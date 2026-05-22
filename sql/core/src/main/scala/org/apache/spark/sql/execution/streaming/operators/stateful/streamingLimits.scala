@@ -28,6 +28,7 @@ import org.apache.spark.sql.execution.{LimitExec, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, StateSchemaCompatibilityChecker, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreOps}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{LongType, NullType, StructField, StructType}
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.util.{CompletionIterator, NextIterator}
 
 /**
@@ -98,7 +99,8 @@ case class StreamingGlobalLimitExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 

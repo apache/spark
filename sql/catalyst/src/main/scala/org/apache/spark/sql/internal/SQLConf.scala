@@ -3440,6 +3440,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT =
+    buildConf("spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled")
+      .internal()
+      .doc("When true, every streaming stateful operator reports its output schema with " +
+        "nullable=true on all columns (including nested struct fields, array elements, and " +
+        "map values), the state schema is widened at every construction site, and the state " +
+        "schema compatibility checker ignores nullability for stateful operator schemas. " +
+        "This prevents query-optimizer decisions (e.g., PropagateEmptyRelation dropping a " +
+        "Union branch) from flipping the state schema nullability across microbatches or " +
+        "restarts. The effective value is pinned per query via the offset log at batch 0, " +
+        "so pre-existing queries keep their original behavior; only newly started queries " +
+        "pick this up.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val FILESTREAM_SINK_METADATA_IGNORED =
     buildConf("spark.sql.streaming.fileStreamSink.ignoreMetadata")
       .internal()

@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroups
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -81,7 +82,8 @@ case class FlatMapGroupsInPandasWithStateExec(
   override protected val stateEncoder: ExpressionEncoder[Any] =
     ExpressionEncoder(stateType).resolveAndBind().asInstanceOf[ExpressionEncoder[Any]]
 
-  override def output: Seq[Attribute] = outAttributes
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(outAttributes)
 
   private val sessionLocalTimeZone = conf.sessionLocalTimeZone
   private val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)

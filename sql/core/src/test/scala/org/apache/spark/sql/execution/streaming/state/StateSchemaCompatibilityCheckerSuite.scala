@@ -27,55 +27,227 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper.newDir
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
+trait StateSchemaCompatibilityCheckerTestMixin extends SharedSparkSession {
 
-  private val hadoopConf: Configuration = new Configuration()
-  private val opId = Random.nextInt(100000)
-  private val batchId = 0
-  private val partitionId = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
+  protected val hadoopConf: Configuration = new Configuration()
+  protected val opId: Int = Random.nextInt(100000)
+  protected val batchId: Int = 0
+  protected val partitionId: Int = StateStore.PARTITION_ID_TO_CHECK_SCHEMA
 
-  private val structSchema = new StructType()
+  protected val structSchema: StructType = new StructType()
     .add(StructField("nested1", IntegerType, nullable = true))
     .add(StructField("nested2", StringType, nullable = true))
 
-  private val keySchema = new StructType()
+  protected val keySchema: StructType = new StructType()
     .add(StructField("key1", IntegerType, nullable = true))
     .add(StructField("key2", StringType, nullable = true))
     .add(StructField("key3", structSchema, nullable = true))
 
-  private val valueSchema = new StructType()
+  protected val valueSchema: StructType = new StructType()
     .add(StructField("value1", IntegerType, nullable = true))
     .add(StructField("value2", StringType, nullable = true))
     .add(StructField("value3", structSchema, nullable = true))
 
-  private val longKeySchema = new StructType()
+  protected val longKeySchema: StructType = new StructType()
     .add(StructField("key" + "1".repeat(64 * 1024), IntegerType, nullable = true))
     .add(StructField("key" + "2".repeat(64 * 1024), StringType, nullable = true))
     .add(StructField("key" + "3".repeat( 64 * 1024), structSchema, nullable = true))
 
-  private val longValueSchema = new StructType()
+  protected val longValueSchema: StructType = new StructType()
     .add(StructField("value" + "1".repeat(64 * 1024), IntegerType, nullable = true))
     .add(StructField("value" + "2".repeat(64 * 1024), StringType, nullable = true))
     .add(StructField("value" + "3".repeat(64 * 1024), structSchema, nullable = true))
 
-  private val keySchema65535Bytes = new StructType()
+  protected val keySchema65535Bytes: StructType = new StructType()
     .add(StructField("k".repeat(65535 - 87), IntegerType, nullable = true))
 
-  private val valueSchema65535Bytes = new StructType()
+  protected val valueSchema65535Bytes: StructType = new StructType()
     .add(StructField("v".repeat(65535 - 87), IntegerType, nullable = true))
 
-  private val keySchemaWithCollation = new StructType()
+  protected val keySchemaWithCollation: StructType = new StructType()
     .add(StructField("key1", IntegerType, nullable = true))
     .add(StructField("key2", StringType("UTF8_LCASE"), nullable = true))
     .add(StructField("key3", structSchema, nullable = true))
 
-  private val valueSchemaWithCollation = new StructType()
+  protected val valueSchemaWithCollation: StructType = new StructType()
     .add(StructField("value1", IntegerType, nullable = true))
     .add(StructField("value2", StringType("UTF8_LCASE"), nullable = true))
     .add(StructField("value3", structSchema, nullable = true))
+
+  protected def applyNewSchemaToNestedFieldInKey(newNestedSchema: StructType): StructType = {
+    applyNewSchemaToNestedField(keySchema, newNestedSchema, "key3")
+  }
+
+  protected def applyNewSchemaToNestedFieldInValue(newNestedSchema: StructType): StructType = {
+    applyNewSchemaToNestedField(valueSchema, newNestedSchema, "value3")
+  }
+
+  protected def applyNewSchemaToNestedField(
+      originSchema: StructType,
+      newNestedSchema: StructType,
+      fieldName: String): StructType = {
+    val newFields = originSchema.map { field =>
+      if (field.name == fieldName) {
+        field.copy(dataType = newNestedSchema)
+      } else {
+        field
+      }
+    }
+    StructType(newFields)
+  }
+
+  protected def stateSchemaDirPath(stateInfo: StatefulOperatorStateInfo): Path = {
+    val storeName = StateStoreId.DEFAULT_STORE_NAME
+    val stateCheckpointPath =
+      new Path(stateInfo.checkpointLocation,
+        s"${stateInfo.operatorId.toString}")
+
+    val storeNamePath = new Path(stateCheckpointPath, storeName)
+    new Path(new Path(storeNamePath, "_metadata"), "schema")
+  }
+
+  protected def getKeyStateEncoderSpec(
+      stateSchemaVersion: Int,
+      keySchema: StructType,
+      encoderSpec: String = "NoPrefixKeyStateEncoderSpec"): Option[KeyStateEncoderSpec] = {
+    if (stateSchemaVersion == 3) {
+      encoderSpec match {
+        case "NoPrefixKeyStateEncoderSpec" =>
+          Some(NoPrefixKeyStateEncoderSpec(keySchema))
+        case "PrefixKeyScanStateEncoderSpec" =>
+          Some(PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 1))
+        case "RangeKeyScanStateEncoderSpec" =>
+          Some(RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0)))
+        case _ =>
+          None
+      }
+    } else {
+      None
+    }
+  }
+
+  protected def getNewSchemaPath(stateSchemaDir: Path, stateSchemaVersion: Int): Option[Path] = {
+    if (stateSchemaVersion == 3) {
+      Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
+    } else {
+      None
+    }
+  }
+
+  protected def verifyException(
+      oldKeySchema: StructType,
+      oldValueSchema: StructType,
+      newKeySchema: StructType,
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean = false,
+      keyCollationChecks: Boolean = false): Unit = {
+    val dir = newDir()
+    val runId = UUID.randomUUID()
+    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
+    val formatValidationForValue = !ignoreValueSchema
+    val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
+      -> formatValidationForValue.toString)
+
+    val stateSchemaDir = stateSchemaDirPath(stateInfo)
+    Seq(2, 3).foreach { stateSchemaVersion =>
+      val schemaFilePath = if (stateSchemaVersion == 3) {
+        Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
+      } else {
+        None
+      }
+
+      val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        0, oldKeySchema, 0, oldValueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
+      val newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion)
+      val result = Try(
+        StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+          oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
+          oldSchemaFilePaths = schemaFilePath.toList,
+          newSchemaFilePath = newSchemaFilePath,
+          extraOptions = extraOptions)
+      ).toEither.fold(Some(_), _ => None)
+
+      val ex = if (result.isDefined) {
+        result.get.asInstanceOf[SparkUnsupportedOperationException]
+      } else {
+        intercept[SparkUnsupportedOperationException] {
+          val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+            0, newKeySchema, 0, newValueSchema,
+            keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
+          StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+            newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
+            extraOptions = extraOptions,
+            oldSchemaFilePaths = stateSchemaVersion match {
+                case 3 => newSchemaFilePath.toList
+                case _ => List.empty
+            },
+            newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion))
+        }
+      }
+
+      if (keyCollationChecks) {
+        assert(ex.getMessage.contains("Binary inequality column is not supported"))
+        assert(ex.getCondition === "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY")
+      } else {
+        if (ignoreValueSchema) {
+          assert(ex.getCondition === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE")
+        } else {
+          assert(ex.getCondition === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
+            ex.getCondition === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
+        }
+        assert(ex.getMessage.contains("does not match existing"))
+      }
+    }
+  }
+
+  protected def verifySuccess(
+      oldKeySchema: StructType,
+      oldValueSchema: StructType,
+      newKeySchema: StructType,
+      newValueSchema: StructType,
+      ignoreValueSchema: Boolean = false): Unit = {
+    val dir = newDir()
+    val runId = UUID.randomUUID()
+    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
+    val formatValidationForValue = !ignoreValueSchema
+    val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
+      -> formatValidationForValue.toString)
+
+    val stateSchemaDir = stateSchemaDirPath(stateInfo)
+    Seq(2, 3).foreach { stateSchemaVersion =>
+      val schemaFilePath = if (stateSchemaVersion == 3) {
+        Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
+      } else {
+        None
+      }
+
+      val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        0, oldKeySchema, 0, oldValueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
+      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+        oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
+        oldSchemaFilePaths = schemaFilePath.toList,
+        newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion),
+        extraOptions = extraOptions)
+
+      val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
+        0, newKeySchema, 0, newValueSchema,
+        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
+      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
+        newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
+        oldSchemaFilePaths = schemaFilePath.toList,
+        newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion),
+        extraOptions = extraOptions)
+    }
+  }
+}
+
+class StateSchemaCompatibilityCheckerSuite extends StateSchemaCompatibilityCheckerTestMixin {
 
   // Checks on adding/removing (nested) field.
 
@@ -173,28 +345,6 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     verifySuccess(keySchema, valueSchema, keySchema, newValueSchema)
   }
 
-  test("storing nullable column into non-nullable column in key should fail") {
-    val nonNullChangedKeySchema = StructType(keySchema.map(_.copy(nullable = false)))
-    verifyException(nonNullChangedKeySchema, valueSchema, keySchema, valueSchema)
-  }
-
-  test("storing nullable column into non-nullable column in value schema should fail") {
-    val nonNullChangedValueSchema = StructType(valueSchema.map(_.copy(nullable = false)))
-    verifyException(keySchema, nonNullChangedValueSchema, keySchema, valueSchema)
-  }
-
-  test("storing nullable column into non-nullable column in nested field in key should fail") {
-    val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
-    val newKeySchema = applyNewSchemaToNestedFieldInKey(typeChangedNestedSchema)
-    verifyException(newKeySchema, valueSchema, keySchema, valueSchema)
-  }
-
-  test("storing nullable column into non-nullable column in nested field in value should fail") {
-    val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
-    val newValueSchema = applyNewSchemaToNestedFieldInValue(typeChangedNestedSchema)
-    verifyException(keySchema, newValueSchema, keySchema, valueSchema)
-  }
-
   // Checks on changing name of (nested) field.
   // Changing the name is allowed since it may be possible Spark can make relevant changes from
   // operators/functions by chance. This opens a risk that end users swap two fields having same
@@ -209,20 +359,6 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
   test("changing the name of field in value should be allowed") {
     val newName: StructField => StructField = f => f.copy(name = f.name + "_new")
     val fieldNameChangedValueSchema = StructType(valueSchema.map(newName))
-    verifySuccess(keySchema, valueSchema, keySchema, fieldNameChangedValueSchema)
-  }
-
-  test("changing the name of nested field in key should be allowed") {
-    val newName: StructField => StructField = f => f.copy(name = f.name + "_new")
-    val newNestedFieldsSchema = StructType(structSchema.map(newName))
-    val fieldNameChangedKeySchema = applyNewSchemaToNestedFieldInKey(newNestedFieldsSchema)
-    verifySuccess(keySchema, valueSchema, fieldNameChangedKeySchema, valueSchema)
-  }
-
-  test("changing the name of nested field in value should be allowed") {
-    val newName: StructField => StructField = f => f.copy(name = f.name + "_new")
-    val newNestedFieldsSchema = StructType(structSchema.map(newName))
-    val fieldNameChangedValueSchema = applyNewSchemaToNestedFieldInValue(newNestedFieldsSchema)
     verifySuccess(keySchema, valueSchema, keySchema, fieldNameChangedValueSchema)
   }
 
@@ -307,174 +443,48 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     verifyException(keySchema, valueSchemaWithCollation, keySchema, valueSchema,
       ignoreValueSchema = false)
   }
+}
 
-  private def applyNewSchemaToNestedFieldInKey(newNestedSchema: StructType): StructType = {
-    applyNewSchemaToNestedField(keySchema, newNestedSchema, "key3")
+class StateSchemaCompatibilityCheckerWithNullabilityWideningDisabledSuite
+    extends StateSchemaCompatibilityCheckerTestMixin {
+
+  override protected def sparkConf: org.apache.spark.SparkConf = {
+    super.sparkConf.set(SQLConf.STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT.key, "false")
   }
 
-  private def applyNewSchemaToNestedFieldInValue(newNestedSchema: StructType): StructType = {
-    applyNewSchemaToNestedField(valueSchema, newNestedSchema, "value3")
+  test("storing nullable column into non-nullable column in key should fail") {
+    val nonNullChangedKeySchema = StructType(keySchema.map(_.copy(nullable = false)))
+    verifyException(nonNullChangedKeySchema, valueSchema, keySchema, valueSchema)
   }
 
-  private def applyNewSchemaToNestedField(
-      originSchema: StructType,
-      newNestedSchema: StructType,
-      fieldName: String): StructType = {
-    val newFields = originSchema.map { field =>
-      if (field.name == fieldName) {
-        field.copy(dataType = newNestedSchema)
-      } else {
-        field
-      }
-    }
-    StructType(newFields)
+  test("storing nullable column into non-nullable column in value schema should fail") {
+    val nonNullChangedValueSchema = StructType(valueSchema.map(_.copy(nullable = false)))
+    verifyException(keySchema, nonNullChangedValueSchema, keySchema, valueSchema)
   }
 
-  private def stateSchemaDirPath(stateInfo: StatefulOperatorStateInfo): Path = {
-    val storeName = StateStoreId.DEFAULT_STORE_NAME
-    val stateCheckpointPath =
-      new Path(stateInfo.checkpointLocation,
-        s"${stateInfo.operatorId.toString}")
-
-    val storeNamePath = new Path(stateCheckpointPath, storeName)
-    new Path(new Path(storeNamePath, "_metadata"), "schema")
+  test("storing nullable column into non-nullable column in nested field in key should fail") {
+    val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
+    val newKeySchema = applyNewSchemaToNestedFieldInKey(typeChangedNestedSchema)
+    verifyException(newKeySchema, valueSchema, keySchema, valueSchema)
   }
 
-  private def getKeyStateEncoderSpec(
-      stateSchemaVersion: Int,
-      keySchema: StructType,
-      encoderSpec: String = "NoPrefixKeyStateEncoderSpec"): Option[KeyStateEncoderSpec] = {
-    if (stateSchemaVersion == 3) {
-      encoderSpec match {
-        case "NoPrefixKeyStateEncoderSpec" =>
-          Some(NoPrefixKeyStateEncoderSpec(keySchema))
-        case "PrefixKeyScanStateEncoderSpec" =>
-          Some(PrefixKeyScanStateEncoderSpec(keySchema, numColsPrefixKey = 1))
-        case "RangeKeyScanStateEncoderSpec" =>
-          Some(RangeKeyScanStateEncoderSpec(keySchema, orderingOrdinals = Seq(0)))
-        case _ =>
-          None
-      }
-    } else {
-      None
-    }
+  test("storing nullable column into non-nullable column in nested field in value should fail") {
+    val typeChangedNestedSchema = StructType(structSchema.map(_.copy(nullable = false)))
+    val newValueSchema = applyNewSchemaToNestedFieldInValue(typeChangedNestedSchema)
+    verifyException(keySchema, newValueSchema, keySchema, valueSchema)
   }
 
-  private def getNewSchemaPath(stateSchemaDir: Path, stateSchemaVersion: Int): Option[Path] = {
-    if (stateSchemaVersion == 3) {
-      Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
-    } else {
-      None
-    }
+  test("changing the name of nested field in key should be allowed") {
+    val newName: StructField => StructField = f => f.copy(name = f.name + "_new")
+    val newNestedFieldsSchema = StructType(structSchema.map(newName))
+    val fieldNameChangedKeySchema = applyNewSchemaToNestedFieldInKey(newNestedFieldsSchema)
+    verifySuccess(keySchema, valueSchema, fieldNameChangedKeySchema, valueSchema)
   }
 
-  private def verifyException(
-      oldKeySchema: StructType,
-      oldValueSchema: StructType,
-      newKeySchema: StructType,
-      newValueSchema: StructType,
-      ignoreValueSchema: Boolean = false,
-      keyCollationChecks: Boolean = false): Unit = {
-    val dir = newDir()
-    val runId = UUID.randomUUID()
-    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
-    val formatValidationForValue = !ignoreValueSchema
-    val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
-      -> formatValidationForValue.toString)
-
-    val stateSchemaDir = stateSchemaDirPath(stateInfo)
-    Seq(2, 3).foreach { stateSchemaVersion =>
-      val schemaFilePath = if (stateSchemaVersion == 3) {
-        Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
-      } else {
-        None
-      }
-
-      val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        0, oldKeySchema, 0, oldValueSchema,
-        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
-      val newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion)
-      val result = Try(
-        StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
-          oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-          oldSchemaFilePaths = schemaFilePath.toList,
-          newSchemaFilePath = newSchemaFilePath,
-          extraOptions = extraOptions)
-      ).toEither.fold(Some(_), _ => None)
-
-      val ex = if (result.isDefined) {
-        result.get.asInstanceOf[SparkUnsupportedOperationException]
-      } else {
-        intercept[SparkUnsupportedOperationException] {
-          val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-            0, newKeySchema, 0, newValueSchema,
-            keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
-          StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
-            newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-            extraOptions = extraOptions,
-            oldSchemaFilePaths = stateSchemaVersion match {
-                case 3 => newSchemaFilePath.toList
-                case _ => List.empty
-            },
-            newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion))
-        }
-      }
-
-      // collation checks are also performed in this path. so we need to check for them explicitly.
-      if (keyCollationChecks) {
-        assert(ex.getMessage.contains("Binary inequality column is not supported"))
-        assert(ex.getCondition === "STATE_STORE_UNSUPPORTED_OPERATION_BINARY_INEQUALITY")
-      } else {
-        if (ignoreValueSchema) {
-          // if value schema is ignored, the mismatch has to be on the key schema
-          assert(ex.getCondition === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE")
-        } else {
-          assert(ex.getCondition === "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE" ||
-            ex.getCondition === "STATE_STORE_VALUE_SCHEMA_NOT_COMPATIBLE")
-        }
-        assert(ex.getMessage.contains("does not match existing"))
-      }
-    }
-  }
-
-  private def verifySuccess(
-      oldKeySchema: StructType,
-      oldValueSchema: StructType,
-      newKeySchema: StructType,
-      newValueSchema: StructType,
-      ignoreValueSchema: Boolean = false): Unit = {
-    val dir = newDir()
-    val runId = UUID.randomUUID()
-    val stateInfo = StatefulOperatorStateInfo(dir, runId, opId, 0, 200)
-    val formatValidationForValue = !ignoreValueSchema
-    val extraOptions = Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG
-      -> formatValidationForValue.toString)
-
-    val stateSchemaDir = stateSchemaDirPath(stateInfo)
-    Seq(2, 3).foreach { stateSchemaVersion =>
-      val schemaFilePath = if (stateSchemaVersion == 3) {
-        Some(new Path(stateSchemaDir, s"${batchId}_${UUID.randomUUID().toString}"))
-      } else {
-        None
-      }
-
-      val oldStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        0, oldKeySchema, 0, oldValueSchema,
-        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, oldKeySchema)))
-      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
-        oldStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-        oldSchemaFilePaths = schemaFilePath.toList,
-        newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion),
-        extraOptions = extraOptions)
-
-      val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-        0, newKeySchema, 0, newValueSchema,
-        keyStateEncoderSpec = getKeyStateEncoderSpec(stateSchemaVersion, newKeySchema)))
-      StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(stateInfo, hadoopConf,
-        newStateSchema, spark.sessionState, stateSchemaVersion = stateSchemaVersion,
-        oldSchemaFilePaths = schemaFilePath.toList,
-        newSchemaFilePath = getNewSchemaPath(stateSchemaDir, stateSchemaVersion),
-        extraOptions = extraOptions)
-    }
+  test("changing the name of nested field in value should be allowed") {
+    val newName: StructField => StructField = f => f.copy(name = f.name + "_new")
+    val newNestedFieldsSchema = StructType(structSchema.map(newName))
+    val fieldNameChangedValueSchema = applyNewSchemaToNestedFieldInValue(newNestedFieldsSchema)
+    verifySuccess(keySchema, valueSchema, keySchema, fieldNameChangedValueSchema)
   }
 }

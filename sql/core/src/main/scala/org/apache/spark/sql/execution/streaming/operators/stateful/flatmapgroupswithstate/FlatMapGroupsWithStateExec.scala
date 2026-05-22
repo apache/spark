@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Streamin
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.streaming.GroupStateTimeout.NoTimeout
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 /**
@@ -425,6 +426,9 @@ case class FlatMapGroupsWithStateExec(
     skipEmittingInitialStateKeys: Boolean,
     child: SparkPlan)
   extends FlatMapGroupsWithStateExecBase with BinaryExecNode with  ObjectProducerExec {
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(super.output)
+
   import GroupStateImpl._
   import FlatMapGroupsWithStateExecHelper._
 

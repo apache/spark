@@ -43,6 +43,7 @@ import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSp
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
@@ -51,7 +52,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
  *
  * @param functionExpr function called on each group
  * @param groupingAttributes used to group the data
- * @param output used to define the output rows
+ * @param outputAttrs used to define the output rows
  * @param outputMode defines the output mode for the statefulProcessor
  * @param timeMode The time mode semantics of the stateful processor for timers and TTL.
  * @param stateInfo Used to identify the state store for a given operator.
@@ -69,7 +70,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Uti
 case class TransformWithStateInPySparkExec(
     functionExpr: Expression,
     groupingAttributes: Seq[Attribute],
-    output: Seq[Attribute],
+    outputAttrs: Seq[Attribute],
     outputMode: OutputMode,
     timeMode: TimeMode,
     stateInfo: Option[StatefulOperatorStateInfo],
@@ -93,6 +94,9 @@ case class TransformWithStateInPySparkExec(
     child,
     initialStateGroupingAttrs,
     initialState) {
+
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(outputAttrs)
 
   // NOTE: This is needed to comply with existing release of transformWithStateInPandas.
   override def shortName: String = if (
