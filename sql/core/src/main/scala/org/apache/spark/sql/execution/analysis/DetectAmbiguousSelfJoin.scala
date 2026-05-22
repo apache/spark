@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Cast, Equality, Expression, ExprId}
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -153,9 +153,29 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
           }
           condition.toSeq.flatMap(getAmbiguousAttrs)
 
-        case _ => ambiguousColRefs.toSeq.map { ref =>
-          colRefAttrs.find(attr => toColumnReference(attr) == ref).get
-        }
+        case _ =>
+          // SPARK-52498: For a Project on top of a self-join with a foldable join condition
+          // (e.g., df.join(df, df("col") === 0).select(df("col"))), the column references
+          // in the select are not ambiguous because the foldable condition means it doesn't
+          // matter which side the column comes from.
+          val isProjectOverFoldableSelfJoin = plan match {
+            case Project(_, Join(
+                LogicalPlanWithDatasetId(_, leftId),
+                LogicalPlanWithDatasetId(_, rightId),
+                _, Some(condition), _)) if leftId == rightId =>
+              condition.collectFirst {
+                case Equality(_, b) if b.foldable => true
+                case Equality(a, _) if a.foldable => true
+              }.isDefined
+            case _ => false
+          }
+          if (isProjectOverFoldableSelfJoin) {
+            Nil
+          } else {
+            ambiguousColRefs.toSeq.map { ref =>
+              colRefAttrs.find(attr => toColumnReference(attr) == ref).get
+            }
+          }
       }
 
       if (ambiguousAttrs.nonEmpty) {

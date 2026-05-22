@@ -553,4 +553,18 @@ class DataFrameSelfJoinSuite extends SharedSparkSession {
           .count() == 1)
     }
   }
+
+  test("SPARK-52498: self join with foldable condition and select should not be ambiguous") {
+    withSQLConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED.key -> "true") {
+      val df1 = spark.range(3).toDF("col1")
+
+      // Self-join with foldable condition + select from one side
+      val df2 = df1.join(df1, df1("col1") === 0).select(df1("col1"))
+      df2.queryExecution.analyzed
+
+      // Multi-layer self-join
+      val df3 = df2.join(df2, df2("col1") === 0).select(df2("col1"))
+      df3.queryExecution.analyzed
+    }
+  }
 }
