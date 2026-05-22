@@ -647,12 +647,11 @@ object SQLConf {
   val TIMESTAMP_NANOS_TYPES_ENABLED =
     buildConf("spark.sql.timestampNanosTypes.enabled")
       .internal()
-      .doc("When true, the SQL parser accepts the parameterized nanosecond-precision " +
-        "timestamp types TIMESTAMP_NTZ(p), TIMESTAMP_LTZ(p), and TIMESTAMP(p) (with " +
-        "optional WITH LOCAL TIME ZONE / WITHOUT TIME ZONE suffix) for p in [7, 9], " +
-        "producing TimestampNTZNanosType / TimestampLTZNanosType. Default is false " +
-        "because downstream execution paths (Cast, PhysicalDataType, AnyTimestampType, " +
-        "encoders, Connect proto) are not yet wired for these types. See SPARK-56822.")
+      .doc("When true, the parameterized nanosecond-precision timestamp types " +
+        "TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p) for p in [7, 9] are recognized as " +
+        "Spark SQL data types at user-facing entry points. Default is false because " +
+        "downstream execution paths (Cast, PhysicalDataType, AnyTimestampType, encoders, " +
+        "Connect proto) are not yet wired for these types. See SPARK-56822.")
       .version("4.2.0")
       .booleanConf
       .createWithDefault(false)

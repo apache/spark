@@ -479,7 +479,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
   }
 
   private def parseTimestampLtzNanosPrecision(precision: String): TimestampLTZNanosType = {
-    checkTimestampNanosTypesEnabled()
+    DataTypeErrors.checkTimestampNanosTypesEnabled()
     try TimestampLTZNanosType(precision.toInt)
     catch {
       case _: NumberFormatException =>
@@ -488,23 +488,11 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
   }
 
   private def parseTimestampNtzNanosPrecision(precision: String): TimestampNTZNanosType = {
-    checkTimestampNanosTypesEnabled()
+    DataTypeErrors.checkTimestampNanosTypesEnabled()
     try TimestampNTZNanosType(precision.toInt)
     catch {
       case _: NumberFormatException =>
         throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
-    }
-  }
-
-  private def checkTimestampNanosTypesEnabled(): Unit = {
-    if (!SqlApiConf.get.timestampNanosTypesEnabled) {
-      throw new SparkException(
-        errorClass = "FEATURE_NOT_ENABLED",
-        messageParameters = Map(
-          "featureName" -> "Nanosecond-precision timestamp types",
-          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
-          "configValue" -> "true"),
-        cause = null)
     }
   }
 
