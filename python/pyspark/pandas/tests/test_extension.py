@@ -138,6 +138,41 @@ class ExtensionTestsMixin:
             with self.assertRaises(AttributeError):
                 ps.Series([1, 2], dtype=object).bad
 
+    def test_extension_properties(self):
+        # Define subclasses mimicking the original pandas subclass implementation
+        class SubclassedSeries(ps.Series):
+            @property
+            def _constructor(self):
+                return SubclassedSeries
+
+            @property
+            def _constructor_expanddim(self):
+                return SubclassedDataFrame
+
+        class SubclassedDataFrame(ps.DataFrame):
+            @property
+            def _constructor(self):
+                return SubclassedDataFrame
+
+            @property
+            def _constructor_sliced(self):
+                return SubclassedSeries
+
+        # Test DataFrame extension properties
+        sub_psdf = SubclassedDataFrame(self.psdf._internal)
+        result_df = sub_psdf.head(2)
+        
+        self.assertIsInstance(result_df, SubclassedDataFrame)
+        self.assertEqual(result_df.shape, (2, 2))
+
+        # Test Series extension properties
+        # Pass the PySpark Series directly instead of its _internal frame
+        sub_psser = SubclassedSeries(self.psdf["a"])
+        result_ser = sub_psser.head(2)
+        
+        self.assertIsInstance(result_ser, SubclassedSeries)
+        self.assertEqual(len(result_ser), 2)
+
 
 class ExtensionTests(
     ExtensionTestsMixin,

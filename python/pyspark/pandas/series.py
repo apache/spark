@@ -484,6 +484,14 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             self._anchor = anchor
             self._col_label = anchor._internal.column_labels[0]
             object.__setattr__(anchor, "_psseries", {self._column_label: self})
+    @property
+    def _constructor(self):
+        return self.__class__
+
+    @property
+    def _constructor_expanddim(self):
+        from pyspark.pandas.frame import DataFrame
+        return DataFrame
 
     @property
     def _psdf(self) -> DataFrame:
@@ -1585,7 +1593,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             renamed = self.rename(DEFAULT_SERIES_NAME)
         else:
             renamed = self
-        return DataFrame(renamed._internal)
+        return self._constructor_expanddim(renamed._internal)
 
     to_dataframe = to_frame
 
@@ -2301,7 +2309,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
             scol = F.when(cond, func(scol, True).over(window)).otherwise(scol)
 
-        return DataFrame(
+        return self._constructor_expanddim(
             self._psdf._internal.with_new_spark_column(
                 self._column_label,
                 scol.alias(name_like_string(self.name)),  # TODO: dtype?
@@ -2422,7 +2430,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             .otherwise(scol)
         )
 
-        return DataFrame(
+        return self._constructor_expanddim(
             self._psdf._internal.with_new_spark_column(self._column_label, scol)  # TODO: dtype?
         )._psser_for(self._column_label)
 
@@ -2767,7 +2775,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 self._update_anchor(DataFrame(dropped_internal))
                 return None
             else:
-                return DataFrame(dropped_internal)
+                return self._constructor_expanddim(dropped_internal)
         elif columns is not None:
             return self._psdf
         else:
@@ -2796,7 +2804,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         1     bee
         Name: animal, dtype: object
         """
-        return first_series(self.to_frame().head(n)).rename(self.name)
+        res = first_series(self.to_frame().head(n)).rename(self.name)
+        return self._constructor(data=res)
 
     def last(self, offset: Union[str, DateOffset]) -> "Series":
         """
@@ -4058,7 +4067,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 applied.append(self.apply(f, args=args, **kwargs).rename(f.__name__))
 
             internal = self._internal.with_new_columns(applied)
-            return DataFrame(internal)
+            return self._constructor_expanddim(internal)
         else:
             return self.apply(func, args=args, **kwargs)
 
@@ -6178,7 +6187,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 for field in internal.data_fields
             ]
         )
-        return DataFrame(internal)
+        return self._constructor_expanddim(internal)
 
     def item(self) -> Scalar:
         """
@@ -6811,7 +6820,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             data_fields=[this_field, that_field],
             column_label_names=[None],
         )
-        return DataFrame(internal)
+        return self._constructor_expanddim(internal)
 
     # TODO(SPARK-40553): 1, support array-like 'value'; 2, add parameter 'sorter'
     def searchsorted(self, value: Any, side: str = "left") -> int:
