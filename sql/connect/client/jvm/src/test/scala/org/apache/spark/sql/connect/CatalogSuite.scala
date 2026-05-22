@@ -151,6 +151,19 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
     assert(spark.catalog.listTables().collect().isEmpty)
   }
 
+  test("createTable should be eager") {
+    val tableName = "eager_table"
+    withTable(tableName) {
+      withTempPath { dir =>
+        val session = spark
+        import session.implicits._
+        Seq((1, "a")).toDF("id", "value").write.parquet(dir.getPath)
+        spark.catalog.createTable(tableName, dir.getPath)
+        assert(spark.catalog.tableExists(tableName))
+      }
+    }
+  }
+
   test("Cache Table APIs") {
     val parquetTableName = "parquet_table"
     withTable(parquetTableName) {

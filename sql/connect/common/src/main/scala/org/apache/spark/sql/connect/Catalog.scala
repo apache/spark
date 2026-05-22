@@ -484,7 +484,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
       schema: StructType,
       description: String,
       options: Map[String, String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
+    val df = sparkSession.newDataFrame { builder =>
       val createTableBuilder = builder.getCatalogBuilder.getCreateTableBuilder
         .setTableName(tableName)
         .setSource(source)
@@ -494,6 +494,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
         createTableBuilder.putOptions(k, v)
       }
     }
+    df.collect()
+    df
   }
 
   /**
