@@ -106,8 +106,7 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     assert(txn.currentState === Committed)
     assert(txn.isClosed)
     // The transaction must have gone through the SCO seam to pathformat_cat, not the
-    // (also-transactional) session catalog. Without these checks the assertions above
-    // would silently pass when the session catalog absorbs the write.
+    // (also-transactional) session catalog.
     assert(pathformatCat.lastTransaction eq txn)
     assert(catalog.lastTransaction == null)
     checkAnswer(spark.table(tablePathWithFormat), Row(1, "a") :: Row(2, "b") :: Nil)

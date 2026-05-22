@@ -48,9 +48,7 @@ class PathBasedTableSuite extends QueryTest with SharedSparkSession {
   }
 
   override def afterEach(): Unit = {
-    // SharedSparkSession reuses one SparkSession across tests. `reset()` drops registered
-    // non-session catalogs (including pathformat_cat), so the next test starts with a
-    // fresh InMemoryTableCatalog instance.
+    // Start each test starts with a fresh InMemoryTableCatalog instance.
     spark.sessionState.catalogManager.reset()
     spark.conf.unset(s"spark.sql.catalog.${FakePathBasedSource.CATALOG_NAME}")
     super.afterEach()
@@ -113,7 +111,7 @@ class PathBasedTableSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("regression: v1 file format direct query still resolves") {
+  test("v1 file format direct query still resolves") {
     withTempDir { dir =>
       val path = new java.io.File(dir, "p.parquet").getCanonicalPath
       Seq((1, "a"), (2, "b")).toDF("id", "data").write.parquet(path)
@@ -145,8 +143,7 @@ class PathBasedTableSuite extends QueryTest with SharedSparkSession {
   test("catalog precedence: same-named catalog wins over SCO data source") {
     // Register a catalog under the same name as the SCO data source short name. SQL
     // resolution should route to the catalog; the SCO resolver is consulted only when
-    // no catalog claims the head, matching v1 file-format precedence (ResolveSQLOnFile)
-    // and Delta's ResolveDeltaPathTable extension.
+    // no catalog claims the head.
     withSQLConf("spark.sql.catalog.pathformat" -> classOf[InMemoryTableCatalog].getName) {
       sql(s"CREATE TABLE $tablePath (id INT, data STRING)")
       sql(s"INSERT INTO $tablePath VALUES (1, 'a')")

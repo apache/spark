@@ -142,7 +142,7 @@ private[sql] object DataSourceV2Utils extends Logging {
         DataSource.lookupDataSourceV2(nameParts.head, conf).flatMap {
           case sco: SupportsCatalogOptions =>
             val optionsWithPath = getOptionsWithPaths(
-              CaseInsensitiveMap(Map.empty), nameParts.tail.mkString("."))
+              CaseInsensitiveMap(Map.empty), nameParts.tail: _*)
             val dsOptions = buildDsOptions(sco, conf, optionsWithPath)
             Some(extractCatalogAndIdentifier(sco, dsOptions))
           case _ => None
