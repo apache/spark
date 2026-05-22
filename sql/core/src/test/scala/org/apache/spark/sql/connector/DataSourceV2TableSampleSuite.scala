@@ -213,6 +213,32 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     }
   }
 
+  test("SPARK-55978: with-replacement sample blocks join pushdown even at fraction 1") {
+    val joinSampleCatalog = "testjoinsamplerepl"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        // SQL TABLESAMPLE always sets withReplacement=false, so use the
+        // DataFrame API. Poisson sampling at fraction 1 still emits each
+        // input row 0, 1, 2, ... times, so the sample is not a no-op and
+        // join pushdown must remain blocked.
+        val df = spark.table(t1).sample(withReplacement = true, fraction = 1.0)
+          .join(spark.table(t2), "id")
+        checkJoinNotPushed(df)
+        checkSamplePushed(df, pushed = true)
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
   test("SPARK-55978: legacy connector with only 4-arg pushTableSample - BERNOULLI pushes down") {
     val legacyCatalog = "testlegacysample"
     registerCatalog(legacyCatalog, classOf[InMemoryTableWithLegacyTableSampleCatalog])
