@@ -29,11 +29,17 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
  *
  * Mixed into both classic [[DataSourceV2DataFrameSuite]] and Connect
  * [[org.apache.spark.sql.connect.DataSourceV2TempViewConnectSuite]].
+ *
+ * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
+ * are lazy and require an action to trigger execution. In classic mode `.collect()` on DDL
+ * is a no-op (DDL executes eagerly), so this is harmless.
  */
 trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
 
   private val T = "testcat.ns1.ns2.tbl"
   private val CT = "cachingcat.ns1.ns2.tbl"
+  // Identifier is catalog-agnostic; the catalog is resolved by the TableCatalog instance
+  // passed to getTableCatalog / externalAppend, not by the Identifier itself.
   private val testIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
 
   // Scenario 1.1 (session write)

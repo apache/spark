@@ -21,10 +21,9 @@ import java.util
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Identifier, InMemoryBaseTable, TableCatalog, TableWritePrivilege}
-import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Base trait for DSv2 tests that involve external table mutations (writes, schema changes,
@@ -36,8 +35,13 @@ import org.apache.spark.sql.test.SharedSparkSession
  *
  * Concrete suites override the abstract methods and mix in the test trait
  * [[DSv2TempViewWithStoredPlanTests]].
+ *
+ * Extends [[QueryTest]] (not [[org.apache.spark.sql.test.SharedSparkSession]]) so that the
+ * trait does not pull in a SparkSession of its own. Concrete suites provide a session via
+ * [[SharedSparkSession]] (classic) or [[org.apache.spark.sql.connect.SparkConnectServerTest]]
+ * (Connect).
  */
-trait DSv2ExternalMutationTestBase extends SharedSparkSession {
+trait DSv2ExternalMutationTestBase extends QueryTest {
 
   /** Prefix for test names, e.g. "[connect] " for Connect suites, "" for classic. */
   protected def testPrefix: String = ""
