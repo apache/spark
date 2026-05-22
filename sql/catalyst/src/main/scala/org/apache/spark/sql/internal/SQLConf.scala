@@ -653,6 +653,7 @@ object SQLConf {
         "downstream execution paths (Cast, PhysicalDataType, AnyTimestampType, encoders, " +
         "Connect proto) are not yet wired for these types. See SPARK-56822.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

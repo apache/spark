@@ -371,8 +371,7 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
               case TimestampNTZType =>
                 parseTimestampNtzNanosPrecision(currentCtx.precision.getText)
               case other =>
-                throw SparkException.internalError(
-                  s"Unexpected default timestamp type: $other")
+                throw SparkException.internalError(s"Unexpected default timestamp type: $other")
             }
           }
         case TIMESTAMP_LTZ =>
