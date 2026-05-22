@@ -68,9 +68,11 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
 
   // ----- Benchmark dimensions -----
 
-  // Checkpoint interval for the streaming query. 5-minute is recommended.
+  // Duration of each RTM batch (passed as RealTimeTrigger(batchDurationMs)). Since RTM
+  // commits progress/checkpoints at batch boundaries, this also controls the effective
+  // checkpoint/progress cadence. 5-minute is recommended.
   // Lowering it may cause more frequent checkpointing but can increase latency.
-  private val checkpointInterval = 5.minutes
+  private val batchDuration = 5.minutes
 
   // Total number of batches to run before stopping. With numBatchesToFilter
   // warm-up batches filtered out, (numBatches - numBatchesToFilter) batches
@@ -236,7 +238,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
       .option("kafka.compression.type", "snappy")
       .outputMode("update")
       .queryName("rtm-kafka-kafka")
-      .trigger(RealTimeTrigger.apply(s"${checkpointInterval.toMillis} milliseconds"))
+      .trigger(RealTimeTrigger.apply(s"${batchDuration.toMillis} milliseconds"))
       .start()
 
     val dataGenThread = new Thread(() => {
@@ -262,7 +264,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     }
     spark.streams.addListener(listener)
 
-    val timeoutMs = numBatches * checkpointInterval.toMillis * 2 + 60 * 1000
+    val timeoutMs = numBatches * batchDuration.toMillis * 2 + 60 * 1000
     val completed = try {
       latch.await(timeoutMs, TimeUnit.MILLISECONDS)
     } finally {
@@ -397,7 +399,7 @@ object RTMKafkaKafkaBenchmark extends BenchmarkBase with Logging {
     val minimumSourceTimestamp =
       kafkaSinkData.agg(min("source-timestamp")).collect()(0)(0).asInstanceOf[Long]
 
-    val timeFilterThresholdMs = checkpointInterval.toMillis * numBatchesToFilter
+    val timeFilterThresholdMs = batchDuration.toMillis * numBatchesToFilter
     val filteredSink = kafkaSinkData
       .withColumn("time", col("source-timestamp") - minimumSourceTimestamp)
       .filter(col("time") > timeFilterThresholdMs)
