@@ -772,7 +772,7 @@ COMPONENTS = (
     Component("MLLIB", primary=True, jira_name="MLlib"),
     Component("OPTIMIZER", jira_name="Optimizer"),
     Component("PROTOBUF", jira_name="Protobuf"),
-    Component("PS", jira_name="Pandas API on Spark"),
+    Component("PS", primary=True, jira_name="Pandas API on Spark"),
     Component("PYTHON", ("PYSPARK",), primary=True, jira_name="PySpark"),
     Component("R", ("SPARKR",), primary=True, jira_name="R"),
     Component("REPL", ("SHELL", "SPARK SHELL", "SPARK_SHELL"), jira_name="Spark Shell"),
@@ -796,8 +796,9 @@ COMPONENTS = (
 )
 
 
-_BRACKET_TAG_RE = re.compile(r"\[\s*([A-Za-z0-9_-]+)\s*\]")
+_BRACKET_TAG_RE = re.compile(r"\[\s*([A-Za-z0-9._-]+)\s*\]")
 _SPARK_ID_RE = re.compile(r"^SPARK-\d+$", re.IGNORECASE)
+_VERSION_TAG_RE = re.compile(r"^\d+\.(\d+|X)$")
 _LEADING_TAGS = frozenset({"MINOR", "TRIVIAL"})
 
 
@@ -857,6 +858,10 @@ class Title:
         (['SPARK-1234'], ['SQL', 'FOLLOWUP'])
         >>> Title.parse("[SPARK-1234][SPARK-5678][SQL] Fix").leading
         ['SPARK-1234', 'SPARK-5678']
+        >>> Title.parse("[SPARK-1234][4.X][SQL] Fix").components
+        ['4.X', 'SQL']
+        >>> Title.parse("[SPARK-1234][SQL][4.2] Fix").components
+        ['SQL', '4.2']
         >>> Title.parse("[SQL] Fix")
         Traceback (most recent call last):
             ...
@@ -1069,13 +1074,30 @@ def main():
             components = new_tags + components
 
         # Deduplicate tags in insertion order.
-        parsed.components = list(dict.fromkeys(components))
+        components = list(dict.fromkeys(components))
+
+        # Move version tags (e.g. [4.X], [4.2]) to the head of components.
+        versions = [t for t in components if _VERSION_TAG_RE.match(t)]
+        if versions:
+            others = [t for t in components if not _VERSION_TAG_RE.match(t)]
+            components = versions + others
 
         # Move FOLLOWUP to the last tag.
-        non_followup = [t for t in parsed.components if t != "FOLLOWUP"]
-        if len(non_followup) < len(parsed.components):
-            parsed.components = non_followup + ["FOLLOWUP"]
+        non_followup = [t for t in components if t != "FOLLOWUP"]
+        if len(non_followup) < len(components):
+            components = non_followup + ["FOLLOWUP"]
 
+        # Warn about tags that are neither known components nor version tags.
+        unknown = [
+            t for t in components
+            if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
+        ]
+        if unknown:
+            print_error(
+                "Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown)
+            )
+
+        parsed.components = components
         title = str(parsed)
         if title != pr["title"]:
             print("Normalized title: %s" % title)
