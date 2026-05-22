@@ -52,9 +52,96 @@ on:
         type: string
         default: '{}'
 jobs:
+  # Precompile Spark with Maven once and publish target/ + ~/.m2/.../spark as
+  # an artifact for the matrix entries below to consume. Optional: any failure
+  # here degrades the matrix to its original local `clean install` path.
+  precompile-maven:
+    name: "Precompile Spark with Maven"
+    runs-on: ${{ inputs.os }}
+    # If this job fails or is cancelled, the matrix entries fall back to
+    # running `mvn clean install` locally as before.
+    continue-on-error: true
+    env:
+      HADOOP_PROFILE: ${{ inputs.hadoop }}
+      HIVE_PROFILE: hive2.3
+      SPARK_LOCAL_IP: localhost
+      GITHUB_PREV_SHA: ${{ github.event.before }}
+    steps:
+      - name: Checkout Spark repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          repository: apache/spark
+          ref: ${{ inputs.branch }}
+      - name: Sync the current branch with the latest in Apache Spark
+        if: github.repository != 'apache/spark'
+        run: |
+          echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+          git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+          git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+      - name: Cache SBT and Maven
+        # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
+        if: ${{ runner.os != 'macOS' }}
+        uses: actions/cache@v5
+        with:
+          path: |
+            build/apache-maven-*
+            build/*.jar
+            ~/.sbt
+          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          restore-keys: |
+            build-
+      - name: Cache Maven local repository
+        # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
+        if: ${{ runner.os != 'macOS' }}
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2/repository
+          key: java${{ inputs.java }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            java${{ inputs.java }}-maven-
+      - name: Install Java ${{ inputs.java }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: zulu
+          java-version: ${{ inputs.java }}
+      - name: Build Spark with Maven
+        shell: |
+          bash -c "if script -qec true 2>/dev/null; then script -qec bash\ {0}; else script -qe /dev/null bash {0}; fi"
+        run: |
+          set -e
+          export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+          export MAVEN_CLI_OPTS="--no-transfer-progress"
+          export JAVA_VERSION=${{ inputs.java }}
+          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
+      - name: Package compile output
+        run: |
+          # Exclude assembly/ from the artifact: 11 of 12 matrix entries wipe it
+          # right after extraction (SPARK-51628 regression-test-for-SPARK-51600),
+          # and the connect entry rebuilds it via `mvn install -pl assembly`.
+          find . \( -path './build' -o -path './.git' -o -path './assembly' \) -prune \
+            -o -type d -name target -print0 \
+            | tar --null -czf compile-target.tar.gz -T -
+          if [ -d "$HOME/.m2/repository/org/apache/spark" ]; then
+            tar -C "$HOME/.m2/repository/org/apache" -czf compile-m2-spark.tar.gz spark
+          fi
+          ls -lh compile-target.tar.gz compile-m2-spark.tar.gz
+      - name: Upload compile artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: spark-maven-compile-${{ inputs.branch }}-java${{ inputs.java }}-${{ github.run_id }}
+          path: |
+            compile-target.tar.gz
+            compile-m2-spark.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+
   # Build: build Spark and run the tests for specified modules using maven
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
+    needs: precompile-maven
+    if: (!cancelled())
     runs-on: ${{ inputs.os }}
     # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
     # timeout-minutes: 150
@@ -184,6 +271,25 @@ jobs:
         run: |
           python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
           python3.12 -m pip list
+      - name: Download precompiled artifact
+        id: download-precompiled
+        if: needs.precompile-maven.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v6
+        with:
+          name: spark-maven-compile-${{ inputs.branch }}-java${{ matrix.java }}-${{ github.run_id }}
+      - name: Extract precompiled artifact
+        id: extract-precompiled
+        if: steps.download-precompiled.outcome == 'success'
+        continue-on-error: true
+        run: |
+          tar -xzf compile-target.tar.gz
+          rm compile-target.tar.gz
+          if [ -f compile-m2-spark.tar.gz ]; then
+            mkdir -p "$HOME/.m2/repository/org/apache"
+            tar -C "$HOME/.m2/repository/org/apache" -xzf compile-m2-spark.tar.gz
+            rm compile-m2-spark.tar.gz
+          fi
       # Run the tests using script command.
       # BSD's script command doesn't support -c option, and the usage is different from Linux's one.
       # The kind of script command is tested by `script -qec true`.
@@ -203,13 +309,28 @@ jobs:
           export ENABLE_KINESIS_TESTS=0
           # Replace with the real module name, for example, connector#kafka-0-10 -> connector/kafka-0-10
           export TEST_MODULES=`echo "$MODULES_TO_TEST" | sed -e "s%#%/%g"`
-          ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
-          
-          if [ "$MODULES_TO_TEST" != "connect" ]; then
-            echo "Clean up the assembly module before maven testing"
-            ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
+          if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+            echo "Reusing precompiled artifact, skipping local Maven clean install."
+            # SPARK-51628 regression coverage is naturally preserved on the reuse
+            # path: the precompile artifact excludes assembly/, so non-connect
+            # tests already run with the assembly module's jars dir missing.
+            # Connect tests strongly depend on a built assembly module; rebuild
+            # it here.
+            if [ "$MODULES_TO_TEST" = "connect" ]; then
+              echo "Building assembly module for connect tests."
+              ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -pl assembly install
+            fi
+          else
+            ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} clean install
+            # SPARK-51628: wipe the assembly module so tests exercise the
+            # SPARK-51600 prepend fallback path. Connect tests strongly depend
+            # on a built assembly module, so they are excluded.
+            if [ "$MODULES_TO_TEST" != "connect" ]; then
+              echo "Clean up the assembly module before maven testing"
+              ./build/mvn $MAVEN_CLI_OPTS clean -pl assembly
+            fi
           fi
-          
+
           if [[ "$INCLUDED_TAGS" != "" ]]; then
             ./build/mvn $MAVEN_CLI_OPTS -pl "$TEST_MODULES" -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Djava.version=${JAVA_VERSION/-ea} -Dtest.include.tags="$INCLUDED_TAGS" test -fae
           elif [[ "$MODULES_TO_TEST" == "connect" && "$INPUT_BRANCH" == "branch-4.0" ]]; then
