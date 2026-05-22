@@ -440,6 +440,10 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     checkEvaluation(aggregate(ai0, 0, (acc, elem) => acc + elem, acc => acc * 10), 60)
     checkEvaluation(aggregate(ai1, 0, (acc, elem) => acc + coalesce(elem, 0), acc => acc * 10), 40)
     checkEvaluation(aggregate(ai2, 0, (acc, elem) => acc + elem, acc => acc * 10), 0)
+    checkEvaluation(
+      aggregate(ai2, Literal.create(null, IntegerType),
+        (acc, elem) => coalesce(acc, 0) + elem, acc => acc.isNull),
+      true)
     checkEvaluation(aggregate(ain, 0, (acc, elem) => acc + elem, acc => acc * 10), null)
 
     val as0 = Literal.create(Seq("a", "b", "c"), ArrayType(StringType, containsNull = false))

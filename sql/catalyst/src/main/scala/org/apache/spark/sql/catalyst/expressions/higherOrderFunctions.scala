@@ -1256,7 +1256,7 @@ case class ArrayAggregate(
           mergeCode.isNull, merge.nullable)
 
         val finishAssignment = assignVar(accForFinishCode, finishAtomic, accForMergeCode.value,
-          accForMergeCode.isNull, merge.nullable)
+          accForMergeCode.isNull, accForMergeVar.nullable)
 
         s"""
             |final int $numElements = ${arg}.numElements();
