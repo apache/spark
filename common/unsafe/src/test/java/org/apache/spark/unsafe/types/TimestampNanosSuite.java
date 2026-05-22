@@ -49,13 +49,17 @@ public class TimestampNanosSuite {
 
   @Test
   public void invalidNanosWithinMicroNTZ() {
-    assertThrows(SparkIllegalArgumentException.class, () -> new TimestampNTZNanos(0L, (short) -1));
-    assertThrows(SparkIllegalArgumentException.class, () -> new TimestampNTZNanos(0L, (short) 1000));
+    assertThrows(SparkIllegalArgumentException.class,
+      () -> new TimestampNTZNanos(0L, (short) -1));
+    assertThrows(SparkIllegalArgumentException.class,
+      () -> new TimestampNTZNanos(0L, (short) 1000));
   }
 
   @Test
   public void invalidNanosWithinMicroLTZ() {
-    assertThrows(SparkIllegalArgumentException.class, () -> new TimestampLTZNanos(0L, (short) -1));
-    assertThrows(SparkIllegalArgumentException.class, () -> new TimestampLTZNanos(0L, (short) 1000));
+    assertThrows(SparkIllegalArgumentException.class,
+      () -> new TimestampLTZNanos(0L, (short) -1));
+    assertThrows(SparkIllegalArgumentException.class,
+      () -> new TimestampLTZNanos(0L, (short) 1000));
   }
 }
