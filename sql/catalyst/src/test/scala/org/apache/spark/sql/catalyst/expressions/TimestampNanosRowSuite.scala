@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{TimestampLTZNanos, TimestampNTZNanos}
+import org.apache.spark.util.ArrayImplicits._
 
 class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -75,6 +76,29 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     unsafeRow.setTimestampNTZNanos(0, null)
     assert(unsafeRow.getTimestampNTZNanos(0) === null)
     assert(unsafeRow.getLong(0) >>> 32 === offset)
+  }
+
+  testBothCodegenAndInterpreted("SPARK-41535: nanos timestamps initialized as null") {
+    val fieldTypes: Array[DataType] =
+      Array(TimestampNTZNanosType(9), TimestampLTZNanosType(7))
+    val converter = UnsafeProjection.create(fieldTypes)
+
+    val row = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
+    row.setTimestampNTZNanos(0, null)
+    row.setTimestampLTZNanos(1, null)
+
+    val nullAtCreation = converter.apply(row)
+
+    for (i <- 0 until row.numFields) {
+      assert(nullAtCreation.isNullAt(i))
+    }
+
+    val ntz = new TimestampNTZNanos(100L, 50.toShort)
+    val ltz = new TimestampLTZNanos(200L, 100.toShort)
+    nullAtCreation.setTimestampNTZNanos(0, ntz)
+    nullAtCreation.setTimestampLTZNanos(1, ltz)
+    assert(nullAtCreation.getTimestampNTZNanos(0) === ntz)
+    assert(nullAtCreation.getTimestampLTZNanos(1) === ltz)
   }
 
   testBothCodegenAndInterpreted("codegen projection reads nanos timestamp column") {
