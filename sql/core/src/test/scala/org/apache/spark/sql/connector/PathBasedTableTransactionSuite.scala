@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SharedTablesInMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SharedTablesInMemoryRowLevelOperationTableCatalog, Txn, TxnTable}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources
@@ -28,8 +28,9 @@ import org.apache.spark.sql.streaming.StreamingQuery
 /**
  * Tests for transactional writes to path-based tables, where the table is identified by a
  * bare path with no catalog prefix (e.g. `/path/to/t`), or a connector-prefixed path
- * (e.g. `pathformat.`/path/to/t``). The transactional catalog is registered as the session
- * catalog (`spark_catalog`).
+ * (e.g. `pathformat.`/path/to/t``). Bare paths resolve to the session catalog
+ * (`spark_catalog`, set to a transactional impl); connector-prefixed paths route through
+ * the SCO seam to a dedicated transactional catalog (`pathformat_cat`).
  */
 class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
 
@@ -43,11 +44,15 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     spark.conf.set(
       V2_SESSION_CATALOG_IMPLEMENTATION.key,
       classOf[SharedTablesInMemoryRowLevelOperationTableCatalog].getName)
+    spark.conf.set(
+      s"spark.sql.catalog.${FakePathBasedSource.CATALOG_NAME}",
+      classOf[SharedTablesInMemoryRowLevelOperationTableCatalog].getName)
   }
 
   override def afterEach(): Unit = {
     SharedTablesInMemoryRowLevelOperationTableCatalog.reset()
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
+    spark.conf.unset(s"spark.sql.catalog.${FakePathBasedSource.CATALOG_NAME}")
     super.afterEach()
   }
 
@@ -56,10 +61,27 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
   }
 
-  private def streamSessionCatalog(query: StreamingQuery): InMemoryRowLevelOperationTableCatalog = {
-    val session = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
-    session.sessionState.catalogManager.v2SessionCatalog
+  // The SCO-targeted catalog that connector-prefixed paths route to. Distinct instance
+  // from `catalog` (session); both share table state via the SharedTables static map.
+  protected def pathformatCat: InMemoryRowLevelOperationTableCatalog = {
+    spark.sessionState.catalogManager.catalog(FakePathBasedSource.CATALOG_NAME)
       .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
+  }
+
+  private def streamPathformatCat(
+      query: StreamingQuery): InMemoryRowLevelOperationTableCatalog = {
+    val session = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.sparkSessionForStream
+    session.sessionState.catalogManager.catalog(FakePathBasedSource.CATALOG_NAME)
+      .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
+  }
+
+  // Bare-path tests resolve to the session catalog; connector-prefixed tests resolve via
+  // SCO to `pathformat_cat`. Return whichever catalog actually ran a transaction so test
+  // bodies can keep using `executeTransaction { ... }` without caring which one fired.
+  override protected def executeTransaction(func: => Unit): (Txn, Map[String, TxnTable]) = {
+    val (sessionTxn, tables) = super.executeTransaction(func)
+    val txn = Option(sessionTxn).orElse(Option(pathformatCat.lastTransaction)).orNull
+    (txn, tables)
   }
 
   private def createPathTable(name: String): Unit = {
@@ -83,6 +105,11 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     }
     assert(txn.currentState === Committed)
     assert(txn.isClosed)
+    // The transaction must have gone through the SCO seam to pathformat_cat, not the
+    // (also-transactional) session catalog. Without these checks the assertions above
+    // would silently pass when the session catalog absorbs the write.
+    assert(pathformatCat.lastTransaction eq txn)
+    assert(catalog.lastTransaction == null)
     checkAnswer(spark.table(tablePathWithFormat), Row(1, "a") :: Row(2, "b") :: Nil)
   }
 
@@ -96,6 +123,8 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     }
     assert(txn.currentState === Committed)
     assert(txn.isClosed)
+    assert(pathformatCat.lastTransaction eq txn)
+    assert(catalog.lastTransaction == null)
     checkAnswer(spark.table(tablePathWithFormat), Row(1, "a") :: Nil)
   }
 
@@ -142,13 +171,14 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       query.processAllAvailable()
       query.stop()
 
-      val streamCat = streamSessionCatalog(query)
+      val streamCat = streamPathformatCat(query)
       val txn = streamCat.lastTransaction
       assert(txn != null, "expected a transaction to have been committed")
       assert(txn.currentState === Committed)
       assert(txn.isClosed)
-      // Streaming must not add transactions to the main session catalog.
+      // Streaming must not add transactions to the main session's catalogs.
       assert(catalog.observedTransactions.isEmpty)
+      assert(pathformatCat.observedTransactions.isEmpty)
       checkAnswer(spark.table(tablePathWithFormat), Row(1) :: Row(2) :: Row(3) :: Nil)
     }
   }
@@ -171,7 +201,7 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       query.processAllAvailable()
       query.stop()
 
-      val streamCat = streamSessionCatalog(query)
+      val streamCat = streamPathformatCat(query)
       val txn = streamCat.lastTransaction
       assert(txn != null, "expected a transaction to have been committed")
       assert(txn.currentState === Committed)
@@ -180,9 +210,10 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       assert(txn.catalog.txnTables.size === 1)
       val txnTable = txn.catalog.txnTables.values.head
       assert(txnTable.scanEvents.size === 1)
-      // Streaming must not add transactions to the main session catalog beyond the pre-existing
-      // INSERT transaction.
-      assert(catalog.observedTransactions.size === 1)
+      // Streaming must not add transactions to the main session's catalogs beyond the
+      // pre-existing INSERT transaction (which lives on pathformatCat, not the session).
+      assert(catalog.observedTransactions.isEmpty)
+      assert(pathformatCat.observedTransactions.size === 1)
     }
   }
 
@@ -209,17 +240,19 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
 
   test("path-based write with same-catalog source succeeds") {
     createPathTable(tablePathWithFormat)
-    // ns1.source is resolved via the current catalog (spark_catalog), same as the write target.
-    sql("CREATE TABLE ns1.source (id INT, data STRING)")
-    sql("INSERT INTO ns1.source VALUES (1, 'a'), (2, 'b')")
+    // Source must live in pathformat_cat (same as the SCO-routed write target) for the
+    // source scan to be tracked in the same transaction.
+    val sourceName = s"${FakePathBasedSource.CATALOG_NAME}.ns1.source"
+    sql(s"CREATE TABLE $sourceName (id INT, data STRING)")
+    sql(s"INSERT INTO $sourceName VALUES (1, 'a'), (2, 'b')")
 
     val (txn, txnTables) = executeTransaction {
-      sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM ns1.source WHERE id = 1")
+      sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM $sourceName WHERE id = 1")
     }
     assert(txn.currentState === Committed)
     assert(txn.isClosed)
     // Source scan with predicate was tracked via the transaction catalog.
-    val sourceTxnTable = txnTables("spark_catalog.ns1.source")
+    val sourceTxnTable = txnTables(sourceName)
     assert(sourceTxnTable.scanEvents.size === 1)
     assert(sourceTxnTable.scanEvents.flatten.exists {
       case sources.EqualTo("id", 1) => true

@@ -121,17 +121,9 @@ private[sql] trait LookupCatalog extends Logging {
         // this custom catalog can't be accessed.
         Some((catalogManager.v2SessionCatalog, nameParts.asIdentifier))
       } else {
-        // Path-based data sources (e.g. `pathformat2.'/path/to/t'`) whose format declares a
-        // catalog via SupportsCatalogOptions are routed to that catalog. Both the catalog and
-        // the canonical identifier come from the connector.
-        val (catalogName, ident) =
-          Option(catalogManager.catalogAndIdentForDataSource(nameParts)).flatten match {
-            case Some((catName, providerIdent)) => (catName, providerIdent)
-            case None => (nameParts.head, nameParts.tail.asIdentifier)
-          }
-
         try {
-          val catalog = catalogManager.catalog(catalogName)
+          val catalog = catalogManager.catalog(nameParts.head)
+          val ident = nameParts.tail.asIdentifier
           if (CatalogV2Util.isSessionCatalog(catalog)) {
             // Reject only when namespace is empty (e.g. spark_catalog.t with no database).
             // Allow multi-part namespace for metadata tables (e.g. default.table.snapshots).
@@ -143,7 +135,18 @@ private[sql] trait LookupCatalog extends Logging {
           Some((catalog, ident))
         } catch {
           case _: CatalogNotFoundException =>
-            Some((currentCatalog, nameParts.asIdentifier))
+            // No catalog matched. As a fallback, try path-based data sources:
+            // formats implementing SupportsCatalogOptions (e.g. `pathformat.`/path/to/t``)
+            // route to the catalog the connector designates. If no SCO format claims the
+            // identifier head, fall through to currentCatalog and let later analysis raise
+            // table-not-found. This matches the v1 file-format precedence (catalog first,
+            // path-based as fallback).
+            Option(catalogManager.catalogAndIdentForDataSource(nameParts)).flatten match {
+              case Some((catName, providerIdent)) =>
+                Some((catalogManager.catalog(catName), providerIdent))
+              case None =>
+                Some((currentCatalog, nameParts.asIdentifier))
+            }
         }
       }
     }

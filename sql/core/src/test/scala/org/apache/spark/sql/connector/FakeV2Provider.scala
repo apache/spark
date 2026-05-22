@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import java.util
+import java.util.Optional
 
 import org.apache.spark.sql.connector.catalog.{Identifier, SessionConfigSupport, SupportsCatalogOptions, SupportsV1OverwriteWithSaveAsTable, Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -96,10 +97,11 @@ class FakeV2ProviderWithV1SaveAsTableOverwriteWriteOptionDisabled
 }
 
 /**
- * Simulates a path-based connector (e.g. Delta) that implements [[SupportsCatalogOptions]]
- * to route `pathformat.\`/path/to/t\`` SQL identifiers to the session catalog. We rely on
- * the default [[SupportsCatalogOptions#extractCatalog]] which returns
- * [[org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME]].
+ * Simulates a path-based connector that implements [[SupportsCatalogOptions]] and routes
+ * `pathformat.\`/path/to/t\`` SQL identifiers to a dedicated catalog (`pathformat_cat`).
+ * Tests register that catalog and assert against it so the SCO seam is exercised
+ * unambiguously: without SCO, `CatalogAndIdentifier` falls back to the current catalog
+ * (session catalog) and the target catalog stays empty.
  */
 class FakePathBasedSource
     extends FakeV2ProviderWithCustomSchema
@@ -108,8 +110,18 @@ class FakePathBasedSource
 
   override def shortName(): String = "pathformat"
 
+  override def extractCatalog(options: CaseInsensitiveStringMap): String =
+    FakePathBasedSource.CATALOG_NAME
+
   override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
     Identifier.of(Array(shortName()), options.get("path"))
+
+  override def extractTimeTravelVersion(options: CaseInsensitiveStringMap): Optional[String] =
+    Optional.ofNullable(options.get("versionAsOf"))
+}
+
+object FakePathBasedSource {
+  val CATALOG_NAME: String = "pathformat_cat"
 }
 
 /**
