@@ -492,7 +492,6 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
     try:
         run_cmd("git push %s %s:%s" % (PUSH_REMOTE_NAME, pick_branch_name, pick_ref))
     except Exception as e:
-        clean_up()
         fail("Exception while pushing: %s" % e)
 
     pick_hash = run_cmd("git rev-parse %s" % pick_branch_name)[:8]
