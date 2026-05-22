@@ -44,6 +44,11 @@ class DataSourceV2TempViewConnectSuite
   override protected def withTestSession(fn: SparkSession => Unit): Unit =
     withSession(fn)
 
+  // Cannot use QueryTest.checkAnswer directly because it accesses df.logicalPlan,
+  // df.queryExecution, and df.materializedRdd, which are not available on Connect client
+  // DataFrames (they throw ConnectClientUnsupportedErrors). Instead, collect the rows and
+  // delegate to QueryTest.sameRows, which is the same value-based, order-agnostic comparison
+  // that checkAnswer uses internally.
   override protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit =
     QueryTest.sameRows(expected, df.collect().toSeq).foreach(msg => fail(msg))
 
