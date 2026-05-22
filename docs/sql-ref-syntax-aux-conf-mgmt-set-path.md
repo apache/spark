@@ -37,8 +37,8 @@ The path can include two virtual namespaces in the `system` catalog:
 - `system.session` &mdash; temporary views, temporary functions, and session variables in the
   current session.
 
-`SET PATH` is gated by `spark.sql.path.enabled`. When it is `false` (the default), `SET PATH`
-raises `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED`. Unqualified resolution and
+`SET PATH` is controlled by `spark.sql.path.enabled`. When it is `false` (the default),
+`SET PATH` raises `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED`. Unqualified resolution and
 [`current_path()`](sql-ref-function-current-path.html) still use the default path.
 
 The initial value of `PATH` in a session is `DEFAULT_PATH`. `DEFAULT_PATH` is either the value of
@@ -47,11 +47,11 @@ The initial value of `PATH` in a session is `DEFAULT_PATH`. `DEFAULT_PATH` is ei
 `spark.sql.defaultPath`. See the [`DEFAULT_PATH` parameter](#parameters) for the exact derivation
 rules.
 
-A `SET PATH` is scoped to the current session and is lost when the session ends. To re-apply
-the current default path mid-session, run `SET PATH = DEFAULT_PATH`. (This stores a snapshot of
-`DEFAULT_PATH` at the moment of the statement; later changes to `spark.sql.defaultPath` are not
-picked up automatically.) Cloned sessions inherit the parent's path at clone time; later changes
-in the child do not propagate back.
+The effect of `SET PATH` is scoped to the current session and is lost when the session ends. To
+re-apply the current default path mid-session, run `SET PATH = DEFAULT_PATH`. (This stores a
+snapshot of `DEFAULT_PATH` at the moment of the statement; later changes to
+`spark.sql.defaultPath` are not picked up automatically.) Cloned sessions inherit the parent's
+path at clone time; later changes in the child do not propagate back.
 
 Persistent views and SQL UDFs capture the path at `CREATE` time into the object's metadata.
 Each invocation resolves the body against that frozen path, not the invoker's current path;
@@ -88,7 +88,7 @@ path_element
      Static duplicates inside the conf are tolerated (unlike interactive `SET PATH`, which
      rejects them) so a later `USE SCHEMA` cannot turn a previously valid default into a runtime
      error. A `DEFAULT_PATH` token inside the conf value resolves to the spark-built-in default
-     below (cycle break) rather than recursing.
+     below to avoid a cycle, rather than recursing.
 
   2. If `spark.sql.defaultPath` is empty (the factory setting), the spark-built-in default
      applies: `system.builtin`, `system.session`, and the current schema
@@ -178,7 +178,7 @@ path_element
 > SELECT current_path();
  spark_catalog.default,system.builtin,spark_catalog.analytics
 
--- CURRENT_SCHEMA is a live marker; USE SCHEMA updates the effective path.
+-- CURRENT_SCHEMA is re-evaluated each time; USE SCHEMA updates the effective path.
 > SET PATH = CURRENT_SCHEMA, system.builtin;
 > USE spark_catalog.finance;
 > SELECT current_path();
@@ -202,7 +202,7 @@ path_element
 > SELECT to_iso_date(DATE'2026-05-22');
  2026-05-22
 
--- Drop system.session from the path to force temporary objects to be spelled out.
+-- Drop system.session from the path to force temporary objects to be qualified explicitly.
 > CREATE TEMPORARY FUNCTION revenue() RETURNS INT RETURN 42;
 > SELECT revenue();                  -- resolves via the default path
  42
