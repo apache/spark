@@ -764,16 +764,17 @@ class DataFrame(Frame, Generic[T]):
         [Index([0, 1], dtype='int64'), Index(['col1', 'col2'], dtype='object')]
         """
         return [self.index, self.columns]
-    
+
     @property
-    def _constructor(self):
+    def _constructor(self) -> Any:
         # Return the class of the current instance to support subclassing
         return self.__class__
-    
+
     @property
-    def _constructor_sliced(self):
+    def _constructor_sliced(self) -> Any:
         # Return the Series class for operations that reduce dimensionality
         from pyspark.pandas.series import Series
+
         return Series
 
     @with_ansi_mode_context
@@ -13912,7 +13913,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     ) -> "DataFrameGroupBy":
         from pyspark.pandas.groupby import DataFrameGroupBy
 
-        return self._constructorGroupBy._build(self, by, as_index=as_index, dropna=dropna)
+        return DataFrameGroupBy._build(self, by, as_index=as_index, dropna=dropna)
 
     def resample(
         self,
@@ -13976,7 +13977,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if len(agg_columns) == 0:
             raise ValueError("No available aggregation columns!")
 
-        return self._constructorResampler(
+        return DataFrameResampler(
             psdf=self,
             resamplekey=on,
             rule=rule,

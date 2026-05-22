@@ -161,7 +161,7 @@ class ExtensionTestsMixin:
         # Test DataFrame extension properties
         sub_psdf = SubclassedDataFrame(self.psdf._internal)
         result_df = sub_psdf.head(2)
-        
+
         self.assertIsInstance(result_df, SubclassedDataFrame)
         self.assertEqual(result_df.shape, (2, 2))
 
@@ -169,7 +169,7 @@ class ExtensionTestsMixin:
         # Pass the PySpark Series directly instead of its _internal frame
         sub_psser = SubclassedSeries(self.psdf["a"])
         result_ser = sub_psser.head(2)
-        
+
         self.assertIsInstance(result_ser, SubclassedSeries)
         self.assertEqual(len(result_ser), 2)
 

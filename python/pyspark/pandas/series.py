@@ -484,13 +484,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             self._anchor = anchor
             self._col_label = anchor._internal.column_labels[0]
             object.__setattr__(anchor, "_psseries", {self._column_label: self})
+
     @property
-    def _constructor(self):
+    def _constructor(self) -> Any:
         return self.__class__
 
     @property
-    def _constructor_expanddim(self):
+    def _constructor_expanddim(self) -> Any:
         from pyspark.pandas.frame import DataFrame
+
         return DataFrame
 
     @property
