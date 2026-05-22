@@ -203,6 +203,12 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."
+    ],
+    "sqlState" : "22023"
+  },
   "AUTOCDC_MICROBATCH_VALIDATION" : {
     "message" : [
       "AutoCDC flow on table <tableName> in batch <batchId> failed microbatch validation."
@@ -237,12 +243,6 @@
       "Invalid AutoCDC destination <tableName> with multiple flows: <flows>. An AutoCDC target table must have exactly one flow writing to it."
     ],
     "sqlState" : "42000"
-  },
-  "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
-    "message" : [
-      "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."
-    ],
-    "sqlState" : "22023"
   },
   "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
     "message" : [
