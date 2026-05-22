@@ -47,7 +47,8 @@ public final class TimestampNanosRowValues {
   }
 
   public static short readNanosWithinMicro(Object baseObject, long baseOffset, int offset) {
-    return Platform.getShort(baseObject, baseOffset + offset + 8);
+    // Use getLong (not getShort) to match writePayload's putLong; endian-safe.
+    return (short) (Platform.getLong(baseObject, baseOffset + offset + 8) & 0xFFFFL);
   }
 
   public static TimestampNTZNanos readNTZ(Object baseObject, long baseOffset, int offset) {
