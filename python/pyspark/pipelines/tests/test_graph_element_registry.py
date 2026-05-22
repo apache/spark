@@ -23,6 +23,7 @@ from pyspark import pipelines as dp
 from pyspark.pipelines.flow import AutoCdcFlow
 from pyspark.pipelines.output import Sink
 from pyspark.pipelines.tests.local_graph_element_registry import LocalGraphElementRegistry
+from pyspark.sql.connect.functions.builtin import col, expr
 from typing import cast
 
 
@@ -99,8 +100,6 @@ class GraphElementRegistryTest(unittest.TestCase):
         assert sink_obj.source_code_location.filename.endswith("test_graph_element_registry.py")
 
     def test_create_auto_cdc_flow(self):
-        from pyspark.sql.connect.functions.builtin import col, expr
-
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
             dp.create_streaming_table("target")
@@ -118,11 +117,14 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertEqual(flow.target, "target")
         self.assertEqual(flow.source, "source")
         self.assertIsNone(flow.name)
+        self.assertIsNone(flow.ignore_null_updates_column_list)
+        self.assertIsNone(flow.ignore_null_updates_except_column_list)
+        self.assertIsNone(flow.stored_as_scd_type)
+        self.assertIsNone(flow.apply_as_deletes)
+        self.assertIsNone(flow.apply_as_truncates)
         assert flow.source_code_location.filename.endswith("test_graph_element_registry.py")
 
     def test_create_auto_cdc_flow_with_all_args(self):
-        from pyspark.sql.connect.functions.builtin import col, expr
-
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
             dp.create_streaming_table("tgt")
@@ -145,8 +147,6 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertEqual(flow.stored_as_scd_type, 1)
 
     def test_create_auto_cdc_flow_stored_as_scd_type_string(self):
-        from pyspark.sql.connect.functions.builtin import col, expr
-
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
             dp.create_auto_cdc_flow(
@@ -161,8 +161,6 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertEqual(flow.stored_as_scd_type, "1")
 
     def test_create_auto_cdc_flow_invalid_scd_type(self):
-        from pyspark.sql.connect.functions.builtin import col, expr
-
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
             with self.assertRaises(PySparkTypeError) as ctx:
