@@ -73,6 +73,9 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
           case projection @ ArrayTypeProjection(projectedElementSchema) =>
             lambda.arguments.headOption match {
               case Some(elementVar: NamedLambdaVariable) =>
+                // Pruning fields changes the physical ordinal layout of the element struct.
+                // For example, pruning struct<a, b, c> to struct<a, c> moves c from ordinal 2
+                // to ordinal 1, so rewrite both the variable type and its field accesses.
                 val projectedElementVar = elementVar.copy(dataType = projectedElementSchema)
                 val lambdaProjection =
                   ProjectionOverLambdaVariable(elementVar, projectedElementVar)
@@ -112,6 +115,10 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
     }
   }
 
+  /**
+   * Rewrites references rooted at one bound lambda element to use its projected type and
+   * recomputes nested field ordinals against each projected struct in the access path.
+   */
   private case class ProjectionOverLambdaVariable(
       original: NamedLambdaVariable,
       projected: NamedLambdaVariable) {

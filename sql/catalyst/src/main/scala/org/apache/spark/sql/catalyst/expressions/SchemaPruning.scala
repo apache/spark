@@ -141,6 +141,9 @@ object SchemaPruning extends SQLConfHelper {
   private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case ArrayTransform(argument, lambda: LambdaFunction) =>
+        // Field accesses through the lambda variable are not directly rooted at the input
+        // attribute. Convert them into a projected type for the transform argument so that
+        // physical nested column pruning can see them.
         val nestedRootFields = lambda.arguments.headOption.collect {
           case elementVar: NamedLambdaVariable =>
             getArrayTransformRootField(argument, lambda.function, elementVar)
@@ -194,6 +197,14 @@ object SchemaPruning extends SQLConfHelper {
     }
   }
 
+  /**
+   * Collects statically identifiable nested fields read from `elementVar`.
+   *
+   * `Some(Seq.empty)` means this subtree does not reference the element variable, and
+   * `Some(fields)` means every reference can be satisfied by the listed nested fields. `None`
+   * means the full element is required somewhere (for example, `x => struct(x.a, x)`), so it is
+   * not safe to prune the element struct.
+   */
   private def collectLambdaVariableFields(
       expr: Expression,
       elementVar: NamedLambdaVariable): Option[Seq[StructField]] = {
@@ -211,6 +222,11 @@ object SchemaPruning extends SQLConfHelper {
     }
   }
 
+  /**
+   * Converts a field access rooted at the lambda element into the single nested
+   * [[StructField]] shape needed by the input array schema. For example,
+   * `x.company.address` becomes `company: struct<address: ...>`.
+   */
   private object LambdaVariableField {
     def unapply(expr: Expression): Option[(StructField, NamedLambdaVariable)] = {
       def selectField(

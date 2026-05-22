@@ -62,6 +62,7 @@ abstract class SchemaPruningSuite
     super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "false")
 
   case class Employee(id: Int, name: FullName, employer: Company)
+  case class Team(members: Array[Employer])
 
   val janeDoe = FullName("Jane", "X.", "Doe")
   val johnDoe = FullName("John", "Y.", "Doe")
@@ -86,6 +87,7 @@ abstract class SchemaPruningSuite
     Department(2, "Operation", 4, employerWithNullCompany2) :: Nil
 
   val employees = Employee(0, janeDoe, company) :: Employee(1, johnDoe, company) :: Nil
+  val teams = Team(Array(employer)) :: Nil
 
   case class Name(first: String, last: String)
   case class BriefContact(id: Int, name: Name, address: String)
@@ -376,6 +378,44 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
+  test("select ArrayTransform over deep nested fields of array of struct") {
+    withDataSourceTable(teams, "teams") {
+      val query = spark.table("teams")
+        .select(transform(col("members"), member =>
+          member.getField("company").getField("address")))
+
+      checkScan(query, "struct<members:array<struct<company:struct<address:string>>>>")
+      checkAnswer(query, Row(Array("123 Business Street")) :: Nil)
+    }
+  }
+
+  testSchemaPruning("select indexed ArrayTransform over nested fields of array of struct") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(transform(col("friends"), (friend, index) =>
+        struct(friend.getField("last").as("last"), index.as("index"))))
+
+    checkScan(query, "struct<friends:array<struct<last:string>>>")
+    checkAnswer(query,
+      Row(Array(Row("Smith", 0))) ::
+      Row(Array.empty[Row]) ::
+      Nil)
+  }
+
+  testSchemaPruning("select case-insensitive ArrayTransform nested field") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val query = spark.table("contacts")
+        .where("p = 1")
+        .select(transform(col("friends"), friend => friend.getField("LaSt")))
+
+      checkScan(query, "struct<friends:array<struct<last:string>>>")
+      checkAnswer(query,
+        Row(Array("Smith")) ::
+        Row(Array.empty[String]) ::
+        Nil)
+    }
+  }
+
   testSchemaPruning("do not prune ArrayTransform when the whole element is used") {
     val query = spark.table("contacts")
       .where("p = 1")
@@ -384,6 +424,19 @@ abstract class SchemaPruningSuite
     checkScan(query, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query,
       Row(Array(Row("Susan", "Z.", "Smith"))) ::
+      Row(Array.empty[Row]) ::
+      Nil)
+  }
+
+  testSchemaPruning("do not prune ArrayTransform when a nested field and whole element are used") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(transform(col("friends"), friend =>
+        struct(friend.getField("first").as("first"), friend.as("friend"))))
+
+    checkScan(query, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query,
+      Row(Array(Row("Susan", Row("Susan", "Z.", "Smith")))) ::
       Row(Array.empty[Row]) ::
       Nil)
   }
