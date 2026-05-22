@@ -71,11 +71,6 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
 
     The fully qualified view name must be unique within its schema.
 
-> Note: a persistent view captures the SQL Path that was in effect when `CREATE VIEW` ran. When the
-> view is referenced, the body resolves against that frozen path, not the invoker's current path.
-> See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
-> Use [DESCRIBE EXTENDED](sql-ref-syntax-aux-describe-table.html) to inspect the captured path.
-
 * **create_view_clauses**
 
     These clauses are optional and order insensitive. It can be of following formats.
@@ -96,7 +91,15 @@ CREATE [ OR REPLACE ] [ [ GLOBAL ] TEMPORARY ] VIEW [ IF NOT EXISTS ] view_ident
       The default is `WITH SCHEMA COMPENSATION`.
 
 * **query**
+
   A [SELECT](sql-ref-syntax-qry-select.html) statement that constructs the view from base tables or other views.
+
+  A persistent view cannot reference temporary views, temporary functions, or session variables.
+
+  For a persistent view, the SQL Path in effect at `CREATE VIEW` time is captured into the view's
+  metadata; the body resolves against that frozen path on every reference, not the invoker's
+  current path. Use [DESCRIBE EXTENDED](sql-ref-syntax-aux-describe-table.html) to inspect the
+  captured path. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 
 ### Examples
 
@@ -156,8 +159,6 @@ resolves against that frozen path on every reference, even when the caller's ses
 different PATH. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 
 ```sql
-> SET spark.sql.path.enabled = true;
-
 > CREATE SCHEMA views_a;
 > CREATE SCHEMA views_b;
 > CREATE TABLE views_a.t USING parquet AS SELECT 1 AS id;

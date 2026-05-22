@@ -50,7 +50,7 @@ In detail, resolution of identifiers to a specific reference follows these rules
 
    1. **Parameterless function reference**
 
-      If the identifier is unqualified and matches `current_user`, `current_date`, or `current_timestamp`: Resolve it as one of these functions.
+      If the identifier is unqualified and matches `current_user`, `current_date`, `current_time`, `current_timestamp`, or `current_path`: Resolve it as one of these functions.
 
    1. **Column DEFAULT specification**
 
@@ -280,8 +280,8 @@ returning the first match:
 
 | `spark.sql.legacy.persistentCatalogFirst` | Mini-path tried in order |
 | :-------------------------------------- | :----------------------- |
-| `false` (default) | `system.session.x` / `system.builtin.x`, then `current_catalog.session.x` / `current_catalog.builtin.x` |
-| `true` (legacy)   | `current_catalog.session.x` / `current_catalog.builtin.x`, then `system.session.x` / `system.builtin.x` |
+| `false` (default) | the system namespace (`system.session.x` / `system.builtin.x`), then the current catalog's `session.x` / `builtin.x` |
+| `true` (legacy)   | the current catalog's `session.x` / `builtin.x`, then the system namespace (`system.session.x` / `system.builtin.x`) |
 
 ### Unqualified (1 part) &mdash; `object`
 
@@ -371,7 +371,6 @@ the effective search path, for example
   [TABLE_OR_VIEW_NOT_FOUND] The table or view `cte` cannot be found.
 
 -- PATH drives unqualified relation lookup order
-> SET spark.sql.path.enabled = true;
 > CREATE SCHEMA db_a;
 > CREATE SCHEMA db_b;
 > CREATE TABLE db_a.t USING parquet AS SELECT 1 AS v;
@@ -392,14 +391,8 @@ the effective search path, for example
 
 ## Function resolution
 
-A function reference is recognized by the trailing parentheses. It can resolve to:
-
-- A built-in function (`system.builtin`), including functions injected by
-  `SparkSessionExtensions`.
-- A temporary function in the current session (`system.session`).
-- A persistent function in a catalog schema.
-
-Resolution follows [Object name resolution](#object-name-resolution).
+A function reference is recognized by the trailing parentheses, and follows
+[Object name resolution](#object-name-resolution).
 
 If the function cannot be resolved, Spark raises `UNRESOLVED_ROUTINE`. The error includes the
 effective search path, for example
@@ -456,7 +449,6 @@ effective search path, for example
 > DROP TEMPORARY FUNCTION abs;
 
 -- PATH controls unqualified routine lookup order
-> SET spark.sql.path.enabled = true;
 > CREATE SCHEMA path_a;
 > CREATE SCHEMA path_b;
 > CREATE FUNCTION path_a.pick() RETURNS INT RETURN 10;

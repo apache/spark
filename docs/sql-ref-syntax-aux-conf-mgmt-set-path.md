@@ -41,20 +41,11 @@ The path can include two virtual namespaces in the `system` catalog:
 raises `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED`. Unqualified resolution and
 [`current_path()`](sql-ref-function-current-path.html) still use the default path.
 
-The path within a session:
-
-1. The initial value of `PATH` is `DEFAULT_PATH`.
-2. `DEFAULT_PATH` is either:
-
-   - the value of `spark.sql.defaultPath`, when that configuration is set; or
-   - a built-in value composed of `system.builtin`, `system.session`, and the current schema,
-     when `spark.sql.defaultPath` is empty.
-
-3. To override the initial value, set `spark.sql.defaultPath`, or set
-   `spark.sql.functionResolution.sessionOrder` to reorder the entries of the built-in value in
-   step 2.
-
-See the [`DEFAULT_PATH` parameter](#parameters) for the exact derivation rules.
+The initial value of `PATH` in a session is `DEFAULT_PATH`. `DEFAULT_PATH` is either the value of
+`spark.sql.defaultPath`, or, when that configuration is empty, a built-in value composed of
+`system.builtin`, `system.session`, and the current schema. To override, set
+`spark.sql.defaultPath`. See the [`DEFAULT_PATH` parameter](#parameters) for the exact derivation
+rules.
 
 A `SET PATH` is scoped to the current session and is lost when the session ends. To revert
 mid-session, run `SET PATH = DEFAULT_PATH`. Cloned sessions inherit the parent's path at clone
@@ -70,18 +61,18 @@ The leading names `session` and `builtin` have special meaning in 2-part referen
 ### Syntax
 
 ```sql
-SET PATH = path_element [, path_element ...]
+SET PATH = path_element [ , ... ]
 
 path_element
-  : DEFAULT_PATH
-  | SYSTEM_PATH
-  | PATH
-  | CURRENT_SCHEMA
-  | CURRENT_DATABASE
-  | schema_name
+    { DEFAULT_PATH |
+      SYSTEM_PATH |
+      PATH |
+      CURRENT_SCHEMA |
+      CURRENT_DATABASE |
+      schema_name }
 
 schema_name
-  : { catalog_name . namespace_name [ . namespace_name ...] }
+    catalog_name . schema_name
 ```
 
 ### Parameters
@@ -102,28 +93,16 @@ schema_name
 
   2. If `spark.sql.defaultPath` is empty (the factory setting), the spark-built-in default
      applies: `system.builtin`, `system.session`, and the current schema
-     (`current_catalog.current_schema`), interleaved per
-     `spark.sql.functionResolution.sessionOrder`:
-
-     | `sessionOrder` | Order produced |
-     | :------------- | :------------- |
-     | `first` | `system.session`, `system.builtin`, `current_schema` |
-     | `second` (default) | `system.builtin`, `system.session`, `current_schema` |
-     | `last` | `system.builtin`, `current_schema`, `system.session` |
+     (`current_catalog.current_schema`), in that order.
 
   To change the default path, set `spark.sql.defaultPath` via any of the usual mechanisms
   (`SET spark.sql.defaultPath = ...` at runtime, `--conf` on `spark-submit`, `SparkConf`, or
   `spark-defaults.conf`); clear it with `RESET spark.sql.defaultPath` to return to the
   spark-built-in default.
 
-  `spark.sql.functionResolution.sessionOrder` and `spark.sql.legacy.persistentCatalogFirst` are
-  internal configurations intended for advanced use; ordinary workloads should leave them at
-  their defaults.
-
 * **`SYSTEM_PATH`**
 
-  Expands to the two system namespaces `system.builtin` and `system.session`, in the order
-  configured by `spark.sql.functionResolution.sessionOrder`.
+  Expands to `system.builtin, system.session`.
 
 * **`PATH`**
 
@@ -140,12 +119,12 @@ schema_name
 
 * **`schema_name`**
 
-  An explicit catalog-qualified schema reference. At least two parts are required
-  (`catalog.namespace`). The catalog and schema do not need to exist at the time of `SET PATH`;
-  non-existent entries are silently skipped during name resolution.
+  An explicit catalog-qualified schema reference (`catalog.schema`). Both parts are required.
+  The catalog and schema do not need to exist at the time of `SET PATH`; non-existent entries
+  are silently skipped during name resolution.
 
-  Identifier quoting follows the usual rules; backtick-quoted parts that contain a dot are
-  preserved, for example `spark_catalog.` + `` `sch.b` ``.
+  Identifier quoting follows the usual rules. Backtick-quoted parts that contain a dot are
+  preserved, for example ``spark_catalog.`sch.b` ``.
 
 ### Semantics
 
@@ -215,6 +194,24 @@ schema_name
 > SELECT current_path();
  system.session,system.builtin,spark_catalog.default
 > RESET spark.sql.defaultPath;
+
+-- Append a schema of shared UDFs so callers do not have to qualify them.
+> CREATE SCHEMA spark_catalog.shared_udfs;
+> CREATE FUNCTION spark_catalog.shared_udfs.to_iso_date(d DATE) RETURNS STRING
+    RETURN date_format(d, 'yyyy-MM-dd');
+> SET PATH = PATH, spark_catalog.shared_udfs;
+> SELECT to_iso_date(DATE'2026-05-22');
+ 2026-05-22
+
+-- Drop system.session from the path to force temporary objects to be spelled out.
+> CREATE TEMPORARY FUNCTION revenue() RETURNS INT RETURN 42;
+> SELECT revenue();                  -- resolves via the default path
+ 42
+> SET PATH = system.builtin, current_schema;
+> SELECT revenue();                  -- now must be qualified
+ [UNRESOLVED_ROUTINE] `revenue` ...
+> SELECT session.revenue();
+ 42
 
 -- Error cases.
 > SET PATH = spark_catalog.default, spark_catalog.default;

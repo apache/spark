@@ -87,13 +87,6 @@ characteristic
 
   The function name must be unique among all routines (procedures and functions) in its schema.
 
-> Note: a SQL UDF captures the SQL Path that was in effect when `CREATE FUNCTION` ran. When the
-> function is invoked, the body resolves against that frozen path, not the invoker's current path.
-> Inside the body, `current_schema()` and `current_path()` still reflect the invoker's context.
-> See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
-> Use [DESCRIBE FUNCTION EXTENDED](sql-ref-syntax-aux-describe-function.html) to inspect the
-> captured path.
-
 - **function_parameter**
 
   Specifies a parameter of the function.
@@ -147,6 +140,15 @@ characteristic
   - [Aggregate functions](sql-ref-functions-builtin.md#aggregate-functions)
   - [Window functions](sql-ref-functions-builtin.md#analytic-window-functions)
   - [Ranking functions](sql-ref-functions-builtin.md#ranking-window-functions)
+
+  A persistent SQL UDF cannot reference temporary views, temporary functions, or session
+  variables.
+
+  The SQL Path in effect at `CREATE FUNCTION` time is captured into the function's metadata; the
+  body resolves against that frozen path on every invocation, not the invoker's current path.
+  `current_schema()` and `current_path()` inside the body still return the invoker's context.
+  Use [DESCRIBE FUNCTION EXTENDED](sql-ref-syntax-aux-describe-function.html) to inspect the
+  captured path. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
   - Row producing functions such as `explode`
 
   Within the body of the function you can refer to parameter by its unqualified name or by qualifying the parameter with the function name.
@@ -354,8 +356,6 @@ against that frozen path on every invocation, even if the caller's session has s
 PATH. See [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
 
 ```sql
-> SET spark.sql.path.enabled = true;
-
 > CREATE SCHEMA path_a;
 > CREATE SCHEMA path_b;
 > CREATE TABLE path_a.t USING parquet AS SELECT 10 AS id;

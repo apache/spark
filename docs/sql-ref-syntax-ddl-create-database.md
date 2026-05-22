@@ -38,10 +38,7 @@ CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
 
     Specifies the name of the database to be created.
 
-    > Note: avoid naming a database `session` or `builtin`. The catalog API accepts both names,
-    > but the 2-part forms `session.x` and `builtin.x` are interpreted as the temporary and
-    > built-in namespaces respectively, which hides a persistent database with one of these
-    > names. See
+    > Note: avoid naming a database `session` or `builtin`; see
     > [Reserved system names](sql-ref-identifier.html#reserved-system-names).
 
 * **IF NOT EXISTS**

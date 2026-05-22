@@ -151,9 +151,7 @@ DESC FUNCTION getemps;
 +--------------------------------------+
 
 -- DESC FUNCTION EXTENDED for a SQL UDF adds the body, the characteristic clauses,
--- the captured SQL configs, the owner, the create time, and the frozen SQL Path
--- (when `spark.sql.path.enabled` is true).
-SET spark.sql.path.enabled = true;
+-- the captured SQL configs, the owner, the create time, and the frozen SQL Path.
 SET PATH = spark_catalog.default, system.builtin;
 CREATE FUNCTION frozen_fn() RETURNS INT
   COMMENT 'demo function'

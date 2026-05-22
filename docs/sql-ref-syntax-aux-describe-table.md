@@ -105,6 +105,10 @@ to return the metadata pertaining to a partition or column respectively.
       "view_schema_mode": "<view_schema_mode>",
       "view_catalog_and_namespace": "<view_catalog_and_namespace>",
       "view_query_output_columns": ["col1", "col2"],
+      // SQL Path captured at the time of permanent view creation
+      "sql_path": [
+        {"catalog_name": "<catalog_name>", "namespace": ["<namespace>"]}
+      ],
       // Spark SQL configurations captured at the time of permanent view creation
       "view_creation_spark_configuration": {
         "conf1": "<value1>",
@@ -272,13 +276,29 @@ DESCRIBE customer salesdb.customer.name;
 +---------+----------+
 
 -- Returns the table metadata in JSON format.
+-- (Formatted for readability; the actual output is on a single line.)
 DESC FORMATTED customer AS JSON;
-{"table_name":"customer","catalog_name":"spark_catalog","schema_name":"default","namespace":["default"],"columns":[{"name":"cust_id","type":{"name":"integer"},"nullable":true},{"name":"name","type":{"name":"string"},"comment":"Short name","nullable":true},{"name":"state","type":{"name":"varchar","length":20},"nullable":true}],"location": "file:/tmp/salesdb.db/custom...","created_time":"2020-04-07T14:05:43Z","last_access":"UNKNOWN","created_by":"None","type":"MANAGED","provider":"parquet","partition_provider":"Catalog","partition_columns":["state"]}
+{
+  "table_name": "customer",
+  "catalog_name": "spark_catalog",
+  "schema_name": "default",
+  "namespace": ["default"],
+  "columns": [
+    {"name": "cust_id", "type": {"name": "integer"}, "nullable": true},
+    {"name": "name", "type": {"name": "string"}, "comment": "Short name", "nullable": true},
+    {"name": "state", "type": {"name": "varchar", "length": 20}, "nullable": true}
+  ],
+  "location": "file:/tmp/salesdb.db/custom...",
+  "created_time": "2020-04-07T14:05:43Z",
+  "last_access": "UNKNOWN",
+  "created_by": "None",
+  "type": "MANAGED",
+  "provider": "parquet",
+  "partition_provider": "Catalog",
+  "partition_columns": ["state"]
+}
 
--- DESCRIBE EXTENDED on a view emits view-specific rows. When `spark.sql.path.enabled` is true,
--- the output also includes the frozen `SQL Path` that the view body resolves against; see
--- [SET PATH](sql-ref-syntax-aux-conf-mgmt-set-path.html).
-SET spark.sql.path.enabled = true;
+-- DESCRIBE EXTENDED on a view emits view-specific rows.
 SET PATH = spark_catalog.default, system.builtin;
 CREATE VIEW recent_customers AS
     SELECT cust_id, name FROM customer WHERE cust_id > 1000;
@@ -302,6 +322,37 @@ DESCRIBE EXTENDED recent_customers;
 |   View Query Output Columns|                   [`cust_id`, `name`]  |        |
 |                    SQL Path|   spark_catalog.default, system.builtin|        |
 +----------------------------+---------------------------------------+--------+
+
+-- The same metadata in JSON form.
+-- (Formatted for readability; the actual output is on a single line.)
+DESCRIBE EXTENDED recent_customers AS JSON;
+{
+  "table_name": "recent_customers",
+  "catalog_name": "spark_catalog",
+  "schema_name": "default",
+  "namespace": ["default"],
+  "columns": [
+    {"name": "cust_id", "type": {"name": "int"}, "nullable": true},
+    {"name": "name", "type": {"name": "string", "collation": "UTF8_BINARY"}, "nullable": true}
+  ],
+  "created_time": "2026-05-22T10:00:00Z",
+  "last_access": "UNKNOWN",
+  "created_by": "Spark 4.2.0",
+  "type": "VIEW",
+  "collation": "UTF8_BINARY",
+  "view_text": "SELECT cust_id, name FROM customer WHERE cust_id > 1000",
+  "view_original_text": "SELECT cust_id, name FROM customer WHERE cust_id > 1000",
+  "view_schema_mode": "COMPENSATION",
+  "view_catalog_and_namespace": "spark_catalog.default",
+  "view_query_output_columns": ["cust_id", "name"],
+  "sql_path": [
+    {"catalog_name": "spark_catalog", "namespace": ["default"]},
+    {"catalog_name": "system", "namespace": ["builtin"]}
+  ],
+  "view_creation_spark_configuration": {
+    "spark.sql.ansi.enabled": "true"
+  }
+}
 ```
 
 ### Related Statements

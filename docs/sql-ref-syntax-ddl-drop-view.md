@@ -23,14 +23,6 @@ license: |
 
 `DROP VIEW` removes the metadata associated with a specified view from the catalog.
 
-Unlike `DROP FUNCTION`, `DROP VIEW` has no `TEMPORARY` keyword. The choice between a temporary
-view and a persistent view is driven by the identifier alone:
-
-* An unqualified `view_name` first matches a temporary view, then a persistent view in
-  the current schema.
-* A name qualified with `session` or `system.session` targets only the temporary view scope.
-* Any other qualifier targets only persistent views.
-
 ### Syntax
 
 ```sql
@@ -45,18 +37,11 @@ DROP VIEW [ IF EXISTS ] view_identifier
 
 * **view_identifier**
 
-    Specifies the view name to be dropped.
+    Specifies the view name to be dropped. The name may be optionally qualified with a database
+    name (or a catalog and database). A name qualified with `session` or `system.session`
+    targets a temporary view.
 
-    * For a **persistent** view the name may be optionally qualified with a database name
-      (or a catalog and database).
-
-      **Syntax:** `[ catalog_name. ] [ database_name. ] view_name`
-
-    * For a **temporary** view the name may be optionally qualified with the session schema
-      (`session` or `system.session`); for example, `DROP VIEW v`, `DROP VIEW session.v`, and
-      `DROP VIEW system.session.v` all drop the same temporary view.
-
-      **Syntax:** `[ { session | system.session } . ] view_name`
+    **Syntax:** `[ catalog_name. ] [ database_name. ] view_name`
 
 ### Examples
 
@@ -70,12 +55,20 @@ DROP VIEW userdb.employeeView;
 -- Assumes a view named `employeeView` does not exist.
 -- Throws exception
 DROP VIEW employeeView;
-Error: org.apache.spark.sql.AnalysisException: Table or view not found: employeeView;
-(state=,code=0)
+Error: TABLE_OR_VIEW_NOT_FOUND
 
 -- Assumes a view named `employeeView` does not exist,Try with IF EXISTS
 -- this time it will not throw exception
 DROP VIEW IF EXISTS employeeView;
+
+-- A temporary view that shadows a persistent view with the same name.
+-- An unqualified DROP VIEW drops the temporary view first; qualifying with `session`
+-- always targets the temporary view explicitly.
+CREATE VIEW default.recent_orders AS SELECT * FROM orders WHERE order_date > current_date - 7;
+CREATE TEMPORARY VIEW recent_orders AS SELECT * FROM orders WHERE order_date = current_date;
+
+DROP VIEW session.recent_orders;             -- drops the temporary view
+DROP VIEW default.recent_orders;             -- drops the persistent view
 ```
 
 ### Related Statements

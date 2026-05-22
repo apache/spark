@@ -29,16 +29,11 @@ resolution.
 
 ```sql
 current_path()
-
-CURRENT_PATH
 ```
-
-Like `current_user`, `current_schema`, and `current_catalog`, `current_path` accepts an empty
-argument list or no parentheses at all.
 
 ### Arguments
 
-This function takes no arguments.
+This function takes no arguments. The parentheses may be omitted.
 
 ### Returns
 
@@ -50,14 +45,9 @@ catalog-qualified current schema (`current_catalog.current_schema`) each time
 `current_path()` is evaluated, so subsequent `USE SCHEMA` statements are reflected without
 re-issuing `SET PATH`.
 
-`current_path()` is a regular built-in function. It remains available, and returns the default
-path, even when `spark.sql.path.enabled` is `false`.
-
 ### Examples
 
 ```sql
-> SET spark.sql.path.enabled = true;
-
 > SELECT current_path();
  system.builtin,system.session,spark_catalog.default
 
@@ -86,11 +76,6 @@ path, even when `spark.sql.path.enabled` is `false`.
 > SET PATH = spark_catalog.other, system.builtin;
 > SELECT * FROM v_path;
  spark_catalog.other,system.builtin
-
--- current_path() still returns the default path when SET PATH is disabled.
-> SET spark.sql.path.enabled = false;
-> SELECT current_path();
- system.builtin,system.session,spark_catalog.default
 ```
 
 ### Related Statements
