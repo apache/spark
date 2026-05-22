@@ -78,8 +78,7 @@ trait GraphValidations extends Logging {
 
   /** Returns true iff the given flow is an [[AutoCdcFlow]] (resolved or not). */
   private def isAutoCdcFlow(f: Flow): Boolean = f match {
-    case _: AutoCdcFlow => true
-    case rcf: ResolutionCompletedFlow => rcf.flow.isInstanceOf[AutoCdcFlow]
+    case _: AutoCdcFlow | _: AutoCdcMergeFlow => true
     case _ => false
   }
 

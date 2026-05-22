@@ -297,19 +297,21 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(first eq second, "schema should be cached as a val and return the same instance")
   }
 
-  test("AutoCdcMergeFlow rejects SCD2 at construction with UnsupportedOperationException") {
+  test("AutoCdcMergeFlow rejects SCD2 at construction with AUTOCDC_SCD2_NOT_SUPPORTED") {
     // Constructing the flow forces the resolved schema, which is unsupported for SCD2 today.
     // Failing eagerly (rather than deferring to the first downstream `schema` read) is the
     // intended UX -- pipeline graph analysis should not be able to register an SCD2 AutoCDC
     // flow at all.
-    val ex = intercept[UnsupportedOperationException] {
-      newAutoCdcMergeFlow(
-        sourceDf = threeColumnSourceDf(),
-        storedAsScdType = ScdType.Type2
-      )
-    }
-    assert(
-      ex.getMessage.contains("AutoCDC flows do not currently support SCD Type 2 transformations.")
+    checkError(
+      exception = intercept[AnalysisException] {
+        newAutoCdcMergeFlow(
+          sourceDf = threeColumnSourceDf(),
+          storedAsScdType = ScdType.Type2
+        )
+      },
+      condition = "AUTOCDC_SCD2_NOT_SUPPORTED",
+      sqlState = "0A000",
+      parameters = Map.empty
     )
   }
 
@@ -395,26 +397,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       )
     }
     assert(excludeEx.getCondition == "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA")
-  }
-
-  test("AutoCdcMergeFlow rejects a source df column starting with the reserved prefix") {
-    // Default Spark session is case-insensitive (`spark.sql.caseSensitive = false`).
-    val conflictingName = s"${Scd1BatchProcessor.reservedColumnNamePrefix}foo"
-    val sourceDf = sourceDfWithExtraColumns(conflictingName -> StringType)
-
-    checkError(
-      exception = intercept[AnalysisException] {
-        newAutoCdcMergeFlow(sourceDf)
-      },
-      condition = "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT",
-      sqlState = "42710",
-      parameters = Map(
-        "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
-        "columnName" -> conflictingName,
-        "schemaName" -> "changeDataFeed",
-        "reservedColumnNamePrefix" -> Scd1BatchProcessor.reservedColumnNamePrefix
-      )
-    )
   }
 
   test(

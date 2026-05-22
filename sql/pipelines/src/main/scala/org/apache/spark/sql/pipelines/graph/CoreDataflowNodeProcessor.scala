@@ -176,7 +176,7 @@ private class FlowResolver(rawGraph: DataflowGraph) {
           } else {
             f
           }
-          transformUnresolvedFlowToResolvedFlow(flowToResolve, maybeNewFuncResult)
+          resolveFlow(flowToResolve, maybeNewFuncResult)
 
         // If the flow failed due to an UnresolvedDatasetException, it means that one of the
         // flow's inputs wasn't available. After other flows are resolved, these inputs
@@ -199,7 +199,7 @@ private class FlowResolver(rawGraph: DataflowGraph) {
       }
   }
 
-  private def transformUnresolvedFlowToResolvedFlow(
+  private def resolveFlow(
       flow: UnresolvedFlow,
       funcResult: FlowFunctionResult): ResolvedFlow = {
     flow match {

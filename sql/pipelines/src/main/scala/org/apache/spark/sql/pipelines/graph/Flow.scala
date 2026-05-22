@@ -157,7 +157,7 @@ case class UntypedFlow(
 }
 
 /**
- * An unresolved but typed that applies a CDC event stream to a target table via MERGE.
+ * An unresolved but typed flow that applies a CDC event stream to a target table via MERGE.
  *
  * [[AutoCdcFlow]] is a typed flow because it is only supported for streaming, and not as a once
  * flow. Therefore by definition it is a streaming-type flow.
@@ -291,8 +291,9 @@ class AutoCdcMergeFlow(
           )
         )
       case ScdType.Type2 =>
-        throw new UnsupportedOperationException(
-          "AutoCDC flows do not currently support SCD Type 2 transformations."
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
+          messageParameters = Map.empty
         )
     }
   }
