@@ -535,7 +535,6 @@ def create_auto_cdc_flow(
     keys: Union[List[str], List[Column]],
     sequence_by: Union[str, Column],
     apply_as_deletes: Optional[Union[str, Column]] = None,
-    apply_as_truncates: Optional[Union[str, Column]] = None,
     column_list: Optional[Union[List[str], List[Column]]] = None,
     except_column_list: Optional[Union[List[str], List[Column]]] = None,
     stored_as_scd_type: Optional[Literal[1, "1"]] = None,
@@ -570,8 +569,6 @@ def create_auto_cdc_flow(
         as either a Python string or PySpark Expression.
     :param apply_as_deletes: Delete condition for the merged operation. This should be a string of \
         expression e.g. "operation = 'DELETE'"
-    :param apply_as_truncates: Truncate condition for the merged operation. This should be a string \
-        expression e.g. "operation = 'TRUNCATE'"
     :param column_list: Columns that will be included in the output table. This should be a list \
         of column identifiers without qualifiers, expressed as either Python strings or PySpark \
         Column. Only one of column_list and except_column_list can be specified.
@@ -596,9 +593,6 @@ def create_auto_cdc_flow(
     if isinstance(apply_as_deletes, str):
         apply_as_deletes = F.expr(apply_as_deletes)
 
-    if isinstance(apply_as_truncates, str):
-        apply_as_truncates = F.expr(apply_as_truncates)
-
     if stored_as_scd_type is not None and str(stored_as_scd_type) != "1":
         raise PySparkTypeError(
             errorClass="NOT_EXPECTED_TYPE",
@@ -618,7 +612,6 @@ def create_auto_cdc_flow(
         keys=keys,
         sequence_by=sequence_by,
         apply_as_deletes=apply_as_deletes,
-        apply_as_truncates=apply_as_truncates,
         column_list=column_list,
         except_column_list=except_column_list,
         stored_as_scd_type=stored_as_scd_type,

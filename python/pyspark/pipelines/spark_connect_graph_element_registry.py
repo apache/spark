@@ -153,8 +153,6 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             auto_cdc_details.stored_as_scd_type = pb2.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_1
         if flow.apply_as_deletes is not None:
             auto_cdc_details.apply_as_deletes.CopyFrom(to_plan(flow.apply_as_deletes))
-        if flow.apply_as_truncates is not None:
-            auto_cdc_details.apply_as_truncates.CopyFrom(to_plan(flow.apply_as_truncates))
 
         inner_command = pb2.PipelineCommand.DefineFlow(
             dataflow_graph_id=self._dataflow_graph_id,

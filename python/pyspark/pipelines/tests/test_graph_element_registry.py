@@ -120,7 +120,6 @@ class GraphElementRegistryTest(unittest.TestCase):
         self.assertIsNone(flow.name)
         self.assertIsNone(flow.stored_as_scd_type)
         self.assertIsNone(flow.apply_as_deletes)
-        self.assertIsNone(flow.apply_as_truncates)
         assert flow.source_code_location.filename.endswith("test_graph_element_registry.py")
 
     def test_create_auto_cdc_flow_with_all_args(self):
@@ -133,7 +132,6 @@ class GraphElementRegistryTest(unittest.TestCase):
                 keys=[col("id")],
                 sequence_by=expr("ts"),
                 apply_as_deletes=expr("op = 'DELETE'"),
-                apply_as_truncates=expr("op = 'TRUNCATE'"),
                 column_list=[col("id"), col("val")],
                 stored_as_scd_type=1,
                 name="my_flow",
@@ -155,7 +153,6 @@ class GraphElementRegistryTest(unittest.TestCase):
                 keys=["id"],
                 sequence_by="ts",
                 apply_as_deletes="op = 'DELETE'",
-                apply_as_truncates="op = 'TRUNCATE'",
                 column_list=["id", "val"],
             )
 
@@ -164,7 +161,6 @@ class GraphElementRegistryTest(unittest.TestCase):
             self.assertIsInstance(k, Column)
         self.assertIsInstance(flow.sequence_by, Column)
         self.assertIsInstance(flow.apply_as_deletes, Column)
-        self.assertIsInstance(flow.apply_as_truncates, Column)
         assert flow.column_list is not None
         for c in flow.column_list:
             self.assertIsInstance(c, Column)

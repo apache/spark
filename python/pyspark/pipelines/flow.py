@@ -57,7 +57,6 @@ class AutoCdcFlow:
     :param keys: Column(s) that uniquely identify a row in source and target data.
     :param sequence_by: Expression used to order the source data.
     :param apply_as_deletes: Optional delete condition for the merged operation.
-    :param apply_as_truncates: Optional truncate condition for the merged operation.
     :param column_list: Optional columns to include in the output table.
     :param except_column_list: Optional columns to exclude from the output table.
     :param stored_as_scd_type: Optional SCD type for the target table. Only 1 is supported.
@@ -70,7 +69,6 @@ class AutoCdcFlow:
     keys: List[Column]
     sequence_by: Column
     apply_as_deletes: Optional[Column]
-    apply_as_truncates: Optional[Column]
     column_list: Optional[List[Column]]
     except_column_list: Optional[List[Column]]
     stored_as_scd_type: Optional[Literal[1, "1"]]
