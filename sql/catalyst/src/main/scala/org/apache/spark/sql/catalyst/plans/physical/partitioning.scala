@@ -81,12 +81,17 @@ case object AllTuples extends Distribution {
  *
  * @param requireAllClusterKeys When true, `Partitioning` which satisfies this distribution,
  *                              must match all `clustering` expressions in the same ordering.
+ * @param allowNullKeySpreading When true, the default partitioning may spread rows whose
+ *                              clustering keys contain NULL values. This is a permission for
+ *                              consumers that do not require NULL-key co-location; ordinary
+ *                              [[HashPartitioning]] can still satisfy this distribution.
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
     requireAllClusterKeys: Boolean = SQLConf.get.getConf(
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION),
-    requiredNumPartitions: Option[Int] = None) extends Distribution {
+    requiredNumPartitions: Option[Int] = None,
+    allowNullKeySpreading: Boolean = false) extends Distribution {
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
@@ -97,7 +102,11 @@ case class ClusteredDistribution(
     assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
       s"This ClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
         s"the actual number of partitions is $numPartitions.")
-    HashPartitioning(clustering, numPartitions)
+    if (allowNullKeySpreading) {
+      NullAwareHashPartitioning(clustering, numPartitions)
+    } else {
+      HashPartitioning(clustering, numPartitions)
+    }
   }
 
   /**
@@ -282,7 +291,7 @@ trait HashPartitioningLike extends Expression with Partitioning with Unevaluable
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
           if (requireAllClusterKeys) {
             // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
             // `ClusteredDistribution`.
@@ -324,6 +333,45 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
 }
 
+/**
+ * Represents a hash partitioning for equi-join inputs where rows with a NULL join key do not need
+ * to be co-located. Non-NULL join keys preserve the same partitioning contract as
+ * [[HashPartitioning]], while rows with any NULL join key may be spread across partitions. As a
+ * result, this partitioning intentionally does not satisfy a strict [[ClusteredDistribution]].
+ */
+case class NullAwareHashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+  extends HashPartitioningLike {
+
+  override def satisfies0(required: Distribution): Boolean = {
+    (required match {
+      case UnspecifiedDistribution => true
+      case AllTuples => numPartitions == 1
+      case _ => false
+    }) || {
+      // Stateful operators require strict NULL-key co-location and therefore cannot consume
+      // null-aware hash partitioning as a compatible clustered layout.
+      required match {
+        case c @ ClusteredDistribution(
+            requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
+            if allowNullKeySpreading =>
+          if (requireAllClusterKeys) {
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        case _ => false
+      }
+    }
+  }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    NullAwareHashShuffleSpec(this, distribution)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): NullAwareHashPartitioning =
+    copy(expressions = newChildren)
+}
+
 case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
 
 /**
@@ -342,6 +390,47 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): CoalescedHashPartitioning =
+    copy(from = from.copy(expressions = newChildren))
+}
+
+/**
+ * Represents a null-aware hash partitioning whose reducer ranges have been coalesced into fewer
+ * partitions. It preserves the same relaxed NULL-key co-location contract as
+ * [[NullAwareHashPartitioning]].
+ */
+case class CoalescedNullAwareHashPartitioning(
+    from: NullAwareHashPartitioning,
+    partitions: Seq[CoalescedBoundary]) extends HashPartitioningLike {
+
+  override def expressions: Seq[Expression] = from.expressions
+
+  override def satisfies0(required: Distribution): Boolean = {
+    (required match {
+      case UnspecifiedDistribution => true
+      case AllTuples => numPartitions == 1
+      case _ => false
+    }) || {
+      required match {
+        case c @ ClusteredDistribution(
+            requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
+            if allowNullKeySpreading =>
+          if (requireAllClusterKeys) {
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        case _ => false
+      }
+    }
+  }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    CoalescedHashShuffleSpec(from.createShuffleSpec(distribution), partitions)
+
+  override val numPartitions: Int = partitions.length
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): CoalescedNullAwareHashPartitioning =
     copy(from = from.copy(expressions = newChildren))
 }
 
@@ -482,7 +571,7 @@ case class KeyedPartitioning(
 
   def groupedSatisfies(required: Distribution): Boolean = {
     required match {
-      case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+      case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
         if (requireAllClusterKeys) {
           // Checks whether this partitioning is partitioned on exactly same clustering keys of
           // `ClusteredDistribution`.
@@ -657,7 +746,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
           val expressions = ordering.map(_.child)
           if (requireAllClusterKeys) {
             // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
@@ -838,7 +927,7 @@ case class ShufflePartitionIdPassThrough(
     super.satisfies0(required) || {
       required match {
         // TODO(SPARK-53428): Support Direct Passthrough Partitioning in the Streaming Joins
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
           val partitioningExpressions = expr.child :: Nil
           if (requireAllClusterKeys) {
             c.areAllClusterKeysMatched(partitioningExpressions)
@@ -919,6 +1008,25 @@ case class RangeShuffleSpec(
   }
 }
 
+private object HashShuffleSpecCompatibility {
+  def isCompatible(
+      leftDistribution: ClusteredDistribution,
+      leftNumPartitions: Int,
+      leftExpressions: Seq[Expression],
+      leftHashKeyPositions: Seq[mutable.BitSet],
+      rightDistribution: ClusteredDistribution,
+      rightNumPartitions: Int,
+      rightExpressions: Seq[Expression],
+      rightHashKeyPositions: Seq[mutable.BitSet]): Boolean = {
+    leftDistribution.clustering.length == rightDistribution.clustering.length &&
+    leftNumPartitions == rightNumPartitions &&
+    leftExpressions.length == rightExpressions.length &&
+    leftHashKeyPositions.zip(rightHashKeyPositions).forall { case (left, right) =>
+      left.intersect(right).nonEmpty
+    }
+  }
+}
+
 case class HashShuffleSpec(
     partitioning: HashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {
@@ -951,14 +1059,26 @@ case class HashShuffleSpec(
       //  3. both partitioning have the same number of expressions
       //  4. each pair of partitioning expression from both sides has overlapping positions in their
       //     corresponding distributions.
-      distribution.clustering.length == otherDistribution.clustering.length &&
-      partitioning.numPartitions == otherPartitioning.numPartitions &&
-      partitioning.expressions.length == otherPartitioning.expressions.length && {
-        val otherHashKeyPositions = otherHashSpec.hashKeyPositions
-        hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
-          left.intersect(right).nonEmpty
-        }
-      }
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherHashSpec.hashKeyPositions)
+    case otherNullAwareSpec @ NullAwareHashShuffleSpec(otherPartitioning, otherDistribution)
+        if distribution.allowNullKeySpreading && otherDistribution.allowNullKeySpreading =>
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherNullAwareSpec.hashKeyPositions)
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ =>
@@ -979,7 +1099,73 @@ case class HashShuffleSpec(
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     val exprs = hashKeyPositions.map(v => clustering(v.head))
-    HashPartitioning(exprs, partitioning.numPartitions)
+    if (distribution.allowNullKeySpreading) {
+      NullAwareHashPartitioning(exprs, partitioning.numPartitions)
+    } else {
+      HashPartitioning(exprs, partitioning.numPartitions)
+    }
+  }
+
+  override def numPartitions: Int = partitioning.numPartitions
+}
+
+/**
+ * Shuffle specification for [[NullAwareHashPartitioning]]. It is compatible only with shuffle
+ * layouts whose distributions explicitly allow NULL-key spreading.
+ */
+case class NullAwareHashShuffleSpec(
+    partitioning: NullAwareHashPartitioning,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  lazy val hashKeyPositions: Seq[mutable.BitSet] = {
+    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
+    distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyPos) =>
+      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
+    }
+    partitioning.expressions.map(k => distKeyToPos.getOrElse(k.canonicalized, mutable.BitSet.empty))
+  }
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec =>
+      partitioning.numPartitions == 1
+    case otherSpec @ NullAwareHashShuffleSpec(otherPartitioning, otherDistribution) =>
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherSpec.hashKeyPositions)
+    case otherHashSpec @ HashShuffleSpec(otherPartitioning, otherDistribution)
+        if distribution.allowNullKeySpreading && otherDistribution.allowNullKeySpreading =>
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherHashSpec.hashKeyPositions)
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
+    case _ =>
+      false
+  }
+
+  override def canCreatePartitioning: Boolean = {
+    if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
+      distribution.areAllClusterKeysMatched(partitioning.expressions)
+    } else {
+      true
+    }
+  }
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    val exprs = hashKeyPositions.map(v => clustering(v.head))
+    NullAwareHashPartitioning(exprs, partitioning.numPartitions)
   }
 
   override def numPartitions: Int = partitioning.numPartitions

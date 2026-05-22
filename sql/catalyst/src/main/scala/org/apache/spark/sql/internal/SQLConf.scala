@@ -967,6 +967,20 @@ object SQLConf {
     .checkValue(_ > 0, "The value of spark.sql.shuffle.partitions must be positive")
     .createWithDefault(200)
 
+  val SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED =
+    buildConf("spark.sql.shuffle.spreadNullJoinKeys.enabled")
+      .doc("When true, Spark may spread rows with NULL equi-join keys across shuffle partitions " +
+        "for shuffled LEFT, RIGHT, and FULL OUTER equi-joins on nullable keys to reduce " +
+        "shuffle skew. Null-aware join output partitioning does not satisfy a strict " +
+        "ClusteredDistribution, so downstream grouping, windowing, or equi-joins may require " +
+        "an extra shuffle. If one input is already hash partitioned, only the other input may " +
+        "be reshuffled into the null-aware layout, so the pre-shuffled input can keep its NULL " +
+        "skew.")
+      .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED =
     buildConf("spark.sql.shuffle.orderIndependentChecksum.enabled")
       .doc("Whether to calculate order independent checksum for the shuffle data or not. If " +
