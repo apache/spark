@@ -53,7 +53,7 @@ case class SortMergeAsOfJoinExec(
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
-    right: SparkPlan) extends BinaryExecNode {
+    right: SparkPlan) extends BaseJoinExec {
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext,
@@ -90,7 +90,15 @@ case class SortMergeAsOfJoinExec(
     leftOrdering :: rightOrdering :: Nil
   }
 
-  override def outputPartitioning: Partitioning = left.outputPartitioning
+  override def outputPartitioning: Partitioning = joinType match {
+    case _: InnerLike =>
+      PartitioningCollection(
+        Seq(left.outputPartitioning, right.outputPartitioning))
+    case LeftOuter => left.outputPartitioning
+    case other =>
+      throw SparkException.internalError(
+        s"$nodeName does not support join type: $other")
+  }
 
   // Determine scan direction based on the order expression (distance metric).
   // This is a performance heuristic only -- if it misclassifies, the scan
@@ -418,13 +426,19 @@ private[joins] class SortMergeAsOfJoinScanner(
               bestMatch = rightRow
               bestDistance = distance
             } else {
+              // Distance is increasing; for Forward the as-of condition
+              // guarantees no closer row exists further right. For
+              // Nearest the distance is V-shaped so once past the
+              // minimum no later row can beat it.
               return bestMatch
             }
           }
         }
-      } else if (bestMatch != null) {
-        return bestMatch
       }
+      // Note: we do NOT early-terminate on as-of condition failure here.
+      // For Nearest + !allowExactMatches, the condition is false at a
+      // single interior point (right == left) with valid matches on
+      // both sides. The distance-based termination above is sufficient.
       i += 1
     }
     bestMatch

@@ -539,4 +539,25 @@ class SortMergeAsOfJoinSuite extends QueryTest
       )
     )
   }
+
+  test("nearest join - allowExactMatches = false with right rows bracketing left") {
+    // Regression test: right rows on both sides of the exact match point.
+    // The operator must not early-terminate when the as-of condition is
+    // false at the interior point (right == left).
+    val schema = StructType(
+      StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(10, "a")).asJava, schema)
+    val df2 = spark.createDataFrame(
+      List(Row(1, "x"), Row(10, "y"), Row(11, "z")).asJava, schema)
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq.empty,
+        joinType = "inner", tolerance = null,
+        allowExactMatches = false, direction = "nearest"),
+      // distance to 11 is 1, distance to 1 is 9. Correct answer is 11.
+      Seq(Row(10, "a", 11, "z"))
+    )
+  }
 }
