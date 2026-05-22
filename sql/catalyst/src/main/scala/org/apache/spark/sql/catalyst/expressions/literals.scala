@@ -205,6 +205,8 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case TimestampNTZType => create(0L, TimestampNTZType)
+    case t: TimestampNTZNanosType => create(new TimestampNTZNanos(0L, 0.toShort), t)
+    case t: TimestampLTZNanosType => create(new TimestampLTZNanos(0L, 0.toShort), t)
     case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
