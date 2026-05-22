@@ -29,6 +29,11 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
   private val ntzValue = new TimestampNTZNanos(1234567890123L, 42.toShort)
   private val ltzValue = new TimestampLTZNanos(9876543210987L, 999.toShort)
 
+  test("GenerateUnsafeProjection.canSupport for nanos timestamp types") {
+    assert(GenerateUnsafeProjection.canSupport(TimestampNTZNanosType(9)))
+    assert(GenerateUnsafeProjection.canSupport(TimestampLTZNanosType(7)))
+  }
+
   test("GenericInternalRow roundtrip for TIMESTAMP_NTZ nanos") {
     val row = new GenericInternalRow(Array[Any](ntzValue, null))
     val accessor = InternalRow.getAccessor(TimestampNTZNanosType(9))
