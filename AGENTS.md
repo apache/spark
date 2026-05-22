@@ -160,6 +160,4 @@ Always get user approval before external operations such as pushing commits, cre
 
 Security model: [SECURITY.md](./SECURITY.md)
 
-Agents that scan this repository should consult `SECURITY.md`
-for the project's threat model, in-scope / out-of-scope
-declarations, and known non-findings before reporting issues.
+Agents that scan this repository should consult `SECURITY.md` for the project's threat model, in-scope / out-of-scope declarations, and known non-findings before reporting issues.
