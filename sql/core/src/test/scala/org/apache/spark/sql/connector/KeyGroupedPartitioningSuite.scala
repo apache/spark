@@ -4343,6 +4343,49 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("SPARK-50593: bucket(4) vs bucket(3) - no common divisor, must shuffle") {
+    // GCD(4, 3) = 1 -- BucketFunction.reducer returns null. Spark must NOT enable SPJ.
+    // Regression guard: a buggy null-handling in TransformExpression.reducer (e.g.,
+    // Try(...).toOption instead of Try(Option(...))) would treat null as Some(null),
+    // enable SPJ, and produce wrong join results for incompatible bucket layouts.
+    val table1 = "bucket_gcd1_a"
+    val table2 = "bucket_gcd1_b"
+
+    val partitions1 = Array(Expressions.bucket(4, "id"))
+    val partitions2 = Array(Expressions.bucket(3, "store_id"))
+
+    createTable(table1, columns, partitions1)
+    sql(s"INSERT INTO testcat.ns.$table1 VALUES " +
+      "(0, 'aaa', CAST('2022-01-01' AS timestamp)), " +
+      "(1, 'bbb', CAST('2021-01-01' AS timestamp)), " +
+      "(2, 'ccc', CAST('2020-01-01' AS timestamp))")
+
+    createTable(table2, columns2, partitions2)
+    sql(s"INSERT INTO testcat.ns.$table2 VALUES " +
+      "(0, 5, 'aaa'), " +
+      "(1, 10, 'bbb'), " +
+      "(2, 15, 'ccc')")
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint(table1, table2)}
+           |$table1.id, $table2.store_id
+           |FROM testcat.ns.$table1 JOIN testcat.ns.$table2
+           |ON $table1.id = $table2.store_id
+           |ORDER BY $table1.id
+           |""".stripMargin)
+
+      val shuffles = collectShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.nonEmpty,
+        "bucket(4) vs bucket(3) have no common divisor (GCD=1), so the reducer " +
+          "returns null. SPJ must NOT be enabled; a shuffle is required.")
+      checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
+    }
+  }
+
   test("SPARK-50593: ReducibleParameters backward compat - old int API still works via default") {
     // Verifies the default reducer(ReducibleParameters, ...) implementation correctly
     // delegates to the deprecated reducer(int, func, int) when a ReducibleFunction only

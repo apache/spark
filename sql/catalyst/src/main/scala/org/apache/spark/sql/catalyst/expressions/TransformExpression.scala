@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.util.Try
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ReducibleParameters, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Represents a partition transform expression, for instance, `bucket`, `days`, `years`, etc.
@@ -30,7 +35,7 @@ import org.apache.spark.sql.types.DataType
  *                 partition transform expressions are compatible.
  */
 case class TransformExpression(function: BoundFunction, children: Seq[Expression])
-    extends Expression {
+    extends Expression with Logging {
 
   override def nullable: Boolean = true
 
@@ -162,6 +167,8 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
   private def extractParameters(expr: TransformExpression): ReducibleParameters = {
     import scala.jdk.CollectionConverters._
     val values = expr.literalChildren.map {
+      case Literal(value, _: StringType) => value.asInstanceOf[UTF8String].toString
+      case Literal(value, _: DecimalType) => value.asInstanceOf[Decimal].toJavaBigDecimal
       case Literal(value, _) => value.asInstanceOf[AnyRef]
     }
     new ReducibleParameters(values.asJava)
@@ -178,15 +185,42 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
       otherExpr: TransformExpression): Option[Reducer[_, _]] = {
     val thisParams = extractParameters(thisExpr)
     val otherParams = extractParameters(otherExpr)
+    val thisName = thisExpr.function.canonicalName()
 
-    val res = if (!thisParams.isEmpty && !otherParams.isEmpty) {
-      // Parameterized functions (bucket, truncate, etc.)
-      thisFunction.reducer(thisParams, otherFunction, otherParams)
-    } else {
-      // Non-parameterized functions (days, hours, etc.)
-      thisFunction.reducer(otherFunction)
+    def isSingleInt(p: ReducibleParameters): Boolean = {
+      p.count() == 1 && p.get(0).isInstanceOf[Int]
     }
-    Option(res)
+
+    // Both thrown exceptions and `null` returns collapse to None; any failure
+    // to compute a reducer falls back to a shuffle (no SPJ).
+    def tryReduce[R](call: => R): Try[Option[R]] = {
+      val attempt = Try(Option(call))
+      attempt.failed.foreach {
+        case e: UnsupportedOperationException =>
+          logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} threw " +
+            log"UnsupportedOperationException; treating as not reducible. Override " +
+            log"reducer(ReducibleParameters, ReducibleFunction, ReducibleParameters) " +
+            log"to enable SPJ.")
+        case _ =>
+      }
+
+      attempt
+    }
+
+    val res: Try[Option[Reducer[_, _]]] =
+      if (thisParams.isEmpty && otherParams.isEmpty) {
+        tryReduce(thisFunction.reducer(otherFunction))
+      } else if (isSingleInt(thisParams) && isSingleInt(otherParams)) {
+        // Try deprecated int-API first for legacy connectors (e.g. Iceberg 1.10);
+        // the first attempt is silent because we have a fallback. Only the fallback warns.
+        Try(Option(thisFunction.reducer(
+            thisParams.getInt(0), otherFunction, otherParams.getInt(0))))
+          .orElse(tryReduce(thisFunction.reducer(thisParams, otherFunction, otherParams)))
+      } else {
+        // Parameterized functions (bucket, truncate, etc.)
+        tryReduce(thisFunction.reducer(thisParams, otherFunction, otherParams))
+      }
+    res.toOption.flatten
   }
 
   override def dataType: DataType = function.resultType()

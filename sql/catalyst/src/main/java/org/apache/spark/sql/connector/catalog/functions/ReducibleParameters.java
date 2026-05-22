@@ -17,6 +17,8 @@
 package org.apache.spark.sql.connector.catalog.functions;
 
 import org.apache.spark.annotation.Evolving;
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -32,11 +34,17 @@ import java.util.List;
  *   <li>custom_transform(col, "param") → ReducibleParameters(["param"])</li>
  * </ul>
  *
- * @since 4.0.0
+ * @since 5.0.0
  */
 @Evolving
 public class ReducibleParameters {
+    public static final ReducibleParameters EMPTY = new ReducibleParameters();
+
     private final List<Object> values;
+
+    private ReducibleParameters() {
+        this.values = new ArrayList<>();
+    }
 
     public ReducibleParameters(List<Object> values) {
         this.values = values;

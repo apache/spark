@@ -641,9 +641,10 @@ object KeyedPartitioning {
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
     def isSupportedTransform(transform: TransformExpression): Boolean = {
-      // TransformExpression.collectLeaves() only returns column references, not literals.
+      // Should only consider column references, not literals.
+      val nonLiteralChildren = transform.children.filterNot(_.isInstanceOf[Literal])
       // We need exactly one column reference per transform.
-      transform.collectLeaves().size == 1
+      nonLiteralChildren.size == 1 && isReference(nonLiteralChildren.head)
     }
 
     @tailrec

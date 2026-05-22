@@ -87,23 +87,12 @@ public interface ReducibleFunction<I, O> {
    * @param otherFunction the other parameterized function
    * @param otherParams parameters for the other function
    * @return a reduction function if reducible, null otherwise
-   * @since 4.0.0
+   * @since 5.0.0
    */
   default Reducer<I, O> reducer(
           ReducibleParameters thisParams,
           ReducibleFunction<?, ?> otherFunction,
           ReducibleParameters otherParams) {
-    // Default: try old Int-based API for backward compatibility
-    if (thisParams.count() == 1 && otherParams.count() == 1) {
-      try {
-        return reducer(
-                thisParams.getInt(0),
-                otherFunction,
-                otherParams.getInt(0));
-      } catch (ClassCastException ignored) {
-        // Not Int parameters, fall through
-      }
-    }
     throw new UnsupportedOperationException();
   }
 
@@ -125,8 +114,12 @@ public interface ReducibleFunction<I, O> {
    * @param otherBucketFunction the other parameterized function
    * @param otherNumBuckets parameter for the other function
    * @return a reduction function if it is reducible, null if not
+   * @deprecated as of 5.0.0. Please override
+   *     {@link #reducer(ReducibleParameters, ReducibleFunction, ReducibleParameters)} instead.
+   *     The new overload supports transforms with any number of parameters of any type
+   *     (e.g. truncate width, multi-arg range buckets), not just a single int.
    */
-  @Deprecated
+  @Deprecated(since = "5.0.0")
   default Reducer<I, O> reducer(
       int thisNumBuckets,
       ReducibleFunction<?, ?> otherBucketFunction,
@@ -149,6 +142,6 @@ public interface ReducibleFunction<I, O> {
    * @return a reduction function if it is reducible, null if not.
    */
   default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
-    throw new UnsupportedOperationException();
+    return reducer(ReducibleParameters.EMPTY, otherFunction, ReducibleParameters.EMPTY);
   }
 }
