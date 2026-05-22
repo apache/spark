@@ -260,6 +260,19 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         sessionId = request.getSessionId)
   }
 
+  override def listSqlExecutions(
+      request: proto.ListSqlExecutionsRequest,
+      responseObserver: StreamObserver[proto.ListSqlExecutionsResponse]): Unit = {
+    try {
+      new SparkConnectListSqlExecutionsHandler(responseObserver).handle(request)
+    } catch
+      ErrorUtils.handleError(
+        "listSqlExecutions",
+        observer = responseObserver,
+        userId = request.getUserContext.getUserId,
+        sessionId = request.getSessionId)
+  }
+
   private def methodWithCustomMarshallers(
       methodDesc: MethodDescriptor[Message, Message]): MethodDescriptor[Message, Message] = {
     val recursionLimit =

@@ -1307,6 +1307,65 @@ message GetStatusResponse {
   }
 }
 
+message ListSqlExecutionsRequest {
+  // (Required) Spark session for the user identified by user_context.user_id.
+  string session_id = 1;
+
+  // (Required) user_context.user_id and session_id identify a unique remote Spark session.
+  UserContext user_context = 2;
+
+  // (Optional) Client information for logging only; not interpreted by the server.
+  optional string client_type = 3;
+
+  // (Optional) Server-side generated idempotency key from a previous response. The server uses
+  // this to validate that the server-side session has not changed since the client last saw it.
+  optional string client_observed_server_side_session_id = 4;
+
+  // (Optional) Pagination. Negative offsets are clamped to 0. A length <= 0 or larger than the
+  // server-side maximum is clamped by the server.
+  int32 offset = 5;
+  int32 length = 6;
+}
+
+message ListSqlExecutionsResponse {
+  // Session id of the session for which executions were requested.
+  string session_id = 1;
+
+  // Server-side generated idempotency key that the client can use to assert that the
+  // server-side session has not changed.
+  string server_side_session_id = 2;
+
+  // Page of executions, in the order returned by the underlying status store.
+  repeated SqlExecutionSummary executions = 3;
+
+  // Total number of executions known to the server, regardless of pagination.
+  int64 total_count = 4;
+
+  // Lightweight summary of a single SQL execution. Plan strings and per-node metrics are
+  // intentionally omitted here -- list responses must stay cheap. A future GetSqlExecution RPC
+  // can return the heavy fields for a single execution_id.
+  message SqlExecutionSummary {
+    int64 execution_id = 1;
+    int64 root_execution_id = 2;
+    string description = 3;
+    SqlExecutionStatus status = 4;
+    int64 submission_time_ms = 5;
+    // Unset while the execution is still running.
+    optional int64 completion_time_ms = 6;
+    optional string error_message = 7;
+    // Job IDs associated with this execution. Job statuses are not included; clients can look
+    // them up via the existing /api/v1/applications/{appId}/jobs REST endpoint if needed.
+    repeated int32 job_ids = 8;
+  }
+
+  enum SqlExecutionStatus {
+    SQL_EXECUTION_STATUS_UNSPECIFIED = 0;
+    SQL_EXECUTION_STATUS_RUNNING = 1;
+    SQL_EXECUTION_STATUS_COMPLETED = 2;
+    SQL_EXECUTION_STATUS_FAILED = 3;
+  }
+}
+
 // Main interface for the SparkConnect service.
 service SparkConnectService {
 
@@ -1364,4 +1423,9 @@ service SparkConnectService {
 
   // Get status information of different types.
   rpc GetStatus(GetStatusRequest) returns (GetStatusResponse) {}
+
+  // List SQL executions visible from this session's SparkSession, drawing from the same
+  // SQLAppStatusStore that powers the driver-side SQL tab. Intended to let pure-Python
+  // Connect clients render a UI without reaching the server's HTTP UI port.
+  rpc ListSqlExecutions(ListSqlExecutionsRequest) returns (ListSqlExecutionsResponse) {}
 }

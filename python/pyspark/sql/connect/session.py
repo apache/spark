@@ -310,6 +310,12 @@ class SparkSession:
         # Set to false to prevent client.release_session on close() (testing only)
         self.release_session_on_close = True
 
+        # Best-effort: start a local client-side UI on the first Connect session
+        # in this process. Idempotent; disabled via PYSPARK_CONNECT_UI=0.
+        from pyspark.sql.connect.ui import _maybe_autostart_ui
+
+        _maybe_autostart_ui(self)
+
     @classmethod
     def _set_default_and_active_session(cls, session: "SparkSession") -> None:
         """

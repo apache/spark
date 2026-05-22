@@ -103,6 +103,12 @@ class SparkConnectServiceStub(object):
             response_deserializer=spark_dot_connect_dot_base__pb2.GetStatusResponse.FromString,
             _registered_method=True,
         )
+        self.ListSqlExecutions = channel.unary_unary(
+            "/spark.connect.SparkConnectService/ListSqlExecutions",
+            request_serializer=spark_dot_connect_dot_base__pb2.ListSqlExecutionsRequest.SerializeToString,
+            response_deserializer=spark_dot_connect_dot_base__pb2.ListSqlExecutionsResponse.FromString,
+            _registered_method=True,
+        )
 
 
 class SparkConnectServiceServicer(object):
@@ -205,6 +211,15 @@ class SparkConnectServiceServicer(object):
         context.set_details("Method not implemented!")
         raise NotImplementedError("Method not implemented!")
 
+    def ListSqlExecutions(self, request, context):
+        """List SQL executions visible from this session's SparkSession, drawing from the same
+        SQLAppStatusStore that powers the driver-side SQL tab. Intended to let pure-Python
+        Connect clients render a UI without reaching the server's HTTP UI port.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details("Method not implemented!")
+        raise NotImplementedError("Method not implemented!")
+
 
 def add_SparkConnectServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -267,6 +282,11 @@ def add_SparkConnectServiceServicer_to_server(servicer, server):
             servicer.GetStatus,
             request_deserializer=spark_dot_connect_dot_base__pb2.GetStatusRequest.FromString,
             response_serializer=spark_dot_connect_dot_base__pb2.GetStatusResponse.SerializeToString,
+        ),
+        "ListSqlExecutions": grpc.unary_unary_rpc_method_handler(
+            servicer.ListSqlExecutions,
+            request_deserializer=spark_dot_connect_dot_base__pb2.ListSqlExecutionsRequest.FromString,
+            response_serializer=spark_dot_connect_dot_base__pb2.ListSqlExecutionsResponse.SerializeToString,
         ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -629,6 +649,36 @@ class SparkConnectService(object):
             "/spark.connect.SparkConnectService/GetStatus",
             spark_dot_connect_dot_base__pb2.GetStatusRequest.SerializeToString,
             spark_dot_connect_dot_base__pb2.GetStatusResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True,
+        )
+
+    @staticmethod
+    def ListSqlExecutions(
+        request,
+        target,
+        options=(),
+        channel_credentials=None,
+        call_credentials=None,
+        insecure=False,
+        compression=None,
+        wait_for_ready=None,
+        timeout=None,
+        metadata=None,
+    ):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            "/spark.connect.SparkConnectService/ListSqlExecutions",
+            spark_dot_connect_dot_base__pb2.ListSqlExecutionsRequest.SerializeToString,
+            spark_dot_connect_dot_base__pb2.ListSqlExecutionsResponse.FromString,
             options,
             channel_credentials,
             insecure,

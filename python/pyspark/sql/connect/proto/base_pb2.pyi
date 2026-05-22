@@ -4630,3 +4630,250 @@ class GetStatusResponse(google.protobuf.message.Message):
     ) -> None: ...
 
 global___GetStatusResponse = GetStatusResponse
+
+class ListSqlExecutionsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    USER_CONTEXT_FIELD_NUMBER: builtins.int
+    CLIENT_TYPE_FIELD_NUMBER: builtins.int
+    CLIENT_OBSERVED_SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    OFFSET_FIELD_NUMBER: builtins.int
+    LENGTH_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """(Required) Spark session for the user identified by user_context.user_id."""
+    @property
+    def user_context(self) -> global___UserContext:
+        """(Required) user_context.user_id and session_id identify a unique remote Spark session."""
+    client_type: builtins.str
+    """(Optional) Client information for logging only; not interpreted by the server."""
+    client_observed_server_side_session_id: builtins.str
+    """(Optional) Server-side generated idempotency key from a previous response. The server uses
+    this to validate that the server-side session has not changed since the client last saw it.
+    """
+    offset: builtins.int
+    """(Optional) Pagination. Negative offsets are clamped to 0. A length <= 0 or larger than the
+    server-side maximum is clamped by the server.
+    """
+    length: builtins.int
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        user_context: global___UserContext | None = ...,
+        client_type: builtins.str | None = ...,
+        client_observed_server_side_session_id: builtins.str | None = ...,
+        offset: builtins.int = ...,
+        length: builtins.int = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_client_observed_server_side_session_id",
+            b"_client_observed_server_side_session_id",
+            "_client_type",
+            b"_client_type",
+            "client_observed_server_side_session_id",
+            b"client_observed_server_side_session_id",
+            "client_type",
+            b"client_type",
+            "length",
+            b"length",
+            "offset",
+            b"offset",
+            "session_id",
+            b"session_id",
+            "user_context",
+            b"user_context",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_client_observed_server_side_session_id", b"_client_observed_server_side_session_id"
+        ],
+    ) -> typing_extensions.Literal["client_observed_server_side_session_id"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_client_type", b"_client_type"]
+    ) -> typing_extensions.Literal["client_type"] | None: ...
+
+global___ListSqlExecutionsRequest = ListSqlExecutionsRequest
+
+class ListSqlExecutionsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    class _SqlExecutionStatus:
+        ValueType = typing.NewType("ValueType", builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+
+    class _SqlExecutionStatusEnumTypeWrapper(
+        google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[
+            ListSqlExecutionsResponse._SqlExecutionStatus.ValueType
+        ],
+        builtins.type,
+    ):  # noqa: F821
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        SQL_EXECUTION_STATUS_UNSPECIFIED: (
+            ListSqlExecutionsResponse._SqlExecutionStatus.ValueType
+        )  # 0
+        SQL_EXECUTION_STATUS_RUNNING: ListSqlExecutionsResponse._SqlExecutionStatus.ValueType  # 1
+        SQL_EXECUTION_STATUS_COMPLETED: ListSqlExecutionsResponse._SqlExecutionStatus.ValueType  # 2
+        SQL_EXECUTION_STATUS_FAILED: ListSqlExecutionsResponse._SqlExecutionStatus.ValueType  # 3
+
+    class SqlExecutionStatus(_SqlExecutionStatus, metaclass=_SqlExecutionStatusEnumTypeWrapper): ...
+    SQL_EXECUTION_STATUS_UNSPECIFIED: ListSqlExecutionsResponse.SqlExecutionStatus.ValueType  # 0
+    SQL_EXECUTION_STATUS_RUNNING: ListSqlExecutionsResponse.SqlExecutionStatus.ValueType  # 1
+    SQL_EXECUTION_STATUS_COMPLETED: ListSqlExecutionsResponse.SqlExecutionStatus.ValueType  # 2
+    SQL_EXECUTION_STATUS_FAILED: ListSqlExecutionsResponse.SqlExecutionStatus.ValueType  # 3
+
+    class SqlExecutionSummary(google.protobuf.message.Message):
+        """Lightweight summary of a single SQL execution. Plan strings and per-node metrics are
+        intentionally omitted here -- list responses must stay cheap. A future GetSqlExecution RPC
+        can return the heavy fields for a single execution_id.
+        """
+
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+        EXECUTION_ID_FIELD_NUMBER: builtins.int
+        ROOT_EXECUTION_ID_FIELD_NUMBER: builtins.int
+        DESCRIPTION_FIELD_NUMBER: builtins.int
+        STATUS_FIELD_NUMBER: builtins.int
+        SUBMISSION_TIME_MS_FIELD_NUMBER: builtins.int
+        COMPLETION_TIME_MS_FIELD_NUMBER: builtins.int
+        ERROR_MESSAGE_FIELD_NUMBER: builtins.int
+        JOB_IDS_FIELD_NUMBER: builtins.int
+        execution_id: builtins.int
+        root_execution_id: builtins.int
+        description: builtins.str
+        status: global___ListSqlExecutionsResponse.SqlExecutionStatus.ValueType
+        submission_time_ms: builtins.int
+        completion_time_ms: builtins.int
+        """Unset while the execution is still running."""
+        error_message: builtins.str
+        @property
+        def job_ids(
+            self,
+        ) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+            """Job IDs associated with this execution. Job statuses are not included; clients can look
+            them up via the existing /api/v1/applications/{appId}/jobs REST endpoint if needed.
+            """
+        def __init__(
+            self,
+            *,
+            execution_id: builtins.int = ...,
+            root_execution_id: builtins.int = ...,
+            description: builtins.str = ...,
+            status: global___ListSqlExecutionsResponse.SqlExecutionStatus.ValueType = ...,
+            submission_time_ms: builtins.int = ...,
+            completion_time_ms: builtins.int | None = ...,
+            error_message: builtins.str | None = ...,
+            job_ids: collections.abc.Iterable[builtins.int] | None = ...,
+        ) -> None: ...
+        def HasField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_completion_time_ms",
+                b"_completion_time_ms",
+                "_error_message",
+                b"_error_message",
+                "completion_time_ms",
+                b"completion_time_ms",
+                "error_message",
+                b"error_message",
+            ],
+        ) -> builtins.bool: ...
+        def ClearField(
+            self,
+            field_name: typing_extensions.Literal[
+                "_completion_time_ms",
+                b"_completion_time_ms",
+                "_error_message",
+                b"_error_message",
+                "completion_time_ms",
+                b"completion_time_ms",
+                "description",
+                b"description",
+                "error_message",
+                b"error_message",
+                "execution_id",
+                b"execution_id",
+                "job_ids",
+                b"job_ids",
+                "root_execution_id",
+                b"root_execution_id",
+                "status",
+                b"status",
+                "submission_time_ms",
+                b"submission_time_ms",
+            ],
+        ) -> None: ...
+        @typing.overload
+        def WhichOneof(
+            self,
+            oneof_group: typing_extensions.Literal["_completion_time_ms", b"_completion_time_ms"],
+        ) -> typing_extensions.Literal["completion_time_ms"] | None: ...
+        @typing.overload
+        def WhichOneof(
+            self, oneof_group: typing_extensions.Literal["_error_message", b"_error_message"]
+        ) -> typing_extensions.Literal["error_message"] | None: ...
+
+    SESSION_ID_FIELD_NUMBER: builtins.int
+    SERVER_SIDE_SESSION_ID_FIELD_NUMBER: builtins.int
+    EXECUTIONS_FIELD_NUMBER: builtins.int
+    TOTAL_COUNT_FIELD_NUMBER: builtins.int
+    session_id: builtins.str
+    """Session id of the session for which executions were requested."""
+    server_side_session_id: builtins.str
+    """Server-side generated idempotency key that the client can use to assert that the
+    server-side session has not changed.
+    """
+    @property
+    def executions(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        global___ListSqlExecutionsResponse.SqlExecutionSummary
+    ]:
+        """Page of executions, in the order returned by the underlying status store."""
+    total_count: builtins.int
+    """Total number of executions known to the server, regardless of pagination."""
+    def __init__(
+        self,
+        *,
+        session_id: builtins.str = ...,
+        server_side_session_id: builtins.str = ...,
+        executions: collections.abc.Iterable[global___ListSqlExecutionsResponse.SqlExecutionSummary]
+        | None = ...,
+        total_count: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "executions",
+            b"executions",
+            "server_side_session_id",
+            b"server_side_session_id",
+            "session_id",
+            b"session_id",
+            "total_count",
+            b"total_count",
+        ],
+    ) -> None: ...
+
+global___ListSqlExecutionsResponse = ListSqlExecutionsResponse
