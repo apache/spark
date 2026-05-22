@@ -2743,7 +2743,7 @@ case class ElementAt(
     case _: ArrayType if failOnError =>
       (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
-        val idx = ElementAtUtils.resolveArrayIndex(
+        val idx = ArrayExpressionUtils.resolveArrayIndex(
           array.numElements(), ordinal.asInstanceOf[Int], getContextOrNull())
         if (arrayElementNullable && array.isNullAt(idx)) null else array.get(idx, dataType)
       }
@@ -2783,7 +2783,7 @@ case class ElementAt(
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
           val errorContext = getContextOrNullCode(ctx)
-          val utils = classOf[ElementAtUtils].getName
+          val utils = classOf[ArrayExpressionUtils].getName
           val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
           val body = if (arrayElementNullable) {
             s"""
