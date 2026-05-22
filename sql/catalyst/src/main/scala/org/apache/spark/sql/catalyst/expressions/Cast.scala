@@ -1994,7 +1994,7 @@ case class Cast(
       val numericObj = LongExactNumeric.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, _) => code"$evPrim = $numericObj.toInt($c);"
     } else {
-      // Byte/short narrowing remains inline; refactored in a follow-up PR.
+    } else {
       val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
       val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
       (c, evPrim, _) =>
