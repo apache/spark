@@ -98,7 +98,7 @@ class Scd1BatchProcessorMergeSuite
    * Build an auxiliary-table schema with the given key columns followed by the standard CDC
    * metadata struct. Used by tests that need a non-trivial key shape (composite or dotted).
    */
-  private def auxSchemaWithCompositeKeys(keyColumns: Seq[(String, DataType)]): StructType = {
+  private def customKeyAuxSchema(keyColumns: Seq[(String, DataType)]): StructType = {
     val withKeys = keyColumns.foldLeft(new StructType()) { case (s, (name, dt)) =>
       s.add(name, dt)
     }
@@ -339,7 +339,7 @@ class Scd1BatchProcessorMergeSuite
     // Composite key: (region, customer_id). The merge join condition is the AND of every key
     // column equality, so an aux row sharing only `region` with the microbatch must NOT be
     // touched, while the microbatch row must be inserted as a new tombstone.
-    val compositeSchema = auxSchemaWithCompositeKeys(Seq(
+    val compositeSchema = customKeyAuxSchema(Seq(
       "region" -> StringType,
       "customer_id" -> IntegerType
     ))
@@ -374,7 +374,7 @@ class Scd1BatchProcessorMergeSuite
     // backticks during schema resolution so the field name is the literal `user.id`. The merge
     // path must propagate the user's quoted identifier through `k.quoted` so the join condition
     // and update target both resolve to the same physical column.
-    val dottedKeySchema = auxSchemaWithCompositeKeys(Seq("user.id" -> IntegerType))
+    val dottedKeySchema = customKeyAuxSchema(Seq("user.id" -> IntegerType))
     createAuxTableWithSchema(
       dottedKeySchema,
       Row(1, cdcMetadataRow(deleteSeq = Some(10), upsertSeq = None))
