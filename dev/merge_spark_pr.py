@@ -470,11 +470,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     return merge_hash
 
 
-def cherry_pick(pr_num, merge_hash, default_branch):
-    pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
-    if pick_ref == "":
-        pick_ref = default_branch
-
+def _do_cherry_pick(pr_num, merge_hash, pick_ref):
+    """Cherry-pick `merge_hash` onto `pick_ref` and push. Returns the pushed ref."""
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
     run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
@@ -504,6 +501,69 @@ def cherry_pick(pr_num, merge_hash, default_branch):
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
     return pick_ref
+
+
+def cherry_pick(pr_num, merge_hash, default_branch, branch_names, already_picked=()):
+    """Prompt for a target branch and cherry-pick `merge_hash` onto it.
+
+    Enforces the Upstream-First policy (see header comment): when the committer types a
+    branch-M.N target while branch-M.x is also a known release branch AND has not already
+    received this commit, prompt to confirm whether to pick into BOTH (the policy-compliant
+    default) or branch-M.N only (treated as a maintenance-only bugfix). Returns the list of
+    refs actually picked into, so the main loop can advance its remaining-branches list
+    correctly.
+    """
+    pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
+    if pick_ref == "":
+        pick_ref = default_branch
+
+    # Upstream-First check: if the committer typed branch-M.N and branch-M.x exists as a
+    # sibling release branch that has not yet received this commit, surface the policy and
+    # offer to pick both in one step. Skipping when sibling_x is the merge target or already
+    # in already_picked avoids a redundant prompt / failing re-cherry-pick.
+    sibling_x = None
+    m = re.match(r"^branch-(\d+)\.(\d+)$", pick_ref)
+    if m:
+        candidate = "branch-%s.x" % m.group(1)
+        if (
+            candidate in branch_names
+            and candidate != pick_ref
+            and candidate not in already_picked
+        ):
+            sibling_x = candidate
+
+    if sibling_x is not None:
+        print()
+        print("=" * 76)
+        print(
+            "Upstream-First policy: non-bugfix commits on %s should also land on %s."
+            % (pick_ref, sibling_x)
+        )
+        print("If this is a %s-only maintenance bugfix, you may pick %s alone."
+              % (pick_ref, pick_ref))
+        print("Otherwise, pick both (%s first, then %s)." % (sibling_x, pick_ref))
+        print("=" * 76)
+        choice = (
+            bold_input(
+                "Pick into [b]oth %s + %s / [o]nly %s / [a]bort (default: both): "
+                % (sibling_x, pick_ref, pick_ref)
+            )
+            .strip()
+            .lower()
+        )
+        if choice in ("", "b", "both"):
+            picked_x = _do_cherry_pick(pr_num, merge_hash, sibling_x)
+            picked_n = _do_cherry_pick(pr_num, merge_hash, pick_ref)
+            return [picked_x, picked_n]
+        elif choice in ("o", "only"):
+            return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+        elif choice in ("a", "abort"):
+            clean_up()
+            fail("Aborted by user at Upstream-First policy prompt.")
+        else:
+            fail("Unrecognized choice %r; aborting." % choice)
+
+    return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
 
 
 def print_jira_issue_summary(issue):
@@ -832,7 +892,6 @@ def main():
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
-    branch_iter = iter(branch_names)
 
     if len(sys.argv) == 1:
         pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
@@ -942,7 +1001,8 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
+        default = branch_names[0]
+        cherry_pick(pr_num, merge_hash, default, branch_names, already_picked=())
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -976,11 +1036,22 @@ def main():
         print("PR #%s is still open after push; closing it explicitly." % pr_num)
         close_pr(pr_num)
 
+    # Walk a mutable remaining-branches list so the next default correctly skips any
+    # branches already picked, including branches consumed by the Upstream-First two-branch
+    # path inside cherry_pick (e.g. picking branch-M.x + branch-M.N in a single prompt).
+    # merged_refs doubles as the already_picked set passed to cherry_pick: it starts with
+    # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
+    remaining_branches = [b for b in branch_names if b != target_ref]
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
-        merged_refs = merged_refs + [
-            cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
-        ]
+        default = remaining_branches[0] if remaining_branches else branch_names[0]
+        picked = cherry_pick(
+            pr_num, merge_hash, default, branch_names, already_picked=tuple(merged_refs)
+        )
+        merged_refs = merged_refs + picked
+        for b in picked:
+            if b in remaining_branches:
+                remaining_branches.remove(b)
 
     if asf_jira is not None:
         continue_maybe("Would you like to update an associated JIRA?")
