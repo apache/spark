@@ -4882,7 +4882,8 @@ class RDD(Generic[T_co]):
         jrdd = self.map(float)._to_java_object_rdd()
         assert self.ctx._jvm is not None
         jdrdd = self.ctx._jvm.JavaDoubleRDD.fromRDD(jrdd.rdd())
-        r = jdrdd.meanApprox(timeout, confidence).getFinalValue()
+        partial = jdrdd.meanApprox(timeout, confidence)
+        r = partial.initialValue()
         return BoundedFloat(r.mean(), r.confidence(), r.low(), r.high())
 
     def countApproxDistinct(self: "RDD[T]", relativeSD: float = 0.05) -> int:
