@@ -1888,7 +1888,7 @@ object CodeGenerator extends Logging {
     } else {
       "update"
     }
-    if (isNull.isDefined && isPrimitiveType) {
+    if (isNull.isDefined) {
       s"""
          |if (${isNull.get}) {
          |  $array.setNullAt($i);

@@ -169,6 +169,11 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
    */
   def arguments: Seq[Expression]
 
+  /**
+   * Arguments that are always evaluated when the higher order function is evaluated.
+   */
+  def alwaysEvaluatedArguments: Seq[Expression] = arguments
+
   def argumentTypes: Seq[AbstractDataType]
 
   /**
@@ -763,6 +768,7 @@ case class ArrayFilter(
         val count = ctx.freshName("count")
         val arrayTracker = ctx.freshName("arrayTracker")
         val arrayData = ctx.freshName("arrayData")
+        val keep = ctx.freshName("keep")
         val i = ctx.freshName("i")
         val j = ctx.freshName("j")
 
@@ -780,7 +786,7 @@ case class ArrayFilter(
         val varAssignments = (Seq(elementAssignment) ++ indexAssignment).mkString("\n")
 
         val resultAssignment = CodeGenerator.setArrayElement(arrayTracker, BooleanType,
-          i, functionCode.value, isNull = None)
+          i, keep, isNull = None)
 
         val getTrackerValue = CodeGenerator.getValue(arrayTracker, BooleanType, i)
         val copy = CodeGenerator.createArrayAssignment(arrayData, arrayType.elementType, arg,
@@ -799,8 +805,9 @@ case class ArrayFilter(
             |for (int $i = 0; $i < $numElements; $i++) {
             |  $varAssignments
             |  ${functionCode.code}
+            |  boolean $keep = !${functionCode.isNull} && ${functionCode.value};
             |  $resultAssignment
-            |  if ((boolean)${functionCode.value}) {
+            |  if ($keep) {
             |    $count++;
             |  }
             |}
@@ -1107,6 +1114,8 @@ case class ArrayAggregate(
   }
 
   override def arguments: Seq[Expression] = argument :: zero :: Nil
+
+  override def alwaysEvaluatedArguments: Seq[Expression] = argument :: Nil
 
   override def argumentTypes: Seq[AbstractDataType] = ArrayType :: AnyDataType :: Nil
 

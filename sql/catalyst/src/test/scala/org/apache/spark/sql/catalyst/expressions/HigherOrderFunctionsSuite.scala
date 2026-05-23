@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -313,6 +314,33 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq(Seq(1, 3), null, Seq(5)))
     checkEvaluation(transform(aai, ix => filter(ix, indexIsEven)),
       Seq(Seq(1, 3), null, Seq(4)))
+  }
+
+  test("ArrayFilter treats null predicate results as false in generated code") {
+    val input = new GenericArrayData(Array[Any](null)) {
+      override def isNullAt(ordinal: Int): Boolean = true
+      override def getBoolean(ordinal: Int): Boolean = true
+    }
+    val expr = filter(Literal(input, ArrayType(BooleanType, containsNull = true)), x => x)
+
+    checkEvaluation(expr, Seq.empty)
+  }
+
+  test("array higher order functions preserve null complex elements in generated code") {
+    val nestedType = ArrayType(IntegerType, containsNull = false)
+    val inputType = ArrayType(nestedType, containsNull = true)
+    val input = new GenericArrayData(Array[Any](
+      new GenericArrayData(Array[Any](9)),
+      new GenericArrayData(Array[Any](1)))) {
+      override def isNullAt(ordinal: Int): Boolean = ordinal == 0 || super.isNullAt(ordinal)
+      override def get(ordinal: Int, dataType: DataType): AnyRef = {
+        if (ordinal == 0) null else super.get(ordinal, dataType)
+      }
+    }
+    val literal = Literal(input, inputType)
+
+    checkEvaluation(transform(literal, x => x), Seq(null, Seq(1)))
+    checkEvaluation(filter(literal, x => x.isNull), Seq(null))
   }
 
   test("ArrayExists") {
