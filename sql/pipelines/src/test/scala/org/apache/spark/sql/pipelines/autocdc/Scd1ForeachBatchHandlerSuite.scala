@@ -19,8 +19,7 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{functions => F, AnalysisException, Row}
+import org.apache.spark.sql.{functions => F, AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -29,7 +28,7 @@ import org.apache.spark.sql.types._
  * E2E unit tests for the Scd1ForeachBatchHandler class.
  */
 class Scd1ForeachBatchHandlerSuite
-    extends SparkFunSuite
+    extends QueryTest
     with SharedSparkSession
     with BeforeAndAfter
     with AutoCdcCatalogExecutionTestBase {

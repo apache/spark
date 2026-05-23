@@ -53,19 +53,17 @@ case class Scd1BatchProcessor(
    *      tombstones already recorded in the auxiliary table.
    *
    * The per-step methods are kept package-visible so that focused unit tests can pin each
-   * transform's behavior independently, but production callers should always use this entry
-   * point so the ordering is enforced.
-   *
-   * Microbatch validation (orderable sequence, non-null sequence/keys) is a separate concern
-   * handled upstream by [[ScdBatchValidator.validateMicrobatch]] and is intentionally not
-   * folded into this method - it must run before any of these transforms touch the data.
+   * transform's behavior independently. This method itself is package-visible so that
+   * [[Scd1ForeachBatchHandler]] can call it after running [[ScdBatchValidator.validateMicrobatch]]
+   * - validation is intentionally not folded in here, as it must run before any of these
+   * transforms touch the data.
    *
    * @param batchDf          The validated incoming CDC microbatch.
    * @param auxiliaryTableDf A snapshot of the auxiliary table for tombstone reconciliation.
    *                         Must contain at minimum the key columns + `_cdc_metadata`.
    * @return The reconciled microbatch, ready to be merged onto both tables.
    */
-  def reconcileMicrobatch(
+  private[autocdc] def reconcileMicrobatch(
       batchDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame = {
     val deduplicated = deduplicateMicrobatch(validatedMicrobatch = batchDf)
@@ -264,10 +262,8 @@ case class Scd1BatchProcessor(
    * After the merge, the auxiliary table has the same schema as before, but with the latest
    * tombstone data per key.
    *
-   * @param reconciledMicrobatchDf The deduplicated microbatch.
-   * @param auxiliaryTableIdentifier The identifier (not a [[DataFrame]]) of the auxiliary
-   *                                 table, as required by the `mergeInto(table, condition)`
-   *                                 API.
+   * @param reconciledMicrobatchDf   The deduplicated microbatch.
+   * @param auxiliaryTableIdentifier The identifier of the auxiliary table.
    */
   private[autocdc] def mergeMicrobatchOntoAuxiliaryTable(
       reconciledMicrobatchDf: DataFrame,
@@ -331,9 +327,7 @@ case class Scd1BatchProcessor(
    *     is always non-null.
    *
    * @param reconciledMicrobatchDf The reconciled microbatch dataframe.
-   * @param targetTableIdentifier  The identifier (not a [[DataFrame]]) of the target
-   *                               table, as required by the `mergeInto(table, condition)`
-   *                               API.
+   * @param targetTableIdentifier  The identifier of the target table.
    */
   private[autocdc] def mergeMicrobatchOntoTarget(
       reconciledMicrobatchDf: DataFrame,

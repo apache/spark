@@ -32,14 +32,9 @@ case class Scd1ForeachBatchHandler(
   /**
    * Process a single CDC microbatch and merge it into the auxiliary and target tables.
    *
-   * The body is intentionally a thin orchestration of three calls - validate, reconcile,
-   * merge - so the per-step ordering is owned by [[Scd1BatchProcessor.reconcileMicrobatch]]
-   * and cannot be reordered by accident at the foreachBatch boundary.
-   *
-   * Idempotent under same-`batchId` replay: both merges' clauses are gated on sequence
-   * inequalities, so re-applying an event already reflected in stored state is a no-op.
-   * A partial failure between the aux and target merges therefore needs no transactional
-   * wrapper - foreachBatch simply replays the whole batch.
+   * Idempotent under same-`batchId` replay: both merges are gated on sequence inequalities,
+   * so a partial failure between them is reconciled correctly when foreachBatch retries the
+   * whole batch.
    */
   def execute(batchDf: DataFrame, batchId: Long): Unit = {
     ScdBatchValidator(
