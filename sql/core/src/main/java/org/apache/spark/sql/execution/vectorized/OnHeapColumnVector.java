@@ -116,9 +116,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNulls(int rowId, int count) {
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
-    for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)1;
-    }
+    java.util.Arrays.fill(nulls, rowId, rowId + count, (byte) 1);
     numNulls += count;
   }
 
@@ -319,9 +317,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putInts(int rowId, int count, int value) {
-    for (int i = 0; i < count; ++i) {
-      intData[i + rowId] = value;
-    }
+    java.util.Arrays.fill(intData, rowId, rowId + count, value);
   }
 
   @Override
