@@ -440,13 +440,6 @@ case class SortMergeJoinExec(
 
   override def needCopyResult: Boolean = true
 
-  /**
-   * This is called by generated Java class, should be public.
-   */
-  def getTaskContext(): TaskContext = {
-    TaskContext.get()
-  }
-
   override def doProduce(ctx: CodegenContext): String = {
     // Specialize `doProduce` code for full outer join, because full outer join needs to
     // buffer both sides of join.
@@ -591,16 +584,9 @@ case class SortMergeJoinExec(
     }
 
     val initJoin = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initJoin")
+    val helperCls = classOf[JoinHelper].getName
     val addHookToRecordMetrics =
-      s"""
-         |$thisPlan.getTaskContext().addTaskCompletionListener(
-         |  new org.apache.spark.util.TaskCompletionListener() {
-         |    @Override
-         |    public void onTaskCompletion(org.apache.spark.TaskContext context) {
-         |      ${metricTerm(ctx, "spillSize")}.add($matches.spillSize());
-         |    }
-         |});
-       """.stripMargin
+      s"$helperCls.recordSpillSizeOnTaskCompletion($matches, ${metricTerm(ctx, "spillSize")});"
 
     s"""
        |if (!$initJoin) {
