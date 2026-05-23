@@ -3200,6 +3200,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ENABLE_STREAMING_SINK_EVOLUTION =
+    buildConf("spark.sql.streaming.queryEvolution.enableSinkEvolution")
+      .internal()
+      .doc("When true, streaming sinks can be named using the name() API on DataStreamWriter. " +
+        "This enables sink evolution capability where sinks can be changed while maintaining " +
+        "a historical record of all sinks used in the checkpoint.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART =
     buildConf("spark.sql.streaming.checkUnfinishedRepartitionOnRestart")
       .internal()
@@ -7799,6 +7809,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STREAMING_MAX_NUM_STATE_SCHEMA_FILES)
 
   def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
+
+  def enableStreamingSinkEvolution: Boolean = getConf(ENABLE_STREAMING_SINK_EVOLUTION)
 
   def streamingCheckUnfinishedRepartitionOnRestart: Boolean =
     getConf(STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART)

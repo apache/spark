@@ -17,7 +17,6 @@
 package org.apache.spark.sql.streaming
 
 import scala.jdk.CollectionConverters._
-import scala.util.matching.Regex
 
 import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders}
@@ -367,18 +366,16 @@ abstract class DataStreamReader {
    *
    * @param sourceName
    *   the source name to validate
+   * @throws AnalysisException
+   *   if the source name contains invalid characters
    * @throws IllegalArgumentException
-   *   if the source name is null, empty, or contains invalid characters
+   *   if the source name is null or empty
    */
   private[sql] def validateSourceName(sourceName: String): Unit = {
-    require(sourceName != null, "Source name cannot be null")
-    require(sourceName.nonEmpty, "Source name cannot be empty")
-
-    val validNamePattern: Regex = "^[a-zA-Z0-9_]+$".r
-    if (!validNamePattern.pattern.matcher(sourceName).matches()) {
-      throw new AnalysisException(
+    StreamingNameValidator.validate(sourceName, "Source") { invalid =>
+      new AnalysisException(
         errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SOURCE_NAME",
-        messageParameters = Map("sourceName" -> sourceName))
+        messageParameters = Map("sourceName" -> invalid))
     }
   }
 
