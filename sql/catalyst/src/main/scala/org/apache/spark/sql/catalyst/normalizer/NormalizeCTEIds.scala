@@ -56,15 +56,20 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
       defIdToNewId: mutable.Map[Long, Long]): LogicalPlan = plan match {
     // Nested WithCTEs are normalized separately by applyInternal.
     case _: WithCTE => plan
-    case ref: CTERelationRef if defIdToNewId.contains(ref.cteId) =>
-      ref.copy(cteId = defIdToNewId(ref.cteId))
-    case unionLoop: UnionLoop if defIdToNewId.contains(unionLoop.id) =>
-      unionLoop.copy(id = defIdToNewId(unionLoop.id))
-    case unionLoopRef: UnionLoopRef if defIdToNewId.contains(unionLoopRef.loopId) =>
-      unionLoopRef.copy(loopId = defIdToNewId(unionLoopRef.loopId))
     case other =>
-      other
-        .withNewChildren(other.children.map(canonicalizeCTE(_, defIdToNewId)))
+      val normalizedPlan = other match {
+        case ref: CTERelationRef if defIdToNewId.contains(ref.cteId) =>
+          ref.copy(cteId = defIdToNewId(ref.cteId))
+        case unionLoop: UnionLoop if defIdToNewId.contains(unionLoop.id) =>
+          unionLoop.copy(id = defIdToNewId(unionLoop.id))
+        case unionLoopRef: UnionLoopRef if defIdToNewId.contains(unionLoopRef.loopId) =>
+          unionLoopRef.copy(loopId = defIdToNewId(unionLoopRef.loopId))
+        case _ =>
+          other
+      }
+
+      normalizedPlan
+        .withNewChildren(normalizedPlan.children.map(canonicalizeCTE(_, defIdToNewId)))
         .transformExpressionsDown {
           case subqueryExpression: SubqueryExpression =>
             subqueryExpression.withNewPlan(canonicalizeCTE(subqueryExpression.plan, defIdToNewId))
