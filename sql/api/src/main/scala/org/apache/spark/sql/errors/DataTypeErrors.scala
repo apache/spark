@@ -21,6 +21,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.catalyst.util.QuotingUtils.toSQLSchema
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, Decimal, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -281,5 +282,17 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
       errorClass = "INVALID_TIMESTAMP_PRECISION",
       messageParameters = Map("precision" -> precision, "type" -> typeName),
       cause = null)
+  }
+
+  def checkTimestampNanosTypesEnabled(): Unit = {
+    if (!SqlApiConf.get.timestampNanosTypesEnabled) {
+      throw new SparkException(
+        errorClass = "FEATURE_NOT_ENABLED",
+        messageParameters = Map(
+          "featureName" -> "Nanosecond-precision timestamp types",
+          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+          "configValue" -> "true"),
+        cause = null)
+    }
   }
 }
