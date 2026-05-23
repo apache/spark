@@ -29,9 +29,10 @@ public final class JoinHelper {
   private JoinHelper() {}
 
   /**
-   * Reset a BitSet that tracks which rows in a buffer of size {@code bufferSize} have already been
-   * matched. Reuses {@code matched} when its capacity is sufficient; otherwise returns a freshly
-   * allocated BitSet. Callers must assign the returned reference back to their bit-set field.
+   * Reset a Spark {@link org.apache.spark.util.collection.BitSet} (not {@link java.util.BitSet})
+   * that tracks which rows in a buffer of size {@code bufferSize} have already been matched.
+   * Reuses {@code matched} when its capacity is sufficient; otherwise returns a freshly allocated
+   * BitSet. Callers must assign the returned reference back to their bit-set field.
    *
    * <p>Used by full-outer sort-merge join, where the left- and right-side buffers are repopulated
    * for each batch of rows sharing a join key.
