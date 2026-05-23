@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Optional, OptionalLong}
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NamedRelation, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, Expression, SortOrder, V2ExpressionUtils}
@@ -37,7 +36,6 @@ import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
-import org.apache.spark.util.Utils
 
 /**
  * A logical plan representing a data source v2 table.
@@ -84,21 +82,15 @@ abstract class DataSourceV2RelationBase(
   }
 
   override def computeStats(): Statistics = {
-    if (Utils.isTesting) {
-      // when testing, throw an exception if this computeStats method is called because stats should
-      // not be accessed before pushing the projection and filters to create a scan. otherwise, the
-      // stats are not accurate because they are based on a full table scan of all columns.
-      throw SparkException.internalError(
-        s"BUG: computeStats called before pushdown on DSv2 relation: $name")
-    } else {
-      // when not testing, return stats because bad stats are better than failing a query
-      table.asReadable.newScanBuilder(options).build() match {
-        case r: SupportsReportStatistics =>
-          val statistics = r.estimateStatistics()
-          DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
-        case _ =>
-          Statistics(sizeInBytes = conf.defaultSizeInBytes)
-      }
+    // Stats may be requested before pushdown (e.g., PushDownLeftSemiAntiJoin in
+    // operatorOptimizationBatch runs before earlyScanPushDownRules). Return fallback stats
+    // based on a full scan estimate rather than throwing.
+    table.asReadable.newScanBuilder(options).build() match {
+      case r: SupportsReportStatistics =>
+        val statistics = r.estimateStatistics()
+        DataSourceV2Relation.transformV2Stats(statistics, None, conf.defaultSizeInBytes, output)
+      case _ =>
+        Statistics(sizeInBytes = conf.defaultSizeInBytes)
     }
   }
 }

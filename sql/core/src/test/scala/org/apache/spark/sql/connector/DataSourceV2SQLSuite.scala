@@ -4376,6 +4376,31 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
         s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
     }
   }
+
+  test("SPARK-56980: computeStats should not throw before pushdown on DSv2 relation") {
+    val t1 = s"${catalogAndNamespace}t1"
+    val t2 = s"${catalogAndNamespace}t2"
+    withTable(t1, t2) {
+      sql(s"CREATE TABLE $t1 (id INT, data STRING) USING $v2Format")
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c'), (2, 'd')")
+      sql(s"CREATE TABLE $t2 (id INT) USING $v2Format")
+      sql(s"INSERT INTO $t2 VALUES (2), (3)")
+
+      // LEFT SEMI join over Aggregate triggers PushDownLeftSemiAntiJoin which calls
+      // canPlanAsBroadcastHashJoin -> canBroadcastBySize -> plan.stats before
+      // earlyScanPushDownRules. This must not throw.
+      val semiResult = sql(
+        s"""SELECT * FROM (SELECT id, count(*) as cnt FROM $t1 GROUP BY id) agg
+           |LEFT SEMI JOIN $t2 ON agg.id = $t2.id""".stripMargin)
+      checkAnswer(semiResult, Seq(Row(2, 2), Row(3, 1)))
+
+      // LEFT ANTI join over Aggregate similarly triggers the same code path
+      val antiResult = sql(
+        s"""SELECT * FROM (SELECT id, count(*) as cnt FROM $t1 GROUP BY id) agg
+           |LEFT ANTI JOIN $t2 ON agg.id = $t2.id""".stripMargin)
+      checkAnswer(antiResult, Seq(Row(1, 1)))
+    }
+  }
 }
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {
