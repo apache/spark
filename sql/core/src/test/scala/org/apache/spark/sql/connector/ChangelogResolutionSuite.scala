@@ -221,6 +221,7 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     val opts = cat.lastOptions
     assert(opts.isDefined)
     assert(opts.get.get("customOption") == "customValue")
+    assert(opts.get.get("startingVersion") == "1")
   }
 
   // ===========================================================================
