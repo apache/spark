@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
@@ -199,11 +200,16 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
 
   /**
-   * Search a filtering predicate in a given logical plan
+   * Search for a selective filtering operation or a precomputed input carrying source statistics.
+   *
+   * A LocalRelation, or a LogicalRDD created by checkpoint() or localCheckpoint(), can be reused
+   * as a broadcast build side for DPP without evaluating an upstream computation again.
    */
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
+  private def hasSelectivePredicateOrMaterializedInput(plan: LogicalPlan): Boolean = {
     plan.exists {
       case f: Filter => isLikelySelective(f.condition)
+      case _: LocalRelation => true
+      case r: LogicalRDD => r.isCheckpointedInput
       case _ => false
     }
   }
@@ -212,10 +218,10 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * To be able to prune partitions on a join key, the filtering side needs to
    * meet the following requirements:
    *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate used for filtering
+   *   (2) it needs to contain a selective predicate or a materialized input with known statistics
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
+    !plan.isStreaming && hasSelectivePredicateOrMaterializedInput(plan)
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
