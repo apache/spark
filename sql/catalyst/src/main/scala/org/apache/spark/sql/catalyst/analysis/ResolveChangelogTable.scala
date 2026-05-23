@@ -175,7 +175,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
   /**
    * Captures which post-processing passes a CDC query requires, derived from the
-   * user-provided [[ChangelogContext]] options and the connector-declared [[Changelog]]
+   * user-provided [[ChangelogContext]] and the connector-declared [[Changelog]]
    * capability flags.
    */
   private case class PostProcessingRequirements(
@@ -194,14 +194,14 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    */
   private def evaluateRequirements(
       changelog: Changelog,
-      options: ChangelogContext): PostProcessingRequirements = {
+      context: ChangelogContext): PostProcessingRequirements = {
     val requiresCarryOverRemoval =
-      options.deduplicationMode() != ChangelogContext.DeduplicationMode.NONE &&
+      context.deduplicationMode() != ChangelogContext.DeduplicationMode.NONE &&
         changelog.containsCarryoverRows()
     val requiresUpdateDetection =
-      options.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
+      context.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
     val requiresNetChanges =
-      options.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES &&
+      context.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES &&
         changelog.containsIntermediateChanges()
 
     // If carry-overs are surfaced and update detection is enabled without carry-over
@@ -209,7 +209,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     // results. Hence we throw.
     if (requiresUpdateDetection &&
         changelog.containsCarryoverRows() &&
-        options.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE) {
+        context.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE) {
       throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(
         changelog.name())
     }

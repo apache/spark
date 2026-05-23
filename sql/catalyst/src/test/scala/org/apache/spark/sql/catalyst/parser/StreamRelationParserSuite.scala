@@ -594,7 +594,8 @@ class StreamRelationParserSuite extends AnalysisTest {
     val plan = parsePlan("SELECT * FROM STREAM t CHANGES")
     val relationChanges = plan.collect { case rc: RelationChanges => rc }
     assert(relationChanges.size == 1)
-    assert(relationChanges.head.changelogContext.range().isInstanceOf[ChangelogRange.UnboundedRange])
+    assert(relationChanges.head.changelogContext.range()
+      .isInstanceOf[ChangelogRange.UnboundedRange])
     assert(relationChanges.head.changelogContext.deduplicationMode() ==
       ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(!relationChanges.head.changelogContext.computeUpdates())

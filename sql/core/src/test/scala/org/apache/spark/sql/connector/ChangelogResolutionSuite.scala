@@ -224,6 +224,49 @@ class ChangelogResolutionSuite extends SharedSparkSession {
     assert(opts.get.get("startingVersion") == "1")
   }
 
+  test("user-defined options are forwarded to loadChangelog - SQL WITH clause") {
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+
+    sql(s"SELECT * FROM $cdcCatalogName.test_table CHANGES FROM VERSION 1 " +
+      "WITH ('customOption' = 'customValue')").queryExecution.analyzed
+
+    val opts = cat.lastOptions
+    assert(opts.isDefined)
+    assert(opts.get.get("customOption") == "customValue")
+  }
+
+  test("user-defined options are forwarded to loadChangelog - DataStreamReader") {
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+
+    spark.readStream
+      .option("startingVersion", "1")
+      .option("customOption", "customValue")
+      .changes(s"$cdcCatalogName.test_table")
+      .queryExecution.analyzed
+
+    val opts = cat.lastOptions
+    assert(opts.isDefined)
+    assert(opts.get.get("customOption") == "customValue")
+    assert(opts.get.get("startingVersion") == "1")
+  }
+
+  test("user-defined options are forwarded to loadChangelog - streaming SQL") {
+    val cat = spark.sessionState.catalogManager
+      .catalog(cdcCatalogName)
+      .asInstanceOf[InMemoryChangelogCatalog]
+
+    sql(s"SELECT * FROM STREAM $cdcCatalogName.test_table CHANGES FROM VERSION 1 " +
+      "WITH ('customOption' = 'customValue')").queryExecution.analyzed
+
+    val opts = cat.lastOptions
+    assert(opts.isDefined)
+    assert(opts.get.get("customOption") == "customValue")
+  }
+
   // ===========================================================================
   // Streaming post-processing
   // ===========================================================================
