@@ -19,8 +19,8 @@ package org.apache.spark.sql.pipelines.autocdc
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.{functions => F, AnalysisException, Row}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._

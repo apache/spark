@@ -26,8 +26,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
-  * E2E unit tests for the Scd1ForeachBatchExec class.
-  */
+ * E2E unit tests for the Scd1ForeachBatchExec class.
+ */
 class Scd1ForeachBatchExecSuite
     extends SparkFunSuite
     with SharedSparkSession
@@ -83,7 +83,8 @@ class Scd1ForeachBatchExecSuite
   // ===========================================================================================
 
   test(
-    "Scd1ForeachBatchExec invalidates rows with null sequencing before merging to aux/target tables."
+    "Scd1ForeachBatchExec invalidates rows with null sequencing before merging to aux/target " +
+    "tables."
   ) {
     createAuxTable()
     createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
@@ -268,7 +269,8 @@ class Scd1ForeachBatchExecSuite
   // ===========================================================================================
 
   test(
-    "Scd1ForeachBatchExec drops stale microbatch rows using auxiliary tombstones and writes fresh upserts"
+    "Scd1ForeachBatchExec drops stale microbatch rows using auxiliary tombstones and writes " +
+    "fresh upserts"
   ) {
     createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
     createTargetTable()
@@ -324,7 +326,8 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec reconciles out-of-order events when ExcludeColumns hides the sequencing column"
+    "Scd1ForeachBatchExec reconciles out-of-order events when ExcludeColumns hides the " +
+    "sequencing column"
   ) {
     // ExcludeColumns omits the sequencing column ("seq") and the delete marker ("is_delete")
     // from persisted rows. The sequencing expression itself still drives CDC reconciliation;

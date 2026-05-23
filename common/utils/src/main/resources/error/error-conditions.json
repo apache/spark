@@ -203,12 +203,6 @@
     ],
     "sqlState" : "22023"
   },
-  "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
-    "message" : [
-      "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
-    ],
-    "sqlState" : "42703"
-  },
   "AUTOCDC_MICROBATCH_VALIDATION" : {
     "message" : [
       "AutoCDC flow on table <tableName> in batch <batchId> failed microbatch validation."
@@ -231,6 +225,12 @@
       }
     },
     "sqlState" : "22000"
+  },
+  "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
+    ],
+    "sqlState" : "42703"
   },
   "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT" : {
     "message" : [
