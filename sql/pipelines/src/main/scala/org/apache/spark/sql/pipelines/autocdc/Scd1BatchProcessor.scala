@@ -454,7 +454,7 @@ object Scd1BatchProcessor {
    * Construct the CDC metadata struct column for SCD1, following the exact schema and field
    * ordering defined by [[cdcMetadataColSchema]].
    */
-  private[autocdc] def constructCdcMetadataCol(
+  private[pipelines] def constructCdcMetadataCol(
       deleteSequence: Column,
       upsertSequence: Column,
       sequencingType: DataType): Column = {

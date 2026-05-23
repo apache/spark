@@ -20,7 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.pipelines.AnalysisWarning
@@ -32,7 +32,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   ScdType
 }
 import org.apache.spark.sql.pipelines.util.InputReadOptions
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * Contains the catalog and database context information for query execution.
@@ -256,6 +256,24 @@ class AutoCdcMergeFlow(
 
   def changeArgs: ChangeArgs = flow.changeArgs
 
+  /** The user-selected projection of [[df.schema]] (i.e. before the SCD metadata column). */
+  private val userSelectedSchema: StructType = {
+    val selectedSchema = ColumnSelection.applyToSchema(
+      schemaName = "changeDataFeed",
+      schema = df.schema,
+      columnSelection = changeArgs.columnSelection,
+      caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+    )
+    // AutoCDC flows require all key columns to be present in the target table, to adhere to SCD
+    // semantics.
+    requireKeysPresentInSelectedSchema(selectedSchema)
+    selectedSchema
+  }
+
+  /** The DataType of the sequencing expression, derived once from the source change feed. */
+  private val sequencingType: DataType =
+    df.select(changeArgs.sequencing).schema.head.dataType
+
   /**
    * Returns the augmented output schema of this flow, which can differ from the schema of the
    * source change-data-feed dataframe.
@@ -265,37 +283,50 @@ class AutoCdcMergeFlow(
    * columns that the AutoCDC MERGE engine projects onto the target table. Downstream
    * dependencies in the pipeline see this augmented schema.
    */
-  override val schema: StructType = {
-    val userSelectedSchema = ColumnSelection.applyToSchema(
-      schemaName = "changeDataFeed",
-      schema = df.schema,
-      columnSelection = changeArgs.columnSelection,
-      caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
-    )
-
-    // AutoCDC flows require all key columns to be present in the target table, to adhere to SCD
-    // semantics.
-    requireKeysPresentInSelectedSchema(userSelectedSchema)
-
-    changeArgs.storedAsScdType match {
-      case ScdType.Type1 =>
-        // SCD1 produces a target table with all the user-selected output columns and a projected
-        // CDC operational metadata column at the end.
-        StructType(
-          userSelectedSchema.fields :+ StructField(
-            Scd1BatchProcessor.cdcMetadataColName,
-            Scd1BatchProcessor.cdcMetadataColSchema(
-              sequencingType = df.select(changeArgs.sequencing).schema.head.dataType
-            ),
-            nullable = false
-          )
+  override val schema: StructType = changeArgs.storedAsScdType match {
+    case ScdType.Type1 =>
+      // SCD1 produces a target table with all the user-selected output columns and a projected
+      // CDC operational metadata column at the end.
+      StructType(
+        userSelectedSchema.fields :+ StructField(
+          Scd1BatchProcessor.cdcMetadataColName,
+          Scd1BatchProcessor.cdcMetadataColSchema(sequencingType),
+          nullable = false
         )
-      case ScdType.Type2 =>
-        throw new AnalysisException(
-          errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
-          messageParameters = Map.empty
-        )
-    }
+      )
+    case ScdType.Type2 =>
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
+        messageParameters = Map.empty
+      )
+  }
+
+  /**
+   * Returns an empty dataframe whose schema matches [[AutoCdcMergeFlow.schema]].
+   *
+   * Today, [[AutoCdcMergeFlow.load]] is not actually ever called during graph analysis or
+   * execution. An AutoCdcMergeFlow can only be an input to a streaming table (not an MV or
+   * persisted/temp view), and streaming tables take a [[VirtualTableInput]] as input, not
+   * the producing [[Flow]] directly. [[VirtualTableInput]] overrides its own [[load]] to do
+   * schema inference on its input flows, rather than a transitive [[Flow.load]].
+   *
+   * The [[AutoCdcMergeFlow.load]] implementation exists solely for API consistency.
+   */
+  override def load(readOptions: InputReadOptions): DataFrame = changeArgs.storedAsScdType match {
+    case ScdType.Type1 =>
+      val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
+      val emptyCdcMetadataCol: Column = Scd1BatchProcessor.constructCdcMetadataCol(
+        deleteSequence = F.lit(null),
+        upsertSequence = F.lit(null),
+        sequencingType = sequencingType
+      ).as(Scd1BatchProcessor.cdcMetadataColName)
+
+      df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
+    case ScdType.Type2 =>
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
+        messageParameters = Map.empty
+      )
   }
 
   /**

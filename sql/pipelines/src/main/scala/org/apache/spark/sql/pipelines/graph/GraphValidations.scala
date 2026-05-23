@@ -150,8 +150,21 @@ trait GraphValidations extends Logging {
                 )
               }
             case _: TemporaryView =>
-              // Temporary views' flows are allowed to be either streaming or batch, so no
-              // validation needs to be done for them
+              // Temporary views' flows are generally allowed to be either streaming or batch.
+              resolvedFlow match {
+                case _: AutoCdcMergeFlow =>
+                  // The exception is AutoCDC flows, which require require a streaming-table sink to
+                  // immediately execute MERGE against.
+                  throw new AnalysisException(
+                    errorClass =
+                      "INVALID_FLOW_QUERY_TYPE.AUTOCDC_RELATION_FOR_TEMPORARY_VIEW",
+                    messageParameters = Map(
+                      "flowIdentifier" -> resolvedFlow.identifier.quotedString,
+                      "viewIdentifier" -> destTableIdentifier.quotedString
+                    )
+                  )
+                case _ => // OK: any other flow is permitted to target a temporary view.
+              }
           }
         }
       }

@@ -316,6 +316,77 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   }
 
   // ===========================================================================================
+  // AutoCdcMergeFlow.load() contract tests
+  // ===========================================================================================
+
+  test("AutoCdcMergeFlow.load() schema matches AutoCdcMergeFlow.schema") {
+    val resolvedFlow = newAutoCdcMergeFlow(threeColumnSourceDf())
+    val loadedDf = resolvedFlow.load(readOptions = null)
+    assert(loadedDf.schema == resolvedFlow.schema)
+  }
+
+  test("AutoCdcMergeFlow.load() respects an IncludeColumns selection") {
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      columnSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("seq"))
+        )
+      )
+    )
+    val loadedDf = resolvedFlow.load(readOptions = null)
+    assert(loadedDf.schema == resolvedFlow.schema)
+    // The user-selected portion drops `name`; the trailing column is the SCD1 metadata.
+    assert(
+      loadedDf.schema.fieldNames.toSeq ==
+      Seq("id", "seq", Scd1BatchProcessor.cdcMetadataColName)
+    )
+  }
+
+  test("AutoCdcMergeFlow.load() respects an ExcludeColumns selection") {
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = threeColumnSourceDf(),
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
+      )
+    )
+    val loadedDf = resolvedFlow.load(readOptions = null)
+    assert(loadedDf.schema == resolvedFlow.schema)
+    assert(
+      loadedDf.schema.fieldNames.toSeq ==
+      Seq("id", "seq", Scd1BatchProcessor.cdcMetadataColName)
+    )
+  }
+
+  test("AutoCdcMergeFlow.load() materializes the CDC metadata column as null-filled") {
+    // The merge engine fills in the metadata at execution time; at planning time we synthesize
+    // a typed null placeholder so that load().schema matches schema. This test pins down the
+    // placeholder shape: outer struct non-null, inner fields null-filled.
+    val schema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("name", StringType)
+      .add("seq", LongType)
+    val sourceRows = java.util.Arrays.asList(
+      org.apache.spark.sql.Row(1, "a", 100L),
+      org.apache.spark.sql.Row(2, "b", 200L)
+    )
+    val sourceDf = spark.createDataFrame(sourceRows, schema)
+    val resolvedFlow = newAutoCdcMergeFlow(sourceDf)
+
+    val loadedDf = resolvedFlow.load(readOptions = null)
+    val collected = loadedDf.collect()
+    assert(collected.length == 2)
+
+    val metaIdx = loadedDf.schema.fieldIndex(Scd1BatchProcessor.cdcMetadataColName)
+    collected.foreach { row =>
+      assert(!row.isNullAt(metaIdx), "_cdc_metadata struct itself should be non-null")
+      val metaRow = row.getStruct(metaIdx)
+      assert(metaRow.isNullAt(0), "deleteSequence placeholder should be null")
+      assert(metaRow.isNullAt(1), "upsertSequence placeholder should be null")
+    }
+  }
+
+  // ===========================================================================================
   // AutoCdcMergeFlow reserved-prefix validation tests
   //
   // The two "contract:" tests below lock in the high-level invariant that no reserved-prefix
