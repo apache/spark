@@ -21,16 +21,16 @@ import java.lang.{Long => JLong}
 import java.util.{Locale, Optional => JOptional}
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
-import org.apache.spark.sql.connector.catalog.ChangelogInfo
+import org.apache.spark.sql.connector.catalog.ChangelogContext
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.TimestampType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * Utility methods for constructing [[ChangelogInfo]] from DataFrame API options.
+ * Utility methods for constructing [[ChangelogContext]] from DataFrame API options.
  */
-object ChangelogInfoUtils {
+object ChangelogContextUtils {
 
   private val STARTING_VERSION = "startingVersion"
   private val ENDING_VERSION = "endingVersion"
@@ -42,12 +42,12 @@ object ChangelogInfoUtils {
   private val COMPUTE_UPDATES = "computeUpdates"
 
   /**
-   * Build a [[ChangelogInfo]] from the options specified via `.option()` calls on
+   * Build a [[ChangelogContext]] from the options specified via `.option()` calls on
    * `DataFrameReader` or `DataStreamReader`.
    */
   def fromOptions(
       options: CaseInsensitiveStringMap,
-      sessionLocalTimeZone: String): ChangelogInfo = {
+      sessionLocalTimeZone: String): ChangelogContext = {
     val startVersion = Option(options.get(STARTING_VERSION))
     val endVersion = Option(options.get(ENDING_VERSION))
     val startTimestamp = Option(options.get(STARTING_TIMESTAMP))
@@ -59,9 +59,9 @@ object ChangelogInfoUtils {
     val deduplicationModeStr = Option(options.get(DEDUPLICATION_MODE))
       .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
     val deduplicationMode = deduplicationModeStr match {
-      case "none" => ChangelogInfo.DeduplicationMode.NONE
-      case "dropcarryovers" => ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS
-      case "netchanges" => ChangelogInfo.DeduplicationMode.NET_CHANGES
+      case "none" => ChangelogContext.DeduplicationMode.NONE
+      case "dropcarryovers" => ChangelogContext.DeduplicationMode.DROP_CARRYOVERS
+      case "netchanges" => ChangelogContext.DeduplicationMode.NET_CHANGES
       case other =>
         throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
     }
@@ -98,7 +98,7 @@ object ChangelogInfoUtils {
       new UnboundedRange()
     }
 
-    new ChangelogInfo(range, deduplicationMode, computeUpdates)
+    new ChangelogContext(range, deduplicationMode, computeUpdates)
   }
 
   private def parseTimestamp(timestampStr: String, sessionLocalTimeZone: String): Long = {

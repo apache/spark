@@ -20,16 +20,18 @@ package org.apache.spark.sql.connector.catalog;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
  * Encapsulates the parameters of a Change Data Capture (CDC) query, passed from the
  * parser / DataFrame API to the catalog's
- * {@link TableCatalog#loadChangelog(Identifier, ChangelogInfo)} method.
+ * {@link TableCatalog#loadChangelog(Identifier, ChangelogContext, CaseInsensitiveStringMap)}
+ * method.
  *
  * @since 4.2.0
  */
 @Evolving
-public class ChangelogInfo {
+public class ChangelogContext {
 
   /**
    * Deduplication modes controlling how Spark post-processes raw change data.
@@ -47,7 +49,7 @@ public class ChangelogInfo {
   private final DeduplicationMode deduplicationMode;
   private final boolean computeUpdates;
 
-  public ChangelogInfo(
+  public ChangelogContext(
       ChangelogRange range,
       DeduplicationMode deduplicationMode,
       boolean computeUpdates) {
@@ -68,7 +70,7 @@ public class ChangelogInfo {
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (!(o instanceof ChangelogInfo that)) return false;
+    if (!(o instanceof ChangelogContext that)) return false;
     return computeUpdates == that.computeUpdates
         && Objects.equals(range, that.range)
         && deduplicationMode == that.deduplicationMode;
@@ -81,7 +83,7 @@ public class ChangelogInfo {
 
   @Override
   public String toString() {
-    return "ChangelogInfo{range=" + range +
+    return "ChangelogContext{range=" + range +
         ", deduplicationMode=" + deduplicationMode +
         ", computeUpdates=" + computeUpdates + "}";
   }
