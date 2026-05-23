@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
   CatalogPlugin,
   CatalogV2Util,
-  ChangelogInfo,
+  ChangelogContext,
   Identifier,
   LookupCatalog,
   MetadataTable,
@@ -330,19 +330,17 @@ class RelationResolution(
    * Resolve a CDC (CHANGES) query: look up the catalog, call loadChangelog(), wrap in
    * ChangelogTable, and return a DataSourceV2Relation.
    */
-  def resolveChangelog(
-      u: UnresolvedRelation,
-      changelogInfo: ChangelogInfo): Option[LogicalPlan] = {
+  def resolveChangelog(u: UnresolvedRelation, ctx: ChangelogContext): Option[LogicalPlan] = {
     expandIdentifier(u.multipartIdentifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
         val tableCatalog = catalog.asTableCatalog
         val changelog = try {
-          tableCatalog.loadChangelog(ident, changelogInfo)
+          tableCatalog.loadChangelog(ident, ctx, u.options)
         } catch {
           case _: UnsupportedOperationException =>
             throw QueryCompilationErrors.cdcNotSupportedError(tableCatalog.name())
         }
-        val changelogTable = ChangelogTable(changelog, changelogInfo)
+        val changelogTable = ChangelogTable(changelog, ctx)
         val relation = if (u.isStreaming) {
           StreamingRelationV2(
             None, changelogTable.name, changelogTable, u.options,

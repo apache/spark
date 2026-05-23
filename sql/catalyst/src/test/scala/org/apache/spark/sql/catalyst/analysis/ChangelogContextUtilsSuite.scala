@@ -22,11 +22,11 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
+import org.apache.spark.sql.connector.catalog.{ChangelogContext, ChangelogRange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
+class ChangelogContextUtilsSuite extends SparkFunSuite with SQLHelper {
 
   private val testTimeZone = "UTC"
 
@@ -35,7 +35,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("version range with both start and end") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions("startingVersion" -> "1", "endingVersion" -> "5"), testTimeZone)
     val range = info.range().asInstanceOf[ChangelogRange.VersionRange]
     assert(range.startingVersion() == "1")
@@ -45,7 +45,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("version range with only start") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions("startingVersion" -> "10"), testTimeZone)
     val range = info.range().asInstanceOf[ChangelogRange.VersionRange]
     assert(range.startingVersion() == "10")
@@ -55,14 +55,14 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   test("version range - endingVersion without startingVersion throws") {
     checkError(
       intercept[AnalysisException] {
-        ChangelogInfoUtils.fromOptions(
+        ChangelogContextUtils.fromOptions(
           makeOptions("endingVersion" -> "5"), testTimeZone)
       },
       condition = "INVALID_CDC_OPTION.MISSING_STARTING_VERSION")
   }
 
   test("timestamp range with both start and end") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions("startingTimestamp" -> "2026-01-01", "endingTimestamp" -> "2026-02-01"),
       testTimeZone)
     val range = info.range().asInstanceOf[ChangelogRange.TimestampRange]
@@ -72,7 +72,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("timestamp range with only start") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions("startingTimestamp" -> "2026-01-01"), testTimeZone)
     val range = info.range().asInstanceOf[ChangelogRange.TimestampRange]
     assert(!range.endingTimestamp().isPresent)
@@ -81,7 +81,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   test("timestamp range - endingTimestamp without startingTimestamp throws") {
     checkError(
       intercept[AnalysisException] {
-        ChangelogInfoUtils.fromOptions(
+        ChangelogContextUtils.fromOptions(
           makeOptions("endingTimestamp" -> "2026-02-01"), testTimeZone)
       },
       condition = "INVALID_CDC_OPTION.MISSING_STARTING_TIMESTAMP")
@@ -90,7 +90,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   test("cannot mix version and timestamp range") {
     checkError(
       intercept[AnalysisException] {
-        ChangelogInfoUtils.fromOptions(
+        ChangelogContextUtils.fromOptions(
           makeOptions("startingVersion" -> "1", "startingTimestamp" -> "2026-01-01"),
           testTimeZone)
       },
@@ -98,37 +98,37 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("unbounded range when no version or timestamp specified") {
-    val info = ChangelogInfoUtils.fromOptions(makeOptions(), testTimeZone)
+    val info = ChangelogContextUtils.fromOptions(makeOptions(), testTimeZone)
     assert(info.range().isInstanceOf[ChangelogRange.UnboundedRange])
   }
 
   test("deduplication mode - none") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions("deduplicationMode" -> "none"), testTimeZone)
-    assert(info.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
   }
 
   test("deduplication mode - dropCarryovers (default)") {
-    val info = ChangelogInfoUtils.fromOptions(makeOptions(), testTimeZone)
-    assert(info.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    val info = ChangelogContextUtils.fromOptions(makeOptions(), testTimeZone)
+    assert(info.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
   }
 
   test("deduplication mode - netChanges") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions("deduplicationMode" -> "netChanges"), testTimeZone)
-    assert(info.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES)
+    assert(info.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES)
   }
 
   test("deduplication mode - case insensitive") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions("deduplicationMode" -> "DROPCARRYOVERS"), testTimeZone)
-    assert(info.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
   }
 
   test("deduplication mode - invalid value throws") {
     checkError(
       intercept[AnalysisException] {
-        ChangelogInfoUtils.fromOptions(
+        ChangelogContextUtils.fromOptions(
           makeOptions("deduplicationMode" -> "invalid"), testTimeZone)
       },
       condition = "INVALID_CDC_OPTION.INVALID_DEDUPLICATION_MODE",
@@ -136,18 +136,18 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("computeUpdates option") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions("computeUpdates" -> "true"), testTimeZone)
     assert(info.computeUpdates())
   }
 
   test("computeUpdates defaults to false") {
-    val info = ChangelogInfoUtils.fromOptions(makeOptions(), testTimeZone)
+    val info = ChangelogContextUtils.fromOptions(makeOptions(), testTimeZone)
     assert(!info.computeUpdates())
   }
 
   test("bound inclusivity options") {
-    val info = ChangelogInfoUtils.fromOptions(
+    val info = ChangelogContextUtils.fromOptions(
       makeOptions(
         "startingVersion" -> "1",
         "endingVersion" -> "5",
@@ -162,7 +162,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
   test("invalid timestamp throws") {
     checkError(
       intercept[AnalysisException] {
-        ChangelogInfoUtils.fromOptions(
+        ChangelogContextUtils.fromOptions(
           makeOptions("startingTimestamp" -> "not-a-timestamp"), testTimeZone)
       },
       condition = "INVALID_CDC_OPTION.INVALID_TIMESTAMP",
@@ -177,7 +177,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
     // = 2026-01-01 08:00:00 UTC = expectedUtcMicros + 8h
     val expectedPstMicros = 1767254400000000L
 
-    val utcInfo = ChangelogInfoUtils.fromOptions(
+    val utcInfo = ChangelogContextUtils.fromOptions(
       makeOptions("startingTimestamp" -> tsStr), "UTC")
     val utcRange =
       utcInfo.range().asInstanceOf[ChangelogRange.TimestampRange]
@@ -185,7 +185,7 @@ class ChangelogInfoUtilsSuite extends SparkFunSuite with SQLHelper {
 
     withSQLConf(
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
-      val laInfo = ChangelogInfoUtils.fromOptions(
+      val laInfo = ChangelogContextUtils.fromOptions(
         makeOptions("startingTimestamp" -> tsStr),
         SQLConf.get.sessionLocalTimeZone)
       val laRange =
