@@ -51,6 +51,11 @@ import org.apache.spark.sql.types.Decimal
  *   B -- Aggregate AVG widened-cast sweep (`pPrime + 4 <= MAX_DOUBLE_DIGITS`
  *        so the rule fires only inside the existing AVG Double-regime
  *        envelope; wider casts stay on the Decimal-exact path).
+ *   C -- Aggregate MIN widened-cast sweep (no regime guard: the MIN arm
+ *        peels for any `pPrime >= p` same-scale widening; expected
+ *        BigInteger-domain outer (`pPrime > MAX_LONG_DIGITS = 18`) is the
+ *        main saving path per design).
+ *   D -- Aggregate MAX widened-cast sweep (mirrors C).
  *
  * NOTE on Window arm: the optimizer does not extend widened-Cast peel to
  * the Window arm (see DecimalAggregates rule comment) because the analyzer
@@ -119,6 +124,40 @@ object DecimalAggregatesBenchmark extends SqlBasedBenchmark {
     ("B2 p=7 s=2 p'=11", 7, 2, 11),  // pPrime upper bound
     ("B3 p=5 s=0 p'=6", 5, 0, 6),    // p+1 boundary, zero scale
     ("B4 p=5 s=0 p'=11", 5, 0, 11)   // pPrime upper bound, zero scale
+  )
+
+  /**
+   * Aggregate MIN cases: (label, p, s, widened p').
+   *
+   * MIN/MAX widened-cast peel has NO regime guard -- it peels for any
+   * `pPrime >= p` same-scale widening (`Optimizer.scala WidenedDecimalChild`).
+   * The main saving path is `pPrime > MAX_LONG_DIGITS = 18`, where the
+   * unrewritten plan would create a BigInteger-domain outer Decimal for
+   * every row, while the rewritten plan compares the inner Long-domain
+   * values and casts only the single aggregate result.
+   *
+   * Coverage:
+   *   - C1: inner Long, outer Long  -- weakest saving (sibling-compatible
+   *         baseline; the row-cast still goes through `changePrecision`
+   *         but stays in Long).
+   *   - C2: inner Long, outer BigInteger -- the main saving regime.
+   *   - C3: inner at Long boundary (p=18), outer BigInteger -- isolates
+   *         the outer-domain cost.
+   *   - C4: inner Long, outer at MAX_PRECISION=38 -- deepest BigInteger.
+   */
+  private val MinAggCases: Seq[(String, Int, Int, Int)] = Seq(
+    ("C1 p=10 s=2 p'=18", 10, 2, 18), // inner Long, outer Long (boundary)
+    ("C2 p=10 s=2 p'=28", 10, 2, 28), // inner Long, outer BigInteger (main saving)
+    ("C3 p=18 s=2 p'=28", 18, 2, 28), // inner Long max, outer BigInteger
+    ("C4 p=10 s=2 p'=38", 10, 2, 38)  // inner Long, outer MAX_PRECISION
+  )
+
+  /** Aggregate MAX cases: mirror C above. */
+  private val MaxAggCases: Seq[(String, Int, Int, Int)] = Seq(
+    ("D1 p=10 s=2 p'=18", 10, 2, 18),
+    ("D2 p=10 s=2 p'=28", 10, 2, 28),
+    ("D3 p=18 s=2 p'=28", 18, 2, 28),
+    ("D4 p=10 s=2 p'=38", 10, 2, 38)
   )
 
   /** Clamp generator to `10^(p-s) - 1` so rand() * bound fits `DECIMAL(p, s)`. */
@@ -204,6 +243,32 @@ object DecimalAggregatesBenchmark extends SqlBasedBenchmark {
         runThreeWay(label, aN,
           nativeSql = "select avg(x) from t",
           widenedSql = s"select avg(cast(x as decimal($pPrime, $s))) from t",
+          iters, apl)
+      }
+    }
+
+    // Section C -- Aggregate MIN widened-cast.
+    runBenchmark("DecimalAggregates MIN widened-cast peel (Aggregate)") {
+      MinAggCases.foreach { case (label, p, s, pPrime) =>
+        require(pPrime >= p, s"$label: p'=$pPrime must be >= p=$p (widening)")
+        require(pPrime <= 38, s"$label: p'=$pPrime exceeds MAX_PRECISION=38")
+        setupAggTable(spark, aN, p, s)
+        runThreeWay(label, aN,
+          nativeSql = "select min(x) from t",
+          widenedSql = s"select min(cast(x as decimal($pPrime, $s))) from t",
+          iters, apl)
+      }
+    }
+
+    // Section D -- Aggregate MAX widened-cast.
+    runBenchmark("DecimalAggregates MAX widened-cast peel (Aggregate)") {
+      MaxAggCases.foreach { case (label, p, s, pPrime) =>
+        require(pPrime >= p, s"$label: p'=$pPrime must be >= p=$p (widening)")
+        require(pPrime <= 38, s"$label: p'=$pPrime exceeds MAX_PRECISION=38")
+        setupAggTable(spark, aN, p, s)
+        runThreeWay(label, aN,
+          nativeSql = "select max(x) from t",
+          widenedSql = s"select max(cast(x as decimal($pPrime, $s))) from t",
           iters, apl)
       }
     }

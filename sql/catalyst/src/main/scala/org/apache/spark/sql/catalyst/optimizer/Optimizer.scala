@@ -2576,9 +2576,9 @@ object DecimalAggregates extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(SUM, AVERAGE), ruleId) {
+    _.containsAnyPattern(SUM, AVERAGE, MIN, MAX), ruleId) {
     case q: LogicalPlan => q.transformExpressionsDownWithPruning(
-      _.containsAnyPattern(SUM, AVERAGE), ruleId) {
+      _.containsAnyPattern(SUM, AVERAGE, MIN, MAX), ruleId) {
       case we @ WindowExpression(ae @ AggregateExpression(af, _, _, _, _), _) => af match {
         // Window arm: `ExtractWindowExpressions` hoists composite children
         // (here the widening Cast) into a child Project, so widened-Cast
@@ -2635,6 +2635,23 @@ object DecimalAggregates extends Rule[LogicalPlan] {
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
             DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
+
+        // Hoist a scale-preserving widening Cast out of Min so the Min runs on
+        // the narrower inner Decimal. Min picks an existing row's value, so a
+        // widening Cast (same scale, larger precision) is bit-identical to
+        // applying the Cast after the aggregate. The outer Cast preserves the
+        // pre-rewrite result dataType (Min.dataType == child.dataType).
+        case m @ Min(WidenedDecimalChild(inner, _, pPrime, sPrime)) =>
+          Cast(
+            ae.copy(aggregateFunction = m.copy(child = inner)),
+            DecimalType(pPrime, sPrime), Option(conf.sessionLocalTimeZone))
+
+        // Hoist a scale-preserving widening Cast out of Max (same reasoning
+        // as the Min arm above).
+        case m @ Max(WidenedDecimalChild(inner, _, pPrime, sPrime)) =>
+          Cast(
+            ae.copy(aggregateFunction = m.copy(child = inner)),
+            DecimalType(pPrime, sPrime), Option(conf.sessionLocalTimeZone))
 
         case _ => ae
       }

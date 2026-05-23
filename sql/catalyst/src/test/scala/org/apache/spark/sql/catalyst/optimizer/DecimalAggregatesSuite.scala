@@ -23,7 +23,7 @@ import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, MaxBy, MaxMinByK, MinBy, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -612,5 +612,93 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     assert(avgs.forall(_.evalMode == EvalMode.TRY),
       s"evalMode should be preserved as TRY after rewrite, got " +
         avgs.map(_.evalMode).mkString(","))
+  }
+
+  // ---------------------------------------------------------------------------
+  // SPARK-57023: DecimalAggregates widened-Cast peel for MIN/MAX. Same scale
+  // (s == sPrime) + same-or-larger precision (pPrime >= p) widening Cast is
+  // bit-identical to applying the Cast after the aggregate, because Min/Max
+  // pick an existing row's value (no arithmetic). The peel hoists the Cast
+  // out and runs Min/Max on the narrower inner Decimal.
+  //
+  // Vanilla 5.0.0-SNAPSHOT ground-truth (rule OFF vs ON) and design rationale:
+  //   features/spark-decimal-minmax-cast-peel/docs/0002-decision-design.md (rev 3)
+  // ---------------------------------------------------------------------------
+
+  test("SPARK-57023: MIN(CAST(dec(7,2) AS dec(12,2))) peels via widened-Cast fast path") {
+    val widened = $"d7_2".cast(DecimalType(12, 2))
+    val originalQuery = widenRel.select(min(widened).as("min_widened"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = widenRel
+      .select(
+        Cast(
+          min($"d7_2"),
+          DecimalType(12, 2),
+          Option(conf.sessionLocalTimeZone))
+          .as("min_widened"))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MAX(CAST(dec(7,2) AS dec(12,2))) peels via widened-Cast fast path") {
+    val widened = $"d7_2".cast(DecimalType(12, 2))
+    val originalQuery = widenRel.select(max(widened).as("max_widened"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = widenRel
+      .select(
+        Cast(
+          max($"d7_2"),
+          DecimalType(12, 2),
+          Option(conf.sessionLocalTimeZone))
+          .as("max_widened"))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MIN(CAST(dec(7,2) AS dec(12,4))) does NOT peel (scale change)") {
+    val rescaled = $"d7_2".cast(DecimalType(12, 4))
+    val originalQuery = widenRel.select(min(rescaled).as("min_rescaled"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MIN(CAST(dec(17,2) AS dec(10,2))) does NOT peel (narrowing)") {
+    val narrowed = $"d17_2".cast(DecimalType(10, 2))
+    val originalQuery = widenRel.select(min(narrowed).as("min_narrowed"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MIN/MAX(CheckOverflow) does NOT peel (CheckOverflow guard)") {
+    val co = CheckOverflow($"d7_2", DecimalType(7, 2), nullOnOverflow = true)
+    val widened = Cast(co, DecimalType(12, 2))
+    val originalQuery = widenRel.select(min(widened).as("min_co"), max(widened).as("max_co"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MinBy/MaxBy/MaxMinByK with widened-Cast value do NOT peel " +
+      "(rule pattern matches only Min/Max)") {
+    val widened = $"d7_2".cast(DecimalType(12, 2))
+    val ordering = $"i"
+    val minByExpr = MinBy(widened, ordering).toAggregateExpression()
+    val maxByExpr = MaxBy(widened, ordering).toAggregateExpression()
+    val maxMinByKExpr = MaxMinByK(widened, ordering, Literal(3)).toAggregateExpression()
+    val originalQuery = widenRel.select(
+      minByExpr.as("min_by_w"),
+      maxByExpr.as("max_by_w"),
+      maxMinByKExpr.as("mmbk_w"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }
