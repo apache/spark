@@ -38,10 +38,8 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField, StructType}
 
 /**
- * Unit tests for the [[AutoCdcFlow]] data class and the augmented schema computed by
- * [[AutoCdcMergeFlow]]. The tests stop at the data-class / schema surface; they do not
- * exercise the full pipeline-graph resolution machinery (which is not yet wired up to AutoCDC
- * flows).
+ * Unit tests for the [[AutoCdcFlow]] and [[AutoCdcMergeFlow]] that do not execute graph analysis
+ * or execution.
  */
 class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
