@@ -39,6 +39,47 @@ case class Scd1BatchProcessor(
     resolvedSequencingType: DataType) {
 
   /**
+   * Reconcile a CDC microbatch into the canonical form that the auxiliary- and target-table
+   * merges consume. Composes the per-step transforms in the only order that produces correct
+   * SCD1 semantics:
+   *
+   *   1. [[deduplicateMicrobatch]]: collapse same-key events to the latest by sequence.
+   *   2. [[extendMicrobatchRowsWithCdcMetadata]]: project the operational `_cdc_metadata` column
+   *      (must run before column selection, which may drop inputs the metadata expressions
+   *      reference).
+   *   3. [[projectTargetColumnsOntoMicrobatch]]: apply the user-defined column selection while
+   *      preserving the CDC metadata column.
+   *   4. [[applyTombstonesToMicrobatch]]: filter out late-arriving events superseded by
+   *      tombstones already recorded in the auxiliary table.
+   *
+   * The per-step methods are kept package-visible so that focused unit tests can pin each
+   * transform's behavior independently, but production callers should always use this entry
+   * point so the ordering is enforced.
+   *
+   * Microbatch validation (orderable sequence, non-null sequence/keys) is a separate concern
+   * handled upstream by [[ScdBatchValidator.validateMicrobatch]] and is intentionally not
+   * folded into this method - it must run before any of these transforms touch the data.
+   *
+   * @param batchDf          The validated incoming CDC microbatch.
+   * @param auxiliaryTableDf A snapshot of the auxiliary table for tombstone reconciliation.
+   *                         Must contain at minimum the key columns + `_cdc_metadata`.
+   * @return The reconciled microbatch, ready to be merged onto both tables.
+   */
+  def reconcileMicrobatch(
+      batchDf: DataFrame,
+      auxiliaryTableDf: DataFrame): DataFrame = {
+    val deduplicated = deduplicateMicrobatch(validatedMicrobatch = batchDf)
+    val withCdcMetadata = extendMicrobatchRowsWithCdcMetadata(validatedMicrobatch = deduplicated)
+    val projected = projectTargetColumnsOntoMicrobatch(
+      microbatchWithCdcMetadataDf = withCdcMetadata
+    )
+    applyTombstonesToMicrobatch(
+      microbatchDf = projected,
+      auxiliaryTableDf = auxiliaryTableDf
+    )
+  }
+
+  /**
    * Deduplicate the incoming CDC microbatch by key, keeping the most recent event per key
    * as ordered by [[ChangeArgs.sequencing]].
    *
@@ -52,7 +93,7 @@ case class Scd1BatchProcessor(
    *
    * The schema of the returned dataframe matches the schema of the microbatch exactly.
    */
-  def deduplicateMicrobatch(validatedMicrobatch: DataFrame): DataFrame = {
+  private[autocdc] def deduplicateMicrobatch(validatedMicrobatch: DataFrame): DataFrame = {
     // The `max_by` API can only return a single column, so pack/unpack the entire row into a
     // temporary column before and after the `max_by` operation.
     val winningRowCol = Scd1BatchProcessor.winningRowColName
@@ -89,7 +130,8 @@ case class Scd1BatchProcessor(
    * The returned dataframe has all of the columns in the input microbatch + the CDC metadata
    * column.
    */
-  def extendMicrobatchRowsWithCdcMetadata(validatedMicrobatch: DataFrame): DataFrame = {
+  private[autocdc] def extendMicrobatchRowsWithCdcMetadata(
+      validatedMicrobatch: DataFrame): DataFrame = {
     // Proactively validate the reserved CDC metadata column does not exist in the microbatch.
     validateCdcMetadataColumnNotPresent(validatedMicrobatch)
 
@@ -124,7 +166,8 @@ case class Scd1BatchProcessor(
    * Returned dataframe's schema is: all of the user-selected columns in the input dataframe as per
    * [[ChangeArgs.columnSelection]] + the CDC metadata column.
    */
-  def projectTargetColumnsOntoMicrobatch(microbatchWithCdcMetadataDf: DataFrame): DataFrame = {
+  private[autocdc] def projectTargetColumnsOntoMicrobatch(
+      microbatchWithCdcMetadataDf: DataFrame): DataFrame = {
     val caseSensitiveColumnComparison =
       microbatchWithCdcMetadataDf.sparkSession.sessionState.conf.caseSensitiveAnalysis
 
@@ -179,7 +222,7 @@ case class Scd1BatchProcessor(
    * The returned filtered dataframe has the same schema as the input microbatch, but with only
    * the rows that remain unaffected by any known tombstones.
    */
-  def applyTombstonesToMicrobatch(
+  private[autocdc] def applyTombstonesToMicrobatch(
       microbatchDf: DataFrame,
       auxiliaryTableDf: DataFrame): DataFrame = {
     val aliasedMicrobatchDf = microbatchDf.alias("microbatch")
@@ -226,7 +269,7 @@ case class Scd1BatchProcessor(
    *                                 table, as required by the `mergeInto(table, condition)`
    *                                 API.
    */
-  def mergeMicrobatchOntoAuxiliaryTable(
+  private[autocdc] def mergeMicrobatchOntoAuxiliaryTable(
       reconciledMicrobatchDf: DataFrame,
       auxiliaryTableIdentifier: TableIdentifier
   ): Unit = {
@@ -292,7 +335,7 @@ case class Scd1BatchProcessor(
    *                               table, as required by the `mergeInto(table, condition)`
    *                               API.
    */
-  def mergeMicrobatchOntoTarget(
+  private[autocdc] def mergeMicrobatchOntoTarget(
       reconciledMicrobatchDf: DataFrame,
       targetTableIdentifier: TableIdentifier
   ): Unit = {

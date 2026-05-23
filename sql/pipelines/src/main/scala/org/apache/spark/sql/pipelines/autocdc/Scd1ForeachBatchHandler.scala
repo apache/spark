@@ -24,13 +24,22 @@ import org.apache.spark.sql.classic.DataFrame
  * Exposes an API to execute one SCD Type 1 AutoCDC microbatch reconciliation on a
  * foreachBatch streaming query.
  */
-case class Scd1ForeachBatchExec(
+case class Scd1ForeachBatchHandler(
     batchProcessor: Scd1BatchProcessor,
     auxiliaryTableIdentifier: TableIdentifier,
     targetTableIdentifier: TableIdentifier) {
 
   /**
    * Process a single CDC microbatch and merge it into the auxiliary and target tables.
+   *
+   * The body is intentionally a thin orchestration of three calls - validate, reconcile,
+   * merge - so the per-step ordering is owned by [[Scd1BatchProcessor.reconcileMicrobatch]]
+   * and cannot be reordered by accident at the foreachBatch boundary.
+   *
+   * Idempotent under same-`batchId` replay: both merges' clauses are gated on sequence
+   * inequalities, so re-applying an event already reflected in stored state is a no-op.
+   * A partial failure between the aux and target merges therefore needs no transactional
+   * wrapper - foreachBatch simply replays the whole batch.
    */
   def execute(batchDf: DataFrame, batchId: Long): Unit = {
     ScdBatchValidator(
@@ -40,20 +49,12 @@ case class Scd1ForeachBatchExec(
       batchId = batchId
     ).validateMicrobatch()
 
-    val deduplicatedMicrobatch = batchProcessor.deduplicateMicrobatch(
-      validatedMicrobatch = batchDf
-    )
-
-    val microbatchWithCdcMetadata = batchProcessor.extendMicrobatchRowsWithCdcMetadata(
-      validatedMicrobatch = deduplicatedMicrobatch
-    )
-
-    val projectedMicrobatch = batchProcessor.projectTargetColumnsOntoMicrobatch(
-      microbatchWithCdcMetadataDf = microbatchWithCdcMetadata
-    )
-
-    val reconciledMicrobatch = batchProcessor.applyTombstonesToMicrobatch(
-      microbatchDf = projectedMicrobatch,
+    val reconciledMicrobatch = batchProcessor.reconcileMicrobatch(
+      batchDf = batchDf,
+      // Aux holds at most one row per currently-active tombstone (revived keys are GC'd
+      // by mergeMicrobatchOntoAuxiliaryTable), so it generally stays small enough for a broadcast
+      // join. Future optimizations: key-pruned reads, table format-aware clustering and tombstone
+      // TTL.
       auxiliaryTableDf = batchDf.sparkSession.read.table(
         auxiliaryTableIdentifier.quotedString
       )
@@ -64,6 +65,11 @@ case class Scd1ForeachBatchExec(
       auxiliaryTableIdentifier = auxiliaryTableIdentifier
     )
 
+    // Failure between these two merges is safe under foreachBatch retry: the aux merge
+    // only ever mutates a tombstone when this batch's event makes it stale (strictly newer
+    // delete advances it) or redundant (`>=` upsert revives the key, GC'ing the tombstone),
+    // so on retry those preconditions no longer hold against the just-advanced aux state -
+    // the aux merge is a no-op and the target merge replays as if for the first time.
     batchProcessor.mergeMicrobatchOntoTarget(
       reconciledMicrobatchDf = reconciledMicrobatch,
       targetTableIdentifier = targetTableIdentifier

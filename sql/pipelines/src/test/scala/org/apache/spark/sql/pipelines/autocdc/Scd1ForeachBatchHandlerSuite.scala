@@ -26,9 +26,9 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
- * E2E unit tests for the Scd1ForeachBatchExec class.
+ * E2E unit tests for the Scd1ForeachBatchHandler class.
  */
-class Scd1ForeachBatchExecSuite
+class Scd1ForeachBatchHandlerSuite
     extends SparkFunSuite
     with SharedSparkSession
     with BeforeAndAfter
@@ -72,7 +72,7 @@ class Scd1ForeachBatchExecSuite
   private def createTargetTable(seedRows: Row*): Unit =
     createTable(defaultTargetIdent, defaultTargetTableIdentifier, targetSchema, seedRows: _*)
 
-  private def exec: Scd1ForeachBatchExec = Scd1ForeachBatchExec(
+  private def exec: Scd1ForeachBatchHandler = Scd1ForeachBatchHandler(
     batchProcessor = processor,
     auxiliaryTableIdentifier = defaultAuxTableIdentifier,
     targetTableIdentifier = defaultTargetTableIdentifier
@@ -83,7 +83,7 @@ class Scd1ForeachBatchExecSuite
   // ===========================================================================================
 
   test(
-    "Scd1ForeachBatchExec invalidates rows with null sequencing before merging to aux/target " +
+    "Scd1ForeachBatchHandler invalidates rows with null sequencing before merging to aux/target " +
     "tables."
   ) {
     createAuxTable()
@@ -112,7 +112,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec invalidates rows with a null key column before merging to aux/target"
+    "Scd1ForeachBatchHandler invalidates rows with a null key column before merging to aux/target"
   ) {
     createAuxTable()
     createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
@@ -144,7 +144,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec invalidates rows when any column of a composite key is null"
+    "Scd1ForeachBatchHandler invalidates rows when any column of a composite key is null"
   ) {
     // Composite [country, city] key. The validator must report per-column null counts in
     // the configured key order (country before city).
@@ -171,7 +171,7 @@ class Scd1ForeachBatchExecSuite
       ),
       resolvedSequencingType = LongType
     )
-    val compositeExec = Scd1ForeachBatchExec(
+    val compositeExec = Scd1ForeachBatchHandler(
       batchProcessor = compositeProcessor,
       auxiliaryTableIdentifier = defaultAuxTableIdentifier,
       targetTableIdentifier = defaultTargetTableIdentifier
@@ -206,7 +206,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec surfaces the null-sequence error before the null-key error"
+    "Scd1ForeachBatchHandler surfaces the null-sequence error before the null-key error"
   ) {
     // A single row has both a null sequence and a null id. The validator must surface the
     // sequence error first to preserve the existing precedence.
@@ -232,7 +232,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec validates that the microbatch's sequencing column is orderable"
+    "Scd1ForeachBatchHandler validates that the microbatch's sequencing column is orderable"
   ) {
     createAuxTable()
     createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
@@ -269,7 +269,7 @@ class Scd1ForeachBatchExecSuite
   // ===========================================================================================
 
   test(
-    "Scd1ForeachBatchExec drops stale microbatch rows using auxiliary tombstones and writes " +
+    "Scd1ForeachBatchHandler drops stale microbatch rows using auxiliary tombstones and writes " +
     "fresh upserts"
   ) {
     createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
@@ -289,7 +289,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec persists a newer delete as a tombstone and removes the target row"
+    "Scd1ForeachBatchHandler persists a newer delete as a tombstone and removes the target row"
   ) {
     createAuxTable()
     createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
@@ -307,7 +307,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec deduplicates the raw microbatch before merging into the target"
+    "Scd1ForeachBatchHandler deduplicates the raw microbatch before merging into the target"
   ) {
     createAuxTable()
     createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
@@ -326,7 +326,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec reconciles out-of-order events when ExcludeColumns hides the " +
+    "Scd1ForeachBatchHandler reconciles out-of-order events when ExcludeColumns hides the " +
     "sequencing column"
   ) {
     // ExcludeColumns omits the sequencing column ("seq") and the delete marker ("is_delete")
@@ -347,7 +347,7 @@ class Scd1ForeachBatchExecSuite
       ),
       resolvedSequencingType = LongType
     )
-    val excludeExec = Scd1ForeachBatchExec(
+    val excludeExec = Scd1ForeachBatchHandler(
       batchProcessor = excludeProcessor,
       auxiliaryTableIdentifier = defaultAuxTableIdentifier,
       targetTableIdentifier = defaultTargetTableIdentifier
@@ -390,7 +390,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec upserts an existing target row when a higher-sequenced event arrives"
+    "Scd1ForeachBatchHandler upserts an existing target row when a higher-sequenced event arrives"
   ) {
     createAuxTable()
     createTargetTable(Row(1, "alice", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(1L))))
@@ -404,7 +404,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec records an aux tombstone for a delete on a nonexistent key without" +
+    "Scd1ForeachBatchHandler records an aux tombstone for a delete on a nonexistent key without" +
       " affecting the target"
   ) {
     // A delete event for a key that never existed in the target must still be recorded in
@@ -422,7 +422,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec ignores a late-arriving upsert with a sequence below the target's" +
+    "Scd1ForeachBatchHandler ignores a late-arriving upsert with a sequence below the target's" +
       " last upsert"
   ) {
     createAuxTable()
@@ -437,7 +437,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec ignores a late-arriving lower-seq delete but still records the aux" +
+    "Scd1ForeachBatchHandler ignores a late-arriving lower-seq delete but still records the aux" +
       " tombstone"
   ) {
     // The auxiliary table records every incoming delete event regardless of whether it
@@ -455,7 +455,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec resolves a within-batch delete and higher-sequenced upsert as an" +
+    "Scd1ForeachBatchHandler resolves a within-batch delete and higher-sequenced upsert as an" +
       " upsert insert"
   ) {
     // Within-batch dedup picks the highest-sequenced event regardless of kind. Here an
@@ -479,7 +479,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec treats a composite key as a single identifier and isolates rows by" +
+    "Scd1ForeachBatchHandler treats a composite key as a single identifier and isolates rows by" +
       " full key"
   ) {
     // Composite [country, city] key. Three rows that overlap on country (US, US, UK) but
@@ -514,7 +514,7 @@ class Scd1ForeachBatchExecSuite
       ),
       resolvedSequencingType = LongType
     )
-    val compositeExec = Scd1ForeachBatchExec(
+    val compositeExec = Scd1ForeachBatchHandler(
       batchProcessor = compositeProcessor,
       auxiliaryTableIdentifier = defaultAuxTableIdentifier,
       targetTableIdentifier = defaultTargetTableIdentifier
@@ -546,7 +546,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec leaves unrelated target rows untouched when only one key is updated"
+    "Scd1ForeachBatchHandler leaves unrelated target rows untouched when only one key is updated"
   ) {
     createAuxTable()
     createTargetTable(
@@ -591,14 +591,14 @@ class Scd1ForeachBatchExecSuite
     resolvedSequencingType = LongType
   )
 
-  private def mixedCaseExec: Scd1ForeachBatchExec = Scd1ForeachBatchExec(
+  private def mixedCaseExec: Scd1ForeachBatchHandler = Scd1ForeachBatchHandler(
     batchProcessor = mixedCaseProcessor,
     auxiliaryTableIdentifier = defaultAuxTableIdentifier,
     targetTableIdentifier = defaultTargetTableIdentifier
   )
 
   test(
-    "Scd1ForeachBatchExec honors case-insensitive analysis from the batch dataframe's session"
+    "Scd1ForeachBatchHandler honors case-insensitive analysis from the batch dataframe's session"
   ) {
     // Every stage of execute (validation, dedup, project target columns, tombstone
     // application, merge to aux, merge to target) must resolve the UPPERCASE column refs in
@@ -620,7 +620,7 @@ class Scd1ForeachBatchExecSuite
   }
 
   test(
-    "Scd1ForeachBatchExec honors case-sensitive analysis from the batch dataframe's session"
+    "Scd1ForeachBatchHandler honors case-sensitive analysis from the batch dataframe's session"
   ) {
     // With case-sensitive analysis, the same UPPERCASE ChangeArgs references against a
     // lowercase schema must not be silently normalized. Execute must surface an
