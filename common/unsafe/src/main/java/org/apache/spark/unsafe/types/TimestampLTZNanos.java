@@ -23,18 +23,43 @@ import java.io.Serializable;
 import java.util.Objects;
 
 /**
- * Physical representation of {@code TIMESTAMP_LTZ(p)} with nanosecond-capable precision.
- * Values are stored as epoch microseconds plus nanoseconds within that microsecond (0-999).
+ * Physical representation of {@code TIMESTAMP_LTZ(p)} with nanosecond-capable fractional precision
+ * ({@code p} in [7, 9]). Analogous to microsecond {@code TimestampType}, which stores a single
+ * {@code long} epoch micros value at UTC+00:00, but with sub-microsecond resolution.
+ *
+ * <p>Values are stored as two components:
+ * <ul>
+ *   <li>{@link #epochMicros} - microseconds since the Unix epoch at UTC+00:00 (same unit as
+ *   {@code TimestampType}),</li>
+ *   <li>{@link #nanosWithinMicro} - additional nanoseconds within that microsecond, in [0, 999].
+ *   The SQL fractional-second precision {@code p} applies when converting to and from external
+ *   representations; the physical value always retains up to three sub-micro digits.</li>
+ * </ul>
+ *
+ * <p>Logical row-size estimation uses 10 bytes (8 + 2). In {@code UnsafeRow}, values are stored in
+ * the variable-length region using a 16-byte payload (see
+ * {@link org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues}), the same pattern as
+ * {@link CalendarInterval}.
+ *
+ * <p>NTZ and LTZ nanosecond timestamps share this composite layout at the row layer; time-zone
+ * semantics are enforced in the SQL and conversion layers, not in this class.
  *
  * @since 4.2.0
  */
 @Unstable
 public final class TimestampLTZNanos implements Serializable {
+  /** Size of the {@code UnsafeRow} variable-length payload for this type (two 8-byte words). */
   public static final int SIZE_IN_BYTES = 16;
 
+  /** Microseconds since the Unix epoch at UTC+00:00. */
   public final long epochMicros;
+  /** Nanoseconds within {@link #epochMicros}, in [0, 999]. */
   public final short nanosWithinMicro;
 
+  /**
+   * @param epochMicros microseconds since the Unix epoch at UTC+00:00
+   * @param nanosWithinMicro nanoseconds within {@code epochMicros}, must be in [0, 999]
+   */
   public TimestampLTZNanos(long epochMicros, short nanosWithinMicro) {
     TimestampNanosUtils.validateNanosWithinMicro(nanosWithinMicro);
     this.epochMicros = epochMicros;

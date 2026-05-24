@@ -63,8 +63,16 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
 
   def setInterval(i: Int, value: CalendarInterval): Unit = update(i, value)
 
+  /**
+   * Sets a nanosecond NTZ timestamp. On [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]],
+   * use this instead of [[setNullAt]] for null so the variable-length offset is preserved.
+   */
   def setTimestampNTZNanos(i: Int, value: TimestampNTZNanos): Unit = update(i, value)
 
+  /**
+   * Sets a nanosecond LTZ timestamp. On [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]],
+   * use this instead of [[setNullAt]] for null so the variable-length offset is preserved.
+   */
   def setTimestampLTZNanos(i: Int, value: TimestampLTZNanos): Unit = update(i, value)
 
   /**

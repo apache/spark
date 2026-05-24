@@ -21,7 +21,11 @@ import java.util.Map;
 
 import org.apache.spark.SparkIllegalArgumentException;
 
+/**
+ * Internal helpers shared by {@link TimestampNTZNanos} and {@link TimestampLTZNanos}.
+ */
 final class TimestampNanosUtils {
+  /** Maximum valid value for {@code nanosWithinMicro} (three sub-micro decimal digits). */
   static final int MAX_NANOS_WITHIN_MICRO = 999;
 
   private TimestampNanosUtils() {}

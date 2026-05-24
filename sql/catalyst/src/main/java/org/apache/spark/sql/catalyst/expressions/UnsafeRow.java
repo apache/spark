@@ -326,18 +326,28 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
   }
 
+  /**
+   * Updates a nanosecond NTZ timestamp column in place. Uses the same variable-length layout as
+   * {@link #setInterval(int, CalendarInterval)}. For null values, do not call {@link #setNullAt};
+   * pass {@code null} here so the variable-length offset is retained for future updates.
+   */
   @Override
   public void setTimestampNTZNanos(int ordinal, TimestampNTZNanos value) {
     setTimestampNanosPayload(ordinal, value == null, value == null ? 0L : value.epochMicros,
       value == null ? 0 : value.nanosWithinMicro);
   }
 
+  /**
+   * Updates a nanosecond LTZ timestamp column in place. See {@link #setTimestampNTZNanos(int,
+   * TimestampNTZNanos)}.
+   */
   @Override
   public void setTimestampLTZNanos(int ordinal, TimestampLTZNanos value) {
     setTimestampNanosPayload(ordinal, value == null, value == null ? 0L : value.epochMicros,
       value == null ? 0 : value.nanosWithinMicro);
   }
 
+  // 16-byte payload in the variable-length region; see TimestampNanosRowValues.
   private void setTimestampNanosPayload(
       int ordinal, boolean isNull, long epochMicros, short nanosWithinMicro) {
     assertIndexIsValid(ordinal);

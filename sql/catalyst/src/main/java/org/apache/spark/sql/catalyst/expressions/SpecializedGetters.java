@@ -60,8 +60,10 @@ public interface SpecializedGetters {
 
   CalendarInterval getInterval(int ordinal);
 
+  /** Nanosecond NTZ timestamp; see {@link TimestampNanosRowValues} for UnsafeRow layout. */
   TimestampNTZNanos getTimestampNTZNanos(int ordinal);
 
+  /** Nanosecond LTZ timestamp; see {@link TimestampNanosRowValues} for UnsafeRow layout. */
   TimestampLTZNanos getTimestampLTZNanos(int ordinal);
 
   VariantVal getVariant(int ordinal);

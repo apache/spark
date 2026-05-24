@@ -174,6 +174,7 @@ public abstract class UnsafeWriter {
       input == null ? 0 : input.nanosWithinMicro);
   }
 
+  // 16-byte variable-length payload; same layout as UnsafeRow#setTimestampNanosPayload.
   private void writeTimestampNanos(
       int ordinal, boolean isNull, long epochMicros, short nanosWithinMicro) {
     grow(TimestampNanosRowValues.SIZE_IN_BYTES);

@@ -168,6 +168,13 @@ class PhysicalCalendarIntervalType() extends PhysicalDataType {
 }
 case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
 
+/**
+ * Physical type for [[org.apache.spark.sql.types.TimestampNTZNanosType]]. Internal values are
+ * [[TimestampNTZNanos]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * 16-byte variable-length payload; see [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Ordering, compare, and hash are not implemented yet and will be added in a follow-up issue.
+ */
 class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
   override private[sql] def ordering =
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
@@ -177,6 +184,13 @@ class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
 }
 case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
 
+/**
+ * Physical type for [[org.apache.spark.sql.types.TimestampLTZNanosType]]. Internal values are
+ * [[TimestampLTZNanos]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * 16-byte variable-length payload; see [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Ordering, compare, and hash are not implemented yet and will be added in a follow-up issue.
+ */
 class PhysicalTimestampLTZNanosType() extends PhysicalDataType {
   override private[sql] def ordering =
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(

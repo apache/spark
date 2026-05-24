@@ -44,6 +44,10 @@ case class TimestampNTZNanosType(precision: Int) extends DatetimeType {
   /**
    * Default size used by Spark for row-size estimation. Values are represented logically as epoch
    * microseconds (Long, 8 bytes) plus nanoseconds within that micro (Short, 2 bytes).
+   *
+   * In [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]], the physical payload is 16 bytes
+   * in the variable-length region (two 8-byte words); see
+   * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
    */
   override def defaultSize: Int = 10
 

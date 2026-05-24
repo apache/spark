@@ -22,14 +22,32 @@ import org.apache.spark.unsafe.types.TimestampLTZNanos;
 import org.apache.spark.unsafe.types.TimestampNTZNanos;
 
 /**
- * Shared read/write helpers for nanosecond timestamp values in UnsafeRow/UnsafeArrayData.
+ * Shared read/write helpers for nanosecond timestamp values in {@link UnsafeRow} and
+ * {@link UnsafeArrayData}.
+ *
+ * <p>Each value occupies a 16-byte payload in the row's variable-length region (the field's 8-byte
+ * word stores {@code (offset << 32) | size}, like {@link org.apache.spark.unsafe.types.CalendarInterval}).
+ * The logical composite is 10 bytes (8-byte epoch micros + 2-byte sub-micro nanos), but UnsafeRow
+ * stores it as two aligned 8-byte words:
+ * <pre>
+ *   word 0: epochMicros (long)
+ *   word 1: nanosWithinMicro in the low 16 bits; upper 48 bits are zero
+ * </pre>
+ *
+ * <p>{@code nanosWithinMicro} is written with {@link Platform#putLong} and read with
+ * {@link Platform#getLong} masked to 16 bits, not {@code putShort}/{@code getShort}, so the layout
+ * is endian-safe on all platforms.
  */
 public final class TimestampNanosRowValues {
+  /** Payload size in the UnsafeRow variable-length region (two 8-byte words). */
   public static final int SIZE_IN_BYTES = TimestampNTZNanos.SIZE_IN_BYTES;
 
   private TimestampNanosRowValues() {
   }
 
+  /**
+   * Writes a non-null nanosecond timestamp payload at {@code baseOffset + cursor}.
+   */
   public static void writePayload(
       Object baseObject, long baseOffset, int cursor, long epochMicros, short nanosWithinMicro) {
     Platform.putLong(baseObject, baseOffset + cursor, epochMicros);
@@ -37,6 +55,10 @@ public final class TimestampNanosRowValues {
     Platform.putLong(baseObject, baseOffset + cursor + 8, ((long) nanosWithinMicro) & 0xFFFFL);
   }
 
+  /**
+   * Zeroes a payload slot. Used when updating a nullable column to null while retaining the
+   * variable-length offset for in-place updates (same pattern as {@link UnsafeRow#setInterval}).
+   */
   public static void zeroPayload(Object baseObject, long baseOffset, int cursor) {
     Platform.putLong(baseObject, baseOffset + cursor, 0L);
     Platform.putLong(baseObject, baseOffset + cursor + 8, 0L);
