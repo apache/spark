@@ -32,15 +32,59 @@ $(document).ready(function () {
 
     var container = document.getElementById("sql-executions-table");
     container.innerHTML =
+      '<h4 class="title-table">SQL Executions</h4>' +
+      '<div>' +
       '<select id="status-filter" class="form-select form-select-sm ' +
       'd-inline-block w-auto mb-2">' +
       '<option value="">All Statuses</option>' +
       '<option value="RUNNING">Running</option>' +
       '<option value="COMPLETED">Completed</option>' +
       '<option value="FAILED">Failed</option>' +
-      '</select>' +
+      '</select></div>' +
       '<table id="sql-table" class="table table-striped compact cell-border" ' +
       'style="width:100%"></table>';
+
+    function renderSummary(summary) {
+      var summaryBar = document.getElementById("sql-summary-bar");
+      if (!summaryBar || !summary) return;
+      var failureRate = (summary.failureRate || 0) * 100;
+      summaryBar.innerHTML =
+        '<h4 class="title-table">Summary</h4>' +
+        '<table id="sql-summary-table" class="table table-striped compact ' +
+        'cell-border" style="width:100%"><thead><tr>' +
+        '<th>Total Queries</th>' +
+        '<th>Average Duration</th>' +
+        '<th>Running Queries</th>' +
+        '<th>Failed Queries</th>' +
+        '<th>Failure Rate</th>' +
+        '</tr></thead><tbody></tbody></table>';
+
+      $("#sql-summary-table").DataTable({
+        data: [{
+          totalQueries: summary.totalQueries || 0,
+          averageDuration: summary.averageDuration || 0,
+          runningQueries: summary.runningQueries || 0,
+          failedQueries: summary.failedQueries || 0,
+          failureRate: failureRate
+        }],
+        columns: [
+          {data: "totalQueries"},
+          {data: "averageDuration", render: formatDurationSql},
+          {data: "runningQueries"},
+          {data: "failedQueries"},
+          {
+            data: "failureRate",
+            render: function (data) {
+              return data.toFixed(1) + "%";
+            }
+          }
+        ],
+        paging: false,
+        searching: false,
+        info: false,
+        ordering: false
+      });
+    }
 
     var columns = getSqlTableColumns({ detail: false });
     if (groupSubExecEnabled) {
@@ -80,7 +124,10 @@ $(document).ready(function () {
           }
           d.groupSubExecution = groupSubExecEnabled ? "true" : "false";
         },
-        dataSrc: function (json) { return json.aaData; },
+        dataSrc: function (json) {
+          renderSummary(json.summary);
+          return json.aaData;
+        },
         error: function () {
           $("#sql-table_processing").css("display", "none");
         }

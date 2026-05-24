@@ -111,6 +111,7 @@ private[v1] class SqlResource extends BaseAppResource {
       // materialization, so there is no separate "KVStore-pagination" path being
       // disabled here.
       val allExecs = sqlStore.executionsList()
+      val summary = SqlResource.executionSummary(allExecs)
 
       val filteredExecs = if (needsFilter) {
         allExecs.filter { exec =>
@@ -182,6 +183,7 @@ private[v1] class SqlResource extends BaseAppResource {
       ret.put("aaData", aaData)
       ret.put("recordsTotal", java.lang.Long.valueOf(recordsTotal))
       ret.put("recordsFiltered", java.lang.Long.valueOf(recordsFiltered))
+      ret.put("summary", summary)
       ret
     }
   }
@@ -314,6 +316,29 @@ private[v1] class SqlResource extends BaseAppResource {
 }
 
 private[v1] object SqlResource {
+
+  def executionSummary(execs: Seq[SQLExecutionUIData]): java.util.LinkedHashMap[String, Object] = {
+    val totalQueries = execs.size
+    val runningQueries = execs.count(_.executionStatus == "RUNNING")
+    val failedQueries = execs.count(_.executionStatus == "FAILED")
+    val totalDuration = execs.foldLeft(0L) { case (sum, exec) =>
+      sum + (exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime)
+    }
+    val averageDuration = if (totalQueries > 0) totalDuration / totalQueries else 0L
+    val failureRate = if (totalQueries > 0) {
+      failedQueries.toDouble / totalQueries.toDouble
+    } else {
+      0.0
+    }
+
+    val summary = new java.util.LinkedHashMap[String, Object]()
+    summary.put("totalQueries", java.lang.Long.valueOf(totalQueries))
+    summary.put("averageDuration", java.lang.Long.valueOf(averageDuration))
+    summary.put("runningQueries", java.lang.Long.valueOf(runningQueries))
+    summary.put("failedQueries", java.lang.Long.valueOf(failedQueries))
+    summary.put("failureRate", java.lang.Double.valueOf(failureRate))
+    summary
+  }
 
   /**
    * Split a set of executions into root rows and a sub-execution map. A root row is

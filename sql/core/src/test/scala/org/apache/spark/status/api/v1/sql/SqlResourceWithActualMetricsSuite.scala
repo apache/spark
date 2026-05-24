@@ -180,10 +180,16 @@ class SqlResourceWithActualMetricsSuite
       val recordsTotal = (json \ "recordsTotal").extract[Long]
       val recordsFiltered = (json \ "recordsFiltered").extract[Long]
       val aaData = (json \ "aaData").children
+      val summary = json \ "summary"
       assert(draw === 1, "draw should be echoed back")
       assert(recordsTotal > 0, "should have some executions")
       assert(recordsFiltered === recordsTotal, "no filter applied")
       assert(aaData.size <= 5, "should respect page length")
+      assert((summary \ "totalQueries").extract[Long] >= recordsTotal)
+      assert((summary \ "averageDuration").extract[Long] >= 0)
+      assert((summary \ "runningQueries").extract[Long] >= 0)
+      assert((summary \ "failedQueries").extract[Long] >= 0)
+      assert((summary \ "failureRate").extract[Double] >= 0.0)
 
       // Verify row data fields
       val firstRow = aaData.head
