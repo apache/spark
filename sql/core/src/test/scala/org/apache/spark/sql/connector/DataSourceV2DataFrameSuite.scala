@@ -89,6 +89,8 @@ class DataSourceV2DataFrameSuite
   }
 
   // DSv2ExternalMutationTestBase implementations for classic mode
+  override protected def testPrefix: String = "[classic] "
+
   override protected def withTestSession(fn: SparkSession => Unit): Unit = fn(spark)
 
   override protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit =

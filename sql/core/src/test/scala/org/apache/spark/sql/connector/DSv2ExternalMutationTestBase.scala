@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Iden
 trait DSv2ExternalMutationTestBase extends QueryTest {
 
   /** Prefix for test names, e.g. "[classic] " or "[connect] ". */
-  protected def testPrefix: String = "[classic] "
+  protected def testPrefix: String
 
   /** Execute a test body with a session. */
   protected def withTestSession(fn: SparkSession => Unit): Unit
