@@ -18,10 +18,14 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
-class TypeUtilsSuite extends SparkFunSuite {
+class TypeUtilsSuite extends SparkFunSuite with SQLHelper {
 
   private def typeCheckPass(types: Seq[DataType]): Unit = {
     assert(TypeUtils.checkForSameTypeInputExpr(types, "a") == TypeCheckSuccess)
@@ -43,5 +47,55 @@ class TypeUtilsSuite extends SparkFunSuite {
     // Should also work on arrays. See SPARK-14990
     typeCheckPass(ArrayType(StringType, containsNull = true) ::
       ArrayType(StringType, containsNull = false) :: Nil)
+  }
+
+  test("TIMESTAMP_NANOS_TYPES_ENABLED defaults to Utils.isTesting") {
+    assert(SQLConf.get.timestampNanosTypesEnabled === Utils.isTesting)
+  }
+
+  test("failUnsupportedDataType rejects timestamp nanos types when preview is disabled") {
+    val ntzNanos = TimestampNTZNanosType(9)
+    val ltzNanos = TimestampLTZNanosType(9)
+    val nestedNtzNanos = StructType(StructField("ts", ntzNanos) :: Nil)
+
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      val conf = SQLConf.get
+      checkError(
+        intercept[AnalysisException] {
+          TypeUtils.failUnsupportedDataType(ntzNanos, conf)
+        },
+        condition = "UNSUPPORTED_TIMESTAMP_NANOS_TYPE")
+
+      checkError(
+        intercept[AnalysisException] {
+          TypeUtils.failUnsupportedDataType(ltzNanos, conf)
+        },
+        condition = "UNSUPPORTED_TIMESTAMP_NANOS_TYPE")
+
+      checkError(
+        intercept[AnalysisException] {
+          TypeUtils.failUnsupportedDataType(nestedNtzNanos, conf)
+        },
+        condition = "UNSUPPORTED_TIMESTAMP_NANOS_TYPE")
+    }
+  }
+
+  test("failUnsupportedDataType allows timestamp nanos types when preview is enabled") {
+    val ntzNanos = TimestampNTZNanosType(9)
+    val ltzNanos = TimestampLTZNanosType(9)
+    val nestedLtzNanos = ArrayType(ltzNanos)
+
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      TypeUtils.failUnsupportedDataType(ntzNanos, SQLConf.get)
+      TypeUtils.failUnsupportedDataType(ltzNanos, SQLConf.get)
+      TypeUtils.failUnsupportedDataType(nestedLtzNanos, SQLConf.get)
+    }
+  }
+
+  test("failUnsupportedDataType does not reject microsecond timestamp types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      TypeUtils.failUnsupportedDataType(TimestampType, SQLConf.get)
+      TypeUtils.failUnsupportedDataType(TimestampNTZType, SQLConf.get)
+    }
   }
 }

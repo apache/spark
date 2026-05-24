@@ -139,9 +139,19 @@ object TypeUtils extends QueryErrorsBase {
     if (dataType.existsRecursively(isInterval)) f
   }
 
+  private def containsTimestampNanosType(dataType: DataType): Boolean = {
+    dataType.existsRecursively {
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
+      case _ => false
+    }
+  }
+
   def failUnsupportedDataType(dataType: DataType, conf: SQLConf): Unit = {
     if (!conf.isTimeTypeEnabled && dataType.existsRecursively(_.isInstanceOf[TimeType])) {
       throw QueryCompilationErrors.unsupportedTimeTypeError()
+    }
+    if (!conf.timestampNanosTypesEnabled && containsTimestampNanosType(dataType)) {
+      throw QueryCompilationErrors.unsupportedTimestampNanosTypeError()
     }
     if (!conf.geospatialEnabled && dataType.existsRecursively(isGeoSpatialType)) {
       throw new org.apache.spark.sql.AnalysisException(

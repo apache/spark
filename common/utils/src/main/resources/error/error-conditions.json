@@ -8609,6 +8609,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "UNSUPPORTED_TIMESTAMP_NANOS_TYPE" : {
+    "message" : [
+      "Nanosecond-capable timestamp types TIMESTAMP_NTZ(p) and TIMESTAMP_LTZ(p) with p in [7, 9] are not supported. Set \"spark.sql.timestampNanosTypes.enabled\" to \"true\" to enable the preview feature."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_TYPED_LITERAL" : {
     "message" : [
       "Literals of the type <unsupportedType> are not supported. Supported types are <supportedTypes>."
