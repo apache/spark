@@ -30,7 +30,6 @@ from pyspark.pipelines.output import (
     Sink,
 )
 from pyspark.sql import Column
-from pyspark.sql.connect.functions.builtin import col as _connect_col, expr as _connect_expr
 from pyspark.sql.types import StructType
 
 
@@ -582,6 +581,8 @@ def create_auto_cdc_flow(
     :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified \
         this will build a "default flow" with name equal to the target name.
     """
+    from pyspark.sql.connect.functions.builtin import expr as _connect_expr
+
     if type(target) is not str:
         raise PySparkTypeError(
             errorClass="NOT_EXPECTED_TYPE",
@@ -684,6 +685,8 @@ def _normalize_column_list(
     arg_name: str,
     column_list: Union[List[str], List[Column]],
 ) -> List[Column]:
+    from pyspark.sql.connect.functions.builtin import col as _connect_col
+
     if not isinstance(column_list, list):
         raise PySparkTypeError(
             errorClass="NOT_EXPECTED_TYPE",
