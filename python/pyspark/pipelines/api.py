@@ -546,13 +546,13 @@ def create_auto_cdc_flow(
     of column_list and except_column_list can be specified.
 
     Example:
-    create_auto_cdc_flow(
-      target="target",
-      source="source",
-      keys=["key"],
-      sequence_by="sequence_expr",
-      column_list=["key", "value"],
-    )
+        create_auto_cdc_flow(
+            target="target",
+            source="source",
+            keys=["key"],
+            sequence_by="sequence_expr",
+            column_list=["key", "value"],
+        )
 
     Note that for keys, sequence_by, column_list, and except_column_list the arguments have to
     be column identifiers without qualifiers, e.g. they cannot be col("sourceTable.keyId").
@@ -579,8 +579,8 @@ def create_auto_cdc_flow(
         will be in the output table.
     :param stored_as_scd_type: The SCD type for the target table. Only 1 (or "1") is supported. \
         When not specified the server default applies.
-    :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified this \
-           will build a "default flow" with name equal to the target name.
+    :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified \
+        this will build a "default flow" with name equal to the target name.
     """
     if type(target) is not str:
         raise PySparkTypeError(
@@ -609,14 +609,12 @@ def create_auto_cdc_flow(
                 "arg_type": type(name).__name__,
             },
         )
-    
+
     if name is None:
         name = target
 
     keys = _normalize_column_list(arg_name="keys", column_list=keys)
-    column_list = _normalize_optional_column_list(
-        arg_name="column_list", column_list=column_list
-    )
+    column_list = _normalize_optional_column_list(arg_name="column_list", column_list=column_list)
     except_column_list = _normalize_optional_column_list(
         arg_name="except_column_list", column_list=except_column_list
     )
@@ -695,9 +693,9 @@ def _normalize_column_list(
                 "arg_type": type(column_list).__name__,
             },
         )
-    
+
     normalized: List[Column] = []
-    
+
     for column in column_list:
         if isinstance(column, str):
             normalized.append(_connect_col(column))
@@ -712,5 +710,5 @@ def _normalize_column_list(
                     "arg_type": type(column).__name__,
                 },
             )
-    
+
     return normalized

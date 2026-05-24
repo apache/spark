@@ -117,8 +117,8 @@ class GraphElementRegistryTest(unittest.TestCase):
         flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
         self.assertEqual(flow.target, "target")
         self.assertEqual(flow.source, "source")
-        
-        # When name is not specified, it inherit's the target's name at construction time.
+
+        # When name is not specified, it inherits the target's name at construction time.
         self.assertEqual(flow.name, "target")
         self.assertIsNone(flow.stored_as_scd_type)
         self.assertIsNone(flow.apply_as_deletes)
@@ -266,6 +266,19 @@ class GraphElementRegistryTest(unittest.TestCase):
             @dp.append_flow(target="st")
             def b():
                 raise NotImplementedError()
+
+        self.assertEqual(
+            context.exception.getCondition(),
+            "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE",
+        )
+
+        with self.assertRaises(PySparkException) as context:
+            dp.create_auto_cdc_flow(
+                target="t",
+                source="s",
+                keys=["k"],
+                sequence_by="seq",
+            )
 
         self.assertEqual(
             context.exception.getCondition(),
