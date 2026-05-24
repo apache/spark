@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
  * both via session SQL and external catalog mutations.
  *
  * Mixed into both classic [[DataSourceV2DataFrameSuite]] and Connect
- * [[DataSourceV2TempViewConnectSuite]].
+ * [[org.apache.spark.sql.connect.DataSourceV2TempViewConnectSuite]].
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on DDL
