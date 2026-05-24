@@ -41,4 +41,24 @@ trait QueryTest extends BaseQueryTest with classic.SparkSessionProvider {
     override protected def session: classic.SparkSession = spark
     override protected def converter: classic.ColumnNodeToExpressionConverter = spark.converter
   }
+
+  /**
+   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
+   */
+  protected def stripSparkFilter(df: classic.DataFrame): classic.DataFrame = {
+    val schema = df.schema
+    val withoutFilters = df.queryExecution.executedPlan.transform {
+      case FilterExec(_, child) => child
+    }
+
+    spark.internalCreateDataFrame(withoutFilters.execute(), schema)
+  }
+
+  /**
+   * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
+   * way to construct `DataFrame` directly out of local data without relying on implicits.
+   */
+  protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): classic.DataFrame = {
+    classic.Dataset.ofRows(spark, plan)
+  }
 }

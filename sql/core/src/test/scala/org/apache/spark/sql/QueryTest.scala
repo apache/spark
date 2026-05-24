@@ -38,10 +38,10 @@ import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -510,27 +510,6 @@ trait QueryTestBase
     spark.catalog.setCurrentDatabase(db)
     Utils.tryWithSafeFinally(f)(
       spark.catalog.setCurrentDatabase("default"))
-  }
-
-  /**
-   * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
-   */
-  protected def stripSparkFilter(df: DataFrame): DataFrame = {
-    val schema = df.schema
-    val withoutFilters = df.queryExecution.executedPlan.transform {
-      case FilterExec(_, child) => child
-    }
-
-    spark.asInstanceOf[classic.SparkSession]
-      .internalCreateDataFrame(withoutFilters.execute(), schema)
-  }
-
-  /**
-   * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
-   * way to construct `DataFrame` directly out of local data without relying on implicits.
-   */
-  protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): classic.DataFrame = {
-    classic.Dataset.ofRows(spark.asInstanceOf[classic.SparkSession], plan)
   }
 
   /**
