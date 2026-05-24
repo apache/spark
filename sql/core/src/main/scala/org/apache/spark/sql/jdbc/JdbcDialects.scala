@@ -876,11 +876,12 @@ abstract class JdbcDialect extends Serializable with Logging {
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
 
   /**
-   * Compile a [[TableSampleInfo]] into a SQL TABLESAMPLE clause, or return [[None]] if the
-   * dialect cannot represent the requested sampling semantics (e.g. sampling with replacement).
+   * Compile a [[org.apache.spark.sql.execution.datasources.v2.TableSampleInfo]] into a
+   * SQL `TABLESAMPLE` clause, or return [[scala.None]] if the  dialect cannot represent
+   * the requested sampling semantics (e.g. sampling with replacement).
    *
-   * The default implementation delegates to [[getTableSample]] when [[supportsTableSample]] is
-   * true, and returns [[None]] otherwise.
+   * The default implementation delegates to [[getTableSample]] when [[supportsTableSample]]
+   * is true, and returns [[scala.None]] otherwise.
    */
   @Since("4.2.0")
   def compileTableSample(sample: TableSampleInfo): Option[String] = {
