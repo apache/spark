@@ -26,7 +26,8 @@ import org.apache.spark.unsafe.types.TimestampNTZNanos;
  * {@link UnsafeArrayData}.
  *
  * <p>Each value occupies a 16-byte payload in the row's variable-length region (the field's 8-byte
- * word stores {@code (offset << 32) | size}, like {@link org.apache.spark.unsafe.types.CalendarInterval}).
+ * word stores {@code (offset << 32) | size}, like
+ * {@link org.apache.spark.unsafe.types.CalendarInterval}).
  * The logical composite is 10 bytes (8-byte epoch micros + 2-byte sub-micro nanos), but UnsafeRow
  * stores it as two aligned 8-byte words:
  * <pre>
