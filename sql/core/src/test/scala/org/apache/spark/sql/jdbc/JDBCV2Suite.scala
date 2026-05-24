@@ -1202,8 +1202,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       .filter(when($"dept" > 1, true).when($"is_manager", false).otherwise($"dept" > 3))
     checkFiltersRemoved(df9)
     checkPushedInfo(df9,
-      "PushedFilters: [CASE WHEN DEPT > 1 THEN TRUE",
-      "WHEN IS_MANAGER = true THEN FALSE ELSE DEPT > 3 END]")
+      "PushedFilters: [CASE WHEN DEPT > 1 THEN 1 = 1",
+      "WHEN IS_MANAGER = true THEN 1 = 0 ELSE DEPT > 3 END]")
     checkAnswer(df9, Seq(Row(2, "alex", 12000, 1200, false),
       Row(2, "david", 10000, 1300, true), Row(6, "jen", 12000, 1200, true)))
 

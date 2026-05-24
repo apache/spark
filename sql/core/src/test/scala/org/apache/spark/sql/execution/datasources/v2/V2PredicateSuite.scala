@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter._
+import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.execution.datasources.v2.V2PredicateSuite.ref
 import org.apache.spark.sql.internal.connector.PredicateUtils
 import org.apache.spark.sql.sources.{AlwaysFalse => V1AlwaysFalse, AlwaysTrue => V1AlwaysTrue, And => V1And, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not => V1Not, Or => V1Or, StringContains, StringEndsWith, StringStartsWith}
@@ -357,6 +358,12 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate1).get == v1Filter)
     assert(PredicateUtils.toV1(v1Filter.toV2).get == v1Filter)
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
+  }
+
+  test("SPARK-53454: AlwaysTrue/AlwaysFalse should compile to valid SQL") {
+    val builder = new V2ExpressionSQLBuilder()
+    assert(builder.build(new AlwaysTrue) === "1 = 1")
+    assert(builder.build(new AlwaysFalse) === "1 = 0")
   }
 }
 
