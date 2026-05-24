@@ -27,7 +27,8 @@ import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedClassicSparkSession, SQLTestData}
+import org.apache.spark.sql.test.SQLTestData
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
 class OuterJoinSuite extends SparkPlanTest with SharedClassicSparkSession with SQLTestData {

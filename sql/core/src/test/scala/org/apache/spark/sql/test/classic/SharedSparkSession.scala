@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.test.classic
 
-import org.scalatest.{BeforeAndAfterEach, Suite}
-import org.scalatest.concurrent.Eventually
+import scala.concurrent.duration._
 
-import org.apache.spark.{sql, DebugFilesystem, SparkConf}
+import org.apache.spark.sql
 import org.apache.spark.sql.classic
 
 /**

@@ -37,7 +37,8 @@ import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedClassicSparkSession, SQLTestUtilsBase}
+import org.apache.spark.sql.test.SQLTestUtilsBase
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
