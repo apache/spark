@@ -56,11 +56,7 @@ trait DSv2ExternalMutationTestBase extends QueryTest {
       session: SparkSession,
       catalogName: String): C
 
-  /**
-   * Cleanup wrapper: drop views and the table after the test body, even on failure.
-   * Classic: delegates to `withTable` + manual view drops.
-   * Connect: `session.sql("DROP ...")` in a finally block.
-   */
+  /** Cleanup wrapper: drop views and the table after the test body, even on failure. */
   protected def withTestTableAndViews(
       session: SparkSession,
       table: String,
