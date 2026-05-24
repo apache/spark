@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
  * both via session SQL and external catalog mutations.
  *
  * Mixed into both classic [[DataSourceV2DataFrameSuite]] and Connect
- * [[org.apache.spark.sql.connect.DataSourceV2TempViewConnectSuite]].
+ * [[DataSourceV2TempViewConnectSuite]].
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on DDL
@@ -38,8 +38,6 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
 
   private val T = "testcat.ns1.ns2.tbl"
   private val CT = "cachingcat.ns1.ns2.tbl"
-  // Identifier is catalog-agnostic; the catalog is resolved by the TableCatalog instance
-  // passed to getTableCatalog / externalAppend, not by the Identifier itself.
   private val testIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
 
   // Scenario 1.1 (session write)
@@ -68,8 +66,8 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        externalAppend(cat = cat, ident = testIdent, row = InternalRow(2, 200))
+        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
         checkRows(session.table("v"), Seq(Row(1, 100), Row(2, 200)))
       }
@@ -86,8 +84,8 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
-        externalAppend(cat = cat, ident = testIdent, row = InternalRow(2, 200))
+        val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
         // Caching connector returns stale table: external write invisible
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -129,11 +127,11 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // external schema change via catalog API
-        val cat = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
         val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
-        cat.alterTable(testIdent, addCol)
+        catalog.alterTable(testIdent, addCol)
 
-        externalAppend(cat = cat, ident = testIdent, row = InternalRow(2, 200, -1))
+        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
 
         // view preserves original 2-column schema, filter still applied
         checkRows(session.table("v"), Seq(Row(1, 100), Row(2, 200)))
@@ -151,11 +149,11 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
         val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
-        cat.alterTable(testIdent, addCol)
+        catalog.alterTable(testIdent, addCol)
 
-        externalAppend(cat = cat, ident = testIdent, row = InternalRow(2, 200, -1))
+        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
 
         // Caching connector returns stale table: external changes invisible
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -201,9 +199,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
         val dropCol = TableChange.deleteColumn(Array("salary"), false)
-        cat.alterTable(testIdent, dropCol)
+        catalog.alterTable(testIdent, dropCol)
 
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
@@ -227,9 +225,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
         val dropCol = TableChange.deleteColumn(Array("salary"), false)
-        cat.alterTable(testIdent, dropCol)
+        catalog.alterTable(testIdent, dropCol)
 
         // Caching connector returns stale table: column removal invisible, no error
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -258,13 +256,13 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        val originalTableId = cat.loadTable(testIdent).id
+        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val originalTableId = catalog.loadTable(testIdent).id
 
         session.sql(s"DROP TABLE $T").collect()
         session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
 
-        val newTableId = cat.loadTable(testIdent).id
+        val newTableId = catalog.loadTable(testIdent).id
         assert(originalTableId != newTableId)
 
         // view resolves to the new empty table
@@ -286,11 +284,11 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        val originalTableId = cat.loadTable(testIdent).id
+        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val originalTableId = catalog.loadTable(testIdent).id
 
-        cat.dropTable(testIdent)
-        cat.createTable(
+        catalog.dropTable(testIdent)
+        catalog.createTable(
           testIdent,
           new TableInfo.Builder()
             .withColumns(Array(
@@ -298,7 +296,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
               Column.create("salary", IntegerType)))
             .build())
 
-        val newTableId = cat.loadTable(testIdent).id
+        val newTableId = catalog.loadTable(testIdent).id
         assert(originalTableId != newTableId)
 
         // view resolves to the new empty table
@@ -320,9 +318,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
-        cat.dropTable(testIdent)
-        cat.createTable(
+        val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        catalog.dropTable(testIdent)
+        catalog.createTable(
           testIdent,
           new TableInfo.Builder()
             .withColumns(Array(
@@ -385,10 +383,10 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v_filter_is_null"), Seq.empty)
 
         // external drop and re-add column via catalog API
-        val cat = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
         val dropCol = TableChange.deleteColumn(Array("salary"), false)
         val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
-        cat.alterTable(testIdent, dropCol, addCol)
+        catalog.alterTable(testIdent, dropCol, addCol)
 
         // salary values are now null, so the filtered view returns nothing
         checkRows(session.table("v"), Seq.empty)
@@ -411,10 +409,10 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
         val dropCol = TableChange.deleteColumn(Array("salary"), false)
         val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
-        cat.alterTable(testIdent, dropCol, addCol)
+        catalog.alterTable(testIdent, dropCol, addCol)
 
         // Caching connector returns stale table: column drop/re-add invisible
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -461,10 +459,10 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
         val dropCol = TableChange.deleteColumn(Array("salary"), false)
         val addCol = TableChange.addColumn(Array("salary"), StringType, true)
-        cat.alterTable(testIdent, dropCol, addCol)
+        catalog.alterTable(testIdent, dropCol, addCol)
 
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
@@ -488,10 +486,10 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
         val dropCol = TableChange.deleteColumn(Array("salary"), false)
         val addCol = TableChange.addColumn(Array("salary"), StringType, true)
-        cat.alterTable(testIdent, dropCol, addCol)
+        catalog.alterTable(testIdent, dropCol, addCol)
 
         // Caching connector returns stale table: type change invisible, no error
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -544,9 +542,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
         val updateType = TableChange.updateColumnType(Array("salary"), LongType)
-        cat.alterTable(testIdent, updateType)
+        catalog.alterTable(testIdent, updateType)
 
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
@@ -570,9 +568,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        val cat = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
         val updateType = TableChange.updateColumnType(Array("salary"), LongType)
-        cat.alterTable(testIdent, updateType)
+        catalog.alterTable(testIdent, updateType)
 
         // Caching connector returns stale table: type change invisible, no error
         checkRows(session.table("v"), Seq(Row(1, 100)))

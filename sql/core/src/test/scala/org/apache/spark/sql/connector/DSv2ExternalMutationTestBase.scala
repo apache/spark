@@ -35,33 +35,22 @@ import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Iden
  *
  * Concrete suites override the abstract methods and mix in the test trait
  * [[DSv2TempViewWithStoredPlanTests]].
- *
- * Extends [[QueryTest]] (not [[org.apache.spark.sql.test.SharedSparkSession]]) so that the
- * trait does not pull in a SparkSession of its own. Concrete suites provide a session via
- * [[SharedSparkSession]] (classic) or [[org.apache.spark.sql.connect.SparkConnectServerTest]]
- * (Connect).
  */
 trait DSv2ExternalMutationTestBase extends QueryTest {
 
-  /** Prefix for test names, e.g. "[connect] " for Connect suites, "" for classic. */
-  protected def testPrefix: String = ""
+  /** Prefix for test names, e.g. "[classic] " or "[connect] ". */
+  protected def testPrefix: String = "[classic] "
 
-  /**
-   * Execute a test body with a session. Classic: `fn(spark)`. Connect: `withSession(fn)`.
-   */
+  /** Execute a test body with a session. */
   protected def withTestSession(fn: SparkSession => Unit): Unit
 
   /**
    * Assert that a DataFrame's rows match the expected rows (order-agnostic).
-   * Classic: delegates to [[org.apache.spark.sql.QueryTest.checkAnswer]].
-   * Connect: collects rows and compares with [[org.apache.spark.sql.QueryTest.sameRows]].
    */
   protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit
 
   /**
-   * Get a server-side [[TableCatalog]] by name.
-   * Classic: the session is the server session, so access the catalog directly.
-   * Connect: get the server session behind the Connect client, then access the catalog.
+   * Get a [[TableCatalog]] by name from the underlying session.
    */
   protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
@@ -79,10 +68,10 @@ trait DSv2ExternalMutationTestBase extends QueryTest {
 
   /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
   protected def externalAppend(
-      cat: TableCatalog,
+      catalog: TableCatalog,
       ident: Identifier,
       row: InternalRow): Unit = {
-    val extTable = cat
+    val extTable = catalog
       .loadTable(ident, util.Set.of(TableWritePrivilege.INSERT))
       .asInstanceOf[InMemoryBaseTable]
     val schema = CatalogV2Util.v2ColumnsToStructType(extTable.columns())

@@ -26,8 +26,8 @@ import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMe
 
 /**
  * Connect-mode runner for [[DSv2TempViewWithStoredPlanTests]]. All test logic lives in the shared
- * trait; this class only provides the Connect-specific session, catalog access, and assertion
- * wiring.
+ * trait; this class only provides the Connect-specific session, catalog access, and result
+ * comparison.
  */
 class DataSourceV2TempViewConnectSuite
     extends SparkConnectServerTest
