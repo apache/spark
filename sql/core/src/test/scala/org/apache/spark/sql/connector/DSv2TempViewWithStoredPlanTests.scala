@@ -27,9 +27,6 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
  * backed by DSv2 tables correctly handle data changes, schema changes, and table recreation,
  * both via session SQL and external catalog mutations.
  *
- * Mixed into both classic [[DataSourceV2DataFrameSuite]] and Connect
- * [[org.apache.spark.sql.connect.DataSourceV2TempViewConnectSuite]].
- *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on DDL
  * is a no-op (DDL executes eagerly), so this is harmless.
