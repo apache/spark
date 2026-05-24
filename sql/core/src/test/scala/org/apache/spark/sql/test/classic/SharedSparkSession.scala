@@ -21,6 +21,7 @@ import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.{sql, DebugFilesystem, SparkConf}
+import org.apache.spark.sql.classic
 
 /**
  * Extends SharedSparkSession to explicitly provide [[classic.SparkSession]].
@@ -29,9 +30,9 @@ import org.apache.spark.{sql, DebugFilesystem, SparkConf}
  * this test with a [[org.apache.spark.sql.connect.SparkSession]].
  */
 trait SharedSparkSession
-  extends sql.SharedSparkSession
+  extends sql.test.SharedSparkSession
     with QueryTest
-    with SparkSessionProvider {
+    with classic.SparkSessionProvider {
   override def spark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 
   // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
