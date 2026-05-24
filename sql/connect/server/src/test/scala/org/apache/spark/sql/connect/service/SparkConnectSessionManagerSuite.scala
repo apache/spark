@@ -25,9 +25,9 @@ import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
-class SparkConnectSessionManagerSuite extends SharedSparkSession {
+class SparkConnectSessionManagerSuite extends SharedClassicSparkSession {
 
   override def beforeEach(): Unit = {
     super.beforeEach()

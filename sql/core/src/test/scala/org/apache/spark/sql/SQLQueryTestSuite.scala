@@ -25,6 +25,7 @@ import java.util.Locale
 import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
@@ -32,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -152,7 +153,7 @@ import org.apache.spark.util.Utils
  */
 // scalastyle:on line.size.limit
 @ExtendedSQLTest
-class SQLQueryTestSuite extends SharedSparkSession
+class SQLQueryTestSuite extends QueryTest with SharedClassicSparkSession with SQLHelper
     with SQLQueryTestHelper with TPCDSSchema {
 
   import IntegratedUDFTestUtils._

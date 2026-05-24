@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.execution.streaming.state.StateStoreTestsHelper._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.ThreadUtils.awaitResult
@@ -47,7 +47,7 @@ class RocksDBStateStoreLockHardeningSuite extends SparkFunSuite
     with PlanTestBase
     with AlsoTestWithRocksDBFeatures
     with PrivateMethodTester
-    with SharedSparkSession
+    with SharedClassicSparkSession
     with BeforeAndAfter
     with Matchers {
 

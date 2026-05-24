@@ -27,9 +27,9 @@ import org.apache.orc.impl.{CryptoUtils, HadoopShimsFactory, KeyProvider}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
-class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
+class OrcEncryptionSuite extends OrcTest with SharedClassicSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = {

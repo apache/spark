@@ -32,7 +32,7 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
 class DummyPlugin extends RelationPlugin {
   override def transform(
@@ -119,7 +119,7 @@ class ExampleCommandPlugin extends CommandPlugin {
   }
 }
 
-class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConnectPlanTest {
+class SparkConnectPluginRegistrySuite extends SharedClassicSparkSession with SparkConnectPlanTest {
 
   override def beforeEach(): Unit = {
     if (SparkEnv.get.conf.contains(Connect.CONNECT_EXTENSIONS_EXPRESSION_CLASSES)) {

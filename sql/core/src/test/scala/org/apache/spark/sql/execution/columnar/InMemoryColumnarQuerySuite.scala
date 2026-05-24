@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, In}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
@@ -32,7 +32,7 @@ import org.apache.spark.sql.execution.{FilterExec, InputAdapter, WholeStageCodeg
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -50,8 +50,9 @@ class TestCachedBatchSerializer(
   }
 }
 
-class InMemoryColumnarQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
-  import testImplicits._
+class InMemoryColumnarQuerySuite extends QueryTest
+  with SharedClassicSparkSession with AdaptiveSparkPlanHelper {
+  import classicTestImplicits._
 
   setupTestData()
 

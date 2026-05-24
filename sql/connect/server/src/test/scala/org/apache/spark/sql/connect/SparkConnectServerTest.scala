@@ -37,14 +37,14 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionKey, SparkConnectService}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.util.CloseableIterator
 
 /**
  * Base class and utilities for a test suite that starts and tests the real SparkConnectService
  * with a real SparkConnectClient, communicating over RPC, but both in-process.
  */
-trait SparkConnectServerTest extends SharedSparkSession {
+trait SparkConnectServerTest extends SharedClassicSparkSession {
 
   // Server port
   val serverPort: Int =

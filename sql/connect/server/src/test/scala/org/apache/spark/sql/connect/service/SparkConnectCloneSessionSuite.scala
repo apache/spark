@@ -20,9 +20,9 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 
 import org.apache.spark.SparkSQLException
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
-class SparkConnectCloneSessionSuite extends SharedSparkSession {
+class SparkConnectCloneSessionSuite extends SharedClassicSparkSession {
 
   override def beforeEach(): Unit = {
     super.beforeEach()

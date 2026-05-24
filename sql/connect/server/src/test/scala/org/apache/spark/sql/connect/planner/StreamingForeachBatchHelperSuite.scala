@@ -26,9 +26,9 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
-class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSugar {
+class StreamingForeachBatchHelperSuite extends SharedClassicSparkSession with MockitoSugar {
 
   private def mockQuery(): StreamingQuery = {
     val query = mock[StreamingQuery]

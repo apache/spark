@@ -26,11 +26,11 @@ import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressio
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.graph.DatasetManager.TableMaterializationException
 import org.apache.spark.sql.pipelines.utils.{BaseCoreExecutionTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils.exceptionString
 
-class DefaultMaterializeTablesSuite extends MaterializeTablesSuite with SharedSparkSession
+class DefaultMaterializeTablesSuite extends MaterializeTablesSuite with SharedClassicSparkSession
 
 /**
  * Local integration tests for materialization of `Table`s in a `DataflowGraph` to make sure

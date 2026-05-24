@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ArtifactStatusesResponse
 import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.connect.ResourceHelper
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.util.ThreadUtils
 
 private class DummyStreamObserver(p: Promise[ArtifactStatusesResponse])
@@ -38,7 +38,7 @@ private class DummyStreamObserver(p: Promise[ArtifactStatusesResponse])
   override def onCompleted(): Unit = {}
 }
 
-class ArtifactStatusesHandlerSuite extends SharedSparkSession with ResourceHelper {
+class ArtifactStatusesHandlerSuite extends SharedClassicSparkSession with ResourceHelper {
 
   val sessionId = UUID.randomUUID().toString
 

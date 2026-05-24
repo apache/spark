@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{TimeMode, TTLConfig, ValueState}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 
 /** A case class for SQL encoder test purpose */
@@ -500,7 +500,7 @@ class ValueStateSuite extends StateVariableSuiteBase {
  * Abstract Base Class that provides test utilities for different state variable
  * types (ValueState, ListState, MapState) used in arbitrary stateful operators.
  */
-abstract class StateVariableSuiteBase extends SharedSparkSession
+abstract class StateVariableSuiteBase extends SharedClassicSparkSession
   with BeforeAndAfter with AlsoTestWithEncodingTypes {
 
   before {

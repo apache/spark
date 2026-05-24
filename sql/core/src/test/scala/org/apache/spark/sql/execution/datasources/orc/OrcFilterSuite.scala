@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.ArrayImplicits._
@@ -45,7 +45,7 @@ import org.apache.spark.util.ArrayImplicits._
  * A test suite that tests Apache ORC filter API based filter pushdown optimization.
  */
 @ExtendedSQLTest
-class OrcFilterSuite extends OrcTest with SharedSparkSession {
+class OrcFilterSuite extends OrcTest with SharedClassicSparkSession {
   import testImplicits.{toRichColumn, ColumnConstructorExt}
 
   override protected def sparkConf: SparkConf =

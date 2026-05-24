@@ -35,12 +35,12 @@ import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExch
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
+import org.apache.spark.sql.test.{SharedClassicSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
+class JoinSuite extends QueryTest with SharedClassicSparkSession with AdaptiveSparkPlanHelper
   with JoinSelectionHelper {
   import testImplicits._
 
@@ -1830,7 +1830,7 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
 }
 
 class ThreadLeakInSortMergeJoinSuite
-  extends SharedSparkSession
+  extends SharedClassicSparkSession
     with AdaptiveSparkPlanHelper {
 
   setupTestData()

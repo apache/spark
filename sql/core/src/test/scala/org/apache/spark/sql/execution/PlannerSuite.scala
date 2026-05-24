@@ -35,11 +35,11 @@ import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoi
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 
-class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
-  import testImplicits._
+class PlannerSuite extends SharedClassicSparkSession with AdaptiveSparkPlanHelper {
+  import classicTestImplicits._
 
   setupTestData()
 

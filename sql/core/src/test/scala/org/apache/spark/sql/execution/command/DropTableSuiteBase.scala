@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.test.ClassicSQLTestUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 
 /**
@@ -29,8 +30,8 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
  *     - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.DropTableSuite`
  *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropTableSuite`
  */
-trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
-  import testImplicits._
+trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils with ClassicSQLTestUtils {
+  import classicTestImplicits._
   override val command = "DROP TABLE"
 
   protected def createTable(tableName: String): Unit = {

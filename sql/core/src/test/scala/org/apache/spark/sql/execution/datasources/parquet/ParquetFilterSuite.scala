@@ -52,7 +52,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
@@ -76,8 +76,11 @@ import org.apache.spark.util.ArrayImplicits._
  * dependent on this configuration, don't forget you better explicitly set this configuration
  * within the test.
  */
-abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
-  import testImplicits.toRichColumn
+abstract class ParquetFilterSuite
+  extends QueryTest
+    with ParquetTest
+    with SharedClassicSparkSession {
+  import classicTestImplicits.toRichColumn
 
   protected def createParquetFilters(
       schema: MessageType,
@@ -155,7 +158,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     val ts3 = data(2)
     val ts4 = data(3)
 
-    import testImplicits._
+    import classicTestImplicits._
     val df = data.map(i => Tuple1(Timestamp.valueOf(i))).toDF()
     withNestedParquetDataFrame(df) { case (parquetDF, colName, fun) =>
       implicit val df: DataFrame = parquetDF
@@ -689,7 +692,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
     }
 
     val data = Seq("1000-01-01", "2018-03-19", "2018-03-20", "2018-03-21")
-    import testImplicits._
+    import classicTestImplicits._
 
     Seq(false, true).foreach { java8Api =>
       Seq(CORRECTED, LEGACY).foreach { rebaseMode =>
@@ -796,7 +799,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
           SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
           SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString,
           SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
-          import testImplicits._
+          import classicTestImplicits._
           withTempPath { file =>
             millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF()
               .write.format(dataSourceName).save(file.getCanonicalPath)
@@ -979,7 +982,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-6554: don't push down predicates which reference partition columns") {
-    import testImplicits._
+    import classicTestImplicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>
@@ -996,7 +999,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-10829: Filter combine partition key and attribute doesn't work in DataSource scan") {
-    import testImplicits._
+    import classicTestImplicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>
@@ -1013,7 +1016,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-12231: test the filter and empty project in partitioned DataSource scan") {
-    import testImplicits._
+    import classicTestImplicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>
@@ -1032,7 +1035,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-12231: test the new projection in partitioned DataSource scan") {
-    import testImplicits._
+    import classicTestImplicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>
@@ -1054,7 +1057,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
 
 
   test("Filter applied on merged Parquet schema with new column should work") {
-    import testImplicits._
+    import classicTestImplicits._
     withAllParquetReaders {
       withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
         SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true") {
@@ -1089,7 +1092,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
 
   // The unsafe row RecordReader does not support row by row filtering so run it with it disabled.
   test("SPARK-11661 Still pushdown filters returned by unhandledFilters") {
-    import testImplicits._
+    import classicTestImplicits._
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
         withTempPath { dir =>
@@ -1108,7 +1111,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-12218: 'Not' is included in Parquet filter pushdown") {
-    import testImplicits._
+    import classicTestImplicits._
 
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       withTempPath { dir =>
@@ -1505,7 +1508,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("Filters should be pushed down for vectorized Parquet reader at row group level") {
-    import testImplicits._
+    import classicTestImplicits._
 
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
@@ -1536,7 +1539,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   test("SPARK-17213: Broken Parquet filter push-down for string columns") {
     withAllParquetReaders {
       withTempPath { dir =>
-        import testImplicits._
+        import classicTestImplicits._
 
         val path = dir.getCanonicalPath
         // scalastyle:off nonascii
@@ -1555,7 +1558,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-31026: Parquet predicate pushdown for fields having dots in the names") {
-    import testImplicits._
+    import classicTestImplicits._
 
     withAllParquetReaders {
       withSQLConf(
@@ -1593,7 +1596,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("Filters should be pushed down for Parquet readers at row group level") {
-    import testImplicits._
+    import classicTestImplicits._
 
     withSQLConf(
       // Makes sure disabling 'spark.sql.parquet.recordFilter' still enables
@@ -1706,7 +1709,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("filter pushdown - StringPredicate") {
-    import testImplicits._
+    import classicTestImplicits._
     // keep() should take effect on StartsWith/EndsWith/Contains
     Seq(
       "value like 'a%'", // StartsWith
@@ -1784,7 +1787,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
       }
     }
 
-    import testImplicits._
+    import classicTestImplicits._
     withTempPath { path =>
       val data = 0 to 1024
       data.toDF("a").selectExpr("if (a = 1024, null, a) AS a") // convert 1024 to null
@@ -1972,7 +1975,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-30826: case insensitivity of StringStartsWith attribute") {
-    import testImplicits._
+    import classicTestImplicits._
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       withTable("t1") {
         withTempPath { dir =>
@@ -2174,7 +2177,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
   }
 
   test("SPARK-38825: in and notIn filters") {
-    import testImplicits._
+    import classicTestImplicits._
     withTempPath { file =>
       Seq(3, 20).foreach { threshold =>
         withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
@@ -2279,7 +2282,7 @@ abstract class ParquetFilterSuite extends ParquetTest with SharedSparkSession {
 
 @ExtendedSQLTest
 class ParquetV1FilterSuite extends ParquetFilterSuite {
-  import testImplicits.ColumnConstructorExt
+  import classicTestImplicits.ColumnConstructorExt
 
   override protected def sparkConf: SparkConf =
     super
@@ -2361,7 +2364,7 @@ class ParquetV1FilterSuite extends ParquetFilterSuite {
 
 @ExtendedSQLTest
 class ParquetV2FilterSuite extends ParquetFilterSuite {
-  import testImplicits.ColumnConstructorExt
+  import classicTestImplicits.ColumnConstructorExt
 
   // TODO: enable Parquet V2 write path after file source V2 writers are workable.
   override protected def sparkConf: SparkConf =
@@ -2421,7 +2424,7 @@ class ParquetV2FilterSuite extends ParquetFilterSuite {
   }
 
   test("SPARK-36889: Respect disabling of filters pushdown for DSv2 by explain") {
-    import testImplicits._
+    import classicTestImplicits._
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
       withTempPath { path =>
         Seq(1, 2).toDF("c0").write.parquet(path.getAbsolutePath)

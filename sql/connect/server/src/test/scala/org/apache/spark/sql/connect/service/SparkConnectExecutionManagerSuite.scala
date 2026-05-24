@@ -18,12 +18,12 @@ package org.apache.spark.sql.connect.service
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
 /**
  * Test suite for SparkConnectExecutionManager.
  */
-class SparkConnectExecutionManagerSuite extends SharedSparkSession {
+class SparkConnectExecutionManagerSuite extends SharedClassicSparkSession {
 
   protected override def afterEach(): Unit = {
     super.afterEach()

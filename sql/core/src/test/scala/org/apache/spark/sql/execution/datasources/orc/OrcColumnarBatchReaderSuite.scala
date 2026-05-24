@@ -27,16 +27,17 @@ import org.apache.orc.TypeDescription
 
 import org.apache.spark.TestUtils
 import org.apache.spark.memory.MemoryMode
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.vectorized.{ConstantColumnVector, OffHeapColumnVector}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.unsafe.types.UTF8String.fromString
 
-class OrcColumnarBatchReaderSuite extends SharedSparkSession {
+class OrcColumnarBatchReaderSuite extends QueryTest with SharedClassicSparkSession {
 
   import testImplicits._
 

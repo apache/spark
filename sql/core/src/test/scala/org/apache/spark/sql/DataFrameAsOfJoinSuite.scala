@@ -22,12 +22,13 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.plans.AsOfJoinDirection
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class DataFrameAsOfJoinSuite extends SharedSparkSession
+class DataFrameAsOfJoinSuite extends QueryTest
+  with SharedClassicSparkSession
   with AdaptiveSparkPlanHelper {
 
   def prepareForAsOfJoin(): (classic.DataFrame, classic.DataFrame) = {

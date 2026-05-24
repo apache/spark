@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 
@@ -41,8 +41,8 @@ import org.apache.spark.tags.ExtendedSQLTest
  * Test suite for functions in [[org.apache.spark.sql.functions]].
  */
 @ExtendedSQLTest
-class DataFrameFunctionsSuite extends SharedSparkSession {
-  import testImplicits._
+class DataFrameFunctionsSuite extends QueryTest with SharedClassicSparkSession {
+  import classicTestImplicits._
 
   test("DataFrame function and SQL function parity") {
     // This test compares the available list of DataFrame functions in

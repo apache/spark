@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
  * in other tests (State operators, TransformWithState, State data source, RTM etc.)
  * by adding the [[AlsoTestWithStateStoreRowChecksum]] trait.
  * */
-abstract class StateStoreRowChecksumSuite extends SharedSparkSession
+abstract class StateStoreRowChecksumSuite extends SharedClassicSparkSession
   with BeforeAndAfter {
 
   import StateStoreTestsHelper._
@@ -437,7 +437,7 @@ class RocksDBStateStoreRowChecksumSuite extends StateStoreRowChecksumSuite
  * }
  * }}}
  */
-trait EnableStateStoreRowChecksum extends SharedSparkSession {
+trait EnableStateStoreRowChecksum extends SharedClassicSparkSession {
   override protected def sparkConf: SparkConf = {
     super.sparkConf
       .set(SQLConf.STATE_STORE_ROW_CHECKSUM_ENABLED.key, true.toString)

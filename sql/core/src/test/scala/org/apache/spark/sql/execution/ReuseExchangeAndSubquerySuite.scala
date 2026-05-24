@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
-class ReuseExchangeAndSubquerySuite extends SharedSparkSession {
+class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedClassicSparkSession {
 
   val tableFormat: String = "parquet"
 

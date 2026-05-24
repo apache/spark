@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.Utils.createArray
@@ -718,7 +718,7 @@ abstract class OrcQueryTest extends OrcTest {
   }
 }
 
-abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
+abstract class OrcQuerySuite extends OrcQueryTest with SharedClassicSparkSession {
   import testImplicits._
 
   test("LZO compression options for writing to an ORC file") {

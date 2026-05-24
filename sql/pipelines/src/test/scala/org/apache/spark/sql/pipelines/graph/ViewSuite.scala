@@ -21,9 +21,9 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.ExecutionTest
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
-class ViewSuite extends ExecutionTest with SharedSparkSession {
+class ViewSuite extends ExecutionTest with SharedClassicSparkSession {
   private val externalTable1Ident = fullyQualifiedIdentifier("external_t1")
 
   override def beforeEach(): Unit = {

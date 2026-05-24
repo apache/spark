@@ -22,11 +22,13 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.InMemoryTableSessionCatalog
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
 /**
  * The class contains tests for the `DROP TABLE` command to check V2 table catalogs.
  */
-class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase {
+class DropTableSuite extends command.DropTableSuiteBase with CommandSuiteBase
+  with SharedClassicSparkSession {
   test("purge option") {
     withNamespaceAndTable("ns", "tbl") { t =>
       createTable(t)

@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
@@ -70,7 +70,8 @@ import org.apache.spark.util.Utils
  * compatibility.
  */
 // scalastyle:on
-class ProtoToParsedPlanTestSuite extends SharedSparkSession with ResourceHelper {
+class ProtoToParsedPlanTestSuite
+    extends SharedClassicSparkSession with ResourceHelper {
 
   private val cleanOrphanedGoldenFiles: Boolean =
     System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"

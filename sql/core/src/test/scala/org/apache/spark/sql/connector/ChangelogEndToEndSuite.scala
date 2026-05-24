@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import java.sql.Timestamp
 import java.util
 
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamedStreamingRelation
 import org.apache.spark.sql.catalyst.streaming.UserProvided
@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.Changelog.{
   CHANGE_TYPE_DELETE, CHANGE_TYPE_INSERT, CHANGE_TYPE_UPDATE_POSTIMAGE, CHANGE_TYPE_UPDATE_PREIMAGE}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.{LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -36,7 +36,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * End-to-end tests for Change Data Capture (CDC) queries using
  * [[InMemoryChangelogCatalog]].
  */
-class ChangelogEndToEndSuite extends SharedSparkSession {
+class ChangelogEndToEndSuite extends QueryTest with SharedClassicSparkSession {
 
   private val catalogName = "cdc_e2e"
   private val testTableName = "test_table"

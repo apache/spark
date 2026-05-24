@@ -18,11 +18,12 @@ package org.apache.spark.sql.execution.arrow
 
 import java.io.File
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.util.Utils
 
-class ArrowFileReadWriteSuite extends SharedSparkSession {
+class ArrowFileReadWriteSuite extends QueryTest with SharedClassicSparkSession {
 
   private var tempDataPath: String = _
 

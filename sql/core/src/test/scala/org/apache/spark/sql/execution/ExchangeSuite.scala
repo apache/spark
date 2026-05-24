@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityB
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class RanColumnar extends RuntimeException
@@ -45,7 +45,7 @@ case class ColumnarExchange(child: SparkPlan) extends Exchange {
     copy(child = newChild)
 }
 
-class ExchangeSuite extends SharedSparkSession {
+class ExchangeSuite extends SparkPlanTest with SharedClassicSparkSession {
   import testImplicits._
 
   setupTestData()

@@ -28,18 +28,19 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.{SparkException, TaskContext, TestUtils}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, GenericInternalRow}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.ClassicSQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.ArrayImplicits._
 
-abstract class BaseScriptTransformationSuite extends QueryTest {
-  import testImplicits._
+abstract class BaseScriptTransformationSuite extends SparkPlanTest with ClassicSQLTestUtils {
+  import classicTestImplicits._
   import ScriptTransformationIOSchema._
 
   protected def defaultSerDe(): String
@@ -202,7 +203,7 @@ abstract class BaseScriptTransformationSuite extends QueryTest {
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
           ioschema = defaultIOSchema)
-      QueryTest.executePlan(plan, spark.sqlContext)
+      SparkPlanTest.executePlan(plan, spark.sqlContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
     assert(uncaughtExceptionHandler.exception.isEmpty)

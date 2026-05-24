@@ -43,10 +43,10 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.util.ArrayImplicits._
 
-class SparkConnectSessionHolderSuite extends SharedSparkSession {
+class SparkConnectSessionHolderSuite extends SharedClassicSparkSession {
 
   test("DataFrame cache: Successful put and get") {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)

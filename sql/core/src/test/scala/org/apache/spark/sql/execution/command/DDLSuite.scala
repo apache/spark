@@ -38,12 +38,12 @@ import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{ClassicSQLTestUtils, SharedClassicSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
-  import testImplicits._
+class InMemoryCatalogedDDLSuite extends DDLSuite with SharedClassicSparkSession {
+  import classicTestImplicits._
 
   override def afterEach(): Unit = {
     try {
@@ -117,7 +117,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   }
 
   test("Create Hive Table As Select") {
-    import testImplicits._
+    import classicTestImplicits._
     withTable("t", "t1") {
       checkError(
         exception = intercept[AnalysisException] {
@@ -251,7 +251,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSparkSession {
   }
 }
 
-trait DDLSuiteBase extends QueryTest {
+trait DDLSuiteBase extends ClassicSQLTestUtils {
 
   protected def isUsingHiveMetastore: Boolean = {
     spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive"
@@ -440,7 +440,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("Create partitioned data source table without user specified schema") {
-    import testImplicits._
+    import classicTestImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
     // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
@@ -460,7 +460,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("Create partitioned data source table with user specified schema") {
-    import testImplicits._
+    import classicTestImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
     // Case 1: with partitioning columns but no schema: Option("num")
@@ -480,7 +480,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("Create non-partitioned data source table without user specified schema") {
-    import testImplicits._
+    import classicTestImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
     // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
@@ -499,7 +499,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("Create non-partitioned data source table with user specified schema") {
-    import testImplicits._
+    import classicTestImplicits._
     val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
 
     // Case 1: with partitioning columns but no schema: Option("nonexistentColumns")
@@ -599,7 +599,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("create table - append to a non-partitioned table created with different paths") {
-    import testImplicits._
+    import classicTestImplicits._
     withTempDir { dir1 =>
       withTempDir { dir2 =>
         withTable("path_test") {
@@ -633,7 +633,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("Refresh table after changing the data source table partitioning") {
-    import testImplicits._
+    import classicTestImplicits._
 
     val tabName = "tab1"
     val catalog = spark.sessionState.catalog
@@ -1091,7 +1091,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
         "alternative" -> "DROP TABLE",
         "operation" -> "DROP VIEW",
         "foundType" -> "EXTERNAL",
-        "requiredType" -> "VIEW or METRIC_VIEW",
+        "requiredType" -> "VIEW",
         "objectName" -> "spark_catalog.dbx.tab1")
     )
   }
@@ -1218,7 +1218,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("create a data source table without schema") {
-    import testImplicits._
+    import classicTestImplicits._
     withTempPath { tempDir =>
       withTable("tab1", "tab2") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
@@ -1236,7 +1236,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("create table using CLUSTERED BY without schema specification") {
-    import testImplicits._
+    import classicTestImplicits._
     withTempPath { tempDir =>
       withTable("jsonTable") {
         (("a", "b") :: Nil).toDF().write.json(tempDir.getCanonicalPath)
@@ -1261,7 +1261,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("Create Data Source Table As Select") {
-    import testImplicits._
+    import classicTestImplicits._
     withTable("t", "t1", "t2") {
       sql("CREATE TABLE t USING parquet SELECT 1 as a, 1 as b")
       checkAnswer(spark.table("t"), Row(1, 1) :: Nil)
@@ -1325,7 +1325,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
   }
 
   test("SPARK-16034 Partition columns should match when appending to existing data source tables") {
-    import testImplicits._
+    import classicTestImplicits._
     val df = Seq((1, 2, 3)).toDF("a", "b", "c")
     withTable("partitionedTable") {
       df.write.mode("overwrite").partitionBy("a", "b").saveAsTable("partitionedTable")
@@ -1868,7 +1868,7 @@ abstract class DDLSuite extends QueryTest with DDLSuiteBase {
             spark.sql(s"CREATE DATABASE tmpdb LOCATION '$escapedLoc'")
             spark.sql("USE tmpdb")
 
-            import testImplicits._
+            import classicTestImplicits._
             Seq(1).toDF("a").write.saveAsTable("t")
             val tblloc = new File(loc, "t")
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))

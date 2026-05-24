@@ -18,12 +18,12 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, RelationProvider, TableScan}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 
-class SaveIntoDataSourceCommandSuite extends SharedSparkSession {
+class SaveIntoDataSourceCommandSuite extends QueryTest with SharedClassicSparkSession {
 
   test("simpleString is redacted") {
     val URL = "connection.url"

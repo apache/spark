@@ -20,13 +20,15 @@ import java.util.Collections
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class InMemoryTableMetricSuite extends SharedSparkSession with BeforeAndAfter {
+class InMemoryTableMetricSuite
+  extends QueryTest with SharedClassicSparkSession with BeforeAndAfter {
   import testImplicits._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 

@@ -19,13 +19,14 @@ package org.apache.spark.sql.collation
 
 import java.sql.Timestamp
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.ExpressionBuilder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types._
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -33,8 +34,8 @@ import org.apache.spark.util.Utils
  *  This suite is introduced in order to test a bulk of expressions and functionalities related to
  *  collations
  */
-class CollationExpressionWalkerSuite extends SharedSparkSession {
-  import testImplicits._
+class CollationExpressionWalkerSuite extends SparkFunSuite with SharedClassicSparkSession {
+  import classicTestImplicits._
 
   // Trait to distinguish different cases for generation
   sealed trait CollationType

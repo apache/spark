@@ -24,12 +24,12 @@ import org.apache.spark.sql.classic.{Dataset => DatasetImpl}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, count, explode, sum, year}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
-class DataFrameSelfJoinSuite extends SharedSparkSession {
-  import testImplicits._
+class DataFrameSelfJoinSuite extends QueryTest with SharedClassicSparkSession {
+  import classicTestImplicits._
 
   test("join - join using self join") {
     val df = Seq(1, 2, 3).map(i => (i, i.toString)).toDF("int", "str")

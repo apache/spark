@@ -18,14 +18,14 @@
 package org.apache.spark.sql.scripting
 
 import org.apache.spark.{SparkException, SparkNumberFormatException}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
 /**
  * SQL Scripting interpreter tests.
@@ -34,7 +34,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  *   are executed and output DataFrames are compared with expected outputs.
  */
 class SqlScriptingInterpreterSuite
-    extends SharedSparkSession
+    extends QueryTest
+    with SharedClassicSparkSession
     with SqlScriptingTestUtils {
 
   protected override def beforeAll(): Unit = {

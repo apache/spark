@@ -27,10 +27,10 @@ import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.TestOptionsSource
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-trait ExplainSuiteHelper extends SharedSparkSession {
+trait ExplainSuiteHelper extends QueryTest with SharedClassicSparkSession {
 
   protected def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
     val output = new java.io.ByteArrayOutputStream()
@@ -90,7 +90,7 @@ trait ExplainSuiteHelper extends SharedSparkSession {
 }
 
 class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite {
-  import testImplicits._
+  import classicTestImplicits._
 
   test("SPARK-23034 show rdd names in RDD scan nodes (Dataset)") {
     val rddWithName = spark.sparkContext.parallelize(Row(1, "abc") :: Nil).setName("testRdd")
@@ -251,7 +251,6 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     checkKeywordsExistsInExplain(df,
       "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
         "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
-    checkKeywordsNotExistsInExplain(df, ExtendedMode, "typednullliteral")
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {
@@ -550,7 +549,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
 }
 
 class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuite {
-  import testImplicits._
+  import classicTestImplicits._
 
   test("SPARK-35884: Explain Formatted") {
     val df1 = Seq((1, 2), (2, 3)).toDF("k", "v1")

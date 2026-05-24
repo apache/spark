@@ -32,13 +32,13 @@ import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 
 abstract class SchemaPruningSuite
   extends FileBasedDataSourceTest
   with SchemaPruningTest
-  with SharedSparkSession
+  with SharedClassicSparkSession
   with AdaptiveSparkPlanHelper {
   case class FullName(first: String, middle: String, last: String)
   case class Company(name: String, address: String)

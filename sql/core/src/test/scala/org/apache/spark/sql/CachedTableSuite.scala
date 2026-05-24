@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}
@@ -64,9 +64,10 @@ import org.apache.spark.util.{AccumulatorContext, Utils}
 private case class BigData(s: String)
 
 @SlowSQLTest
-class CachedTableSuite extends SharedSparkSession
+class CachedTableSuite extends QueryTest
+  with SharedClassicSparkSession
   with AdaptiveSparkPlanHelper {
-  import testImplicits._
+  import classicTestImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryCatalog].getName)

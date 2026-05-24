@@ -21,6 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. RENAME` command that check V1
@@ -30,7 +31,10 @@ import org.apache.spark.sql.execution.command
  *   - V1 In-Memory catalog: `org.apache.spark.sql.execution.command.v1.AlterTableRenameSuite`
  *   - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
  */
-trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with QueryErrorsBase {
+trait AlterTableRenameSuiteBase
+  extends command.AlterTableRenameSuiteBase
+    with command.AlterTableDirHelper
+    with QueryErrorsBase {
   test("destination database is different") {
     withNamespaceAndTable("dst_ns", "dst_tbl") { dst =>
       withNamespace("src_ns") {
@@ -89,3 +93,4 @@ trait AlterTableRenameSuiteBase extends command.AlterTableRenameSuiteBase with Q
  * V1 In-Memory table catalog.
  */
 class AlterTableRenameSuite extends AlterTableRenameSuiteBase with CommandSuiteBase
+  with SharedClassicSparkSession

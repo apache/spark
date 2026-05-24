@@ -19,9 +19,9 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
-class PipelineUpdateContextImplSuite extends PipelineTest with SharedSparkSession {
+class PipelineUpdateContextImplSuite extends PipelineTest with SharedClassicSparkSession {
 
   test("validateStorageRoot should accept valid URIs with schemes") {
     val validStorageRoots = Seq(

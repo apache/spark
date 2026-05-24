@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.spark.sql.test.ClassicSQLTestUtils
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.storage.StorageLevel
 
@@ -31,8 +32,11 @@ import org.apache.spark.storage.StorageLevel
  *     - V1 Hive External catalog:
  *       `org.apache.spark.sql.hive.execution.command.AlterTableRenameSuite`
  */
-trait AlterTableRenameSuiteBase extends QueryTest with DDLCommandTestUtils {
-  import testImplicits._
+trait AlterTableRenameSuiteBase
+  extends QueryTest
+    with DDLCommandTestUtils
+    with ClassicSQLTestUtils {
+  import classicTestImplicits._
   override val command = "ALTER TABLE .. RENAME"
 
   test("rename a table in a database/namespace") {

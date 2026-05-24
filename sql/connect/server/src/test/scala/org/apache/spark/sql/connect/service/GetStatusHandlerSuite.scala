@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.GetStatusResponse
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.plugin.{GetStatusPlugin, SparkConnectPluginRegistry}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -104,7 +104,7 @@ class FailingGetStatusPlugin extends GetStatusPlugin {
     throw new RuntimeException("operation plugin failure")
 }
 
-class GetStatusHandlerSuite extends SharedSparkSession {
+class GetStatusHandlerSuite extends SharedClassicSparkSession {
 
   // Default userId matching SparkConnectTestUtils.createDummySessionHolder default
   private val defaultUserId = "testUser"

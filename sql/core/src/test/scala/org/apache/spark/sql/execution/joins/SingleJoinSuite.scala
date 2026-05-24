@@ -18,20 +18,20 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.BuildRight
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, Project}
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
-class SingleJoinSuite extends SharedSparkSession {
-  import testImplicits.toRichColumn
+class SingleJoinSuite extends SparkPlanTest with SharedClassicSparkSession {
+  import classicTestImplicits.toRichColumn
 
   private val EnsureRequirements = new EnsureRequirements()
 
@@ -86,7 +86,7 @@ class SingleJoinSuite extends SharedSparkSession {
         rightRows.queryExecution.sparkPlan)
       checkError(
         exception = intercept[SparkRuntimeException] {
-          QueryTest.executePlan(outputPlan, spark.sqlContext)
+          SparkPlanTest.executePlan(outputPlan, spark.sqlContext)
         },
         condition = "SCALAR_SUBQUERY_TOO_MANY_ROWS",
         parameters = Map.empty

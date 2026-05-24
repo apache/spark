@@ -22,13 +22,14 @@ import java.util.UUID
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.should.Matchers
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
@@ -39,7 +40,8 @@ import org.apache.spark.util.Utils
  * [[TimestampAsPrefixKeyStateEncoder]] and [[TimestampAsPostfixKeyStateEncoder]].
  */
 @ExtendedSQLTest
-class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession with Matchers {
+class RocksDBTimestampEncoderOperationsSuite extends SharedClassicSparkSession
+  with BeforeAndAfterEach with Matchers {
 
   // Test schemas
   private val keySchema = StructType(Seq(

@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.ClassicSQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -56,9 +57,9 @@ case class ListStringCaseClass(l: Seq[String])
  * A test suite for Hive custom UDFs.
  */
 @SlowHiveTest
-class HiveUDFSuite extends QueryTest with TestHiveSingleton {
+class HiveUDFSuite extends QueryTest with TestHiveSingleton with ClassicSQLTestUtils {
   import spark.implicits._
-  import testImplicits.castToImpl
+  import classicTestImplicits.castToImpl
 
   import spark.udf
 

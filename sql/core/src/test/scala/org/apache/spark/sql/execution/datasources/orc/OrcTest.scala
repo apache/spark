@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
+import org.apache.spark.sql.test.ClassicSQLTestUtils
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -47,7 +48,7 @@ import org.apache.spark.util.Utils
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
  */
-trait OrcTest extends QueryTest with FileBasedDataSourceTest {
+trait OrcTest extends QueryTest with FileBasedDataSourceTest with ClassicSQLTestUtils {
 
   val orcImp: String = "native"
 

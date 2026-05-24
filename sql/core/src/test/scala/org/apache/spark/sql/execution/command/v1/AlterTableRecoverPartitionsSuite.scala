@@ -22,6 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. RECOVER PARTITIONS` command that
@@ -35,7 +36,9 @@ import org.apache.spark.sql.execution.command
  *   - V1 Hive External catalog:
  *     `org.apache.spark.sql.hive.execution.command.AlterTableRecoverPartitionsSuite`
  */
-trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPartitionsSuiteBase {
+trait AlterTableRecoverPartitionsSuiteBase
+  extends command.AlterTableRecoverPartitionsSuiteBase
+  with command.AlterTableDirHelper {
   test("table does not exist") {
     val e = intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist RECOVER PARTITIONS")
@@ -138,7 +141,8 @@ trait AlterTableRecoverPartitionsSuiteBase extends command.AlterTableRecoverPart
  */
 class AlterTableRecoverPartitionsSuite
   extends AlterTableRecoverPartitionsSuiteBase
-  with CommandSuiteBase {
+  with CommandSuiteBase
+  with SharedClassicSparkSession {
 
   override protected def sparkConf = super.sparkConf
     .set(RDD_PARALLEL_LISTING_THRESHOLD, 0)
@@ -150,7 +154,8 @@ class AlterTableRecoverPartitionsSuite
  */
 class AlterTableRecoverPartitionsParallelSuite
   extends AlterTableRecoverPartitionsSuiteBase
-  with CommandSuiteBase {
+  with CommandSuiteBase
+  with SharedClassicSparkSession {
 
   override protected def sparkConf = super.sparkConf
     .set(RDD_PARALLEL_LISTING_THRESHOLD, 10)

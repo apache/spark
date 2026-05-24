@@ -28,11 +28,12 @@ import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 
 @ExtendedSQLTest
-class BroadcastExchangeSuite extends SharedSparkSession
+class BroadcastExchangeSuite extends SparkPlanTest
+  with SharedClassicSparkSession
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._

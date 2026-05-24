@@ -29,15 +29,19 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatestplus.mockito.MockitoSugar
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.connect.proto.{Command, ExecutePlanResponse}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.execution.ExecuteResponseObserver
 import org.apache.spark.sql.connect.planner.SparkConnectStreamingQueryListenerHandler
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.streaming.Trigger.ProcessingTime
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
-class SparkConnectListenerBusListenerSuite extends SharedSparkSession with MockitoSugar {
+class SparkConnectListenerBusListenerSuite
+    extends SparkFunSuite
+    with SharedClassicSparkSession
+    with MockitoSugar {
 
   override def afterEach(): Unit = {
     try {

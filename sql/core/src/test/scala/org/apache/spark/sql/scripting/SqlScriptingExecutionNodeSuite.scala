@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.scripting
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, LeafNode, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /**
@@ -30,7 +31,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  * Execution nodes are constructed manually and iterated through.
  * It is then checked if the leaf statements have been iterated in the expected order.
  */
-class SqlScriptingExecutionNodeSuite extends SharedSparkSession {
+class SqlScriptingExecutionNodeSuite extends SparkFunSuite with SharedClassicSparkSession {
   // Helpers
   case class TestCompoundBody(
       override val statements: Seq[CompoundStatementExec],

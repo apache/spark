@@ -51,7 +51,7 @@ import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.{SharedClassicSparkSession, SharedSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -71,9 +71,10 @@ object TestForTypeAlias {
   def aliasedArrayInTuple: (Int, IntArray) = (1, Array(1))
 }
 
-class DatasetSuite extends SharedSparkSession
+class DatasetSuite extends QueryTest
+  with SharedClassicSparkSession
   with AdaptiveSparkPlanHelper {
-  import testImplicits._
+  import classicTestImplicits._
 
   private implicit val ordering: Ordering[ClassData] = Ordering.by((c: ClassData) => c.a -> c.b)
 
@@ -3073,7 +3074,8 @@ object CustomPathEncoder {
   )
 }
 
-class DatasetLargeResultCollectingSuite extends SharedSparkSession {
+class DatasetLargeResultCollectingSuite extends QueryTest
+  with SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf.set(MAX_RESULT_SIZE.key, "4g")
   // SPARK-41193: Ignore this suite because it cannot run successfully with Spark

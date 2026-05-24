@@ -19,17 +19,19 @@ package org.apache.spark.sql.errors
 import org.apache.spark._
 import org.apache.spark.SparkBuildInfo
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, CheckOverflowInTableInsert, ExpressionProxy, Literal, SubExprEvaluationRuntime}
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
+import org.apache.spark.sql.test.{SharedClassicSparkSession, TestSparkSession}
 import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
-class QueryExecutionAnsiErrorsSuite extends SharedSparkSession {
-  import testImplicits._
+class QueryExecutionAnsiErrorsSuite extends QueryTest
+  with SharedClassicSparkSession {
+  import classicTestImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")
 

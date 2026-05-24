@@ -37,7 +37,7 @@ import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -45,7 +45,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Testing trait for SparkConnect tests with some helper methods to make it easier to create new
  * test cases.
  */
-trait SparkConnectPlanTest extends SharedSparkSession {
+trait SparkConnectPlanTest extends SharedClassicSparkSession {
   def transform(rel: proto.Relation): logical.LogicalPlan = {
     SparkConnectPlannerTestUtils.transform(spark, rel)
   }

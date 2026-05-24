@@ -22,12 +22,12 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 
 class SystemMetadataSuite
     extends ExecutionTest
     with SystemMetadataTestHelpers
-    with SharedSparkSession {
+    with SharedClassicSparkSession {
 
     gridTest(
       "flow checkpoint for ST wrote to the expected location when fullRefresh ="

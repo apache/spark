@@ -27,10 +27,10 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.util.Utils
 
-class DataSourceSuite extends SharedSparkSession with PrivateMethodTester {
+class DataSourceSuite extends SharedClassicSparkSession with PrivateMethodTester {
   import TestPaths._
 
   test("test glob and non glob paths") {

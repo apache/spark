@@ -21,19 +21,20 @@ import java.io.{File, FileWriter}
 
 import org.apache.spark.api.python.PythonException
 import org.apache.spark.api.python.PythonUtils
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonScan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SharedClassicSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 abstract class PythonDataSourceSuiteBase
-    extends SharedSparkSession
+    extends QueryTest
+    with SharedClassicSparkSession
     with AdaptiveSparkPlanHelper {
 
   protected val simpleDataSourceReaderScript: String =
