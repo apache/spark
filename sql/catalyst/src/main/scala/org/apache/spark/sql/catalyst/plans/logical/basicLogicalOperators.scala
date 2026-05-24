@@ -2008,6 +2008,8 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
+  // Distinct is rewritten to Aggregate by ReplaceDistinctWithAggregate, hence potentially
+  // stateful (same criteria as Aggregate).
   override def isStateful: Boolean = child.isStreaming
 }
 

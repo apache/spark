@@ -80,10 +80,13 @@ abstract class LogicalPlan
   def isStreaming: Boolean = _isStreaming
   private[this] lazy val _isStreaming = children.exists(_.isStreaming)
 
-  /** Marks if a streaming node is a stateful operator. */
+  /**
+   * Whether this node is a stateful operator -- i.e. one that becomes an operator
+   * that leverage state store to maintain state across microbatches.
+   */
   def isStateful: Boolean = false
 
-  /** Marks if a subplan contains a stateful operator. */
+  /** Whether this plan or any of its descendants is a stateful operator ([[isStateful]]). */
   def containsStatefulOperator: Boolean = _containsStatefulOperator
   private[this] lazy val _containsStatefulOperator =
     isStateful || children.exists(_.containsStatefulOperator)
