@@ -35,18 +35,33 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
       plan: LogicalPlan,
       curId: AtomicLong,
       cteIdToNewId: mutable.Map[Long, Long]): LogicalPlan = {
-    plan transformDownWithSubqueries {
+    val newIdValues = mutable.Set.empty[Long]
+    val normalized = plan transformDownWithSubqueries {
       case ctas @ CacheTableAsSelect(_, plan, _, _, _, _, _) =>
         ctas.copy(plan = applyInternal(plan, curId, cteIdToNewId))
 
       case withCTE @ WithCTE(plan, cteDefs) =>
         val newCteDefs = cteDefs.map { cteDef =>
           cteIdToNewId.getOrElseUpdate(cteDef.id, curId.getAndIncrement())
+          newIdValues += cteIdToNewId(cteDef.id)
           val normalizedCteDef = canonicalizeCTE(cteDef.child, cteIdToNewId)
           cteDef.copy(child = normalizedCteDef, id = cteIdToNewId(cteDef.id))
         }
         val normalizedPlan = canonicalizeCTE(plan, cteIdToNewId)
         withCTE.copy(plan = normalizedPlan, cteDefs = newCteDefs)
+    }
+    // SPARK-56739: Second pass to normalize orphan CTERelationRefs that exist outside any
+    // WithCTE node (e.g., after InlineCTE or MergeSubplans removes the parent WithCTE).
+    // Skip refs whose cteId is already a normalized value (to avoid double-normalization
+    // when original IDs and new IDs overlap).
+    if (cteIdToNewId.nonEmpty) {
+      normalized.transformDownWithSubqueries {
+        case ref: CTERelationRef
+            if cteIdToNewId.contains(ref.cteId) && !newIdValues.contains(ref.cteId) =>
+          ref.copy(cteId = cteIdToNewId(ref.cteId))
+      }
+    } else {
+      normalized
     }
   }
 
