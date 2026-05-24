@@ -218,6 +218,7 @@ class GraphElementRegistryTest(unittest.TestCase):
     def test_create_auto_cdc_flow_rejects_non_str_target(self):
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
             with self.assertRaises(PySparkTypeError) as ctx:
                 dp.create_auto_cdc_flow(
                     target=123,  # type: ignore[arg-type]
