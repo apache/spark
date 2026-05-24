@@ -25,7 +25,6 @@ import org.scalatest.concurrent.Eventually
 import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.{classic, QueryTest, QueryTestBase, SparkSession, SparkSessionProvider, SQLContext}
-import org.apache.spark.sql.test.{classic => classicTest}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -53,46 +52,6 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
     } finally {
       doThreadPostAudit()
     }
-  }
-}
-
-/**
- * Extends SharedSparkSession to explicitly provide [[classic.SparkSession]].
- *
- * Use this trait to indicate that this test is classic-only, i.e. it would not make sense to run
- * this test with a [[org.apache.spark.sql.connect.SparkSession]].
- */
-trait SharedClassicSparkSession
-  extends SharedSparkSession
-    with classicTest.QueryTest
-    with classic.SparkSessionProvider {
-  override def spark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
-
-  // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
-  // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
-  def runAndFetchMetrics(func: => Unit): Map[(Long, String, String), String] = {
-    val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
-
-    func
-
-    // Wait until the new execution is started and being tracked.
-    eventually(timeout(10.seconds), interval(10.milliseconds)) {
-      assert(statusStore.executionsCount() >= oldCount)
-    }
-
-    // Wait for listener to finish computing the metrics for the execution.
-    eventually(timeout(10.seconds), interval(10.milliseconds)) {
-      assert(statusStore.executionsList().nonEmpty &&
-        statusStore.executionsList().last.metricValues != null)
-    }
-
-    val exec = statusStore.executionsList().last
-    val execId = exec.executionId
-    val sqlMetrics = statusStore.planGraph(execId).allNodes
-      .flatMap(n => n.metrics.map(m => (m.accumulatorId, (n.id, n.name, m.name))))
-      .toMap
-    statusStore.executionMetrics(execId).map { case (k, v) => sqlMetrics(k) -> v }
   }
 }
 
