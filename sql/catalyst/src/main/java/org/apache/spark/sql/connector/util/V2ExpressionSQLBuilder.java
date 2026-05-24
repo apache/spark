@@ -36,7 +36,8 @@ import org.apache.spark.sql.connector.expressions.SortDirection;
 import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.UserDefinedScalarFunc;
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate;
-import org.apache.spark.sql.connector.expressions.filter.Predicate;
+import org.apache.spark.sql.connector.expressions.filter.AlwaysFalse;
+import org.apache.spark.sql.connector.expressions.filter.AlwaysTrue;
 import org.apache.spark.sql.connector.expressions.aggregate.Avg;
 import org.apache.spark.sql.connector.expressions.aggregate.Max;
 import org.apache.spark.sql.connector.expressions.aggregate.Min;
@@ -76,9 +77,9 @@ public class V2ExpressionSQLBuilder {
   }
 
   public String build(Expression expr) {
-    if (expr instanceof Predicate p && p.name().equals("ALWAYS_TRUE")) {
+    if (expr instanceof AlwaysTrue) {
       return "1 = 1";
-    } else if (expr instanceof Predicate p && p.name().equals("ALWAYS_FALSE")) {
+    } else if (expr instanceof AlwaysFalse) {
       return "1 = 0";
     } else if (expr instanceof Literal literal) {
       return visitLiteral(literal);
