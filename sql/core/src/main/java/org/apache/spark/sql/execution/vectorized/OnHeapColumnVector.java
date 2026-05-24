@@ -144,10 +144,8 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBooleans(int rowId, int count, boolean value) {
-    byte v = (byte)((value) ? 1 : 0);
-    for (int i = 0; i < count; ++i) {
-      byteData[i + rowId] = v;
-    }
+    byte v = (byte) (value ? 1 : 0);
+    java.util.Arrays.fill(byteData, rowId, rowId + count, v);
   }
 
   @Override
@@ -189,9 +187,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBytes(int rowId, int count, byte value) {
-    for (int i = 0; i < count; ++i) {
-      byteData[i + rowId] = value;
-    }
+    java.util.Arrays.fill(byteData, rowId, rowId + count, value);
   }
 
   @Override
@@ -251,9 +247,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putShorts(int rowId, int count, short value) {
-    for (int i = 0; i < count; ++i) {
-      shortData[i + rowId] = value;
-    }
+    java.util.Arrays.fill(shortData, rowId, rowId + count, value);
   }
 
   @Override
@@ -391,9 +385,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putLongs(int rowId, int count, long value) {
-    for (int i = 0; i < count; ++i) {
-      longData[i + rowId] = value;
-    }
+    java.util.Arrays.fill(longData, rowId, rowId + count, value);
   }
 
   @Override
