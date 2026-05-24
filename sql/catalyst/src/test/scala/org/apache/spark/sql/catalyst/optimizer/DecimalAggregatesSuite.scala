@@ -613,18 +613,6 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
       s"evalMode should be preserved as TRY after rewrite, got " +
         avgs.map(_.evalMode).mkString(","))
   }
-
-  // ---------------------------------------------------------------------------
-  // SPARK-57023: DecimalAggregates widened-Cast peel for MIN/MAX. Same scale
-  // (s == sPrime) + same-or-larger precision (pPrime >= p) widening Cast is
-  // bit-identical to applying the Cast after the aggregate, because Min/Max
-  // pick an existing row's value (no arithmetic). The peel hoists the Cast
-  // out and runs Min/Max on the narrower inner Decimal.
-  //
-  // Vanilla 5.0.0-SNAPSHOT ground-truth (rule OFF vs ON) and design rationale:
-  //   features/spark-decimal-minmax-cast-peel/docs/0002-decision-design.md (rev 3)
-  // ---------------------------------------------------------------------------
-
   test("SPARK-57023: MIN(CAST(dec(7,2) AS dec(12,2))) peels via widened-Cast fast path") {
     val widened = $"d7_2".cast(DecimalType(12, 2))
     val originalQuery = widenRel.select(min(widened).as("min_widened"))
