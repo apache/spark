@@ -25,12 +25,13 @@ import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedClassicSparkSession, TestSparkSession}
+import org.apache.spark.sql.test.TestSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => ClassicSharedSparkSession}
 import org.apache.spark.sql.types.ByteType
 
 // Test suite for all the execution errors that requires enable ANSI SQL mode.
 class QueryExecutionAnsiErrorsSuite extends QueryTest
-  with SharedClassicSparkSession {
+  with ClassicSharedSparkSession {
   import classicTestImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf.set(SQLConf.ANSI_ENABLED.key, "true")

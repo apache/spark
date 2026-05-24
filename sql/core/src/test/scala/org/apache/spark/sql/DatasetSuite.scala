@@ -52,7 +52,7 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.test.classic.SharedSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => ClassicSharedSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -73,7 +73,7 @@ object TestForTypeAlias {
 }
 
 class DatasetSuite extends QueryTest
-  with classic.SharedSparkSession
+  with ClassicSharedSparkSession
   with AdaptiveSparkPlanHelper {
   import classicTestImplicits._
 
