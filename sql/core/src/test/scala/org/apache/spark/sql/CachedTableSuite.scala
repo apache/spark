@@ -53,7 +53,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 import org.apache.spark.storage.StorageLevel.{MEMORY_AND_DISK_2, MEMORY_ONLY}

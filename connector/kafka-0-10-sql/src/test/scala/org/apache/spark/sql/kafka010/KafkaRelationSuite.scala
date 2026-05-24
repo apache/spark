@@ -31,7 +31,7 @@ import org.apache.spark.sql.{DataFrameReader, QueryTest}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.util.Utils
 
 abstract class KafkaRelationSuiteBase

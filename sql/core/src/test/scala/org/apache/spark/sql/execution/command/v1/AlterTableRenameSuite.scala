@@ -21,7 +21,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. RENAME` command that check V1

@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.HashedRelation
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.tags.ExtendedSQLTest
 
 @ExtendedSQLTest

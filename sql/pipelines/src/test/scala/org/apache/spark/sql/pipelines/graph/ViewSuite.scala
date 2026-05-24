@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.common.FlowStatus
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.ExecutionTest
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class ViewSuite extends ExecutionTest with SharedClassicSparkSession {
   private val externalTable1Ident = fullyQualifiedIdentifier("external_t1")

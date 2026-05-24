@@ -37,7 +37,7 @@ import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
 import org.apache.spark.sql.execution.arrow.ArrowConverters
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 

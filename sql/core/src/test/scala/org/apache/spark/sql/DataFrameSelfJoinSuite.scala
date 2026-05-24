@@ -24,7 +24,7 @@ import org.apache.spark.sql.classic.{Dataset => DatasetImpl}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{col, count, explode, sum, year}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.test.SQLTestData.TestData
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 

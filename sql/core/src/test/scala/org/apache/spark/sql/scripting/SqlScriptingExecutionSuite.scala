@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 /**
  * SQL Scripting interpreter tests.

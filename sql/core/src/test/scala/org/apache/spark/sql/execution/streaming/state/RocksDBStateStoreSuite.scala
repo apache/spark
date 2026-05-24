@@ -44,7 +44,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileMan
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform

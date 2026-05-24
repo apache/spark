@@ -20,7 +20,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.util.Utils
 

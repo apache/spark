@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStr
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.StreamingQueryListener._
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**

@@ -21,7 +21,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.analysis.resolver.ProhibitedResolver
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
 
 class FileResolverSuite extends QueryTest with SharedClassicSparkSession {

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedOrdinal
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class ReplaceIntegerLiteralsWithOrdinalsDataframeSuite
   extends QueryTest

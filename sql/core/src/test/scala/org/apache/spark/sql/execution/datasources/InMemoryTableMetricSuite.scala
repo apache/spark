@@ -24,7 +24,7 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.functions.lit
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.IntegerType
 
 class InMemoryTableMetricSuite

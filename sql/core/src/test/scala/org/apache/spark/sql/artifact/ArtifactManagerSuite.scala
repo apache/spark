@@ -26,7 +26,7 @@ import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.DataTypes
 import org.apache.spark.storage.CacheId
 import org.apache.spark.util.{SparkTestUtils, Utils}

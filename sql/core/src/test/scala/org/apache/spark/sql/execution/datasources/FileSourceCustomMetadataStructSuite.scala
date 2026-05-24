@@ -29,7 +29,7 @@ import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.functions.{col, lit, when}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 

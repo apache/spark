@@ -38,7 +38,7 @@ import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils

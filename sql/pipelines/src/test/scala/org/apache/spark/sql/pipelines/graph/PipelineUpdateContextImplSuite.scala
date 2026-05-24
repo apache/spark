@@ -19,7 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class PipelineUpdateContextImplSuite extends PipelineTest with SharedClassicSparkSession {
 

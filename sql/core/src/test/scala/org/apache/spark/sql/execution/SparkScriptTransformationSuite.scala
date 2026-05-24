@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.TestUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class SparkScriptTransformationSuite extends BaseScriptTransformationSuite
   with SharedClassicSparkSession {

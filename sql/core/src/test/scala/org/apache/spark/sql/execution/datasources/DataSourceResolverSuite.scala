@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{
 }
 import org.apache.spark.sql.catalyst.catalog.UnresolvedCatalogRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class DataSourceResolverSuite extends QueryTest with SharedClassicSparkSession {

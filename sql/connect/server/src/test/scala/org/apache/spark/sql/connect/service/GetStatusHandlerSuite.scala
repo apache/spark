@@ -31,7 +31,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.GetStatusResponse
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.plugin.{GetStatusPlugin, SparkConnectPluginRegistry}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.util.ThreadUtils
 
 /**

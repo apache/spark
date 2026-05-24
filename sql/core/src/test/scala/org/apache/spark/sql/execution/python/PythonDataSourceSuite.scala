@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceManager
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.python.PythonScan
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 

@@ -18,7 +18,7 @@ package org.apache.spark.sql.connect.service
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 /**
  * Test suite for SparkConnectExecutionManager.

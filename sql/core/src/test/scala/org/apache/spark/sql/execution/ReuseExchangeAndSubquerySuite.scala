@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class ReuseExchangeAndSubquerySuite extends SparkPlanTest with SharedClassicSparkSession {
 

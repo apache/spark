@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 /**
  * This base suite contains unified tests for the `ALTER TABLE .. RECOVER PARTITIONS` command that

@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.TestOptionsSource
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 trait ExplainSuiteHelper extends QueryTest with SharedClassicSparkSession {

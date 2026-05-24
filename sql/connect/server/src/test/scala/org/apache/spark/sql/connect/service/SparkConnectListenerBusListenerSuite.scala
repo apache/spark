@@ -36,7 +36,7 @@ import org.apache.spark.sql.connect.execution.ExecuteResponseObserver
 import org.apache.spark.sql.connect.planner.SparkConnectStreamingQueryListenerHandler
 import org.apache.spark.sql.streaming.{StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.streaming.Trigger.ProcessingTime
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class SparkConnectListenerBusListenerSuite
     extends SparkFunSuite

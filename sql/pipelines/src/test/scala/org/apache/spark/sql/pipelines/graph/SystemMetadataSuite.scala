@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class SystemMetadataSuite
     extends ExecutionTest

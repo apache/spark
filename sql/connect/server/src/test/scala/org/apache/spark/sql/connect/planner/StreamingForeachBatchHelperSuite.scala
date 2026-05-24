@@ -26,7 +26,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class StreamingForeachBatchHelperSuite extends SharedClassicSparkSession with MockitoSugar {
 

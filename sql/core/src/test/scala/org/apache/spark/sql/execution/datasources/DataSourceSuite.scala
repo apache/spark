@@ -27,7 +27,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.util.Utils
 
 class DataSourceSuite extends SharedClassicSparkSession with PrivateMethodTester {

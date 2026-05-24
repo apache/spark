@@ -27,7 +27,7 @@ import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class InnerJoinSuite extends SparkPlanTest with SharedClassicSparkSession {

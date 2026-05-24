@@ -20,7 +20,7 @@ package org.apache.spark.sql.connect.service
 import java.util.UUID
 
 import org.apache.spark.SparkSQLException
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class SparkConnectCloneSessionSuite extends SharedClassicSparkSession {
 

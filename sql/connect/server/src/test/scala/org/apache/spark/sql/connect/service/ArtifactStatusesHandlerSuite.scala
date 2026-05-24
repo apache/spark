@@ -28,7 +28,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.ArtifactStatusesResponse
 import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.connect.ResourceHelper
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.util.ThreadUtils
 
 private class DummyStreamObserver(p: Promise[ArtifactStatusesResponse])

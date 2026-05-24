@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.plans.AsOfJoinDirection
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 

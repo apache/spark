@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.{ThreadUtils, Utils}
 

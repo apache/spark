@@ -18,7 +18,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.pipelines.Language
 import org.apache.spark.sql.pipelines.utils.PipelineTest
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class SqlQueryOriginSuite extends PipelineTest with SharedClassicSparkSession {
   test("basic test") {

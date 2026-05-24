@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.functions.{col, lit, struct, when}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{ArrayType, DoubleType, StringType, StructField, StructType}
 
 class DataFrameStatSuite extends QueryTest with SharedClassicSparkSession {

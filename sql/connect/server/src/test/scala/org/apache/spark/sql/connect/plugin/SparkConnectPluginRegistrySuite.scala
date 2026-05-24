@@ -32,7 +32,7 @@ import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
 import org.apache.spark.sql.connect.service.SessionHolder
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class DummyPlugin extends RelationPlugin {
   override def transform(

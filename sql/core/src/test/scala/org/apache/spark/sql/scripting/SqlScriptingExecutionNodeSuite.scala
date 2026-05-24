@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{CreateVariable, LeafNode, OneRowRelation, Project, SetVariable}
 import org.apache.spark.sql.catalyst.trees.Origin
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /**

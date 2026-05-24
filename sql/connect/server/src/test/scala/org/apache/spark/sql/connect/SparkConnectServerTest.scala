@@ -37,7 +37,7 @@ import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.dsl.MockRemoteSession
 import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connect.service.{ExecuteHolder, SessionKey, SparkConnectService}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.util.CloseableIterator
 
 /**

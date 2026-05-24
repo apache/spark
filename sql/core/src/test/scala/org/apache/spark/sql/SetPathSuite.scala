@@ -21,7 +21,7 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{IntegerType, LongType}
 
 /**

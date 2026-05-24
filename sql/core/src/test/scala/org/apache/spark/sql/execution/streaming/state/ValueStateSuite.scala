@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{TimeMode, TTLConfig, ValueState}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types._
 
 /** A case class for SQL encoder test purpose */

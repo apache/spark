@@ -24,7 +24,7 @@ import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.streaming.StreamingQuery
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 class SinkExecutionSuite extends ExecutionTest with SharedClassicSparkSession {
   def createDataflowGraph(

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityB
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class RanColumnar extends RuntimeException

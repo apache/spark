@@ -28,7 +28,7 @@ import org.apache.spark.sql.pipelines.common.{FlowStatus, RunState}
 import org.apache.spark.sql.pipelines.graph.TriggeredGraphExecution.StreamState
 import org.apache.spark.sql.pipelines.logging.{EventLevel, FlowProgress}
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 class TriggeredGraphExecutionSuite extends ExecutionTest with SharedClassicSparkSession {

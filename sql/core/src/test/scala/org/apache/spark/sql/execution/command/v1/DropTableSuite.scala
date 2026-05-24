@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 /**
  * This base suite contains unified tests for the `DROP TABLE` command that check V1

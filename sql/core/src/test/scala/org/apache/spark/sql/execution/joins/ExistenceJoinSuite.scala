@@ -27,7 +27,7 @@ import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructType}
 
 class ExistenceJoinSuite extends SparkPlanTest with SharedClassicSparkSession {

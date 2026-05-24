@@ -20,7 +20,7 @@ import java.io.File
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.util.Utils
 
 class ArrowFileReadWriteSuite extends QueryTest with SharedClassicSparkSession {

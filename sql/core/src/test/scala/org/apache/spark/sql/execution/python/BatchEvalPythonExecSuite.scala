@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Great
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.{FilterExec, InputAdapter, SparkPlanTest, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{BooleanType, DoubleType}
 
 class BatchEvalPythonExecSuite extends SparkPlanTest

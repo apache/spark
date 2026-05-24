@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.execution.command
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 
 /**
  * The class contains tests for the `ALTER TABLE .. RENAME` command to check V2 table catalogs.

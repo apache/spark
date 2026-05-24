@@ -38,7 +38,7 @@ import org.apache.spark.SparkRuntimeException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{AddArtifactsRequest, AddArtifactsResponse}
 import org.apache.spark.sql.connect.ResourceHelper
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 class AddArtifactsHandlerSuite extends SharedClassicSparkSession with ResourceHelper {

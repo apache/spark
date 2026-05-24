@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.variant.ParseJson
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types._
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 

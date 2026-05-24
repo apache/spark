@@ -30,7 +30,7 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetTest, ParquetToSparkSchemaConverter, SparkShreddingUtils}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.VariantVal

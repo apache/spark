@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils

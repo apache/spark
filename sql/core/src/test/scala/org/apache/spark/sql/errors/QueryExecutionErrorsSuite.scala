@@ -53,7 +53,7 @@ import org.apache.spark.sql.internal.LegacyBehaviorPolicy.EXCEPTION
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType}
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH

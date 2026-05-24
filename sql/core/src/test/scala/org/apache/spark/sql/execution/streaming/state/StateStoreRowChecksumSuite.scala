@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 

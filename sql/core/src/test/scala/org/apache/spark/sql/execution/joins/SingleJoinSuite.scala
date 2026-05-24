@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, Project}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest}
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
-import org.apache.spark.sql.test.SharedClassicSparkSession
+import org.apache.spark.sql.test.classic.{SharedSparkSession => SharedClassicSparkSession}
 import org.apache.spark.sql.types.{DoubleType, IntegerType, StructType}
 
 class SingleJoinSuite extends SparkPlanTest with SharedClassicSparkSession {
