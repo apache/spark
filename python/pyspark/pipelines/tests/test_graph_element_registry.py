@@ -117,7 +117,9 @@ class GraphElementRegistryTest(unittest.TestCase):
         flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
         self.assertEqual(flow.target, "target")
         self.assertEqual(flow.source, "source")
-        self.assertIsNone(flow.name)
+        
+        # When name is not specified, it inherit's the target's name at construction time.
+        self.assertEqual(flow.name, "target")
         self.assertIsNone(flow.stored_as_scd_type)
         self.assertIsNone(flow.apply_as_deletes)
         assert flow.source_code_location.filename.endswith("test_graph_element_registry.py")
@@ -168,6 +170,7 @@ class GraphElementRegistryTest(unittest.TestCase):
     def test_create_auto_cdc_flow_stored_as_scd_type_string(self):
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
+            dp.create_streaming_table("t")
             dp.create_auto_cdc_flow(
                 target="t",
                 source="s",
@@ -182,6 +185,7 @@ class GraphElementRegistryTest(unittest.TestCase):
     def test_create_auto_cdc_flow_invalid_scd_type(self):
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
+            dp.create_streaming_table("t")
             with self.assertRaises(PySparkTypeError) as ctx:
                 dp.create_auto_cdc_flow(
                     target="t",
@@ -189,6 +193,50 @@ class GraphElementRegistryTest(unittest.TestCase):
                     keys=[col("k")],
                     sequence_by=expr("seq"),
                     stored_as_scd_type=2,  # type: ignore[arg-type]
+                )
+            self.assertEqual(ctx.exception.getCondition(), "NOT_EXPECTED_TYPE")
+
+    def test_create_auto_cdc_flow_with_except_column_list(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            dp.create_auto_cdc_flow(
+                target="tgt",
+                source="src",
+                keys=[col("id")],
+                sequence_by=expr("ts"),
+                except_column_list=["op", "ts"],
+            )
+
+        flow = cast(AutoCdcFlow, registry.auto_cdc_flows[0])
+        self.assertIsNone(flow.column_list)
+        assert flow.except_column_list is not None
+        self.assertEqual(len(flow.except_column_list), 2)
+        for c in flow.except_column_list:
+            self.assertIsInstance(c, Column)
+
+    def test_create_auto_cdc_flow_rejects_non_str_target(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            with self.assertRaises(PySparkTypeError) as ctx:
+                dp.create_auto_cdc_flow(
+                    target=123,  # type: ignore[arg-type]
+                    source="src",
+                    keys=[col("id")],
+                    sequence_by=expr("ts"),
+                )
+            self.assertEqual(ctx.exception.getCondition(), "NOT_EXPECTED_TYPE")
+
+    def test_create_auto_cdc_flow_rejects_invalid_key_element(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            with self.assertRaises(PySparkTypeError) as ctx:
+                dp.create_auto_cdc_flow(
+                    target="tgt",
+                    source="src",
+                    keys=[123],  # type: ignore[list-item]
+                    sequence_by=expr("ts"),
                 )
             self.assertEqual(ctx.exception.getCondition(), "NOT_EXPECTED_TYPE")
 

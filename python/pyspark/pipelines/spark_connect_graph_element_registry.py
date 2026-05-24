@@ -156,13 +156,12 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
 
         inner_command = pb2.PipelineCommand.DefineFlow(
             dataflow_graph_id=self._dataflow_graph_id,
+            flow_name=flow.name,
             target_dataset_name=flow.target,
             auto_cdc_flow_details=auto_cdc_details,
             sql_conf={},
             source_code_location=source_code_location_to_proto(flow.source_code_location),
         )
-        if flow.name is not None:
-            inner_command.flow_name = flow.name
 
         command = pb2.Command()
         command.pipeline_command.define_flow.CopyFrom(inner_command)

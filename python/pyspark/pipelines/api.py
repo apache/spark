@@ -30,7 +30,7 @@ from pyspark.pipelines.output import (
     Sink,
 )
 from pyspark.sql import Column
-from pyspark.sql import functions as F
+from pyspark.sql.connect.functions.builtin import col as _connect_col, expr as _connect_expr
 from pyspark.sql.types import StructType
 
 
@@ -547,11 +547,11 @@ def create_auto_cdc_flow(
 
     Example:
     create_auto_cdc_flow(
-      target = "target",
-      source = "source",
-      keys = ["key"],
-      sequence_by = "sequence_expr",
-      column_list = ["key", "value"],
+      target="target",
+      source="source",
+      keys=["key"],
+      sequence_by="sequence_expr",
+      column_list=["key", "value"],
     )
 
     Note that for keys, sequence_by, column_list, and except_column_list the arguments have to
@@ -566,7 +566,7 @@ def create_auto_cdc_flow(
         the existing record. At least one key must be provided. This should be a list of column \
         identifiers without qualifiers, expressed as either Python strings or PySpark Columns.
     :param sequence_by: An expression that we use to order the source data. This can be expressed \
-        as either a Python string or PySpark Expression.
+        as either a SQL expression string or a PySpark Column.
     :param apply_as_deletes: Delete condition for the merged operation. This should be a string of \
         expression e.g. "operation = 'DELETE'"
     :param column_list: Columns that will be included in the output table. This should be a list \
@@ -582,16 +582,68 @@ def create_auto_cdc_flow(
     :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified this \
            will build a "default flow" with name equal to the target name.
     """
-    keys = _normalize_column_list(keys)
+    if type(target) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "target",
+                "expected_type": "str",
+                "arg_type": type(target).__name__,
+            },
+        )
+    if type(source) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "source",
+                "expected_type": "str",
+                "arg_type": type(source).__name__,
+            },
+        )
+    if name is not None and type(name) is not str:
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "name",
+                "expected_type": "str",
+                "arg_type": type(name).__name__,
+            },
+        )
+    
+    if name is None:
+        name = target
 
-    column_list = _normalize_optional_column_list(column_list)
-    except_column_list = _normalize_optional_column_list(except_column_list)
+    keys = _normalize_column_list(arg_name="keys", column_list=keys)
+    column_list = _normalize_optional_column_list(
+        arg_name="column_list", column_list=column_list
+    )
+    except_column_list = _normalize_optional_column_list(
+        arg_name="except_column_list", column_list=except_column_list
+    )
 
     if isinstance(sequence_by, str):
-        sequence_by = F.expr(sequence_by)
+        sequence_by = _connect_expr(sequence_by)
+    elif not isinstance(sequence_by, Column):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "sequence_by",
+                "expected_type": "str or Column",
+                "arg_type": type(sequence_by).__name__,
+            },
+        )
 
     if isinstance(apply_as_deletes, str):
-        apply_as_deletes = F.expr(apply_as_deletes)
+        apply_as_deletes = _connect_expr(apply_as_deletes)
+    elif apply_as_deletes is not None and not isinstance(apply_as_deletes, Column):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": "apply_as_deletes",
+                "expected_type": "str or Column",
+                "arg_type": type(apply_as_deletes).__name__,
+            },
+        )
 
     if stored_as_scd_type is not None and str(stored_as_scd_type) != "1":
         raise PySparkTypeError(
@@ -622,14 +674,43 @@ def create_auto_cdc_flow(
 
 
 def _normalize_optional_column_list(
+    arg_name: str,
     column_list: Optional[Union[List[str], List[Column]]],
 ) -> Optional[List[Column]]:
     if column_list is None:
         return None
-    return _normalize_column_list(column_list)
+    return _normalize_column_list(arg_name=arg_name, column_list=column_list)
 
 
 def _normalize_column_list(
+    arg_name: str,
     column_list: Union[List[str], List[Column]],
 ) -> List[Column]:
-    return [F.col(c) if isinstance(c, str) else c for c in column_list]
+    if not isinstance(column_list, list):
+        raise PySparkTypeError(
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "arg_name": arg_name,
+                "expected_type": "list[str] or list[Column]",
+                "arg_type": type(column_list).__name__,
+            },
+        )
+    
+    normalized: List[Column] = []
+    
+    for column in column_list:
+        if isinstance(column, str):
+            normalized.append(_connect_col(column))
+        elif isinstance(column, Column):
+            normalized.append(column)
+        else:
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": arg_name,
+                    "expected_type": "list[str] or list[Column]",
+                    "arg_type": type(column).__name__,
+                },
+            )
+    
+    return normalized
