@@ -868,10 +868,24 @@ abstract class JdbcDialect extends Serializable with Logging {
    */
   def supportsOffset: Boolean = false
 
+  @deprecated("Use compileTableSample instead", "4.2.0")
   def supportsTableSample: Boolean = false
 
+  @deprecated("Use compileTableSample instead", "4.2.0")
   def getTableSample(sample: TableSampleInfo): String =
     throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3183")
+
+  /**
+   * Compile a [[TableSampleInfo]] into a SQL TABLESAMPLE clause, or return [[None]] if the
+   * dialect cannot represent the requested sampling semantics (e.g. sampling with replacement).
+   *
+   * The default implementation delegates to [[getTableSample]] when [[supportsTableSample]] is
+   * true, and returns [[None]] otherwise.
+   */
+  @Since("4.2.0")
+  def compileTableSample(sample: TableSampleInfo): Option[String] = {
+    if (supportsTableSample) Some(getTableSample(sample)) else None
+  }
 
   def supportsHint: Boolean = false
 

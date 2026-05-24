@@ -20,7 +20,6 @@ package org.apache.spark.sql.jdbc
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition}
-import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 
 /**
  * The builder to build a single SELECT query.
@@ -170,10 +169,10 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   }
 
   /**
-   * Constructs the table sample clause that following dialect's SQL syntax.
+   * Sets a pre-compiled table sample clause directly.
    */
-  def withTableSample(sample: TableSampleInfo): JdbcSQLQueryBuilder = {
-    tableSampleClause = dialect.getTableSample(sample)
+  def withTableSampleClause(clause: String): JdbcSQLQueryBuilder = {
+    tableSampleClause = clause
 
     this
   }
