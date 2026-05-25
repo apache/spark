@@ -409,9 +409,9 @@ trait QueryTestBase
           spark.table(tableName),
           cascade = cascade,
           blocking = true)
-      case spark =>
-        // TODO i guess this doesn't block?!
-        spark.sql(s"UNCACHE TABLE $tableName")
+      case _ =>
+        throw new UnsupportedOperationException(
+          "uncacheTable with blocking semantics is not supported on Connect")
     }
   }
 
@@ -516,10 +516,15 @@ trait QueryTestBase
    * FileSystem is changed.
    */
   def makeQualifiedPath(path: String): URI = {
-    val hadoopPath = new Path(path)
-    val fs = hadoopPath.getFileSystem(
-      spark.asInstanceOf[classic.SparkSession].sessionState.newHadoopConf())
-    fs.makeQualified(hadoopPath).toUri
+    spark match {
+      case spark: classic.SparkSession =>
+        val hadoopPath = new Path(path)
+        val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
+        fs.makeQualified(hadoopPath).toUri
+      case _ =>
+        throw new UnsupportedOperationException(
+          "makeQualifiedPath is not supported on Connect")
+    }
   }
 
   /**
@@ -657,6 +662,9 @@ trait QueryTestBase
           assert(spark.sparkContext.statusTracker
             .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
         }
+      case _ =>
+        throw new UnsupportedOperationException(
+          "waitForTasksToFinish is not supported on Connect")
     }
   }
 
