@@ -828,8 +828,8 @@ abstract class Dataset[T] extends Serializable {
    * projection-only operations (`select`, `withColumn`, `withColumnRenamed`, etc.); the chains
    * may differ between the two sides, but anything below them -- including any `filter`,
    * `orderBy`, `join`, or aggregation -- must be identical on both sides so the two sides stay
-   * row-aligned. Non-scalar Python UDFs (e.g., `GROUPED_MAP`) are not allowed on either side.
-   * An `AnalysisException` is thrown when the two DataFrames cannot be aligned.
+   * row-aligned. Non-scalar Python UDFs (e.g., `GROUPED_MAP`) are not allowed on either side. An
+   * `AnalysisException` is thrown when the two DataFrames cannot be aligned.
    *
    * @param other
    *   The DataFrame to combine with, which must derive from the same source as this DataFrame.
