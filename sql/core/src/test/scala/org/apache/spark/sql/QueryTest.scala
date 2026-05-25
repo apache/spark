@@ -282,6 +282,11 @@ trait QueryTestBase
    * Note that the alternative of importing `spark.implicits._` is not possible here.
    * This is because we create the `SparkSession` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
+   *
+   * IMPORTANT: This is a classic-only escape hatch retained for compatibility with ~434
+   * existing callers. The `converter` accesses classic-only internals and will throw
+   * `UnsupportedOperationException` if triggered from a Connect session. Classic-only test
+   * suites should prefer `classicTestImplicits` (defined in `classic.QueryTest`).
    */
   protected object testImplicits
     extends SQLImplicits
@@ -289,7 +294,13 @@ trait QueryTestBase
       with classic.ColumnConversions {
     override protected def session: SparkSession = self.spark
     override protected def converter: classic.ColumnNodeToExpressionConverter =
-      self.spark.asInstanceOf[classic.SparkSession].converter
+      self.spark match {
+        case spark: classic.SparkSession => spark.converter
+        case _ =>
+          throw new UnsupportedOperationException(
+            "testImplicits.converter is not supported on Connect. " +
+            "Use classicTestImplicits in classic.QueryTest instead.")
+      }
   }
 
   protected override def withSQLConf[T](pairs: (String, String)*)(f: => T): T = {
