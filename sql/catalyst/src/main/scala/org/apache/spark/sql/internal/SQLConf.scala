@@ -2352,6 +2352,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val NEAREST_BY_BROADCAST_ENABLED =
+    buildConf("spark.sql.join.nearestBy.broadcast.enabled")
+      .internal()
+      .doc("When true, NearestByJoin uses a streaming heap operator instead of the " +
+        "cross-product + aggregate rewrite.")
+      .version("5.0.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ORDER_BY_ORDINAL = buildConf("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
          "When false, the ordinal numbers in order/sort by clause are ignored.")
@@ -8252,6 +8261,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def dropTableOnView: Boolean = getConf(DROP_TABLE_VIEW_ENABLED)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
+
+  def nearestByBroadcastEnabled: Boolean =
+    getConf(SQLConf.NEAREST_BY_BROADCAST_ENABLED)
 
   override def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
