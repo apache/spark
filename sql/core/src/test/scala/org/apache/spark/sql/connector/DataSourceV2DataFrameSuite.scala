@@ -89,7 +89,7 @@ class DataSourceV2DataFrameSuite
   }
 
   // DSv2ExternalMutationTestBase implementations for classic mode
-  override protected def testPrefix: String = "[classic] "
+  override protected def testPrefix: String = ""
 
   override protected def withTestSession(fn: SparkSession => Unit): Unit = fn(spark)
 
@@ -99,7 +99,12 @@ class DataSourceV2DataFrameSuite
   override protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
       catalogName: String): C = {
-    catalog(catalogName).asInstanceOf[C]
+    val c = catalog(catalogName)
+    val ct = implicitly[ClassTag[C]]
+    require(
+      ct.runtimeClass.isInstance(c),
+      s"Expected ${ct.runtimeClass.getName} but got ${c.getClass.getName}")
+    c.asInstanceOf[C]
   }
 
   override protected def withTestTableAndViews(
