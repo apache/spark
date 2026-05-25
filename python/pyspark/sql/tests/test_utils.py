@@ -37,7 +37,7 @@ from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
 )
-from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.sqlutils import ReusedSQLTestCase, with_class_conf
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
@@ -1874,6 +1874,18 @@ class UtilsTestsMixin:
 
 class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):
     pass
+
+
+@with_class_conf(
+    {
+        "spark.sql.test.with_class_conf.key1": "v1",
+        "spark.sql.test.with_class_conf.key2": "v2",
+    }
+)
+class WithClassConfTests(ReusedSQLTestCase):
+    def test_confs_applied(self):
+        self.assertEqual(self.spark.conf.get("spark.sql.test.with_class_conf.key1"), "v1")
+        self.assertEqual(self.spark.conf.get("spark.sql.test.with_class_conf.key2"), "v2")
 
 
 if __name__ == "__main__":
