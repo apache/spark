@@ -516,6 +516,29 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     left.crossJoin(right)
   }
 
+  test("nearestByJoin inner_approx_similarity") {
+    left
+      .as("l")
+      .nearestByJoin(
+        right = right.as("r"),
+        rankingExpression = fn.col("l.a") + fn.col("r.a"),
+        numResults = 1,
+        mode = "approx",
+        direction = "similarity")
+  }
+
+  test("nearestByJoin leftouter_exact_distance") {
+    left
+      .as("l")
+      .nearestByJoin(
+        right = right.as("r"),
+        rankingExpression = fn.col("l.a") + fn.col("r.a"),
+        numResults = 5,
+        mode = "exact",
+        direction = "distance",
+        joinType = "leftouter")
+  }
+
   test("sortWithinPartitions strings") {
     simple.sortWithinPartitions("a", "id")
   }

@@ -26,9 +26,7 @@ libraries:
 """
 
 PYTHON_EXAMPLE = """from pyspark import pipelines as dp
-from pyspark.sql import DataFrame, SparkSession
-
-spark = SparkSession.active()
+from pyspark.sql import DataFrame
 
 @dp.materialized_view
 def example_python_materialized_view() -> DataFrame:

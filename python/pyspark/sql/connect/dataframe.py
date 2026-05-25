@@ -726,6 +726,30 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
+    def nearestByJoin(
+        self,
+        other: ParentDataFrame,
+        rankingExpression: Column,
+        numResults: int,
+        mode: str,
+        direction: str,
+        *,
+        joinType: str = "inner",
+    ) -> ParentDataFrame:
+        other = self._check_same_session(other)
+        return DataFrame(
+            plan.NearestByJoin(
+                left=self._plan,
+                right=other._plan,
+                ranking_expression=rankingExpression,
+                num_results=int(numResults),
+                join_type=joinType,
+                mode=mode,
+                direction=direction,
+            ),
+            session=self._session,
+        )
+
     def _joinAsOf(
         self,
         other: ParentDataFrame,

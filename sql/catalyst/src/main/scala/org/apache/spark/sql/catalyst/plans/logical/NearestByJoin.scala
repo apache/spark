@@ -18,12 +18,12 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, NearestByDirection}
+import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, NearestByDirection, NearestByJoinValidation}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 
 object NearestByJoin {
-  /** Upper bound on `numResults`. Mirrors the K-overload limit of `MaxMinByK`. */
-  val MaxNumResults: Int = 100000
+  /** @see [[NearestByJoinValidation.MaxNumResults]] */
+  val MaxNumResults: Int = NearestByJoinValidation.MaxNumResults
 }
 
 /**

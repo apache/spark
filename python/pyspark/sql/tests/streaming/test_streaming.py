@@ -667,6 +667,26 @@ class StreamingTestsMixin:
         result = self.spark.sql("SELECT * FROM test_streaming_drop_duplicates_within_wm").collect()
         self.assertTrue(len(result) >= 6 and len(result) <= 9)
 
+    def test_stream_reader_option_none_chains_safely(self):
+        df = (
+            self.spark.readStream.format("rate")
+            .option("rowsPerSecond", None)
+            .options(numPartitions=None)
+            .option("rowsPerSecond", "5")
+            .load()
+        )
+        self.assertIsNotNone(df.schema)
+
+    def test_stream_writer_option_none_chains_safely(self):
+        df = self.spark.readStream.format("rate").option("rowsPerSecond", "5").load()
+        writer = (
+            df.writeStream.format("memory")
+            .queryName("opt_none_test")
+            .option("checkpointLocation", None)
+            .options(checkpointLocation=None)
+        )
+        self.assertIsNotNone(writer)
+
 
 class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):
     def _assert_exception_tree_contains_msg(self, exception, msg):

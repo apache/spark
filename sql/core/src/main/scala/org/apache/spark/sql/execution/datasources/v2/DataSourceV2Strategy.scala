@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.EXPR
-import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, ResolvedIdentifier, ResolvedNamespace, ResolvedPartitionSpec, ResolvedPersistentView, ResolvedTable, ResolvedTempView}
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, Not, Or, PredicateHelper, SubqueryExpression}
@@ -41,14 +41,15 @@ import org.apache.spark.sql.connector.expressions.{FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{And => V2And, Not => V2Not, Or => V2Or, Predicate}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream, SupportsRealTimeMode}
-import org.apache.spark.sql.connector.write.V1Write
+import org.apache.spark.sql.connector.write.{V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
-import org.apache.spark.sql.execution.command.{CommandUtils, CreateMetricViewCommand, MetricViewHelper}
+import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
@@ -326,8 +327,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // CREATE VIEW ... WITH METRICS on a non-session v2 catalog. Routes the metric-view path
     // through `CreateV2MetricViewExec`, which extends `V2ViewPreparation` to share the
     // `IF NOT EXISTS` short-circuit, `OR REPLACE`, and cross-type-collision decoding with
-    // `CreateV2ViewExec`. Session-catalog dispatch stays in `CreateMetricViewCommand.run`.
-    case CreateMetricViewCommand(
+    // `CreateV2ViewExec`. Session-catalog dispatch happens earlier in `ResolveSessionCatalog`,
+    // which rewrites `CreateMetricView` (the parser's v1/v2-agnostic logical plan) to
+    // `CreateMetricViewCommand` for v1 execution.
+    case CreateMetricView(
         ResolvedIdentifier(catalog, ident), userSpecifiedColumns, comment, properties,
         originalText, allowExisting, replace) if !CatalogV2Util.isSessionCatalog(catalog) =>
       val viewCatalog = catalog match {
@@ -491,8 +494,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
             invalidateCache) :: Nil
       }
 
-    case AppendData(r @ ExtractV2Table(v1: SupportsWrite), _, _,
-        _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
+    case AppendWrite(r @ ExtractV2Table(v1: SupportsWrite), Some(write), analyzedQuery)
+        if v1.supports(TableCapability.V1_BATCH_WRITE) =>
       write match {
         case v1Write: V1Write =>
           assert(analyzedQuery.isDefined)
@@ -504,6 +507,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case AppendData(r: DataSourceV2Relation, query, _, _, _, Some(write), _) =>
       AppendDataExec(planLater(query), refreshCache(r), write, r.name) :: Nil
+
+    case InsertOnlyMerge(r: DataSourceV2Relation, query, Some(write), _) =>
+      InsertOnlyMergeExec(planLater(query), refreshCache(r), write, r.name) :: Nil
 
     case OverwriteByExpression(r @ ExtractV2Table(v1: SupportsWrite), _, _,
         _, _, _, Some(write), analyzedQuery) if v1.supports(TableCapability.V1_BATCH_WRITE) =>
@@ -775,7 +781,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case r: CacheTableAsSelect =>
       CacheTableAsSelectExec(
-        r.tempViewName, r.plan, r.originalText, r.isLazy, r.options, r.referredTempFunctions) :: Nil
+        r.tempViewNameString, r.plan, r.originalText, r.isLazy, r.options,
+        r.referredTempFunctions) :: Nil
 
     case r: UncacheTable =>
       def isTempView(table: LogicalPlan): Boolean = table match {
@@ -840,6 +847,20 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ExplainOnlySparkPlan(c) :: Nil
 
     case _ => Nil
+  }
+}
+
+/**
+ * Pattern that matches either an [[AppendData]] or an [[InsertOnlyMerge]] and exposes the
+ * fields needed to plan the v1 batch-write fallback path.
+ */
+private object AppendWrite {
+  def unapply(
+      plan: LogicalPlan
+  ): Option[(NamedRelation, Option[Write], Option[LogicalPlan])] = plan match {
+    case a: AppendData => Some((a.table, a.write, a.analyzedQuery))
+    case m: InsertOnlyMerge => Some((m.table, m.write, m.analyzedQuery))
+    case _ => None
   }
 }
 

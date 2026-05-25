@@ -7,7 +7,7 @@ TakeOrderedAndProject (34)
             +- * HashAggregate (29)
                +- Exchange (28)
                   +- * HashAggregate (27)
-                     +- Union (26)
+                     +- * Union (26)
                         :- * HashAggregate (15)
                         :  +- Exchange (14)
                         :     +- * HashAggregate (13)
@@ -102,7 +102,7 @@ Results [3]: [i_category#8, i_class#7, sum#10]
 Input [3]: [i_category#8, i_class#7, sum#10]
 Arguments: hashpartitioning(i_category#8, i_class#7, 5), ENSURE_REQUIREMENTS, [plan_id=2]
 
-(15) HashAggregate [codegen id : 4]
+(15) HashAggregate [codegen id : 12]
 Input [3]: [i_category#8, i_class#7, sum#10]
 Keys [2]: [i_category#8, i_class#7]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#2))]
@@ -112,14 +112,14 @@ Results [6]: [cast(MakeDecimal(sum(UnscaledValue(ws_net_paid#2))#11,17,2) as dec
 (16) ReusedExchange [Reuses operator id: 14]
 Output [3]: [i_category#16, i_class#17, sum#18]
 
-(17) HashAggregate [codegen id : 8]
+(17) HashAggregate [codegen id : 7]
 Input [3]: [i_category#16, i_class#17, sum#18]
 Keys [2]: [i_category#16, i_class#17]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#19))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#19))#11]
 Results [2]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#19))#11,17,2) AS total_sum#20, i_category#16]
 
-(18) HashAggregate [codegen id : 8]
+(18) HashAggregate [codegen id : 7]
 Input [2]: [total_sum#20, i_category#16]
 Keys [1]: [i_category#16]
 Functions [1]: [partial_sum(total_sum#20)]
@@ -130,7 +130,7 @@ Results [3]: [i_category#16, sum#23, isEmpty#24]
 Input [3]: [i_category#16, sum#23, isEmpty#24]
 Arguments: hashpartitioning(i_category#16, 5), ENSURE_REQUIREMENTS, [plan_id=3]
 
-(20) HashAggregate [codegen id : 9]
+(20) HashAggregate
 Input [3]: [i_category#16, sum#23, isEmpty#24]
 Keys [1]: [i_category#16]
 Functions [1]: [sum(total_sum#20)]
@@ -140,14 +140,14 @@ Results [6]: [sum(total_sum#20)#25 AS total_sum#26, i_category#16, null AS i_cla
 (21) ReusedExchange [Reuses operator id: 14]
 Output [3]: [i_category#31, i_class#32, sum#33]
 
-(22) HashAggregate [codegen id : 13]
+(22) HashAggregate [codegen id : 11]
 Input [3]: [i_category#31, i_class#32, sum#33]
 Keys [2]: [i_category#31, i_class#32]
 Functions [1]: [sum(UnscaledValue(ws_net_paid#34))]
 Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#34))#11]
 Results [1]: [MakeDecimal(sum(UnscaledValue(ws_net_paid#34))#11,17,2) AS total_sum#35]
 
-(23) HashAggregate [codegen id : 13]
+(23) HashAggregate [codegen id : 11]
 Input [1]: [total_sum#35]
 Keys: []
 Functions [1]: [partial_sum(total_sum#35)]
@@ -158,16 +158,16 @@ Results [2]: [sum#38, isEmpty#39]
 Input [2]: [sum#38, isEmpty#39]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=4]
 
-(25) HashAggregate [codegen id : 14]
+(25) HashAggregate
 Input [2]: [sum#38, isEmpty#39]
 Keys: []
 Functions [1]: [sum(total_sum#35)]
 Aggregate Attributes [1]: [sum(total_sum#35)#40]
 Results [6]: [sum(total_sum#35)#40 AS total_sum#41, null AS i_category#42, null AS i_class#43, 1 AS g_category#44, 1 AS g_class#45, 2 AS lochierarchy#46]
 
-(26) Union
+(26) Union [codegen id : 12]
 
-(27) HashAggregate [codegen id : 15]
+(27) HashAggregate [codegen id : 12]
 Input [6]: [total_sum#12, i_category#8, i_class#7, g_category#13, g_class#14, lochierarchy#15]
 Keys [6]: [total_sum#12, i_category#8, i_class#7, g_category#13, g_class#14, lochierarchy#15]
 Functions: []
@@ -178,7 +178,7 @@ Results [6]: [total_sum#12, i_category#8, i_class#7, g_category#13, g_class#14, 
 Input [6]: [total_sum#12, i_category#8, i_class#7, g_category#13, g_class#14, lochierarchy#15]
 Arguments: hashpartitioning(total_sum#12, i_category#8, i_class#7, g_category#13, g_class#14, lochierarchy#15, 5), ENSURE_REQUIREMENTS, [plan_id=5]
 
-(29) HashAggregate [codegen id : 16]
+(29) HashAggregate [codegen id : 13]
 Input [6]: [total_sum#12, i_category#8, i_class#7, g_category#13, g_class#14, lochierarchy#15]
 Keys [6]: [total_sum#12, i_category#8, i_class#7, g_category#13, g_class#14, lochierarchy#15]
 Functions: []
@@ -189,7 +189,7 @@ Results [5]: [total_sum#12, i_category#8, i_class#7, lochierarchy#15, CASE WHEN 
 Input [5]: [total_sum#12, i_category#8, i_class#7, lochierarchy#15, _w0#47]
 Arguments: hashpartitioning(lochierarchy#15, _w0#47, 5), ENSURE_REQUIREMENTS, [plan_id=6]
 
-(31) Sort [codegen id : 17]
+(31) Sort [codegen id : 14]
 Input [5]: [total_sum#12, i_category#8, i_class#7, lochierarchy#15, _w0#47]
 Arguments: [lochierarchy#15 ASC NULLS FIRST, _w0#47 ASC NULLS FIRST, total_sum#12 DESC NULLS LAST], false, 0
 
@@ -197,7 +197,7 @@ Arguments: [lochierarchy#15 ASC NULLS FIRST, _w0#47 ASC NULLS FIRST, total_sum#1
 Input [5]: [total_sum#12, i_category#8, i_class#7, lochierarchy#15, _w0#47]
 Arguments: [rank(total_sum#12) windowspecdefinition(lochierarchy#15, _w0#47, total_sum#12 DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rank_within_parent#48], [lochierarchy#15, _w0#47], [total_sum#12 DESC NULLS LAST]
 
-(33) Project [codegen id : 18]
+(33) Project [codegen id : 15]
 Output [5]: [total_sum#12, i_category#8, i_class#7, lochierarchy#15, rank_within_parent#48]
 Input [6]: [total_sum#12, i_category#8, i_class#7, lochierarchy#15, _w0#47, rank_within_parent#48]
 

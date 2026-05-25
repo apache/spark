@@ -43,7 +43,7 @@ import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
-import org.apache.spark.sql.catalyst.analysis.{ChangelogInfoUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, FunctionRegistry, GlobalTempView, LocalTempView, MultiAlias, RelationChanges, UnresolvedAlias, UnresolvedAttribute, UnresolvedDataFrameStar, UnresolvedDeserializer, UnresolvedExtractValue, UnresolvedFunction, UnresolvedOrdinal, UnresolvedPlanId, UnresolvedRegex, UnresolvedRelation, UnresolvedStar, UnresolvedStarWithColumns, UnresolvedStarWithColumnsRenames, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction, UnresolvedTranspose}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, AgnosticEncoder, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ProductEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.catalyst.expressions._
@@ -159,6 +159,8 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.JOIN => transformJoinOrJoinWith(rel.getJoin)
         case proto.Relation.RelTypeCase.AS_OF_JOIN => transformAsOfJoin(rel.getAsOfJoin)
         case proto.Relation.RelTypeCase.LATERAL_JOIN => transformLateralJoin(rel.getLateralJoin)
+        case proto.Relation.RelTypeCase.NEAREST_BY_JOIN =>
+          transformNearestByJoin(rel.getNearestByJoin)
         case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
         case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
         case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
@@ -1739,10 +1741,10 @@ class SparkConnectPlanner(
     val tableName = rel.getUnparsedIdentifier
     val options = new CaseInsensitiveStringMap(rel.getOptionsMap)
     val timeZone = session.sessionState.conf.sessionLocalTimeZone
-    val changelogInfo = ChangelogInfoUtils.fromOptions(options, timeZone)
+    val ctx = ChangelogContextUtils.fromOptions(options, timeZone)
     val ident = parser.parseMultipartIdentifier(tableName)
     val relation = UnresolvedRelation(ident, options, isStreaming = rel.getIsStreaming)
-    RelationChanges(relation, changelogInfo)
+    RelationChanges(relation, ctx)
   }
 
   private def transformParse(rel: proto.Parse): LogicalPlan = {
@@ -2565,6 +2567,28 @@ class SparkConnectPlanner(
       right = LateralSubquery(transformRelation(rel.getRight)),
       joinType = joinType,
       condition = joinCondition)
+  }
+
+  private def transformNearestByJoin(rel: proto.NearestByJoin): LogicalPlan = {
+    assertPlan(rel.hasLeft && rel.hasRight, "Both join sides must be present")
+    assertPlan(rel.hasRankingExpression, "Ranking expression must be present")
+    // proto3 string fields default to "" when not set; reject the empty case explicitly so the
+    // user sees a "must be set" error instead of a misleading "unsupported value" error.
+    assertPlan(rel.getJoinType.nonEmpty, "NearestByJoin.join_type must be set")
+    assertPlan(rel.getMode.nonEmpty, "NearestByJoin.mode must be set")
+    assertPlan(rel.getDirection.nonEmpty, "NearestByJoin.direction must be set")
+    val left = Dataset.ofRows(session, transformRelation(rel.getLeft))
+    val right = Dataset.ofRows(session, transformRelation(rel.getRight))
+    val rankingExpression = Column(transformExpression(rel.getRankingExpression))
+    left
+      .nearestByJoin(
+        right,
+        rankingExpression,
+        rel.getNumResults,
+        rel.getMode,
+        rel.getDirection,
+        rel.getJoinType)
+      .logicalPlan
   }
 
   private def transformSort(sort: proto.Sort): LogicalPlan = {

@@ -588,6 +588,47 @@ class CatalogTestsMixin:
             spark.sql(f"INSERT INTO {t} VALUES (1)")
             spark.catalog.analyzeTable(t, noScan=True)
 
+    def test_path_current_path_disabled(self):
+        # current_path() is a regular builtin and resolves even when
+        # spark.sql.path.enabled is false. The DataFrame and SQL surfaces must agree.
+        from pyspark.sql.functions import current_path
+
+        spark = self.spark
+        with self.sql_conf({"spark.sql.path.enabled": False}):
+            sql_form = spark.sql("SELECT current_path()").collect()[0][0]
+            self.assertIsInstance(sql_form, str)
+            self.assertNotEqual(sql_form, "")
+            api_form = spark.range(1).select(current_path()).collect()[0][0]
+            self.assertEqual(sql_form, api_form)
+
+    def test_path_set_path_and_current_path(self):
+        # SET PATH is parsed and applied; current_path() reflects it
+        # over both the SQL and DataFrame surfaces. Restores DEFAULT_PATH on exit.
+        from pyspark.sql.functions import current_path
+
+        spark = self.spark
+        with self.sql_conf({"spark.sql.path.enabled": True}):
+            try:
+                spark.sql("SET PATH = spark_catalog.default, system.builtin")
+                sql_form = spark.sql("SELECT current_path()").collect()[0][0]
+                self.assertEqual(sql_form, "spark_catalog.default,system.builtin")
+                api_form = spark.range(1).select(current_path()).collect()[0][0]
+                self.assertEqual(sql_form, api_form)
+            finally:
+                spark.sql("SET PATH = DEFAULT_PATH")
+
+    def test_path_set_path_rejected_when_disabled(self):
+        # SET PATH must raise UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED
+        # when the feature flag is off (covers both classic and Connect error paths).
+        spark = self.spark
+        with self.sql_conf({"spark.sql.path.enabled": False}):
+            with self.assertRaises(AnalysisException) as ctx:
+                spark.sql("SET PATH = spark_catalog.default")
+            self.assertEqual(
+                ctx.exception.getCondition(),
+                "UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED",
+            )
+
 
 class CatalogTests(CatalogTestsMixin, ReusedSQLTestCase):
     pass

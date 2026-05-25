@@ -59,18 +59,34 @@ trait UnresolvedUnaryNode extends UnaryNode with UnresolvedNode
 /**
  * A logical plan placeholder that holds the identifier clause string expression. It will be
  * replaced by the actual logical plan with the evaluated identifier string.
+ *
+ * Extends `NamedRelation` so it can occupy a `NamedRelation`-typed slot (e.g.
+ * `OverwriteByExpression.table`) directly at parse time, instead of wrapping the whole command.
+ *
+ * The parser always places this node inside the command's identifier slot (a child slot for
+ * DELETE/UPDATE/MERGE/CTAS/RTAS, or a non-child slot for `InsertIntoStatement.table` and
+ * `OverwriteByExpression.table` -- handled via explicit cases in `ResolveIdentifierClause` and
+ * `BindParameters`). It is never the substitution root of a `WITH ... <command>` subtree, so
+ * `CTEInChildren` semantics are not needed: any surrounding `WithCTE` produced by
+ * `CTESubstitution` targets the inner command directly.
  */
 case class PlanWithUnresolvedIdentifier(
     identifierExpr: Expression,
     children: Seq[LogicalPlan],
     planBuilder: (Seq[String], Seq[LogicalPlan]) => LogicalPlan)
-  extends UnresolvedNode {
+  extends UnresolvedNode with NamedRelation {
 
   def this(identifierExpr: Expression, planBuilder: Seq[String] => LogicalPlan) = {
     this(identifierExpr, Nil, (ident, _) => planBuilder(ident))
   }
 
   final override val nodePatterns: Seq[TreePattern] = Seq(PLAN_WITH_UNRESOLVED_IDENTIFIER)
+
+  // Placeholder name used by error paths that render `NamedRelation.name` for an unresolved
+  // table reference -- e.g. `SparkStrategies.extractTableNameForError` and the `r: NamedRelation`
+  // fallback in `QueryCompilationErrors`. Renders as the SQL text of the identifier expression
+  // (e.g. `IDENTIFIER(:p)` or `concat('a', 'b')`) so error messages remain informative.
+  override def name: String = identifierExpr.sql
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan =

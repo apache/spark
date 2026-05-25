@@ -49,7 +49,6 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNodeTag, TreePattern}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -764,6 +763,66 @@ class Dataset[T] private[sql](
     lateralJoin(right, Some(joinExprs), LateralJoinType(joinType))
   }
 
+  private[sql] def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      joinType: JoinType,
+      approx: Boolean,
+      direction: NearestByDirection): DataFrame = {
+    if (numResults < 1 || numResults > NearestByJoin.MaxNumResults) {
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.NUM_RESULTS_OUT_OF_RANGE",
+        messageParameters = Map(
+          "numResults" -> numResults.toString,
+          "min" -> "1",
+          "max" -> NearestByJoin.MaxNumResults.toString))
+    }
+    withPlan {
+      NearestByJoin(
+        logicalPlan,
+        right.logicalPlan,
+        joinType,
+        approx,
+        numResults,
+        rankingExpression.expr,
+        direction)
+    }
+  }
+
+  /** @inheritdoc */
+  def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String): DataFrame = {
+    nearestByJoin(
+      right,
+      rankingExpression,
+      numResults,
+      Inner,
+      NearestByJoinMode(mode),
+      NearestByDirection(direction))
+  }
+
+  /** @inheritdoc */
+  def nearestByJoin(
+      right: sql.Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String,
+      joinType: String): DataFrame = {
+    nearestByJoin(
+      right,
+      rankingExpression,
+      numResults,
+      NearestByJoinType(joinType),
+      NearestByJoinMode(mode),
+      NearestByDirection(direction))
+  }
+
   // TODO(SPARK-22947): Fix the DataFrame API.
   private[sql] def joinAsOf(
       other: Dataset[_],
@@ -1460,15 +1519,10 @@ class Dataset[T] private[sql](
       funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
-    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
-      MapInPandas(
-        func,
-        toAttributes(func.dataType.asInstanceOf[StructType]),
-        logicalPlan,
-        isBarrier,
-        Option(profile)))
+      sparkSession.sessionState.externalUDFPlanner.planPythonMapInPandas(
+        funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
   /**
@@ -1480,15 +1534,10 @@ class Dataset[T] private[sql](
       funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
-    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
-      MapInArrow(
-        func,
-        toAttributes(func.dataType.asInstanceOf[StructType]),
-        logicalPlan,
-        isBarrier,
-        Option(profile)))
+      sparkSession.sessionState.externalUDFPlanner.planPythonMapInArrow(
+        funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
   /** @inheritdoc */

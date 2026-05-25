@@ -40,7 +40,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     (projectedKPs ++ projectedOthers).take(aliasCandidateLimit) match {
       case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
       case Seq(p) => p
-      case ps => PartitioningCollection(ps)
+      case ps => PartitioningCollection.fromPartitionings(ps)
     }
   }
 
@@ -88,11 +88,14 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
    *
    * The resulting [[KeyedPartitioning]]s are the cross-product of the per-position alternatives
    * restricted to the projectable positions. All share the same `partitionKeys` object (projected
-   * to the same subset of positions), preserving the invariant required by [[GroupPartitionsExec]].
+   * to the same subset of positions), preserving the invariant required by
+   * [[PartitioningCollection]].
    */
   private def projectKeyedPartitionings(
       kps: Seq[KeyedPartitioning]): LazyList[KeyedPartitioning] = {
     if (kps.isEmpty) return LazyList.empty
+    // All input KPs share the same `partitionKeys` reference and matching arity by the
+    // [[PartitioningCollection]] invariant (the only producer of multi-KP inputs here).
     val numPositions = kps.head.expressions.length
 
     val alternativesPerPosition: IndexedSeq[LazyList[Expression]] =

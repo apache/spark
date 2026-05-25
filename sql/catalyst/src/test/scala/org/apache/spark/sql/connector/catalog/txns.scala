@@ -177,8 +177,8 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
       throw new IllegalArgumentException(s"Cannot drop all fields")
     }
 
-    // TODO: We need to pass all tracked predicates to the new TXN table.
     val newTxnTable = new TxnTable(txnTable.delegate, schema, this)
+    newTxnTable.scanEvents ++= txnTable.scanEvents
     tables.put(ident, newTxnTable)
     newTxnTable
   }

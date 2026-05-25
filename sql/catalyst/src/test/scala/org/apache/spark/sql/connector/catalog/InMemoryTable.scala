@@ -205,7 +205,8 @@ class InMemoryTable(
 
   private class Overwrite(filters: Array[Filter]) extends TestBatchWrite {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override protected def doCommit(
+        messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val deleteKeys = InMemoryTable.filtersToKeys(
         dataMap.keys, partCols.map(_.toSeq.quoted).toImmutableArraySeq, filters)
       dataMap --= deleteKeys

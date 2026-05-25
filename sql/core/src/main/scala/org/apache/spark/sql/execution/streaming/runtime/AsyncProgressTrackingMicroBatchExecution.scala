@@ -94,7 +94,8 @@ class AsyncProgressTrackingMicroBatchExecution(
       resolvedCheckpointRoot,
       asyncWritesExecutorService,
       asyncProgressTrackingCheckpointingIntervalMs,
-      triggerClock
+      triggerClock,
+      errorNotifier
     )
 
   override lazy val offsetLog: AsyncOffsetSeqLog = asyncCheckpointMetadata.offsetLog

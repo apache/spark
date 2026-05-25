@@ -19,9 +19,52 @@ package org.apache.spark.sql.catalyst.expressions;
 import java.util.Arrays;
 import java.util.Comparator;
 
+import org.apache.spark.QueryContext;
 import org.apache.spark.sql.catalyst.util.SQLOrderingUtil;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 
 public class ArrayExpressionUtils {
+
+  // ANSI index helpers used by ArrayType expression codegen and eval paths.
+
+  /**
+   * Resolves the user-supplied 1-based {@code element_at} index to a
+   * 0-based array position. Throws when the absolute index exceeds the
+   * array length (ANSI out-of-bounds) or when {@code index} is zero
+   * (always invalid).
+   *
+   * @param length  the array length
+   * @param index   the 1-based index supplied by the user (positive or negative)
+   * @param context the query context attached to the error
+   * @return        the resolved 0-based position
+   */
+  public static int resolveArrayIndex(int length, int index, QueryContext context) {
+    if (length < Math.abs(index)) {
+      throw QueryExecutionErrors.invalidElementAtIndexError(index, length, context);
+    }
+    if (index == 0) {
+      throw QueryExecutionErrors.invalidIndexOfZeroError(context);
+    }
+    return index > 0 ? index - 1 : length + index;
+  }
+
+  /**
+   * Validates a 0-based {@code arr[idx]} index against the array length
+   * under ANSI mode. Throws when {@code index} is negative or
+   * {@code >= length}; otherwise returns {@code index} unchanged so the
+   * caller can chain into {@code arr.get(idx, dataType)}.
+   *
+   * @param length  the array length
+   * @param index   the 0-based index supplied by the user
+   * @param context the query context attached to the error
+   * @return        the validated 0-based position (== {@code index})
+   */
+  public static int checkArrayIndex(int length, int index, QueryContext context) {
+    if (index < 0 || index >= length) {
+      throw QueryExecutionErrors.invalidArrayIndexError(index, length, context);
+    }
+    return index;
+  }
 
   // comparator
   // Boolean ascending nullable comparator

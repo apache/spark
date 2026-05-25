@@ -125,6 +125,11 @@ object SparkBuild extends PomBuild {
           "The Java version used to build the project is outdated. " +
             s"Please use Java $minimumVersion or later.")
       }
+      if (currentVersionFeature == 25 && currentVersionUpdate < 3) {
+        throw new MessageOnlyException(
+          s"Java 25 requires update 3 or later due to JDK-8377811. " +
+            s"Current version: $currentVersion. Please use Java 25.0.3 or later.")
+      }
     },
     (Compile / compile) := ((Compile / compile) dependsOn checkJavaVersion).value,
     (Test / compile) := ((Test / compile) dependsOn checkJavaVersion).value
@@ -1087,25 +1092,10 @@ object SparkProtobuf {
 }
 
 object UDFWorkerProto {
-  import BuildCommons.protoVersion
-  lazy val settings = Seq(
-    PB.protocVersion := BuildCommons.protoVersion,
-    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
-
-    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
-
-    (Compile / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-sources"
-    ),
-
-    (assembly / test) := { },
-
-    (assembly / logLevel) := Level.Info,
-
-    // Exclude `scala-library` from assembly.
-    (assembly / assemblyPackageScala / assembleArtifact) := false,
-
-    // Include only the proto module jar and protobuf-java in the assembly.
+  // Reuses SparkConnectCommon for proto + gRPC codegen wiring; overrides
+  // only the assembly fields that need the UDF-worker namespace.
+  lazy val settings = SparkConnectCommon.settings ++ Seq(
+    // Include only this module's jar and protobuf-java in the assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
@@ -1116,27 +1106,9 @@ object UDFWorkerProto {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("com.google.protobuf.**" ->
-        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
-    ),
-
-    (assembly / assemblyMergeStrategy) := {
-      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
-        MergeStrategy.filterDistinctLines
-      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
-      case _ => MergeStrategy.first
-    }
-  ) ++ {
-    val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    if (sparkProtocExecPath.isDefined) {
-      Seq(
-        PB.protocExecutable := file(sparkProtocExecPath.get)
-      )
-    } else {
-      Seq.empty
-    }
-  }
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll
+    )
+  )
 }
 
 object Unsafe {
@@ -1248,7 +1220,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.2")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.3")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides ++= {
@@ -1949,8 +1921,9 @@ object TestSettings {
         "-Dio.netty.tryReflectionSetAccessible=true",
         "-Dio.netty.allocator.type=pooled",
         "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
-        "-Dio.netty.noUnsafe=false",
-        "--enable-native-access=ALL-UNNAMED").mkString(" ")
+        "--sun-misc-unsafe-memory-access=allow",
+        "--enable-native-access=ALL-UNNAMED",
+        "-XX:+EnableDynamicAgentLoading").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

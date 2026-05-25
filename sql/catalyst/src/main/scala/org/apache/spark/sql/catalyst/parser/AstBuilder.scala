@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogInfo, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -708,6 +708,26 @@ class AstBuilder extends DataTypeAstBuilder
     visitMultipartIdentifier(ctx.multipartIdentifier)
   }
 
+  override def visitSinglePathElementList(
+      ctx: SinglePathElementListContext): Seq[PathElement] = withOrigin(ctx) {
+    ctx.pathElement().asScala.map(visitPathElement).toSeq
+  }
+
+  override def visitPathElement(ctx: PathElementContext): PathElement = withOrigin(ctx) {
+    if (ctx.DEFAULT_PATH() != null) PathElement.DefaultPath
+    else if (ctx.SYSTEM_PATH() != null) PathElement.SystemPath
+    else if (ctx.PATH() != null) PathElement.PathRef
+    else if (ctx.CURRENT_DATABASE() != null || ctx.CURRENT_SCHEMA() != null) {
+      PathElement.CurrentSchema
+    } else {
+      val parts = visitMultipartIdentifier(ctx.multipartIdentifier())
+      if (parts.length < 2) {
+        throw QueryCompilationErrors.invalidSqlPathSchemaReferenceError(parts.mkString("."))
+      }
+      PathElement.SchemaInPath(parts)
+    }
+  }
+
   override def visitSingleDataType(ctx: SingleDataTypeContext): DataType = withOrigin(ctx) {
     typedVisit[DataType](ctx.dataType)
   }
@@ -913,32 +933,31 @@ class AstBuilder extends DataTypeAstBuilder
       query: LogicalPlan,
       queryAliasCtx: TableAliasContext): LogicalPlan = withOrigin(ctx) {
     ctx match {
-      // We cannot push withIdentClause() into the write command because:
-      //   1. `PlanWithUnresolvedIdentifier` is not a NamedRelation
-      //   2. Write commands do not hold the table logical plan as a child, and we need to add
-      //      additional resolution code to resolve identifiers inside the write commands.
+      // For all `InsertIntoStatement` / `OverwriteByExpression`-producing branches, build the
+      // `table` slot directly via `buildWriteTableSlot` so that any
+      // `PlanWithUnresolvedIdentifier` lives *inside* the command's identifier slot. This
+      // preserves the `CTEInChildren` shape and lets `CTESubstitution` place `WithCTE` on the
+      // command's children correctly (SPARK-46625).
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
-        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          createInsertIntoStatement(
-            insertParams = insertParams,
-            ident = ident,
-            query = otherPlans.head,
-            overwrite = false,
-            writePrivileges = Set(TableWritePrivilege.INSERT),
-            withSchemaEvolution = table.EVOLUTION() != null)
-        })
+        val privileges = Set(TableWritePrivilege.INSERT)
+        createInsertIntoStatement(
+          insertParams = insertParams,
+          tableSlot = buildWriteTableSlot(
+            insertParams.relationCtx, insertParams.options, privileges),
+          query = query,
+          overwrite = false,
+          withSchemaEvolution = table.EVOLUTION() != null)
       case table: InsertOverwriteTableContext =>
         val insertParams = visitInsertOverwriteTable(table)
-        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          createInsertIntoStatement(
-            insertParams = insertParams,
-            ident = ident,
-            query = otherPlans.head,
-            overwrite = true,
-            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
-            withSchemaEvolution = table.EVOLUTION() != null)
-        })
+        val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
+        createInsertIntoStatement(
+          insertParams = insertParams,
+          tableSlot = buildWriteTableSlot(
+            insertParams.relationCtx, insertParams.options, privileges),
+          query = query,
+          overwrite = true,
+          withSchemaEvolution = table.EVOLUTION() != null)
       case ctx: InsertIntoReplaceBooleanCondContext =>
         // Although REPLACE WHERE and REPLACE ON share a unified grammar rule, they have
         // different SQL semantics:
@@ -948,63 +967,66 @@ class AstBuilder extends DataTypeAstBuilder
         // while REPLACE WHERE still can.
         val isInsertReplaceWhere = ctx.WHERE() != null
         if (isInsertReplaceWhere) {
+          // The unified grammar rule for REPLACE WHERE | ON accepts a table alias for
+          // symmetry with REPLACE ON (whose condition can reference the target via the
+          // alias, e.g. `t.col`). The REPLACE WHERE branch has no use for the alias
+          // because the WHERE condition is evaluated against the target table directly.
+          // Reject explicitly so users get a clear parse error instead of a confusing
+          // column-not-found at analysis time.
+          if (ctx.tableAlias() != null && ctx.tableAlias().strictIdentifier() != null) {
+            throw QueryParsingErrors.insertReplaceWhereTableAliasNotAllowed(ctx.tableAlias())
+          }
           val options = Option(ctx.optionsClause())
-          withIdentClause(ctx.identifierReference, Seq(query), (ident, otherPlans) => {
-            val table = createUnresolvedRelation(
-              ctx = ctx.identifierReference,
-              ident = ident,
-              optionsClause = options,
-              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
-              isStreaming = false)
-            val deleteExpr = expression(ctx.replaceCondition)
-            val isByName = ctx.NAME() != null
-            if (isByName) {
-              OverwriteByExpression.byName(
-                table,
-                df = otherPlans.head,
-                deleteExpr,
-                withSchemaEvolution = ctx.EVOLUTION() != null)
-            } else {
-              OverwriteByExpression.byPosition(
-                table,
-                query = otherPlans.head,
-                deleteExpr,
-                withSchemaEvolution = ctx.EVOLUTION() != null)
-            }
-          })
+          val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
+          // `PlanWithUnresolvedIdentifier` is a `NamedRelation`, so it can occupy
+          // `OverwriteByExpression.table` directly; the materialization happens in
+          // `ResolveIdentifierClause` via its `OverwriteByExpression` special-case.
+          val table = buildWriteTableSlot(ctx.identifierReference, options, privileges)
+          val deleteExpr = expression(ctx.replaceCondition)
+          val isByName = ctx.NAME() != null
+          if (isByName) {
+            OverwriteByExpression.byName(
+              table,
+              df = query,
+              deleteExpr,
+              withSchemaEvolution = ctx.EVOLUTION() != null)
+          } else {
+            OverwriteByExpression.byPosition(
+              table,
+              query = query,
+              deleteExpr,
+              withSchemaEvolution = ctx.EVOLUTION() != null)
+          }
         } else {
           val insertParams = visitInsertIntoReplaceOn(ctx)
-          withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-            val query = {
-              val queryAliasOpt =
-                getTableAliasWithoutColumnAlias(queryAliasCtx, "INSERT REPLACE ON")
-
-              queryAliasOpt.map { queryAlias =>
-                withOrigin(queryAliasCtx) {
-                  SubqueryAlias(queryAlias, child = otherPlans.head)
-                }
-              }.getOrElse(otherPlans.head)
-            }
-            createInsertIntoStatement(
-              insertParams = insertParams,
-              ident = ident,
-              query = query,
-              overwrite = true,
-              writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
-              withSchemaEvolution = ctx.EVOLUTION() != null)
-          })
+          val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
+          val finalQuery = {
+            val queryAliasOpt =
+              getTableAliasWithoutColumnAlias(queryAliasCtx, "INSERT REPLACE ON")
+            queryAliasOpt.map { queryAlias =>
+              withOrigin(queryAliasCtx) {
+                SubqueryAlias(queryAlias, child = query)
+              }
+            }.getOrElse(query)
+          }
+          createInsertIntoStatement(
+            insertParams = insertParams,
+            tableSlot = buildWriteTableSlot(
+              insertParams.relationCtx, insertParams.options, privileges),
+            query = finalQuery,
+            overwrite = true,
+            withSchemaEvolution = ctx.EVOLUTION() != null)
         }
       case ctx: InsertIntoReplaceUsingContext =>
         val insertParams = visitInsertIntoReplaceUsing(ctx)
-        withIdentClause(insertParams.relationCtx, Seq(query), (ident, otherPlans) => {
-          createInsertIntoStatement(
-            insertParams = insertParams,
-            ident = ident,
-            query = otherPlans.head,
-            overwrite = true,
-            writePrivileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE),
-            withSchemaEvolution = ctx.EVOLUTION() != null)
-        })
+        val privileges = Set(TableWritePrivilege.INSERT, TableWritePrivilege.DELETE)
+        createInsertIntoStatement(
+          insertParams = insertParams,
+          tableSlot = buildWriteTableSlot(
+            insertParams.relationCtx, insertParams.options, privileges),
+          query = query,
+          overwrite = true,
+          withSchemaEvolution = ctx.EVOLUTION() != null)
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
@@ -1133,18 +1155,12 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def createInsertIntoStatement(
       insertParams: InsertTableParams,
-      ident: Seq[String],
+      tableSlot: LogicalPlan,
       query: LogicalPlan,
       overwrite: Boolean,
-      writePrivileges: Set[TableWritePrivilege],
       withSchemaEvolution: Boolean): InsertIntoStatement = {
     InsertIntoStatement(
-      table = createUnresolvedRelation(
-        ctx = insertParams.relationCtx,
-        ident = ident,
-        optionsClause = insertParams.options,
-        writePrivileges = writePrivileges,
-        isStreaming = false),
+      table = tableSlot,
       partitionSpec = insertParams.partitionSpec,
       userSpecifiedCols = insertParams.userSpecifiedCols,
       query = query,
@@ -1153,6 +1169,27 @@ class AstBuilder extends DataTypeAstBuilder
       byName = insertParams.byName,
       replaceCriteriaOpt = insertParams.replaceCriteriaOpt,
       withSchemaEvolution = withSchemaEvolution)
+  }
+
+  /**
+   * Build the `table` slot of a write command. If the identifier reference is a constant string,
+   * returns an [[UnresolvedRelation]] directly; otherwise returns a
+   * [[PlanWithUnresolvedIdentifier]] that materializes into an [[UnresolvedRelation]] once the
+   * identifier expression is resolved. Both branches produce a [[NamedRelation]], so the result
+   * fits `NamedRelation`-typed slots (e.g. `OverwriteByExpression.table`) as well as the more
+   * general `LogicalPlan` slot of `InsertIntoStatement.table`.
+   *
+   * Placing the placeholder in the identifier slot (rather than wrapping the entire write command)
+   * preserves the `CTEInChildren` shape at parse time, so `CTESubstitution` places `WithCTE` on the
+   * command's children correctly. See SPARK-46625.
+   */
+  private def buildWriteTableSlot(
+      ctx: IdentifierReferenceContext,
+      optionsClause: Option[OptionsClauseContext],
+      writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
+    withIdentClause(ctx, parts =>
+      createUnresolvedRelation(ctx, parts, optionsClause, writePrivileges, isStreaming = false))
+      .asInstanceOf[NamedRelation]
   }
 
   /**
@@ -2612,17 +2649,17 @@ class AstBuilder extends DataTypeAstBuilder
     withOrigin(ctx) {
       val relation = createUnresolvedRelation(ctx.identifierReference, Option(ctx.optionsClause))
       val options = resolveOptions(Option(ctx.optionsClause))
-      val changelogInfo = buildChangelogInfo(ctx.changesClause, options)
-      val result = RelationChanges(relation, changelogInfo)
+      val changelogContext = buildChangelogContext(ctx.changesClause, options)
+      val result = RelationChanges(relation, changelogContext)
       mayApplyAliasPlan(ctx.tableAlias, result)
     }
 
   /**
-   * Build a [[ChangelogInfo]] from a batch changesClause context and optional WITH options.
+   * Build a [[ChangelogContext]] from a batch changesClause context and optional WITH options.
    */
-  private def buildChangelogInfo(
+  private def buildChangelogContext(
       ctx: ChangesClauseContext,
-      options: CaseInsensitiveStringMap): ChangelogInfo = {
+      options: CaseInsensitiveStringMap): ChangelogContext = {
     val startExclusive = ctx.startExclusive != null
     val endExclusive = ctx.endExclusive != null
     val startInclusive = !startExclusive
@@ -2667,16 +2704,16 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val (deduplicationMode, computeUpdates) = resolveChangelogOptions(options)
-    new ChangelogInfo(range, deduplicationMode, computeUpdates)
+    new ChangelogContext(range, deduplicationMode, computeUpdates)
   }
 
   /**
-   * Build a [[ChangelogInfo]] from a streaming streamChangesClause context and optional
+   * Build a [[ChangelogContext]] from a streaming streamChangesClause context and optional
    * WITH options.
    */
-  private def buildStreamChangelogInfo(
+  private def buildStreamChangelogContext(
       ctx: StreamChangesClauseContext,
-      options: CaseInsensitiveStringMap): ChangelogInfo = {
+      options: CaseInsensitiveStringMap): ChangelogContext = {
     val startExclusive = ctx.startExclusive != null
     val startInclusive = !startExclusive
 
@@ -2707,7 +2744,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val (deduplicationMode, computeUpdates) = resolveChangelogOptions(options)
-    new ChangelogInfo(range, deduplicationMode, computeUpdates)
+    new ChangelogContext(range, deduplicationMode, computeUpdates)
   }
 
   /**
@@ -2715,14 +2752,13 @@ class AstBuilder extends DataTypeAstBuilder
    * Defaults: DROP_CARRYOVERS for deduplicationMode, false for computeUpdates.
    */
   private def resolveChangelogOptions(
-      options: CaseInsensitiveStringMap)
-      : (ChangelogInfo.DeduplicationMode, Boolean) = {
+      options: CaseInsensitiveStringMap): (ChangelogContext.DeduplicationMode, Boolean) = {
     val deduplicationModeStr = Option(options.get("deduplicationMode"))
       .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
     val deduplicationMode = deduplicationModeStr match {
-      case "none" => ChangelogInfo.DeduplicationMode.NONE
-      case "dropcarryovers" => ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS
-      case "netchanges" => ChangelogInfo.DeduplicationMode.NET_CHANGES
+      case "none" => ChangelogContext.DeduplicationMode.NONE
+      case "dropcarryovers" => ChangelogContext.DeduplicationMode.DROP_CARRYOVERS
+      case "netchanges" => ChangelogContext.DeduplicationMode.NET_CHANGES
       case other =>
         throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
     }
@@ -2888,8 +2924,8 @@ class AstBuilder extends DataTypeAstBuilder
       case Some(changesCtx) =>
         // Streaming CDC: wrap in RelationChanges and NamedStreamingRelation
         val options = resolveOptions(Option(ctx.optionsClause))
-        val changelogInfo = buildStreamChangelogInfo(changesCtx, options)
-        val result = RelationChanges(relation, changelogInfo)
+        val changelogContext = buildStreamChangelogContext(changesCtx, options)
+        val result = RelationChanges(relation, changelogContext)
         val table = mayApplyAliasPlan(ctx.tableAlias, result)
         val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
         val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
@@ -3563,11 +3599,7 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   override def visitCollateClause(ctx: CollateClauseContext): Seq[String] = withOrigin(ctx) {
-    val collationName = visitMultipartIdentifier(ctx.collationName)
-    if (!SQLConf.get.trimCollationEnabled && collationName.last.toUpperCase().contains("TRIM")) {
-      throw QueryCompilationErrors.trimCollationNotEnabledError()
-    }
-    collationName
+    visitMultipartIdentifier(ctx.collationName)
   }
 
   /**
@@ -5671,42 +5703,45 @@ class AstBuilder extends DataTypeAstBuilder
         bucketSpec.map(_.asTransform) ++
         clusterBySpec.map(_.asTransform)
 
-    val asSelectPlan = Option(ctx.query).map(plan).toSeq
-    withIdentClause(identifierContext, asSelectPlan, (identifiers, otherPlans) => {
-      val namedConstraints =
-        constraints.map(c => c.withTableName(identifiers.last))
-      val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
-        collation, serdeInfo, external, namedConstraints)
-      val identifier = withOrigin(identifierContext) {
-        UnresolvedIdentifier(identifiers)
-      }
-      otherPlans.headOption match {
-        case Some(_) if columns.nonEmpty =>
+    Option(ctx.query).map(plan) match {
+      case Some(query) =>
+        // CTAS path: push the identifier placeholder into the `name` slot so that
+        // `CTESubstitution` sees the `CreateTableAsSelect` (a `CTEInChildren`) directly
+        // and places `WithCTE` on its children (SPARK-46625). CTAS disallows constraints /
+        // user-specified columns / non-reference partition columns, so we don't need the
+        // identifier parts at parse time.
+        if (columns.nonEmpty) {
           operationNotAllowed(
-            "Schema may not be specified in a Create Table As Select (CTAS) statement",
-            ctx)
-
-        case Some(_) if partCols.nonEmpty =>
-          // non-reference partition columns are not allowed because schema can't be specified
+            "Schema may not be specified in a Create Table As Select (CTAS) statement", ctx)
+        }
+        if (partCols.nonEmpty) {
           operationNotAllowed(
-            "Partition column types may not be specified in Create Table As Select (CTAS)",
-            ctx)
-
-        case Some(_) if constraints.nonEmpty =>
+            "Partition column types may not be specified in Create Table As Select (CTAS)", ctx)
+        }
+        if (constraints.nonEmpty) {
           operationNotAllowed(
-            "Constraints may not be specified in a Create Table As Select (CTAS) statement",
-            ctx)
-
-        case Some(query) =>
-          CreateTableAsSelect(identifier, partitioning, query, tableSpec, Map.empty, ifNotExists)
-
-        case _ =>
+            "Constraints may not be specified in a Create Table As Select (CTAS) statement", ctx)
+        }
+        val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
+          collation, serdeInfo, external, constraints = Nil)
+        val nameSlot = withIdentClause(identifierContext, identifiers =>
+          withOrigin(identifierContext) { UnresolvedIdentifier(identifiers) })
+        CreateTableAsSelect(nameSlot, partitioning, query, tableSpec, Map.empty, ifNotExists)
+      case None =>
+        withIdentClause(identifierContext, identifiers => {
+          val namedConstraints =
+            constraints.map(c => c.withTableName(identifiers.last))
+          val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
+            collation, serdeInfo, external, namedConstraints)
+          val identifier = withOrigin(identifierContext) {
+            UnresolvedIdentifier(identifiers)
+          }
           // Note: table schema includes both the table columns list and the partition columns
           // with data type.
           val allColumns = columns ++ partCols
           CreateTable(identifier, allColumns, partitioning, tableSpec, ignoreIfExists = ifNotExists)
-      }
-    })
+        })
+    }
   }
 
   /**
@@ -5755,43 +5790,42 @@ class AstBuilder extends DataTypeAstBuilder
         clusterBySpec.map(_.asTransform)
 
     val identifierContext = ctx.replaceTableHeader().identifierReference()
-    val asSelectPlan = Option(ctx.query).map(plan).toSeq
-    withIdentClause(identifierContext, asSelectPlan, (identifiers, otherPlans) => {
-      val namedConstraints =
-        constraints.map(c => c.withTableName(identifiers.last))
-      val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
-        collation, serdeInfo, external = false, namedConstraints)
-      val identifier = withOrigin(identifierContext) {
-        UnresolvedIdentifier(identifiers)
-      }
-      otherPlans.headOption match {
-        case Some(_) if columns.nonEmpty =>
+    Option(ctx.query).map(plan) match {
+      case Some(query) =>
+        // RTAS path: push the identifier placeholder into the `name` slot (see CTAS above).
+        if (columns.nonEmpty) {
           operationNotAllowed(
-            "Schema may not be specified in a Replace Table As Select (RTAS) statement",
-            ctx)
-
-        case Some(_) if partCols.nonEmpty =>
-          // non-reference partition columns are not allowed because schema can't be specified
+            "Schema may not be specified in a Replace Table As Select (RTAS) statement", ctx)
+        }
+        if (partCols.nonEmpty) {
           operationNotAllowed(
-            "Partition column types may not be specified in Replace Table As Select (RTAS)",
-            ctx)
-
-        case Some(_) if constraints.nonEmpty =>
+            "Partition column types may not be specified in Replace Table As Select (RTAS)", ctx)
+        }
+        if (constraints.nonEmpty) {
           operationNotAllowed(
-            "Constraints may not be specified in a Replace Table As Select (RTAS) statement",
-            ctx)
-
-        case Some(query) =>
-          ReplaceTableAsSelect(identifier, partitioning, query, tableSpec,
-            writeOptions = Map.empty, orCreate = orCreate)
-
-        case _ =>
+            "Constraints may not be specified in a Replace Table As Select (RTAS) statement", ctx)
+        }
+        val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
+          collation, serdeInfo, external = false, constraints = Nil)
+        val nameSlot = withIdentClause(identifierContext, identifiers =>
+          withOrigin(identifierContext) { UnresolvedIdentifier(identifiers) })
+        ReplaceTableAsSelect(nameSlot, partitioning, query, tableSpec,
+          writeOptions = Map.empty, orCreate = orCreate)
+      case None =>
+        withIdentClause(identifierContext, identifiers => {
+          val namedConstraints =
+            constraints.map(c => c.withTableName(identifiers.last))
+          val tableSpec = UnresolvedTableSpec(properties, provider, options, location, comment,
+            collation, serdeInfo, external = false, namedConstraints)
+          val identifier = withOrigin(identifierContext) {
+            UnresolvedIdentifier(identifiers)
+          }
           // Note: table schema includes both the table columns list and the partition columns
           // with data type.
           val allColumns = columns ++ partCols
           ReplaceTable(identifier, allColumns, partitioning, tableSpec, orCreate = orCreate)
-      }
-    })
+        })
+    }
   }
 
   /**
@@ -6533,35 +6567,74 @@ class AstBuilder extends DataTypeAstBuilder
    * }}}
    */
   override def visitCacheTable(ctx: CacheTableContext): LogicalPlan = withOrigin(ctx) {
-    val query = Option(ctx.query).map(plan)
-    withIdentClause(ctx.identifierReference, query.toSeq, (ident, children) => {
-      if (query.isDefined && ident.length > 1) {
-        val catalogAndNamespace = ident.init
-        throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
-          catalogAndNamespace.quoted, ctx)
-      }
-      val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
-      val isLazy = ctx.LAZY != null
-      if (query.isDefined) {
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val isLazy = ctx.LAZY != null
+    Option(ctx.query).map(plan) match {
+      case Some(query) =>
         // Disallow parameter markers in the query of the cache.
         // We need this limitation because we store the original query text, pre substitution.
-        // To lift this we would need to reconstitute the query with parameter markers replaced with
-        // the values given at CACHE TABLE time, or we would need to store the parameter values
-        // alongside the text.
-        // The same rule can be found in CREATE VIEW builder.
-        checkInvalidParameter(query.get, "the query of CACHE TABLE")
-        CacheTableAsSelect(ident.head, children.head, source(ctx.query()), isLazy, options)
-      } else {
-        CacheTable(
-          createUnresolvedRelation(
-            ctx.identifierReference,
-            ident,
-            None,
-            writePrivileges = Set.empty,
-            isStreaming = false),
-          ident, isLazy, options)
+        // To lift this we would need to reconstitute the query with parameter markers replaced
+        // with the values given at CACHE TABLE time, or we would need to store the parameter
+        // values alongside the text. The same rule can be found in CREATE VIEW builder.
+        checkInvalidParameter(query, "the query of CACHE TABLE")
+        // `CacheTableAsSelect.tempViewName` is an `Expression` slot: a `Literal` for direct
+        // identifiers and `IDENTIFIER('literal-string')`, or an
+        // `ExpressionWithUnresolvedIdentifier` for `IDENTIFIER(<non-literal>)`. Building the name
+        // as an expression avoids the wrap-the-whole-command form (where the
+        // `PlanWithUnresolvedIdentifier` would wrap the entire `CacheTableAsSelect`), which is the
+        // last shape that motivated the `WithCTE(<command>, _)` workaround chain in SPARK-46625.
+        val nameExpr = buildCacheTableAsSelectName(ctx.identifierReference, ctx)
+        CacheTableAsSelect(nameExpr, query, source(ctx.query()), isLazy, options)
+      case None =>
+        withIdentClause(ctx.identifierReference, ident => {
+          CacheTable(
+            createUnresolvedRelation(
+              ctx.identifierReference,
+              ident,
+              None,
+              writePrivileges = Set.empty,
+              isStreaming = false),
+            ident, isLazy, options)
+        })
+    }
+  }
+
+  /**
+   * Build the `tempViewName` expression for a `CACHE TABLE ... AS SELECT` command from an
+   * `identifierReference` context.
+   *
+   * `CacheTableAsSelect` requires a single-part temp view name (no catalog/namespace). For direct
+   * identifiers and `IDENTIFIER('literal-string')` we validate this at parse time and produce a
+   * non-null string `Literal`. For `IDENTIFIER(<non-literal>)` we emit an
+   * `ExpressionWithUnresolvedIdentifier` whose builder validates the single-part invariant when
+   * the identifier expression is resolved.
+   */
+  private def buildCacheTableAsSelectName(
+      ctx: IdentifierReferenceContext,
+      parentCtx: CacheTableContext): Expression = {
+    // Use the outer `parentCtx` for the multi-part error so the query context points at the
+    // whole `CACHE TABLE ... AS ...` statement, not just the identifier reference. The caller
+    // (`visitCacheTable`) already has `withOrigin(parentCtx)` in scope.
+    def singlePart(parts: Seq[String]): String = {
+      if (parts.length > 1) {
+        throw QueryParsingErrors.addCatalogInCacheTableAsSelectNotAllowedError(
+          parts.init.quoted, parentCtx)
       }
-    })
+      parts.head
+    }
+    val exprCtx = ctx.expression
+    if (exprCtx != null) {
+      expression(exprCtx) match {
+        case Literal(value, _: StringType) if value != null =>
+          Literal(singlePart(parseMultipartIdentifier(value.toString)))
+        case expr =>
+          new ExpressionWithUnresolvedIdentifier(
+            withOrigin(exprCtx) { expr },
+            parts => Literal(singlePart(parts)))
+      }
+    } else {
+      Literal(singlePart(visitMultipartIdentifier(ctx.multipartIdentifier)))
+    }
   }
 
   /**

@@ -56,7 +56,10 @@ class StateOperatorProgress private[spark] (
     val numRowsDroppedByWatermark: Long,
     val numShufflePartitions: Long,
     val numStateStoreInstances: Long,
-    val customMetrics: ju.Map[String, JLong] = new ju.HashMap())
+    val customMetrics: ju.Map[String, JLong] = new ju.HashMap(),
+    // Names of customMetrics entries treated as snapshots of state-store status;
+    // preserved by copyForNoExecution() and not surfaced in JSON output.
+    private[spark] val snapshotCustomMetricNames: Set[String] = Set.empty)
     extends Serializable {
 
   /** The compact JSON representation of this progress. */
@@ -81,7 +84,34 @@ class StateOperatorProgress private[spark] (
       numRowsDroppedByWatermark = newNumRowsDroppedByWatermark,
       numShufflePartitions = numShufflePartitions,
       numStateStoreInstances = numStateStoreInstances,
-      customMetrics = customMetrics)
+      customMetrics = customMetrics,
+      snapshotCustomMetricNames = snapshotCustomMetricNames)
+
+  /**
+   * Returns a copy of this progress suitable for a no-data trigger event. Per-batch fields (row
+   * counts, time-Ms fields, and customMetrics entries not in `snapshotCustomMetricNames`) are
+   * zeroed; snapshot fields and snapshot customMetrics entries are preserved.
+   */
+  private[sql] def copyForNoExecution(): StateOperatorProgress = {
+    val newCustomMetrics = new ju.HashMap[String, JLong](customMetrics.size())
+    customMetrics.forEach { (k, v) =>
+      newCustomMetrics.put(k, if (snapshotCustomMetricNames.contains(k)) v else 0L)
+    }
+    new StateOperatorProgress(
+      operatorName = operatorName,
+      numRowsTotal = numRowsTotal,
+      numRowsUpdated = 0L,
+      allUpdatesTimeMs = 0L,
+      numRowsRemoved = 0L,
+      allRemovalsTimeMs = 0L,
+      commitTimeMs = 0L,
+      memoryUsedBytes = memoryUsedBytes,
+      numRowsDroppedByWatermark = 0L,
+      numShufflePartitions = numShufflePartitions,
+      numStateStoreInstances = numStateStoreInstances,
+      customMetrics = newCustomMetrics,
+      snapshotCustomMetricNames = snapshotCustomMetricNames)
+  }
 
   private[sql] def jsonValue: JValue = {
     ("operatorName" -> JString(operatorName)) ~

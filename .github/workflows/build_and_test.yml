@@ -68,6 +68,8 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
+      # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
+      head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
@@ -84,6 +86,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Resolve apache/spark HEAD SHA
+      id: resolve-sha
+      run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -261,8 +266,8 @@ jobs:
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).build == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     strategy:
@@ -349,7 +354,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -397,8 +402,22 @@ jobs:
     - name: Install Python packages (Python 3.12)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect') || contains(matrix.modules, 'yarn')
       run: |
-        python3.12 -m pip install 'numpy>=1.22' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
+        python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
         python3.12 -m pip list
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v6
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -409,8 +428,12 @@ jobs:
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         # SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
-        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
+        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
+        fi
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
         fi
         export SERIAL_SBT_TESTS=1
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
@@ -467,7 +490,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: apache/spark
-          ref: ${{ inputs.branch }}
+          ref: ${{ needs.precondition.outputs.head_sha }}
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |
@@ -541,9 +564,11 @@ jobs:
     needs: precondition
     if: >-
       (!cancelled()) && (
+        fromJson(needs.precondition.outputs.required).build == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
-        fromJson(needs.precondition.outputs.required).pyspark-install == 'true')
+        fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
+        fromJson(needs.precondition.outputs.required).sparkr == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -560,7 +585,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -682,7 +707,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -809,7 +834,7 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
-    needs: [precondition, infra-image]
+    needs: [precondition, infra-image, precompile]
     # always run if sparkr == 'true', even infra-image is skip (such as non-master job)
     if: (!cancelled()) && fromJson(needs.precondition.outputs.required).sparkr == 'true'
     name: "Build modules: sparkr"
@@ -832,7 +857,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -868,6 +893,20 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v6
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -875,6 +914,10 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        fi
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
@@ -903,7 +946,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -965,7 +1008,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -1164,7 +1207,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -1364,7 +1407,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -1481,7 +1524,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -1549,7 +1592,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: apache/spark
-          ref: ${{ inputs.branch }}
+          ref: ${{ needs.precondition.outputs.head_sha }}
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |
@@ -1613,7 +1656,7 @@ jobs:
           elif [[ "${{ inputs.branch }}" == 'branch-4.0' ]]; then
             kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.11.0/installer/volcano-development.yaml || true
           else
-            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.1/installer/volcano-development.yaml || true
+            kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml || true
           fi
           eval $(minikube docker-env)
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"

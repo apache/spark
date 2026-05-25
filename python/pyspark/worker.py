@@ -44,6 +44,9 @@ from typing import (
 T = TypeVar("T")
 
 if TYPE_CHECKING:
+    import pandas as pd
+    import pyarrow as pa
+
     from pyspark.sql.pandas._typing import GroupedBatch
 
 from pyspark.accumulators import (
@@ -256,8 +259,7 @@ def verify_return_type(result: T, expected_type: Type[T]) -> T:
     """
     if get_origin(expected_type) is Iterator:
         (element_type,) = get_args(expected_type)
-        package = getattr(inspect.getmodule(element_type), "__package__", "")
-        label = f"iterator of {package}.{element_type.__name__}"
+        label = f"iterator of {_top_level_package(element_type)}.{element_type.__name__}"
 
         if not isinstance(result, Iterator):
             raise PySparkTypeError(
@@ -279,15 +281,19 @@ def verify_return_type(result: T, expected_type: Type[T]) -> T:
         return map(check_element, result)  # type: ignore[return-value]
 
     if not isinstance(result, expected_type):
-        package = getattr(inspect.getmodule(expected_type), "__package__", "")
         raise PySparkTypeError(
             errorClass="UDF_RETURN_TYPE",
             messageParameters={
-                "expected": f"{package}.{expected_type.__name__}",
+                "expected": f"{_top_level_package(expected_type)}.{expected_type.__name__}",
                 "actual": type(result).__name__,
             },
         )
     return result
+
+
+def _top_level_package(t: type) -> str:
+    """Return the top-level package of ``t`` (``pandas`` for ``pd.DataFrame``)."""
+    return (t.__module__ or "").split(".", 1)[0]
 
 
 def verify_result_row_count(result_length: int, expected: int) -> None:
@@ -429,64 +435,59 @@ def wrap_pandas_batch_iter_udf(f, return_type, runner_conf):
     )
 
 
-def verify_pandas_result(result, return_type, assign_cols_by_name, truncate_return_schema):
-    import pandas as pd
-
-    if isinstance(return_type, StructType):
-        if not isinstance(result, pd.DataFrame):
-            raise PySparkTypeError(
-                errorClass="UDF_RETURN_TYPE",
+def _verify_column_schema(
+    actual_names: list, expected_names: list, *, assign_cols_by_name: bool
+) -> None:
+    """Check column names (by-name) or count (by-position) match the expected schema."""
+    if assign_cols_by_name:
+        actual_set = set(actual_names)
+        expected_set = set(expected_names)
+        missing = sorted(expected_set.difference(actual_set))
+        extra = sorted(actual_set.difference(expected_set))
+        if missing or extra:
+            raise PySparkRuntimeError(
+                errorClass="RESULT_COLUMN_NAMES_MISMATCH",
                 messageParameters={
-                    "expected": "pandas.DataFrame",
-                    "actual": type(result).__name__,
+                    "missing": f" Missing: {', '.join(missing)}." if missing else "",
+                    "extra": f" Unexpected: {', '.join(extra)}." if extra else "",
                 },
             )
+    elif len(actual_names) != len(expected_names):
+        raise PySparkRuntimeError(
+            errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
+            messageParameters={
+                "expected": str(len(expected_names)),
+                "actual": str(len(actual_names)),
+            },
+        )
 
-        # check the schema of the result only if it is not empty or has columns
-        if not result.empty or len(result.columns) != 0:
-            # if any column name of the result is a string
-            # the column names of the result have to match the return type
-            #   see create_array in pyspark.sql.pandas.serializers.ArrowStreamPandasSerializer
-            field_names = set([field.name for field in return_type.fields])
-            # only the first len(field_names) result columns are considered
-            # when truncating the return schema
-            result_columns = (
-                result.columns[: len(field_names)] if truncate_return_schema else result.columns
-            )
-            column_names = set(result_columns)
-            if (
-                assign_cols_by_name
-                and any(isinstance(name, str) for name in result.columns)
-                and column_names != field_names
-            ):
-                missing = sorted(list(field_names.difference(column_names)))
-                missing = f" Missing: {', '.join(missing)}." if missing else ""
 
-                extra = sorted(list(column_names.difference(field_names)))
-                extra = f" Unexpected: {', '.join(extra)}." if extra else ""
+def verify_pandas_result(
+    result: Union["pd.DataFrame", "pd.Series"],
+    return_type: DataType,
+    assign_cols_by_name: bool,
+    truncate_return_schema: bool,
+) -> None:
+    import pandas as pd
 
-                raise PySparkRuntimeError(
-                    errorClass="RESULT_COLUMN_NAMES_MISMATCH",
-                    messageParameters={
-                        "missing": missing,
-                        "extra": extra,
-                    },
-                )
-            # otherwise the number of columns of result have to match the return type
-            elif len(result_columns) != len(return_type):
-                raise PySparkRuntimeError(
-                    errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
-                    messageParameters={
-                        "expected": str(len(return_type)),
-                        "actual": str(len(result.columns)),
-                    },
-                )
-    else:
-        if not isinstance(result, pd.Series):
-            raise PySparkTypeError(
-                errorClass="UDF_RETURN_TYPE",
-                messageParameters={"expected": "pandas.Series", "actual": type(result).__name__},
-            )
+    if not isinstance(return_type, StructType):
+        verify_return_type(result, pd.Series)
+        return
+
+    verify_return_type(result, pd.DataFrame)
+
+    # Skip schema check on a fully empty result (no rows and no columns).
+    if result.empty and len(result.columns) == 0:
+        return
+
+    field_names = [field.name for field in return_type.fields]
+    actual_names = (
+        list(result.columns[: len(field_names)]) if truncate_return_schema else list(result.columns)
+    )
+    # By-name mode only applies when the result has string column names;
+    # a numeric RangeIndex falls back to a by-position count check.
+    by_name = assign_cols_by_name and any(isinstance(n, str) for n in result.columns)
+    _verify_column_schema(actual_names, field_names, assign_cols_by_name=by_name)
 
 
 def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
@@ -511,65 +512,53 @@ def wrap_cogrouped_map_pandas_udf(f, return_type, argspec, runner_conf):
     return lambda kl, vl, kr, vr: [(wrapped(kl, vl, kr, vr), return_type)]
 
 
-def verify_arrow_result(result, assign_cols_by_name, expected_cols_and_types):
-    # the types of the fields have to be identical to return type
-    # an empty table can have no columns; if there are columns, they have to match
-    if result.num_columns != 0 or result.num_rows != 0:
-        # columns are either mapped by name or position
-        if assign_cols_by_name:
-            actual_cols_and_types = {
-                name: dataType for name, dataType in zip(result.schema.names, result.schema.types)
-            }
-            missing = sorted(
-                list(set(expected_cols_and_types.keys()).difference(actual_cols_and_types.keys()))
+def verify_arrow_result(
+    result: Union["pa.Table", "pa.RecordBatch"],
+    assign_cols_by_name: bool,
+    expected_cols_and_types: Union[dict[str, "pa.DataType"], list[tuple[str, "pa.DataType"]]],
+) -> None:
+    # Skip schema check on a fully empty result (no rows and no columns).
+    if result.num_columns == 0 and result.num_rows == 0:
+        return
+
+    actual_names = list(result.schema.names)
+    actual_types = list(result.schema.types)
+    # expected_cols_and_types is a dict in by-name mode, list of (name, type) by position.
+    if isinstance(expected_cols_and_types, dict):
+        expected_names = list(expected_cols_and_types.keys())
+    else:
+        expected_names = [name for name, _ in expected_cols_and_types]
+
+    _verify_column_schema(actual_names, expected_names, assign_cols_by_name=assign_cols_by_name)
+
+    if isinstance(expected_cols_and_types, dict):
+        actual_by_name = dict(zip(actual_names, actual_types))
+        column_types = [
+            (name, expected_cols_and_types[name], actual_by_name[name])
+            for name in sorted(expected_cols_and_types.keys())
+        ]
+    else:
+        column_types = [
+            (expected_name, expected_type, actual_type)
+            for (expected_name, expected_type), actual_type in zip(
+                expected_cols_and_types, actual_types
             )
-            extra = sorted(
-                list(set(actual_cols_and_types.keys()).difference(expected_cols_and_types.keys()))
-            )
-
-            if missing or extra:
-                missing = f" Missing: {', '.join(missing)}." if missing else ""
-                extra = f" Unexpected: {', '.join(extra)}." if extra else ""
-
-                raise PySparkRuntimeError(
-                    errorClass="RESULT_COLUMN_NAMES_MISMATCH",
-                    messageParameters={
-                        "missing": missing,
-                        "extra": extra,
-                    },
-                )
-
-            column_types = [
-                (name, expected_cols_and_types[name], actual_cols_and_types[name])
-                for name in sorted(expected_cols_and_types.keys())
-            ]
-        else:
-            actual_cols_and_types = [
-                (name, dataType) for name, dataType in zip(result.schema.names, result.schema.types)
-            ]
-            column_types = [
-                (expected_name, expected_type, actual_type)
-                for (expected_name, expected_type), (actual_name, actual_type) in zip(
-                    expected_cols_and_types, actual_cols_and_types
-                )
-            ]
-
-        type_mismatch = [
-            (name, expected, actual)
-            for name, expected, actual in column_types
-            if actual != expected
         ]
 
-        if type_mismatch:
-            raise PySparkRuntimeError(
-                errorClass="RESULT_COLUMN_TYPES_MISMATCH",
-                messageParameters={
-                    "mismatch": ", ".join(
-                        "column '{}' (expected {}, actual {})".format(name, expected, actual)
-                        for name, expected, actual in type_mismatch
-                    )
-                },
-            )
+    type_mismatch = [
+        (name, expected, actual) for name, expected, actual in column_types if actual != expected
+    ]
+
+    if type_mismatch:
+        raise PySparkRuntimeError(
+            errorClass="RESULT_COLUMN_TYPES_MISMATCH",
+            messageParameters={
+                "mismatch": ", ".join(
+                    "column '{}' (expected {}, actual {})".format(name, expected, actual)
+                    for name, expected, actual in type_mismatch
+                )
+            },
+        )
 
 
 def wrap_grouped_transform_with_state_pandas_udf(f, return_type, runner_conf):
@@ -724,21 +713,6 @@ def wrap_grouped_map_pandas_udf_with_state(f, return_type, runner_conf):
         )
 
     return lambda k, v, s: [(wrapped(k, v, s), return_type)]
-
-
-def wrap_grouped_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
-    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-
-    def wrapped(*series):
-        import pandas as pd
-
-        result = func(*series)
-        return pd.Series([result])
-
-    return (
-        args_kwargs_offsets,
-        lambda *a: (wrapped(*a), return_type),
-    )
 
 
 def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
@@ -1031,11 +1005,8 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF:
         argspec = inspect.getfullargspec(chained_func)  # signature was lost when wrapping it
         return func, args_offsets, return_type, len(argspec.args)
-    elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
-        return wrap_grouped_agg_pandas_udf(
-            func, args_offsets, kwargs_offsets, return_type, runner_conf
-        )
     elif eval_type in (
+        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
         PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
     ):
@@ -2239,6 +2210,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         ):
@@ -2246,7 +2218,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         elif eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
             ser = ArrowStreamGroupSerializer(write_start_stream=True)
         elif eval_type in (
-            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
             PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
@@ -2572,6 +2543,50 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return grouped_func, None, ser, ser
 
+    if eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF:
+        import pyarrow as pa
+        import pandas as pd
+
+        col_names = ["_%d" % i for i in range(len(udfs))]
+        output_schema = StructType(
+            [StructField(name, rt) for name, (_, _, _, rt) in zip(col_names, udfs)]
+        )
+
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
+            for group in data:
+                batch_list = list(group)
+                if not batch_list:
+                    continue
+                table = pa.Table.from_batches(batch_list).combine_chunks()
+                all_series = ArrowBatchTransformer.to_pandas(
+                    table,
+                    timezone=runner_conf.timezone,
+                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                )
+                results = [
+                    udf_func(
+                        *[all_series[o] for o in args_offsets],
+                        **{k: all_series[v] for k, v in kwargs_offsets.items()},
+                    )
+                    for udf_func, args_offsets, kwargs_offsets, _ in udfs
+                ]
+                result_series = [pd.Series([r]) for r in results]
+                yield PandasToArrowConversion.convert(
+                    result_series,
+                    output_schema,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    arrow_cast=True,
+                    prefers_large_types=runner_conf.use_large_var_types,
+                    assign_cols_by_name=runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                )
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
     if eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
         import pyarrow as pa
 
@@ -2651,15 +2666,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         arrow_return_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
-        if runner_conf.assign_cols_by_name:
-            expected_cols_and_types = {
-                col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
-            }
-        else:
-            expected_cols_and_types = [
-                (col.name, to_arrow_type(col.dataType, timezone="UTC"))
-                for col in return_type.fields
-            ]
+        arrow_return_schema = pa.schema(list(arrow_return_type))
 
         key_offsets = parsed_offsets[0][0]
         value_offsets = parsed_offsets[0][1]
@@ -2695,17 +2702,15 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     result = grouped_udf(key, value_table)
 
                 verify_return_type(result, pa.Table)
-                verify_arrow_result(
-                    result, runner_conf.assign_cols_by_name, expected_cols_and_types
+                # Verify types (and reorder by name when configured).
+                result = ArrowBatchTransformer.enforce_schema(
+                    result,
+                    arrow_return_schema,
+                    arrow_cast=False,
+                    reorder_by_name=runner_conf.assign_cols_by_name,
                 )
 
-                # Reorder columns if needed and wrap into struct
                 for batch in result.to_batches():
-                    if runner_conf.assign_cols_by_name:
-                        batch = pa.RecordBatch.from_arrays(
-                            [batch.column(field.name) for field in arrow_return_type],
-                            names=[field.name for field in arrow_return_type],
-                        )
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
         # profiling is not supported for UDF
@@ -2724,15 +2729,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         arrow_return_type = to_arrow_type(
             return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
-        if runner_conf.assign_cols_by_name:
-            expected_cols_and_types = {
-                col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
-            }
-        else:
-            expected_cols_and_types = [
-                (col.name, to_arrow_type(col.dataType, timezone="UTC"))
-                for col in return_type.fields
-            ]
+        arrow_return_schema = pa.schema(list(arrow_return_type))
 
         key_offsets = parsed_offsets[0][0]
         value_offsets = parsed_offsets[0][1]
@@ -2766,16 +2763,14 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     key = tuple(c[0] for c in keys.columns)
                     result = grouped_udf(key, value_batches)
 
-                # Verify, reorder, and wrap each output batch
+                # Verify (and reorder by name when configured) each output batch
                 for batch in verify_return_type(result, Iterator[pa.RecordBatch]):
-                    verify_arrow_result(
-                        batch, runner_conf.assign_cols_by_name, expected_cols_and_types
+                    batch = ArrowBatchTransformer.enforce_schema(
+                        batch,
+                        arrow_return_schema,
+                        arrow_cast=False,
+                        reorder_by_name=runner_conf.assign_cols_by_name,
                     )
-                    if runner_conf.assign_cols_by_name:
-                        batch = pa.RecordBatch.from_arrays(
-                            [batch.column(field.name) for field in arrow_return_type],
-                            names=[field.name for field in arrow_return_type],
-                        )
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
                 # Drain remaining input batches to maintain stream position
@@ -2940,20 +2935,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         parsed_offsets = extract_key_value_indexes(arg_offsets)
 
-        # Pre-compute expected column names/types for strict result validation.
-        # Cogrouped map has a strict contract: missing, extra, or type-mismatched
-        # columns must raise; no silent coercion.
-        if runner_conf.assign_cols_by_name:
-            expected_cols_and_types = {
-                col.name: to_arrow_type(col.dataType, timezone="UTC") for col in return_type.fields
-            }
-            reorder_names = [col.name for col in return_type.fields]
-        else:
-            expected_cols_and_types = [
-                (col.name, to_arrow_type(col.dataType, timezone="UTC"))
-                for col in return_type.fields
-            ]
-            reorder_names = None
+        arrow_return_type = to_arrow_type(
+            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+        )
+        arrow_return_schema = pa.schema(list(arrow_return_type))
 
         select_columns = ArrowBatchTransformer.select_columns
         left_key_cols, left_val_cols = parsed_offsets[0]
@@ -2981,17 +2966,15 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     result = cogrouped_udf(key, left_values, right_values)
 
                 verify_return_type(result, pa.Table)
-                verify_arrow_result(
-                    result, runner_conf.assign_cols_by_name, expected_cols_and_types
+                # Verify types (and reorder by name when configured).
+                result = ArrowBatchTransformer.enforce_schema(
+                    result,
+                    arrow_return_schema,
+                    arrow_cast=False,
+                    reorder_by_name=runner_conf.assign_cols_by_name,
                 )
 
                 for batch in result.to_batches():
-                    if reorder_names is not None:
-                        # Names and types already validated equal; pure reorder, no cast.
-                        batch = pa.RecordBatch.from_arrays(
-                            [batch.column(name) for name in reorder_names],
-                            names=reorder_names,
-                        )
                     yield ArrowBatchTransformer.wrap_struct(batch)
 
         # profiling is not supported for UDF
@@ -3523,13 +3506,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 )
             return f(series_iter)
 
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-    ):
+    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
         import pandas as pd
 
-        # For SQL_GROUPED_AGG_PANDAS_UDF and SQL_WINDOW_AGG_PANDAS_UDF,
+        # For SQL_WINDOW_AGG_PANDAS_UDF,
         # convert iterator of batch tuples to concatenated pandas Series
         def mapper(batch_iter):
             # batch_iter is Iterator[Tuple[pd.Series, ...]] where each tuple represents one batch

@@ -21,7 +21,6 @@ from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class DiffFramesSetItemFrameMixin:
@@ -116,7 +115,7 @@ class DiffFramesSetItemFrameMixin:
             psdf.iloc[[0], 1] = 10 * another_psdf.max_speed
 
 
-class DiffFramesSetItemFrameTests(DiffFramesSetItemFrameMixin, PandasOnSparkTestCase, SQLTestUtils):
+class DiffFramesSetItemFrameTests(DiffFramesSetItemFrameMixin, PandasOnSparkTestCase):
     pass
 
 

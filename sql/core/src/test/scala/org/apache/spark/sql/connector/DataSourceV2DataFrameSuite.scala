@@ -25,9 +25,10 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangeResetsColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -54,6 +55,9 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.cachingcat",
+      classOf[CachingInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.cachingcat.copyOnLoad", "true")
     .set("spark.sql.catalog.nullidcat",
       classOf[NullTableIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
@@ -71,6 +75,7 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.composedidcat.copyOnLoad", "true")
 
   after {
+    catalog("cachingcat").asInstanceOf[CachingInMemoryTableCatalog].clearCache()
     spark.sessionState.catalogManager.reset()
   }
 
@@ -102,7 +107,9 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t2 (id bigint, data string) USING foo")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.insertInto(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       spark.table(t1).write.insertInto(t2)
+      checkInsertMetrics(t2, numInsertedRows = 3)
       checkAnswer(spark.table(t2), df)
     }
   }
@@ -112,6 +119,7 @@ class DataSourceV2DataFrameSuite
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -129,6 +137,7 @@ class DataSourceV2DataFrameSuite
 
       // appends are by name not by position
       df.select($"data", $"id").write.mode("append").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -157,6 +166,7 @@ class DataSourceV2DataFrameSuite
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.mode("ignore").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -190,6 +200,7 @@ class DataSourceV2DataFrameSuite
 
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.option("other", "20").mode("append").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
 
       sparkContext.listenerBus.waitUntilEmpty()
       plan match {
@@ -391,24 +402,29 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq((1, "hr")).toDF("id", "dep")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       sql(s"ALTER TABLE $tableName ADD COLUMN txt STRING DEFAULT 'initial-text'")
 
       val df2 = Seq((2, "hr"), (3, "software")).toDF("id", "dep")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN txt SET DEFAULT 'new-text'")
 
       val df3 = Seq((4, "hr"), (5, "hr")).toDF("id", "dep")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       val df4 = Seq((6, "hr", null), (7, "hr", "explicit-text")).toDF("id", "dep", "txt")
       df4.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN txt DROP DEFAULT")
 
       val df5 = Seq((8, "hr"), (9, "hr")).toDF("id", "dep")
       df5.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -432,11 +448,13 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq(1, 2).toDF("id")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT 'it'")
 
       val df2 = Seq(3, 4).toDF("id")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -450,6 +468,7 @@ class DataSourceV2DataFrameSuite
 
       val df3 = Seq(1, 2).toDF("id")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -493,11 +512,13 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq(1).toDF("id")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT ('i' || 't')")
 
       val df2 = Seq(2).toDF("id")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -536,6 +557,7 @@ class DataSourceV2DataFrameSuite
 
       val df3 = Seq(1).toDF("id")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -2503,29 +2525,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("temp view with stored plan after session drop and re-add column same type") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
-
-      // create two temp views with salary filters
-      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
-      spark.table(t).filter("salary IS NULL").createOrReplaceTempView("v_null")
-      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
-      checkAnswer(spark.table("v_null"), Seq.empty)
-
-      // drop and re-add column with same name and type
-      sql(s"ALTER TABLE $t DROP COLUMN salary")
-      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
-
-      // salary values are now null, so the salary < 999 filter returns nothing
-      checkAnswer(spark.table("v"), Seq.empty)
-      // IS NULL filter now matches all rows
-      checkAnswer(spark.table("v_null"), Seq(Row(1, null), Row(10, null)))
-    }
-  }
-
   // Column ID tests: Write operations
   //
   // [[writeTo().append()]] eagerly executes the command during the
@@ -2706,6 +2705,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // add top-level column to underlying table
@@ -2713,6 +2713,7 @@ class DataSourceV2DataFrameSuite
 
       // accessing temp view should succeed as top-level column additions are allowed
       // view captures original columns
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert data to verify view still works correctly
@@ -2728,6 +2729,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "address"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // add nested column to underlying table
@@ -2752,6 +2754,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data", "age"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // drop column from underlying table
@@ -2776,6 +2779,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "address"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // drop nested column from underlying table
@@ -2800,6 +2804,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // change nullability constraint using ALTER TABLE
@@ -2841,6 +2846,7 @@ class DataSourceV2DataFrameSuite
       assert(originalTableId != newTableId)
 
       // accessing temp view should work despite table ID change (returns empty data)
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert new data and verify view reflects it
@@ -2856,6 +2862,7 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t (id bigint, data STRING, extra INT) USING foo")
 
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data", "extra"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // alter table
@@ -2866,6 +2873,7 @@ class DataSourceV2DataFrameSuite
 
       // recreate view with updated schema
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // now it should work with new schema
@@ -2896,6 +2904,7 @@ class DataSourceV2DataFrameSuite
 
       // accessing temp view should succeed as top-level column additions are allowed
 
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
     }
   }
@@ -2908,6 +2917,7 @@ class DataSourceV2DataFrameSuite
 
         // create temp view using SQL that should capture plan
         sql(s"CREATE OR REPLACE TEMPORARY VIEW v AS SELECT * FROM $t")
+        assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
         checkAnswer(spark.table("v"), Seq.empty)
 
         // verify that view stores analyzed plan
@@ -2918,6 +2928,7 @@ class DataSourceV2DataFrameSuite
         sql(s"ALTER TABLE $t ADD COLUMN age int")
 
         // accessing temp view should succeed as top-level column additions are allowed
+        assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
         checkAnswer(spark.table("v"), Seq.empty)
 
         // insert data to verify view still works correctly
@@ -2934,6 +2945,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "name"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // change VARCHAR(10) to VARCHAR(20)
@@ -2958,6 +2970,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert data into underlying table (no schema change)
@@ -2973,6 +2986,581 @@ class DataSourceV2DataFrameSuite
 
       // view should reflect all data
       checkAnswer(spark.table("v"), df.union(df2))
+    }
+  }
+
+  // Temp views with stored plans: scenarios from the DSv2 table refresh tests.
+  // Each test creates a DSv2 table with initial data, builds a temp view with a filter
+  // (to demonstrate that the stored plan is non-trivial), and then verifies the view
+  // behavior after various table modifications (session or external).
+
+  /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
+  // The row layout must match the current table column order.
+  private def externalAppend(
+      catalogName: String,
+      ident: Identifier,
+      row: InternalRow): Unit = {
+    val extTable = catalog(catalogName).loadTable(ident,
+      util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
+    val schema = CatalogV2Util.v2ColumnsToStructType(extTable.columns())
+    extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
+  }
+
+  // Scenario 1.1 (session write)
+  test("temp view with stored plan reflects session write") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      sql(s"INSERT INTO $t VALUES (2, 200)")
+
+      checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Scenario 1.2 (external write)
+  test("temp view with stored plan reflects external write") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external writer adds (2, 200) via direct catalog API
+      externalAppend(
+        catalogName = "testcat",
+        ident = ident,
+        row = InternalRow(2, 200))
+
+      checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Scenario 1.2 connector w/ cache (external write, caching connector)
+  test("connector w/ cache: temp view stale after external write") {
+    val t = "cachingcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external writer adds (2, 200) via catalog API (bypasses cache)
+      externalAppend(
+        catalogName = "cachingcat",
+        ident = ident,
+        row = InternalRow(2, 200))
+
+      // Caching connector returns stale table: external write invisible
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, external write becomes visible
+      sql(s"REFRESH TABLE $t")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Scenario 2.1 (session ADD COLUMN)
+  test("temp view with stored plan preserves schema after session ADD COLUMN") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      sql(s"ALTER TABLE $t ADD COLUMN new_column INT")
+      sql(s"INSERT INTO $t VALUES (2, 200, -1)")
+
+      // view preserves original 2-column schema, filter still applied
+      checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Scenario 2.2 (external ADD COLUMN)
+  test("temp view with stored plan preserves schema after external ADD COLUMN") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external schema change via catalog API
+      val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
+      catalog("testcat").alterTable(ident, addCol)
+
+      // external writer adds data with new schema
+      externalAppend(
+        catalogName = "testcat",
+        ident = ident,
+        row = InternalRow(2, 200, -1))
+
+      // view preserves original 2-column schema, filter still applied
+      checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Scenario 2.2 connector w/ cache (external ADD COLUMN, caching connector)
+  test("connector w/ cache: temp view stale after external ADD COLUMN") {
+    val t = "cachingcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external schema change + data via catalog API
+      val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
+      catalog("cachingcat").alterTable(ident, addCol)
+
+      externalAppend(
+        catalogName = "cachingcat",
+        ident = ident,
+        row = InternalRow(2, 200, -1))
+
+      // Caching connector returns stale table: external changes invisible
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, view preserves original 2-column schema
+      sql(s"REFRESH TABLE $t")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100), Row(2, 200)))
+    }
+  }
+
+  // Scenario 3.1 (session column removal)
+  test("temp view with stored plan detects session column removal") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // session schema change via SQL
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  // Scenario 3.2 (external column removal)
+  test("temp view with stored plan detects external column removal") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external schema change via catalog API
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      catalog("testcat").alterTable(ident, dropCol)
+
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  // Scenario 3.2 connector w/ cache (external column removal, caching connector)
+  test("connector w/ cache: temp view stale after external column removal") {
+    val t = "cachingcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external column removal via catalog API
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      catalog("cachingcat").alterTable(ident, dropCol)
+
+      // Caching connector returns stale table: column removal invisible, no error
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, column removal detected
+      sql(s"REFRESH TABLE $t")
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`cachingcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` INT has been removed"))
+    }
+  }
+
+  // Scenario 4.1 (session drop and recreate table)
+  test("temp view with stored plan resolves to session-recreated table") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      val originalTableId = catalog("testcat").loadTable(ident).id
+
+      // session drop and recreate via SQL
+      sql(s"DROP TABLE $t")
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+
+      val newTableId = catalog("testcat").loadTable(ident).id
+      assert(originalTableId != newTableId)
+
+      // view resolves to the new empty table
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // insert new data and verify the view picks it up
+      sql(s"INSERT INTO $t VALUES (2, 200)")
+      checkAnswer(spark.table("v"), Seq(Row(2, 200)))
+    }
+  }
+
+  // Scenario 4.2 (external drop and recreate table)
+  test("temp view with stored plan resolves to externally recreated table") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      val originalTableId = catalog("testcat").loadTable(ident).id
+
+      // external drop and recreate via catalog API
+      catalog("testcat").dropTable(ident)
+      catalog("testcat").createTable(
+        ident,
+        new TableInfo.Builder()
+          .withColumns(Array(
+            Column.create("id", IntegerType),
+            Column.create("salary", IntegerType)))
+          .build())
+
+      val newTableId = catalog("testcat").loadTable(ident).id
+      assert(originalTableId != newTableId)
+
+      // view resolves to the new empty table
+      checkAnswer(spark.table("v"), Seq.empty)
+
+      // insert new data and verify the view picks it up
+      sql(s"INSERT INTO $t VALUES (2, 200)")
+      checkAnswer(spark.table("v"), Seq(Row(2, 200)))
+    }
+  }
+
+  // Scenario 4.2 connector w/ cache (external drop/recreate, caching connector)
+  test("connector w/ cache: temp view stale after external drop/recreate") {
+    val t = "cachingcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external drop and recreate via catalog API
+      catalog("cachingcat").dropTable(ident)
+      catalog("cachingcat").createTable(
+        ident,
+        new TableInfo.Builder()
+          .withColumns(Array(
+            Column.create("id", IntegerType),
+            Column.create("salary", IntegerType)))
+          .build())
+
+      // Caching connector returns stale table: drop/recreate invisible
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, view resolves to new empty table
+      sql(s"REFRESH TABLE $t")
+      checkAnswer(spark.table("v"), Seq.empty)
+    }
+  }
+
+  // Scenario 5.1 (session drop and re-add column with same type, multiple views)
+  test("temp view with stored plan after session drop and re-add column same type" +
+      " with unfiltered view") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      spark.table(t).createOrReplaceTempView("v_no_filter")
+      spark.table(t).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+      checkAnswer(spark.table("v_no_filter"), Seq(Row(1, 100), Row(10, 1000)))
+      checkAnswer(spark.table("v_filter_is_null"), Seq.empty)
+
+      // drop and re-add column with same name and type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
+
+      // salary values are now null, so the filtered view returns nothing
+      checkAnswer(spark.table("v"), Seq.empty)
+      // unfiltered view returns rows with null salary
+      checkAnswer(spark.table("v_no_filter"), Seq(Row(1, null), Row(10, null)))
+      // IS NULL filter now matches all rows
+      checkAnswer(spark.table("v_filter_is_null"), Seq(Row(1, null), Row(10, null)))
+    }
+  }
+
+  // Scenario 5.2 (external drop and re-add column with same type)
+  test("temp view with stored plan after external drop and re-add column same type") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      spark.table(t).createOrReplaceTempView("v_no_filter")
+      spark.table(t).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+      checkAnswer(spark.table("v_no_filter"), Seq(Row(1, 100), Row(10, 1000)))
+      checkAnswer(spark.table("v_filter_is_null"), Seq.empty)
+
+      // external drop and re-add column via catalog API
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
+      catalog("testcat").alterTable(ident, dropCol, addCol)
+
+      // salary values are now null, so the filtered view returns nothing
+      checkAnswer(spark.table("v"), Seq.empty)
+      // unfiltered view returns rows with null salary
+      checkAnswer(spark.table("v_no_filter"), Seq(Row(1, null), Row(10, null)))
+      // IS NULL filter now matches all rows
+      checkAnswer(spark.table("v_filter_is_null"), Seq(Row(1, null), Row(10, null)))
+    }
+  }
+
+  // Scenario 5.2 connector w/ cache (external drop/re-add column, caching connector)
+  test("connector w/ cache: temp view stale after external drop/re-add column same type") {
+    val t = "cachingcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external drop and re-add column with same type via catalog API
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      val addCol = TableChange.addColumn(Array("salary"), IntegerType, true)
+      catalog("cachingcat").alterTable(ident, dropCol, addCol)
+
+      // Caching connector returns stale table: column drop/re-add invisible
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, salary values are null
+      sql(s"REFRESH TABLE $t")
+      checkAnswer(spark.table("v"), Seq.empty)
+    }
+  }
+
+  // Scenario 6.1 (session drop and re-add column with different type)
+  test("temp view with stored plan detects session column type change") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // drop and re-add column with same name but different type
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"ALTER TABLE $t ADD COLUMN salary STRING")
+
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to STRING"))
+    }
+  }
+
+  // Scenario 6.2 (external drop and re-add column with different type)
+  test("temp view with stored plan detects external column type change") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external drop and re-add column with different type via catalog API
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      val addCol = TableChange.addColumn(Array("salary"), StringType, true)
+      catalog("testcat").alterTable(ident, dropCol, addCol)
+
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to STRING"))
+    }
+  }
+
+  // Scenario 6.2 connector w/ cache (external column type change, caching connector)
+  test("connector w/ cache: temp view stale after external column type change") {
+    val t = "cachingcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external drop and re-add column with different type via catalog API
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      val addCol = TableChange.addColumn(Array("salary"), StringType, true)
+      catalog("cachingcat").alterTable(ident, dropCol, addCol)
+
+      // Caching connector returns stale table: type change invisible, no error
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, type change detected
+      sql(s"REFRESH TABLE $t")
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`cachingcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to STRING"))
+    }
+  }
+
+  // Scenario 7.1 (session type widening from INT to BIGINT)
+  test("temp view with stored plan detects session type widening") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // session type widening via SQL
+      sql(s"ALTER TABLE $t ALTER COLUMN salary TYPE LONG")
+
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to BIGINT"))
+    }
+  }
+
+  // Scenario 7.2 (external type widening from INT to BIGINT)
+  test("temp view with stored plan detects external type widening") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // widen salary type from INT to BIGINT via catalog API
+      val updateType = TableChange.updateColumnType(Array("salary"), LongType)
+      catalog("testcat").alterTable(ident, updateType)
+
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`testcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to BIGINT"))
+    }
+  }
+
+  // Scenario 7.2 connector w/ cache (external type widening, caching connector)
+  test("connector w/ cache: temp view stale after external type widening") {
+    val t = "cachingcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
+
+      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // external type widening via catalog API
+      val updateType = TableChange.updateColumnType(Array("salary"), LongType)
+      catalog("cachingcat").alterTable(ident, updateType)
+
+      // Caching connector returns stale table: type change invisible, no error
+      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
+
+      // REFRESH TABLE invalidates the connector cache, type change detected
+      sql(s"REFRESH TABLE $t")
+      checkError(
+        exception = intercept[AnalysisException] { spark.table("v").collect() },
+        condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
+        parameters = Map(
+          "viewName" -> "`v`",
+          "tableName" -> "`cachingcat`.`ns1`.`ns2`.`tbl`",
+          "colType" -> "data",
+          "errors" -> "- `salary` type has changed from INT to BIGINT"))
     }
   }
 
@@ -3060,6 +3648,7 @@ class DataSourceV2DataFrameSuite
 
       // verify external changes are reflected correctly when table is queried
       assertNotCached(spark.table(t))
+      assert(spark.table(t).schema.fieldNames.toSeq == Seq("id", "value", "category"))
       checkAnswer(spark.table(t), Seq.empty)
     }
   }

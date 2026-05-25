@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{EvaluateUnresolvedInlineTable, IntervalUtils}
-import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
+import org.apache.spark.sql.connector.catalog.{ChangelogContext, ChangelogRange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -2194,14 +2194,14 @@ class PlanParserSuite extends AnalysisTest {
         endInclusive: Boolean = true): RelationChanges = {
       RelationChanges(
         UnresolvedRelation(Seq("a", "b", "c")),
-        new ChangelogInfo(
+        new ChangelogContext(
           new ChangelogRange.VersionRange(
             startVersion,
             endVersion.map(java.util.Optional.of[String])
               .getOrElse(java.util.Optional.empty[String]),
             startInclusive,
             endInclusive),
-          ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+          ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
           false))
     }
 
@@ -2262,7 +2262,7 @@ class PlanParserSuite extends AnalysisTest {
         case rc: RelationChanges => rc
         case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
       }
-      changes.changelogInfo.range().asInstanceOf[ChangelogRange.TimestampRange]
+      changes.changelogContext.range().asInstanceOf[ChangelogRange.TimestampRange]
     }
 
     // Basic timestamp range
@@ -2300,54 +2300,54 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("CHANGES clause - with options") {
-    def assertChangelogInfo(sql: String): ChangelogInfo = {
+    def assertChangelogContext(sql: String): ChangelogContext = {
       val plan = parsePlan(sql)
       val project = plan.asInstanceOf[Project]
       val changes = project.child match {
         case rc: RelationChanges => rc
         case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
       }
-      changes.changelogInfo
+      changes.changelogContext
     }
 
     // Default: DROP_CARRYOVERS and computeUpdates = false
-    val info1 = assertChangelogInfo(
+    val info1 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20")
-    assert(info1.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info1.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(!info1.computeUpdates())
 
     // deduplicationMode = none
-    val info2 = assertChangelogInfo(
+    val info2 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none')")
-    assert(info2.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info2.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
     assert(!info2.computeUpdates())
 
     // deduplicationMode = netChanges
-    val info3 = assertChangelogInfo(
+    val info3 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'netChanges')")
-    assert(info3.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES)
+    assert(info3.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES)
 
     // computeUpdates = true
-    val info4 = assertChangelogInfo(
+    val info4 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (computeUpdates = 'true')")
-    assert(info4.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info4.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(info4.computeUpdates())
 
     // Both options together
-    val info5 = assertChangelogInfo(
+    val info5 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none', computeUpdates = 'true')")
-    assert(info5.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info5.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
     assert(info5.computeUpdates())
 
     // Case-insensitive deduplicationMode value
-    val info6 = assertChangelogInfo(
+    val info6 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'DROPCARRYOVERS')")
-    assert(info6.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info6.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
   }
 
   test("CHANGES clause - invalid deduplicationMode") {
@@ -2378,10 +2378,10 @@ class PlanParserSuite extends AnalysisTest {
       Project(Seq(UnresolvedStar(None)),
         RelationChanges(
           UnresolvedRelation(Seq("my_table")),
-          new ChangelogInfo(
+          new ChangelogContext(
             new ChangelogRange.VersionRange(
               "1", java.util.Optional.empty[String], true, true),
-            ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+            ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
             false))))
   }
 
