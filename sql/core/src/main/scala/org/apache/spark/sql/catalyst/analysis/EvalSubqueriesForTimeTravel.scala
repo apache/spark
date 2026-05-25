@@ -26,7 +26,7 @@ import org.apache.spark.sql.classic.SparkSession
 class EvalSubqueriesForTimeTravel extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(RELATION_TIME_TRAVEL)) {
-    case r @ RelationTimeTravel(_, Some(ts), _)
+    case r @ RelationTimeTravel(_, Some(ts), _, _)
         if ts.resolved && SubqueryExpression.hasSubquery(ts) =>
       val subqueryEvaluated = ts.transform {
         case s: ScalarSubquery =>

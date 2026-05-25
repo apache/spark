@@ -905,7 +905,8 @@ class AstBuilder extends DataTypeAstBuilder
       partitionSpec: Map[String, Option[String]],
       ifPartitionNotExists: Boolean,
       byName: Boolean,
-      replaceCriteriaOpt: Option[InsertReplaceCriteria] = None)
+      replaceCriteriaOpt: Option[InsertReplaceCriteria] = None,
+      temporal: Option[TemporalClauseContext] = None)
 
   /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
@@ -944,7 +945,8 @@ class AstBuilder extends DataTypeAstBuilder
         createInsertIntoStatement(
           insertParams = insertParams,
           tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
+            insertParams.relationCtx, insertParams.options, privileges,
+            insertParams.temporal.orNull),
           query = query,
           overwrite = false,
           withSchemaEvolution = table.EVOLUTION() != null)
@@ -954,7 +956,8 @@ class AstBuilder extends DataTypeAstBuilder
         createInsertIntoStatement(
           insertParams = insertParams,
           tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
+            insertParams.relationCtx, insertParams.options, privileges,
+            insertParams.temporal.orNull),
           query = query,
           overwrite = true,
           withSchemaEvolution = table.EVOLUTION() != null)
@@ -981,7 +984,8 @@ class AstBuilder extends DataTypeAstBuilder
           // `PlanWithUnresolvedIdentifier` is a `NamedRelation`, so it can occupy
           // `OverwriteByExpression.table` directly; the materialization happens in
           // `ResolveIdentifierClause` via its `OverwriteByExpression` special-case.
-          val table = buildWriteTableSlot(ctx.identifierReference, options, privileges)
+          val table = buildWriteTableSlot(
+            ctx.identifierReference, options, privileges, ctx.temporalClause())
           val deleteExpr = expression(ctx.replaceCondition)
           val isByName = ctx.NAME() != null
           if (isByName) {
@@ -1012,7 +1016,8 @@ class AstBuilder extends DataTypeAstBuilder
           createInsertIntoStatement(
             insertParams = insertParams,
             tableSlot = buildWriteTableSlot(
-              insertParams.relationCtx, insertParams.options, privileges),
+              insertParams.relationCtx, insertParams.options, privileges,
+              insertParams.temporal.orNull),
             query = finalQuery,
             overwrite = true,
             withSchemaEvolution = ctx.EVOLUTION() != null)
@@ -1023,7 +1028,8 @@ class AstBuilder extends DataTypeAstBuilder
         createInsertIntoStatement(
           insertParams = insertParams,
           tableSlot = buildWriteTableSlot(
-            insertParams.relationCtx, insertParams.options, privileges),
+            insertParams.relationCtx, insertParams.options, privileges,
+            insertParams.temporal.orNull),
           query = query,
           overwrite = true,
           withSchemaEvolution = ctx.EVOLUTION() != null)
@@ -1059,7 +1065,8 @@ class AstBuilder extends DataTypeAstBuilder
       userSpecifiedCols = userSpecifiedCols,
       partitionSpec = partitionSpec,
       ifPartitionNotExists = false,
-      byName = ctx.NAME() != null)
+      byName = ctx.NAME() != null,
+      temporal = Option(ctx.temporalClause()))
   }
 
   /**
@@ -1086,7 +1093,8 @@ class AstBuilder extends DataTypeAstBuilder
       userSpecifiedCols = userSpecifiedCols,
       partitionSpec = partitionSpec,
       ifPartitionNotExists = ctx.EXISTS() != null,
-      byName = ctx.NAME() != null)
+      byName = ctx.NAME() != null,
+      temporal = Option(ctx.temporalClause()))
   }
 
   /**
@@ -1107,7 +1115,8 @@ class AstBuilder extends DataTypeAstBuilder
       relationCtx = ctx.identifierReference(),
       optionsCtx = ctx.optionsClause(),
       byName = byName,
-      replaceCriteriaOpt = Some(InsertReplaceUsing(replaceUsingCols))
+      replaceCriteriaOpt = Some(InsertReplaceUsing(replaceUsingCols)),
+      temporalCtx = ctx.temporalClause()
     )
   }
 
@@ -1131,7 +1140,8 @@ class AstBuilder extends DataTypeAstBuilder
       relationCtx = ctx.identifierReference(),
       optionsCtx = ctx.optionsClause(),
       byName = byName,
-      replaceCriteriaOpt = Some(InsertReplaceOn(replaceOnCond, tableAliasOpt))
+      replaceCriteriaOpt = Some(InsertReplaceOn(replaceOnCond, tableAliasOpt)),
+      temporalCtx = ctx.temporalClause()
     )
   }
 
@@ -1139,7 +1149,8 @@ class AstBuilder extends DataTypeAstBuilder
       relationCtx: IdentifierReferenceContext,
       optionsCtx: OptionsClauseContext,
       byName: Boolean,
-      replaceCriteriaOpt: Option[InsertReplaceCriteria]): InsertTableParams = {
+      replaceCriteriaOpt: Option[InsertReplaceCriteria],
+      temporalCtx: TemporalClauseContext = null): InsertTableParams = {
     InsertTableParams(
       relationCtx = relationCtx,
       options = Option(optionsCtx),
@@ -1147,7 +1158,8 @@ class AstBuilder extends DataTypeAstBuilder
       partitionSpec = Map[String, Option[String]](),
       ifPartitionNotExists = false,
       byName = byName,
-      replaceCriteriaOpt = replaceCriteriaOpt)
+      replaceCriteriaOpt = replaceCriteriaOpt,
+      temporal = Option(temporalCtx))
   }
 
   /**
@@ -1186,10 +1198,38 @@ class AstBuilder extends DataTypeAstBuilder
   private def buildWriteTableSlot(
       ctx: IdentifierReferenceContext,
       optionsClause: Option[OptionsClauseContext],
-      writePrivileges: Set[TableWritePrivilege]): NamedRelation = {
-    withIdentClause(ctx, parts =>
+      writePrivileges: Set[TableWritePrivilege],
+      temporalCtx: TemporalClauseContext = null): NamedRelation = {
+    val base = withIdentClause(ctx, parts =>
       createUnresolvedRelation(ctx, parts, optionsClause, writePrivileges, isStreaming = false))
       .asInstanceOf[NamedRelation]
+    if (temporalCtx == null) {
+      base
+    } else {
+      val version = visitVersion(temporalCtx.version)
+      val timestamp = Option(temporalCtx.timestamp).map(expression)
+      val branch = Option(temporalCtx.branch).map(b => string(visitStringLit(b)))
+      if (branch.isEmpty) {
+        throw QueryParsingErrors.invalidTimeTravelSpec(
+          "writes can only target a named branch via FOR BRANCH or VERSION AS OF BRANCH",
+          temporalCtx)
+      }
+      if (version.nonEmpty || timestamp.nonEmpty) {
+        throw QueryParsingErrors.invalidTimeTravelSpec(
+          "BRANCH cannot be combined with VERSION or TIMESTAMP",
+          temporalCtx)
+      }
+      base match {
+        case u: UnresolvedRelation =>
+          val newOptions = new java.util.HashMap[String, String]
+          newOptions.putAll(u.options)
+          newOptions.put(UnresolvedRelation.BRANCH_AS_OF, branch.get)
+          u.copy(options = new CaseInsensitiveStringMap(newOptions))
+        case other =>
+          throw new IllegalStateException(
+            s"FOR BRANCH on write requires a constant table identifier; got ${other.getClass}")
+      }
+    }
   }
 
   /**
@@ -2667,14 +2707,14 @@ class AstBuilder extends DataTypeAstBuilder
 
   private def withTimeTravel(
       ctx: TemporalClauseContext, plan: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val v = ctx.version
     val version = visitVersion(ctx.version)
     val timestamp = Option(ctx.timestamp).map(expression)
+    val branch = Option(ctx.branch).map(b => string(visitStringLit(b)))
     if (timestamp.exists(_.references.nonEmpty)) {
       throw QueryParsingErrors.invalidTimeTravelSpec(
         "timestamp expression cannot refer to any columns", ctx.timestamp)
     }
-    RelationTimeTravel(plan, timestamp, version)
+    RelationTimeTravel(plan, timestamp, version, branch)
   }
 
   /**

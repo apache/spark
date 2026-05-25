@@ -96,4 +96,15 @@ public interface SupportsBranching extends Table {
   default TableBranch[] listBranches() {
     return new TableBranch[0];
   }
+
+  /**
+   * Return a {@link Table} view that targets the named branch. Reads issued against the returned
+   * table see the rows currently on that branch; writes commit into that branch.
+   *
+   * <p>The returned table shares schema with the parent table. Implementations are free to return
+   * the same instance and remember the branch via internal state, or to return a wrapper.
+   *
+   * @throws BranchNotFoundException if the branch does not exist
+   */
+  Table loadBranch(String branchName) throws BranchNotFoundException;
 }

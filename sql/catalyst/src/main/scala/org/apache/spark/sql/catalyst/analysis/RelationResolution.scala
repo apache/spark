@@ -168,6 +168,7 @@ class RelationResolution(
       u.options,
       conf.getConf(SQLConf.TIME_TRAVEL_TIMESTAMP_KEY),
       conf.getConf(SQLConf.TIME_TRAVEL_VERSION_KEY),
+      UnresolvedRelation.BRANCH_AS_OF,
       conf.sessionLocalTimeZone
     )
     if (timeTravelSpec.nonEmpty && timeTravelSpecFromOptions.nonEmpty) {
@@ -233,7 +234,17 @@ class RelationResolution(
   private def tryResolvePersistent(
       u: UnresolvedRelation,
       identifier: Seq[String],
-      finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
+      explicitTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
+    // Apply the session default branch only on the persistent-relation path; temp views
+    // and shared relations cannot be branched.
+    val defaultBranch = conf.getConf(SQLConf.DEFAULT_BRANCH)
+    val finalTimeTravelSpec = if (explicitTimeTravelSpec.isDefined) {
+      explicitTimeTravelSpec
+    } else if (defaultBranch != null && defaultBranch.nonEmpty) {
+      Some(AsOfBranch(defaultBranch, isExplicit = false))
+    } else {
+      None
+    }
     expandIdentifier(identifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
         val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
@@ -243,7 +254,7 @@ class RelationResolution(
           .map(adaptCachedRelation(_, planId))
           .orElse {
             val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
-            val finalOptions = u.clearWritePrivileges.options
+            val finalOptions = u.clearWritePrivileges.clearBranchAsOf.options
             // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
             // `loadRelation` answers both "is there a table?" and "is there a view?" in one
             // call. Time-travel and write privileges apply to tables only, so for those the

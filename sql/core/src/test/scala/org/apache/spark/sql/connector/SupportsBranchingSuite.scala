@@ -20,10 +20,11 @@ package org.apache.spark.sql.connector
 import java.util
 import java.util.Locale
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{BranchAlreadyExistsException, BranchNotFoundException, InvalidFastForwardException}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalog, SupportsBranching, Table, TableCapability}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 class SupportsBranchingSuite extends QueryTest with DatasourceV2SQLBase {
@@ -190,5 +191,100 @@ class SupportsBranchingSuite extends QueryTest with DatasourceV2SQLBase {
       plainTable.asBranchable
     }
     assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("branching"))
+  }
+
+  // ------------------------------------------------------------------
+  // SELECT and INSERT targeting a branch
+  // ------------------------------------------------------------------
+
+  test("SELECT FOR BRANCH reads from the branch's data") {
+    withBranchingTable("t") { fq =>
+      sql(s"INSERT INTO $fq VALUES (1L, 'main')")
+      sql(s"ALTER TABLE $fq CREATE BRANCH dev")
+      sql(s"INSERT INTO $fq FOR BRANCH 'dev' VALUES (2L, 'dev')")
+      // Reads without FOR BRANCH go to the main table.
+      checkAnswer(sql(s"SELECT data FROM $fq"), Seq(Row("main")))
+      // Reads with FOR BRANCH go to the branch.
+      checkAnswer(sql(s"SELECT data FROM $fq FOR BRANCH 'dev'"), Seq(Row("dev")))
+    }
+  }
+
+  test("SELECT VERSION AS OF BRANCH is equivalent to FOR BRANCH") {
+    withBranchingTable("t") { fq =>
+      sql(s"ALTER TABLE $fq CREATE BRANCH dev")
+      sql(s"INSERT INTO $fq FOR BRANCH 'dev' VALUES (1L, 'a'), (2L, 'b')")
+      checkAnswer(
+        sql(s"SELECT data FROM $fq VERSION AS OF BRANCH 'dev' ORDER BY id"),
+        Seq(Row("a"), Row("b")))
+    }
+  }
+
+  test("INSERT FOR BRANCH writes to the branch only") {
+    withBranchingTable("t") { fq =>
+      sql(s"ALTER TABLE $fq CREATE BRANCH dev")
+      sql(s"INSERT INTO $fq VALUES (1L, 'main')")
+      sql(s"INSERT INTO $fq FOR BRANCH 'dev' VALUES (1L, 'dev')")
+      // Main table only sees main row.
+      checkAnswer(sql(s"SELECT data FROM $fq"), Seq(Row("main")))
+      checkAnswer(
+        sql(s"SELECT data FROM $fq FOR BRANCH 'dev'"),
+        Seq(Row("dev")))
+    }
+  }
+
+  test("INSERT OVERWRITE FOR BRANCH overwrites branch data") {
+    withBranchingTable("t") { fq =>
+      sql(s"ALTER TABLE $fq CREATE BRANCH dev")
+      sql(s"INSERT INTO $fq FOR BRANCH 'dev' VALUES (1L, 'a')")
+      sql(s"INSERT OVERWRITE $fq FOR BRANCH 'dev' VALUES (2L, 'b')")
+      checkAnswer(sql(s"SELECT data FROM $fq FOR BRANCH 'dev'"), Seq(Row("b")))
+    }
+  }
+
+  test("spark.sql.defaultBranch routes reads and writes to the named branch") {
+    withBranchingTable("t") { fq =>
+      sql(s"ALTER TABLE $fq CREATE BRANCH dev")
+      withSQLConf(SQLConf.DEFAULT_BRANCH.key -> "dev") {
+        sql(s"INSERT INTO $fq VALUES (1L, 'x')")
+        checkAnswer(sql(s"SELECT data FROM $fq"), Seq(Row("x")))
+      }
+      // Without the conf, the main table has no rows.
+      checkAnswer(sql(s"SELECT data FROM $fq"), Nil)
+      // The branch should hold the row that was written under the conf.
+      checkAnswer(sql(s"SELECT data FROM $fq FOR BRANCH 'dev'"), Seq(Row("x")))
+    }
+  }
+
+  test("explicit FOR BRANCH overrides spark.sql.defaultBranch") {
+    withBranchingTable("t") { fq =>
+      sql(s"ALTER TABLE $fq CREATE BRANCH dev")
+      sql(s"ALTER TABLE $fq CREATE BRANCH staging")
+      withSQLConf(SQLConf.DEFAULT_BRANCH.key -> "dev") {
+        sql(s"INSERT INTO $fq FOR BRANCH 'staging' VALUES (1L, 'staging')")
+      }
+      checkAnswer(sql(s"SELECT data FROM $fq FOR BRANCH 'staging'"), Seq(Row("staging")))
+      checkAnswer(sql(s"SELECT data FROM $fq FOR BRANCH 'dev'"), Nil)
+    }
+  }
+
+  test("spark.sql.defaultBranch is silently ignored for non-branching tables") {
+    // The session catalog's default fallback (InMemoryTableSessionCatalog) uses InMemoryTable
+    // which is branching-capable, so create a temp view instead -- views aren't branching.
+    withSQLConf(SQLConf.DEFAULT_BRANCH.key -> "dev") {
+      sql("CREATE OR REPLACE TEMPORARY VIEW v AS SELECT 1 AS x")
+      checkAnswer(sql("SELECT x FROM v"), Seq(Row(1)))
+    }
+  }
+
+  test("explicit FOR BRANCH on a non-branching table fails") {
+    withSQLConf(SQLConf.DEFAULT_BRANCH.key -> "") {
+      sql("CREATE OR REPLACE TEMPORARY VIEW v AS SELECT 1 AS x")
+      val ex = intercept[AnalysisException] {
+        sql("SELECT x FROM v FOR BRANCH 'dev'")
+      }
+      // Temp views don't support time travel at all -- accept either error.
+      val msg = ex.getMessage.toLowerCase(Locale.ROOT)
+      assert(msg.contains("time travel") || msg.contains("branching"))
+    }
   }
 }

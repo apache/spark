@@ -2181,6 +2181,22 @@ class PlanParserSuite extends AnalysisTest {
           Seq("current_date"), Nil, isDistinct = false)) :: Nil, OneRowRelation()))),
         None)))
 
+    // FOR BRANCH and VERSION AS OF BRANCH both produce a RelationTimeTravel with a branch.
+    def testBranch(sqlText: String): Unit = {
+      comparePlans(
+        parsePlan(sqlText),
+        Project(Seq(UnresolvedStar(None)),
+          RelationTimeTravel(
+            UnresolvedRelation(Seq("a", "b", "c")),
+            None,
+            None,
+            Some("dev"))))
+    }
+    testBranch("SELECT * FROM a.b.c FOR BRANCH 'dev'")
+    testBranch("SELECT * FROM a.b.c VERSION AS OF BRANCH 'dev'")
+    testBranch("SELECT * FROM a.b.c SYSTEM_VERSION AS OF BRANCH 'dev'")
+    testBranch("SELECT * FROM a.b.c FOR VERSION AS OF BRANCH 'dev'")
+
     val sql = "SELECT * FROM a.b.c TIMESTAMP AS OF col"
     val fragment = "TIMESTAMP AS OF col"
     checkError(

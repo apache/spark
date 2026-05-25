@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{RELATION_TIME_TRAVEL, Tr
 case class RelationTimeTravel(
     relation: LogicalPlan,
     timestamp: Option[Expression],
-    version: Option[String]) extends UnresolvedLeafNode {
+    version: Option[String],
+    branch: Option[String] = None) extends UnresolvedLeafNode {
   override val nodePatterns: Seq[TreePattern] = Seq(RELATION_TIME_TRAVEL)
 }

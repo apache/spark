@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CurrentUserContext
-import org.apache.spark.sql.catalyst.analysis.{AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, RelationCache, TimeTravelSpec}
+import org.apache.spark.sql.catalyst.analysis.{AsOfBranch, AsOfTimestamp, AsOfVersion, NamedRelation, NoSuchDatabaseException, NoSuchFunctionException, NoSuchTableException, RelationCache, TimeTravelSpec}
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.{SerdeInfo, TableSpec}
@@ -36,6 +36,7 @@ import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, LiteralValue, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, Metadata, MetadataBuilder, StructField, StructType}
@@ -481,22 +482,39 @@ private[sql] object CatalogV2Util {
       ident: Identifier,
       timeTravelSpec: Option[TimeTravelSpec] = None,
       writePrivilegesString: Option[String] = None): Table = {
-    if (timeTravelSpec.nonEmpty) {
+    val branchSpec = timeTravelSpec.collect { case b: AsOfBranch => b }
+    val nonBranchSpec = timeTravelSpec.filter {
+      case _: AsOfBranch => false
+      case _ => true
+    }
+    if (nonBranchSpec.nonEmpty) {
       assert(writePrivilegesString.isEmpty, "Should not write to a table with time travel")
-      timeTravelSpec.get match {
-        case v: AsOfVersion =>
-          catalog.asTableCatalog.loadTable(ident, v.version)
-        case ts: AsOfTimestamp =>
-          catalog.asTableCatalog.loadTable(ident, ts.timestamp)
-      }
-    } else {
-      if (writePrivilegesString.isDefined) {
-        val writePrivileges = writePrivilegesString.get.split(",").map(_.trim)
-          .map(TableWritePrivilege.valueOf).toSet.asJava
-        catalog.asTableCatalog.loadTable(ident, writePrivileges)
-      } else {
-        catalog.asTableCatalog.loadTable(ident)
-      }
+    }
+    val baseTable: Table = nonBranchSpec match {
+      case Some(v: AsOfVersion) =>
+        catalog.asTableCatalog.loadTable(ident, v.version)
+      case Some(ts: AsOfTimestamp) =>
+        catalog.asTableCatalog.loadTable(ident, ts.timestamp)
+      case _ =>
+        if (writePrivilegesString.isDefined) {
+          val writePrivileges = writePrivilegesString.get.split(",").map(_.trim)
+            .map(TableWritePrivilege.valueOf).toSet.asJava
+          catalog.asTableCatalog.loadTable(ident, writePrivileges)
+        } else {
+          catalog.asTableCatalog.loadTable(ident)
+        }
+    }
+    branchSpec match {
+      case Some(spec) =>
+        baseTable match {
+          case b: SupportsBranching => b.loadBranch(spec.branch)
+          case other if spec.isExplicit =>
+            throw QueryCompilationErrors.tableDoesNotSupportBranchingError(other)
+          case other =>
+            // Non-explicit (session default) branch: silently ignore for non-branching tables.
+            other
+        }
+      case None => baseTable
     }
   }
 

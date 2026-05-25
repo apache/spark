@@ -638,7 +638,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         if (stagedError.isDefined) stagedError.get.apply()
 
         operator match {
-          case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
+          case RelationTimeTravel(u: UnresolvedRelation, _, _, _) =>
             u.tableNotFound(
               u.multipartIdentifier,
               searchPathForUnresolvedRelation(u.multipartIdentifier))

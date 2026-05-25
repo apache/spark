@@ -7099,6 +7099,17 @@ object SQLConf {
       .stringConf
       .createWithDefault("versionAsOf")
 
+  val DEFAULT_BRANCH =
+    buildConf("spark.sql.defaultBranch")
+      .doc("When non-empty, sets a default branch for reads and writes against data sources " +
+        "that implement SupportsBranching. An explicit FOR BRANCH or VERSION AS OF BRANCH " +
+        "clause in the query takes precedence. Tables that do not implement SupportsBranching " +
+        "ignore this setting.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .stringConf
+      .createWithDefault("")
+
   val OPERATOR_PIPE_SYNTAX_ENABLED =
     buildConf("spark.sql.operatorPipeSyntaxEnabled")
       .doc("If true, enable operator pipe syntax for Apache Spark SQL. This uses the operator " +

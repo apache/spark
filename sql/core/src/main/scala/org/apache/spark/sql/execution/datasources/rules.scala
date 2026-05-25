@@ -116,7 +116,7 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, _)
+    case r @ RelationTimeTravel(u: UnresolvedRelation, timestamp, _, _)
         if maybeSQLFile(u) && timestamp.forall(_.resolved) =>
       // If we successfully look up the data source, then this is a path-based table, so we should
       // fail to time travel. Otherwise, this is some other catalog table that isn't resolved yet,

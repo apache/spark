@@ -163,6 +163,17 @@ case class UnresolvedRelation(
     }
   }
 
+  def clearBranchAsOf: UnresolvedRelation = {
+    if (options.containsKey(UnresolvedRelation.BRANCH_AS_OF)) {
+      val newOptions = new java.util.HashMap[String, String]
+      newOptions.putAll(options)
+      newOptions.remove(UnresolvedRelation.BRANCH_AS_OF)
+      copy(options = new CaseInsensitiveStringMap(newOptions))
+    } else {
+      this
+    }
+  }
+
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_RELATION)
 }
 
@@ -170,6 +181,10 @@ object UnresolvedRelation {
   // An internal option of `UnresolvedRelation` to specify the required write privileges when
   // writing data to this relation.
   val REQUIRED_WRITE_PRIVILEGES = "__required_write_privileges__"
+
+  // An internal option of `UnresolvedRelation` to specify that reads/writes should target a
+  // particular named branch on a `SupportsBranching` table.
+  val BRANCH_AS_OF = "__branch_as_of__"
 
   def apply(
       tableIdentifier: TableIdentifier,

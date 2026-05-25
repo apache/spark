@@ -35,6 +35,10 @@ case class AsOfVersion(version: String) extends TimeTravelSpec {
   override def toString: String = s"VERSION AS OF '$version'"
 }
 
+case class AsOfBranch(branch: String, isExplicit: Boolean = true) extends TimeTravelSpec {
+  override def toString: String = s"BRANCH '$branch'"
+}
+
 object TimeTravelSpec {
 
   /**
@@ -75,8 +79,10 @@ object TimeTravelSpec {
   def create(
       timestamp: Option[Expression],
       version: Option[String],
+      branch: Option[String],
       sessionLocalTimeZone: String) : Option[TimeTravelSpec] = {
-    if (timestamp.nonEmpty && version.nonEmpty) {
+    val nonEmptyCount = Seq(timestamp.nonEmpty, version.nonEmpty, branch.nonEmpty).count(identity)
+    if (nonEmptyCount > 1) {
       throw QueryCompilationErrors.invalidTimeTravelSpecError()
     } else if (timestamp.nonEmpty) {
       val ts = timestamp.get
@@ -84,9 +90,19 @@ object TimeTravelSpec {
       Some(AsOfTimestamp(resolveTimestampExpression(ts, sessionLocalTimeZone)))
     } else if (version.nonEmpty) {
       Some(AsOfVersion(version.get))
+    } else if (branch.nonEmpty) {
+      Some(AsOfBranch(branch.get))
     } else {
       None
     }
+  }
+
+  // Kept for binary compatibility with callers that only know about timestamp/version.
+  def create(
+      timestamp: Option[Expression],
+      version: Option[String],
+      sessionLocalTimeZone: String) : Option[TimeTravelSpec] = {
+    create(timestamp, version, None, sessionLocalTimeZone)
   }
 
   def fromOptions(
@@ -94,29 +110,46 @@ object TimeTravelSpec {
       timestampKey: String,
       versionKey: String,
       sessionLocalTimeZone: String): Option[TimeTravelSpec] = {
-    (Option(options.get(timestampKey)), Option(options.get(versionKey))) match {
-      case (Some(_), Some(_)) =>
-        throw QueryCompilationErrors.invalidTimeTravelSpecError()
+    fromOptions(options, timestampKey, versionKey, branchKey = null, sessionLocalTimeZone)
+  }
 
-      case (Some(timestampStr), None) =>
-        val timestampValue = Cast(
-          Literal(timestampStr),
-          TimestampType,
-          Some(sessionLocalTimeZone),
-          ansiEnabled = false
-        ).eval()
-        if (timestampValue == null) {
-          throw new AnalysisException(
-            "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.OPTION",
-            Map("expr" -> s"'$timestampStr'")
-          )
-        }
-        Some(AsOfTimestamp(timestampValue.asInstanceOf[Long]))
+  def fromOptions(
+      options: CaseInsensitiveStringMap,
+      timestampKey: String,
+      versionKey: String,
+      branchKey: String,
+      sessionLocalTimeZone: String): Option[TimeTravelSpec] = {
+    val timestampOpt = Option(options.get(timestampKey))
+    val versionOpt = Option(options.get(versionKey))
+    val branchOpt = Option(branchKey).flatMap(k => Option(options.get(k)))
 
-      case (None, Some(versionStr)) =>
-        Some(AsOfVersion(versionStr))
+    val provided = Seq(timestampOpt.nonEmpty, versionOpt.nonEmpty, branchOpt.nonEmpty)
+      .count(identity)
+    if (provided > 1) {
+      throw QueryCompilationErrors.invalidTimeTravelSpecError()
+    }
 
-      case _ => None
+    if (timestampOpt.isDefined) {
+      val timestampStr = timestampOpt.get
+      val timestampValue = Cast(
+        Literal(timestampStr),
+        TimestampType,
+        Some(sessionLocalTimeZone),
+        ansiEnabled = false
+      ).eval()
+      if (timestampValue == null) {
+        throw new AnalysisException(
+          "INVALID_TIME_TRAVEL_TIMESTAMP_EXPR.OPTION",
+          Map("expr" -> s"'$timestampStr'")
+        )
+      }
+      Some(AsOfTimestamp(timestampValue.asInstanceOf[Long]))
+    } else if (versionOpt.isDefined) {
+      Some(AsOfVersion(versionOpt.get))
+    } else if (branchOpt.isDefined) {
+      Some(AsOfBranch(branchOpt.get))
+    } else {
+      None
     }
   }
 }

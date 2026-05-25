@@ -57,6 +57,10 @@ class InMemoryTable(
     numRowsPerSplit) with SupportsDelete with SupportsBranching {
 
   private val branches = new ConcurrentHashMap[String, TableBranch]()
+  // Data lives in an independent InMemoryTable per branch so that reads/writes targeting a
+  // branch see only that branch's rows. Branch tables share schema, partitioning, and
+  // properties with the parent.
+  private val branchTables = new ConcurrentHashMap[String, InMemoryTable]()
 
   override def createBranch(branchName: String,
       sourceSnapshotId: OptionalLong): TableBranch = {
@@ -75,6 +79,7 @@ class InMemoryTable(
     if (existing != null) {
       throw new BranchAlreadyExistsException(branchName, name)
     }
+    branchTables.put(branchName, newBranchTable(branchName))
     branch
   }
 
@@ -89,11 +94,36 @@ class InMemoryTable(
     }
     val branch = new TableBranch(branchName, snapshot, System.currentTimeMillis())
     branches.put(branchName, branch)
+    branchTables.put(branchName, newBranchTable(branchName))
     branch
   }
 
   override def dropBranch(branchName: String): Boolean = {
+    branchTables.remove(branchName)
     branches.remove(branchName) != null
+  }
+
+  override def loadBranch(branchName: String): Table = {
+    val branch = branches.get(branchName)
+    if (branch == null) {
+      throw new BranchNotFoundException(branchName, name)
+    }
+    branchTables.get(branchName)
+  }
+
+  private def newBranchTable(branchName: String): InMemoryTable = {
+    new InMemoryTable(
+      name = s"$name@$branchName",
+      columns = columns(),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      distribution = distribution,
+      ordering = ordering,
+      numPartitions = numPartitions,
+      advisoryPartitionSize = advisoryPartitionSize,
+      isDistributionStrictlyRequired = isDistributionStrictlyRequired,
+      numRowsPerSplit = numRowsPerSplit)
   }
 
   override def fastForwardBranch(
