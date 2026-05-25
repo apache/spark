@@ -300,6 +300,34 @@ abstract class CTEInlineSuiteBase
     }
   }
 
+  test("SPARK-56921: plan normalization preserves recursive CTE loop refs") {
+    val df = sql(
+      s"""with recursive t(n) as (
+         |  select 1
+         |  union all
+         |  select n + 1 from t where n < 3
+         |)
+         |select * from t
+       """.stripMargin)
+
+    val normalized = df.queryExecution.normalized
+    val unionLoops = normalized.collect { case unionLoop: UnionLoop => unionLoop }
+
+    assert(unionLoops.nonEmpty, "Recursive CTE should normalize with a UnionLoop.")
+    unionLoops.foreach { unionLoop =>
+      val unionLoopRefs = unionLoop.recursion.collect {
+        case unionLoopRef: UnionLoopRef => unionLoopRef
+      }
+
+      assert(unionLoopRefs.nonEmpty, "Recursive CTE should normalize with a UnionLoopRef.")
+      assert(
+        unionLoopRefs.forall(_.loopId == unionLoop.id),
+        "UnionLoopRef loop IDs should match the normalized UnionLoop ID.")
+    }
+
+    checkAnswer(df, Row(1) :: Row(2) :: Row(3) :: Nil)
+  }
+
   test("SPARK-36447: invalid nested CTEs") {
     withTempView("t") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")

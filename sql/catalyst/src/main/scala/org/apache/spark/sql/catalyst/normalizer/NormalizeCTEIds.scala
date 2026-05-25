@@ -54,7 +54,10 @@ object NormalizeCTEIds extends Rule[LogicalPlan] {
   private def canonicalizeCTE(
       plan: LogicalPlan,
       defIdToNewId: mutable.Map[Long, Long]): LogicalPlan = plan match {
-    // Nested WithCTEs are normalized separately by applyInternal.
+    // Stop at nested WithCTEs because applyInternal canonicalizes each WithCTE scope
+    // independently. Descending here would re-apply the shared cteIdToNewId map to
+    // inner-scope refs and, under sibling WithCTEs, move them to the wrong CTE
+    // definition (SPARK-56921).
     case _: WithCTE => plan
     case other =>
       val normalizedPlan = other match {
