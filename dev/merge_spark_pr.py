@@ -714,7 +714,7 @@ class Component:
     the same component (e.g. "DOCS", "DOCUMENTATION" -> "DOC").
 
     ``primary`` marks components whose presence alone satisfies the merge-time
-    requirement. Non-primary JIRA components (e.g. [TEST], [PS], [SHUFFLE])
+    requirement. Non-primary JIRA components (e.g. [TEST], [SHUFFLE], [DEPLOY])
     remain recognized — they normalize and pass through validation — but
     they must be paired with a primary tag (e.g. [SQL][TEST]). Status
     markers are never primary. [WIP] is intentionally absent from the
@@ -750,22 +750,22 @@ class Component:
 #   curl -s https://issues.apache.org/jira/rest/api/2/project/SPARK/components
 # A `primary=True` marker indicates the tag alone satisfies the merge-time
 # component requirement; non-primary JIRA components must be paired with a
-# primary one (e.g. [SQL][TEST], [PYTHON][PS], [CORE][SHUFFLE]). Status
+# primary one (e.g. [SQL][TEST], [CORE][SHUFFLE]). Status
 # markers leave `jira_name` empty.
 COMPONENTS = (
-    Component("BLOCK MANAGER", ("BLOCK_MANAGER",), jira_name="Block Manager"),
+    Component("BLOCK_MANAGER", jira_name="Block Manager"),
     Component("BUILD", primary=True, jira_name="Build"),
     Component("CONNECT", primary=True, jira_name="Connect"),
-    Component("CORE", ("SPARK CORE", "SPARK_CORE"), primary=True, jira_name="Spark Core"),
+    Component("CORE", ("SPARK_CORE",), primary=True, jira_name="Spark Core"),
     Component("DEPLOY", jira_name="Deploy"),
     Component("DOC", ("DOCS", "DOCUMENTATION"), primary=True, jira_name="Documentation"),
     Component("DOCKER", primary=True, jira_name="Spark Docker"),
     Component("EC2", jira_name="EC2"),
     Component("EXAMPLE", ("EXAMPLES",), jira_name="Examples"),
     Component("GRAPHX", primary=True, jira_name="GraphX"),
-    Component("INFRA", ("PROJECT INFRA", "PROJECT_INFRA"), primary=True, jira_name="Project Infra"),
+    Component("INFRA", ("PROJECT_INFRA",), primary=True, jira_name="Project Infra"),
     Component("IO", jira_name="Input/Output"),
-    Component("JAVA", ("JAVA API", "JAVA_API", "JAVAAPI"), jira_name="Java API"),
+    Component("JAVA", ("JAVA_API", "JAVAAPI"), jira_name="Java API"),
     Component("K8S", ("KUBERNETES",), primary=True, jira_name="Kubernetes"),
     Component("MESOS", jira_name="Mesos"),
     Component("ML", primary=True, jira_name="ML"),
@@ -775,22 +775,21 @@ COMPONENTS = (
     Component("PS", primary=True, jira_name="Pandas API on Spark"),
     Component("PYTHON", ("PYSPARK",), primary=True, jira_name="PySpark"),
     Component("R", ("SPARKR",), primary=True, jira_name="R"),
-    Component("REPL", ("SHELL", "SPARK SHELL", "SPARK_SHELL"), jira_name="Spark Shell"),
+    Component("REPL", ("SHELL", "SPARK_SHELL"), jira_name="Spark Shell"),
     Component("SCHEDULER", jira_name="Scheduler"),
     Component("SDP", ("PIPELINES",), primary=True, jira_name="Declarative Pipelines"),
     Component("SECURITY", primary=True, jira_name="Security"),
     Component("SHUFFLE", jira_name="Shuffle"),
-    # Component("SPARKR", jira_name="SparkR"),  # SPARKR is treated as an alias of R above
     Component("SQL", primary=True, jira_name="SQL"),
     Component("SS", primary=True, jira_name="Structured Streaming"),
     Component("STREAMING", ("DSTREAM", "DSTREAMS"), primary=True, jira_name="DStreams"),
     Component("SUBMIT", jira_name="Spark Submit"),
     Component("TEST", ("TESTS", "TEST-ONLY", "TESTS-ONLY"), jira_name="Tests"),
-    Component("UI", ("WEBUI", "WEB UI", "WEB_UI"), primary=True, jira_name="Web UI"),
+    Component("UI", ("WEBUI", "WEB_UI"), primary=True, jira_name="Web UI"),
     Component("WINDOWS", primary=True, jira_name="Windows"),
     Component("YARN", primary=True, jira_name="YARN"),
     # Status markers — recognized in PR titles, but not JIRA components.
-    Component("FOLLOWUP", ("FOLLOW-UP", "FOLLOW UP")),
+    Component("FOLLOWUP", ("FOLLOW-UP",)),
     Component("MINOR"),
     Component("TRIVIAL"),
 )
@@ -819,6 +818,11 @@ class Title:
     (['SPARK-1234'], ['SQL', 'FOLLOWUP'], 'Fix something')
     >>> str(t)
     '[SPARK-1234][SQL][FOLLOWUP] Fix something'
+    >>> t = Title.parse("[SPARK-1234]")
+    >>> t.leading, t.components, t.text
+    (['SPARK-1234'], [], '')
+    >>> str(t)
+    '[SPARK-1234]'
     """
 
     def __init__(
@@ -938,8 +942,8 @@ def prompt_for_components():
     component. Each entered token is normalized via Component.find
     (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"). Unrecognized tokens are
     passed through as-is. Re-prompts until at least one entered token resolves
-    to a tag in PRIMARY_COMPONENTS. Returns an uppercase list of tags in
-    insertion order.
+    to a primary Component (one with primary=True). Returns an uppercase list
+    of tags in insertion order.
     """
     print("PR title is missing a primary [COMPONENT] tag.")
     print("Primary components (one of these is required):")
