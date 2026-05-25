@@ -566,16 +566,16 @@ def create_auto_cdc_flow(
         identifiers without qualifiers, expressed as either Python strings or PySpark Columns.
     :param sequence_by: An expression that we use to order the source data. This can be expressed \
         as either a SQL expression string or a PySpark Column.
-    :param apply_as_deletes: Delete condition for the merged operation. This should be a string of \
-        expression e.g. "operation = 'DELETE'"
+    :param apply_as_deletes: A boolean expression indicating whether an event represents a \
+        delete. This can be expressed as either a SQL expression string or a PySpark Column.
     :param column_list: Columns that will be included in the output table. This should be a list \
         of column identifiers without qualifiers, expressed as either Python strings or PySpark \
-        Column. Only one of column_list and except_column_list can be specified.
+        Columns. Only one of column_list and except_column_list can be specified.
     :param except_column_list: Columns that will be excluded in the output table. This should be a \
         list of column identifiers without qualifiers, expressed as either Python strings or \
-        PySpark Column. Only one of column_list and except_column_list can be specified. When this \
-        is specified, all columns in the dataframe of the target table except those in this list \
-        will be in the output table.
+        PySpark Columns. Only one of column_list and except_column_list can be specified. When \
+        this is specified, all columns in the dataframe of the target table except those in this \
+        list will be in the output table.
     :param stored_as_scd_type: The SCD type for the target table. Only 1 (or "1") is supported. \
         When not specified the server default applies.
     :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified \
