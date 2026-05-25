@@ -811,7 +811,7 @@ private[v2] trait V2JDBCTest
           if (partitioningEnabled) {
             multiplePartitionAdditionalCheck(df1, partitionInfo)
           }
-          assert(df6.collect().length <= 10)
+          assert(df9.collect().length <= 10)
 
           // SYSTEM sampling + column pruning
           val df10 = sql(s"SELECT col1 FROM $catalogName.new_table $tableOptions " +
@@ -821,7 +821,7 @@ private[v2] trait V2JDBCTest
           if (partitioningEnabled) {
             multiplePartitionAdditionalCheck(df1, partitionInfo)
           }
-          assert(df6.collect().length <= 10)
+          assert(df10.collect().length <= 10)
         }
       }
     }

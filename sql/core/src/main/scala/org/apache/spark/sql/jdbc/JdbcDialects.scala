@@ -31,6 +31,7 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
@@ -877,15 +878,21 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Compile a [[org.apache.spark.sql.execution.datasources.v2.TableSampleInfo]] into a
-   * SQL `TABLESAMPLE` clause, or return [[scala.None]] if the  dialect cannot represent
+   * SQL `TABLESAMPLE` clause, or return [[scala.None]] if the dialect cannot represent
    * the requested sampling semantics (e.g. sampling with replacement).
    *
    * The default implementation delegates to [[getTableSample]] when [[supportsTableSample]]
-   * is true, and returns [[scala.None]] otherwise.
+   * is true and the requested sample is BERNOULLI without replacement (the contract
+   * predating this method), and returns [[scala.None]] otherwise.
    */
   @Since("4.2.0")
   def compileTableSample(sample: TableSampleInfo): Option[String] = {
-    if (supportsTableSample) Some(getTableSample(sample)) else None
+    if (supportsTableSample && !sample.withReplacement &&
+        sample.sampleMethod == SampleMethod.Bernoulli) {
+      Some(getTableSample(sample))
+    } else {
+      None
+    }
   }
 
   def supportsHint: Boolean = false
