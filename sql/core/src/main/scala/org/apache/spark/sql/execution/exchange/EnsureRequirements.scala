@@ -86,8 +86,9 @@ case class EnsureRequirements(
                 // Find any KeyedPartitioning that satisfies via groupedSatisfies.
                 val satisfyingKeyedPartitioning =
                   groupedSatisfies.orElse(nonGroupedSatisfiesWhenGrouped).get
-                val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.collectLeaves())
-                  .map(_.asInstanceOf[Attribute])
+                // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees
+                // one attribute per partition expression.
+                val attrs = satisfyingKeyedPartitioning.expressions.flatMap(_.references)
                 val keyRowOrdering = RowOrdering.create(o.ordering, attrs)
                 val keyOrdering = keyRowOrdering.on((t: InternalRowComparableWrapper) => t.row)
                 if (satisfyingKeyedPartitioning.partitionKeys.sliding(2).forall {
@@ -409,12 +410,16 @@ case class EnsureRequirements(
           .orElse(reorderJoinKeysRecursively(
             leftKeys, rightKeys, leftPartitioning, None))
       case (Some(KeyedPartitioning(clustering, _, _, _)), _) =>
-        val leafExprs = clustering.flatMap(_.collectLeaves())
+        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
+        // attribute per partition expression.
+        val leafExprs = clustering.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, leftKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, None, rightPartitioning))
       case (_, Some(KeyedPartitioning(clustering, _, _, _))) =>
-        val leafExprs = clustering.flatMap(_.collectLeaves())
+        // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
+        // attribute per partition expression.
+        val leafExprs = clustering.flatMap(_.references)
         reorder(leftKeys.toIndexedSeq, rightKeys.toIndexedSeq, leafExprs, rightKeys)
             .orElse(reorderJoinKeysRecursively(
               leftKeys, rightKeys, leftPartitioning, None))
@@ -777,7 +782,9 @@ case class EnsureRequirements(
       partitioning: Partitioning,
       distribution: ClusteredDistribution): Option[KeyedShuffleSpec] = {
     def tryCreate(partitioning: KeyedPartitioning): Option[KeyedShuffleSpec] = {
-      val attributes = partitioning.expressions.flatMap(_.collectLeaves())
+      // The single-column invariant in KeyedPartitioning.supportsExpressions guarantees one
+      // attribute per partition expression.
+      val attributes = partitioning.expressions.flatMap(_.references)
       val clustering = distribution.clustering
 
       val satisfies = if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
