@@ -339,7 +339,7 @@ class SparkContext:
         )
         os.environ["SPARK_BUFFER_SIZE"] = str(self._jvm.PythonUtils.getSparkBufferSize(self._jsc))
 
-        self.pythonExec = self._get_python_exec_from_conf()
+        self.pythonExec = self._resolve_python_exec()
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
         # Broadcast's __reduce__ method stores Broadcast instances here.
@@ -416,7 +416,7 @@ class SparkContext:
         ):
             signal.signal(signal.SIGINT, signal_handler)
 
-    def _get_python_exec_from_conf(self) -> str:
+    def _resolve_python_exec(self) -> str:
         """
         Determine the Python executable to use for the driver.
 
@@ -456,7 +456,11 @@ class SparkContext:
         for key in config_keys:
             python_exec = self._conf.get(key, None)
             if python_exec is not None and python_exec.strip() != "":
-                return python_exec.strip()
+                python_exec = python_exec.strip()
+                # Sync back to environment variable so downstream code can also
+                # access the resolved Python path consistently.
+                os.environ["PYSPARK_PYTHON"] = python_exec
+                return python_exec
 
         # Default fallback
         return "python3"
