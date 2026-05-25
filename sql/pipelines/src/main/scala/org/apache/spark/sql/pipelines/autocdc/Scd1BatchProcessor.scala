@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{functions => F}
+import org.apache.spark.sql.{functions => F, AnalysisException}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.QuotingUtils
