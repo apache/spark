@@ -4832,12 +4832,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def unsupportedTimestampNanosTypeError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_TIMESTAMP_NANOS_TYPE",
-      messageParameters = Map.empty)
-  }
-
   def nestedSequentialStreamingUnionError(): Throwable = {
     new AnalysisException(
       errorClass = "NESTED_SEQUENTIAL_STREAMING_UNION",

@@ -286,13 +286,17 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def checkTimestampNanosTypesEnabled(): Unit = {
     if (!SqlApiConf.get.timestampNanosTypesEnabled) {
-      throw new SparkException(
-        errorClass = "FEATURE_NOT_ENABLED",
-        messageParameters = Map(
-          "featureName" -> "Nanosecond-precision timestamp types",
-          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
-          "configValue" -> "true"),
-        cause = null)
+      throw timestampNanosTypesNotEnabledError()
     }
+  }
+
+  def timestampNanosTypesNotEnabledError(): Throwable = {
+    new SparkException(
+      errorClass = "FEATURE_NOT_ENABLED",
+      messageParameters = Map(
+        "featureName" -> "Nanosecond-precision timestamp types",
+        "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+        "configValue" -> "true"),
+      cause = null)
   }
 }

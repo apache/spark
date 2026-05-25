@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
+import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -151,7 +151,7 @@ object TypeUtils extends QueryErrorsBase {
       throw QueryCompilationErrors.unsupportedTimeTypeError()
     }
     if (!conf.timestampNanosTypesEnabled && containsTimestampNanosType(dataType)) {
-      throw QueryCompilationErrors.unsupportedTimestampNanosTypeError()
+      throw DataTypeErrors.timestampNanosTypesNotEnabledError()
     }
     if (!conf.geospatialEnabled && dataType.existsRecursively(isGeoSpatialType)) {
       throw new org.apache.spark.sql.AnalysisException(

@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
@@ -60,23 +59,30 @@ class TypeUtilsSuite extends SparkFunSuite with SQLHelper {
 
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
       val conf = SQLConf.get
+      val expectedParams = Map(
+        "featureName" -> "Nanosecond-precision timestamp types",
+        "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+        "configValue" -> "true")
       checkError(
-        intercept[AnalysisException] {
+        intercept[SparkException] {
           TypeUtils.failUnsupportedDataType(ntzNanos, conf)
         },
-        condition = "UNSUPPORTED_TIMESTAMP_NANOS_TYPE")
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = expectedParams)
 
       checkError(
-        intercept[AnalysisException] {
+        intercept[SparkException] {
           TypeUtils.failUnsupportedDataType(ltzNanos, conf)
         },
-        condition = "UNSUPPORTED_TIMESTAMP_NANOS_TYPE")
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = expectedParams)
 
       checkError(
-        intercept[AnalysisException] {
+        intercept[SparkException] {
           TypeUtils.failUnsupportedDataType(nestedNtzNanos, conf)
         },
-        condition = "UNSUPPORTED_TIMESTAMP_NANOS_TYPE")
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = expectedParams)
     }
   }
 
