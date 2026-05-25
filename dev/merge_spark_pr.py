@@ -701,7 +701,6 @@ def resolve_jira_issues(title, merge_branches, comment):
         resolve_jira_issue(merge_branches, comment, jira_id)
 
 
-
 class Component:
     """A Spark PR-title tag, paired with its canonical JIRA component name.
 
@@ -741,7 +740,6 @@ class Component:
             if c.matches(token):
                 return c
         return None
-
 
 
 # Full SPARK JIRA component list (sorted alphabetically by tag), followed
@@ -894,9 +892,7 @@ class Title:
         m0 = _BRACKET_TAG_RE.match(raw)
         first = m0.group(1).upper() if m0 else ""
         if not (_SPARK_ID_RE.match(first) or first in _LEADING_TAGS):
-            raise ValueError(
-                "title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: %r" % raw
-            )
+            raise ValueError("title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: %r" % raw)
 
         past_leading = False
         pos = 0
@@ -923,9 +919,7 @@ class Title:
         text = raw[pos:].lstrip()
         markers = [t for t in leading if t in _LEADING_TAGS]
         if len(markers) > 1 or (markers and len(leading) > len(markers)):
-            raise ValueError(
-                "[SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist"
-            )
+            raise ValueError("[SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist")
         return cls(leading, components, text)
 
     def __str__(self) -> str:
@@ -1093,13 +1087,10 @@ def main():
 
         # Warn about tags that are neither known components nor version tags.
         unknown = [
-            t for t in components
-            if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
+            t for t in components if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
         ]
         if unknown:
-            print_error(
-                "Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown)
-            )
+            print_error("Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown))
 
         parsed.components = components
         title = str(parsed)
