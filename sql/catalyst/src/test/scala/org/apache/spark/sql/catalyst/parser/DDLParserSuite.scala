@@ -3737,4 +3737,77 @@ class DDLParserSuite extends AnalysisTest {
       )
     }
   }
+
+  test("alter table: create branch") {
+    comparePlans(
+      parsePlan("ALTER TABLE t CREATE BRANCH b"),
+      CreateBranch(
+        UnresolvedTable(Seq("t"), "ALTER TABLE ... CREATE BRANCH"),
+        "b",
+        None,
+        ifNotExists = false,
+        replace = false))
+
+    comparePlans(
+      parsePlan("ALTER TABLE t CREATE BRANCH IF NOT EXISTS b"),
+      CreateBranch(
+        UnresolvedTable(Seq("t"), "ALTER TABLE ... CREATE BRANCH"),
+        "b",
+        None,
+        ifNotExists = true,
+        replace = false))
+
+    comparePlans(
+      parsePlan("ALTER TABLE t CREATE OR REPLACE BRANCH b VERSION AS OF 42"),
+      CreateBranch(
+        UnresolvedTable(Seq("t"), "ALTER TABLE ... CREATE BRANCH"),
+        "b",
+        Some(42L),
+        ifNotExists = false,
+        replace = true))
+  }
+
+  test("alter table: create branch with both REPLACE and IF NOT EXISTS is rejected") {
+    val sqlText = "ALTER TABLE t CREATE OR REPLACE BRANCH IF NOT EXISTS b"
+    checkError(
+      exception = parseException(sqlText),
+      condition = "CREATE_BRANCH_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      parameters = Map("tableName" -> "t", "branchName" -> "b"),
+      context = ExpectedContext(fragment = sqlText, start = 0, stop = sqlText.length - 1))
+  }
+
+  test("alter table: drop branch") {
+    comparePlans(
+      parsePlan("ALTER TABLE t DROP BRANCH b"),
+      DropBranch(
+        UnresolvedTable(Seq("t"), "ALTER TABLE ... DROP BRANCH"),
+        "b",
+        ifExists = false))
+
+    comparePlans(
+      parsePlan("ALTER TABLE t DROP BRANCH IF EXISTS b"),
+      DropBranch(
+        UnresolvedTable(Seq("t"), "ALTER TABLE ... DROP BRANCH"),
+        "b",
+        ifExists = true))
+  }
+
+  test("alter table: fastforward branch") {
+    comparePlans(
+      parsePlan("ALTER TABLE t FASTFORWARD BRANCH b TO target"),
+      FastForwardBranch(
+        UnresolvedTable(Seq("t"), "ALTER TABLE ... FASTFORWARD BRANCH"),
+        "b",
+        "target"))
+  }
+
+  test("show branches") {
+    comparePlans(
+      parsePlan("SHOW BRANCHES IN t"),
+      ShowBranches(UnresolvedTable(Seq("t"), "SHOW BRANCHES")))
+
+    comparePlans(
+      parsePlan("SHOW BRANCHES FROM t"),
+      ShowBranches(UnresolvedTable(Seq("t"), "SHOW BRANCHES")))
+  }
 }

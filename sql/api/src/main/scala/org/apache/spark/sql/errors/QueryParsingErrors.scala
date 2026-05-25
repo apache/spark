@@ -771,6 +771,16 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def createBranchWithBothIfNotExistsAndReplaceError(
+      tableName: String,
+      branchName: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "CREATE_BRANCH_WITH_IF_NOT_EXISTS_AND_REPLACE",
+      messageParameters = Map("tableName" -> tableName, "branchName" -> branchName),
+      ctx)
+  }
+
   def temporaryViewWithSchemaBindingMode(ctx: StatementContext): Throwable = {
     new ParseException(
       errorClass = "UNSUPPORTED_FEATURE.TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE",

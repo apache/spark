@@ -6813,6 +6813,76 @@ class AstBuilder extends DataTypeAstBuilder
   }
 
   /**
+   * Create a [[CreateBranch]].
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE t CREATE BRANCH name [VERSION AS OF 123]
+   *   ALTER TABLE t CREATE OR REPLACE BRANCH name [VERSION AS OF 123]
+   *   ALTER TABLE t CREATE BRANCH IF NOT EXISTS name
+   * }}}
+   */
+  override def visitCreateBranch(ctx: CreateBranchContext): LogicalPlan = withOrigin(ctx) {
+    val ifNotExists = ctx.EXISTS() != null
+    val replace = ctx.REPLACE() != null
+    if (ifNotExists && replace) {
+      throw QueryParsingErrors.createBranchWithBothIfNotExistsAndReplaceError(
+        ctx.identifierReference().getText, ctx.branch.getText, ctx)
+    }
+    val snapshotId = Option(ctx.snapshotId).map(_.getText.toLong)
+    CreateBranch(
+      createUnresolvedTable(ctx.identifierReference, "ALTER TABLE ... CREATE BRANCH"),
+      ctx.branch.getText,
+      snapshotId,
+      ifNotExists,
+      replace)
+  }
+
+  /**
+   * Create a [[DropBranch]].
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE t DROP BRANCH [IF EXISTS] name
+   * }}}
+   */
+  override def visitDropBranch(ctx: DropBranchContext): LogicalPlan = withOrigin(ctx) {
+    DropBranch(
+      createUnresolvedTable(ctx.identifierReference, "ALTER TABLE ... DROP BRANCH"),
+      ctx.branch.getText,
+      ctx.EXISTS() != null)
+  }
+
+  /**
+   * Create a [[FastForwardBranch]].
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE t FASTFORWARD BRANCH branch TO target
+   * }}}
+   */
+  override def visitFastForwardBranch(
+      ctx: FastForwardBranchContext): LogicalPlan = withOrigin(ctx) {
+    FastForwardBranch(
+      createUnresolvedTable(ctx.identifierReference, "ALTER TABLE ... FASTFORWARD BRANCH"),
+      ctx.branch.getText,
+      ctx.target.getText)
+  }
+
+  /**
+   * Create a [[ShowBranches]].
+   *
+   * For example:
+   * {{{
+   *   SHOW BRANCHES (FROM | IN) table
+   * }}}
+   */
+  override def visitShowBranches(ctx: ShowBranchesContext): LogicalPlan = withOrigin(ctx) {
+    ShowBranches(
+      createUnresolvedTable(ctx.identifierReference, "SHOW BRANCHES"))
+  }
+
+  /**
    * Create an [[AddPartitions]].
    *
    * For example:

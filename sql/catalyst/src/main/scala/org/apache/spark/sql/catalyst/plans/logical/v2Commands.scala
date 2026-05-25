@@ -1698,6 +1698,59 @@ case class RecoverPartitions(child: LogicalPlan) extends UnaryCommand {
 }
 
 /**
+ * The logical plan of the ALTER TABLE ... CREATE BRANCH command.
+ */
+case class CreateBranch(
+    child: LogicalPlan,
+    branchName: String,
+    sourceSnapshotId: Option[Long],
+    ifNotExists: Boolean,
+    replace: Boolean) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): CreateBranch =
+    copy(child = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... DROP BRANCH command.
+ */
+case class DropBranch(
+    child: LogicalPlan,
+    branchName: String,
+    ifExists: Boolean) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): DropBranch =
+    copy(child = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... FASTFORWARD BRANCH command.
+ */
+case class FastForwardBranch(
+    child: LogicalPlan,
+    branchName: String,
+    targetBranchName: String) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): FastForwardBranch =
+    copy(child = newChild)
+}
+
+/**
+ * The logical plan of the SHOW BRANCHES command.
+ */
+case class ShowBranches(
+    child: LogicalPlan,
+    override val output: Seq[Attribute] = ShowBranches.getOutputAttrs) extends UnaryCommand {
+  override protected def withNewChildInternal(newChild: LogicalPlan): ShowBranches =
+    copy(child = newChild)
+}
+
+object ShowBranches {
+  def getOutputAttrs: Seq[Attribute] = Seq(
+    AttributeReference("name", StringType, nullable = false)(),
+    AttributeReference("snapshot_id", org.apache.spark.sql.types.LongType, nullable = true)(),
+    AttributeReference("creation_time",
+      org.apache.spark.sql.types.TimestampType, nullable = false)())
+}
+
+/**
  * The logical plan of the LOAD DATA INTO TABLE command.
  */
 case class LoadData(

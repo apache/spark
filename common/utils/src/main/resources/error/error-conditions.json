@@ -425,6 +425,19 @@
     ],
     "sqlState" : "0A000"
   },
+  "BRANCH_ALREADY_EXISTS" : {
+    "message" : [
+      "Cannot create branch <branchName> on table <relationName> because it already exists.",
+      "Choose a different name, drop the existing branch, or add the IF NOT EXISTS clause to tolerate pre-existing branches."
+    ],
+    "sqlState" : "42710"
+  },
+  "BRANCH_NOT_FOUND" : {
+    "message" : [
+      "Cannot find the branch <branchName> on table <relationName>."
+    ],
+    "sqlState" : "42704"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."
@@ -1587,6 +1600,12 @@
       "Start time provided to function <function> decreased from <previousStartTime> to <currentStartTime>. Start time is required to be non-decreasing."
     ],
     "sqlState" : "22023"
+  },
+  "CREATE_BRANCH_WITH_IF_NOT_EXISTS_AND_REPLACE" : {
+    "message" : [
+      "ALTER TABLE <tableName> CREATE BRANCH <branchName> with both IF NOT EXISTS and OR REPLACE is not allowed."
+    ],
+    "sqlState" : "42601"
   },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
@@ -3844,6 +3863,12 @@
   "INVALID_EXTRACT_FIELD_TYPE" : {
     "message" : [
       "Field name should be a non-null string literal, but it's <extraction>."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_FASTFORWARD" : {
+    "message" : [
+      "Cannot fast-forward branch <branchName> on table <relationName> to <targetBranchName>: <reason>."
     ],
     "sqlState" : "42000"
   },

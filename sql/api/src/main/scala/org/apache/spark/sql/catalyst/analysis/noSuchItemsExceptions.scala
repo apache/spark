@@ -224,6 +224,84 @@ class NoSuchIndexException private (
   }
 }
 
+// any changes to this class should be backward compatible as it may be used by external connectors
+class BranchNotFoundException private (
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+    extends AnalysisException(
+      message,
+      cause = cause,
+      errorClass = errorClass,
+      messageParameters = messageParameters) {
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause,
+      Some(errorClass),
+      messageParameters)
+  }
+
+  def this(branchName: String, relationName: String) = {
+    this(
+      errorClass = "BRANCH_NOT_FOUND",
+      Map("branchName" -> quoteIdentifier(branchName), "relationName" -> relationName),
+      cause = None)
+  }
+
+  def this(branchName: String, tableIdent: Identifier) = {
+    this(branchName, quoted(tableIdent))
+  }
+}
+
+// any changes to this class should be backward compatible as it may be used by external connectors
+class InvalidFastForwardException private (
+    message: String,
+    cause: Option[Throwable],
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+    extends AnalysisException(
+      message,
+      cause = cause,
+      errorClass = errorClass,
+      messageParameters = messageParameters) {
+
+  def this(
+      errorClass: String,
+      messageParameters: Map[String, String],
+      cause: Option[Throwable]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause,
+      Some(errorClass),
+      messageParameters)
+  }
+
+  def this(branchName: String, targetBranchName: String, relationName: String, reason: String) = {
+    this(
+      errorClass = "INVALID_FASTFORWARD",
+      Map(
+        "branchName" -> quoteIdentifier(branchName),
+        "targetBranchName" -> quoteIdentifier(targetBranchName),
+        "relationName" -> relationName,
+        "reason" -> reason),
+      cause = None)
+  }
+
+  def this(
+      branchName: String,
+      targetBranchName: String,
+      tableIdent: Identifier,
+      reason: String) = {
+    this(branchName, targetBranchName, quoted(tableIdent), reason)
+  }
+}
+
 class CannotReplaceMissingTableException(
     tableIdentifier: Identifier,
     cause: Option[Throwable] = None,

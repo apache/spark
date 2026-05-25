@@ -37,6 +37,8 @@ BIN_END	false
 BIN_START	false
 BOOLEAN	false
 BOTH	true
+BRANCH	false
+BRANCHES	false
 BUCKET	false
 BUCKETS	false
 BY	false
@@ -146,6 +148,7 @@ EXTENDED	false
 EXTERNAL	false
 EXTRACT	false
 FALSE	true
+FASTFORWARD	false
 FETCH	true
 FIELDS	false
 FILEFORMAT	false

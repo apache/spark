@@ -749,6 +749,19 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         Seq(part).asResolvedPartitionSpecs.head,
         recacheTable(r, includeTimeTravel = false)) :: Nil
 
+    case CreateBranch(r: ResolvedTable, branchName, sourceSnapshotId, ifNotExists, replace) =>
+      CreateBranchExec(
+        r.table.asBranchable, branchName, sourceSnapshotId, ifNotExists, replace) :: Nil
+
+    case DropBranch(r: ResolvedTable, branchName, ifExists) =>
+      DropBranchExec(r.table.asBranchable, branchName, ifExists) :: Nil
+
+    case FastForwardBranch(r: ResolvedTable, branchName, targetBranchName) =>
+      FastForwardBranchExec(r.table.asBranchable, branchName, targetBranchName) :: Nil
+
+    case sb @ ShowBranches(r: ResolvedTable, _) =>
+      ShowBranchesExec(sb.output, r.table.asBranchable) :: Nil
+
     case ShowColumns(resolvedTable: ResolvedTable, ns, output) =>
       ns match {
         case Some(namespace) =>

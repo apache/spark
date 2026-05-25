@@ -1807,6 +1807,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     tableDoesNotSupportError("truncates", table)
   }
 
+  def tableDoesNotSupportBranchingError(table: Table): Throwable = {
+    tableDoesNotSupportError("branching", table)
+  }
+
   def tableDoesNotSupportPartitionManagementError(table: Table): Throwable = {
     tableDoesNotSupportError("partition management", table)
   }

@@ -18,9 +18,13 @@
 package org.apache.spark.sql.connector.catalog
 
 import java.util
-import java.util.{Objects, UUID}
+import java.util.{Objects, OptionalLong, UUID}
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{BranchAlreadyExistsException, BranchNotFoundException, InvalidFastForwardException}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions.{SortOrder, Transform}
@@ -50,7 +54,76 @@ class InMemoryTable(
     override val id: String = UUID.randomUUID().toString)
   extends InMemoryBaseTable(name, columns, partitioning, properties, constraints, distribution,
     ordering, numPartitions, advisoryPartitionSize, isDistributionStrictlyRequired,
-    numRowsPerSplit) with SupportsDelete {
+    numRowsPerSplit) with SupportsDelete with SupportsBranching {
+
+  private val branches = new ConcurrentHashMap[String, TableBranch]()
+
+  override def createBranch(branchName: String,
+      sourceSnapshotId: OptionalLong): TableBranch = {
+    // If no explicit source snapshot is provided, point at the table's current version when one
+    // exists; otherwise leave the snapshot id empty so SHOW BRANCHES surfaces NULL for a branch
+    // created on a table that has no commits yet.
+    val snapshot = if (sourceSnapshotId.isPresent) {
+      sourceSnapshotId
+    } else if (tableVersion > 0) {
+      OptionalLong.of(tableVersion.toLong)
+    } else {
+      OptionalLong.empty()
+    }
+    val branch = new TableBranch(branchName, snapshot, System.currentTimeMillis())
+    val existing = branches.putIfAbsent(branchName, branch)
+    if (existing != null) {
+      throw new BranchAlreadyExistsException(branchName, name)
+    }
+    branch
+  }
+
+  override def replaceBranch(branchName: String,
+      sourceSnapshotId: OptionalLong): TableBranch = branches.synchronized {
+    val snapshot = if (sourceSnapshotId.isPresent) {
+      sourceSnapshotId
+    } else if (tableVersion > 0) {
+      OptionalLong.of(tableVersion.toLong)
+    } else {
+      OptionalLong.empty()
+    }
+    val branch = new TableBranch(branchName, snapshot, System.currentTimeMillis())
+    branches.put(branchName, branch)
+    branch
+  }
+
+  override def dropBranch(branchName: String): Boolean = {
+    branches.remove(branchName) != null
+  }
+
+  override def fastForwardBranch(
+      branchName: String,
+      targetBranchName: String): TableBranch = {
+    val current = branches.get(branchName)
+    if (current == null) {
+      throw new BranchNotFoundException(branchName, name)
+    }
+    val target = branches.get(targetBranchName)
+    if (target == null) {
+      throw new BranchNotFoundException(targetBranchName, name)
+    }
+    val currentSnapshot = if (current.snapshotId().isPresent) current.snapshotId().getAsLong else 0L
+    val targetSnapshot = if (target.snapshotId().isPresent) target.snapshotId().getAsLong else 0L
+    if (targetSnapshot < currentSnapshot) {
+      throw new InvalidFastForwardException(
+        branchName,
+        targetBranchName,
+        name,
+        s"target is behind (target=$targetSnapshot, current=$currentSnapshot)")
+    }
+    val updated = new TableBranch(branchName, targetSnapshot, current.creationTimeMs())
+    branches.put(branchName, updated)
+    updated
+  }
+
+  override def listBranches(): Array[TableBranch] = {
+    branches.values().asScala.toArray.sortBy(_.name())
+  }
 
   def this(
       name: String,

@@ -444,6 +444,8 @@ Below is a list of all the keywords in Spark SQL.
 |BIN_START|non-reserved|non-reserved|non-reserved|
 |BOOLEAN|non-reserved|non-reserved|reserved|
 |BOTH|reserved|non-reserved|reserved|
+|BRANCH|non-reserved|non-reserved|non-reserved|
+|BRANCHES|non-reserved|non-reserved|non-reserved|
 |BUCKET|non-reserved|non-reserved|non-reserved|
 |BUCKETS|non-reserved|non-reserved|non-reserved|
 |BY|non-reserved|non-reserved|reserved|
@@ -553,6 +555,7 @@ Below is a list of all the keywords in Spark SQL.
 |EXTERNAL|non-reserved|non-reserved|reserved|
 |EXTRACT|non-reserved|non-reserved|reserved|
 |FALSE|reserved|non-reserved|reserved|
+|FASTFORWARD|non-reserved|non-reserved|non-reserved|
 |FETCH|reserved|non-reserved|reserved|
 |FIELDS|non-reserved|non-reserved|non-reserved|
 |FILTER|reserved|non-reserved|reserved|

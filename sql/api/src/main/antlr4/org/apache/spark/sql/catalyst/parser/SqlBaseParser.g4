@@ -316,6 +316,14 @@ statement
     | ALTER TABLE identifierReference
         DROP CONSTRAINT (IF EXISTS)? name=identifier
         (RESTRICT | CASCADE)?                                     #dropTableConstraint
+    | ALTER TABLE identifierReference
+        CREATE (OR REPLACE)? BRANCH (IF errorCapturingNot EXISTS)?
+        branch=identifier
+        (VERSION AS OF snapshotId=INTEGER_VALUE)?                      #createBranch
+    | ALTER TABLE identifierReference
+        DROP BRANCH (IF EXISTS)? branch=identifier                     #dropBranch
+    | ALTER TABLE identifierReference
+        FASTFORWARD BRANCH branch=identifier TO target=identifier      #fastForwardBranch
     | DROP TABLE (IF EXISTS)? identifierReference PURGE?               #dropTable
     | DROP VIEW (IF EXISTS)? identifierReference                       #dropView
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
@@ -374,6 +382,7 @@ statement
     | SHOW VIEWS ((FROM | IN) identifierReference)?
         (LIKE? pattern=stringLit)?                                        #showViews
     | SHOW PARTITIONS identifierReference partitionSpec? (AS JSON)?    #showPartitions
+    | SHOW BRANCHES (FROM | IN) identifierReference                    #showBranches
     | SHOW functionScope=simpleIdentifier? FUNCTIONS ((FROM | IN) ns=identifierReference)?
         (LIKE? (legacy=multipartIdentifier | pattern=stringLit))?      #showFunctions
     | SHOW PROCEDURES ((FROM | IN) identifierReference)?               #showProcedures
@@ -1978,6 +1987,8 @@ ansiNonReserved
     | BINARY_HEX
     | BINDING
     | BOOLEAN
+    | BRANCH
+    | BRANCHES
     | BUCKET
     | BUCKETS
     | BY
@@ -2063,6 +2074,7 @@ ansiNonReserved
     | EXTENDED
     | EXTERNAL
     | EXTRACT
+    | FASTFORWARD
     | FIELDS
     | FILEFORMAT
     | FIRST
@@ -2368,6 +2380,8 @@ nonReserved
     | BINDING
     | BOOLEAN
     | BOTH
+    | BRANCH
+    | BRANCHES
     | BUCKET
     | BUCKETS
     | BY
@@ -2475,6 +2489,7 @@ nonReserved
     | EXTERNAL
     | EXTRACT
     | FALSE
+    | FASTFORWARD
     | FETCH
     | FILTER
     | FIELDS

@@ -197,3 +197,31 @@ class IndexAlreadyExistsException private (
     this("INDEX_ALREADY_EXISTS", Map("indexName" -> indexName, "tableName" -> tableName), cause)
   }
 }
+
+// any changes to this class should be backward compatible as it may be used by external connectors
+class BranchAlreadyExistsException private (
+    message: String,
+    errorClass: Option[String],
+    messageParameters: Map[String, String])
+    extends AnalysisException(
+      message,
+      errorClass = errorClass,
+      messageParameters = messageParameters) {
+
+  def this(errorClass: String, messageParameters: Map[String, String]) = {
+    this(
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      Some(errorClass),
+      messageParameters)
+  }
+
+  def this(branchName: String, relationName: String) = {
+    this(
+      errorClass = "BRANCH_ALREADY_EXISTS",
+      Map("branchName" -> quoteIdentifier(branchName), "relationName" -> relationName))
+  }
+
+  def this(branchName: String, tableIdent: Identifier) = {
+    this(branchName, quoted(tableIdent))
+  }
+}

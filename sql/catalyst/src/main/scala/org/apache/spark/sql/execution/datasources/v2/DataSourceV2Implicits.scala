@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.analysis.{PartitionSpec, ResolvedPartitionSpec, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, MetadataAttribute}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsDeleteV2, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
+import org.apache.spark.sql.connector.catalog.{MetadataColumn, SupportsAtomicPartitionManagement, SupportsBranching, SupportsDeleteV2, SupportsPartitionManagement, SupportsRead, SupportsWrite, Table, TableCapability, TruncatableTable}
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -62,6 +62,14 @@ object DataSourceV2Implicits {
         case t: TruncatableTable => t
         case _ =>
           throw QueryCompilationErrors.tableDoesNotSupportTruncatesError(table)
+      }
+    }
+
+    def asBranchable: SupportsBranching = {
+      table match {
+        case t: SupportsBranching => t
+        case _ =>
+          throw QueryCompilationErrors.tableDoesNotSupportBranchingError(table)
       }
     }
 
