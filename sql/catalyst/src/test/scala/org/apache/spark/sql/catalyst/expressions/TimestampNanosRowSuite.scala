@@ -83,7 +83,13 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(unsafeRow.getLong(0) >>> 32 === offset)
   }
 
-  testBothCodegenAndInterpreted("SPARK-41535: nanos timestamps initialized as null") {
+  // Nanosecond timestamps use the UnsafeRow variable-length region, like CalendarInterval.
+  // SPARK-41535 fixed null CalendarInterval columns not being marked null when an
+  // UnsafeProjection buffer is first created from a row of null intervals (see
+  // MutableProjectionSuite and UnsafeRowConverterSuite). The same applies here:
+  // nullAtCreation must have null bits set for every nanos column, and later
+  // setTimestampNTZNanos / setTimestampLTZNanos must work in place.
+  testBothCodegenAndInterpreted("nanos timestamps initialized as null in unsafe projection") {
     val fieldTypes: Array[DataType] =
       Array(TimestampNTZNanosType(9), TimestampLTZNanosType(7))
     val converter = UnsafeProjection.create(fieldTypes)
