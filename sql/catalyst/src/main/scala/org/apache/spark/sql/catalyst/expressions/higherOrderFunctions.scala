@@ -1259,10 +1259,10 @@ case class ArrayAggregate(
         }
 
         val initialAssignment = assignVar(accForMergeCode, mergeAtomic, zeroCode.value,
-          zeroCode.isNull, zero.nullable)
+          zeroCode.isNull, accForMergeVar.nullable)
 
         val mergeAssignment = assignVar(accForMergeCode, mergeAtomic, mergeCopy,
-          mergeCode.isNull, merge.nullable)
+          mergeCode.isNull, accForMergeVar.nullable)
 
         val finishAssignment = assignVar(accForFinishCode, finishAtomic, accForMergeCode.value,
           accForMergeCode.isNull, accForMergeVar.nullable)
