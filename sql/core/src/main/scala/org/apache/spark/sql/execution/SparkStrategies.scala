@@ -178,6 +178,21 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    *     Supports both equi-joins and non-equi-joins.
    *     Supports only inner like joins.
    */
+
+  object NearestByJoinSelection extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case j: NearestByJoin if NearestByJoin.canBroadcastRight(j, conf) =>
+        joins.BroadcastNearestByJoinExec(
+          planLater(j.left),
+          planLater(j.right),
+          j.joinType,
+          j.numResults,
+          j.rankingExpression,
+          j.direction) :: Nil
+      case _ => Nil
+    }
+  }
+
   object JoinSelection extends Strategy with JoinSelectionHelper {
     private val hintErrorHandler = conf.hintErrorHandler
 

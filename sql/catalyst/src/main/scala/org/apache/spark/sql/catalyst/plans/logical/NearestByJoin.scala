@@ -20,10 +20,17 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, NearestByDirection, NearestByJoinValidation}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.internal.SQLConf
 
 object NearestByJoin {
   /** @see [[NearestByJoinValidation.MaxNumResults]] */
   val MaxNumResults: Int = NearestByJoinValidation.MaxNumResults
+
+  /** Whether the right side of a NearestByJoin is eligible for broadcast execution. */
+  def canBroadcastRight(j: NearestByJoin, conf: SQLConf): Boolean =
+    conf.nearestByBroadcastEnabled &&
+      j.right.stats.sizeInBytes >= 0 &&
+      j.right.stats.sizeInBytes <= conf.autoBroadcastJoinThreshold
 }
 
 /**
