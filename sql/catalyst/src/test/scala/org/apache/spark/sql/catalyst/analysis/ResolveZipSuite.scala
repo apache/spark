@@ -16,10 +16,13 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.PythonUDF
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.IntegerType
 
 class ResolveZipSuite extends AnalysisTest {
 
@@ -28,6 +31,11 @@ class ResolveZipSuite extends AnalysisTest {
   object Resolve extends RuleExecutor[LogicalPlan] {
     override val batches: Seq[Batch] = Seq(
       Batch("ResolveZip", Once, ResolveZip))
+  }
+
+  private def reachesBase(plan: LogicalPlan, expectedBase: LogicalPlan): Boolean = plan match {
+    case Project(_, child) => reachesBase(child, expectedBase)
+    case other => other eq expectedBase
   }
 
   test("resolve Zip: both sides have Project over same base") {
@@ -119,7 +127,7 @@ class ResolveZipSuite extends AnalysisTest {
   }
 
   test("resolve Zip: chained Project with aliases composes substitutions") {
-    // Build df.select(a + 1 AS x).select(x * 2 AS y) — outer references the inner alias.
+    // Build df.select(a + 1 AS x).select(x * 2 AS y) -- outer references the inner alias.
     val inner = base.select(($"a" + 1).as("x"))
     val outer = inner.select(($"x" * 2).as("y")).analyze
     val right = base.select(($"b" * 3).as("z")).analyze
@@ -127,9 +135,48 @@ class ResolveZipSuite extends AnalysisTest {
 
     val resolved = Resolve.execute(zip)
     assert(resolved.isInstanceOf[Project], "Aliased chain should still merge to a Project")
-    assert(resolved.asInstanceOf[Project].child eq base,
-      "Resolved Project should sit directly on the shared base")
+    assert(reachesBase(resolved, base),
+      "Resolved plan should be a Project chain rooted at the shared base")
     assert(resolved.output.map(_.name) == Seq("y", "z"))
+  }
+
+  test("resolve Zip: different-instance bases with same canonical plan") {
+    // Two LocalRelations with the same schema but distinct exprIds. `sameResult` matches
+    // (canonicalized plans are equal), so this is the only path where `attrMapping` actually
+    // remaps right-side references.
+    val baseB = LocalRelation($"a".int, $"b".int, $"c".int)
+    val left = Project(Seq(base.output(0)), base)
+    val right = baseB.select(($"a" + 1).as("a_plus_1")).analyze
+    val zip = Zip(left, right)
+
+    val resolved = Resolve.execute(zip)
+    assert(resolved.isInstanceOf[Project])
+    assert(reachesBase(resolved, base),
+      "Resolved plan should be rooted at the left base, not the right base")
+    assert(!resolved.exists(_ eq baseB), "Right base should be discarded after merge")
+    assert(resolved.output.map(_.name) == Seq("a", "a_plus_1"))
+  }
+
+  test("CheckAnalysis: non-scalar Python UDF throws ZIP_PLANS_NOT_MERGEABLE") {
+    // A GROUPED_MAP Python UDF in either side's projection breaks the 1:1 row mapping, so
+    // ResolveZip refuses to merge and the surviving Zip must surface ZIP_PLANS_NOT_MERGEABLE
+    // (rather than fall through to the generic unresolved-operator INTERNAL_ERROR).
+    val groupedMapUdf = PythonUDF(
+      "pyUDF",
+      null,
+      IntegerType,
+      Seq(base.output(0)),
+      PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+      udfDeterministic = true)
+    val left = base.select(groupedMapUdf.as("x"))
+    val right = base.select($"b".as("y"))
+    val zip = Zip(left.analyze, right.analyze)
+
+    assertAnalysisErrorCondition(
+      zip,
+      expectedErrorCondition = "ZIP_PLANS_NOT_MERGEABLE",
+      expectedMessageParameters = Map.empty
+    )
   }
 
   test("resolve Zip: stacked withColumn-style projections (multiple Project layers)") {
@@ -144,8 +191,8 @@ class ResolveZipSuite extends AnalysisTest {
 
     val resolved = Resolve.execute(zip)
     assert(resolved.isInstanceOf[Project], "Stacked withColumn chain should merge to a Project")
-    assert(resolved.asInstanceOf[Project].child eq base,
-      "Resolved Project should sit directly on the shared base")
+    assert(reachesBase(resolved, base),
+      "Resolved plan should be a Project chain rooted at the shared base")
     assert(resolved.output.map(_.name) == Seq("a", "b", "c", "d", "e", "a", "b", "c", "f"))
   }
 }

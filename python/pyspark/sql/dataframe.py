@@ -2591,13 +2591,14 @@ class DataFrame:
         """Combines the columns of this :class:`DataFrame` with another :class:`DataFrame`
         side-by-side, preserving row alignment between the two inputs.
 
-        Both DataFrames must derive from a common source DataFrame through column-only
-        operations (such as :meth:`select` or :meth:`withColumn`) that preserve the
-        row-to-row mapping of the source. Operations that change row identity or count,
-        including :meth:`filter`, :meth:`join`, :meth:`groupBy`, :meth:`distinct`,
-        :meth:`orderBy`, :meth:`limit`, and non-scalar Python UDFs, are not supported on
-        either side. An :class:`AnalysisException` is thrown when the two DataFrames cannot
-        be aligned.
+        Both DataFrames must produce the same canonicalized plan after stripping outer
+        ``Project`` chains. In practice this means they derive from a common source through
+        chains of projection-only operations (:meth:`select`, :meth:`withColumn`,
+        :meth:`withColumnRenamed`, etc.); the chains may differ between the two sides, but
+        anything below them, including any :meth:`filter`, :meth:`orderBy`, :meth:`join`,
+        or aggregation, must be identical on both sides so the two sides stay row-aligned.
+        Non-scalar Python UDFs (e.g., ``GROUPED_MAP``) are not allowed on either side. An
+        :class:`AnalysisException` is thrown when the two DataFrames cannot be aligned.
 
         .. versionadded:: 4.3.0
 

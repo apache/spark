@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.Rand
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.functions.rand
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameZipSuite extends QueryTest with SharedSparkSession {
@@ -141,5 +143,24 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       left.zip(right),
       Row(1, 2, 1, 2) :: Row(3, 4, 3, 4) :: Nil)
+  }
+
+  test("zip: nondeterministic alias used multiple times stays a single expression") {
+    // df.withColumn("r", rand()).withColumn("x", r + r) -- if the rewrite naively inlined
+    // r into r+r, rand() would be evaluated twice per row and x would no longer equal 2*r.
+    // The depth-layered chain keeps each user alias in its own Alias entry, and
+    // CollapseProject's canCollapseExpressions guard refuses to inline a non-deterministic
+    // producer consumed more than once -- so the optimized plan must contain rand() exactly
+    // once.
+    val df = spark.range(10).toDF("id")
+    val left = df.withColumn("r", rand()).withColumn("x", $"r" + $"r").select("x")
+    val right = df.select("id")
+
+    val optimized = left.zip(right).queryExecution.optimizedPlan
+    val randCount = optimized.flatMap { p =>
+      p.expressions.flatMap(_.collect { case _: Rand => 1 })
+    }.sum
+    assert(randCount == 1,
+      s"rand() must appear exactly once after the rewrite, got $randCount; plan:\n$optimized")
   }
 }

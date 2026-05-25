@@ -823,11 +823,13 @@ abstract class Dataset[T] extends Serializable {
    * Combines the columns of this DataFrame with another DataFrame side-by-side, preserving row
    * alignment between the two inputs.
    *
-   * Both DataFrames must derive from a common source DataFrame through column-only operations
-   * (such as `select` or `withColumn`) that preserve the row-to-row mapping of the source.
-   * Operations that change row identity or count -- including `filter`, `join`, `groupBy`,
-   * `distinct`, `orderBy`, `limit`, and non-scalar Python UDFs -- are not supported on either
-   * side. An `AnalysisException` is thrown when the two DataFrames cannot be aligned.
+   * Both DataFrames must produce the same canonicalized plan after stripping outer `Project`
+   * chains. In practice this means they derive from a common source through chains of
+   * projection-only operations (`select`, `withColumn`, `withColumnRenamed`, etc.); the chains
+   * may differ between the two sides, but anything below them -- including any `filter`,
+   * `orderBy`, `join`, or aggregation -- must be identical on both sides so the two sides stay
+   * row-aligned. Non-scalar Python UDFs (e.g., `GROUPED_MAP`) are not allowed on either side.
+   * An `AnalysisException` is thrown when the two DataFrames cannot be aligned.
    *
    * @param other
    *   The DataFrame to combine with, which must derive from the same source as this DataFrame.

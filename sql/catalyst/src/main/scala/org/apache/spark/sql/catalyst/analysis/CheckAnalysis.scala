@@ -702,17 +702,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "type" -> toSQLType(rankingExpression.dataType)))
 
           case z: Zip =>
-            def stripProjects(plan: LogicalPlan): LogicalPlan = plan match {
-              case Project(_, child) => stripProjects(child)
-              case other => other
-            }
-            val leftBase = stripProjects(z.left)
-            val rightBase = stripProjects(z.right)
-            if (!leftBase.sameResult(rightBase)) {
-              z.failAnalysis(
-                errorClass = "ZIP_PLANS_NOT_MERGEABLE",
-                messageParameters = Map.empty)
-            }
+            // ResolveZip succeeded for all valid inputs, so a surviving Zip means the two
+            // sides either don't share a base or contain a non-scalar Python UDF. Either way
+            // we surface ZIP_PLANS_NOT_MERGEABLE -- without this we'd fall through to the
+            // generic unresolved-operator INTERNAL_ERROR catch-all.
+            z.failAnalysis(
+              errorClass = "ZIP_PLANS_NOT_MERGEABLE",
+              messageParameters = Map.empty)
 
           case a: Aggregate =>
             a.groupingExpressions.foreach(
