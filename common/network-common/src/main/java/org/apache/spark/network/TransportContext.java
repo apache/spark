@@ -137,6 +137,11 @@ public class TransportContext implements Closeable {
     this.closeIdleConnections = closeIdleConnections;
     this.sslFactory = createSslFactory();
 
+    logger.info("TransportContext initialized: module=" +
+        (conf.getModuleName() == null ? "<none>" : conf.getModuleName()) +
+        ", ioMode=" + conf.ioMode() +
+        ", role=" + (isClientOnly ? "client-only" : "server+client"));
+
     if (conf.getModuleName() != null &&
         conf.getModuleName().equalsIgnoreCase("shuffle") &&
         !isClientOnly && conf.separateChunkFetchRequest()) {

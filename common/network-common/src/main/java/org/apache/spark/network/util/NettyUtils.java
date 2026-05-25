@@ -17,8 +17,12 @@
 
 package org.apache.spark.network.util;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.*;
@@ -82,6 +86,16 @@ public class NettyUtils {
    */
   private static volatile Boolean ioUringUsable = null;
 
+  /**
+   * Guards a one-shot info log line describing the io_uring features the running kernel exposes.
+   * Emitted the first time {@link #createEventLoop} is asked for {@link IOMode#IO_URING}, so it
+   * appears once per process when -- and only when -- io_uring is actually selected. Useful for
+   * triaging shuffle/RPC performance reports: it answers questions like "is {@code SPLICE}
+   * supported on this kernel?" and "what is the kernel's max pipe buffer size?" without needing
+   * to attach a debugger.
+   */
+  private static final AtomicBoolean ioUringCapabilitiesLogged = new AtomicBoolean(false);
+
   public static long freeDirectMemory() {
     return PlatformDependent.maxDirectMemory() - PlatformDependent.usedDirectMemory();
   }
@@ -129,6 +143,31 @@ public class NettyUtils {
     }
   }
 
+  /**
+   * Emits a single info log line summarizing the io_uring features the running kernel exposes,
+   * the kernel version, and the system-wide max pipe buffer size. Called from the IO_URING branch
+   * of {@link #createEventLoop} so it logs at most once per process and only when io_uring is
+   * actually used.
+   *
+   * <p>The pipe-max-size matters because Netty's {@code IoUringFileRegion} routes FileRegion
+   * sends through a {@code splice(2)} pipe (file -&gt; pipe -&gt; socket), bounded by the pipe
+   * buffer; a small pipe forces more SQE/CQE round-trips per shuffle chunk.
+   */
+  private static void logIoUringCapabilitiesOnce() {
+    if (!ioUringCapabilitiesLogged.compareAndSet(false, true)) {
+      return;
+    }
+    String pipeMaxSize = "unknown";
+    try {
+      pipeMaxSize = Files.readString(Path.of("/proc/sys/fs/pipe-max-size")).trim();
+    } catch (IOException | RuntimeException ignored) {
+      // Not Linux, or /proc not mounted; leave as "unknown".
+    }
+    logger.info("Netty io_uring transport selected: features=[" + IoUring.featureString() +
+        "], kernel=" + System.getProperty("os.version") +
+        ", pipe-max-size=" + pipeMaxSize + " bytes");
+  }
+
   /** Creates a new ThreadFactory which prefixes each thread with the given name. */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new DefaultThreadFactory(threadPoolPrefix, true);
@@ -142,7 +181,10 @@ public class NettyUtils {
       case NIO -> NioIoHandler.newFactory();
       case EPOLL -> EpollIoHandler.newFactory();
       case KQUEUE -> KQueueIoHandler.newFactory();
-      case IO_URING -> IoUringIoHandler.newFactory();
+      case IO_URING -> {
+        logIoUringCapabilitiesOnce();
+        yield IoUringIoHandler.newFactory();
+      }
       case AUTO -> {
         if (JavaUtils.isLinux && Epoll.isAvailable()) {
           yield EpollIoHandler.newFactory();
