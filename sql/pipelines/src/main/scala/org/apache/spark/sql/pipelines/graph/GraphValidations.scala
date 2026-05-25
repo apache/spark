@@ -153,7 +153,7 @@ trait GraphValidations extends Logging {
               // Temporary views' flows are generally allowed to be either streaming or batch.
               resolvedFlow match {
                 case _: AutoCdcMergeFlow =>
-                  // The exception is AutoCDC flows, which require require a streaming-table sink to
+                  // The exception is AutoCDC flows, which require a streaming-table sink to
                   // immediately execute MERGE against.
                   throw new AnalysisException(
                     errorClass =
