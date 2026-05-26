@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.errors.QueryCompilationErrors;
 
 /**
  * A mix-in interface for {@link Scan}. Data sources can implement this interface to
@@ -31,11 +32,14 @@ public interface SupportsPushDownTableSample extends ScanBuilder {
   /**
    * Pushes down BERNOULLI (row-level) SAMPLE to the data source.
    */
-  boolean pushTableSample(
+  @Deprecated(since = "4.2.0")
+  default boolean pushTableSample(
       double lowerBound,
       double upperBound,
       boolean withReplacement,
-      long seed);
+      long seed) {
+    throw QueryCompilationErrors.mustOverrideOneMethodError("pushTableSample");
+  }
 
   /**
    * Pushes down SAMPLE to the data source with the specified sampling method.

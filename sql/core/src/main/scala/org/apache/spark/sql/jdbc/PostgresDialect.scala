@@ -376,15 +376,12 @@ private case class PostgresDialect()
 
   override def supportsOffset: Boolean = true
 
-  override def supportsTableSample: Boolean = true
-
   override def supportsJoin: Boolean = true
 
-  override def getTableSample(sample: TableSampleInfo): String = {
-    // hard-coded to BERNOULLI for now because Spark doesn't have a way to specify sample
-    // method name
-    "TABLESAMPLE BERNOULLI" +
-      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
+  override def compileTableSample(sample: TableSampleInfo): Option[String] = {
+    if (sample.withReplacement) return None
+    Some(s"TABLESAMPLE ${sample.sampleMethod.toString.toUpperCase(Locale.ROOT)}" +
+      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})")
   }
 
   override def renameTable(oldTable: Identifier, newTable: Identifier): String = {
