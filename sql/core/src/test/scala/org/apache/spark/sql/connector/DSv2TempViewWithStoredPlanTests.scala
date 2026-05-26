@@ -343,7 +343,8 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
 
         session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         session.table(testTable).createOrReplaceTempView("v_no_filter")
-        session.table(testTable).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
+        session.table(testTable).filter("salary IS NULL")
+          .createOrReplaceTempView("v_filter_is_null")
         checkRows(session.table("v"), Seq(Row(1, 100)))
         checkRows(session.table("v_no_filter"), Seq(Row(1, 100), Row(10, 1000)))
         checkRows(session.table("v_filter_is_null"), Seq.empty)
@@ -372,7 +373,8 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
 
         session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         session.table(testTable).createOrReplaceTempView("v_no_filter")
-        session.table(testTable).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
+        session.table(testTable).filter("salary IS NULL")
+          .createOrReplaceTempView("v_filter_is_null")
         checkRows(session.table("v"), Seq(Row(1, 100)))
         checkRows(session.table("v_no_filter"), Seq(Row(1, 100), Row(10, 1000)))
         checkRows(session.table("v_filter_is_null"), Seq.empty)
