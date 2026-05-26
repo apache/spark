@@ -30,7 +30,7 @@ import org.apache.spark.sql.sources.TestOptionsSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-trait ExplainSuiteHelper extends QueryTest with SharedSparkSession {
+trait ExplainSuiteHelper extends SharedSparkSession {
 
   protected def getNormalizedExplain(df: DataFrame, mode: ExplainMode): String = {
     val output = new java.io.ByteArrayOutputStream()
@@ -251,6 +251,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     checkKeywordsExistsInExplain(df,
       "Project [id#xL AS ifnull(id, 1)#xL, if ((id#xL = 1)) null " +
         "else id#xL AS nullif(id, 1)#xL, id#xL AS nvl(id, 1)#xL, 1 AS nvl2(id, 1, 2)#x]")
+    checkKeywordsNotExistsInExplain(df, ExtendedMode, "typednullliteral")
   }
 
   test("SPARK-26659: explain of DataWritingCommandExec should not contain duplicate cmd.nodeName") {

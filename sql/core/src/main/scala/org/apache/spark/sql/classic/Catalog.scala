@@ -28,13 +28,12 @@ import org.apache.spark.internal.LogKeys.{CATALOG_NAME, DATABASE_NAME, TABLE_NAM
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog
 import org.apache.spark.sql.catalog.{
-  CachedTable,
   CatalogMetadata,
-  CatalogTablePartition,
   Column,
   Database,
   Function,
-  Table
+  Table,
+  TablePartition
 }
 import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.InternalRow
@@ -273,12 +272,12 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
             if (isExternal) CatalogTableType.EXTERNAL.name
             else CatalogTableType.MANAGED.name,
           isTemporary = false)
-      case ResolvedPersistentView(catalog, identifier, metadata) =>
+      case ResolvedPersistentView(catalog, identifier, info) =>
         new Table(
           name = identifier.name(),
           catalog = catalog.name(),
           namespace = identifier.namespace(),
-          description = metadata.comment.orNull,
+          description = info.properties().get(TableCatalog.PROP_COMMENT),
           tableType = "VIEW",
           isTemporary = false
         )
@@ -410,10 +409,12 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
         val catalogPath =
           (Seq(currentCatalog()) ++
             sparkSession.sessionState.catalogManager.currentNamespace).toSeq
-        val searchPath = sparkSession.sessionState.conf.resolutionSearchPath(catalogPath)
+        val searchPath = sparkSession.sessionState.catalogManager
+          .sqlResolutionPathEntries(catalogPath.head, catalogPath.tail.toSeq)
+          .map(_.quoted)
         throw QueryCompilationErrors.unresolvedRoutineError(
           ident,
-          searchPath.map(_.quoted),
+          searchPath,
           plan.origin)
     }
   }
@@ -460,8 +461,8 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
         schemaToColumns(schema, partitionColumnNames.contains, bucketColumnNames.contains,
           clusteringColumnNames.contains)
 
-      case ResolvedPersistentView(_, _, metadata) =>
-        schemaToColumns(metadata.schema)
+      case ResolvedPersistentView(_, _, info) =>
+        schemaToColumns(info.schema)
 
       case ResolvedTempView(_, metadata) =>
         schemaToColumns(metadata.schema)
@@ -988,13 +989,6 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
     Catalog.makeDataset(catalogs.map(name => makeCatalog(name)), sparkSession)
   }
 
-  override def listCachedTables(): Dataset[CachedTable] = {
-    val cached = sparkSession.sharedState.cacheManager.listNamedCachedTables().map { case (n, sl) =>
-      new CachedTable(n, sl.description)
-    }
-    Catalog.makeDataset(cached, sparkSession)
-  }
-
   override def dropTable(tableName: String, ifExists: Boolean, purge: Boolean): Unit = {
     val plan = DropTable(
       UnresolvedIdentifier(parseIdent(tableName), allowTemp = true),
@@ -1024,12 +1018,12 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog with Logging {
     sparkSession.sessionState.executePlan(plan).toRdd
   }
 
-  override def listPartitions(tableName: String): Dataset[CatalogTablePartition] = {
+  override def listPartitions(tableName: String): Dataset[TablePartition] = {
     val plan = ShowPartitions(
       UnresolvedTable(toTableIdent(tableName), "Catalog.listPartitions"),
       None)
     val partitions = sparkSession.sessionState.executePlan(plan).toRdd.collect().map { row =>
-      new CatalogTablePartition(row.getString(0))
+      new TablePartition(row.getString(0))
     }
     Catalog.makeDataset(partitions.toImmutableArraySeq, sparkSession)
   }

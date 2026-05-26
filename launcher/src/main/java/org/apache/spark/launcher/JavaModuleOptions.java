@@ -46,7 +46,7 @@ public class JavaModuleOptions {
       "-Dio.netty.tryReflectionSetAccessible=true",
       "-Dio.netty.allocator.type=pooled",
       "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
-      "-Dio.netty.noUnsafe=false",
+      "--sun-misc-unsafe-memory-access=allow",
       "--enable-native-access=ALL-UNNAMED"};
 
     /**

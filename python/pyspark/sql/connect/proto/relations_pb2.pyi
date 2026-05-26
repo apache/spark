@@ -111,6 +111,7 @@ class Relation(google.protobuf.message.Message):
     LATERAL_JOIN_FIELD_NUMBER: builtins.int
     CHUNKED_CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     RELATION_CHANGES_FIELD_NUMBER: builtins.int
+    NEAREST_BY_JOIN_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -223,6 +224,8 @@ class Relation(google.protobuf.message.Message):
     @property
     def relation_changes(self) -> global___RelationChanges: ...
     @property
+    def nearest_by_join(self) -> global___NearestByJoin: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -310,6 +313,7 @@ class Relation(google.protobuf.message.Message):
         lateral_join: global___LateralJoin | None = ...,
         chunked_cached_local_relation: global___ChunkedCachedLocalRelation | None = ...,
         relation_changes: global___RelationChanges | None = ...,
+        nearest_by_join: global___NearestByJoin | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -395,6 +399,8 @@ class Relation(google.protobuf.message.Message):
             b"map_partitions",
             "ml_relation",
             b"ml_relation",
+            "nearest_by_join",
+            b"nearest_by_join",
             "offset",
             b"offset",
             "parse",
@@ -524,6 +530,8 @@ class Relation(google.protobuf.message.Message):
             b"map_partitions",
             "ml_relation",
             b"ml_relation",
+            "nearest_by_join",
+            b"nearest_by_join",
             "offset",
             b"offset",
             "parse",
@@ -633,6 +641,7 @@ class Relation(google.protobuf.message.Message):
             "lateral_join",
             "chunked_cached_local_relation",
             "relation_changes",
+            "nearest_by_join",
             "fill_na",
             "drop_na",
             "replace",
@@ -4416,11 +4425,13 @@ class Parse(google.protobuf.message.Message):
         PARSE_FORMAT_UNSPECIFIED: Parse._ParseFormat.ValueType  # 0
         PARSE_FORMAT_CSV: Parse._ParseFormat.ValueType  # 1
         PARSE_FORMAT_JSON: Parse._ParseFormat.ValueType  # 2
+        PARSE_FORMAT_XML: Parse._ParseFormat.ValueType  # 3
 
     class ParseFormat(_ParseFormat, metaclass=_ParseFormatEnumTypeWrapper): ...
     PARSE_FORMAT_UNSPECIFIED: Parse.ParseFormat.ValueType  # 0
     PARSE_FORMAT_CSV: Parse.ParseFormat.ValueType  # 1
     PARSE_FORMAT_JSON: Parse.ParseFormat.ValueType  # 2
+    PARSE_FORMAT_XML: Parse.ParseFormat.ValueType  # 3
 
     class OptionsEntry(google.protobuf.message.Message):
         DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -4453,7 +4464,7 @@ class Parse(google.protobuf.message.Message):
         """(Optional) DataType representing the schema. If not set, Spark will infer the schema."""
     @property
     def options(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
-        """Options for the csv/json parser. The map key is case insensitive."""
+        """Options for the csv/json/xml parser. The map key is case insensitive."""
     def __init__(
         self,
         *,
@@ -4655,3 +4666,79 @@ class LateralJoin(google.protobuf.message.Message):
     ) -> None: ...
 
 global___LateralJoin = LateralJoin
+
+class NearestByJoin(google.protobuf.message.Message):
+    """Relation of type [[NearestByJoin]].
+
+    For each row on the left side, returns up to `num_results` rows from the right side ranked
+    by `ranking_expression`.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LEFT_FIELD_NUMBER: builtins.int
+    RIGHT_FIELD_NUMBER: builtins.int
+    RANKING_EXPRESSION_FIELD_NUMBER: builtins.int
+    NUM_RESULTS_FIELD_NUMBER: builtins.int
+    JOIN_TYPE_FIELD_NUMBER: builtins.int
+    MODE_FIELD_NUMBER: builtins.int
+    DIRECTION_FIELD_NUMBER: builtins.int
+    @property
+    def left(self) -> global___Relation:
+        """(Required) Left (query) input relation."""
+    @property
+    def right(self) -> global___Relation:
+        """(Required) Right (base) input relation."""
+    @property
+    def ranking_expression(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) Scalar expression used to rank candidate rows on the right side."""
+    num_results: builtins.int
+    """(Required) Maximum number of matches per left row. Must be between 1 and 100000."""
+    join_type: builtins.str
+    """The following three fields use `string` (not typed enums) for parity with `AsOfJoin`,
+    which models analogous fields the same way. Validation happens server-side at planning time.
+
+    (Required) The join type. Must be one of: "inner", "leftouter".
+    """
+    mode: builtins.str
+    """(Required) Search algorithm contract. Must be one of: "approx", "exact"."""
+    direction: builtins.str
+    """(Required) Ranking direction. Must be one of: "distance", "similarity"."""
+    def __init__(
+        self,
+        *,
+        left: global___Relation | None = ...,
+        right: global___Relation | None = ...,
+        ranking_expression: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        num_results: builtins.int = ...,
+        join_type: builtins.str = ...,
+        mode: builtins.str = ...,
+        direction: builtins.str = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "left", b"left", "ranking_expression", b"ranking_expression", "right", b"right"
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "direction",
+            b"direction",
+            "join_type",
+            b"join_type",
+            "left",
+            b"left",
+            "mode",
+            b"mode",
+            "num_results",
+            b"num_results",
+            "ranking_expression",
+            b"ranking_expression",
+            "right",
+            b"right",
+        ],
+    ) -> None: ...
+
+global___NearestByJoin = NearestByJoin

@@ -462,7 +462,7 @@ class Column(ParentColumn):
         startPos = enum_to_value(startPos)
         length = enum_to_value(length)
 
-        if type(startPos) != type(length):
+        if type(startPos) is not type(length):
             raise PySparkTypeError(
                 errorClass="NOT_SAME_TYPE",
                 messageParameters={

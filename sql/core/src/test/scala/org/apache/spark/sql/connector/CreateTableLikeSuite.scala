@@ -299,6 +299,40 @@ class CreateTableLikeSuite extends DatasourceV2SQLBase {
   }
 
   // -------------------------------------------------------------------------
+  // ROW FORMAT / STORED AS propagation
+  // -------------------------------------------------------------------------
+
+  test("STORED AS is converted to hive.stored-as property for v2 target") {
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint) USING parquet")
+      sql("CREATE TABLE testcat.dst LIKE src STORED AS textfile")
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      assert(dst.properties.get("hive.stored-as") === "textfile",
+        "STORED AS should be converted to hive.stored-as property")
+    }
+  }
+
+  test("STORED AS INPUTFORMAT/OUTPUTFORMAT are converted to hive properties for v2 target") {
+    withTable("src", "testcat.dst") {
+      sql("CREATE TABLE src (id bigint) USING parquet")
+      sql(
+        """CREATE TABLE testcat.dst LIKE src
+          |STORED AS INPUTFORMAT 'org.apache.hadoop.mapred.TextInputFormat'
+          |OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
+          |""".stripMargin)
+
+      val dst = testCatalog.loadTable(Identifier.of(Array(), "dst"))
+      assert(dst.properties.get("hive.input-format") ===
+        "org.apache.hadoop.mapred.TextInputFormat",
+        "INPUTFORMAT should be converted to hive.input-format property")
+      assert(dst.properties.get("hive.output-format") ===
+        "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "OUTPUTFORMAT should be converted to hive.output-format property")
+    }
+  }
+
+  // -------------------------------------------------------------------------
   // V1 fallback regression
   // -------------------------------------------------------------------------
 

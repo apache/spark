@@ -26,7 +26,7 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
 import org.apache.spark.{SparkConf, SparkIllegalArgumentException, TestUtils}
 import org.apache.spark.io.ZStdCompressionCodec
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec
 import org.apache.spark.sql.catalyst.util.HadoopCompressionCodec.{BZIP2, DEFLATE, GZIP, LZ4, NONE, SNAPPY}
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -35,7 +35,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
-abstract class TextSuite extends QueryTest with SharedSparkSession with CommonFileDataSourceSuite {
+abstract class TextSuite extends SharedSparkSession with CommonFileDataSourceSuite {
   import testImplicits._
 
   override protected def dataSourceFormat = "text"

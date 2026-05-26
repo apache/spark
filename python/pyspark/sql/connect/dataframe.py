@@ -112,12 +112,12 @@ if TYPE_CHECKING:
 class DataFrame(ParentDataFrame):
     def __new__(
         cls,
-        plan: plan.LogicalPlan,
-        session: "SparkSession",
+        *args: Any,
+        **kwargs: Any,
     ) -> "DataFrame":
-        self = object.__new__(cls)
-        self.__init__(plan, session)  # type: ignore[misc]
-        return self
+        # ParentDataFrame by default creates classic DataFrame for backward compatibility.
+        # We have to do an explicit object.__new__ to avoid that.
+        return object.__new__(cls)
 
     def __init__(
         self,
@@ -723,6 +723,30 @@ class DataFrame(ParentDataFrame):
             how = how.lower().replace("_", "")
         return DataFrame(
             plan.LateralJoin(left=self._plan, right=other._plan, on=on, how=how),
+            session=self._session,
+        )
+
+    def nearestByJoin(
+        self,
+        other: ParentDataFrame,
+        rankingExpression: Column,
+        numResults: int,
+        mode: str,
+        direction: str,
+        *,
+        joinType: str = "inner",
+    ) -> ParentDataFrame:
+        other = self._check_same_session(other)
+        return DataFrame(
+            plan.NearestByJoin(
+                left=self._plan,
+                right=other._plan,
+                ranking_expression=rankingExpression,
+                num_results=int(numResults),
+                join_type=joinType,
+                mode=mode,
+                direction=direction,
+            ),
             session=self._session,
         )
 

@@ -66,6 +66,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] {
 
       WriteToStream(
         s.userSpecifiedName.orNull,
+        s.userSpecifiedSinkName,
         resolvedCheckpointLocation,
         s.sink,
         s.outputMode,

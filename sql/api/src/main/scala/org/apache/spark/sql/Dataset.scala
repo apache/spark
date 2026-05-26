@@ -912,6 +912,76 @@ abstract class Dataset[T] extends Serializable {
    */
   def lateralJoin(right: Dataset[_], joinExprs: Column, joinType: String): DataFrame
 
+  /**
+   * Nearest-by top-K ranking join with another `DataFrame`, using the default `inner` join type.
+   * For each row on the left (query side), returns up to `numResults` rows from `right` (base
+   * side), ranked by `rankingExpression`.
+   *
+   * Equivalent SQL (with `mode = "exact"` and `direction = "similarity"`):
+   * {{{
+   *   left INNER JOIN right EXACT NEAREST numResults BY SIMILARITY rankingExpression
+   * }}}
+   *
+   * The current implementation evaluates the full cross-product of left and right and bounds
+   * memory per left row by `numResults`. Index-backed approximate strategies (transparent to
+   * `approx` mode) are planned for a future release; until then, pre-filter the right side when
+   * it is large. Tie-breaking among rows with equal ranking values is unspecified.
+   *
+   * @param right
+   *   Right (base side) of the join - the candidate pool searched for each row of this Dataset.
+   * @param rankingExpression
+   *   Scalar expression used to rank candidate rows.
+   * @param numResults
+   *   Maximum number of matches per query row. Must be between 1 and 100000.
+   * @param mode
+   *   Search algorithm contract. Must be one of: `approx`, `exact`. `approx` allows the optimizer
+   *   to use indexed or other approximate strategies when available; `exact` forces brute-force
+   *   evaluation and requires the ranking expression to be deterministic.
+   * @param direction
+   *   `"distance"` (smallest value first) or `"similarity"` (largest value first).
+   * @group untypedrel
+   * @since 4.2.0
+   */
+  def nearestByJoin(
+      right: Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String): DataFrame
+
+  /**
+   * Nearest-by top-K ranking join with another `DataFrame`.
+   *
+   * The current implementation evaluates the full cross-product of left and right and bounds
+   * memory per left row by `numResults`. Index-backed approximate strategies (transparent to
+   * `approx` mode) are planned for a future release; until then, pre-filter the right side when
+   * it is large. Tie-breaking among rows with equal ranking values is unspecified.
+   *
+   * @param right
+   *   Right (base side) of the join - the candidate pool searched for each row of this Dataset.
+   * @param rankingExpression
+   *   Scalar expression used to rank candidate rows.
+   * @param numResults
+   *   Maximum number of matches per query row. Must be between 1 and 100000.
+   * @param mode
+   *   Search algorithm contract. Must be one of: `approx`, `exact`. `approx` allows the optimizer
+   *   to use indexed or other approximate strategies when available; `exact` forces brute-force
+   *   evaluation and requires the ranking expression to be deterministic.
+   * @param direction
+   *   `"distance"` (smallest value first) or `"similarity"` (largest value first).
+   * @param joinType
+   *   Type of join to perform. Must be one of: `inner`, `leftouter`.
+   * @group untypedrel
+   * @since 4.2.0
+   */
+  def nearestByJoin(
+      right: Dataset[_],
+      rankingExpression: Column,
+      numResults: Int,
+      mode: String,
+      direction: String,
+      joinType: String): DataFrame
+
   protected def sortInternal(global: Boolean, sortExprs: Seq[Column]): Dataset[T]
 
   /**
@@ -2321,7 +2391,9 @@ abstract class Dataset[T] extends Serializable {
   def withColumnsRenamed(colsMap: util.Map[String, String]): DataFrame =
     withColumnsRenamed(colsMap.asScala.toMap)
 
-  protected def withColumnsRenamed(colNames: Seq[String], newColNames: Seq[String]): DataFrame
+  protected[spark] def withColumnsRenamed(
+      colNames: Seq[String],
+      newColNames: Seq[String]): DataFrame
 
   /**
    * Returns a new Dataset by updating an existing column with metadata.

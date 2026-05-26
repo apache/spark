@@ -77,12 +77,7 @@ class Function(NamedTuple):
     isTemporary: bool
 
 
-class CachedTable(NamedTuple):
-    name: str
-    storageLevel: str
-
-
-class CatalogTablePartition(NamedTuple):
+class TablePartition(NamedTuple):
     partition: str
 
 
@@ -177,40 +172,6 @@ class Catalog:
                 CatalogMetadata(name=jcatalog.name(), description=jcatalog.description())
             )
         return catalogs
-
-    def listCachedTables(self) -> List[CachedTable]:
-        """Lists named in-memory cache entries (same as ``SHOW CACHED TABLES``).
-
-        Includes caches registered with ``CACHE TABLE`` or
-        :meth:`~pyspark.sql.catalog.Catalog.cacheTable`. Caches from
-        :meth:`~pyspark.sql.DataFrame.cache` without a name are not listed.
-
-        .. versionadded:: 4.2.0
-
-        Returns
-        -------
-        list
-            A list of :class:`CachedTable` describing each named cache entry.
-
-        Examples
-        --------
-        >>> _ = spark.sql("DROP TABLE IF EXISTS tbl_cached_list")
-        >>> _ = spark.sql("CREATE TABLE tbl_cached_list (id INT) USING parquet")
-        >>> spark.catalog.clearCache()
-        >>> spark.catalog.listCachedTables()
-        []
-        >>> spark.catalog.cacheTable("tbl_cached_list")
-        >>> any("tbl_cached_list" in ct.name for ct in spark.catalog.listCachedTables())
-        True
-        >>> spark.catalog.uncacheTable("tbl_cached_list")
-        >>> _ = spark.sql("DROP TABLE tbl_cached_list")
-        """
-        iter = self._jcatalog.listCachedTables().toLocalIterator()
-        out: List[CachedTable] = []
-        while iter.hasNext():
-            j = iter.next()
-            out.append(CachedTable(name=j.name(), storageLevel=j.storageLevel()))
-        return out
 
     def dropTable(self, tableName: str, ifExists: bool = False, purge: bool = False) -> None:
         """Drops a persistent table.
@@ -322,7 +283,7 @@ class Catalog:
         """
         self._jcatalog.dropDatabase(dbName, ifExists, cascade)
 
-    def listPartitions(self, tableName: str) -> List[CatalogTablePartition]:
+    def listPartitions(self, tableName: str) -> List[TablePartition]:
         """Lists partition value strings for a table (same as ``SHOW PARTITIONS``).
 
         .. versionadded:: 4.2.0
@@ -335,7 +296,7 @@ class Catalog:
         Returns
         -------
         list
-            A list of :class:`CatalogTablePartition` (each ``partition`` field is a spec string).
+            A list of :class:`TablePartition` (each ``partition`` field is a spec string).
 
         Examples
         --------
@@ -350,10 +311,10 @@ class Catalog:
         >>> _ = spark.sql("DROP TABLE tbl_part_doc")
         """
         iter = self._jcatalog.listPartitions(tableName).toLocalIterator()
-        out: List[CatalogTablePartition] = []
+        out: List[TablePartition] = []
         while iter.hasNext():
             j = iter.next()
-            out.append(CatalogTablePartition(partition=j.partition()))
+            out.append(TablePartition(partition=j.partition()))
         return out
 
     def listViews(self, dbName: Optional[str] = None, pattern: Optional[str] = None) -> List[Table]:

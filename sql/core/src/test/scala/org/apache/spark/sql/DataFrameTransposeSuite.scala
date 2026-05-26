@@ -22,7 +22,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFrameTransposeSuite extends QueryTest with SharedSparkSession {
+class DataFrameTransposeSuite extends SharedSparkSession {
   import testImplicits._
 
   //

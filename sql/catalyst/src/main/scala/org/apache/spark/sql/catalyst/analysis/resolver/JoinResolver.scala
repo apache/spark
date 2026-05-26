@@ -370,7 +370,10 @@ class JoinResolver(resolver: Resolver, expressionResolver: ExpressionResolver)
   private def getJoinNamesForNaturalJoin(
       leftNameScope: NameScope,
       rightNameScope: NameScope): Seq[String] = {
-    leftNameScope.output.map(_.name).intersect(rightNameScope.output.map(_.name))
+    NaturalAndUsingJoinResolution.canonicalizedIntersect(
+      leftNameScope.output.map(_.name),
+      rightNameScope.output.map(_.name)
+    )
   }
 
   /**

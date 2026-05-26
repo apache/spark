@@ -63,6 +63,7 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     ArrayType,
+    MapType,
     StringType,
 )
 from pyspark.sql.utils import enum_to_value as _enum_to_value
@@ -1539,6 +1540,15 @@ bit_xor.__doc__ = pysparkfuncs.bit_xor.__doc__
 # Window Functions
 
 
+def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = None) -> Column:
+    if startTime is None:
+        return _invoke_function_over_columns("counter_diff", value)
+    return _invoke_function_over_columns("counter_diff", value, startTime)
+
+
+counter_diff.__doc__ = pysparkfuncs.counter_diff.__doc__
+
+
 def cume_dist() -> Column:
     return _invoke_function("cume_dist")
 
@@ -1965,7 +1975,7 @@ from_csv.__doc__ = pysparkfuncs.from_csv.__doc__
 
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, MapType, Column, str],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     if isinstance(schema, (str, Column)):
@@ -2187,6 +2197,13 @@ def is_variant_null(v: "ColumnOrName") -> Column:
 
 
 is_variant_null.__doc__ = pysparkfuncs.is_variant_null.__doc__
+
+
+def is_valid_variant(v: "ColumnOrName") -> Column:
+    return _invoke_function("is_valid_variant", _to_col(v))
+
+
+is_valid_variant.__doc__ = pysparkfuncs.is_valid_variant.__doc__
 
 
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
@@ -3728,6 +3745,19 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 timestamp_add.__doc__ = pysparkfuncs.timestamp_add.__doc__
 
 
+def time_bucket(
+    bucket_size: "Column",
+    ts: "ColumnOrName",
+    origin: Optional["Column"] = None,
+) -> Column:
+    if origin is None:
+        return _invoke_function_over_columns("time_bucket", bucket_size, ts)
+    return _invoke_function_over_columns("time_bucket", bucket_size, ts, origin)
+
+
+time_bucket.__doc__ = pysparkfuncs.time_bucket.__doc__
+
+
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -4412,6 +4442,13 @@ def current_catalog() -> Column:
 
 
 current_catalog.__doc__ = pysparkfuncs.current_catalog.__doc__
+
+
+def current_path() -> Column:
+    return _invoke_function("current_path")
+
+
+current_path.__doc__ = pysparkfuncs.current_path.__doc__
 
 
 def current_database() -> Column:
@@ -5390,8 +5427,12 @@ bitmap_and_agg.__doc__ = pysparkfuncs.bitmap_and_agg.__doc__
 # Geospatial ST Functions
 
 
-def st_asbinary(geo: "ColumnOrName") -> Column:
-    return _invoke_function_over_columns("st_asbinary", geo)
+def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
+    if endianness is None:
+        return _invoke_function_over_columns("st_asbinary", geo)
+    else:
+        _endianness = lit(endianness) if isinstance(endianness, str) else endianness
+        return _invoke_function_over_columns("st_asbinary", geo, _endianness)
 
 
 st_asbinary.__doc__ = pysparkfuncs.st_asbinary.__doc__

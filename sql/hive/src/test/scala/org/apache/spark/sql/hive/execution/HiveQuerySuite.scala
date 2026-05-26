@@ -27,17 +27,16 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkFiles, TestUtils}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive.HiveUtils.{builtinHiveVersion => hiveVersion}
-import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive}
+import org.apache.spark.sql.hive.test.{HiveTestJars, TestHive, TestUDTFJar}
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 
 case class TestData(a: Int, b: String)
@@ -47,8 +46,8 @@ case class TestData(a: Int, b: String)
  * included in the hive distribution.
  */
 @SlowHiveTest
-class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAndAfter {
-  import org.apache.spark.sql.hive.test.TestHive.sparkSession.implicits._
+class HiveQuerySuite extends HiveComparisonTest with QueryTest with BeforeAndAfter {
+  import testImplicits._
 
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
 
@@ -836,7 +835,6 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("ADD JAR command 2") {
-    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     // this is a test case from mapjoin_addjar.q
     val testJar = HiveTestJars.getHiveHcatalogCoreJar().toURI
     val testData = TestHive.getHiveFile("data/files/sample.json").toURI
@@ -852,7 +850,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       filter(_.getString(0).contains(HiveTestJars.getHiveHcatalogCoreJar().getName)).count() > 0)
     assert(sql("list jar").
       filter(_.getString(0).contains(HiveTestJars.getHiveHcatalogCoreJar().getName)).count() > 0)
-    val testJar2 = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+    val testJar2 = TestUDTFJar.jar.getCanonicalPath
     sql(s"ADD JAR $testJar2")
     assert(sql(s"list jar $testJar").count() == 1)
   }
@@ -870,9 +868,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
   }
 
   test("CREATE TEMPORARY FUNCTION") {
-    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
-    val funcJar = TestHive.getHiveFile("TestUDTF.jar")
-    val jarURL = funcJar.toURI.toURL
+    val jarURL = TestUDTFJar.jar.toURI.toURL
     sql(s"ADD JAR $jarURL")
     withUserDefinedFunction("udtf_count2" -> true) {
       sql(

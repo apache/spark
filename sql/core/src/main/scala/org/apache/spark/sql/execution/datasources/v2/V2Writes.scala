@@ -22,11 +22,11 @@ import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
-import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, InsertOnlyMerge, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceData, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
-import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -50,6 +50,13 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val write = writeBuilder.build()
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       a.copy(write = Some(write), query = newQuery)
+
+    case m @ InsertOnlyMerge(r: DataSourceV2Relation, query, None, _) =>
+      val writeOptions = r.options.asCaseSensitiveMap.asScala.toMap
+      val writeBuilder = newWriteBuilder(r.table, writeOptions, query.schema)
+      val write = writeBuilder.build()
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
+      m.copy(write = Some(write), query = newQuery)
 
     case o @ OverwriteByExpression(
         r: DataSourceV2Relation, deleteExpr, query, options, _, _, None, _) =>
@@ -91,17 +98,15 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       o.copy(write = Some(write), query = newQuery)
 
     case WriteToMicroBatchDataSource(
-        relationOpt, table, query, queryId, options, outputMode, Some(batchId)) =>
-      val writeOptions = mergeOptions(
-        options,
-        relationOpt.map(r => r.options.asCaseSensitiveMap.asScala.toMap).getOrElse(Map.empty))
+        r: DataSourceV2Relation, query, queryId, options, outputMode, Some(batchId)) =>
+      val table = r.table
+      val writeOptions = mergeOptions(options, r.options.asCaseSensitiveMap.asScala.toMap)
       val writeBuilder = newWriteBuilder(table, writeOptions, query.schema, queryId = queryId)
       val write = buildWriteForMicroBatch(table, writeBuilder, outputMode)
       val microBatchWrite = new MicroBatchWrite(batchId, write.toStreaming)
       val customMetrics = write.supportedCustomMetrics.toImmutableArraySeq
-      val funCatalogOpt = relationOpt.flatMap(_.funCatalog)
-      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, funCatalogOpt)
-      WriteToDataSourceV2(relationOpt, microBatchWrite, newQuery, customMetrics)
+      val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
+      WriteToDataSourceV2(Some(r), microBatchWrite, newQuery, customMetrics)
 
     case rd @ ReplaceData(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
       val rowSchema = projections.rowProjection.schema
@@ -112,7 +117,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
       val newQuery = DistributionAndOrderingUtils.prepareQuery(write, query, r.funCatalog)
       rd.copy(write = Some(write), query = newQuery)
 
-    case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, None) =>
+    case wd @ WriteDelta(r: DataSourceV2Relation, _, query, _, projections, _, None) =>
       val writeOptions = mergeOptions(Map.empty, r.options.asCaseSensitiveMap.asScala.toMap)
       val deltaWriteBuilder = newDeltaWriteBuilder(r.table, writeOptions, projections)
       val deltaWrite = deltaWriteBuilder.build()
@@ -131,7 +136,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   private def buildWriteForMicroBatch(
-      table: SupportsWrite,
+      table: Table,
       writeBuilder: WriteBuilder,
       outputMode: OutputMode): Write = {
 

@@ -123,7 +123,7 @@ def _init_module() -> None:
                 measures = self[code]
                 if not measures:
                     continue  # skip if no measurement
-                line_iterator = ((line, measures[line]) for line in measures.keys())
+                line_iterator = ((line, measures[line]) for line in measures)
                 yield (filename, line_iterator)
 
     class UDFLineProfiler(LineProfiler):

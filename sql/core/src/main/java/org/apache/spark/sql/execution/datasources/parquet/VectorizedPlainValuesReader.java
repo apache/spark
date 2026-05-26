@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.time.ZoneOffset;
 
 import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.column.values.ValuesReader;
@@ -26,6 +27,7 @@ import org.apache.parquet.io.api.Binary;
 import org.apache.parquet.io.ParquetDecodingException;
 
 import org.apache.spark.SparkUnsupportedOperationException;
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
@@ -153,6 +155,67 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     ByteBuffer buffer = getBuffer(requiredBytes);
     for (int i = 0; i < total; i += 1) {
       c.putLong(rowId + i, Integer.toUnsignedLong(buffer.getInt()));
+    }
+  }
+
+  @Override
+  public final void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    // No `hasArray` bulk-copy path: source (int32) and target (int64) have different byte
+    // widths so a contiguous byte copy is impossible. Matches the pattern in peer
+    // type-converting bulk methods such as `readUnsignedIntegers`.
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, buffer.getInt());
+    }
+  }
+
+  @Override
+  public final void readIntegersAsDoubles(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    // No `hasArray` bulk-copy path: source (int32) and target (double, 8 bytes) have
+    // different widths so a contiguous byte copy is impossible. Matches the pattern in
+    // `readIntegersAsLongs` and `readUnsignedIntegers`.
+    for (int i = 0; i < total; i += 1) {
+      c.putDouble(rowId + i, buffer.getInt());
+    }
+  }
+
+  @Override
+  public final void readFloatsAsDoubles(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    // No `hasArray` bulk-copy path: source (float, 4 bytes) and target (double, 8 bytes)
+    // have different widths so a contiguous byte copy is impossible. Matches the pattern
+    // in `readIntegersAsLongs`.
+    for (int i = 0; i < total; i += 1) {
+      c.putDouble(rowId + i, buffer.getFloat());
+    }
+  }
+
+  @Override
+  public final void readLongsAsInts(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 8;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    // No `hasArray` bulk-copy path: source (int64, 8 bytes) and target (int32, 4 bytes)
+    // have different widths so a contiguous byte copy is impossible. Matches the pattern
+    // in `readIntegersAsLongs`.
+    for (int i = 0; i < total; i += 1) {
+      c.putInt(rowId + i, (int) buffer.getLong());
+    }
+  }
+
+  @Override
+  public final void readIntegersAsTimestampMicros(
+      int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    // Per-element conversion calls into `DateTimeUtils.daysToMicros`, which is `days *
+    // MICROS_PER_DAY` for UTC plus an overflow check via `Math.multiplyExact`. No
+    // `hasArray` bulk-copy path because source and target have different widths.
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, DateTimeUtils.daysToMicros(buffer.getInt(), ZoneOffset.UTC));
     }
   }
 
@@ -475,9 +538,9 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       if (buffer.hasArray()) {
         v.putByteArray(rowId + i, buffer.array(), buffer.arrayOffset() + buffer.position(), len);
       } else {
-        byte[] bytes = new byte[len];
-        buffer.get(bytes);
-        v.putByteArray(rowId + i, bytes);
+        // Copy directly from the ByteBuffer into the column vector's backing storage,
+        // bypassing any intermediate byte[] allocation.
+        v.putByteArray(rowId + i, buffer, buffer.position(), len);
       }
     }
   }

@@ -183,6 +183,51 @@ trait ReadStateStore {
       prefixKey: UnsafeRow,
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
 
+  /**
+   * Scan key-value pairs in the range [startKey, endKey).
+   *
+   * @param startKey None to scan from the beginning of the column family,
+   *                 or Some(key) to seek to the given start position (inclusive).
+   * @param endKey   None to scan to the end of the column family,
+   *                 or Some(key) as the exclusive upper bound for the scan.
+   * @param colFamilyName The column family name.
+   *
+   * Callers must ensure the column family's key encoder produces lexicographically ordered
+   * bytes for the scan range to be meaningful (e.g., timestamp-based encoders or
+   * RangeKeyScanStateEncoder).
+   */
+  def rangeScan(
+      startKey: Option[UnsafeRow],
+      endKey: Option[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = {
+    throw StateStoreErrors.unsupportedOperationException("rangeScan", "")
+  }
+
+  /**
+   * Scan key-value pairs in the range [startKey, endKey), expanding multi-valued entries.
+   *
+   * @param startKey None to scan from the beginning of the column family,
+   *                 or Some(key) to seek to the given start position (inclusive).
+   * @param endKey   None to scan to the end of the column family,
+   *                 or Some(key) as the exclusive upper bound for the scan.
+   * @param colFamilyName The column family name.
+   *
+   * Callers must ensure the column family's key encoder produces lexicographically ordered
+   * bytes for the scan range to be meaningful (e.g., timestamp-based encoders or
+   * RangeKeyScanStateEncoder).
+   *
+   * It is expected to throw exception if Spark calls this method without setting
+   * multipleValuesPerKey as true for the column family.
+   */
+  def rangeScanWithMultiValues(
+      startKey: Option[UnsafeRow],
+      endKey: Option[UnsafeRow],
+      colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME)
+    : StateStoreIterator[UnsafeRowPair] = {
+    throw StateStoreErrors.unsupportedOperationException("rangeScanWithMultiValues", "")
+  }
+
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(
       colFamilyName: String = StateStore.DEFAULT_COL_FAMILY_NAME): StateStoreIterator[UnsafeRowPair]
@@ -411,6 +456,20 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     store.prefixScanWithMultiValues(prefixKey, colFamilyName)
   }
 
+  override def rangeScan(
+      startKey: Option[UnsafeRow],
+      endKey: Option[UnsafeRow],
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.rangeScan(startKey, endKey, colFamilyName)
+  }
+
+  override def rangeScanWithMultiValues(
+      startKey: Option[UnsafeRow],
+      endKey: Option[UnsafeRow],
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    store.rangeScanWithMultiValues(startKey, endKey, colFamilyName)
+  }
+
   override def iteratorWithMultiValues(
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     store.iteratorWithMultiValues(colFamilyName)
@@ -478,6 +537,10 @@ trait StateStoreCustomMetric {
   def desc: String
   def withNewDesc(desc: String): StateStoreCustomMetric
   def createSQLMetric(sparkContext: SparkContext): SQLMetric
+
+  // True if the metric reflects current store state (e.g. file size, memory) rather
+  // than per-batch work; snapshot metrics are preserved on no-data trigger events.
+  def isSnapshot: Boolean = false
 }
 
 case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric {
@@ -487,7 +550,10 @@ case class StateStoreCustomSumMetric(name: String, desc: String) extends StateSt
     SQLMetrics.createMetric(sparkContext, desc)
 }
 
-case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric {
+case class StateStoreCustomSizeMetric(
+    name: String,
+    desc: String,
+    override val isSnapshot: Boolean = false) extends StateStoreCustomMetric {
   override def withNewDesc(desc: String): StateStoreCustomSizeMetric = copy(desc = desc)
 
   override def createSQLMetric(sparkContext: SparkContext): SQLMetric =

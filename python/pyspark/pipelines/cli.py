@@ -165,7 +165,7 @@ def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
         "libraries",
     }
     REQUIRED_FIELDS = ["name", "storage"]
-    for key in spec_data.keys():
+    for key in spec_data:
         if key not in ALLOWED_FIELDS:
             raise PySparkException(
                 errorClass="PIPELINE_SPEC_UNEXPECTED_FIELD", messageParameters={"field_name": key}
@@ -253,6 +253,7 @@ def register_definitions(
                         assert module_spec.loader is not None, (
                             f"Module spec has no loader for {file}"
                         )
+                        module.__dict__["spark"] = spark
                         with add_pipeline_analysis_context(
                             spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
                         ):

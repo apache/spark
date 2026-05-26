@@ -498,22 +498,6 @@ class CatalogTestsMixin:
                 spark.catalog.refreshTable("spark_catalog.default.my_tab")
                 self.assertEqual(spark.table("my_tab").count(), 0)
 
-    def test_catalog_list_cached_tables(self):
-        spark = self.spark
-        t = "py_catalog_api_cached_t"
-        with self.table(t):
-            spark.sql(f"CREATE TABLE {t} (id INT) USING parquet")
-            spark.catalog.clearCache()
-            self.assertEqual(spark.catalog.listCachedTables(), [])
-            self.assertEqual(len(spark.sql("SHOW CACHED TABLES").collect()), 0)
-            spark.catalog.cacheTable(t)
-            cached = spark.catalog.listCachedTables()
-            self.assertTrue(any(t in ct.name for ct in cached))
-            sql_set = {(r[0], r[1]) for r in spark.sql("SHOW CACHED TABLES").collect()}
-            api_set = {(ct.name, ct.storageLevel) for ct in cached}
-            self.assertEqual(sql_set, api_set)
-            spark.catalog.uncacheTable(t)
-
     def test_catalog_drop_table(self):
         spark = self.spark
         t = "py_catalog_api_drop_t"
@@ -603,6 +587,47 @@ class CatalogTestsMixin:
             spark.sql(f"CREATE TABLE {t} (id INT) USING parquet")
             spark.sql(f"INSERT INTO {t} VALUES (1)")
             spark.catalog.analyzeTable(t, noScan=True)
+
+    def test_path_current_path_disabled(self):
+        # current_path() is a regular builtin and resolves even when
+        # spark.sql.path.enabled is false. The DataFrame and SQL surfaces must agree.
+        from pyspark.sql.functions import current_path
+
+        spark = self.spark
+        with self.sql_conf({"spark.sql.path.enabled": False}):
+            sql_form = spark.sql("SELECT current_path()").collect()[0][0]
+            self.assertIsInstance(sql_form, str)
+            self.assertNotEqual(sql_form, "")
+            api_form = spark.range(1).select(current_path()).collect()[0][0]
+            self.assertEqual(sql_form, api_form)
+
+    def test_path_set_path_and_current_path(self):
+        # SET PATH is parsed and applied; current_path() reflects it
+        # over both the SQL and DataFrame surfaces. Restores DEFAULT_PATH on exit.
+        from pyspark.sql.functions import current_path
+
+        spark = self.spark
+        with self.sql_conf({"spark.sql.path.enabled": True}):
+            try:
+                spark.sql("SET PATH = spark_catalog.default, system.builtin")
+                sql_form = spark.sql("SELECT current_path()").collect()[0][0]
+                self.assertEqual(sql_form, "spark_catalog.default,system.builtin")
+                api_form = spark.range(1).select(current_path()).collect()[0][0]
+                self.assertEqual(sql_form, api_form)
+            finally:
+                spark.sql("SET PATH = DEFAULT_PATH")
+
+    def test_path_set_path_rejected_when_disabled(self):
+        # SET PATH must raise UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED
+        # when the feature flag is off (covers both classic and Connect error paths).
+        spark = self.spark
+        with self.sql_conf({"spark.sql.path.enabled": False}):
+            with self.assertRaises(AnalysisException) as ctx:
+                spark.sql("SET PATH = spark_catalog.default")
+            self.assertEqual(
+                ctx.exception.getCondition(),
+                "UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED",
+            )
 
 
 class CatalogTests(CatalogTestsMixin, ReusedSQLTestCase):

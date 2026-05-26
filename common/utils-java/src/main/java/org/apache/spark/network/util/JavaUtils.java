@@ -31,6 +31,8 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -766,5 +768,59 @@ public class JavaUtils {
     if (!check) {
       throw new IllegalStateException(String.format(msg, args));
     }
+  }
+
+  private static final HexFormat LOWERCASE_HEX = HexFormat.of();
+
+  /**
+   * Computes the digest of the input bytes using the given algorithm
+   * and returns the result as a lowercase hex string.
+   */
+  public static String digestToHexString(String algorithm, byte[] input) {
+    try {
+      return LOWERCASE_HEX.formatHex(MessageDigest.getInstance(algorithm).digest(input));
+    } catch (NoSuchAlgorithmException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Computes the digest of the input string using the given algorithm
+   * and returns the result as a lowercase hex string.
+   */
+  public static String digestToHexString(String algorithm, String input) {
+    return digestToHexString(algorithm, input.getBytes(StandardCharsets.UTF_8));
+  }
+
+  /**
+   * Computes the MD5 digest of the input bytes
+   * and returns the result as a lowercase hex string.
+   */
+  public static String md5Hex(byte[] input) {
+    return digestToHexString("MD5", input);
+  }
+
+  /**
+   * Computes the MD5 digest of the input string
+   * and returns the result as a lowercase hex string.
+   */
+  public static String md5Hex(String input) {
+    return digestToHexString("MD5", input);
+  }
+
+  /**
+   * Computes the SHA-256 digest of the input bytes
+   * and returns the result as a lowercase hex string.
+   */
+  public static String sha256Hex(byte[] input) {
+    return digestToHexString("SHA-256", input);
+  }
+
+  /**
+   * Computes the SHA-256 digest of the input string
+   * and returns the result as a lowercase hex string.
+   */
+  public static String sha256Hex(String input) {
+    return digestToHexString("SHA-256", input);
   }
 }

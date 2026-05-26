@@ -90,6 +90,8 @@ class DataStreamReader(OptionUtils):
     schema.__doc__ = PySparkDataStreamReader.schema.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataStreamReader":
+        if value is None:
+            return self
         self._options[key] = str(value)
         return self
 
@@ -137,7 +139,7 @@ class DataStreamReader(OptionUtils):
         if schema is not None:
             self.schema(schema)
         self.options(**options)
-        if path is not None and (type(path) != str or len(path.strip()) == 0):
+        if path is not None and (not isinstance(path, str) or len(path.strip()) == 0):
             raise PySparkValueError(
                 errorClass="VALUE_NOT_NON_EMPTY_STR",
                 messageParameters={"arg_name": "path", "arg_value": str(path)},
@@ -488,6 +490,8 @@ class DataStreamWriter:
     format.__doc__ = PySparkDataStreamWriter.format.__doc__
 
     def option(self, key: str, value: "OptionalPrimitiveType") -> "DataStreamWriter":
+        if value is None:
+            return self
         self._write_proto.options[key] = cast(str, to_str(value))
         return self
 
@@ -535,7 +539,7 @@ class DataStreamWriter:
     clusterBy.__doc__ = PySparkDataStreamWriter.clusterBy.__doc__
 
     def queryName(self, queryName: str) -> "DataStreamWriter":
-        if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
+        if not queryName or not isinstance(queryName, str) or len(queryName.strip()) == 0:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_NON_EMPTY_STR",
                 messageParameters={"arg_name": "queryName", "arg_value": str(queryName)},
@@ -583,7 +587,7 @@ class DataStreamWriter:
             )
 
         if processingTime is not None:
-            if type(processingTime) != str or len(processingTime.strip()) == 0:
+            if not isinstance(processingTime, str) or len(processingTime.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={
@@ -602,7 +606,7 @@ class DataStreamWriter:
             self._write_proto.once = True
 
         elif continuous is not None:
-            if type(continuous) != str or len(continuous.strip()) == 0:
+            if not isinstance(continuous, str) or len(continuous.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={"arg_name": "continuous", "arg_value": str(continuous)},
@@ -610,7 +614,7 @@ class DataStreamWriter:
             self._write_proto.continuous_checkpoint_interval = continuous.strip()
 
         elif realTime is not None:
-            if type(realTime) != str or len(realTime.strip()) == 0:
+            if not isinstance(realTime, str) or len(realTime.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={"arg_name": "realTime", "arg_value": str(realTime)},

@@ -1044,7 +1044,7 @@ class UnresolvedNamedLambdaVariable(Expression):
 
     @staticmethod
     def fresh_var_name(name: str) -> str:
-        assert isinstance(name, str) and str != ""
+        assert isinstance(name, str) and name != ""
 
         _id: Optional[int] = None
 

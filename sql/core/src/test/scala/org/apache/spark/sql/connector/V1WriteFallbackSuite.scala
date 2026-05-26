@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
@@ -46,7 +46,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class V1WriteFallbackSuite extends SharedSparkSession with BeforeAndAfter {
 
   import testImplicits._
 
@@ -252,6 +252,9 @@ class V1WriteFallbackSuite extends QueryTest with SharedSparkSession with Before
 class V1WriteFallbackSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = false, includeSQLOnlyTests = true)
   with SessionCatalogTest[InMemoryTableWithV1Fallback, V1FallbackTableCatalog] {
+
+  // V1 fallback writes do not flow through V2TableWriteExec, so no InsertSummary is emitted.
+  override protected def checkInsertMetrics(tableName: String, numInsertedRows: Long): Unit = ()
 
   override protected val v2Format = classOf[InMemoryV1Provider].getName
   override protected val catalogClassName: String = classOf[V1FallbackTableCatalog].getName

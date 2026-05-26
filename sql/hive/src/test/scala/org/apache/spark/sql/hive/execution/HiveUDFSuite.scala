@@ -39,9 +39,8 @@ import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -57,10 +56,11 @@ case class ListStringCaseClass(l: Seq[String])
  * A test suite for Hive custom UDFs.
  */
 @SlowHiveTest
-class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
+class HiveUDFSuite extends QueryTest with TestHiveSingleton {
+  import spark.implicits._
+  import testImplicits.castToImpl
 
   import spark.udf
-  import spark.implicits._
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
@@ -605,10 +605,11 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
   }
 
+  private lazy val testUDTFJar: File = TestUDTFJar.jar
+
   test("UDTF") {
-    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count2" -> true) {
-      sql(s"ADD JAR ${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath}")
+      sql(s"ADD JAR ${testUDTFJar.getCanonicalPath}")
       // The function source code can be found at:
       // https://cwiki.apache.org/confluence/display/Hive/DeveloperGuide+UDTF
       sql(
@@ -628,13 +629,12 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("permanent UDTF") {
-    assume(Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar") != null)
     withUserDefinedFunction("udtf_count_temp" -> false) {
       sql(
         s"""
            |CREATE FUNCTION udtf_count_temp
            |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
-           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").toURI}'
+           |USING JAR '${testUDTFJar.toURI}'
         """.stripMargin)
 
       checkAnswer(

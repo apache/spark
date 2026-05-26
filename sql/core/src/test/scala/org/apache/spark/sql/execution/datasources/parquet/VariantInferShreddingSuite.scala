@@ -23,7 +23,7 @@ import java.io.File
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
@@ -36,7 +36,7 @@ import org.apache.spark.types.variant._
 import org.apache.spark.unsafe.types.VariantVal
 
 // Unit tests for variant shredding inference.
-class VariantInferShreddingSuite extends QueryTest with SharedSparkSession with ParquetTest {
+class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
   override def sparkConf: SparkConf = {
     super.sparkConf.set(SQLConf.PUSH_VARIANT_INTO_SCAN.key, "true")
       .set(SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key, "true")

@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.13</artifactId>
-    <version>4.2.0-SNAPSHOT</version>
+    <version>5.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -36,8 +36,23 @@
   
   <dependencies>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-proto_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-compiler</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.avro</groupId>
@@ -556,7 +571,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,protobuf-java,jetty-io,jetty-ee10-servlet,jetty-ee10-servlets,jetty-http,jetty-ee10-plus,jetty-util,jetty-server,jetty-security,jetty-proxy,jetty-client,jetty-session,jetty-compression-server,jetty-compression-common,jetty-compression-gzip
+                guava,protobuf-java,jetty-io,jetty-ee10-servlet,jetty-ee10-servlets,jetty-http,jetty-ee10-plus,jetty-util,jetty-server,jetty-security,jetty-ee10-proxy,jetty-client,jetty-session,jetty-compression-server,jetty-compression-common,jetty-compression-gzip
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>

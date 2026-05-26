@@ -21,7 +21,7 @@ import java.util.{Locale, UUID}
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 
-import org.apache.spark.{MapOutputStatistics, SparkFunSuite, TaskContext}
+import org.apache.spark.{MapOutputStatistics, TaskContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, Max, Partial}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
-import org.apache.spark.sql.catalyst.plans.{PlanTest, SQLHelper}
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -58,8 +58,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Test cases for the [[SparkSessionExtensions]].
  */
-class SparkSessionExtensionSuite extends SparkFunSuite with SQLHelper with AdaptiveSparkPlanHelper
-  with PlanTest {
+class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 

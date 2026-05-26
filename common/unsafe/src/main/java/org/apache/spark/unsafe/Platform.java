@@ -43,6 +43,10 @@ public final class Platform {
 
   public static final int DOUBLE_ARRAY_OFFSET;
 
+  // Field offset for java.nio.Buffer.address — used to read the native memory address
+  // of a DirectByteBuffer without going through sun.nio.ch.DirectBuffer.
+  private static final long DIRECT_BUFFER_ADDRESS_OFFSET;
+
   private static final boolean unaligned;
 
   // Split java.version on non-digit chars:
@@ -230,6 +234,14 @@ public final class Platform {
     throw new IllegalStateException("unreachable");
   }
 
+  /**
+   * Returns the native memory address of a direct {@link ByteBuffer}.
+   * The buffer must be direct; passing a heap buffer produces an undefined result.
+   */
+  public static long getDirectBufferAddress(ByteBuffer buffer) {
+    return _UNSAFE.getLong(buffer, DIRECT_BUFFER_ADDRESS_OFFSET);
+  }
+
   public static void setMemory(Object object, long offset, long size, byte value) {
     _UNSAFE.setMemory(object, offset, size, value);
   }
@@ -296,6 +308,12 @@ public final class Platform {
       LONG_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(long[].class);
       FLOAT_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(float[].class);
       DOUBLE_ARRAY_OFFSET = _UNSAFE.arrayBaseOffset(double[].class);
+      try {
+        DIRECT_BUFFER_ADDRESS_OFFSET =
+          _UNSAFE.objectFieldOffset(java.nio.Buffer.class.getDeclaredField("address"));
+      } catch (NoSuchFieldException e) {
+        throw new IllegalStateException(e);
+      }
     } else {
       BOOLEAN_ARRAY_OFFSET = 0;
       BYTE_ARRAY_OFFSET = 0;
@@ -304,6 +322,7 @@ public final class Platform {
       LONG_ARRAY_OFFSET = 0;
       FLOAT_ARRAY_OFFSET = 0;
       DOUBLE_ARRAY_OFFSET = 0;
+      DIRECT_BUFFER_ADDRESS_OFFSET = 0;
     }
   }
 

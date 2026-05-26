@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Max}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Cross, Inner, LeftOuter, NearestBySimilarity, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SQLConf
@@ -922,6 +922,35 @@ class AnalysisErrorSuite extends AnalysisTest with DataTypeErrorsBase {
           |+- LocalRelation <empty>, [a#x]
           |
           |Conflicting attributes: "a".""".stripMargin))
+  }
+
+  test("NearestByJoin with a streaming input fails analysis") {
+    val streamingLeft = LocalRelation(
+      Seq(AttributeReference("a", IntegerType)()), Nil, isStreaming = true)
+    val batchRight = LocalRelation(AttributeReference("b", IntegerType)())
+    val nearestBy = NearestByJoin(
+      streamingLeft, batchRight, Inner, approx = true, numResults = 1,
+      rankingExpression = streamingLeft.output.head + batchRight.output.head,
+      direction = NearestBySimilarity)
+    assertAnalysisErrorCondition(
+      nearestBy,
+      expectedErrorCondition = "NEAREST_BY_JOIN.STREAMING_NOT_SUPPORTED",
+      expectedMessageParameters = Map.empty)
+  }
+
+  test("NearestByJoin is rejected when spark.sql.crossJoin.enabled is false") {
+    val left = LocalRelation(AttributeReference("a", IntegerType)())
+    val right = LocalRelation(AttributeReference("b", IntegerType)())
+    val nearestBy = NearestByJoin(
+      left, right, Inner, approx = true, numResults = 1,
+      rankingExpression = left.output.head + right.output.head,
+      direction = NearestBySimilarity)
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      assertAnalysisErrorCondition(
+        nearestBy,
+        expectedErrorCondition = "NEAREST_BY_JOIN.CROSS_JOIN_NOT_ENABLED",
+        expectedMessageParameters = Map.empty)
+    }
   }
 
   test("check grouping expression data types") {

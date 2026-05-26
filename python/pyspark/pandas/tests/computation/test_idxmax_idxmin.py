@@ -20,7 +20,6 @@ import pandas as pd
 from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameIdxMaxMinMixin:
@@ -280,7 +279,6 @@ class FrameIdxMaxMinMixin:
 class FrameIdxMaxMinTests(
     FrameIdxMaxMinMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

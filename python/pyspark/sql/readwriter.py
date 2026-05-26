@@ -201,6 +201,8 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
+        if value is None:
+            return self
         self._jreader = self._jreader.option(key, to_str(value))
         return self
 
@@ -248,8 +250,9 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
-        for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jreader = self._jreader.option(k, to_str(v))
         return self
 
     def load(
@@ -311,8 +314,8 @@ class DataFrameReader(OptionUtils):
         if isinstance(path, str):
             return self._df(self._jreader.load(path))
         elif path is not None:
-            if type(path) != list:
-                path = [path]  # type: ignore[list-item]
+            if not isinstance(path, list):
+                path = [path]
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         else:
@@ -320,7 +323,7 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: Union[str, List[str], "RDD[str]"],
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -361,11 +364,15 @@ class DataFrameReader(OptionUtils):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str, list or :class:`RDD`
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string represents path to the JSON dataset, or a list of paths,
-            or RDD of Strings storing JSON objects.
+            or RDD of Strings storing JSON objects,
+            or a DataFrame with a single string column containing JSON strings.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema or
             a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -434,6 +441,20 @@ class DataFrameReader(OptionUtils):
         +----+---+
         | Bob| 30|
         +----+---+
+
+        Example 4: Parse JSON from a DataFrame with a single string column.
+
+        >>> json_df = spark.createDataFrame(
+        ...     [('{"name": "Alice", "age": 25}',), ('{"name": "Bob", "age": 30}',)],
+        ...     schema="value STRING",
+        ... )
+        >>> spark.read.json(json_df).sort("name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
         """
         self._set_opts(
             schema=schema,
@@ -464,7 +485,7 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
@@ -486,12 +507,20 @@ class DataFrameReader(OptionUtils):
             assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.jsonFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
-                    "expected_type": "str or list[RDD]",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )
@@ -742,7 +771,7 @@ class DataFrameReader(OptionUtils):
 
     def csv(
         self,
-        path: PathOrPaths,
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         sep: Optional[str] = None,
         encoding: Optional[str] = None,
@@ -788,11 +817,15 @@ class DataFrameReader(OptionUtils):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str or list
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string, or list of strings, for input path(s),
-            or RDD of Strings storing CSV rows.
+            or RDD of Strings storing CSV rows,
+            or a DataFrame with a single string column containing CSV rows.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -861,7 +894,7 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
@@ -870,7 +903,7 @@ class DataFrameReader(OptionUtils):
 
         if not is_remote_only() and isinstance(path, RDD):
 
-            def func(iterator):
+            def func(iterator: Iterable) -> Iterable:
                 for x in iterator:
                     if not isinstance(x, str):
                         x = str(x)
@@ -879,7 +912,8 @@ class DataFrameReader(OptionUtils):
                     yield x
 
             keyed = path.mapPartitions(func)
-            keyed._bypass_serializer = True
+            keyed._bypass_serializer = True  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             # see SPARK-22112
             # There aren't any jvm api for creating a dataframe from rdd storing csv.
@@ -889,19 +923,27 @@ class DataFrameReader(OptionUtils):
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )
             return self._df(self._jreader.csv(jdataset))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.csvFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
-                    "expected_type": "str or list[RDD]",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )
 
     def xml(
         self,
-        path: Union[str, List[str], "RDD[str]"],
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -929,11 +971,15 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 4.0.0
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str, list or :class:`RDD`
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string, or list of strings, for input path(s),
-            or RDD of Strings storing XML rows.
+            or RDD of Strings storing XML rows,
+            or a DataFrame with a single string column containing XML strings.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -949,7 +995,7 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        Write a DataFrame into a XML file and read it back.
+        Example 1: Write a DataFrame into a XML file and read it back.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory(prefix="xml") as d:
@@ -965,6 +1011,21 @@ class DataFrameReader(OptionUtils):
         +---+------------+
         |100|Hyukjin Kwon|
         +---+------------+
+
+        Example 2: Parse XML from a DataFrame with a single string column.
+
+        >>> xml_df = spark.createDataFrame(
+        ...     [('<person><name>Alice</name><age>25</age></person>',),
+        ...      ('<person><name>Bob</name><age>30</age></person>',)],
+        ...     schema="value STRING",
+        ... )
+        >>> spark.read.option("rowTag", "person").xml(xml_df).sort("name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
         """
         self._set_opts(
             rowTag=rowTag,
@@ -989,7 +1050,7 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
@@ -1017,12 +1078,20 @@ class DataFrameReader(OptionUtils):
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )
             return self._df(self._jreader.xml(jdataset))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.xmlFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
-                    "expected_type": "str or list[RDD]",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )
@@ -1367,6 +1436,8 @@ class DataFrameWriter(OptionUtils):
         +---+------------+
         """
 
+        if value is None:
+            return self
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
@@ -1417,8 +1488,9 @@ class DataFrameWriter(OptionUtils):
         |100|Hyukjin Kwon|
         +---+------------+
         """
-        for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jwrite = self._jwrite.option(k, to_str(v))
         return self
 
     @overload
@@ -2403,6 +2475,8 @@ class DataFrameWriterV2:
 
         .. versionadded: 3.1.0
         """
+        if value is None:
+            return self
         self._jwriter.option(key, to_str(value))
         return self
 
@@ -2412,7 +2486,7 @@ class DataFrameWriterV2:
 
         .. versionadded: 3.1.0
         """
-        options = {k: to_str(v) for k, v in options.items()}
+        options = {k: to_str(v) for k, v in options.items() if v is not None}
         self._jwriter.options(options)
         return self
 

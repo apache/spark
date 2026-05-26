@@ -21,7 +21,7 @@ name: "Build / Python-only (master, Minimum dependencies of PySpark)"
 
 on:
   schedule:
-    - cron: '0 9 * * *'
+    - cron: '0 9 */2 * *'
   workflow_dispatch:
 
 jobs:
@@ -38,9 +38,10 @@ jobs:
       envs: >-
         {
           "PYSPARK_IMAGE_TO_TEST": "python-minimum",
-          "PYTHON_TO_TEST": "python3.10"
+          "PYTHON_TO_TEST": "python3.11"
         }
       jobs: >-
         {
-          "pyspark": "true"
+          "pyspark": "true",
+          "pyspark-pandas": "true"
         }

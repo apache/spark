@@ -18,6 +18,7 @@
 from pyspark.sql import Row, Observation, functions as F
 from pyspark.sql.types import StructType, LongType
 from pyspark.errors import (
+    AnalysisException,
     PySparkAssertionError,
     PySparkException,
     PySparkTypeError,
@@ -84,6 +85,16 @@ class DataFrameObservationTestsMixin:
             exception=pe.exception,
             errorClass="REUSE_OBSERVATION",
             messageParameters={},
+        )
+
+        new_observation = Observation("metric")
+        with self.assertRaises(AnalysisException) as pe:
+            observed.observe(new_observation, 2 * F.count(F.lit(1)).alias("cnt")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DUPLICATED_METRICS_NAME",
+            messageParameters={"metricName": "metric"},
         )
 
         # observation requires name (if given) to be non empty string
@@ -262,6 +273,109 @@ class DataFrameObservationTestsMixin:
             _ = observation.get
 
         self.assertIn("test error", str(cm.exception))
+
+    def test_observe_self_join(self):
+        # SPARK-56322: self-joining an observed DataFrame
+        obs = Observation("my_observation")
+        df = (
+            self.spark.range(100)
+            .selectExpr("id", "CASE WHEN id < 10 THEN 'A' ELSE 'B' END AS group_key")
+            .observe(obs, F.count(F.lit(1)).alias("row_count"))
+        )
+
+        df1 = df.where("id < 20")
+        df2 = df.where("id % 2 == 0")
+
+        joined = df1.alias("a").join(df2.alias("b"), on=["id"], how="inner")
+        result = joined.collect()
+
+        # The join should produce rows where id < 20 AND id is even
+        expected_ids = sorted([i for i in range(20) if i % 2 == 0])
+        actual_ids = sorted([row.id for row in result])
+        self.assertEqual(actual_ids, expected_ids)
+
+        # The observation should have been collected
+        self.assertEqual(obs.get, {"row_count": 100})
+
+        # Check the error conditions
+        with self.assertRaises(PySparkAssertionError) as pe:
+            joined.observe(obs, F.count(F.lit(1)).alias("row_count")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="REUSE_OBSERVATION",
+            messageParameters={},
+        )
+
+        obs2 = Observation("my_observation")
+        with self.assertRaises(AnalysisException) as pe:
+            joined.observe(obs2, 2 * F.count(F.lit(1)).alias("row_count")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DUPLICATED_METRICS_NAME",
+            messageParameters={"metricName": "my_observation"},
+        )
+
+    def test_observe_lateral_join(self):
+        # SPARK-56322: lateral self-joining an observed DataFrame
+        obs = Observation("lateral_join_observation")
+        df = self.spark.range(50).observe(obs, F.count(F.lit(1)).alias("row_count"))
+
+        joined = (
+            df.alias("left")
+            .lateralJoin(
+                df.alias("right"), on=F.expr("right.id between left.id - 1 and left.id + 1")
+            )
+            .selectExpr("left.id as left_id", "right.id as right_id")
+        )
+        result = joined.collect()
+
+        # Joins on row 0 should produce rows 0 and 1
+        bounded_matches = sorted([r.right_id for r in result if r.left_id == 0])
+        self.assertEqual(bounded_matches, [0, 1])
+
+        # Joins on row 25 should produce rows 24, 25, and 26
+        unbounded_matches = sorted([r.right_id for r in result if r.left_id == 25])
+        self.assertEqual(unbounded_matches, [24, 25, 26])
+
+        # The observation should have been collected
+        self.assertEqual(obs.get, {"row_count": 50})
+
+        # Check the error conditions
+        with self.assertRaises(PySparkAssertionError) as reused:
+            joined.observe(obs, F.count(F.lit(1)).alias("row_count")).collect()
+
+        self.check_error(
+            exception=reused.exception,
+            errorClass="REUSE_OBSERVATION",
+            messageParameters={},
+        )
+
+        obs2 = Observation("lateral_join_observation")
+        with self.assertRaises(AnalysisException) as pe:
+            joined.observe(obs2, F.count(2 * F.lit(1)).alias("row_count")).collect()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="DUPLICATED_METRICS_NAME",
+            messageParameters={"metricName": "lateral_join_observation"},
+        )
+
+    def test_observe_self_join_union(self):
+        # SPARK-56322: union of observed DataFrames with same observation
+        obs = Observation("union_obs")
+        df = self.spark.range(50).observe(obs, F.count(F.lit(1)).alias("cnt"))
+
+        df1 = df.where("id < 25")
+        df2 = df.where("id >= 25")
+
+        unioned = df1.union(df2)
+        result = unioned.collect()
+
+        actual_ids = sorted([row.id for row in result])
+        self.assertEqual(actual_ids, list(range(50)))
+        self.assertEqual(obs.get, {"cnt": 50})
 
 
 class DataFrameObservationTests(

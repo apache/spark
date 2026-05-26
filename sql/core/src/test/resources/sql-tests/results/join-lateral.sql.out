@@ -1906,6 +1906,87 @@ struct<1:int>
 
 
 -- !query
+WITH nj1(k, v1) AS (VALUES (1, 'a')),
+     nj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM nj1 NATURAL JOIN nj2,
+LATERAL (SELECT k AS unq_k)
+-- !query schema
+struct<k:int,v1:string,v2:string,unq_k:int>
+-- !query output
+1	a	b	1
+
+
+-- !query
+WITH nj1(k, v1) AS (VALUES (1, 'a')),
+     nj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM nj1 NATURAL JOIN nj2,
+LATERAL (SELECT k AS unq_k, nj1.k AS qual_nj1k, nj2.k AS qual_nj2k)
+-- !query schema
+struct<k:int,v1:string,v2:string,unq_k:int,qual_nj1k:int,qual_nj2k:int>
+-- !query output
+1	a	b	1	1	1
+
+
+-- !query
+WITH uj1(k, v1) AS (VALUES (1, 'a')),
+     uj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM uj1 JOIN uj2 USING (k),
+LATERAL (SELECT k AS unq_k, uj1.k AS qual_uj1k, uj2.k AS qual_uj2k)
+-- !query schema
+struct<k:int,v1:string,v2:string,unq_k:int,qual_uj1k:int,qual_uj2k:int>
+-- !query output
+1	a	b	1	1	1
+
+
+-- !query
+WITH cte1(k, v1) AS (VALUES (1, 'a'))
+SELECT * FROM (SELECT k FROM cte1 ORDER BY v1) sub,
+LATERAL (SELECT v1 AS leaked)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 107,
+    "stopIndex" : 108,
+    "fragment" : "v1"
+  } ]
+}
+
+
+-- !query
+WITH cte1(k, v1) AS (VALUES (1, 'a'), (2, 'b'), (3, 'c'))
+SELECT * FROM (SELECT k FROM cte1 GROUP BY k) g,
+LATERAL (SELECT v1 AS leaked)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 124,
+    "stopIndex" : 125,
+    "fragment" : "v1"
+  } ]
+}
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

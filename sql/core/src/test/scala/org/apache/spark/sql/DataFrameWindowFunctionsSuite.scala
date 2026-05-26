@@ -38,8 +38,7 @@ import org.apache.spark.tags.SlowSQLTest
  * Window function testing for DataFrame API.
  */
 @SlowSQLTest
-class DataFrameWindowFunctionsSuite extends QueryTest
-  with SharedSparkSession
+class DataFrameWindowFunctionsSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
 
   import testImplicits._
@@ -71,10 +70,12 @@ class DataFrameWindowFunctionsSuite extends QueryTest
 
   test("window function should fail if order by clause is not specified") {
     val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
-    val e = intercept[AnalysisException](
-      // Here we missed .orderBy("key")!
-      df.select(row_number().over(Window.partitionBy("value"))).collect())
-    assert(e.message.contains("requires window to be ordered"))
+    checkError(
+      exception = intercept[AnalysisException](
+        // Here we missed .orderBy("key")!
+        df.select(row_number().over(Window.partitionBy("value"))).collect()),
+      condition = "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+      parameters = Map("wf_name" -> "row_number", "wf_expr" -> "row_number()"))
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
@@ -834,6 +835,28 @@ class DataFrameWindowFunctionsSuite extends QueryTest
           "v", "z", null, "v", "z", "y", null, "va")))
   }
 
+  test("counter_diff with and without startTime") {
+    import java.sql.Timestamp
+    val df = Seq(
+      (1, Timestamp.valueOf("2024-01-01 00:00:00"), 100),
+      (2, Timestamp.valueOf("2024-01-01 12:00:00"), 200),
+      (3, Timestamp.valueOf("2024-01-01 12:00:00"), 400),
+      (4, Timestamp.valueOf("2024-01-02 00:00:00"), 50),
+      (5, Timestamp.valueOf("2024-01-02 00:00:00"), 150)
+    ).toDF("t", "st", "c")
+    val w = Window.orderBy($"t")
+
+    // 1-arg form: reset detected by counter decrease only.
+    checkAnswer(
+      df.select($"t", counter_diff($"c").over(w)).orderBy($"t"),
+      Seq(Row(1, null), Row(2, 100), Row(3, 200), Row(4, null), Row(5, 100)))
+
+    // 2-arg form: reset also detected by startTime advance.
+    checkAnswer(
+      df.select($"t", counter_diff($"c", $"st").over(w)).orderBy($"t"),
+      Seq(Row(1, null), Row(2, null), Row(3, 200), Row(4, null), Row(5, 100)))
+  }
+
   test("lag - Offset expression <offset> must be a literal") {
     val nullStr: String = null
     val df = Seq(
@@ -1051,6 +1074,176 @@ class DataFrameWindowFunctionsSuite extends QueryTest
            |GROUP BY a
            |HAVING SUM(b) = 5 AND RANK() OVER(ORDER BY a) = 1""".stripMargin),
       "HAVING")
+  }
+
+  test("QUALIFY filters window function results") {
+    withTempView("dealer") {
+      Seq(
+        (100, "Fremont", "Honda Civic", 10),
+        (100, "Fremont", "Honda Accord", 15),
+        (100, "Fremont", "Honda CRV", 7),
+        (200, "Dublin", "Honda Civic", 20),
+        (200, "Dublin", "Honda Accord", 10),
+        (200, "Dublin", "Honda CRV", 3),
+        (300, "San Jose", "Honda Civic", 5),
+        (300, "San Jose", "Honda Accord", 8)
+      ).toDF("id", "city", "car_model", "quantity").createOrReplaceTempView("dealer")
+
+      val expectedWithRank = Seq(
+        Row("San Jose", "Honda Accord", 1),
+        Row("Dublin", "Honda CRV", 1),
+        Row("San Jose", "Honda Civic", 1))
+      checkAnswer(
+        sql(
+          """
+            |SELECT city, car_model, RANK() OVER (PARTITION BY car_model ORDER BY quantity) AS rank
+            |FROM dealer
+            |QUALIFY rank = 1
+          """.stripMargin),
+        expectedWithRank)
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT city, car_model
+            |FROM dealer
+            |QUALIFY RANK() OVER (PARTITION BY car_model ORDER BY quantity) = 1
+          """.stripMargin),
+        expectedWithRank.map(row => Row(row.getString(0), row.getString(1))))
+    }
+  }
+
+  test("QUALIFY filters window function results after HAVING") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, SUM(b) AS total
+            |FROM testData2
+            |GROUP BY a
+            |HAVING SUM(b) > 2
+            |QUALIFY ROW_NUMBER() OVER (ORDER BY a DESC) = 1
+          """.stripMargin),
+        Row(3, 3))
+    }
+  }
+
+  test("QUALIFY requires a current-query window function") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a FROM testData2 QUALIFY a = 1").queryExecution.analyzed
+        },
+        condition = "QUALIFY_REQUIRES_WINDOW_FUNCTION",
+        parameters = Map.empty)
+    }
+  }
+
+  test("QUALIFY does not allow aggregate functions in its predicate") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT a, RANK() OVER (ORDER BY b) AS rank FROM testData2 QUALIFY COUNT(1) > 1")
+            .queryExecution.analyzed
+        },
+        condition = "QUALIFY_AGGREGATE_NOT_ALLOWED",
+        parameters = Map("aggregateExpr" -> "\"count(1)\""),
+        context = ExpectedContext("COUNT(1)", 66, 73))
+    }
+  }
+
+  test("QUALIFY allows aggregate aliases in its predicate") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a, SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY a) AS rn
+            |FROM testData2
+            |GROUP BY a
+            |QUALIFY total > 1
+          """.stripMargin),
+        Seq(Row(1, 3, 1), Row(2, 3, 2), Row(3, 3, 3)))
+    }
+  }
+
+  test("QUALIFY with correlated subquery in condition") {
+    withTempView("t1", "t2") {
+      Seq((1, 10), (2, 20), (3, 30)).toDF("k", "v").createOrReplaceTempView("t1")
+      Seq((1, 100), (2, 200)).toDF("k", "v").createOrReplaceTempView("t2")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT k, v, ROW_NUMBER() OVER (ORDER BY k) AS rn
+            |FROM t1
+            |QUALIFY rn = 1 AND EXISTS (SELECT 1 FROM t2 WHERE t2.k = t1.k)
+          """.stripMargin),
+        Row(1, 10, 1))
+    }
+  }
+
+  test("QUALIFY rejects non-grouping column references with GROUP BY") {
+    withTempView("testData2") {
+      testData2.createOrReplaceTempView("testData2")
+
+      val e = intercept[AnalysisException] {
+        sql(
+          """
+            |SELECT a, SUM(b) AS total, ROW_NUMBER() OVER (ORDER BY a) AS rn
+            |FROM testData2
+            |GROUP BY a
+            |QUALIFY b > 1
+          """.stripMargin).queryExecution.analyzed
+      }
+      assert(e.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+      assert(e.getMessageParameters.get("objectName").contains("b"))
+    }
+  }
+
+  test("QUALIFY can reference columns not in SELECT list") {
+    withTempView("t") {
+      Seq((1, 10, "x"), (2, 20, "y"), (3, 30, "z"))
+        .toDF("a", "b", "c").createOrReplaceTempView("t")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT ROW_NUMBER() OVER (ORDER BY b) AS rn
+            |FROM t
+            |QUALIFY a = 1
+          """.stripMargin),
+        Row(1))
+    }
+  }
+
+  test("QUALIFY with window in condition and non-selected column reference") {
+    withTempView("t") {
+      Seq((1, 10, "x"), (2, 20, "y"), (3, 30, "z"))
+        .toDF("a", "b", "c").createOrReplaceTempView("t")
+
+      checkAnswer(
+        sql(
+          """
+            |SELECT a
+            |FROM t
+            |QUALIFY ROW_NUMBER() OVER (ORDER BY b) = 1 AND c > 'w'
+          """.stripMargin),
+        Row(1))
+    }
+  }
+
+  test("QUALIFY is non-reserved in non-ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+      checkAnswer(sql("SELECT qualify FROM VALUES (1) AS t(qualify)"), Row(1))
+    }
   }
 
   test("window functions in multiple selects") {

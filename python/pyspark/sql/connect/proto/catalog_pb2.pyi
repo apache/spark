@@ -82,7 +82,6 @@ class Catalog(google.protobuf.message.Message):
     CURRENT_CATALOG_FIELD_NUMBER: builtins.int
     SET_CURRENT_CATALOG_FIELD_NUMBER: builtins.int
     LIST_CATALOGS_FIELD_NUMBER: builtins.int
-    LIST_CACHED_TABLES_FIELD_NUMBER: builtins.int
     DROP_TABLE_FIELD_NUMBER: builtins.int
     DROP_VIEW_FIELD_NUMBER: builtins.int
     CREATE_DATABASE_FIELD_NUMBER: builtins.int
@@ -146,8 +145,6 @@ class Catalog(google.protobuf.message.Message):
     @property
     def list_catalogs(self) -> global___ListCatalogs: ...
     @property
-    def list_cached_tables(self) -> global___ListCachedTables: ...
-    @property
     def drop_table(self) -> global___DropTable: ...
     @property
     def drop_view(self) -> global___DropView: ...
@@ -196,7 +193,6 @@ class Catalog(google.protobuf.message.Message):
         current_catalog: global___CurrentCatalog | None = ...,
         set_current_catalog: global___SetCurrentCatalog | None = ...,
         list_catalogs: global___ListCatalogs | None = ...,
-        list_cached_tables: global___ListCachedTables | None = ...,
         drop_table: global___DropTable | None = ...,
         drop_view: global___DropView | None = ...,
         create_database: global___CreateDatabase | None = ...,
@@ -255,8 +251,6 @@ class Catalog(google.protobuf.message.Message):
             b"get_table_properties",
             "is_cached",
             b"is_cached",
-            "list_cached_tables",
-            b"list_cached_tables",
             "list_catalogs",
             b"list_catalogs",
             "list_columns",
@@ -336,8 +330,6 @@ class Catalog(google.protobuf.message.Message):
             b"get_table_properties",
             "is_cached",
             b"is_cached",
-            "list_cached_tables",
-            b"list_cached_tables",
             "list_catalogs",
             b"list_catalogs",
             "list_columns",
@@ -400,7 +392,6 @@ class Catalog(google.protobuf.message.Message):
             "current_catalog",
             "set_current_catalog",
             "list_catalogs",
-            "list_cached_tables",
             "drop_table",
             "drop_view",
             "create_database",
@@ -1231,17 +1222,6 @@ class ListCatalogs(google.protobuf.message.Message):
     ) -> typing_extensions.Literal["pattern"] | None: ...
 
 global___ListCatalogs = ListCatalogs
-
-class ListCachedTables(google.protobuf.message.Message):
-    """See `spark.catalog.listCachedTables`"""
-
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-
-    def __init__(
-        self,
-    ) -> None: ...
-
-global___ListCachedTables = ListCachedTables
 
 class DropTable(google.protobuf.message.Message):
     """See `spark.catalog.dropTable`"""

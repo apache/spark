@@ -566,7 +566,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
   private lazy val metricStateOnCurrentVersionSizeBytes: StateStoreCustomSizeMetric =
     StateStoreCustomSizeMetric("stateOnCurrentVersionSizeBytes",
-      "estimated size of state only on current version")
+      "estimated size of state only on current version",
+      isSnapshot = true)
 
   private lazy val metricLoadedMapCacheHit: StateStoreCustomMetric =
     StateStoreCustomSumMetric("loadedMapCacheHitCount",
@@ -731,7 +732,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       storeIdStr) {
       override protected def beforeLoad(): Unit = {}
 
-      override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
+      override protected def loadSnapshotFromCheckpoint(
+          snapshotVersion: Long, uniqueId: Option[String]): Unit = {
         loadedMap = if (snapshotVersion <= 0) {
           // Use an empty map for versions 0 or less.
           Some(createHDFSBackedStateStoreMap())
@@ -744,7 +746,8 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
 
       override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {}
 
-      override protected def getEligibleSnapshots(versionToLoad: Long): Seq[Long] = {
+      override protected def getEligibleSnapshots(
+          versionToLoad: Long): Seq[(Long, Option[String])] = {
         val snapshotVersions = SnapshotLoaderHelper.getEligibleSnapshotsForVersion(
           versionToLoad, fm, baseDir, onlySnapshotFiles, fileSuffix = ".snapshot")
 
@@ -754,7 +757,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
         }.filter(_ <= versionToLoad)
 
         // Combine the two sets of versions, so we can check both during load
-        (snapshotVersions ++ cachedVersions).distinct
+        (snapshotVersions ++ cachedVersions).distinct.map((_, None))
       }
     }
 

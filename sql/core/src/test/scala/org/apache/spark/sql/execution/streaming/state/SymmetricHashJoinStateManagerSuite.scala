@@ -24,6 +24,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.{SparkRuntimeException, SparkThrowable}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Expression, GenericInternalRow, JoinedRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
@@ -329,8 +330,8 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
 
   /* Test removeByValue with nulls in middle simulated by updating numValues on the state manager */
   private def testAllOperationsWithNullsInMiddle(stateFormatVersion: Int): Unit = {
-    // Test with skipNullsForStreamStreamJoins set to false which would throw a
-    // NullPointerException while iterating and also return null values as part of get
+    // Test with skipNullsForStreamStreamJoins set to false which would throw
+    // STREAM_STREAM_JOIN_INCONSISTENT_STATE.NULL_VALUE while iterating
     withJoinStateManager(inputValueAttributes, joinKeyExpressions, stateFormatVersion) { manager =>
       implicit val mgr = manager
 
@@ -342,15 +343,9 @@ class SymmetricHashJoinStateManagerSuite extends SymmetricHashJoinStateManagerBa
         updateNumValues(40, 7) // create nulls in between and end
         removeByValue(50)
       }
-      assert(ex.isInstanceOf[NullPointerException])
-      assert(getNumValues(40) === 7)        // we should get 7 with no nulls skipped
-
-      removeByValue(300)
-      assert(getNumValues(40) === 1)         // only 400 should remain
-      assert(get(40) === Seq(400))
-      removeByValue(400)
-      assert(get(40) === Seq.empty)
-      assertNumRows(stateFormatVersion, 0)   // ensure all elements removed
+      assert(ex.isInstanceOf[SparkRuntimeException])
+      assert(ex.asInstanceOf[SparkThrowable].getCondition ==
+        "STREAM_STREAM_JOIN_INCONSISTENT_STATE.NULL_VALUE")
     }
 
     // Test with skipNullsForStreamStreamJoins set to true which would skip nulls
@@ -1102,6 +1097,90 @@ class SymmetricHashJoinStateManagerEventTimeInValueSuite
       assert(getJoinedRowTimestamps(40, Some((20L, 20L))) === Seq(20, 20, 20))
       assert(getJoinedRowTimestamps(40, Some((10L, 20L))) === Seq(10, 10, 20, 20, 20))
       assert(getJoinedRowTimestamps(40, Some((10L, 30L))) === Seq(10, 10, 20, 20, 20, 30))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - getValuesInRange boundary edge cases") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+
+      // Exact boundary matches (both inclusive)
+      assert(getJoinedRowTimestamps(40, Some((10L, 10L))) === Seq(10))
+      assert(getJoinedRowTimestamps(40, Some((50L, 50L))) === Seq(50))
+
+      // Range with Long.MinValue / Long.MaxValue
+      assert(getJoinedRowTimestamps(40, Some((Long.MinValue, 30L))) === Seq(10, 20, 30))
+      assert(getJoinedRowTimestamps(40, Some((30L, Long.MaxValue))) === Seq(30, 40, 50))
+      assert(getJoinedRowTimestamps(40, Some((Long.MinValue, Long.MaxValue))) ===
+        Seq(10, 20, 30, 40, 50))
+
+      // Empty range (minTs > maxTs)
+      assert(getJoinedRowTimestamps(40, Some((50L, 10L))) === Seq.empty)
+
+      // Range entirely outside stored timestamps
+      assert(getJoinedRowTimestamps(40, Some((100L, 200L))) === Seq.empty)
+      assert(getJoinedRowTimestamps(40, Some((1L, 5L))) === Seq.empty)
+
+      // Full range via None (all entries)
+      assert(getJoinedRowTimestamps(40, None) === Seq(10, 20, 30, 40, 50))
+    }
+  }
+
+  test("StreamingJoinStateManager V4 - evictByTimestamp boundary edge cases") {
+    withJoinStateManager(
+      inputValueAttributes, joinKeyExpressions, stateFormatVersion = 4) { manager =>
+      implicit val mgr = manager
+      val evictByTs = manager.asInstanceOf[SupportsEvictByTimestamp]
+
+      // --- Range eviction with startTimestamp (exclusive) and endTimestamp (inclusive) ---
+      Seq(10, 20, 30, 40, 50).foreach(append(40, _))
+      // startTimestamp=20 is exclusive, endTimestamp=40 is inclusive: evicts timestamps 30, 40
+      assert(evictByTs.evictByTimestamp(40, Some(20)) === 2)
+      assert(get(40) === Seq(10, 20, 50))
+
+      // --- evictAndReturnByTimestamp returns evicted values ---
+      Seq(30, 40).foreach(append(40, _)) // restore evicted entries
+      val evictedValues = evictByTs.evictAndReturnByTimestamp(30, Some(10))
+        .map(p => toValueInt(p.value)).toSeq.sorted
+      // startTimestamp=10 is exclusive, endTimestamp=30 is inclusive: timestamps 20 and 30
+      assert(evictedValues === Seq(20, 30))
+      assert(get(40) === Seq(10, 40, 50))
+
+      // --- start equals end: empty range (exclusive start = inclusive end) ---
+      // startTimestamp=40 (exclusive) and endTimestamp=40 (inclusive): range is empty
+      assert(evictByTs.evictByTimestamp(40, Some(40)) === 0)
+      assert(get(40) === Seq(10, 40, 50))
+
+      // --- start just below entry: evicts exactly that entry ---
+      // startTimestamp=39 (exclusive) means entries >= 40 are scanned; endTimestamp=40 inclusive
+      assert(evictByTs.evictByTimestamp(40, Some(39)) === 1)
+      assert(get(40) === Seq(10, 50))
+
+      // --- overflow boundary: endTimestamp = Long.MaxValue ---
+      // Restore entries for a clean slate
+      Seq(20, 30, 40).foreach(append(40, _))
+      // endTimestamp=Long.MaxValue with no startTimestamp: evicts all entries
+      assert(evictByTs.evictByTimestamp(Long.MaxValue) === 5)
+      assert(get(40) === Seq.empty)
+
+      // --- overflow boundary: startTimestamp = Some(Long.MinValue) ---
+      Seq(10, 20, 30).foreach(append(40, _))
+      // startTimestamp=Long.MinValue (exclusive), endTimestamp=20 (inclusive):
+      // Long.MinValue is excluded per the contract (already evicted), so the scan
+      // starts from Long.MinValue + 1. Since no real entry has timestamp Long.MinValue,
+      // this effectively scans all entries up to endTimestamp.
+      assert(evictByTs.evictByTimestamp(20, Some(Long.MinValue)) === 2)
+      assert(get(40) === Seq(30))
+
+      // --- overflow boundary: startTimestamp = Some(Long.MaxValue) ---
+      Seq(10, 20).foreach(append(40, _))
+      // startTimestamp=Long.MaxValue (exclusive) means everything <= Long.MaxValue was already
+      // evicted. Nothing can remain, so the scan returns an empty iterator immediately.
+      assert(evictByTs.evictByTimestamp(50, Some(Long.MaxValue)) === 0)
+      assert(get(40) === Seq(10, 20, 30))
     }
   }
 

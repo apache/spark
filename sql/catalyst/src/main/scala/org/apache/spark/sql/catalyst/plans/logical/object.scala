@@ -567,6 +567,7 @@ case class FlatMapGroupsWithState(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapGroupsWithState =
     copy(child = newLeft, initialState = newRight)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 object TransformWithState {
@@ -655,6 +656,7 @@ case class TransformWithState(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithState =
     copy(child = newLeft, initialState = newRight)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */
