@@ -1911,6 +1911,19 @@ trait CreateTempView {
 }
 
 /**
+ * Used by [[ApplyDefaultCollation]] to read and update the default collation on commands that are
+ * defined in the sql/core module (e.g. CreateViewCommand, CreateSQLFunctionCommand) and therefore
+ * cannot be referenced directly from sql/catalyst. Implementations should report whether the
+ * created object is a temporary (session-scoped) object, since session collation is inherited only
+ * for temporary objects.
+ */
+trait SupportsDefaultCollation { self: LogicalPlan =>
+  def collation: Option[String]
+  def isTemp: Boolean
+  def withCollation(collation: Option[String]): LogicalPlan
+}
+
+/**
  * The logical plan of the ALTER VIEW ... SET TBLPROPERTIES command.
  */
 case class SetViewProperties(

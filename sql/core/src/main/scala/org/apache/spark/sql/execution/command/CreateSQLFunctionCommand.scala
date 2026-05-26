@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
-import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
+import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, SupportsDefaultCollation, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
@@ -64,9 +64,13 @@ case class CreateSQLFunctionCommand(
     isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean)
-    extends CreateUserDefinedFunctionCommand {
+    extends CreateUserDefinedFunctionCommand
+    with SupportsDefaultCollation {
 
   import SQLFunction._
+
+  override def withCollation(newCollation: Option[String]): LogicalPlan =
+    copy(collation = newCollation)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val parser = sparkSession.sessionState.sqlParser

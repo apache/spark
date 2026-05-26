@@ -94,4 +94,7 @@ object SQLFunctionContext {
     set(context)
     try f finally { set(originContext) }
   }
+
+  /** @return true if we are inside SQL function resolution. */
+  def isInsideSQLFunctionResolution: Boolean = get.nestedSQLFunctionDepth > 0
 }

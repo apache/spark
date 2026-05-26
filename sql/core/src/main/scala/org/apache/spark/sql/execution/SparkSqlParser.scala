@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants
+import org.apache.spark.sql.catalyst.util.{CollationFactory, DateTimeConstants}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
@@ -308,6 +308,24 @@ class SparkSqlAstBuilder extends AstBuilder {
         case _ => throw QueryParsingErrors.unexpectedFormatForSetConfigurationError(ctx)
       }
     }
+  }
+
+  /**
+   * Create a [[SetCommand]] logical plan to set [[SQLConf.DEFAULT_COLLATION]].
+   * Example SQL:
+   * {{{
+   *   SET COLLATION UTF8_LCASE;
+   *   SET COLLATION `UTF8_BINARY`;
+   *   SET COLLATION UNICODE;
+   * }}}
+   */
+  override def visitSetCollation(ctx: SetCollationContext): LogicalPlan = withOrigin(ctx) {
+    if (!SQLConf.get.sessionLevelCollationsEnabled) {
+      throw QueryCompilationErrors.sessionLevelCollationsNotEnabledError()
+    }
+    val collationName = getIdentifierText(ctx.collationName)
+    val validatedName = CollationFactory.fetchCollation(collationName).collationName
+    SetCommand(Some(SQLConf.DEFAULT_COLLATION.key -> Some(validatedName)))
   }
 
   override def visitSetQuotedConfiguration(

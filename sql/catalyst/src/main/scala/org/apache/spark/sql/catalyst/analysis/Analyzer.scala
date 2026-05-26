@@ -250,6 +250,9 @@ object AnalysisContext {
     set(context)
     try f finally { set(originContext) }
   }
+
+  /** @return true if we are inside view resolution. */
+  def `isInsideViewResolution`: Boolean = get.nestedViewDepth > 0
 }
 
 object Analyzer {

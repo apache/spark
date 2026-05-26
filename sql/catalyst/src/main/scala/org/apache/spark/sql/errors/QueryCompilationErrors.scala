@@ -396,6 +396,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def sessionLevelCollationsNotEnabledError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.SESSION_LEVEL_COLLATIONS",
+      messageParameters = Map.empty
+    )
+  }
+
   def trailingCommaInSelectError(origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "TRAILING_COMMA_IN_SELECT",

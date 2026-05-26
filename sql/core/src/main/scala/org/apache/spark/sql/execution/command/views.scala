@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, GlobalTempView, 
 import org.apache.spark.sql.catalyst.analysis.V2TableReference
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, TemporaryViewRelation}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, SubqueryExpression, VariableReference}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, View, WithCTE}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, AnalysisOnlyCommand, CreateTempView, CreateView, CTEInChildren, CTERelationDef, LogicalPlan, Project, SupportsDefaultCollation, View, WithCTE}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier, ViewCatalog}
@@ -88,7 +88,8 @@ case class CreateViewCommand(
   extends RunnableCommand
   with AnalysisOnlyCommand
   with CTEInChildren
-  with CreateTempView {
+  with CreateTempView
+  with SupportsDefaultCollation {
 
   import ViewHelper._
 
@@ -109,6 +110,11 @@ case class CreateViewCommand(
   }
 
   private def isTemporary = viewType == LocalTempView || viewType == GlobalTempView
+
+  override def isTemp: Boolean = isTemporary
+
+  override def withCollation(newCollation: Option[String]): LogicalPlan =
+    copy(collation = newCollation)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     if (!isAnalyzed) {
