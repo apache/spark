@@ -36,17 +36,17 @@ import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
 /**
- * A non-owning view over a contiguous chunk of bytes that may live on-heap or off-heap,
- * modelled on {@link UTF8String} but without UTF-8 semantics. It is intended as the shared
- * physical carrier for opaque-bytes SQL types whose values can be read directly out of an
- * {@code UnsafeRow} / {@code UnsafeArrayData} / {@code ColumnVector} backing buffer.
+ * A non-owning view over a contiguous chunk of bytes that may live on-heap or off-heap.
+ * It is intended as the shared physical carrier for opaque-bytes SQL types whose values
+ * can be read directly out of an {@code UnsafeRow} / {@code UnsafeArrayData} /
+ * {@code ColumnVector} backing buffer.
  * <p>
  * Lifetime: a {@code BinaryView} is only valid for as long as the memory it points to is
  * alive. Callers that need to retain a value across the source buffer's lifetime must call
- * {@link #copy()} first. This is the same discipline {@code UTF8String} uses.
+ * {@link #copy()} first.
  */
 @Unstable
-public class BinaryView implements Comparable<BinaryView>, Externalizable, KryoSerializable {
+public final class BinaryView implements Comparable<BinaryView>, Externalizable, KryoSerializable {
 
   // null when off-heap; a byte[] (or other primitive array) when on-heap.
   private Object base;
@@ -58,7 +58,7 @@ public class BinaryView implements Comparable<BinaryView>, Externalizable, KryoS
   /** For Externalizable / KryoSerializable only. */
   public BinaryView() {}
 
-  protected BinaryView(Object base, long offset, int numBytes) {
+  private BinaryView(Object base, long offset, int numBytes) {
     this.base = base;
     this.offset = offset;
     this.numBytes = numBytes;
@@ -174,7 +174,7 @@ public class BinaryView implements Comparable<BinaryView>, Externalizable, KryoS
     return new BinaryView(copyToNewArray(), BYTE_ARRAY_OFFSET, numBytes);
   }
 
-  protected final byte[] copyToNewArray() {
+  private byte[] copyToNewArray() {
     byte[] out = new byte[numBytes];
     Platform.copyMemory(base, offset, out, BYTE_ARRAY_OFFSET, numBytes);
     return out;
@@ -222,10 +222,11 @@ public class BinaryView implements Comparable<BinaryView>, Externalizable, KryoS
   @Override
   public boolean equals(Object other) {
     if (this == other) return true;
-    if (other == null || other.getClass() != this.getClass()) return false;
-    BinaryView o = (BinaryView) other;
-    return numBytes == o.numBytes
-      && ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
+    if (other instanceof BinaryView o) {
+      return numBytes == o.numBytes
+        && ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
+    }
+    return false;
   }
 
   /** Lexicographic, unsigned byte-wise comparison. */

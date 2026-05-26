@@ -193,6 +193,25 @@ class GeometryDataFrameSuite extends SharedSparkSession {
     checkAnswer(df, Seq(Row(expectedGeom)))
   }
 
+  test("SPARK-57058: ORDER BY on a Geometry column fails with DATATYPE_CANNOT_ORDER") {
+    val rdd = sparkContext.parallelize(Seq(
+      Row(Geometry.fromWKB(point1, 0)),
+      Row(Geometry.fromWKB(point2, 0))))
+    val schema = StructType(Seq(StructField("g", GeometryType(0), nullable = false)))
+    spark.createDataFrame(rdd, schema).createOrReplaceTempView("geo_t")
+    val ex = intercept[Exception] {
+      spark.sql("SELECT g FROM geo_t ORDER BY g").collect()
+    }
+    val cause = Iterator.iterate[Throwable](ex)(_.getCause).takeWhile(_ != null)
+      .collectFirst { case e: SparkIllegalArgumentException => e }
+    assert(cause.isDefined,
+      s"expected SparkIllegalArgumentException in cause chain, got: $ex")
+    checkError(
+      exception = cause.get,
+      condition = "DATATYPE_CANNOT_ORDER",
+      parameters = Map("dataType" -> "PhysicalBinaryViewType"))
+  }
+
   test("geospatial feature disabled") {
     withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
       val geometry = Geometry.fromWKB(point1, 4326)
