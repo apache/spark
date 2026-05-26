@@ -53,10 +53,10 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       s"spark.sql.catalog.$catalog",
       classOf[SharedTablesInMemoryRowLevelOperationTableCatalog].getName
     )
-    // Disable per-flow retries so failure-path tests (e.g. KEY_SCHEMA_DRIFT, INCOMPATIBLE_DATA)
-    // surface the AnalysisException after the first attempt instead of going through the default
-    // 2 retries, which would otherwise emit duplicate FAILED events and inflate test runtime
-    // without changing the asserted outcome.
+    // Disable per-flow retries so failure-path tests (e.g. INCOMPATIBLE_DATA) surface the
+    // AnalysisException after the first attempt instead of going through the default 2 retries,
+    // which would otherwise emit duplicate FAILED events and inflate test runtime without
+    // changing the asserted outcome.
     spark.conf.set(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS.key, "0")
     spark.sql(s"CREATE NAMESPACE IF NOT EXISTS $catalog.$namespace")
   }
