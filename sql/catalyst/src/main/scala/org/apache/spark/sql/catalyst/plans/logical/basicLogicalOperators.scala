@@ -837,9 +837,10 @@ case class Join(
 /**
  * A logical plan that combines the columns of two DataFrames that derive from the same
  * base plan through chains of Project nodes. This node is always unresolved and must be
- * rewritten by [[ResolveZip]] into a single Project over the shared base plan during
- * analysis. If the two children do not share the same base plan (after stripping Project
- * nodes), analysis will fail with an error.
+ * rewritten by [[ResolveZip]] into a chain of Project nodes over the shared base plan
+ * during analysis. If the two children do not share the same base plan (after stripping
+ * outer Projects), or if either side contains a non-scalar Python UDF, analysis will fail
+ * with ZIP_PLANS_NOT_MERGEABLE.
  */
 case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   override def output: Seq[Attribute] = left.output ++ right.output
