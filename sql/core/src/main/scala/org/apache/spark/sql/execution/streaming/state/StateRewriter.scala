@@ -22,7 +22,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkIllegalStateException, SparkThrowable, TaskContext}
+import org.apache.spark.{SparkIllegalStateException, TaskContext}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
@@ -376,27 +376,19 @@ class StateRewriter(
   }
 
   private def verifyCheckpointFormatVersion(): Unit = {
-    // Verify checkpoint version in sqlConf based on commitLog for readCheckpoint
-    // in case user forgot to set STATE_STORE_CHECKPOINT_FORMAT_VERSION.
-    // Using read batch commit since the latest commit could be a skipped batch.
-    // If SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION is wrong, readCheckpoint.commitLog
-    // will throw an exception, and we will propagate this exception upstream.
-    // This prevents the StateRewriter from failing to write the correct state files
-    try {
-      readCheckpoint.commitLog.get(readBatchId)
-    } catch {
-        case e: IllegalStateException if e.getCause != null &&
-            e.getCause.isInstanceOf[SparkThrowable] =>
-          val sparkThrowable = e.getCause.asInstanceOf[SparkThrowable]
-          if (sparkThrowable.getCondition == "INVALID_LOG_VERSION.EXACT_MATCH_VERSION") {
-            val params = sparkThrowable.getMessageParameters
-            val expectedVersion = params.get("version")
-            val actualVersion = params.get("matchVersion")
-            throw StateRewriterErrors.stateCheckpointFormatVersionMismatchError(
-              checkpointLocationForRead, expectedVersion, actualVersion)
-          }
-          throw e
+    // Verify checkpoint version in sqlConf matches the version recorded in the read commit log,
+    // in case the user forgot to set STATE_STORE_CHECKPOINT_FORMAT_VERSION. This prevents the
+    // StateRewriter from writing state files in a format that disagrees with the source
+    // checkpoint. Using the read batch commit since the latest commit could be a skipped batch.
+    readCheckpoint.commitLog.get(readBatchId).foreach { metadata =>
+      val configuredVersion = readCheckpoint.commitLog.VERSION
+      if (metadata.version != configuredVersion) {
+        throw StateRewriterErrors.stateCheckpointFormatVersionMismatchError(
+          checkpointLocationForRead,
+          expectedVersion = metadata.version.toString,
+          actualVersion = configuredVersion.toString)
       }
+    }
   }
 }
 
