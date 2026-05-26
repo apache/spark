@@ -3089,6 +3089,37 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-56919: INSERT OVERWRITE should not lose table path when AQE fails") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
+      "spark.sql.optimizer.plannedWrite.enabled" -> "false") {
+      withTempPath { path =>
+        val tablePath = path.getAbsolutePath
+        spark.range(10).toDF("id")
+          .write.mode("overwrite").parquet(tablePath)
+        assert(new java.io.File(tablePath).exists())
+
+        spark.udf.register("fail_udf", (i: Long) => {
+          throw new RuntimeException("SPARK-56919")
+          i
+        })
+
+        // The repartition forces a shuffle stage. With planned write disabled,
+        // materializeAdaptiveSparkPlan runs the stage, which fails via the UDF.
+        intercept[Exception] {
+          spark.sql(s"SELECT fail_udf(id) as id FROM parquet.`$tablePath`")
+            .repartition(2)
+            .write.mode("overwrite").parquet(tablePath)
+        }
+
+        // The table path must survive a failed overwrite.
+        assert(new java.io.File(tablePath).exists(),
+          "Table path should not be permanently lost after a failed INSERT OVERWRITE")
+      }
+    }
+  }
 }
 
 class FileExistingTestFileSystem extends RawLocalFileSystem {

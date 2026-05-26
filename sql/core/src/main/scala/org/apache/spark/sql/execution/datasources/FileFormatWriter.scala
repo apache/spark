@@ -148,6 +148,10 @@ object FileFormatWriter extends Logging {
         writerBucketSpec.map(_.bucketIdExpression) ++ sortColumns
     val writeFilesOpt = V1WritesUtils.getWriteFilesOpt(plan)
 
+    // SPARK-56919: setupJob must run before materializeAdaptiveSparkPlan, which can throw.
+    // Otherwise INSERT OVERWRITE permanently loses the table path if AQE fails.
+    committer.setupJob(job)
+
     // SPARK-40588: when planned writing is disabled and AQE is enabled,
     // plan contains an AdaptiveSparkPlanExec, which does not know
     // its final plan's ordering, so we have to materialize that plan first
@@ -267,9 +271,6 @@ object FileFormatWriter extends Logging {
       job: Job,
       description: WriteJobDescription,
       committer: FileCommitProtocol)(f: => Array[WriteTaskResult]): Set[String] = {
-    // This call shouldn't be put into the `try` block below because it only initializes and
-    // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
-    committer.setupJob(job)
     try {
       val ret = f
       val commitMsgs = ret.map(_.commitMsg)
