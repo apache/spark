@@ -3453,7 +3453,7 @@ object SQLConf {
         "restarts. The effective value is pinned per query via the offset log at batch 0, " +
         "so pre-existing queries keep their original behavior; only newly started queries " +
         "pick this up.")
-      .version("4.1.0")
+      .version("4.3.0")
       .booleanConf
       .createWithDefault(true)
 
