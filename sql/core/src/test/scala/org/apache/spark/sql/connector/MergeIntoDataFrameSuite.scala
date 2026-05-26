@@ -1233,4 +1233,103 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
       assert(e.message.contains("incompatible changes to table `cat`.`ns1`.`source_table`"))
     }
   }
+
+  // The DataFrame cache is bypassed during a transaction unless the connector approves the cached
+  // scans via Transaction#registerScans. The next two tests exercise that path against the merge
+  // source — a common case where users cache an expensive source DataFrame before running MERGE.
+
+  test("cached merge source is reused when the connector accepts via registerScans") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // Cache a derived view of the target table *before* any transaction starts.
+    val sourceDF = spark.table(tableNameAsString).where("salary < 250").as("source")
+    sourceDF.cache()
+    sourceDF.count()
+
+    // Default decision accepts every registerScans call.
+    val (txn, txnTables) = executeTransaction {
+      sourceDF
+        .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+        .whenMatched()
+        .update(Map("salary" -> targetTableCol("salary").plus(1)))
+        .merge()
+    }
+
+    assert(txn.currentState == Committed)
+
+    // The cached source contains a scan against the txn catalog, so the validator called
+    // registerScans. The connector accepted, so the cache entry was substituted and the read
+    // was added to the transaction's read set.
+    assert(txn.registeredScans.nonEmpty, "registerScans should have been called and accepted")
+    val flat = txn.registeredScans.flatten
+    assert(flat.exists(_.table().name() == tableNameAsString),
+      s"registerScans should reference the target table, got ${flat.map(_.table().name())}")
+
+    // Cache hit means the source's salary<250 filter never reaches the TxnTable as a scan event;
+    // only the merge target's own scans appear there.
+    val targetTxnTable = txnTables(tableNameAsString)
+    val sourceFilterScanned = targetTxnTable.scanEvents.flatten.exists {
+      case sources.LessThan("salary", 250) => true
+      case _ => false
+    }
+    assert(!sourceFilterScanned,
+      s"cached source should not have been rescanned, got ${targetTxnTable.scanEvents}")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 101, "hr"),
+        Row(2, 201, "software"),
+        Row(3, 300, "hr")))
+  }
+
+  test("cached merge source touching the txn target is dropped when the connector refuses") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // Cache a derived view of the target table *before* any transaction starts.
+    val sourceDF = spark.table(tableNameAsString).where("salary < 250").as("source")
+    sourceDF.cache()
+    sourceDF.count()
+
+    // Make the next transaction refuse to accept any cached scans.
+    catalog.nextTxnRegisterScansDecision = _ => false
+
+    val (txn, txnTables) = executeTransaction {
+      sourceDF
+        .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+        .whenMatched()
+        .update(Map("salary" -> targetTableCol("salary").plus(1)))
+        .merge()
+    }
+
+    assert(txn.currentState == Committed)
+    assert(txn.registeredScans.isEmpty,
+      "registerScans returned false, so nothing should have been recorded")
+
+    // The cached source must NOT have been substituted: the source's filter is rescanned through
+    // the txn catalog, leaving a scanEvent on the target's TxnTable.
+    val targetTxnTable = txnTables(tableNameAsString)
+    val sourceFilterScanned = targetTxnTable.scanEvents.flatten.exists {
+      case sources.LessThan("salary", 250) => true
+      case _ => false
+    }
+    assert(sourceFilterScanned,
+      s"expected the source's salary<250 filter to appear as a scan event after cache bypass, " +
+        s"got ${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 101, "hr"),
+        Row(2, 201, "software"),
+        Row(3, 300, "hr")))
+  }
 }

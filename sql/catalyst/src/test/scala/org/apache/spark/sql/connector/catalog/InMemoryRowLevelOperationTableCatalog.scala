@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
-import org.apache.spark.sql.connector.catalog.transactions.{Transaction, TransactionInfo}
+import org.apache.spark.sql.connector.catalog.transactions.{CachedScan, Transaction, TransactionInfo}
 import org.apache.spark.sql.types.StructType
 
 class InMemoryRowLevelOperationTableCatalog
@@ -36,9 +36,15 @@ class InMemoryRowLevelOperationTableCatalog
   // validation in SQL scripting tests.
   val observedTransactions: ArrayBuffer[Txn] = new ArrayBuffer[Txn]()
 
+  // Test hook: applied to the next Txn's registerScansDecision so tests can exercise both the
+  // accept and refuse paths of cache substitution.
+  var nextTxnRegisterScansDecision: Seq[CachedScan] => Boolean = _ => true
+
   override def beginTransaction(info: TransactionInfo): Transaction = {
     assert(transaction == null || transaction.currentState != Active)
-    this.transaction = new Txn(new TxnTableCatalog(this))
+    val txn = new Txn(new TxnTableCatalog(this))
+    txn.registerScansDecision = nextTxnRegisterScansDecision
+    this.transaction = txn
     transaction
   }
 

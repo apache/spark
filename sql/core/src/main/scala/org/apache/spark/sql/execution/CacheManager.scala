@@ -492,13 +492,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   /**
    * Replaces segments of the given logical plan with cached versions where possible. The input
    * plan must be normalized.
+   *
+   * @param plan        the plan to rewrite.
+   * @param cacheFilter invoked once per cache hit. If it returns false, the cache entry is
+   *                    skipped and the original subtree is preserved. Defaults to always accept.
    */
-  private[sql] def useCachedData(plan: LogicalPlan): LogicalPlan = {
+  private[sql] def useCachedData(
+      plan: LogicalPlan,
+      cacheFilter: CachedData => Boolean = _ => true): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment).map { cached =>
+        lookupCachedDataInternal(currentFragment).filter(cacheFilter).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -511,7 +517,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan))
+      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, cacheFilter))
     }
 
     if (result.fastEquals(plan)) {

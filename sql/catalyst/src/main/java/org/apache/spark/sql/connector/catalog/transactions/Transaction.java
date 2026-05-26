@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.catalog.CatalogPlugin;
 import org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin;
 
 import java.io.Closeable;
+import java.util.List;
 
 /**
  * Represents a transaction.
@@ -65,6 +66,31 @@ public interface Transaction extends Closeable {
    * Spark calls {@link #close()} immediately after this method returns.
    */
   void abort();
+
+  /**
+   * Attempts to register a set of already-materialized scans against this transaction's read set.
+   * <p>
+   * Spark calls this when a cached subtree of the current plan contains scans against tables in
+   * this transaction's catalog and Spark would like to reuse the cached result instead of
+   * recomputing. The connector decides whether the cached snapshots are compatible with the
+   * transaction's isolation contract (e.g. snapshot isolation may require all reads to be
+   * pinned to the same version).
+   * <p>
+   * The call is atomic: an implementation must either accept all of the supplied scans (return
+   * {@code true}) and add them to the read set, or accept none of them (return {@code false})
+   * and leave the read set unchanged.
+   * <p>
+   * The default implementation returns {@code false}, causing Spark to skip cache substitution
+   * for the corresponding cache entry.
+   *
+   * @param scans non-empty list of cached scans whose tables belong to this transaction's
+   *              catalog.
+   * @return true if all scans were accepted and the cache entry is safe to reuse;
+   *         false otherwise.
+   */
+  default boolean registerScans(List<CachedScan> scans) {
+    return false;
+  }
 
   /**
    * Releases any resources held by this transaction.

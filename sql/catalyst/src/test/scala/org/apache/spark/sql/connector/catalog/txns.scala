@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.connector.catalog.transactions.Transaction
+import org.apache.spark.sql.connector.catalog.transactions.{CachedScan, Transaction}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperationBuilder, RowLevelOperationInfo, WriteBuilder}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -39,9 +39,24 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
   private[this] var state: TransactionState = Active
   private[this] var closed: Boolean = false
 
+  // Records every batch of scans the connector accepted via registerScans. Tests assert on this
+  // to confirm cache substitution went through the txn path.
+  val registeredScans: ArrayBuffer[Seq[CachedScan]] = ArrayBuffer.empty
+
+  // Controls how registerScans responds. By default accept everything. Tests can swap this to
+  // exercise the rejection path. Mutated only from the test thread before a query runs.
+  var registerScansDecision: Seq[CachedScan] => Boolean = _ => true
+
   def currentState: TransactionState = state
 
   def isClosed: Boolean = closed
+
+  override def registerScans(scans: java.util.List[CachedScan]): Boolean = {
+    val asScala = scans.asScala.toSeq
+    val accepted = registerScansDecision(asScala)
+    if (accepted) registeredScans += asScala
+    accepted
+  }
 
   override def commit(): Unit = {
     if (closed) throw new IllegalStateException("Can't commit, already closed")
