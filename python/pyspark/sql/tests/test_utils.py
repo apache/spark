@@ -38,6 +38,8 @@ from pyspark.testing.utils import (
     have_pyarrow,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
+
+with_sql_conf = SQLTestUtils.with_sql_conf
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
@@ -1876,7 +1878,7 @@ class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):
     pass
 
 
-@SQLTestUtils.with_sql_conf(
+@with_sql_conf(
     {
         "spark.sql.test.with_sql_conf.key1": "v1",
         "spark.sql.test.with_sql_conf.key2": "v2",
