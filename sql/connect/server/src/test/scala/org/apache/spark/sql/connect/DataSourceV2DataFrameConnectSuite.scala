@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMe
  * traits; this class only provides the Connect-specific session, catalog access, and result
  * comparison.
  */
-class DataSourceV2TempViewConnectSuite
+class DataSourceV2DataFrameConnectSuite
     extends SparkConnectServerTest
     with DSv2TempViewWithStoredPlanTests
     with DSv2RepeatedTableAccessTests {
