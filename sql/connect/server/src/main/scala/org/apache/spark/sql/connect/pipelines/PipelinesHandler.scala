@@ -57,9 +57,7 @@ private[connect] object PipelinesHandler extends Logging {
    *   Function used to convert a relation to a LogicalPlan. This is used when determining the
    *   LogicalPlan that a flow returns.
    * @param transformExpressionFunc
-   *   Function used to convert a proto expression to a Catalyst expression. Used for typed flows
-   *   (e.g. AutoCDC) whose definition includes expression-shaped fields such as keys,
-   *   sequence-by, and delete predicates.
+   *   Function used to convert a proto expression to a Catalyst expression.
    * @return
    *   The response after handling the command
    */
@@ -441,11 +439,6 @@ private[connect] object PipelinesHandler extends Logging {
 
     val toColumn: proto.Expression => Column = expr => Column(transformExpressionFunc(expr))
 
-    // Resolve a proto expression that the Python AutoCDC API treats as an unqualified column
-    // identifier (e.g. an entry in `keys`, `column_list`, or `except_column_list`) into an
-    // [[UnqualifiedColumnName]]. We round-trip through [[Expression.sql]] so that
-    // [[UnqualifiedColumnName.apply]]'s parser-based single-part validation is the authority on
-    // what is acceptable; non-identifier expressions are rejected by that parser.
     val asUnqualifiedColumnName: proto.Expression => UnqualifiedColumnName =
       expr => UnqualifiedColumnName(transformExpressionFunc(expr).sql)
 
