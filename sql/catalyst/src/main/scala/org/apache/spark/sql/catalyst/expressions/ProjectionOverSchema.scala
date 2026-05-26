@@ -133,8 +133,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
             case projectedSchema: StructType =>
               GetStructField(projection, projectedSchema.fieldIndex(field.name))
             case dataType =>
-              throw new IllegalStateException(
-                s"unmatched lambda child schema for GetStructField: $dataType")
+              throw SparkException.internalError(
+                s"unmatched lambda child schema for GetStructField: ${dataType.toString}")
           }
         }
       case _ => None
