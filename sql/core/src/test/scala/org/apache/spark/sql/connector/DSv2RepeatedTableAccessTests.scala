@@ -23,9 +23,16 @@ import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Colu
 import org.apache.spark.sql.types.IntegerType
 
 /**
- * Shared repeated table access tests for DSv2 tables. These tests verify that repeated
- * sql() calls correctly see the latest data, schema, and table identity after session
- * writes, external catalog mutations, and table recreation.
+ * Shared repeated table access tests with external changes for DSv2 tables. These tests verify
+ * that repeated `sql()` calls correctly reflect external mutations made via the catalog API:
+ *
+ *  - Scenario 1 (external writes): external data appended via the catalog API is visible.
+ *  - Scenario 2 (external schema changes): external ADD COLUMN via the catalog API is visible.
+ *  - Scenario 3 (external drop/recreate): external drop and recreate via the catalog API
+ *    resolves to the new empty table.
+ *
+ * Each scenario includes a session-write baseline, an external-write test, and a
+ * caching-connector variant showing stale results until `REFRESH TABLE`.
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on DDL
