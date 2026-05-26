@@ -33,8 +33,8 @@ import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Iden
  * (where the test session IS the server session) and Connect mode (where the test session
  * is a Connect client and catalog access requires the server session).
  *
- * Concrete suites override the abstract methods and mix in the test trait
- * [[DSv2TempViewWithStoredPlanTests]].
+ * Concrete suites override the abstract methods and mix in a test trait such as
+ * [[DSv2TempViewWithStoredPlanTests]] or [[DSv2RepeatedTableAccessTests]].
  */
 trait DSv2ExternalMutationTestBase extends QueryTest {
 

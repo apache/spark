@@ -81,7 +81,7 @@ class DataSourceV2RepeatedSQLConnectSuite
   // server for fresh analysis on every action.
 
   private val T = "testcat.ns1.ns2.tbl"
-  private val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+  private val testIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
 
   test("[connect] reused DataFrame reflects external write") {
     withTestSession { session =>
@@ -93,7 +93,7 @@ class DataSourceV2RepeatedSQLConnectSuite
         checkRows(df, Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        externalAppend(catalog = catalog, ident = ident, row = InternalRow(2, 200))
+        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
         // same df object, Connect re-analyzes and sees the new row
         checkRows(df, Seq(Row(1, 100), Row(2, 200)))
@@ -112,9 +112,9 @@ class DataSourceV2RepeatedSQLConnectSuite
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
         val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
-        catalog.alterTable(ident, addCol)
+        catalog.alterTable(testIdent, addCol)
 
-        externalAppend(catalog = catalog, ident = ident, row = InternalRow(2, 200, -1))
+        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
 
         // same df object, Connect re-analyzes and sees the new schema
         checkRows(df, Seq(Row(1, 100, null), Row(2, 200, -1)))
@@ -132,9 +132,9 @@ class DataSourceV2RepeatedSQLConnectSuite
         checkRows(df, Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        catalog.dropTable(ident)
+        catalog.dropTable(testIdent)
         catalog.createTable(
-          ident,
+          testIdent,
           new TableInfo.Builder()
             .withColumns(Array(
               Column.create("id", IntegerType),
