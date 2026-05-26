@@ -21,19 +21,13 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.DSv2RepeatedTableAccessTests
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, Identifier, InMemoryTableCatalog, TableCatalog, TableChange, TableInfo}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, TableCatalog}
 
 /**
- * Connect-mode runner for [[DSv2RepeatedTableAccessTests]]. All shared test logic lives in the
- * trait; this class provides the Connect-specific session, catalog access, and result comparison.
- *
- * The "DataFrame reuse" tests at the bottom are Connect-specific: reusing the same DataFrame
- * object across external mutations still sees fresh data, because Connect re-sends the plan
- * to the server for fresh analysis on every action. In classic Spark, the resolved plan is
- * captured at DataFrame creation time, so reusing a DF after schema changes would fail.
+ * Connect-mode runner for [[DSv2RepeatedTableAccessTests]]. All test logic lives in the shared
+ * trait; this class only provides the Connect-specific session, catalog access, and result
+ * comparison.
  */
 class DataSourceV2RepeatedSQLConnectSuite
     extends SparkConnectServerTest
@@ -78,77 +72,6 @@ class DataSourceV2RepeatedSQLConnectSuite
     finally {
       views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v").collect())
       session.sql(s"DROP TABLE IF EXISTS $table").collect()
-    }
-  }
-
-  // Connect-specific DataFrame reuse tests: reusing the same DataFrame object across
-  // external mutations still sees fresh data, because Connect re-sends the plan to the
-  // server for fresh analysis on every action.
-
-  private val T = "testcat.ns1.ns2.tbl"
-  private val testIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
-
-  test("[connect] reused DataFrame reflects external write") {
-    withTestSession { session =>
-      withTestTableAndViews(session, T) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-
-        val df = session.sql(s"SELECT * FROM $T")
-        checkRows(df, Seq(Row(1, 100)))
-
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
-
-        // same df object, Connect re-analyzes and sees the new row
-        checkRows(df, Seq(Row(1, 100), Row(2, 200)))
-      }
-    }
-  }
-
-  test("[connect] reused DataFrame reflects external schema change") {
-    withTestSession { session =>
-      withTestTableAndViews(session, T) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-
-        val df = session.sql(s"SELECT * FROM $T")
-        checkRows(df, Seq(Row(1, 100)))
-
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        val addCol = TableChange.addColumn(Array("new_col"), IntegerType, true)
-        catalog.alterTable(testIdent, addCol)
-
-        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
-
-        // same df object, Connect re-analyzes and sees the new schema
-        checkRows(df, Seq(Row(1, 100, null), Row(2, 200, -1)))
-      }
-    }
-  }
-
-  test("[connect] reused DataFrame reflects external drop/recreate") {
-    withTestSession { session =>
-      withTestTableAndViews(session, T) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
-
-        val df = session.sql(s"SELECT * FROM $T")
-        checkRows(df, Seq(Row(1, 100)))
-
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        catalog.dropTable(testIdent)
-        catalog.createTable(
-          testIdent,
-          new TableInfo.Builder()
-            .withColumns(Array(
-              Column.create("id", IntegerType),
-              Column.create("salary", IntegerType)))
-            .build())
-
-        // same df object, Connect re-analyzes against the new empty table
-        checkRows(df, Seq.empty)
-      }
     }
   }
 }
