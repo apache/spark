@@ -385,6 +385,8 @@ jobs:
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space ]; then
@@ -743,6 +745,8 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
@@ -893,6 +897,8 @@ jobs:
         key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           sparkr-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
