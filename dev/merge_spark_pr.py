@@ -1120,6 +1120,10 @@ def main():
     if "[WIP]" in title or "[DO-NOT-MERGE]" in title:
         fail("Cannot merge a PR with [WIP] or [DO-NOT-MERGE] in the title:\n%s" % title)
 
+    # Fail hard on draft PRs to prevent accidental merges.
+    if pr.get("draft", False):
+        fail("Cannot merge a draft PR #%s: %s" % (pr_num, title))
+
     # e.g. 'Revert "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
     is_revert_pr = title.startswith('Revert "') and title.endswith('"')
     # e.g. 'Reapply "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
