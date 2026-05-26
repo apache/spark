@@ -7147,6 +7147,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_DF_WRITER_OVERWRITE_MISSING_TABLE_THROWS =
+    buildConf("spark.sql.legacy.dataFrameWriter.overwriteOnMissingTableThrows")
+      .internal()
+      .doc("When set to true, SaveMode.Overwrite against a missing table on a " +
+        "SupportsCatalogOptions source throws NoSuchTableException instead of " +
+        "creating the table. Restores the pre-SPARK-57068 behavior.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val CTE_RELATION_DEF_MAX_ROWS =
     buildConf("spark.sql.cteRelationDefMaxRows.enabled")
       .internal()

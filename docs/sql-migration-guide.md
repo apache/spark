@@ -25,6 +25,7 @@ license: |
 ## Upgrading from Spark SQL 4.2 to 4.3
 
 - Since Spark 4.3, the configuration key `spark.sql.sources.v2.bucketing.allowJoinKeysSubsetOfPartitionKeys.enabled` has been renamed to `spark.sql.sources.v2.bucketing.allowKeysSubsetOfPartitionKeys.enabled` to reflect that it now applies to storage-partitioned joins, aggregates, and windows. The old key continues to work as an alias.
+- Since Spark 4.3, `df.write.format(<V2 provider with SupportsCatalogOptions>).mode("overwrite").save(<new identifier>)` creates the table when it does not yet exist, matching the long-standing V1 source behavior (parquet/JSON/ORC). Previously this surfaced `NoSuchTableException`. `SaveMode.Append` on a non-existent table continues to throw, since Append explicitly expects an existing table. To restore the pre-4.3 behavior, set `spark.sql.legacy.dataFrameWriter.overwriteOnMissingTableThrows` to `true`.
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 

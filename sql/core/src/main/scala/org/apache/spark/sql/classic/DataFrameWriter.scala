@@ -176,7 +176,20 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              (catalog.loadTable(ident), Some(catalog), Some(ident))
+              try {
+                (catalog.loadTable(ident), Some(catalog), Some(ident))
+              } catch {
+                // SPARK-57068: align Overwrite-on-missing with V1 source behavior
+                // (parquet/JSON/ORC) by falling back to CreateTableAsSelect. Append is
+                // intentionally not handled here: it expects an existing table, and
+                // silently creating one would mask user mistakes.
+                case _: NoSuchTableException
+                    if curmode == SaveMode.Overwrite &&
+                       !df.sparkSession.sessionState.conf.getConf(
+                         SQLConf.LEGACY_DF_WRITER_OVERWRITE_MISSING_TABLE_THROWS) =>
+                  return createTableAsSelectForCatalogOptions(
+                    catalog, ident, finalOptions, ignoreIfExists = false)
+              }
             case _: TableProvider =>
               val t = getTable
               if (t.supports(BATCH_WRITE)) {
@@ -203,30 +216,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         case createMode =>
           provider match {
             case supportsExtract: SupportsCatalogOptions =>
-              if (_withSchemaEvolution) {
-                throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
-              }
               val ident = supportsExtract.extractIdentifier(dsOptions)
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
-
-              val tableSpec = UnresolvedTableSpec(
-                properties = Map.empty,
-                provider = Some(source),
-                optionExpression = OptionList(Seq.empty),
-                location = extraOptions.get("path"),
-                comment = extraOptions.get(TableCatalog.PROP_COMMENT),
-                collation = extraOptions.get(TableCatalog.PROP_COLLATION),
-                serde = None,
-                external = false,
-                constraints = Seq.empty)
-              CreateTableAsSelect(
-                UnresolvedIdentifier(
-                  catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
-                partitioningAsV2,
-                df.queryExecution.analyzed,
-                tableSpec,
-                finalOptions,
+              createTableAsSelectForCatalogOptions(
+                catalog, ident, finalOptions,
                 ignoreIfExists = createMode == SaveMode.Ignore)
             case _: TableProvider =>
               if (getTable.supports(BATCH_WRITE)) {
@@ -246,6 +240,34 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       assertSchemaEvolutionNotEnabledForV1Write()
       saveToV1SourceCommand(path)
     }
+  }
+
+  private def createTableAsSelectForCatalogOptions(
+      catalog: TableCatalog,
+      ident: Identifier,
+      finalOptions: Map[String, String],
+      ignoreIfExists: Boolean): LogicalPlan = {
+    if (_withSchemaEvolution) {
+      throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
+    }
+    val tableSpec = UnresolvedTableSpec(
+      properties = Map.empty,
+      provider = Some(source),
+      optionExpression = OptionList(Seq.empty),
+      location = extraOptions.get("path"),
+      comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+      collation = extraOptions.get(TableCatalog.PROP_COLLATION),
+      serde = None,
+      external = false,
+      constraints = Seq.empty)
+    CreateTableAsSelect(
+      UnresolvedIdentifier(
+        catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
+      partitioningAsV2,
+      df.queryExecution.analyzed,
+      tableSpec,
+      finalOptions,
+      ignoreIfExists = ignoreIfExists)
   }
 
   private def assertSchemaEvolutionNotEnabledForV1Write(): Unit = {
