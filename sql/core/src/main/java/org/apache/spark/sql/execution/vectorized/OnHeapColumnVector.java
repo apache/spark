@@ -22,6 +22,7 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -228,6 +229,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
     return UTF8String.fromBytes(byteData, rowId, count);
+  }
+
+  @Override
+  protected BinaryView getBytesAsBinaryView(int rowId, int count) {
+    return BinaryView.fromBytes(byteData, rowId, count);
   }
 
   @Override

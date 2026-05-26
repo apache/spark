@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -267,6 +268,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
     return UTF8String.fromAddress(null, data + rowId, count);
+  }
+
+  @Override
+  protected BinaryView getBytesAsBinaryView(int rowId, int count) {
+    return BinaryView.fromAddress(null, data + rowId, count);
   }
 
   @Override

@@ -1773,9 +1773,11 @@ object CodeGenerator extends Logging {
       case _: TimestampLTZNanosType => s"$row.setTimestampLTZNanos($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
-      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
-      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
-      case _: StringType | _: StructType | _: ArrayType | _: MapType =>
+      // The UTF8String, BinaryView, InternalRow, ArrayData and MapData may came from UnsafeRow, we
+      // should copy it to avoid keeping a "pointer" to a memory region which may get updated
+      // afterwards.
+      case _: StringType | _: GeometryType | _: GeographyType |
+           _: StructType | _: ArrayType | _: MapType =>
         s"$row.update($ordinal, $value.copy())"
       case _ => s"$row.update($ordinal, $value)"
     }
