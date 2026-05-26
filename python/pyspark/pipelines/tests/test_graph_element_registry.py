@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyspark.errors import PySparkException, PySparkTypeError
+from pyspark.errors import PySparkException, PySparkTypeError, PySparkValueError
 from pyspark.pipelines.graph_element_registry import graph_element_registration_context
 from pyspark import pipelines as dp
 from pyspark.pipelines.flow import AutoCdcFlow
@@ -240,6 +240,37 @@ class GraphElementRegistryTest(unittest.TestCase):
                     sequence_by=expr("ts"),
                 )
             self.assertEqual(ctx.exception.getCondition(), "NOT_EXPECTED_TYPE")
+
+    def test_create_auto_cdc_flow_rejects_empty_keys(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            with self.assertRaises(PySparkValueError) as ctx:
+                dp.create_auto_cdc_flow(
+                    target="tgt",
+                    source="src",
+                    keys=[],
+                    sequence_by=expr("ts"),
+                )
+            self.assertEqual(ctx.exception.getCondition(), "CANNOT_BE_EMPTY")
+
+    def test_create_auto_cdc_flow_rejects_both_column_lists(self):
+        registry = LocalGraphElementRegistry()
+        with graph_element_registration_context(registry):
+            dp.create_streaming_table("tgt")
+            with self.assertRaises(PySparkValueError) as ctx:
+                dp.create_auto_cdc_flow(
+                    target="tgt",
+                    source="src",
+                    keys=[col("id")],
+                    sequence_by=expr("ts"),
+                    column_list=["id"],
+                    except_column_list=["op"],
+                )
+            self.assertEqual(
+                ctx.exception.getCondition(),
+                "INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+            )
 
     def test_definition_without_graph_element_registry(self):
         for decorator in [dp.table, dp.temporary_view, dp.materialized_view]:

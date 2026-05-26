@@ -16,7 +16,7 @@
 #
 from typing import Callable, Dict, List, Literal, Optional, Union, overload
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkTypeError, PySparkValueError
 from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
 from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
 from pyspark.pipelines.flow import AutoCdcFlow, Flow, QueryFunction
@@ -541,8 +541,8 @@ def create_auto_cdc_flow(
 ) -> None:
     """
     Create an Auto CDC flow into the target table from the Change Data Capture (CDC) source.
-    Target table must have already been created using create_streaming_table function. Only one
-    of column_list and except_column_list can be specified.
+    Target table must have already been created using the `create_streaming_table` function.
+    Only one of column_list and except_column_list can be specified.
 
     Example:
         create_auto_cdc_flow(
@@ -571,16 +571,19 @@ def create_auto_cdc_flow(
     :param column_list: Columns that will be included in the output table. This should be a list \
         of column identifiers without qualifiers, expressed as either Python strings or PySpark \
         Columns. Only one of column_list and except_column_list can be specified.
-    :param except_column_list: Columns that will be excluded in the output table. This should be a \
-        list of column identifiers without qualifiers, expressed as either Python strings or \
+    :param except_column_list: Columns that will be excluded from the output table. This should \
+        be a list of column identifiers without qualifiers, expressed as either Python strings or \
         PySpark Columns. Only one of column_list and except_column_list can be specified. When \
-        this is specified, all columns in the dataframe of the target table except those in this \
-        list will be in the output table.
+        this is specified, all columns in the `DataFrame` of the target table except those in \
+        this list will be in the output table.
     :param stored_as_scd_type: The SCD type for the target table. Only 1 (or "1") is supported. \
-        When not specified the server default applies.
-    :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified \
+        When not specified, the server default applies.
+    :param name: The name of the flow for this create_auto_cdc_flow command. When unspecified, \
         this will build a "default flow" with name equal to the target name.
     """
+    # Lazy import: pyspark.sql.connect.functions.builtin transitively imports grpc, which is
+    # not available in the docs-build environment. pyspark.pipelines.api is loaded eagerly
+    # from pyspark.pipelines.__init__, so a top-level import here would break docs CI.
     from pyspark.sql.connect.functions.builtin import expr as _connect_expr
 
     if type(target) is not str:
@@ -614,7 +617,21 @@ def create_auto_cdc_flow(
     if name is None:
         name = target
 
+    if column_list is not None and except_column_list is not None:
+        raise PySparkValueError(
+            errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
+            messageParameters={
+                "arg_names": "column_list, except_column_list",
+                "condition": "specified together",
+            },
+        )
+
     keys = _normalize_column_list(arg_name="keys", column_list=keys)
+    if len(keys) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "key column"},
+        )
     column_list = _normalize_optional_column_list(arg_name="column_list", column_list=column_list)
     except_column_list = _normalize_optional_column_list(
         arg_name="except_column_list", column_list=except_column_list
@@ -685,6 +702,7 @@ def _normalize_column_list(
     arg_name: str,
     column_list: Union[List[str], List[Column]],
 ) -> List[Column]:
+    # Lazy import: see comment in create_auto_cdc_flow.
     from pyspark.sql.connect.functions.builtin import col as _connect_col
 
     if not isinstance(column_list, list):
