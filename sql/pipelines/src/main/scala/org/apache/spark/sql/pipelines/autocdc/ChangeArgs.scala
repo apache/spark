@@ -120,7 +120,7 @@ object ColumnSelection {
 }
 
 /** User-facing case-sensitivity labels surfaced in AutoCDC error messages. */
-private[autocdc] object CaseSensitivityLabels {
+private[pipelines] object CaseSensitivityLabels {
   val CaseSensitive: String = "case-sensitive"
   val CaseInsensitive: String = "case-insensitive"
 
