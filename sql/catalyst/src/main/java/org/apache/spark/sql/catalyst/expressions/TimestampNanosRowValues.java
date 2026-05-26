@@ -74,7 +74,10 @@ public final class TimestampNanosRowValues {
   }
 
   public static TimestampNanosVal readVal(Object baseObject, long baseOffset, int offset) {
-    return TimestampNanosVal.fromParts(
+    // Use the trusted factory: every value that ever reached the row was validated at its
+    // origin (the public constructor / fromParts), so re-checking the nanos range on every
+    // cell read would be wasted work on a hot path.
+    return TimestampNanosVal.fromTrustedRowBytes(
         readEpochMicros(baseObject, baseOffset, offset),
         readNanosWithinMicro(baseObject, baseOffset, offset));
   }

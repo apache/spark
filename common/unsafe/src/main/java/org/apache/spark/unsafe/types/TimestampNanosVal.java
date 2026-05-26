@@ -64,7 +64,11 @@ public final class TimestampNanosVal implements Serializable {
    * @param nanosWithinMicro nanoseconds within {@code epochMicros}, must be in [0, 999]
    */
   public TimestampNanosVal(long epochMicros, short nanosWithinMicro) {
-    if (nanosWithinMicro < 0 || nanosWithinMicro > MAX_NANOS_WITHIN_MICRO) {
+    this(epochMicros, nanosWithinMicro, /* trusted */ false);
+  }
+
+  private TimestampNanosVal(long epochMicros, short nanosWithinMicro, boolean trusted) {
+    if (!trusted && (nanosWithinMicro < 0 || nanosWithinMicro > MAX_NANOS_WITHIN_MICRO)) {
       throw new SparkIllegalArgumentException(
         "INTERNAL_ERROR",
         Map.of(
@@ -81,6 +85,18 @@ public final class TimestampNanosVal implements Serializable {
    */
   public static TimestampNanosVal fromParts(long epochMicros, short nanosWithinMicro) {
     return new TimestampNanosVal(epochMicros, nanosWithinMicro);
+  }
+
+  /**
+   * Trusted factory for the row-read path. Skips the {@link #nanosWithinMicro} range check
+   * because every value reaching this entry point was already validated when it entered the
+   * row (the only paths to one go through the validating constructor / {@link #fromParts}).
+   * Intended for internal callers like
+   * {@link org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues}; do not use from
+   * SQL- or user-facing code.
+   */
+  public static TimestampNanosVal fromTrustedRowBytes(long epochMicros, short nanosWithinMicro) {
+    return new TimestampNanosVal(epochMicros, nanosWithinMicro, /* trusted */ true);
   }
 
   @Override
