@@ -427,6 +427,14 @@ class Scd1MergeStreamingWrite(
 
   override def startStream(): StreamingQuery = {
     val sourceChangeDataFeed = graph.reanalyzeFlow(flow).df
+    
+    // The auxiliary table is created here (at flow execution) rather than during flow resolution
+    // or dataset materialization for two reasons:
+    //   1. It is an internal state store: we deliberately keep it out of the graph registration
+    //      context's table set so that it is invisible to other flows and the [[DatasetManager]]
+    //      will never materialize it.
+    //   2. Its format must match the target table's, which only exists after the target is
+    //      materialized. Flow resolution must also stay side-effect free (e.g. for dry runs).
     val auxiliaryTableIdentifier = createAuxiliaryTableIfNotExists(spark = updateContext.spark)
 
     sourceChangeDataFeed.writeStream
