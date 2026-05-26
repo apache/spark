@@ -44,7 +44,7 @@ import java.util.Objects;
  * {@link org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues}), the same pattern as
  * {@link CalendarInterval}.
  *
- * @since 4.2.0
+ * @since 4.3.0
  */
 @Unstable
 public final class TimestampNanosVal implements Serializable {
