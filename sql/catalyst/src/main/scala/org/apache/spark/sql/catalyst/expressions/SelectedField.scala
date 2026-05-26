@@ -63,6 +63,21 @@ object SelectedField {
   }
 
   /**
+   * Builds the selected root field for `expr` while substituting a narrower projected data type.
+   * This lets a lambda field access establish the required scan type of its array argument, even
+   * though the lambda variable is not itself rooted at a data source attribute.
+   */
+  private[catalyst] def withDataType(
+      expr: Expression,
+      dataType: DataType): Option[StructField] = {
+    val unaliased = expr match {
+      case Alias(child, _) => child
+      case expression => expression
+    }
+    selectField(unaliased, Some(dataType))
+  }
+
+  /**
    * Convert an expression into the parts of the schema (the field) it accesses.
    */
   @scala.annotation.tailrec

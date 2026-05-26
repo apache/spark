@@ -236,12 +236,14 @@ object DataType {
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
       case TIMESTAMP_LTZ_NANOS_TYPE(precision) =>
+        DataTypeErrors.checkTimestampNanosTypesEnabled()
         try TimestampLTZNanosType(precision.toInt)
         catch {
           case _: NumberFormatException =>
             throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
         }
       case TIMESTAMP_NTZ_NANOS_TYPE(precision) =>
+        DataTypeErrors.checkTimestampNanosTypesEnabled()
         try TimestampNTZNanosType(precision.toInt)
         catch {
           case _: NumberFormatException =>

@@ -644,6 +644,23 @@ object SQLConf {
       .booleanConf
       .createWithDefaultFunction(() => Utils.isTesting)
 
+  val TIMESTAMP_NANOS_TYPES_ENABLED =
+    buildConf("spark.sql.timestampNanosTypes.enabled")
+      .internal()
+      .doc("When true, allows nanosecond-capable timestamp types TIMESTAMP_NTZ(p) and " +
+        "TIMESTAMP_LTZ(p) with fractional seconds precision p in [7, 9] at user-facing " +
+        "entry points, including the SQL parser, schemas, and analyzed plans. This is a " +
+        "preview feature under SPARK-56822 and may change in future releases. The default is " +
+        "false in production; tests enable it by default via Utils.isTesting. " +
+        "Unparameterized TIMESTAMP, TIMESTAMP_NTZ, and TIMESTAMP_LTZ remain microsecond " +
+        "types. Enabling this flag does not guarantee full SQL support: casts, Parquet read, " +
+        "typed literals, and other operations may still fail until their respective features " +
+        "are implemented.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(Utils.isTesting)
+
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +
       " org.apache.spark.sql.ExtendedExplainGenerator trait. If provided, Spark will print" +
@@ -3196,6 +3213,16 @@ object SQLConf {
       .doc("When true, enforces that all streaming sources must be explicitly named via " +
         "the .name() API. This enables streaming source evolution, allowing sources to be " +
         "added, removed, or reordered without losing state.")
+      .version("4.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ENABLE_STREAMING_SINK_EVOLUTION =
+    buildConf("spark.sql.streaming.queryEvolution.enableSinkEvolution")
+      .internal()
+      .doc("When true, streaming sinks can be named using the name() API on DataStreamWriter. " +
+        "This enables sink evolution capability where sinks can be changed while maintaining " +
+        "a historical record of all sinks used in the checkpoint.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)
@@ -7550,6 +7577,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
 
+  def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
+
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
   def dynamicPartitionPruningEnabled: Boolean = getConf(DYNAMIC_PARTITION_PRUNING_ENABLED)
@@ -7799,6 +7828,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(STREAMING_MAX_NUM_STATE_SCHEMA_FILES)
 
   def enableStreamingSourceEvolution: Boolean = getConf(ENABLE_STREAMING_SOURCE_EVOLUTION)
+
+  def enableStreamingSinkEvolution: Boolean = getConf(ENABLE_STREAMING_SINK_EVOLUTION)
 
   def streamingCheckUnfinishedRepartitionOnRestart: Boolean =
     getConf(STREAMING_CHECK_UNFINISHED_REPARTITION_ON_RESTART)

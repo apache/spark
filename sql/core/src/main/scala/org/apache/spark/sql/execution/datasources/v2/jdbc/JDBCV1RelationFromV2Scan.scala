@@ -20,7 +20,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
-import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.types.StructType
 
@@ -35,7 +34,7 @@ case class JDBCV1RelationFromV2Scan(
     pushedPredicates: Array[Predicate],
     pushedAggregateColumn: Array[String] = Array(),
     groupByColumns: Option[Array[String]],
-    tableSample: Option[TableSampleInfo],
+    tableSampleClause: Option[String],
     pushedLimit: Int,
     sortOrders: Array[String],
     pushedOffset: Int) extends BaseRelation with TableScan {
@@ -49,8 +48,8 @@ case class JDBCV1RelationFromV2Scan(
       pushedAggregateColumn
     }
 
-    relation.buildScan(columnList, prunedSchema, pushedPredicates, groupByColumns, tableSample,
-      pushedLimit, sortOrders, pushedOffset)
+    relation.buildScan(columnList, prunedSchema, pushedPredicates, groupByColumns,
+      tableSampleClause, pushedLimit, sortOrders, pushedOffset)
   }
 
   override def toString: String = "JDBC v1 Relation from v2 scan"

@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkIllegalStateException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.V2TableReference
@@ -112,6 +112,22 @@ class MicroBatchExecution(
 
   override protected def sourceToIdMap: Map[SparkDataStream, String] = sourceIdMap.map(_.swap)
 
+  // Sink name for commit log support
+  // If sink evolution is enabled, use user-provided sinkName (or error if not provided)
+  // Otherwise, always use DEFAULT_SINK_NAME for backward compatibility
+  private val sinkName: String = {
+    if (sparkSession.sessionState.conf.enableStreamingSinkEvolution) {
+      plan.sinkName.getOrElse {
+        throw new SparkException(
+          errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.UNNAMED_STREAMING_SINKS_WITH_ENFORCEMENT",
+          messageParameters = Map.empty,
+          cause = null)
+      }
+    } else {
+      MicroBatchExecution.DEFAULT_SINK_NAME
+    }
+  }
+
   @volatile protected[sql] var triggerExecutor: TriggerExecutor = _
 
   protected def getTrigger(): TriggerExecutor = {
@@ -167,6 +183,16 @@ class MicroBatchExecution(
   // into every subsequent batch's query plan.
   private val stateSchemaMetadatas = MutableMap[Long, StateSchemaBroadcast]()
 
+  /**
+   * Cached result of the first `offsetLog.getLatest()` call. Reused by both
+   * `logicalPlan` (to determine `enforceNamed`) and `initializeExecution` (to seed
+   * `latestStartedBatch`). This avoids a redundant `ListStatus` on the checkpoint's
+   * `offsets/` directory during stream startup. Safe to cache: between construction
+   * and `initializeExecution`, nothing else writes the offset log on the query thread.
+   */
+  private lazy val initialLatestOffsetSeq: Option[(Long, OffsetSeqBase)] =
+    offsetLog.getLatest()
+
   override lazy val logicalPlan: LogicalPlan = {
     assert(queryExecutionThread eq Thread.currentThread,
       "logicalPlan must be initialized in QueryExecutionThread " +
@@ -188,7 +214,7 @@ class MicroBatchExecution(
 
     // Read the source evolution enforcement from the last written offset log entry. If no entries
     // are found, use the session config value.
-    val enforceNamed = offsetLog.getLatest().flatMap { case (_, offsetSeq) =>
+    val enforceNamed = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
       offsetSeq.metadataOpt.flatMap { metadata =>
         OffsetSeqMetadata.readValueOpt(metadata, SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION)
           .map(_.toBoolean)
@@ -435,7 +461,7 @@ class MicroBatchExecution(
 
   private def initializeExecution(
       sparkSessionForStream: SparkSession): MicroBatchExecutionContext = {
-    var latestStartedBatch = offsetLog.getLatest()
+    var latestStartedBatch = initialLatestOffsetSeq
     val latestCommittedBatch = commitLog.getLatest()
 
     val lastCommittedBatchId = latestCommittedBatch match {
@@ -1472,6 +1498,12 @@ class MicroBatchExecution(
 
 object MicroBatchExecution {
   val BATCH_ID_KEY = "streaming.sql.batchId"
+
+  /**
+   * Default sink name used when sink evolution is disabled or no explicit name is provided.
+   * This maintains backward compatibility with existing streaming queries.
+   */
+  private[sql] val DEFAULT_SINK_NAME = "sink-0"
 }
 
 case class OffsetHolder(start: OffsetV2, end: Option[OffsetV2]) extends LeafNode {
