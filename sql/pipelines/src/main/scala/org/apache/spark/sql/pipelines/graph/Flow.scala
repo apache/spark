@@ -130,6 +130,9 @@ case class FlowFunctionResult(
 
 /** A [[Flow]] whose output schema and dependencies aren't known. */
 sealed trait UnresolvedFlow extends Flow {
+  /** Optional user-supplied comment attached to this flow at definition time. */
+  def comment: Option[String]
+
   /** Returns a copy of this flow with the given SQL confs overriding the existing ones. */
   def withSqlConf(newSqlConf: Map[String, String]): UnresolvedFlow
 }
@@ -138,10 +141,10 @@ sealed trait UnresolvedFlow extends Flow {
  * An [[UnresolvedFlow]] whose execution-type has not yet been determined.
  *
  * In some cases, we know the execution-type for an [[UnresolvedFlow]] even before flow analysis
- * and resolution. For example an AutoCDCFlow is a special unresolved-but-typed flow; we know a
- * flow will be an AutoCDC flow immediately on construction, because it has its own special
- * registration API. Such flows are considered "typed flows", but there isn't any semantic reason
- * yet to explicitly introduce a `TypedFlow` trait/class.
+ * and resolution. For example, an [[AutoCdcFlow]] is a special unresolved-but-typed flow; we
+ * know a flow will be an AutoCDC flow immediately on construction, because it has its own
+ * special registration API. Such flows are considered "typed flows", but there isn't any
+ * semantic reason yet to explicitly introduce a `TypedFlow` trait/class.
  */
 case class UntypedFlow(
     identifier: TableIdentifier,
@@ -150,7 +153,8 @@ case class UntypedFlow(
     queryContext: QueryContext,
     sqlConf: Map[String, String],
     override val once: Boolean,
-    override val origin: QueryOrigin
+    override val origin: QueryOrigin,
+    comment: Option[String] = None
 ) extends UnresolvedFlow {
   override def withSqlConf(newSqlConf: Map[String, String]): UntypedFlow =
     copy(sqlConf = newSqlConf)
@@ -162,17 +166,17 @@ case class UntypedFlow(
  * [[AutoCdcFlow]] is a typed flow because it is only supported for streaming, and not as a once
  * flow. Therefore by definition it is a streaming-type flow.
  *
- * In the future once-support for [[AutoCdcFlow]] may be added.
+ * In the future, support for once-mode [[AutoCdcFlow]] may be added.
  */
 case class AutoCdcFlow(
     identifier: TableIdentifier,
     destinationIdentifier: TableIdentifier,
     func: FlowFunction,
     queryContext: QueryContext,
-    sqlConf: Map[String, String] = Map.empty,
-    comment: Option[String] = None,
     override val origin: QueryOrigin,
-    changeArgs: ChangeArgs
+    changeArgs: ChangeArgs,
+    sqlConf: Map[String, String] = Map.empty,
+    comment: Option[String] = None
 ) extends UnresolvedFlow {
   override val once: Boolean = false
 
@@ -245,8 +249,8 @@ class AppendOnceFlow(
 }
 
 /**
- * A resolved flow that applies a CDC event stream to a target table via MERGE, in accordance to
- * the configured [[flow.changeArgs]].
+ * A resolved flow that applies a CDC event stream to a target table via MERGE, in accordance
+ * with the configured [[flow.changeArgs]].
  */
 class AutoCdcMergeFlow(
     val flow: AutoCdcFlow,
@@ -264,8 +268,8 @@ class AutoCdcMergeFlow(
       columnSelection = changeArgs.columnSelection,
       caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
     )
-    // AutoCDC flows require all key columns to be present in the target table, to adhere to SCD
-    // semantics.
+    // AutoCDC flows require all key columns to be present in the user-selected source schema,
+    // so that they survive into the target table where SCD reconciliation needs them.
     requireKeysPresentInSelectedSchema(selectedSchema)
     selectedSchema
   }
@@ -308,7 +312,7 @@ class AutoCdcMergeFlow(
    * execution. An AutoCdcMergeFlow can only be an input to a streaming table (not an MV or
    * persisted/temp view), and streaming tables take a [[VirtualTableInput]] as input, not
    * the producing [[Flow]] directly. [[VirtualTableInput]] overrides its own [[load]] to do
-   * schema inference on its input flows, rather than a transitive [[Flow.load]].
+   * schema inference on its input flows, rather than a transitive [[ResolvedFlow.load]].
    *
    * The [[AutoCdcMergeFlow.load]] implementation exists solely for API consistency.
    */

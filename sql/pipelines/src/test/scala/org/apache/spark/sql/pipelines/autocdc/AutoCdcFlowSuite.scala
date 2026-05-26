@@ -164,7 +164,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       sqlConf = Map.empty
     )
 
-  /** Builds a [[AutoCdcMergeFlow]] over the given source dataframe + change args. */
+  /** Builds an [[AutoCdcMergeFlow]] over the given source dataframe + change args. */
   private def newAutoCdcMergeFlow(
       sourceDf: DataFrame,
       keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id")),
@@ -472,9 +472,9 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     "AutoCdcMergeFlow rejects a source df column whose name equals the reserved CDC " +
     "metadata column"
   ) {
-    // Locks in the previous engine-level guard (Scd1BatchProcessor.extendMicrobatchRowsWith
-    // CdcMetadata) at flow-construction time. Any future regression where a user-supplied
-    // CDC stream carries the reserved metadata column name should fail eagerly here.
+    // Locks in the previous engine-level guard at flow-construction time. Any future
+    // regression where a user-supplied CDC stream carries the reserved metadata column name
+    // should fail eagerly here.
     val sourceDf = sourceDfWithExtraColumns(Scd1BatchProcessor.cdcMetadataColName -> StringType)
 
     checkError(
