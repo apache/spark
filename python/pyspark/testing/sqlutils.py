@@ -170,58 +170,58 @@ except Exception as e:
 test_compiled = not test_not_compiled_message
 
 
+def with_sql_conf(pairs):
+    """
+    Class decorator that sets the given Spark confs in ``setUpClass`` and unsets them in
+    ``tearDownClass``, around the calls to the inherited ``setUpClass``/``tearDownClass``.
+
+    The decorated class is expected to expose ``cls.spark`` (a ``SparkSession``) after the
+    inherited ``setUpClass`` runs — typically by extending ``ReusedSQLTestCase`` or
+    ``ReusedConnectTestCase``.
+
+    If the decorated class defines its own ``setUpClass``/``tearDownClass``, those are
+    called instead of the inherited ones; the conf set/unset happens after setUpClass
+    and before tearDownClass respectively.
+    """
+    assert isinstance(pairs, dict), "pairs should be a dictionary."
+
+    def decorator(cls):
+        own_setup = cls.__dict__.get("setUpClass")
+        own_teardown = cls.__dict__.get("tearDownClass")
+
+        @classmethod
+        def setUpClass(klass):
+            if own_setup is not None:
+                own_setup.__func__(klass)
+            else:
+                super(cls, klass).setUpClass()
+            for key, value in pairs.items():
+                klass.spark.conf.set(key, value)
+
+        @classmethod
+        def tearDownClass(klass):
+            try:
+                for key in pairs:
+                    klass.spark.conf.unset(key)
+            finally:
+                if own_teardown is not None:
+                    own_teardown.__func__(klass)
+                else:
+                    super(cls, klass).tearDownClass()
+
+        cls.setUpClass = setUpClass
+        cls.tearDownClass = tearDownClass
+        return cls
+
+    return decorator
+
+
 class SQLTestUtils:
     """
     This util assumes the instance of this to have 'spark' attribute, having a spark session.
     It is usually used with 'ReusedSQLTestCase' class but can be used if you feel sure the
     the implementation of this class has 'spark' attribute.
     """
-
-    @staticmethod
-    def with_sql_conf(pairs):
-        """
-        Class decorator that sets the given Spark confs in ``setUpClass`` and unsets them in
-        ``tearDownClass``, around the calls to the inherited ``setUpClass``/``tearDownClass``.
-
-        The decorated class is expected to expose ``cls.spark`` (a ``SparkSession``) after the
-        inherited ``setUpClass`` runs — typically by extending ``ReusedSQLTestCase`` or
-        ``ReusedConnectTestCase``.
-
-        If the decorated class defines its own ``setUpClass``/``tearDownClass``, those are
-        called instead of the inherited ones; the conf set/unset happens after setUpClass
-        and before tearDownClass respectively.
-        """
-        assert isinstance(pairs, dict), "pairs should be a dictionary."
-
-        def decorator(cls):
-            own_setup = cls.__dict__.get("setUpClass")
-            own_teardown = cls.__dict__.get("tearDownClass")
-
-            @classmethod
-            def setUpClass(klass):
-                if own_setup is not None:
-                    own_setup.__func__(klass)
-                else:
-                    super(cls, klass).setUpClass()
-                for key, value in pairs.items():
-                    klass.spark.conf.set(key, value)
-
-            @classmethod
-            def tearDownClass(klass):
-                try:
-                    for key in pairs:
-                        klass.spark.conf.unset(key)
-                finally:
-                    if own_teardown is not None:
-                        own_teardown.__func__(klass)
-                    else:
-                        super(cls, klass).tearDownClass()
-
-            cls.setUpClass = setUpClass
-            cls.tearDownClass = tearDownClass
-            return cls
-
-        return decorator
 
     @contextmanager
     def sql_conf(self, pairs):
@@ -359,9 +359,6 @@ class SQLTestUtils:
         c = [j[0] for j in b]
         diff = [abs(v - c[k]) < 1e-6 if math.isfinite(v) else v == c[k] for k, v in enumerate(a)]
         assert sum(diff) == len(a), f"sum: {sum(diff)}, len: {len(a)}"
-
-
-with_sql_conf = SQLTestUtils.with_sql_conf
 
 
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
