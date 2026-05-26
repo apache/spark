@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
@@ -110,6 +111,22 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     nullAtCreation.setTimestampLTZNanos(1, ltz)
     assert(nullAtCreation.getTimestampNTZNanos(0) === ntz)
     assert(nullAtCreation.getTimestampLTZNanos(1) === ltz)
+  }
+
+  // Exercises UnsafeArrayWriter.write(int, TimestampNanosVal) via the codegen path through
+  // GenerateUnsafeProjection.writeArrayToBuffer, mirroring the CalendarInterval-array tests
+  // in UnsafeRowConverterSuite.
+  testBothCodegenAndInterpreted("UnsafeArrayWriter for nanos timestamp arrays") {
+    val arrType = ArrayType(TimestampNTZNanosType(9), containsNull = true)
+    val converter = UnsafeProjection.create(Array[DataType](arrType))
+    val input = new GenericInternalRow(Array[Any](
+      new GenericArrayData(Array[Any](ntzValue, null, ntzValue))))
+    val output = converter.apply(input)
+    val arr = output.getArray(0)
+    assert(arr.numElements() == 3)
+    assert(arr.getTimestampNTZNanos(0) === ntzValue)
+    assert(arr.isNullAt(1))
+    assert(arr.getTimestampNTZNanos(2) === ntzValue)
   }
 
   testBothCodegenAndInterpreted("codegen projection reads nanos timestamp column") {
