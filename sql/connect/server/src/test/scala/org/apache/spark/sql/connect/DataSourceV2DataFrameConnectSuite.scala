@@ -25,9 +25,12 @@ import org.apache.spark.sql.connector.{DSv2RepeatedTableAccessTests, DSv2TempVie
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, TableCatalog}
 
 /**
- * Connect-mode runner for DSv2 external mutation test traits. All test logic lives in the shared
- * traits; this class only provides the Connect-specific session, catalog access, and result
- * comparison.
+ * Connect-mode counterpart of [[org.apache.spark.sql.connector.DataSourceV2DataFrameSuite]].
+ *
+ * Runs DSv2 temp view tests ([[DSv2TempViewWithStoredPlanTests]]) and repeated table access
+ * tests ([[DSv2RepeatedTableAccessTests]]) under Spark Connect. All test logic lives in the
+ * shared traits; this class only provides the Connect-specific session, catalog access, and
+ * result comparison.
  */
 class DataSourceV2DataFrameConnectSuite
     extends SparkConnectServerTest
