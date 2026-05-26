@@ -189,6 +189,16 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       Seq("[1, 3, 5]", null, "[4, 6]"))
   }
 
+  test("ArrayTransform codegen rebinds fallback lambda variables by expression ID") {
+    val input = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
+    val arg = NamedLambdaVariable("arg", IntegerType, nullable = false)
+    val detachedArg = arg.copy(value = new java.util.concurrent.atomic.AtomicReference[Any]())
+    val function = LambdaFunction(CodegenFallbackExpr(detachedArg + 1), Seq(arg))
+    val expr = ArrayTransform(input, function).bind(validateBinding)
+
+    checkEvaluation(expr, Seq(2, 3, 4))
+  }
+
   test("ArraySort") {
     val a0 = Literal.create(Seq(2, 1, 3), ArrayType(IntegerType))
     val a1 = Literal.create(Seq[Integer](), ArrayType(IntegerType))

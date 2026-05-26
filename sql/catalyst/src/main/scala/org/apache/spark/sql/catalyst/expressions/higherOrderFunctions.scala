@@ -460,7 +460,7 @@ case class ArrayTransform(
         val initialization = CodeGenerator.createArrayData(
           arrayData, dataType.elementType, numElements, s" $prettyName failed.")
 
-        val functionCode = function.genCode(ctx)
+        val functionCode = functionForEval.genCode(ctx)
 
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
         val indexAssignment = indexCode.map(c => assignIndex(ctx, c, indexVar.get, i))
@@ -779,7 +779,7 @@ case class ArrayFilter(
         val resultInit = CodeGenerator.createArrayData(
           arrayData, arrayType.elementType, count, s" $prettyName failed.")
 
-        val functionCode = function.genCode(ctx)
+        val functionCode = functionForEval.genCode(ctx)
 
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
         val indexAssignment = indexCode.map(c => assignIndex(ctx, c, indexVar.get, i))
@@ -918,7 +918,7 @@ case class ArrayExists(
         val foundNull = ctx.freshName("foundNull")
         val i = ctx.freshName("i")
 
-        val functionCode = function.genCode(ctx)
+        val functionCode = functionForEval.genCode(ctx)
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
         val threeWayLogic = if (followThreeValuedLogic) TrueLiteral else FalseLiteral
 
@@ -1041,7 +1041,7 @@ case class ArrayForAll(
         val foundNull = ctx.freshName("foundNull")
         val i = ctx.freshName("i")
 
-        val functionCode = function.genCode(ctx)
+        val functionCode = functionForEval.genCode(ctx)
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
 
         val nullCheck = if (nullable) {
@@ -1233,8 +1233,9 @@ case class ArrayAggregate(
         val i = ctx.freshName("i")
 
         val zeroCode = zero.genCode(ctx)
-        val mergeCode = merge.genCode(ctx)
-        val finishCode = finish.genCode(ctx)
+        val Seq(mergeForCodegen, finishForCodegen) = functionsForEval
+        val mergeCode = mergeForCodegen.genCode(ctx)
+        val finishCode = finishForCodegen.genCode(ctx)
 
         val elementAssignment = assignArrayElement(ctx, arg, elementCode, elementVar, i)
         val mergeAtomic = ctx.addReferenceObj(accForMergeVar.name,
