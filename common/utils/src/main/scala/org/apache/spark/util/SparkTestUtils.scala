@@ -123,7 +123,8 @@ private[spark] trait SparkTestUtils {
 
     val options = Seq("-d", classDir.getAbsolutePath) ++ (
       if (classpathUrls.nonEmpty) {
-        Seq("-classpath", classpathUrls.map(u => new File(u.toURI).getPath).mkString(File.pathSeparator))
+        Seq("-classpath",
+          classpathUrls.map(u => new File(u.toURI).getPath).mkString(File.pathSeparator))
       } else Seq.empty
     )
 
