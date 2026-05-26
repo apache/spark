@@ -169,6 +169,7 @@ case class TransformWithStateInPySparkExec(
       }
       name -> cf.copy(
         keySchema = widenKey(cf.keySchema),
+        valueSchema = WidenStatefulOpNullability.widenStateSchema(cf.valueSchema),
         keyStateEncoderSpec = widenedSpec)
     }
   }
