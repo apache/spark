@@ -26,14 +26,13 @@ import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.storage.StorageLevel.{DISK_ONLY, MEMORY_ONLY}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
+class CachedTableSuite extends QueryTest with TestHiveSingleton {
   import hiveContext._
 
   def rddIdOf(tableName: String): Int = {

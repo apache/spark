@@ -147,7 +147,7 @@ class DataFrame:
     ) -> "DataFrame":
         from pyspark.sql.classic.dataframe import DataFrame
 
-        return DataFrame.__new__(DataFrame, jdf, sql_ctx)
+        return DataFrame(jdf, sql_ctx)
 
     @property
     def sparkSession(self) -> "SparkSession":
@@ -2094,7 +2094,12 @@ class DataFrame:
         ...
 
     @overload
-    def sample(self, fraction: float, seed: Optional[int] = ...) -> "DataFrame": ...
+    def sample(
+        self, *, withReplacement: Optional[bool] = None, fraction: float, seed: Optional[int] = ...
+    ) -> "DataFrame": ...
+
+    @overload
+    def sample(self, withReplacement: float, fraction: Optional[int] = ..., /) -> "DataFrame": ...
 
     @overload
     def sample(
@@ -2104,7 +2109,7 @@ class DataFrame:
         seed: Optional[int] = ...,
     ) -> "DataFrame": ...
 
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def sample(
         self,
         withReplacement: Optional[Union[float, bool]] = None,
@@ -2862,6 +2867,73 @@ class DataFrame:
         |          3|Charlie|     106|2024-04-05|
         |          4|  Diana|    NULL|      NULL|
         +-----------+-------+--------+----------+
+        """
+        ...
+
+    def nearestByJoin(
+        self,
+        other: "DataFrame",
+        rankingExpression: Column,
+        numResults: int,
+        mode: str,
+        direction: str,
+        *,
+        joinType: str = "inner",
+    ) -> "DataFrame":
+        """
+        Nearest-by top-K ranking join with another :class:`DataFrame`. For each row on the
+        left (query side), returns up to ``numResults`` rows from ``other`` (base side), ranked
+        by ``rankingExpression``.
+
+        The current implementation evaluates the full cross-product of left and right and
+        bounds memory per left row by ``numResults``. Index-backed approximate strategies
+        (transparent to ``approx`` mode) are planned for a future release; until then,
+        pre-filter ``other`` when it is large. Tie-breaking among rows with equal ranking
+        values is unspecified.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            Right (base side) of the join - the candidate pool searched for each row of this
+            DataFrame.
+        rankingExpression : :class:`Column`
+            Scalar expression used to rank candidate rows on the right side.
+        numResults : int
+            Maximum number of matches per query row. Must be between 1 and 100000.
+        mode : str
+            Search algorithm contract. Must be one of: ``approx``, ``exact``. ``approx`` allows
+            the optimizer to use indexed or other approximate strategies when available;
+            ``exact`` forces brute-force evaluation and requires the ranking expression to be
+            deterministic.
+        direction : str
+            ``"distance"`` (smallest value first) or ``"similarity"`` (largest value first).
+        joinType : str, keyword-only, optional
+            Default ``inner``. Must be one of: ``inner``, ``leftouter``.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            Joined DataFrame.
+
+        Examples
+        --------
+        >>> from pyspark.sql import functions as sf
+        >>> users = spark.createDataFrame(
+        ...     [(1, 10.0), (2, 20.0), (3, 30.0)], ["user_id", "score"])
+        >>> products = spark.createDataFrame(
+        ...     [("A", 11.0), ("B", 22.0), ("C", 5.0)], ["product", "pscore"])
+        >>> users.nearestByJoin(
+        ...     products, -sf.abs(users.score - products.pscore), 1, "exact", "similarity"
+        ... ).select("user_id", "product").orderBy("user_id").show()
+        +-------+-------+
+        |user_id|product|
+        +-------+-------+
+        |      1|      A|
+        |      2|      B|
+        |      3|      B|
+        +-------+-------+
         """
         ...
 
@@ -5221,6 +5293,7 @@ class DataFrame:
     def replace(
         self,
         to_replace: Dict["LiteralType", "OptionalPrimitiveType"],
+        *,
         subset: Optional[List[str]] = ...,
     ) -> "DataFrame": ...
 
@@ -5232,7 +5305,7 @@ class DataFrame:
         subset: Optional[List[str]] = ...,
     ) -> "DataFrame": ...
 
-    @dispatch_df_method  # type: ignore[misc]
+    @dispatch_df_method
     def replace(
         self,
         to_replace: Union[

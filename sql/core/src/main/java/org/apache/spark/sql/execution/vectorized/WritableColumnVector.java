@@ -287,6 +287,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putBytes(int rowId, int count, byte[] src, int srcIndex);
 
   /**
+   * Copies {@code count} bytes from a {@link ByteBuffer} starting at absolute position
+   * {@code srcIndex} into this column at {@code rowId}. Does not modify the buffer's position.
+   */
+  public abstract void putBytes(int rowId, int count, ByteBuffer src, int srcIndex);
+
+  /**
    * Sets `value` to the value at rowId.
    */
   public abstract void putShort(int rowId, short value);
@@ -433,6 +439,25 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract int putByteArray(int rowId, byte[] value, int offset, int count);
   public final int putByteArray(int rowId, byte[] value) {
     return putByteArray(rowId, value, 0, value.length);
+  }
+
+  /**
+   * Stores bytes from a {@link ByteBuffer} as a variable-length byte array at {@code rowId}.
+   * Copies {@code length} bytes starting at absolute position {@code srcPosition} in the buffer.
+   * Does not modify the buffer's position.
+   */
+  public final int putByteArray(int rowId, ByteBuffer src, int srcPosition, int length) {
+    int result = arrayData().appendBytes(length, src, srcPosition);
+    putArray(rowId, result, length);
+    return result;
+  }
+
+  final int appendBytes(int length, ByteBuffer src, int srcPosition) {
+    reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putBytes(elementsAppended, length, src, srcPosition);
+    elementsAppended += length;
+    return result;
   }
 
   @Override

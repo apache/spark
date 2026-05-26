@@ -403,7 +403,7 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
   test("read changes with options") {
     session.read
       .option("startingTimestamp", "2026-01-01")
-      .option("deduplicationMode", "netChanges")
+      .option("deduplicationMode", "dropCarryovers")
       .option("computeUpdates", "true")
       .changes("myTable")
   }
@@ -514,6 +514,29 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   test("crossJoin") {
     left.crossJoin(right)
+  }
+
+  test("nearestByJoin inner_approx_similarity") {
+    left
+      .as("l")
+      .nearestByJoin(
+        right = right.as("r"),
+        rankingExpression = fn.col("l.a") + fn.col("r.a"),
+        numResults = 1,
+        mode = "approx",
+        direction = "similarity")
+  }
+
+  test("nearestByJoin leftouter_exact_distance") {
+    left
+      .as("l")
+      .nearestByJoin(
+        right = right.as("r"),
+        rankingExpression = fn.col("l.a") + fn.col("r.a"),
+        numResults = 5,
+        mode = "exact",
+        direction = "distance",
+        joinType = "leftouter")
   }
 
   test("sortWithinPartitions strings") {
@@ -2726,6 +2749,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("is_variant_null") {
     fn.is_variant_null(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("is_valid_variant") {
+    fn.is_valid_variant(fn.parse_json(fn.col("g")))
   }
 
   functionTest("variant_get") {

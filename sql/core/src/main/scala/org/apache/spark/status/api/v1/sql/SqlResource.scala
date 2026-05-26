@@ -19,12 +19,14 @@ package org.apache.spark.status.api.v1.sql
 
 import java.util.{Date, HashMap}
 
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 import jakarta.ws.rs._
 import jakarta.ws.rs.core.{Context, MediaType, UriInfo}
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.internal.config.UI.UI_SQL_GROUP_SUB_EXECUTION_ENABLED
 import org.apache.spark.sql.execution.ui.{SparkPlanGraph, SparkPlanGraphCluster, SparkPlanGraphNode, SQLAppStatusStore, SQLExecutionUIData}
 import org.apache.spark.status.api.v1.{BaseAppResource, NotFoundException}
 import org.apache.spark.ui.UIUtils
@@ -74,6 +76,11 @@ private[v1] class SqlResource extends BaseAppResource {
    * Server-side DataTables endpoint for SQL executions listing.
    * Accepts DataTables server-side parameters (start, length, order, search)
    * and returns paginated results with recordsTotal/recordsFiltered counts.
+   *
+   * When `groupSubExecution=true` (default = `spark.ui.groupSQLSubExecutionEnabled`),
+   * pagination is over root executions only and each row carries its sub-executions
+   * inline as `subExecutions: [...]`. Sub-executions whose root is missing from the
+   * filtered set (orphans) are surfaced as roots so they don't disappear.
    */
   @GET
   @Path("sqlTable")
@@ -85,7 +92,11 @@ private[v1] class SqlResource extends BaseAppResource {
       // Echo draw counter to prevent stale responses
       val draw = Option(uriParams.getFirst("draw")).map(_.toInt).getOrElse(0)
 
-      val totalRecords = sqlStore.executionsCount()
+      // Sub-execution grouping flag; default to the cluster config. Defensive
+      // parse - bad values should not 500 the public REST endpoint.
+      val groupSubExec = Option(uriParams.getFirst("groupSubExecution"))
+        .flatMap(v => Try(v.toBoolean).toOption)
+        .getOrElse(ui.conf.get(UI_SQL_GROUP_SUB_EXECUTION_ENABLED))
 
       // Search and status filter
       val searchValue = Option(uriParams.getFirst("search[value]"))
@@ -94,9 +105,14 @@ private[v1] class SqlResource extends BaseAppResource {
         .filter(_.nonEmpty)
       val needsFilter = searchValue.isDefined || statusFilter.isDefined
 
+      // Always load all execs once. We need the full set to (a) identify orphan
+      // sub-executions whose root is filtered out and (b) count root rows for
+      // `recordsTotal`. `sqlStore.executionsList()` is already a full
+      // materialization, so there is no separate "KVStore-pagination" path being
+      // disabled here.
+      val allExecs = sqlStore.executionsList()
+
       val filteredExecs = if (needsFilter) {
-        // When filtering, we must load all and filter in memory
-        val allExecs = sqlStore.executionsList()
         allExecs.filter { exec =>
           val matchesSearch = searchValue.forall { search =>
             val lower = search.toLowerCase(java.util.Locale.ROOT)
@@ -110,10 +126,14 @@ private[v1] class SqlResource extends BaseAppResource {
           matchesSearch && matchesStatus
         }
       } else {
-        // No filter — will use KVStore pagination below
-        Seq.empty
+        allExecs
       }
-      val filteredRecords = if (needsFilter) filteredExecs.size else totalRecords
+
+      val (rootRows, subsByRoot) = if (groupSubExec) {
+        SqlResource.partitionRoots(filteredExecs)
+      } else {
+        (filteredExecs, Map.empty[Long, Seq[SQLExecutionUIData]])
+      }
 
       // Sort
       val sortCol = Option(uriParams.getFirst("order[0][column]"))
@@ -125,26 +145,43 @@ private[v1] class SqlResource extends BaseAppResource {
       val start = Option(uriParams.getFirst("start")).map(_.toInt).getOrElse(0)
       val length = Option(uriParams.getFirst("length")).map(_.toInt).getOrElse(20)
 
-      val page = if (needsFilter) {
-        // Filter/search: sort and paginate in memory
-        val sorted = sortExecs(filteredExecs, sortCol, sortDir)
-        if (length > 0) sorted.slice(start, start + length) else sorted
-      } else {
-        // No filter: use KVStore-level pagination for efficiency
-        // KVStore returns in insertion order; sort in memory for the page
-        val execs = sqlStore.executionsList()
-        val sorted = sortExecs(execs, sortCol, sortDir)
-        if (length > 0) sorted.slice(start, start + length) else sorted
+      val sortedRoots = sortExecs(rootRows, sortCol, sortDir)
+      val page = if (length > 0) sortedRoots.slice(start, start + length) else sortedRoots
+
+      // Convert to Java-compatible row data; embed sub-executions when grouping.
+      // Always emit a `subExecutions` field (possibly empty) in grouped mode so
+      // JSON consumers see a consistent schema; flat mode never includes it.
+      val aaData = page.map { exec =>
+        val row = execToRow(exec)
+        if (groupSubExec) {
+          val subs = subsByRoot.getOrElse(exec.executionId, Seq.empty)
+          // Sort subs by id ascending so they appear in chronological order
+          row.put("subExecutions", sortExecs(subs, "id", "asc").map(execToRow).asJava)
+        }
+        row
       }
 
-      // Convert to Java-compatible row data
-      val aaData = page.map(execToRow)
+      // Counts: grouped totals reflect root-only counts so DataTables shows
+      // "Showing X to Y of Z entries" matching the rows the user actually sees.
+      // Flat mode's recordsTotal is the unfiltered total (from the KVStore),
+      // which lets DataTables show the "filtered from W total entries" suffix.
+      val recordsTotal = if (groupSubExec) {
+        if (needsFilter) {
+          // Re-derive root rows from the unfiltered set using the same predicate
+          SqlResource.partitionRoots(allExecs)._1.size
+        } else {
+          rootRows.size
+        }
+      } else {
+        sqlStore.executionsCount()
+      }
+      val recordsFiltered = if (groupSubExec) rootRows.size else filteredExecs.size
 
       val ret = new HashMap[String, Object]()
       ret.put("draw", Integer.valueOf(draw))
       ret.put("aaData", aaData)
-      ret.put("recordsTotal", java.lang.Long.valueOf(filteredRecords))
-      ret.put("recordsFiltered", java.lang.Long.valueOf(filteredRecords))
+      ret.put("recordsTotal", java.lang.Long.valueOf(recordsTotal))
+      ret.put("recordsFiltered", java.lang.Long.valueOf(recordsFiltered))
       ret
     }
   }
@@ -274,4 +311,23 @@ private[v1] class SqlResource extends BaseAppResource {
     }
   }
 
+}
+
+private[v1] object SqlResource {
+
+  /**
+   * Split a set of executions into root rows and a sub-execution map. A root row is
+   * either an execution whose id equals its rootExecutionId, or an orphan sub whose
+   * root parent is absent from the input set. Called on the filtered set (for paging)
+   * and on the full set (for `recordsTotal`), so the predicate lives in one place
+   * rather than being inlined twice.
+   */
+  def partitionRoots(execs: Seq[SQLExecutionUIData])
+      : (Seq[SQLExecutionUIData], Map[Long, Seq[SQLExecutionUIData]]) = {
+    val ids = execs.iterator.map(_.executionId).toSet
+    val (roots, subs) = execs.partition { e =>
+      e.executionId == e.rootExecutionId || !ids.contains(e.rootExecutionId)
+    }
+    (roots, subs.groupBy(_.rootExecutionId))
+  }
 }

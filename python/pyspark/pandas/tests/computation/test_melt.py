@@ -20,7 +20,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string
 
 
@@ -168,7 +167,6 @@ class FrameMeltMixin:
 class FrameMeltTests(
     FrameMeltMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

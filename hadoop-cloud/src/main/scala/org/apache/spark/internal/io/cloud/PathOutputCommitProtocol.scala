@@ -115,6 +115,17 @@ class PathOutputCommitProtocol(
         // failures. Warn
         logTrace(s"Committer $committer may not be tolerant of task commit failures")
       }
+
+      if (dynamicPartitionOverwrite) {
+        // FileOutputCommitter must be initialized with the staging directory so that task output
+        // lands under stagingDir/_temporary/... and commitJob can later delete the old partition
+        // directories and move staged files to final dest. Without this, the committer writes
+        // directly to the final path and the dynamic-overwrite cleanup in commitJob never sees any
+        // partitionPaths.
+        val ctor =
+          committer.getClass.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
+        committer = ctor.newInstance(stagingDir, context)
+      }
     } else {
       // if required other committers need to be checked for dynamic partition
       // compatibility through a StreamCapabilities probe.
@@ -161,6 +172,11 @@ class PathOutputCommitProtocol(
     }.getOrElse(workDir)
     val file = new Path(parent, getFilename(taskContext, spec))
     logTrace(s"Creating task file $file for dir $dir and spec $spec")
+    if (dynamicPartitionOverwrite && committer.isInstanceOf[FileOutputCommitter]) {
+      assert(dir.isDefined,
+        "The dataset to be written must be partitioned when dynamicPartitionOverwrite is true.")
+      partitionPaths += dir.get
+    }
     file.toString
   }
 

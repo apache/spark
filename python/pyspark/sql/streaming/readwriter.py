@@ -207,6 +207,8 @@ class DataStreamReader(OptionUtils):
         >>> time.sleep(3)
         >>> q.stop()
         """
+        if value is None:
+            return self
         self._jreader = self._jreader.option(key, to_str(value))
         return self
 
@@ -242,8 +244,9 @@ class DataStreamReader(OptionUtils):
         >>> time.sleep(3)
         >>> q.stop()
         """
-        for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jreader = self._jreader.option(k, to_str(v))
         return self
 
     def name(self, source_name: str) -> "DataStreamReader":
@@ -349,7 +352,7 @@ class DataStreamReader(OptionUtils):
             self.schema(schema)
         self.options(**options)
         if path is not None:
-            if type(path) != str or len(path.strip()) == 0:
+            if not isinstance(path, str) or len(path.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={"arg_name": "path", "arg_value": str(path)},
@@ -1064,7 +1067,7 @@ class DataStreamWriter:
         >>> time.sleep(3)
         >>> q.stop()
         """
-        if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
+        if not outputMode or not isinstance(outputMode, str) or len(outputMode.strip()) == 0:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_NON_EMPTY_STR",
                 messageParameters={"arg_name": "outputMode", "arg_value": str(outputMode)},
@@ -1143,6 +1146,8 @@ class DataStreamWriter:
         >>> time.sleep(3)
         >>> q.stop()
         """
+        if value is None:
+            return self
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
@@ -1179,8 +1184,9 @@ class DataStreamWriter:
         >>> time.sleep(3)
         >>> q.stop()
         """
-        for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jwrite = self._jwrite.option(k, to_str(v))
         return self
 
     @overload
@@ -1324,7 +1330,7 @@ class DataStreamWriter:
         >>> q.name
         'streaming_query'
         """
-        if not queryName or type(queryName) != str or len(queryName.strip()) == 0:
+        if not queryName or not isinstance(queryName, str) or len(queryName.strip()) == 0:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_NON_EMPTY_STR",
                 messageParameters={"arg_name": "queryName", "arg_value": str(queryName)},
@@ -1426,7 +1432,7 @@ class DataStreamWriter:
         jTrigger = None
         assert self._spark._sc._jvm is not None
         if processingTime is not None:
-            if type(processingTime) != str or len(processingTime.strip()) == 0:
+            if not isinstance(processingTime, str) or len(processingTime.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={
@@ -1451,7 +1457,7 @@ class DataStreamWriter:
             ).Once()
 
         elif continuous is not None:
-            if type(continuous) != str or len(continuous.strip()) == 0:
+            if not isinstance(continuous, str) or len(continuous.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={"arg_name": "continuous", "arg_value": str(continuous)},
@@ -1461,7 +1467,7 @@ class DataStreamWriter:
                 self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
             ).Continuous(interval)
         elif realTime is not None:
-            if type(realTime) != str or len(realTime.strip()) == 0:
+            if not isinstance(realTime, str) or len(realTime.strip()) == 0:
                 raise PySparkValueError(
                     errorClass="VALUE_NOT_NON_EMPTY_STR",
                     messageParameters={"arg_name": "realTime", "arg_value": str(realTime)},

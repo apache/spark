@@ -114,7 +114,8 @@ class StateStoreConf(
   val compressionCodec: String = sqlConf.stateStoreCompressionCodec
 
   /** Whether file checksum generation and verification is enabled. */
-  val checkpointFileChecksumEnabled: Boolean = sqlConf.checkpointFileChecksumEnabled
+  val checkpointFileChecksumEnabled: Boolean =
+    sqlConf.checkpointFileChecksumEnabled && sqlConf.stateStoreCheckpointFormatVersion >= 2
 
   /** Number of threads for the file checksum thread pool (0 to disable). */
   val fileChecksumThreadPoolSize: Int = sqlConf.stateStoreFileChecksumThreadPoolSize

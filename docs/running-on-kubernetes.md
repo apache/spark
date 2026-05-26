@@ -44,7 +44,7 @@ Cluster administrators should use the [Pod Security Admission Controller](https:
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.33 with access configured to it using
+* A running Kubernetes cluster at version >= 1.34 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -707,6 +707,18 @@ See the [configuration page](configuration.html) for information on Spark config
     The maximum number of executor pods to try to create during the whole job lifecycle.
   </td>
   <td>4.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.recoveryMode.enabled</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    When Spark driver detects an executor termination due to OOM, Spark starts to
+    allocate the recovery-mode executors which accept only a single task per executor JVM.
+    In other words, the recovery-mode executors replace the OOM-terminated executors to
+    survive from the resource-hungry tasks for the remaining tasks and stages.
+    If set to <code>false</code>, Spark will not use the recovery-mode executors.
+  </td>
+  <td>4.2.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
@@ -1546,6 +1558,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.annotateExitException</code></td>
+  <td><code>false</code></td>
+  <td>
+    If set to true, Spark will store the exit exception failed applications in the Kubernetes API server using the <code>spark.exit-exception</code> annotation.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.service.ipFamilyPolicy</code></td>
   <td><code>SingleStack</code></td>
   <td>
@@ -1562,6 +1582,14 @@ See the [configuration page](configuration.html) for information on Spark config
     <code>IPv4</code> and <code>IPv6</code>.
   </td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.useDriverPodIP</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, executor pods use Driver pod IP directly instead of Driver Service.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
@@ -1661,6 +1689,17 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.allocation.maxPendingPodsPerRp</code></td>
+  <td><code>Int.MaxValue</code></td>
+  <td>
+    Maximum number of pending PODs allowed per resource profile ID during executor
+    allocation. This provides finer-grained control over pending pods by limiting them
+    per resource profile rather than globally. When set, this limit is enforced
+    independently for each resource profile ID.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.allocation.pods.allocator</code></td>
   <td><code>direct</code></td>
   <td>
@@ -1746,6 +1785,67 @@ See the [configuration page](configuration.html) for information on Spark config
     If there is no outlier, it works like TOTAL_DURATION policy.
   </td>
   <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeInterval</code></td>
+  <td><code>0s</code></td>
+  <td>
+    Interval between executor resize operations. To disable, set 0 (default).
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeThreshold</code></td>
+  <td><code>0.9</code></td>
+  <td>
+    The threshold to resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeFactor</code></td>
+  <td><code>0.1</code></td>
+  <td>
+    The factor to resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeInterval</code></td>
+  <td><code>5min</code></td>
+  <td>
+    Interval between executor PVC resize operations, in minutes. Defaults to 5 minutes.
+    Set to 0 to disable. Must be 0 or a positive multiple of 5 minutes.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeThreshold</code></td>
+  <td><code>0.5</code></td>
+  <td>
+    The PVC usage ratio (used / capacity) above which the driver triggers a resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeFactor</code></td>
+  <td><code>1.0</code></td>
+  <td>
+    The factor to grow PVC storage by, relative to the current request.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
 </tr>
 </table>
 
@@ -1953,10 +2053,10 @@ Spark allows users to specify a custom Kubernetes schedulers.
 #### Using Volcano as Customized Scheduler for Spark on Kubernetes
 
 ##### Prerequisites
-* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.14.1:
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.14.2:
 
   ```bash
-  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.1/installer/volcano-development.yaml
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml
   ```
 
 ##### Build

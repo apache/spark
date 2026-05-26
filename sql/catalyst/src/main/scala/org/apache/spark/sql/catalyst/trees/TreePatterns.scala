@@ -48,6 +48,7 @@ object TreePattern extends Enumeration  {
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
+  val EXTERNAL_UDF: Value = Value
   val EXTRACT_VALUE: Value = Value
   val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
   val GENERATOR: Value = Value
@@ -70,7 +71,9 @@ object TreePattern extends Enumeration  {
   val MAP_FROM_ARRAYS: Value = Value
   val MAP_FROM_ENTRIES: Value = Value
   val MAP_OBJECTS: Value = Value
+  val MAX: Value = Value
   val MEASURE: Value = Value
+  val MIN: Value = Value
   val MULTI_ALIAS: Value = Value
   val NEW_INSTANCE: Value = Value
   val NOT: Value = Value
@@ -154,6 +157,7 @@ object TreePattern extends Enumeration  {
   val LOGICAL_QUERY_STAGE: Value = Value
   val METRIC_VIEW_PLACEHOLDER: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
+  val NEAREST_BY_JOIN: Value = Value
   val NO_GROUPING_AGGREGATE_REFERENCE: Value = Value
   val OFFSET: Value = Value
   val OUTER_JOIN: Value = Value
@@ -188,6 +192,7 @@ object TreePattern extends Enumeration  {
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value
+  val UNRESOLVED_QUALIFY: Value = Value
   val UNRESOLVED_FUNC: Value = Value
   val UNRESOLVED_PROCEDURE: Value = Value
   val UNRESOLVED_RELATION: Value = Value

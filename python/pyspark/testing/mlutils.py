@@ -99,10 +99,10 @@ class SparkSessionTestCase(PySparkTestCase):
 
 
 class MockDataset(DataFrame):
-    def __new__(cls) -> "DataFrame":
-        self = object.__new__(cls)
-        self.__init__()
-        return self
+    def __new__(cls, *args, **kwargs):
+        # DataFrame by default creates classic DataFrame, we need this to
+        # overwrite the default behavior.
+        return object.__new__(cls)
 
     def __init__(self):
         self.index = 0

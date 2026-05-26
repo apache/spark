@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.SerdeInfo
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, Table, TableCatalog, TableInfo, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -41,7 +42,8 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  *
  * The [[TableInfo]] passed to [[TableCatalog.createTableLike]] contains all explicit information
  * for the new table: columns and partitioning copied from the source, constraints copied from
- * the source, user-specified TBLPROPERTIES / LOCATION / USING provider (if given), and
+ * the source, user-specified TBLPROPERTIES / LOCATION / USING provider (if given),
+ * ROW FORMAT / STORED AS converted to hive properties (if given), and
  * [[TableCatalog.PROP_OWNER]] set to the current user. Source table properties are intentionally
  * excluded so that connectors can decide which custom properties to clone via [[sourceTable]].
  */
@@ -51,6 +53,7 @@ case class CreateTableLikeExec(
     sourceTable: Table,
     location: Option[URI],
     provider: Option[String],
+    serdeInfo: Option[SerdeInfo],
     properties: Map[String, String],
     ifNotExists: Boolean) extends LeafV2CommandExec {
 
@@ -93,6 +96,7 @@ case class CreateTableLikeExec(
   private def targetProperties: Map[String, String] =
     CatalogV2Util.withDefaultOwnership(
       properties ++
+        CatalogV2Util.convertToProperties(serdeInfo) ++
         provider.map(TableCatalog.PROP_PROVIDER -> _) ++
         location.map(uri => TableCatalog.PROP_LOCATION -> CatalogUtils.URIToString(uri)))
 }

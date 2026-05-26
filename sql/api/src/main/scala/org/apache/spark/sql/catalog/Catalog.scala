@@ -702,16 +702,6 @@ abstract class Catalog {
   def listCatalogs(pattern: String): Dataset[CatalogMetadata]
 
   /**
-   * Lists in-memory cache entries registered with an explicit name (via `CACHE TABLE`,
-   * `Catalog.cacheTable`, etc.). `Dataset.cache()` without a name is not listed.
-   *
-   * @return
-   *   a dataset of `CachedTable` rows describing each named cache entry.
-   * @since 4.2.0
-   */
-  def listCachedTables(): Dataset[CachedTable] = catalogUnsupported("listCachedTables")
-
-  /**
    * Drops a persistent table. This does not remove temp views (use `dropTempView`).
    *
    * @param tableName
@@ -811,7 +801,7 @@ abstract class Catalog {
    *   name of the partitioned table; may be qualified with catalog and database (namespace).
    * @since 4.2.0
    */
-  def listPartitions(tableName: String): Dataset[CatalogTablePartition] = {
+  def listPartitions(tableName: String): Dataset[TablePartition] = {
     catalogUnsupported("listPartitions")
   }
 

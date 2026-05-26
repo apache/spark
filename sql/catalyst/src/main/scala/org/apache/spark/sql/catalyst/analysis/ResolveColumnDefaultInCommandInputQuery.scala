@@ -43,7 +43,6 @@ import org.apache.spark.sql.types.StructField
 class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager)
   extends SQLConfHelper with ColumnResolutionHelper {
 
-  // TODO (SPARK-43752): support v2 write commands as well.
   def apply(plan: LogicalPlan): LogicalPlan = plan match {
     case i: InsertIntoStatement if conf.enableDefaultColumns && i.table.resolved &&
         i.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>

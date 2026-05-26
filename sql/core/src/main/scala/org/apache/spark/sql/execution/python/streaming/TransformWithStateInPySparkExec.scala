@@ -74,6 +74,7 @@ case class TransformWithStateInPySparkExec(
     timeMode: TimeMode,
     stateInfo: Option[StatefulOperatorStateInfo],
     batchTimestampMs: Option[Long],
+    prevBatchTimestampMs: Option[Long] = None,
     eventTimeWatermarkForLateEvents: Option[Long],
     eventTimeWatermarkForEviction: Option[Long],
     userFacingDataType: TransformWithStateInPySpark.UserFacingDataType.Value,
@@ -314,7 +315,8 @@ case class TransformWithStateInPySparkExec(
     val data = groupAndProject(filteredIter, groupingAttributes, child.output, dedupAttributes)
 
     val processorHandle = new StatefulProcessorHandleImpl(store, getStateInfo.queryRunId,
-      groupingKeyExprEncoder, timeMode, isStreaming, batchTimestampMs, metrics)
+      groupingKeyExprEncoder, timeMode, isStreaming, batchTimestampMs,
+      prevBatchTimestampMs, metrics)
 
     val evalType = {
       if (userFacingDataType == TransformWithStateInPySpark.UserFacingDataType.PANDAS) {
@@ -440,6 +442,7 @@ object TransformWithStateInPySparkExec {
       timeMode,
       Some(statefulOperatorStateInfo),
       Some(System.currentTimeMillis),
+      None,
       None,
       None,
       userFacingDataType,

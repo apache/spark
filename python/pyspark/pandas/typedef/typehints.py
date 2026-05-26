@@ -21,11 +21,10 @@ Utilities to deal with types. This is mostly focused on python3.
 
 import datetime
 import decimal
-import sys
 import typing
 from collections.abc import Iterable
 from inspect import isclass
-from typing import Any, Callable, Generic, List, Tuple, Union, Type, get_type_hints
+from typing import Any, Callable, Generic, List, Optional, Tuple, Union, Type, get_type_hints
 
 import numpy as np
 import pandas as pd
@@ -127,15 +126,15 @@ class UnknownType:
 
 
 class IndexNameTypeHolder:
-    name = None
-    tpe = None
-    short_name = "IndexNameType"
+    name: Optional[str] = None
+    tpe: Optional[Union[type, Dtype]] = None
+    short_name: str = "IndexNameType"
 
 
 class NameTypeHolder:
-    name = None
-    tpe = None
-    short_name = "NameType"
+    name: Optional[str] = None
+    tpe: Optional[Union[type, Dtype]] = None
+    short_name: str = "NameType"
 
 
 def as_spark_type(
@@ -150,18 +149,14 @@ def as_spark_type(
     - dictionaries of field_name -> type
     - Python3's typing system
     """
-    # For NumPy typing, NumPy version should be 1.21+
-    if LooseVersion(np.__version__) >= LooseVersion("1.21"):
-        if (
-            hasattr(tpe, "__origin__")
-            and tpe.__origin__ is np.ndarray
-            and hasattr(tpe, "__args__")
-            and len(tpe.__args__) > 1
-        ):
-            # numpy.typing.NDArray
-            return types.ArrayType(
-                as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error)
-            )
+    if (
+        hasattr(tpe, "__origin__")
+        and tpe.__origin__ is np.ndarray
+        and hasattr(tpe, "__args__")
+        and len(tpe.__args__) > 1
+    ):
+        # numpy.typing.NDArray
+        return types.ArrayType(as_spark_type(tpe.__args__[1].__args__[0], raise_error=raise_error))
 
     if isinstance(tpe, np.dtype) and tpe == np.dtype("object"):
         pass
@@ -726,7 +721,7 @@ def create_type_for_series_type(param: Any) -> Type[SeriesType]:
     new_class: Type[NameTypeHolder]
     if isinstance(param, ExtensionDtype):
         new_class = type(NameTypeHolder.short_name, (NameTypeHolder,), {})
-        new_class.tpe = param  # type: ignore[assignment]
+        new_class.tpe = param
     else:
         if LooseVersion(pd.__version__) < "3.0.0":
             new_class = param.type if isinstance(param, np.dtype) else param
@@ -867,21 +862,16 @@ def _new_type_holders(
         isinstance(param, slice) and param.step is None and param.stop is not None
         for param in params
     )
-    if sys.version_info < (3, 11):
-        is_unnamed_params = all(
-            not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
+    # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11+
+    is_unnamed_params = all(
+        not isinstance(param, slice)
+        and (
+            not isinstance(param, Iterable)
+            or isinstance(param, typing.GenericAlias)  # type: ignore[attr-defined]
+            or isinstance(param, typing._GenericAlias)  # type: ignore[attr-defined]
         )
-    else:
-        # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11
-        is_unnamed_params = all(
-            not isinstance(param, slice)
-            and (
-                not isinstance(param, Iterable)
-                or isinstance(param, typing.GenericAlias)  # type: ignore[attr-defined]
-                or isinstance(param, typing._GenericAlias)  # type: ignore[attr-defined]
-            )
-            for param in params
-        )
+        for param in params
+    )
 
     if is_named_params:
         # DataFrame["id": int, "A": int]
@@ -893,13 +883,11 @@ def _new_type_holders(
             new_param.name = param.start
             if LooseVersion(pd.__version__) < "3.0.0":
                 if isinstance(param.stop, ExtensionDtype):
-                    new_param.tpe = param.stop  # type: ignore[assignment]
+                    new_param.tpe = param.stop
                 else:
                     # When the given argument is a numpy's dtype instance.
                     new_param.tpe = (
-                        param.stop.type  # type: ignore[assignment]
-                        if isinstance(param.stop, np.dtype)
-                        else param.stop
+                        param.stop.type if isinstance(param.stop, np.dtype) else param.stop
                     )
             else:
                 new_param.tpe = param.stop
@@ -914,13 +902,9 @@ def _new_type_holders(
             )
             if LooseVersion(pd.__version__) < "3.0.0":
                 if isinstance(param, ExtensionDtype):
-                    new_type.tpe = param  # type: ignore[assignment]
+                    new_type.tpe = param
                 else:
-                    new_type.tpe = (
-                        param.type  # type: ignore[assignment]
-                        if isinstance(param, np.dtype)
-                        else param
-                    )
+                    new_type.tpe = param.type if isinstance(param, np.dtype) else param
             else:
                 new_type.tpe = param
             new_types.append(new_type)

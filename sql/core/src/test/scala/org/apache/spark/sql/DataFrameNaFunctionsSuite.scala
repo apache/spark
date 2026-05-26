@@ -24,7 +24,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class DataFrameNaFunctionsSuite extends QueryTest with SharedSparkSession {
+class DataFrameNaFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   def createDF(): DataFrame = {

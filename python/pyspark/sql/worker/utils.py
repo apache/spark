@@ -24,7 +24,12 @@ from pyspark.accumulators import (
     _deserialize_accumulator,
     SpecialAccumulatorIds,
 )
-from pyspark.sql.profiler import ProfileResultsParam, WorkerPerfProfiler, WorkerMemoryProfiler
+from pyspark.sql.profiler import (
+    ProfileResultsParam,
+    ProfileResultsParamV2,
+    WorkerPerfProfiler,
+    WorkerMemoryProfiler,
+)
 from pyspark.serializers import (
     read_int,
     write_int,
@@ -67,7 +72,11 @@ def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
 
         _accumulatorRegistry.clear()
         accumulator = _deserialize_accumulator(
-            SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+            SpecialAccumulatorIds.SQL_UDF_PROFIER, {}, ProfileResultsParam
+        )
+
+        accumulator_v2 = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
         )
 
         if main.__module__ == "__main__":
@@ -80,10 +89,10 @@ def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
         worker_module = worker_module.split(".")[-1]
 
         if conf.profiler == "perf":
-            with WorkerPerfProfiler(accumulator, worker_module):
+            with WorkerPerfProfiler(accumulator, accumulator_v2, worker_module):
                 main(infile, outfile)
         elif conf.profiler == "memory":
-            with WorkerMemoryProfiler(accumulator, worker_module, main):
+            with WorkerMemoryProfiler(accumulator, accumulator_v2, worker_module, main):
                 main(infile, outfile)
         else:
             main(infile, outfile)

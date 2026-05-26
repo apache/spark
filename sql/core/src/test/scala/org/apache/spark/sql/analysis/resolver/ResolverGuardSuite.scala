@@ -18,7 +18,6 @@
 package org.apache.spark.sql.analysis.resolver
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.analysis.resolver.{
   AnalyzerBridgeState,
   ExplicitlyUnsupportedResolverFeature,
@@ -397,7 +396,7 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
 
 }
 
-trait ResolverGuardSuiteBase extends QueryTest with SharedSparkSession {
+trait ResolverGuardSuiteBase extends SharedSparkSession {
   protected def checkResolverGuard(
       query: String,
       unsupportedReason: Option[String] = None): Unit = {

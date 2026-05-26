@@ -465,7 +465,7 @@ CreateViewCommand `spark_catalog`.`default`.`v`, UTF8_LCASE, SELECT 1, false, fa
 -- !query
 ALTER VIEW v AS SELECT 'a' AS c1, 'b' AS c2
 -- !query analysis
-AlterViewAsCommand `spark_catalog`.`default`.`v`, SELECT 'a' AS c1, 'b' AS c2, true
+AlterViewAsCommand `spark_catalog`.`default`.`v`, SELECT 'a' AS c1, 'b' AS c2, true, UTF8_LCASE
    +- Project [a AS c1#x, b AS c2#x]
       +- OneRowRelation
 
@@ -495,7 +495,7 @@ Project [collation(c2#x) AS collation(c2)#x]
 -- !query
 ALTER VIEW v AS SELECT 'c' AS c3 WHERE 'a' = 'A'
 -- !query analysis
-AlterViewAsCommand `spark_catalog`.`default`.`v`, SELECT 'c' AS c3 WHERE 'a' = 'A', true
+AlterViewAsCommand `spark_catalog`.`default`.`v`, SELECT 'c' AS c3 WHERE 'a' = 'A', true, UTF8_LCASE
    +- Project [c AS c3#x]
       +- Filter (a = A)
          +- OneRowRelation
@@ -556,7 +556,7 @@ ALTER VIEW v AS
 -- !query analysis
 AlterViewAsCommand `spark_catalog`.`default`.`v`, SELECT *, 'c' AS c4, (SELECT (SELECT CASE 'š' = 'S' WHEN TRUE THEN 'd' ELSE 'b' END)) AS c5
     FROM t
-    WHERE c1 = 'A' AND 'ć' = 'Č', true
+    WHERE c1 = 'A' AND 'ć' = 'Č', true, sr_CI_AI
    +- Project [c1#x, c2#x, c3#x, c AS c4#x, scalar-subquery#x [] AS c5#x]
       :  +- Project [scalar-subquery#x [] AS scalarsubquery()#x]
       :     :  +- Project [CASE WHEN ((š = S) = true) THEN d ELSE b END AS CASE WHEN (('š' collate sr_CI_AI = 'S' collate sr_CI_AI) = true) THEN 'd' collate sr_CI_AI ELSE 'b' collate sr_CI_AI END#x]

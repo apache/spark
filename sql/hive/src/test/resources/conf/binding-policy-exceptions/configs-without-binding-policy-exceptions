@@ -319,6 +319,8 @@ spark.scheduler.numCancelledJobGroupsToTrack
 spark.scheduler.resource.profileMergeConflicts
 spark.scheduler.revive.interval
 spark.scheduler.stage.legacyAbortAfterKillTasks
+spark.scheduler.streaming.idAwareLogging.enabled
+spark.scheduler.streaming.idAwareLogging.queryIdLength
 spark.security.credentials.renewalRatio
 spark.security.credentials.retryWait
 spark.serializer
@@ -646,6 +648,7 @@ spark.sql.hive.metastorePartitionPruningFastFallback
 spark.sql.hive.metastorePartitionPruningInSetThreshold
 spark.sql.hive.tablePropertyLengthThreshold
 spark.sql.hive.thriftServer.async
+spark.sql.hive.thriftServer.http.sniHostCheckEnabled
 spark.sql.hive.thriftServer.singleSession
 spark.sql.hive.useDelegateForSymlinkTextInputFormat
 spark.sql.hive.version
@@ -657,6 +660,7 @@ spark.sql.inMemoryColumnarStorage.hugeVectorReserveRatio
 spark.sql.inMemoryColumnarStorage.hugeVectorThreshold
 spark.sql.inMemoryColumnarStorage.partitionPruning
 spark.sql.inMemoryTableScanStatistics.enable
+spark.sql.insertNestedTypeCoercion.enabled
 spark.sql.join.preferSortMergeJoin
 spark.sql.json.enableExactStringParsing
 spark.sql.json.enablePartialResults
@@ -1033,6 +1037,7 @@ spark.sql.streaming.numRecentProgressUpdates
 spark.sql.streaming.offsetLog.formatVersion
 spark.sql.streaming.optimizeOneRowPlan.enabled
 spark.sql.streaming.pollingDelay
+spark.sql.streaming.queryEvolution.enableSinkEvolution
 spark.sql.streaming.queryEvolution.enableSourceEvolution
 spark.sql.streaming.ratioExtraSpaceAllowedInCheckpoint
 spark.sql.streaming.realTimeMode.allowlistCheck
@@ -1171,6 +1176,7 @@ spark.taskMetrics.trackUpdatedBlockStatuses
 spark.test.noStageRetry
 spark.testing
 spark.testing.dynamicAllocation.schedule.enabled
+spark.testing.injectShuffleFetchFailures
 spark.testing.memory
 spark.testing.nCoresPerExecutor
 spark.testing.nExecutorsPerHost
@@ -1187,7 +1193,8 @@ spark.ui.enabled
 spark.ui.filters
 spark.ui.groupSQLSubExecutionEnabled
 spark.ui.heapHistogramEnabled
-spark.ui.jettyStopTimeout
+spark.ui.jetty.sniHostCheckEnabled
+spark.ui.jetty.stopTimeout
 spark.ui.killEnabled
 spark.ui.liveUpdate.minFlushPeriod
 spark.ui.liveUpdate.period

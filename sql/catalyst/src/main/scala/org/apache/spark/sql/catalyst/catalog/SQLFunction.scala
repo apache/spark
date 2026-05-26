@@ -122,7 +122,10 @@ case class SQLFunction(
    * Convert the SQL function to a [[CatalogFunction]].
    */
   def toCatalogFunction: CatalogFunction = {
-    val props = sqlFunctionToProps ++ properties
+    // Persist function metadata (owner, createTime) alongside the SQL function
+    // body so the values survive a session restart and can be rendered by
+    // DESCRIBE FUNCTION EXTENDED.
+    val props = sqlFunctionToProps ++ functionMetadataToProps ++ properties
     CatalogFunction(
       identifier = name,
       className = SQL_FUNCTION_PREFIX,
@@ -179,9 +182,23 @@ case class SQLFunction(
     props.put(CREATE_TIME, createTimeMs.toString)
     props.toMap
   }
+
+  /** Frozen PATH string persisted when the function was created with SQL PATH enabled. */
+  def functionStoredResolutionPath: Option[String] =
+    properties.get(SQLFunction.FUNCTION_RESOLUTION_PATH)
 }
 
 object SQLFunction {
+
+  val SCALAR = "SCALAR"
+  val TABLE = "TABLE"
+
+  /**
+   * Persisted frozen PATH for SQL function bodies when created with [[SQLConf.PATH_ENABLED]].
+   * Serialized as a JSON array of path entries (same format as
+   * [[CatalogTable.VIEW_RESOLUTION_PATH]]).
+   */
+  val FUNCTION_RESOLUTION_PATH: String = "function.resolutionPath"
 
   private val SQL_FUNCTION_PREFIX = "sqlFunction."
 
@@ -216,21 +233,7 @@ object SQLFunction {
       }
       val blob = parts.sortBy(_._1).map(_._2).mkString
       val props = mapper.readValue(blob, classOf[Map[String, String]])
-      val isTableFunc = props(IS_TABLE_FUNC).toBoolean
-      val collation = props.get(COLLATION)
-      val returnType = parseReturnTypeText(props(RETURN_TYPE), isTableFunc, parser, collation)
-      SQLFunction(
-        name = function.identifier,
-        inputParam = props.get(INPUT_PARAM).map(parseRoutineParam(_, parser, collation)),
-        returnType = returnType.get,
-        exprText = props.get(EXPRESSION),
-        queryText = props.get(QUERY),
-        comment = props.get(COMMENT),
-        collation = collation,
-        deterministic = props.get(DETERMINISTIC).map(_.toBoolean),
-        containsSQL = props.get(CONTAINS_SQL).map(_.toBoolean),
-        isTableFunc = isTableFunc,
-        props.filterNot(_._1.startsWith(SQL_FUNCTION_PREFIX)))
+      fromProps(props, function.identifier, parser)
     } catch {
       case e: Exception =>
         throw new AnalysisException(
@@ -240,6 +243,56 @@ object SQLFunction {
             "className" -> s"${function.className}"), cause = Some(e)
         )
     }
+  }
+
+  /**
+   * Convert an [[ExpressionInfo]] into a SQL function.
+   */
+  def fromExpressionInfo(info: ExpressionInfo, parser: ParserInterface): SQLFunction = {
+    try {
+      val props = mapper.readValue(info.getUsage, classOf[Map[String, String]])
+      fromProps(props, FunctionIdentifier(info.getName, Option(info.getDb)), parser)
+    } catch {
+      case e: Exception =>
+        throw new AnalysisException(
+          errorClass = "CORRUPTED_CATALOG_FUNCTION",
+          messageParameters = Map(
+            "identifier" -> s"${info.getDb}.${info.getName}",
+            "className" -> s"${info.getClassName}"), cause = Some(e)
+        )
+    }
+  }
+
+  /**
+   * Build a [[SQLFunction]] from a deserialized property map and a function identifier.
+   * Shared by both [[fromCatalogFunction]] and [[fromExpressionInfo]] so all readers
+   * stay in sync as new properties are added.
+   *
+   * `OWNER` is optional and defaults to `None` when missing; `CREATE_TIME` falls back
+   * to the current wall-clock time so functions persisted before metadata was added
+   * to the catalog payload still load.
+   */
+  private def fromProps(
+      props: Map[String, String],
+      identifier: FunctionIdentifier,
+      parser: ParserInterface): SQLFunction = {
+    val isTableFunc = props(IS_TABLE_FUNC).toBoolean
+    val collation = props.get(COLLATION)
+    val returnType = parseReturnTypeText(props(RETURN_TYPE), isTableFunc, parser, collation)
+    SQLFunction(
+      name = identifier,
+      inputParam = props.get(INPUT_PARAM).map(parseRoutineParam(_, parser, collation)),
+      returnType = returnType.get,
+      exprText = props.get(EXPRESSION),
+      queryText = props.get(QUERY),
+      comment = props.get(COMMENT),
+      collation = collation,
+      deterministic = props.get(DETERMINISTIC).map(_.toBoolean),
+      containsSQL = props.get(CONTAINS_SQL).map(_.toBoolean),
+      isTableFunc = isTableFunc,
+      properties = props.filterNot(_._1.startsWith(SQL_FUNCTION_PREFIX)),
+      owner = props.get(OWNER),
+      createTimeMs = props.get(CREATE_TIME).map(_.toLong).getOrElse(System.currentTimeMillis))
   }
 
   def parseDefault(text: String, parser: ParserInterface): Expression = {

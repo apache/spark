@@ -234,9 +234,9 @@ class ScalarPandasUDFTestsMixin:
 
         @pandas_udf("Array<struct<col1:string, col2:long, col3:double>>")
         def return_cols(cols):
-            assert type(cols) == pd.Series
-            assert type(cols[0]) == np.ndarray
-            assert type(cols[0][0]) == dict
+            assert isinstance(cols, pd.Series)
+            assert isinstance(cols[0], np.ndarray)
+            assert isinstance(cols[0][0], dict)
             return cols
 
         df = self.spark.createDataFrame(
@@ -1542,34 +1542,34 @@ class ScalarPandasUDFTestsMixin:
 
         @udf("int")
         def f1(x):
-            assert type(x) == int
+            assert isinstance(x, int)
             return x + 1
 
         @pandas_udf("int")
         def f2_scalar(x):
-            assert type(x) == pd.Series
+            assert isinstance(x, pd.Series)
             return x + 10
 
         @pandas_udf("int", PandasUDFType.SCALAR_ITER)
         def f2_iter(it):
             for x in it:
-                assert type(x) == pd.Series
+                assert isinstance(x, pd.Series)
                 yield x + 10
 
         @udf("int")
         def f3(x):
-            assert type(x) == int
+            assert isinstance(x, int)
             return x + 100
 
         @pandas_udf("int")
         def f4_scalar(x):
-            assert type(x) == pd.Series
+            assert isinstance(x, pd.Series)
             return x + 1000
 
         @pandas_udf("int", PandasUDFType.SCALAR_ITER)
         def f4_iter(it):
             for x in it:
-                assert type(x) == pd.Series
+                assert isinstance(x, pd.Series)
                 yield x + 1000
 
         expected_chained_1 = df.withColumn("f2_f1", df["v"] + 11).collect()
@@ -1667,7 +1667,7 @@ class ScalarPandasUDFTestsMixin:
 
         @udf("int")
         def f1(x):
-            assert type(x) == int
+            assert isinstance(x, int)
             return x + 1
 
         def f2(x):
@@ -1676,13 +1676,13 @@ class ScalarPandasUDFTestsMixin:
 
         @pandas_udf("int")
         def f3s(x):
-            assert type(x) == pd.Series
+            assert isinstance(x, pd.Series)
             return x + 100
 
         @pandas_udf("int", PandasUDFType.SCALAR_ITER)
         def f3i(it):
             for x in it:
-                assert type(x) == pd.Series
+                assert isinstance(x, pd.Series)
                 yield x + 100
 
         expected = (

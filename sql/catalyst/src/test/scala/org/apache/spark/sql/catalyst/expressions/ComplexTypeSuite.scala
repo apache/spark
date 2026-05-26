@@ -129,22 +129,259 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(GetArrayItem(stArray4, Literal(1)).nullable)
   }
 
-  test("GetMapValue") {
-    val typeM = MapType(StringType, StringType)
-    val map = Literal.create(Map("a" -> "b"), typeM)
-    val nullMap = Literal.create(null, typeM)
-    val nullString = Literal.create(null, StringType)
+  Seq((Int.MaxValue, "Linear Lookup"), (0, "Hash Lookup")).foreach { case (threshold, name) =>
+    test(s"GetMapValue - $name") {
+      withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> threshold.toString) {
+        val typeM = MapType(StringType, StringType)
+        val map = Literal.create(Map("a" -> "b"), typeM)
+        val nullMap = Literal.create(null, typeM)
+        val nullString = Literal.create(null, StringType)
 
-    checkEvaluation(GetMapValue(map, Literal("a")), "b")
-    checkEvaluation(GetMapValue(map, nullString), null)
-    checkEvaluation(GetMapValue(nullMap, nullString), null)
-    checkEvaluation(GetMapValue(map, nullString), null)
+        // 1. Basic lookup (String keys)
+        checkEvaluation(GetMapValue(map, Literal("a")), "b")
+        checkEvaluation(GetMapValue(map, nullString), null)
+        checkEvaluation(GetMapValue(nullMap, nullString), null)
+        checkEvaluation(GetMapValue(map, nullString), null)
 
-    val nonNullMap = Literal.create(Map("a" -> 1), MapType(StringType, IntegerType, false))
-    checkEvaluation(GetMapValue(nonNullMap, Literal("a")), 1)
+        val nonNullMap = Literal.create(Map("a" -> 1), MapType(StringType, IntegerType, false))
+        checkEvaluation(GetMapValue(nonNullMap, Literal("a")), 1)
 
-    val nestedMap = Literal.create(Map("a" -> Map("b" -> "c")), MapType(StringType, typeM))
-    checkEvaluation(GetMapValue(nestedMap, Literal("a")), Map("b" -> "c"))
+        // 2. Nested map
+        val nestedMap = Literal.create(Map("a" -> Map("b" -> "c")), MapType(StringType, typeM))
+        checkEvaluation(GetMapValue(nestedMap, Literal("a")), Map("b" -> "c"))
+
+        // 3. Basic lookup (Int keys)
+        val intMap = Literal.create(Map(1 -> 10, 2 -> 20, 3 -> 30),
+          MapType(IntegerType, IntegerType))
+        checkEvaluation(GetMapValue(intMap, Literal(1)), 10)
+        checkEvaluation(GetMapValue(intMap, Literal(2)), 20)
+        checkEvaluation(GetMapValue(intMap, Literal(3)), 30)
+        checkEvaluation(GetMapValue(intMap, Literal(4)), null)
+
+        val emptyMap = Literal.create(Map.empty[Int, Int], MapType(IntegerType, IntegerType))
+        checkEvaluation(GetMapValue(emptyMap, Literal(1)), null)
+
+        // 4. Special data
+        // Duplicate keys: Spark MapType doesn't enforce uniqueness in the underlying
+        // data structure (ArrayBasedMapData)
+        // We construct it manually to simulate duplicates.
+        val keys = new GenericArrayData(Array(1, 2, 1))
+        val values = new GenericArrayData(Array(10, 20, 30))
+        val dupMapData = new ArrayBasedMapData(keys, values)
+        val dupMap = Literal.create(dupMapData, MapType(IntegerType, IntegerType))
+        // Should return the first match
+        checkEvaluation(GetMapValue(dupMap, Literal(1)), 10)
+        checkEvaluation(GetMapValue(dupMap, Literal(2)), 20)
+
+        // Null values
+        val nullValueMap = Literal.create(Map(1 -> null), MapType(IntegerType, StringType))
+        checkEvaluation(GetMapValue(nullValueMap, Literal(1)), null)
+
+        // NaN keys
+        val nan = Double.NaN
+        val floatNan = Float.NaN
+        val doubleMap = Literal.create(Map(1.0 -> 10, nan -> 20), MapType(DoubleType, IntegerType))
+        checkEvaluation(GetMapValue(doubleMap, Literal(1.0)), 10)
+        checkEvaluation(GetMapValue(doubleMap, Literal(nan)), 20)
+
+        val floatMap = Literal.create(Map(1.0f -> 10, floatNan -> 20),
+          MapType(FloatType, IntegerType))
+        checkEvaluation(GetMapValue(floatMap, Literal(1.0f)), 10)
+        checkEvaluation(GetMapValue(floatMap, Literal(floatNan)), 20)
+
+        // 5. Key types
+        // Long
+        val longMap = Literal.create(Map(1L -> 10, 2L -> 20), MapType(LongType, IntegerType))
+        checkEvaluation(GetMapValue(longMap, Literal(1L)), 10)
+        checkEvaluation(GetMapValue(longMap, Literal(3L)), null)
+
+        // String
+        val stringMap = Literal.create(Map("a" -> "A", "b" -> "B"), MapType(StringType, StringType))
+        checkEvaluation(GetMapValue(stringMap, Literal("a")), "A")
+        checkEvaluation(GetMapValue(stringMap, Literal("c")), null)
+
+        // Decimal
+        val decType = DecimalType(10, 2)
+        val d1 = Decimal("1.00")
+        val d2 = Decimal("2.50")
+        val d3 = Decimal("3.75")
+        val decimalMap = Literal.create(
+          Map(d1 -> 10, d2 -> 20, d3 -> 30),
+          MapType(decType, IntegerType))
+        checkEvaluation(GetMapValue(decimalMap, Literal(d1, decType)), 10)
+        checkEvaluation(GetMapValue(decimalMap, Literal(d2, decType)), 20)
+        checkEvaluation(GetMapValue(decimalMap, Literal(d3, decType)), 30)
+        checkEvaluation(GetMapValue(decimalMap, Literal(Decimal("9.99"), decType)), null)
+
+        // Decimal with different precision/scale
+        val decType2 = DecimalType(38, 18)
+        val d4 = Decimal("12345678901234567890.123456789012345678")
+        val d5 = Decimal("99999999999999999999.999999999999999999")
+        val bigDecimalMap = Literal.create(
+          Map(d4 -> 100, d5 -> 200),
+          MapType(decType2, IntegerType))
+        checkEvaluation(GetMapValue(bigDecimalMap, Literal(d4, decType2)), 100)
+        checkEvaluation(GetMapValue(bigDecimalMap, Literal(d5, decType2)), 200)
+        checkEvaluation(GetMapValue(bigDecimalMap,
+          Literal(Decimal("0.000000000000000001"), decType2)), null)
+
+        // Decimal zero key
+        val zeroDecMap = Literal.create(
+          Map(Decimal("0.00") -> 99, d1 -> 10),
+          MapType(decType, IntegerType))
+        checkEvaluation(GetMapValue(zeroDecMap, Literal(Decimal("0.00"), decType)), 99)
+        checkEvaluation(GetMapValue(zeroDecMap, Literal(d1, decType)), 10)
+
+        // Decimal negative keys
+        val negDecMap = Literal.create(
+          Map(Decimal("-1.50") -> 10, Decimal("-99.99") -> 20, d1 -> 30),
+          MapType(decType, IntegerType))
+        checkEvaluation(GetMapValue(negDecMap, Literal(Decimal("-1.50"), decType)), 10)
+        checkEvaluation(GetMapValue(negDecMap, Literal(Decimal("-99.99"), decType)), 20)
+        checkEvaluation(GetMapValue(negDecMap, Literal(d1, decType)), 30)
+        checkEvaluation(GetMapValue(negDecMap, Literal(Decimal("1.50"), decType)), null)
+
+        // Decimal key with null value
+        val decNullValMap = Literal.create(
+          Map(d1 -> null, d2 -> 20),
+          MapType(decType, IntegerType))
+        checkEvaluation(GetMapValue(decNullValMap, Literal(d1, decType)), null)
+        checkEvaluation(GetMapValue(decNullValMap, Literal(d2, decType)), 20)
+
+        // Decimal at compact/BigDecimal boundary (precision=18)
+        val decType18 = DecimalType(18, 0)
+        val boundary1 = Decimal(999999999999999999L)
+        val boundary2 = Decimal(-999999999999999999L)
+        val boundaryMap = Literal.create(
+          Map(boundary1 -> 100, boundary2 -> 200),
+          MapType(decType18, IntegerType))
+        checkEvaluation(GetMapValue(boundaryMap, Literal(boundary1, decType18)), 100)
+        checkEvaluation(GetMapValue(boundaryMap, Literal(boundary2, decType18)), 200)
+        checkEvaluation(GetMapValue(boundaryMap, Literal(Decimal(0L), decType18)), null)
+
+        // Decimal duplicate keys
+        val decKeys = new GenericArrayData(Array(d1, d2, d1))
+        val decValues = new GenericArrayData(Array(10, 20, 30))
+        val dupDecMapData = new ArrayBasedMapData(decKeys, decValues)
+        val dupDecMap = Literal.create(dupDecMapData, MapType(decType, IntegerType))
+        checkEvaluation(GetMapValue(dupDecMap, Literal(d1, decType)), 10)
+        checkEvaluation(GetMapValue(dupDecMap, Literal(d2, decType)), 20)
+
+        // Time keys
+        val timeType = TimeType()
+        val t1 = DateTimeTestUtils.localTime(10, 30, 0)
+        val t2 = DateTimeTestUtils.localTime(14, 0, 30)
+        val t3 = DateTimeTestUtils.localTime(23, 59, 59, 999999)
+        val timeMap = Literal.create(Map(t1 -> 10, t2 -> 20, t3 -> 30),
+          MapType(timeType, IntegerType))
+        checkEvaluation(GetMapValue(timeMap, Literal(t1, timeType)), 10)
+        checkEvaluation(GetMapValue(timeMap, Literal(t2, timeType)), 20)
+        checkEvaluation(GetMapValue(timeMap, Literal(t3, timeType)), 30)
+        checkEvaluation(GetMapValue(timeMap,
+          Literal(DateTimeTestUtils.localTime(0, 0, 0), timeType)), null)
+
+        // Time zero (midnight)
+        val t0 = DateTimeTestUtils.localTime()
+        val timeZeroMap = Literal.create(Map(t0 -> 99, t1 -> 10),
+          MapType(timeType, IntegerType))
+        checkEvaluation(GetMapValue(timeZeroMap, Literal(t0, timeType)), 99)
+
+        // Time duplicate keys
+        val timeKeys = new GenericArrayData(Array(t1, t2, t1))
+        val timeValues = new GenericArrayData(Array(10, 20, 30))
+        val dupTimeMapData = new ArrayBasedMapData(timeKeys, timeValues)
+        val dupTimeMap = Literal.create(dupTimeMapData, MapType(timeType, IntegerType))
+        checkEvaluation(GetMapValue(dupTimeMap, Literal(t1, timeType)), 10)
+        checkEvaluation(GetMapValue(dupTimeMap, Literal(t2, timeType)), 20)
+
+        // 6. Binary Keys
+        val binaryMap = Literal.create(Map(Array(1.toByte) -> 10, Array(2.toByte) -> 20),
+          MapType(BinaryType, IntegerType))
+        checkEvaluation(GetMapValue(binaryMap, Literal(Array(1.toByte))), 10)
+        checkEvaluation(GetMapValue(binaryMap, Literal(Array(3.toByte))), null)
+
+        // 7. Array Keys
+        val arrayType = ArrayType(IntegerType)
+        val arrayMap = Literal.create(
+          Map(Array(1, 2) -> 10, Array(3, 4) -> 20),
+          MapType(arrayType, IntegerType))
+        checkEvaluation(GetMapValue(arrayMap, Literal.create(Array(1, 2), arrayType)), 10)
+        checkEvaluation(GetMapValue(arrayMap, Literal.create(Array(3, 4), arrayType)), 20)
+        checkEvaluation(GetMapValue(arrayMap, Literal.create(Array(5, 6), arrayType)), null)
+
+        // 8. Struct Keys
+        val structType = new StructType().add("a", "int").add("b", "int")
+        val structMap = Literal.create(
+          Map(create_row(1, 1) -> 10, create_row(2, 2) -> 20),
+          MapType(structType, IntegerType))
+        checkEvaluation(GetMapValue(structMap, Literal.create(create_row(1, 1), structType)), 10)
+        checkEvaluation(GetMapValue(structMap, Literal.create(create_row(2, 2), structType)), 20)
+        checkEvaluation(GetMapValue(structMap, Literal.create(create_row(3, 3), structType)), null)
+      }
+    }
+  }
+
+  test("GetMapValue - non-foldable map always uses linear scan") {
+    // With threshold=0, a foldable map would take the hash path. A non-foldable map (backed by
+    // a row column) must still fall back to linear scan, because its hash index cannot be
+    // reused across rows (building it per row is a perf regression vs. linear).
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      val mapType = MapType(IntegerType, IntegerType)
+      val mapData = ArrayBasedMapData(Map(1 -> 10, 2 -> 20, 3 -> 30))
+      val row = create_row(mapData)
+      val mapRef = BoundReference(0, mapType, nullable = true)
+      assert(!mapRef.foldable)
+
+      // Behavior still correct.
+      checkEvaluation(GetMapValue(mapRef, Literal(1)), 10, row)
+      checkEvaluation(GetMapValue(mapRef, Literal(2)), 20, row)
+      checkEvaluation(GetMapValue(mapRef, Literal(4)), null, row)
+
+      checkEvaluation(ElementAt(mapRef, Literal(3)), 30, row)
+      checkEvaluation(ElementAt(mapRef, Literal(99)), null, row)
+
+      // A null map from a non-foldable reference must still return null.
+      val nullRow = create_row(null)
+      checkEvaluation(GetMapValue(mapRef, Literal(1)), null, nullRow)
+
+      // Strategy choice: non-foldable input never takes the hash path, independent of
+      // threshold. This guards against future refactors that accidentally route every map
+      // through the hash executor (a regression that behavior-only tests wouldn't catch).
+      assert(!GetMapValue(mapRef, Literal(1)).usesFoldableHashLookup)
+      assert(!ElementAt(mapRef, Literal(1)).usesFoldableHashLookup)
+    }
+  }
+
+  test("GetMapValue - strategy choice for foldable maps") {
+    // Build a foldable map literal large enough to clear the default threshold. The
+    // strategy assertions here pair with the non-foldable test above: together they lock in
+    // that foldability, not size alone, gates the hash path.
+    val entries = (0 until 2000).map(i => i -> i.toString).toMap
+    val foldableLit = Literal.create(entries, MapType(IntegerType, StringType))
+    val smallLit = Literal.create(Map(1 -> "a"), MapType(IntegerType, StringType))
+    val binaryKeyLit = Literal.create(
+      Map(Array[Byte](1) -> 10), MapType(BinaryType, IntegerType))
+
+    // Foldable + above threshold + hashable key type --> PrebuiltHashExecutor.
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "1000") {
+      assert(GetMapValue(foldableLit, Literal(1)).usesFoldableHashLookup)
+      assert(ElementAt(foldableLit, Literal(1)).usesFoldableHashLookup)
+    }
+
+    // Foldable but below threshold --> LinearExecutor.
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "10000") {
+      assert(!GetMapValue(foldableLit, Literal(1)).usesFoldableHashLookup)
+    }
+
+    // Foldable, size=1, threshold=0 --> still LinearExecutor (threshold is >=, len < threshold
+    // is false here but we want to also confirm small maps don't regress with threshold=0).
+    withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> "0") {
+      assert(GetMapValue(smallLit, Literal(1)).usesFoldableHashLookup)
+
+      // Unsupported key type (BinaryType fails typeWithProperEquals) --> LinearExecutor even
+      // when foldable and threshold=0.
+      assert(!GetMapValue(binaryKeyLit, Literal(Array[Byte](1))).usesFoldableHashLookup)
+    }
   }
 
   test("GetStructField") {

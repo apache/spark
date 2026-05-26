@@ -101,6 +101,32 @@ class ApplyInArrowTestsMixin:
             actual2 = grouped_df.applyInArrow(func_variation, "id long, value long").collect()
             self.assertEqual(actual2, expected)
 
+    def test_apply_in_arrow_large_var_types(self):
+        # SPARK-56929: when useLargeVarTypes=true, the expected schema computed by
+        # worker.py for result validation must also use large_string/large_binary,
+        # otherwise verify_arrow_result raises a spurious RESULT_COLUMN_TYPES_MISMATCH.
+        data = [(0, "foo", b"foo"), (0, "bar", b"bar"), (1, None, None), (1, "baz", b"baz")]
+        df = self.spark.createDataFrame(data, "id long, s string, b binary")
+        schema = "id long, s string, b binary"
+
+        def func(table):
+            assert pa.types.is_large_string(table.schema.field("s").type)
+            assert pa.types.is_large_binary(table.schema.field("b").type)
+            return table
+
+        for assign_cols_by_name in [True, False]:
+            with self.subTest(assign_cols_by_name=assign_cols_by_name):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.useLargeVarTypes": True,
+                        "spark.sql.legacy.execution.pandas.groupedMap."
+                        "assignColumnsByName": assign_cols_by_name,
+                    }
+                ):
+                    for func_variation in function_variations(func):
+                        actual = df.groupby("id").applyInArrow(func_variation, schema)
+                        assertDataFrameEqual(actual, df)
+
     def test_apply_in_arrow_empty_groupby(self):
         df = self.data
 
@@ -142,14 +168,13 @@ class ApplyInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.Table, but is tuple",
+                r"pyarrow\.Table.*\btuple\b",
             ):
                 df.groupby("id").applyInArrow(stats, schema="id long, m double").collect()
 
             with self.assertRaisesRegex(
                 PythonException,
-                "Return type of the user-defined function should be pyarrow.RecordBatch, but is "
-                + "tuple",
+                r"iterator of pyarrow\.RecordBatch.*iterator of tuple",
             ):
                 df.groupby("id").applyInArrow(stats_iter, schema="id long, m double").collect()
 
@@ -171,7 +196,8 @@ class ApplyInArrowTestsMixin:
                     for func_variation in function_variations(lambda table: table):
                         with self.assertRaisesRegex(
                             PythonException,
-                            f"Columns do not match in their data type: {expected}",
+                            "Column types of the returned data do not match specified schema. "
+                            f"Mismatch: {expected}",
                         ):
                             df.groupby("id").applyInArrow(func_variation, schema=schema).collect()
 
@@ -196,7 +222,8 @@ class ApplyInArrowTestsMixin:
                         for func_variation in function_variations(lambda table: table):
                             with self.assertRaisesRegex(
                                 PythonException,
-                                f"Columns do not match in their data type: {expected}",
+                                "Column types of the returned data do not match specified schema. "
+                                f"Mismatch: {expected}",
                             ):
                                 df.groupby("id").applyInArrow(
                                     func_variation, schema=schema
@@ -226,6 +253,39 @@ class ApplyInArrowTestsMixin:
                     df.groupby("id").applyInArrow(
                         func_variation, schema="id long, m double"
                     ).collect()
+
+    def test_apply_in_arrow_returning_wrong_column_count_positional_assignment(self):
+        df = self.data
+
+        def too_many_cols(key, table):
+            return pa.Table.from_pydict(
+                {
+                    "a": [key[0].as_py()],
+                    "b": [pc.mean(table.column("v")).as_py()],
+                    "c": [pc.stddev(table.column("v")).as_py()],
+                }
+            )
+
+        def too_few_cols(key, table):
+            return pa.Table.from_pydict({"a": [key[0].as_py()]})
+
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
+        ):
+            with self.quiet():
+                for func, expected, actual in [
+                    (too_many_cols, 2, 3),
+                    (too_few_cols, 2, 1),
+                ]:
+                    with self.subTest(func=func.__name__):
+                        for func_variation in function_variations(func):
+                            with self.assertRaisesRegex(
+                                PythonException,
+                                rf"Expected: {expected}.*Actual: {actual}",
+                            ):
+                                df.groupby("id").applyInArrow(
+                                    func_variation, schema="a long, b double"
+                                ).collect()
 
     def test_apply_in_arrow_returning_empty_dataframe(self):
         df = self.data

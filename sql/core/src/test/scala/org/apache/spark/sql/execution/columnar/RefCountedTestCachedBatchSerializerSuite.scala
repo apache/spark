@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.columnar.{CachedBatch, SimpleMetricsCachedBatch}
@@ -97,7 +96,7 @@ class RefCountedTestCachedBatchSerializer extends DefaultCachedBatchSerializer {
   override def supportsColumnarInput(schema: Seq[Attribute]): Boolean = false
 }
 
-class RefCountedTestCachedBatchSerializerSuite extends QueryTest with SharedSparkSession {
+class RefCountedTestCachedBatchSerializerSuite extends SharedSparkSession {
   import testImplicits._
 
   override protected def sparkConf: SparkConf = {

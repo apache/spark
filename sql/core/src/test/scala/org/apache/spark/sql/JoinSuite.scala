@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.SlowSQLTest
 
 @SlowSQLTest
-class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper
+class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   with JoinSelectionHelper {
   import testImplicits._
 
@@ -1288,6 +1288,17 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
+  test("SPARK-36082: only use SingleColumn Null Aware Anti Join when right side " +
+      "can broadcast") {
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val joinExec = assertJoin((
+        "select * from testData where key not in (select b from testData3)",
+        classOf[BroadcastNestedLoopJoinExec]))
+      assert(!joinExec.isInstanceOf[BroadcastHashJoinExec])
+    }
+  }
+
   test("SPARK-32399: Full outer shuffled hash join") {
     val inputDFs = Seq(
       // Test unique join key
@@ -1819,8 +1830,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
 }
 
 class ThreadLeakInSortMergeJoinSuite
-  extends QueryTest
-    with SharedSparkSession
+  extends SharedSparkSession
     with AdaptiveSparkPlanHelper {
 
   setupTestData()

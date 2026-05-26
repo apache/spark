@@ -49,6 +49,7 @@ from pyspark.sql.types import (
     DataType,
     StringType,
     StructType,
+    MapType,
     NumericType,
     _from_numpy_type,
 )
@@ -6462,6 +6463,84 @@ def rank() -> Column:
     +-----+-----+
     """
     return _invoke_function("rank")
+
+
+@_try_remote_functions
+def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = None) -> Column:
+    """
+    Window function: computes the differences between consecutive cumulative counter values in a
+    time series, thereby converting the counter from the cumulative to the delta format.
+
+    Gracefully handles counter resets by returning NULL. Counter resets are detected when the
+    counter value decreases, or when the start time advances between rows.
+
+    Use the PARTITION BY clause of the window to separate independent counters. This is done by
+    specifying all columns which uniquely identify a time series. These are typically the counter
+    name and any attributes tied to the counter.
+
+    Use the ORDER BY clause of the window to order the observations by the associated timestamp
+    in ascending order.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    value : :class:`~pyspark.sql.Column` or column name
+        A cumulative counter. Must be a numeric data type. Must be non-negative.
+    startTime : :class:`~pyspark.sql.Column` or column name, optional
+        An optional timestamp parameter which indicates when the counter was last set to zero.
+        Used to signal counter resets.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The difference between the current and previous counter value within the window partition.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql import Window
+    >>> from datetime import datetime
+    >>> df = spark.createDataFrame(
+    ...     [('http_requests', datetime(2026, 1, 1, 0, 0), 100),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 1), 200),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 2), 400),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 3), 50),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 4), 100)],
+    ...     "m STRING, t TIMESTAMP_NTZ, c INT")
+    >>> w = Window.partitionBy("m").orderBy("t")
+    >>> df.select("m", "t", "c", sf.counter_diff("c").over(w).alias("diff")).show()
+    +-------------+-------------------+---+----+
+    |            m|                  t|  c|diff|
+    +-------------+-------------------+---+----+
+    |http_requests|2026-01-01 00:00:00|100|NULL|
+    |http_requests|2026-01-01 00:01:00|200| 100|
+    |http_requests|2026-01-01 00:02:00|400| 200|
+    |http_requests|2026-01-01 00:03:00| 50|NULL|
+    |http_requests|2026-01-01 00:04:00|100|  50|
+    +-------------+-------------------+---+----+
+
+    >>> df2 = spark.createDataFrame(
+    ...     [('http_requests', datetime(2026, 1, 1, 0, 0), 100, datetime(2026, 1, 1, 0, 0)),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 1), 200, datetime(2026, 1, 1, 0, 0)),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 2), 400, datetime(2026, 1, 1, 0, 0)),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 3), 500, datetime(2026, 1, 1, 0, 2, 15)),
+    ...      ('http_requests', datetime(2026, 1, 1, 0, 4), 600, datetime(2026, 1, 1, 0, 2, 15))],
+    ...     "m STRING, t TIMESTAMP_NTZ, c INT, s TIMESTAMP_NTZ")
+    >>> df2.select("m", "t", "s", "c", sf.counter_diff("c", "s").over(w).alias("diff")).show()
+    +-------------+-------------------+-------------------+---+----+
+    |            m|                  t|                  s|  c|diff|
+    +-------------+-------------------+-------------------+---+----+
+    |http_requests|2026-01-01 00:00:00|2026-01-01 00:00:00|100|NULL|
+    |http_requests|2026-01-01 00:01:00|2026-01-01 00:00:00|200| 100|
+    |http_requests|2026-01-01 00:02:00|2026-01-01 00:00:00|400| 200|
+    |http_requests|2026-01-01 00:03:00|2026-01-01 00:02:15|500|NULL|
+    |http_requests|2026-01-01 00:04:00|2026-01-01 00:02:15|600| 100|
+    +-------------+-------------------+-------------------+---+----+
+    """
+    if startTime is None:
+        return _invoke_function_over_columns("counter_diff", value)
+    return _invoke_function_over_columns("counter_diff", value, startTime)
 
 
 @_try_remote_functions
@@ -13126,6 +13205,67 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
 
 
 @_try_remote_functions
+def time_bucket(
+    bucket_size: "Column",
+    ts: "ColumnOrName",
+    origin: Optional["Column"] = None,
+) -> Column:
+    """
+    Aligns a timestamp to the start of a fixed-size interval bucket.
+
+    Returns the start of the bucket that ``ts`` falls into, where buckets are defined by
+    the given ``bucket_size`` interval aligned to optional ``origin``. For ``TIMESTAMP_NTZ``,
+    bucketing is performed in UTC. For ``TIMESTAMP``, year-month interval buckets and
+    calendar-day components of day-time interval buckets align to the session time zone.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    bucket_size : :class:`~pyspark.sql.Column`
+        A day-time or year-month interval defining the bucket size. Must be positive
+        and foldable.
+    ts : :class:`~pyspark.sql.Column` or column name
+        A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+    origin : :class:`~pyspark.sql.Column`, optional
+        Alignment anchor. Defaults to 1970-01-01 00:00:00. Must be the same type as
+        ``ts`` and must be foldable.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The start of the bucket containing ``ts``, as the same type as ``ts``.
+
+    Examples
+    --------
+    >>> spark.conf.set("spark.sql.session.timeZone", "UTC")
+    >>> import datetime
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame(
+    ...     [(datetime.datetime(2024, 1, 1, 11, 27, 0),)], ['ts'])
+    >>> df.select(
+    ...     sf.time_bucket(sf.expr("INTERVAL '15' MINUTE"), 'ts').alias("bucket")
+    ... ).collect()
+    [Row(bucket=datetime.datetime(2024, 1, 1, 11, 15))]
+
+    Shift the grid with an explicit origin: buckets run at :05, :20, :35, :50:
+
+    >>> df.select(
+    ...     sf.time_bucket(
+    ...         sf.expr("INTERVAL '15' MINUTE"),
+    ...         'ts',
+    ...         sf.expr("TIMESTAMP '1970-01-01 00:05:00'")
+    ...     ).alias("bucket")
+    ... ).collect()
+    [Row(bucket=datetime.datetime(2024, 1, 1, 11, 20))]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
+    """
+    if origin is None:
+        return _invoke_function_over_columns("time_bucket", bucket_size, ts)
+    return _invoke_function_over_columns("time_bucket", bucket_size, ts, origin)
+
+
+@_try_remote_functions
 def window(
     timeColumn: "ColumnOrName",
     windowDuration: str,
@@ -13614,6 +13754,31 @@ def current_catalog() -> Column:
     +-----------------+
     """
     return _invoke_function("current_catalog")
+
+
+@_try_remote_functions
+def current_path() -> Column:
+    """Returns the current SQL path as a comma-separated list of qualified schema names.
+
+    .. versionadded:: 4.2.0
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.current_catalog`
+    :meth:`pyspark.sql.functions.current_database`
+    :meth:`pyspark.sql.functions.current_schema`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> spark.range(1).select(sf.current_path()).show() # doctest: +SKIP
+    +----------------------------------------------------+
+    |                                      current_path()|
+    +----------------------------------------------------+
+    |system.builtin,system.session,spark_catalog.default |
+    +----------------------------------------------------+
+    """
+    return _invoke_function("current_path")
 
 
 @_try_remote_functions
@@ -20880,7 +21045,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
 @_try_remote_functions
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, MapType, Column, str],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
@@ -20897,8 +21062,8 @@ def from_json(
     ----------
     col : :class:`~pyspark.sql.Column` or str
         a column or column name in JSON format
-    schema : :class:`DataType` or str
-        a StructType, ArrayType of StructType or Python string literal with a DDL-formatted string
+    schema : :class:`StructType`, :class:`ArrayType`, :class:`MapType`, or str
+        a StructType, ArrayType of StructType, MapType, or Python string literal with a DDL-formatted string
         to use when parsing the json column
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
@@ -21136,6 +21301,35 @@ def is_variant_null(v: "ColumnOrName") -> Column:
     from pyspark.sql.classic.column import _to_java_column
 
     return _invoke_function("is_variant_null", _to_java_column(v))
+
+
+@_try_remote_functions
+def is_valid_variant(v: "ColumnOrName") -> Column:
+    """
+    Check if a variant value is valid. Returns true if the variant is valid, false if it is
+    malformed, and NULL if the input is NULL.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a boolean column indicating whether the variant value is valid
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([ {'json': '''{ "a" : 1 }'''} ])
+    >>> df.select(is_valid_variant(parse_json(df.json)).alias("r")).collect()
+    [Row(r=True)]
+    """
+    from pyspark.sql.classic.column import _to_java_column
+
+    return _invoke_function("is_valid_variant", _to_java_column(v))
 
 
 @_try_remote_functions
@@ -22501,12 +22695,16 @@ def shuffle(col: "ColumnOrName", seed: Optional[Union[Column, int]] = None) -> C
 @_try_remote_functions
 def reverse(col: "ColumnOrName") -> Column:
     """
-    Collection function: returns a reversed string or an array with elements in reverse order.
+    Collection function: returns a reversed string, a binary value with bytes in reverse order,
+    or an array with elements in reverse order.
 
     .. versionadded:: 1.5.0
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+
+    .. versionchanged:: 4.2.0
+        Added support for binary type.
 
     Parameters
     ----------
@@ -22516,7 +22714,8 @@ def reverse(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A new column that contains a reversed string or an array with elements in reverse order.
+        A new column that contains a reversed string, a binary value with bytes in reverse order,
+        or an array with elements in reverse order.
 
     Examples
     --------
@@ -22543,6 +22742,17 @@ def reverse(col: "ColumnOrName") -> Column:
     |          [1]|
     |           []|
     +-------------+
+
+    Example 3: Reverse binary data
+
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytearray(b"\\xCA\\xFE"),)], "data: binary")
+    >>> df.select(sf.hex(sf.reverse(df.data))).show()
+    +------------------+
+    |hex(reverse(data))|
+    +------------------+
+    |              FECA|
+    +------------------+
     """
     return _invoke_function_over_columns("reverse", col)
 
@@ -26248,15 +26458,21 @@ def bucket(numBuckets: Union[Column, int], col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
-def st_asbinary(geo: "ColumnOrName") -> Column:
+def st_asbinary(geo: "ColumnOrName", endianness: Optional["ColumnOrName"] = None) -> Column:
     """Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
 
     .. versionadded:: 4.1.0
+
+    .. versionchanged:: 4.2.0
+        Added the optional `endianness` parameter.
 
     Parameters
     ----------
     geo : :class:`~pyspark.sql.Column` or str
         A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+    endianness : :class:`~pyspark.sql.Column` or str, optional
+        The optional endianness of the output WKB, 'NDR' for little-endian (default) or 'XDR' for
+        big-endian.
 
     Examples
     --------
@@ -26265,15 +26481,31 @@ def st_asbinary(geo: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geogfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
 
     Example 2: Getting WKB from GEOMETRY.
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), NDR))='0101000000000000000000F03F0000000000000040')]
+
+    Example 3: Getting WKB (little-endian) from GEOGRAPHY.
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb'), 'NDR'))).collect()
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
+
+    Example 4: Getting WKB (big-endian) from GEOMETRY.
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
+    >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb'), 'XDR'))).collect()
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), XDR))='00000000013FF00000000000004000000000000000')]
     """
-    return _invoke_function_over_columns("st_asbinary", geo)
+    if endianness is None:
+        return _invoke_function_over_columns("st_asbinary", geo)
+    else:
+        _endianness = lit(endianness) if isinstance(endianness, str) else endianness
+        return _invoke_function_over_columns("st_asbinary", geo, _endianness)
 
 
 @_try_remote_functions
@@ -26292,7 +26524,7 @@ def st_geogfromwkb(wkb: "ColumnOrName") -> Column:
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geogfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geogfromwkb(wkb)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geogfromwkb(wkb), NDR))='0101000000000000000000F03F0000000000000040')]
     """
     return _invoke_function_over_columns("st_geogfromwkb", wkb)
 
@@ -26317,7 +26549,7 @@ def st_geomfromwkb(
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([(bytes.fromhex('0101000000000000000000F03F0000000000000040'),)], ['wkb'])  # noqa
     >>> df.select(sf.hex(sf.st_asbinary(sf.st_geomfromwkb('wkb')))).collect()
-    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0)))='0101000000000000000000F03F0000000000000040')]
+    [Row(hex(st_asbinary(st_geomfromwkb(wkb, 0), NDR))='0101000000000000000000F03F0000000000000040')]
     """
     if srid is None:
         return _invoke_function_over_columns("st_geomfromwkb", wkb)

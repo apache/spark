@@ -452,7 +452,7 @@ class ArrowUDFTypeHintsTests(ReusedSQLTestCase):
 
         with self.assertRaisesRegex(
             Exception,
-            "Unsupported signature:.*pandas.core.series.Series.",
+            f"Unsupported signature:.*{pd.Series.__name__}.",
         ):
 
             @arrow_udf("long")

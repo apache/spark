@@ -33,6 +33,7 @@ import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
@@ -136,6 +137,9 @@ trait StatefulOperatorCustomMetric {
   def name: String
   def desc: String
   def createSQLMetric(sparkContext: SparkContext): SQLMetric
+  // True if the metric reflects current state rather than per-batch work; snapshot
+  // metrics are preserved on no-data trigger events. Mirrors StateStoreCustomMetric.
+  def isSnapshot: Boolean = false
 }
 
 /** Custom stateful operator metric for simple "count" gauge */
@@ -401,7 +405,8 @@ trait StateStoreWriter
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
       numShufflePartitions = stateInfo.map(_.numPartitions.toLong).getOrElse(-1L),
       numStateStoreInstances = longMetric("numStateStoreInstances").value,
-      javaConvertedCustomMetrics
+      javaConvertedCustomMetrics,
+      snapshotCustomMetricNames
     )
   }
 
@@ -474,17 +479,43 @@ trait StateStoreWriter
     }.toMap
   }
 
-  private def stateStoreInstanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] = {
+  // All instance metrics with their (partitionId, storeName) bindings; consumed by
+  // both `stateStoreInstanceMetrics` (for SQLMetric registration) and
+  // `snapshotCustomMetricNames` (for the snapshot-name set). The result is a
+  // serializable Seq so storing it as a lazy val on this trait is safe even when
+  // the enclosing SparkPlan is shipped to executors. The provider itself is NOT
+  // stored as a field (it is non-serializable), so each consumer below recreates
+  // it locally.
+  private lazy val stateStoreInstanceMetricsWithIds: Seq[StateStoreInstanceMetric] = {
     val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
-    val maxPartitions = stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
-
+    val maxPartitions =
+      stateInfo.map(_.numPartitions).getOrElse(conf.defaultNumShufflePartitions)
     (0 until maxPartitions).flatMap { partitionId =>
       provider.supportedInstanceMetrics.flatMap { metric =>
-        stateStoreNames.map { storeName =>
-          val metricWithPartition = metric.withNewId(partitionId, storeName)
-          (metricWithPartition, metricWithPartition.createSQLMetric(sparkContext))
-        }
+        stateStoreNames.map(metric.withNewId(partitionId, _))
       }
+    }
+  }
+
+  // Names of customMetrics entries treated as snapshots; preserved by
+  // StateOperatorProgress.copyForNoExecution() on no-data trigger events. Includes
+  // provider- and operator-level metrics with isSnapshot = true, and all instance
+  // metric names (instance metrics use sentinel inits like -1 with monotonic
+  // combine, so they are always snapshot-style).
+  private lazy val snapshotCustomMetricNames: Set[String] = {
+    val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
+    val customSnapshots = provider.supportedCustomMetrics.collect {
+      case m if m.isSnapshot => m.name
+    }.toSet
+    val operatorSnapshots = customStatefulOperatorMetrics.collect {
+      case m if m.isSnapshot => m.name
+    }.toSet
+    customSnapshots ++ operatorSnapshots ++ stateStoreInstanceMetricsWithIds.map(_.name).toSet
+  }
+
+  private def stateStoreInstanceMetrics: Map[StateStoreInstanceMetric, SQLMetric] = {
+    stateStoreInstanceMetricsWithIds.map { metric =>
+      (metric, metric.createSQLMetric(sparkContext))
     }.toMap
   }
 
@@ -669,8 +700,7 @@ object WatermarkSupport {
       val eventTimeColsSet = eventTimeCols.map(_.exprId).toSet
       if (eventTimeColsSet.size > 1) {
         throw new AnalysisException(
-          // TODO: [SPARK-55731] Assign error class for _LEGACY_ERROR_TEMP_3077
-          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          errorClass = "MULTIPLE_EVENT_TIME_COLUMNS",
           messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
 
@@ -706,8 +736,7 @@ object WatermarkSupport {
       val eventTimeColsSet = eventTimeCols.map(_._1.exprId).toSet
       if (eventTimeColsSet.size > 1) {
         throw new AnalysisException(
-          // TODO: [SPARK-55731] Assign error class for _LEGACY_ERROR_TEMP_3077
-          errorClass = "_LEGACY_ERROR_TEMP_3077",
+          errorClass = "MULTIPLE_EVENT_TIME_COLUMNS",
           messageParameters = Map("eventTimeCols" -> eventTimeCols.mkString("(", ",", ")")))
       }
 
@@ -1303,7 +1332,8 @@ case class SessionWindowStateStoreSaveExec(
 
     stateOpProgress.copy(
       newNumRowsUpdated = stateOpProgress.numRowsUpdated,
-      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark)
+      newNumRowsDroppedByWatermark = numRowsDroppedByWatermark,
+      newNumRowsRemoved = stateOpProgress.numRowsRemoved)
   }
 }
 
@@ -1336,7 +1366,10 @@ abstract class BaseStreamingDeduplicateExec
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
       extraOptions = extraOptionOnStateStore) { (store, iter) =>
-      val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+      // Normalize NaN and -0.0 in floating-point key values so that semantically equal
+      // values produce identical UnsafeRow bytes.
+      val getKey = GenerateUnsafeProjection.generate(
+        keyExpressions.map(NormalizeFloatingNumbers.normalize), child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
       val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")

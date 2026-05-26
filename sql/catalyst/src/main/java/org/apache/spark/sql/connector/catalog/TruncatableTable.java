@@ -18,6 +18,8 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.metric.CustomMetric;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 
 /**
  * Represents a table which can be atomically truncated.
@@ -34,4 +36,25 @@ public interface TruncatableTable extends Table {
    * @since 3.2.0
    */
   boolean truncateTable();
+
+  /**
+   * Returns an array of supported custom metrics with name and description.
+   * By default it returns empty array.
+   *
+   * @since 4.2.0
+   */
+  default CustomMetric[] supportedCustomMetrics() {
+    return new CustomMetric[]{};
+  }
+
+  /**
+   * Returns an array of custom metrics which are collected with values at the driver side only.
+   * Note that these metrics must be included in the supported custom metrics reported by
+   * `supportedCustomMetrics`.
+   *
+   * @since 4.2.0
+   */
+  default CustomTaskMetric[] reportDriverMetrics() {
+    return new CustomTaskMetric[]{};
+  }
 }

@@ -54,6 +54,7 @@ private[sql] trait SqlApiConf {
   def legacyParameterSubstitutionConstantsOnly: Boolean
   def legacyIdentifierClauseOnly: Boolean
   def typesFrameworkEnabled: Boolean
+  def timestampNanosTypesEnabled: Boolean
 }
 
 private[sql] object SqlApiConf {
@@ -112,4 +113,5 @@ private[sql] object DefaultSqlApiConf extends SqlApiConf {
   override def legacyParameterSubstitutionConstantsOnly: Boolean = false
   override def legacyIdentifierClauseOnly: Boolean = false
   override def typesFrameworkEnabled: Boolean = false
+  override def timestampNanosTypesEnabled: Boolean = false
 }
