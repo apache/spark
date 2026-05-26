@@ -268,8 +268,7 @@ private object RowToColumnConverter {
       case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LongConverter
       case DoubleType => DoubleConverter
       case StringType => StringConverter
-      case _: GeographyType => GeographyConverter
-      case _: GeometryType => GeometryConverter
+      case _: GeographyType | _: GeometryType => BinaryViewConverter
       case CalendarIntervalType => CalendarConverter
       case VariantType => VariantConverter
       case at: ArrayType => ArrayConverter(getConverterForType(at.elementType, at.containsNull))
@@ -341,16 +340,9 @@ private object RowToColumnConverter {
     }
   }
 
-  private object GeographyConverter extends TypeConverter {
+  private object BinaryViewConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      val data = row.getGeography(column).getBytes
-      cv.appendByteArray(data, 0, data.length)
-    }
-  }
-
-  private object GeometryConverter extends TypeConverter {
-    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      val data = row.getGeometry(column).getBytes
+      val data = row.getBinaryView(column).getBytes
       cv.appendByteArray(data, 0, data.length)
     }
   }

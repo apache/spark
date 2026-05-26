@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.SparkIllegalArgumentException;
-import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -56,7 +56,7 @@ class GeographyExecutionSuite {
 
   @Test
   void testFromValue() {
-    GeographyVal value = GeographyVal.fromBytes(testGeographyVal);
+    BinaryView value = BinaryView.fromBytes(testGeographyVal);
     Geography geography = Geography.fromValue(value);
     assertNotNull(geography);
     assertEquals(value, geography.getValue());

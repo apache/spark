@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.util.geo.WkbParseException;
 import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.catalyst.util.geo.WkbWriter;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
-import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.unsafe.types.BinaryView;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -33,8 +33,8 @@ public final class Geography implements Geo {
 
   /** Geography internal implementation. */
 
-  // The Geography type is implemented as an array of bytes stored inside a `GeographyVal` object.
-  protected final GeographyVal value;
+  // The GEOGRAPHY physical value is an opaque chunk of bytes, carried as a {@link BinaryView}.
+  protected final BinaryView value;
 
   /** Geography constants. */
 
@@ -45,26 +45,26 @@ public final class Geography implements Geo {
 
   // We make the constructors private. Use `fromBytes` or `fromValue` to create new instances.
   private Geography(byte[] bytes) {
-    this.value = GeographyVal.fromBytes(bytes);
+    this.value = BinaryView.fromBytes(bytes);
   }
 
-  private Geography(GeographyVal value) {
+  private Geography(BinaryView value) {
     this.value = value;
   }
 
-  // Factory methods to create new Geography instances from a byte array or a `GeographyVal`.
+  // Factory methods to create new Geography instances from a byte array or a {@link BinaryView}.
   public static Geography fromBytes(byte[] bytes) {
     return new Geography(bytes);
   }
 
-  public static Geography fromValue(GeographyVal value) {
+  public static Geography fromValue(BinaryView value) {
     return new Geography(value);
   }
 
   /** Geography getters and instance methods. */
 
-  // Returns the underlying physical type value of this Geography instance.
-  public GeographyVal getValue() {
+  // Returns the underlying physical-type value of this Geography instance.
+  public BinaryView getValue() {
     return value;
   }
 
@@ -73,10 +73,11 @@ public final class Geography implements Geo {
     return value.getBytes();
   }
 
-  // Returns a copy of this geography.
+  // Returns a copy of this geography that owns its own backing buffer. Required before
+  // calling mutating methods like {@link #setSrid(int)} on a value that was read directly
+  // from an UnsafeRow / ColumnVector buffer.
   public Geography copy() {
-    byte[] bytes = getBytes();
-    return Geography.fromBytes(Arrays.copyOf(bytes, bytes.length));
+    return new Geography(value.copy());
   }
 
   /** Geography WKB parsing. */

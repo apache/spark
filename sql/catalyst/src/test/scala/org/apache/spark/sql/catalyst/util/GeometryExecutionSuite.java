@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.SparkIllegalArgumentException;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -67,7 +67,7 @@ class GeometryExecutionSuite {
 
   @Test
   void testFromValue() {
-    GeometryVal value = GeometryVal.fromBytes(testGeometryVal);
+    BinaryView value = BinaryView.fromBytes(testGeometryVal);
     Geometry geometry = Geometry.fromValue(value);
     assertNotNull(geometry);
     assertEquals(value, geometry.getValue());

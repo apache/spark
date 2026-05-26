@@ -101,7 +101,10 @@ case class ST_AsBinary(geo: Expression, endianness: Expression)
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
     BinaryType,
-    "stAsBinary",
+    geo.dataType match {
+      case _: GeographyType => "stGeogAsBinary"
+      case _: GeometryType => "stGeomAsBinary"
+    },
     Seq(geo, endianness),
     returnNullable = false
   )
@@ -260,7 +263,10 @@ case class ST_Srid(geo: Expression)
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
     IntegerType,
-    "stSrid",
+    geo.dataType match {
+      case _: GeographyType => "stGeogSrid"
+      case _: GeometryType => "stGeomSrid"
+    },
     Seq(geo),
     returnNullable = false
   )
@@ -310,7 +316,10 @@ case class ST_SetSrid(geo: Expression, srid: Expression)
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
     STExpressionUtils.geospatialTypeWithSrid(geo.dataType, srid),
-    "stSetSrid",
+    geo.dataType match {
+      case _: GeographyType => "stGeogSetSrid"
+      case _: GeometryType => "stGeomSetSrid"
+    },
     Seq(geo, srid),
     returnNullable = false
   )

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, TimestampNanosVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, ByteArray, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
@@ -65,8 +65,9 @@ object PhysicalDataType {
     case StructType(fields) => PhysicalStructType(fields)
     case MapType(keyType, valueType, valueContainsNull) =>
       PhysicalMapType(keyType, valueType, valueContainsNull)
-    case _: GeometryType => PhysicalGeometryType
-    case _: GeographyType => PhysicalGeographyType
+    // GEOMETRY and GEOGRAPHY are physically just an opaque chunk of bytes; they differ only
+    // at the logical-type level, so they share a single physical type.
+    case _: GeometryType | _: GeographyType => PhysicalBinaryViewType
     case VariantType => PhysicalVariantType
     case _ => UninitializedPhysicalType
   }
@@ -460,18 +461,13 @@ object UninitializedPhysicalType extends PhysicalDataType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 
-case class PhysicalGeographyType() extends PhysicalDataType {
-  private[sql] type InternalType = GeographyVal
+// Physical type for opaque, variable-length byte payloads that are addressed as a zero-copy
+// view ({@link BinaryView}) into the row backing buffer. Today GEOMETRY and GEOGRAPHY share
+// this physical type; future opaque-bytes logical types can plug into it as well.
+class PhysicalBinaryViewType extends PhysicalDataType {
+  private[sql] type InternalType = BinaryView
   @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
+  private[sql] val ordering: Ordering[InternalType] = Ordering.ordered[BinaryView]
 }
 
-object PhysicalGeographyType extends PhysicalGeographyType
-
-case class PhysicalGeometryType() extends PhysicalDataType {
-  private[sql] type InternalType = GeometryVal
-  @transient private[sql] lazy val tag = typeTag[InternalType]
-  private[sql] val ordering = implicitly[Ordering[InternalType]]
-}
-
-object PhysicalGeometryType extends PhysicalGeometryType
+case object PhysicalBinaryViewType extends PhysicalBinaryViewType
