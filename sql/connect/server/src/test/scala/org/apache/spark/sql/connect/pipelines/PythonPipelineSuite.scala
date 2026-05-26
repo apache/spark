@@ -941,9 +941,7 @@ class PythonPipelineSuite
     val graph = buildGraph(pipelineSource)
     graph.flows
       .collectFirst { case f: AutoCdcFlow => f }
-      .getOrElse(
-        throw new AssertionError(
-          s"Expected an AutoCdcFlow in the graph, got: ${graph.flows}"))
+      .getOrElse(fail(s"Expected an AutoCdcFlow in the graph, got: ${graph.flows}"))
   }
 
   test("AutoCDC API: minimal flow registers an AutoCdcFlow with default name and SCD1 default") {
@@ -1012,7 +1010,7 @@ class PythonPipelineSuite
         |""".stripMargin)
 
     val deleteCondition = flow.changeArgs.deleteCondition.getOrElse(
-      throw new AssertionError("expected apply_as_deletes to populate deleteCondition"))
+      fail("expected apply_as_deletes to populate deleteCondition"))
     assert(deleteCondition.expr.sql.contains("value"))
     assert(deleteCondition.expr.sql.contains("0"))
   }
@@ -1191,7 +1189,7 @@ class PythonPipelineSuite
     assert(flow.changeArgs.keys == Seq(UnqualifiedColumnName("value")))
     assert(flow.changeArgs.sequencing.expr.sql == "timestamp")
     val deleteCondition = flow.changeArgs.deleteCondition.getOrElse(
-      throw new AssertionError("expected apply_as_deletes to populate deleteCondition"))
+      fail("expected apply_as_deletes to populate deleteCondition"))
     assert(deleteCondition.expr.sql.contains("value"))
     assert(deleteCondition.expr.sql.contains("0"))
   }
