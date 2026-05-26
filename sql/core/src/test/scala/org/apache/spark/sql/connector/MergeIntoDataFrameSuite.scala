@@ -1269,18 +1269,25 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     assert(txn.currentState == Committed)
 
     // Cached scan's version == current version → registerScans accepted → cache substituted.
+    // The non-empty registeredScans buffer is the witness that the connector ran the
+    // cache-acceptance path (not a fresh scan-builder path).
     assert(txn.registeredScans.nonEmpty,
       "registerScans should have been called and accepted (no writes since cache)")
 
-    // The cached source was not rescanned, so the source's salary<250 filter doesn't appear in
-    // the target's scanEvents.
+    // Even though the cache was used, registerScans recorded the read on the target's TxnTable
+    // so that scanEvents uniformly captures cached and fresh reads. The MERGE plan references
+    // the source twice (matched and not-matched branches), so the source filter appears twice
+    // in scanEvents — whether contributed by registerScans (cache path) or by fresh scans
+    // (rescan path). The `registeredScans` non-empty assertion above is what distinguishes
+    // the two cases.
     val targetTxnTable = txnTables(tableNameAsString)
-    val sourceFilterScanned = targetTxnTable.scanEvents.flatten.exists {
+    val sourceFilterScans = targetTxnTable.scanEvents.flatten.count {
       case sources.LessThan("salary", 250) => true
       case _ => false
     }
-    assert(!sourceFilterScanned,
-      s"cached source should not have been rescanned, got ${targetTxnTable.scanEvents}")
+    assert(sourceFilterScans == 2,
+      s"expected two salary<250 scan events, got " +
+        s"${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

@@ -54,6 +54,10 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
   // A real connector might be more permissive (e.g. Serializable connectors can accept older
   // snapshots and record them in the read set for commit-time conflict detection), but the
   // strict-equality rule is sufficient for testing the API plumbing.
+  //
+  // On acceptance, we record a scan event on each scan's TxnTable (looked up by delegate
+  // identity), mirroring what `InMemoryScanBuilder.build` does for fresh scans. This keeps
+  // `scanEvents` a uniform record of all reads in the transaction — cached or fresh.
   override def registerScans(scans: java.util.List[Scan]): Boolean = {
     val asScala = scans.asScala.toSeq
     val accepted = asScala.forall {
@@ -61,7 +65,16 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
         s.builtAtTableVersion == s.currentTableVersion
       case _ => false
     }
-    if (accepted) registeredScans += asScala
+    if (accepted) {
+      registeredScans += asScala
+      asScala.foreach {
+        case s: InMemoryBaseTable#InMemoryBatchScan =>
+          catalog.txnTables.values
+            .find(_.delegate eq s.table)
+            .foreach(_.scanEvents += s.pushedFilters)
+        case _ =>
+      }
+    }
     accepted
   }
 

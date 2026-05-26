@@ -520,6 +520,7 @@ abstract class InMemoryBaseTable(
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
+      scan.pushedFilters = _pushedFilters
       recordScanEvent(_pushedFilters)
       scan
     }
@@ -693,6 +694,15 @@ abstract class InMemoryBaseTable(
     // The current table version, read fresh on each access. Compare against
     // [[builtAtTableVersion]] to detect intervening writes.
     def currentTableVersion: Int = InMemoryBaseTable.this.tableVersion
+
+    // Back-pointer to the table this scan was built against. Used by registerScans to mirror
+    // the recordScanEvent call that InMemoryScanBuilder.build makes for fresh scans, so cached
+    // reads show up in scanEvents just like fresh ones.
+    val table: InMemoryBaseTable = InMemoryBaseTable.this
+
+    // The filters pushed to this scan at build time. The ScanBuilder copies them onto the scan
+    // so they can be replayed (via recordScanEvent) if this scan is reused from cache.
+    var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
