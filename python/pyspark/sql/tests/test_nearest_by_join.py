@@ -217,24 +217,20 @@ class NearestByJoinTestsMixin:
                 messageParameters={},
             )
 
-    def test_exact_with_nondeterministic_ranking_rejected(self):
+    def test_exact_with_nondeterministic_ranking_accepted(self):
         users, products = self.users, self.products
-        # Use an explicit seed (`rand(0)`) so the rendered expression in the error message is
-        # byte-stable. Without it, Spark assigns a random seed at analysis and the message
-        # parameter becomes `"(rand(<random-long>) + pscore)"`, which can't be asserted on.
-        with self.assertRaises(AnalysisException) as pe:
+        # Result rows are nondeterministic; only assert that each left row gets exactly one match.
+        count = (
             users.nearestByJoin(
                 products,
                 sf.rand(0) + products.pscore,
                 numResults=1,
                 mode="exact",
                 direction="similarity",
-            ).collect()
-        self.check_error(
-            exception=pe.exception,
-            errorClass="NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
-            messageParameters={"expression": '"(rand(0) + pscore)"'},
+            )
+            .count()
         )
+        self.assertEqual(count, 3)
 
     def test_streaming_inputs_rejected(self):
         streaming_users = (
