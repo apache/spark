@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.transformwith
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration, Utils}
 
 /**
@@ -92,6 +93,9 @@ case class TransformWithStateExec(
   override def output: Seq[Attribute] =
     WidenStatefulOpNullability.widenOutputForStatefulOp(super.output)
 
+  private lazy val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(keyExpressions.toStructType)
+
   override def shortName: String = StatefulOperatorsUtils.TRANSFORM_WITH_STATE_EXEC_OP_NAME
 
   // We need to just initialize key and value deserializer once per partition.
@@ -137,12 +141,11 @@ case class TransformWithStateExec(
   override def getColFamilySchemas(
       shouldBeNullable: Boolean
   ): Map[String, StateStoreColFamilySchema] = {
-    val keySchema = keyExpressions.toStructType
     // we have to add the default column family schema because the RocksDBStateEncoder
     // expects this entry to be present in the stateSchemaProvider.
     val defaultSchema = StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      0, keyExpressions.toStructType, 0, DUMMY_VALUE_ROW_SCHEMA,
-      Some(NoPrefixKeyStateEncoderSpec(keySchema)))
+      0, stateKeySchema, 0, DUMMY_VALUE_ROW_SCHEMA,
+      Some(NoPrefixKeyStateEncoderSpec(stateKeySchema)))
 
     // For Scala, the user can't explicitly set nullability on schema, so there is
     // no reason to throw an error, and we can simply set the schema to nullable.
@@ -151,7 +154,11 @@ case class TransformWithStateExec(
         shouldCheckNullable = false, shouldSetNullable = shouldBeNullable) ++
         Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
-    columnFamilySchemas
+    columnFamilySchemas.map { case (name, cf) =>
+      name -> cf.copy(
+        keySchema = WidenStatefulOpNullability.widenStateSchema(cf.keySchema),
+        valueSchema = WidenStatefulOpNullability.widenStateSchema(cf.valueSchema))
+    }
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
@@ -405,9 +412,9 @@ case class TransformWithStateExec(
             val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
             val store = StateStore.get(
               storeProviderId = storeProviderId,
-              keyEncoder.schema,
+              stateKeySchema,
               DUMMY_VALUE_ROW_SCHEMA,
-              NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
+              NoPrefixKeyStateEncoderSpec(stateKeySchema),
               version = stateInfo.get.storeVersion,
               stateStoreCkptId = stateInfo.get.getStateStoreCkptId(partitionId).map(_.head),
               stateSchemaBroadcast = stateInfo.get.stateSchemaMetadata,
@@ -427,9 +434,9 @@ case class TransformWithStateExec(
       if (isStreaming) {
         child.execute().mapPartitionsWithStateStore[InternalRow](
           getStateInfo,
-          keyEncoder.schema,
+          stateKeySchema,
           DUMMY_VALUE_ROW_SCHEMA,
-          NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
+          NoPrefixKeyStateEncoderSpec(stateKeySchema),
           session.sessionState,
           Some(session.streams.stateStoreCoordinator),
           useColumnFamilies = true
@@ -477,9 +484,9 @@ case class TransformWithStateExec(
     // Create StateStoreProvider for this partition
     val stateStoreProvider = StateStoreProvider.createAndInit(
       providerId,
-      keyEncoder.schema,
+      stateKeySchema,
       DUMMY_VALUE_ROW_SCHEMA,
-      NoPrefixKeyStateEncoderSpec(keyEncoder.schema),
+      NoPrefixKeyStateEncoderSpec(stateKeySchema),
       useColumnFamilies = true,
       storeConf = storeConf,
       hadoopConf = hadoopConfBroadcast.value.value,

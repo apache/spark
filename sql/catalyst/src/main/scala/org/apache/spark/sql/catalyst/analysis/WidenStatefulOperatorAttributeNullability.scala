@@ -80,15 +80,15 @@ object WidenStatefulOpNullability {
  * and propagates the widening upward to ancestor operators' expressions.
  *
  * The rule does NOT introduce any new logical or physical node. It is purely an
- * attribute-rewrite pass:
+ * attribute-rewrite pass: for every node whose subtree contains a stateful operator,
+ * collect `exprId`s from `p.output` plus children's output, then deep-widen every
+ * `AttributeReference` in the node's expressions whose `exprId` is in that set via
+ * [[WidenStatefulOpNullability#deepWidenAttribute]].
  *
- *   1. At a stateful operator: rewrite every `AttributeReference` inside the operator's
- *      internal expressions via [[WidenStatefulOpNullability#deepWidenAttribute]] whenever
- *      the attribute's `exprId` matches one in the operator's own (already widened via
- *      component (b)) `output`.
- *
- *   2. At non-stateful ancestor operators: rewrite `AttributeReference`s whose `exprId` is
- *      in `children.flatMap(_.output)` (already widened thanks to component (b)).
+ * At a stateful operator itself, all children's output attributes are included because
+ * the operator's internal expressions (e.g. grouping keys) reference them directly.
+ * At non-stateful ancestor operators, only children whose subtrees contain a stateful
+ * operator are included, to avoid unnecessary widening of non-stateful siblings.
  *
  * '''Scope.''' The walk only fires on nodes whose subtree contains a stateful operator.
  *
@@ -109,7 +109,13 @@ object WidenStatefulOperatorAttributeNullability extends Rule[LogicalPlan] {
       case p: LeafNode => p
       case p if !p.containsStatefulOperator => p
       case p =>
-        val widenableExprIds: Set[ExprId] = (p.output ++ p.children.flatMap(_.output))
+        val childOutputs = if (p.isStateful) {
+          p.children.flatMap(_.output)
+        } else {
+          p.children.filter(_.containsStatefulOperator).flatMap(_.output)
+        }
+        val widenableExprIds: Set[ExprId] =
+          (p.output ++ childOutputs)
           .iterator.collect { case ar: AttributeReference => ar.exprId }.toSet
         if (widenableExprIds.isEmpty) {
           p

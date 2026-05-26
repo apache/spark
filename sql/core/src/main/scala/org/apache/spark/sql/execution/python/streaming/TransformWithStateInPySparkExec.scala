@@ -135,10 +135,15 @@ case class TransformWithStateInPySparkExec(
       shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
     // For Python, the user can explicitly set nullability on schema, so
     // we need to throw an error if the schema is nullable
-    driverProcessorHandle.getColumnFamilySchemas(
+    val schemas = driverProcessorHandle.getColumnFamilySchemas(
       shouldCheckNullable = shouldBeNullable,
       shouldSetNullable = shouldBeNullable
     )
+    schemas.map { case (name, cf) =>
+      name -> cf.copy(
+        keySchema = WidenStatefulOpNullability.widenStateSchema(cf.keySchema),
+        valueSchema = WidenStatefulOpNullability.widenStateSchema(cf.valueSchema))
+    }
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
