@@ -84,6 +84,13 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
   }
 
   /** @inheritdoc */
+  private[sql] def name(sinkName: String): this.type = {
+    validateSinkName(sinkName)
+    this.sinkName = Some(sinkName)
+    this
+  }
+
+  /** @inheritdoc */
   def format(source: String): this.type = {
     this.source = source
     this
@@ -312,6 +319,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
 
     ds.sparkSession.sessionState.streamingQueryManager.startQuery(
       newOptions.get("queryName"),
+      sinkName,
       newOptions.get("checkpointLocation"),
       ds,
       newOptions.originalMap,
@@ -444,6 +452,8 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
   private var partitioningColumns: Option[Seq[String]] = None
 
   private var clusteringColumns: Option[Seq[String]] = None
+
+  private var sinkName: Option[String] = None
 }
 
 object DataStreamWriter {

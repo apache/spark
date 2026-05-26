@@ -120,7 +120,7 @@ object ColumnSelection {
 }
 
 /** User-facing case-sensitivity labels surfaced in AutoCDC error messages. */
-private[autocdc] object CaseSensitivityLabels {
+private[pipelines] object CaseSensitivityLabels {
   val CaseSensitive: String = "case-sensitive"
   val CaseInsensitive: String = "case-insensitive"
 
@@ -156,4 +156,22 @@ case class ChangeArgs(
     storedAsScdType: ScdType,
     deleteCondition: Option[Column] = None,
     columnSelection: Option[ColumnSelection] = None
-)
+) {
+  ChangeArgs.validateNonEmptyKeys(keys)
+}
+
+object ChangeArgs {
+  /**
+   * Validates that [[ChangeArgs.keys]] is non-empty. Both SCD1 and SCD2 semantics require at
+   * least one key column to identify rows; rejecting empty key sets at construction lets
+   * downstream consumers rely on `keys.nonEmpty` without re-validating.
+   */
+  private def validateNonEmptyKeys(keys: Seq[UnqualifiedColumnName]): Unit = {
+    if (keys.isEmpty) {
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_EMPTY_KEYS",
+        messageParameters = Map.empty
+      )
+    }
+  }
+}

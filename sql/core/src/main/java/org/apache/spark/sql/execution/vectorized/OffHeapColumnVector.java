@@ -33,6 +33,14 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
+  // Below this count, byte-fill methods (putBytes / putBooleans) write bytes in an inline
+  // loop. At or above this count, they call Platform.setMemory which lowers to a native
+  // memset. The JNI fixed cost of setMemory dominates for very short fills; on the
+  // benchmarked hardware (Apple M4 Max + OpenJDK 21) the crossover sits between 64 and
+  // 512, so 128 is a conservative choice that avoids regression at small counts while
+  // retaining the bulk of the asymptotic gain.
+  private static final int SET_MEMORY_THRESHOLD = 128;
+
   /**
    * Allocates columns to store elements of each field of the schema off heap.
    * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
@@ -151,9 +159,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBooleans(int rowId, int count, boolean value) {
-    byte v = (byte)((value) ? 1 : 0);
-    for (int i = 0; i < count; ++i) {
-      Platform.putByte(null, data + rowId + i, v);
+    byte v = (byte) (value ? 1 : 0);
+    if (count < SET_MEMORY_THRESHOLD) {
+      for (int i = 0; i < count; ++i) {
+        Platform.putByte(null, data + rowId + i, v);
+      }
+    } else {
+      Platform.setMemory(data + rowId, v, count);
     }
   }
 
@@ -193,8 +205,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBytes(int rowId, int count, byte value) {
-    for (int i = 0; i < count; ++i) {
-      Platform.putByte(null, data + rowId + i, value);
+    if (count < SET_MEMORY_THRESHOLD) {
+      for (int i = 0; i < count; ++i) {
+        Platform.putByte(null, data + rowId + i, value);
+      }
+    } else {
+      Platform.setMemory(data + rowId, value, count);
     }
   }
 

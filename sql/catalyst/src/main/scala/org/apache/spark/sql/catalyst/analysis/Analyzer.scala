@@ -75,7 +75,7 @@ import org.apache.spark.util.ArrayImplicits._
  * functions.
  */
 object SimpleAnalyzer extends Analyzer(
-  new CatalogManager(
+  new DefaultCatalogManager(
     FakeV2SessionCatalog,
     new SessionCatalog(
       new InMemoryCatalog,
@@ -323,7 +323,7 @@ class Analyzer(
 
   // Only for tests.
   def this(catalog: SessionCatalog) = {
-    this(new CatalogManager(FakeV2SessionCatalog, catalog))
+    this(new DefaultCatalogManager(FakeV2SessionCatalog, catalog))
   }
 
   def getRelationResolution: RelationResolution = relationResolution
@@ -1135,8 +1135,8 @@ class Analyzer(
         val timeTravelSpec = TimeTravelSpec.create(timestamp, version, conf.sessionLocalTimeZone)
         resolveRelation(u, timeTravelSpec).getOrElse(r)
 
-      case r @ RelationChanges(u: UnresolvedRelation, changelogInfo) =>
-        relationResolution.resolveChangelog(u, changelogInfo).getOrElse(r)
+      case r @ RelationChanges(u: UnresolvedRelation, ctx) =>
+        relationResolution.resolveChangelog(u, ctx).getOrElse(r)
 
       case u @ UnresolvedTable(identifier, cmd, suggestAlternative) =>
         lookupTableOrView(identifier).map {
@@ -1535,6 +1535,37 @@ class Analyzer(
     }
 
     def doApply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      // `InsertIntoStatement.table` and `V2WriteCommand.table` are non-child `LogicalPlan`
+      // slots (`child = query`), so the default `resolveOperatorsUp` + `mapExpressions`
+      // traversal never resolves expressions placed inside them. For a
+      // `PlanWithUnresolvedIdentifier`, `identifierExpr` (e.g. an `UnresolvedAttribute`
+      // referring to a SQL variable in `INSERT INTO IDENTIFIER(target_table) ...`) must
+      // be resolved here before `ResolveIdentifierClause` can materialize the relation.
+      // Mirror the structural recursion into the non-child `.table` slot that
+      // `BindParameters` and `ResolveIdentifierClause` already do for the same shape
+      // (SPARK-46625); unlike those rules, this one performs attribute resolution rather
+      // than parameter binding or placeholder materialization. Resolve against `p` (whose
+      // `children` are `Nil` on the INSERT / `OverwriteByExpression` path built by
+      // `buildWriteTableSlot`) so the IDENTIFIER expression cannot see query output
+      // columns -- only the last-resort variable resolution path fires. The
+      // `!identifierExpr.resolved` guard makes the case idempotent under bottom-up
+      // traversal.
+      case i: InsertIntoStatement
+          if i.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
+             !i.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
+        val p = i.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+        val resolvedExpr = resolveExpressionByPlanChildren(
+          p.identifierExpr, p, includeLastResort = true)
+        i.copy(table = p.copy(identifierExpr = resolvedExpr))
+
+      case w: V2WriteCommand
+          if w.table.isInstanceOf[PlanWithUnresolvedIdentifier] &&
+             !w.table.asInstanceOf[PlanWithUnresolvedIdentifier].identifierExpr.resolved =>
+        val p = w.table.asInstanceOf[PlanWithUnresolvedIdentifier]
+        val resolvedExpr = resolveExpressionByPlanChildren(
+          p.identifierExpr, p, includeLastResort = true)
+        w.withNewTable(p.copy(identifierExpr = resolvedExpr))
+
       // Don't wait other rules to resolve the child plans of `InsertIntoStatement` as we need
       // to resolve column "DEFAULT" in the child plans so that they must be unresolved.
       case i: InsertIntoStatement => resolveColumnDefaultInCommandInputQuery(i)

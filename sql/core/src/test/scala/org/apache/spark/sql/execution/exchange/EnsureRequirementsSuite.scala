@@ -40,10 +40,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
-  private val exprA = Literal(1)
-  private val exprB = Literal(2)
-  private val exprC = Literal(3)
-  private val exprD = Literal(4)
+  private val exprA = AttributeReference("a", IntegerType)()
+  private val exprB = AttributeReference("b", IntegerType)()
+  private val exprC = AttributeReference("c", IntegerType)()
+  private val exprD = AttributeReference("d", IntegerType)()
 
   private val EnsureRequirements = new EnsureRequirements()
 
