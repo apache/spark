@@ -303,6 +303,22 @@ object DatasetManager extends Logging {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
+    if (isFullRefresh) {
+      // On full refresh, drop the AutoCDC auxiliary state associated with this table (if any) so
+      // that stale delete-tracking data and table properties are not carried forward into the new
+      // table generation.
+
+      // Intentionally DROP and not TRUNCATE for two reasons; First, the auxiliary table may
+      // contain table properties that represent stateful information (ex. SCD key count) that
+      // should not be carried forward on a full refresh. Second, the auxiliary table is an
+      // internal table and not part of the dataflow graph. That means it does not go through
+      // schema evolution like other tables and hence on a full refresh, we should explicitly be
+      // drop the existing auxiliary table schema so it can be recomputed.
+
+      val auxiliaryTableId = AutoCdcAuxiliaryTable.identifier(table.identifier)
+      context.spark.sql(s"DROP TABLE IF EXISTS ${auxiliaryTableId.quotedString}")
+    }
+
     // Alter the table if we need to
     existingTableOpt.foreach { existingTable =>
       val existingSchema = v2ColumnsToStructType(existingTable.columns())

@@ -203,6 +203,19 @@
     ],
     "sqlState" : "22023"
   },
+  "AUTOCDC_INVALID_STATE" : {
+    "message" : [
+      "AutoCDC flow <flowName> detected an invalid state:"
+    ],
+    "subClass" : {
+      "KEY_SCHEMA_DRIFT" : {
+        "message" : [
+          "The AutoCDC flow's current key columns <expectedKeySchema> do not match the keys recorded in the auxiliary table <auxTableName> (recorded keys <recordedKeySchema>). AutoCDC does not support changing key columns or their types across incremental pipeline runs. To change keys, perform a full refresh of the target table."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
   "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."
@@ -253,6 +266,12 @@
   "AUTOCDC_SCD2_NOT_SUPPORTED" : {
     "message" : [
       "AutoCDC flows do not currently support SCD Type 2 transformations."
+    ],
+    "sqlState" : "0A000"
+  },
+  "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE" : {
+    "message" : [
+      "Cannot start AutoCDC flow because the target table <tableName> (format: <format>) does not support row-level MERGE operations. AutoCDC requires a target table whose format implements `SupportsRowLevelOperations`."
     ],
     "sqlState" : "0A000"
   },

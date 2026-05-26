@@ -367,19 +367,29 @@ case class Scd1BatchProcessor(
     val incomingWinsDelete = microbatchDeleteVersionField.isNotNull &&
       microbatchDeleteVersionField > destinationUpsertVersionField
 
-    // When the incoming upsert wins against an existing record, the entire row (all columns)
-    // will be overwritten, including the CDC metadata column. We only exclude keys because
-    // most merge implementations require that join columns are not being mutated, even if
-    // the mutation is a no-op.
     val resolver = microbatchDf.sparkSession.sessionState.conf.resolver
     val keyNames = changeArgs.keys.map(_.name)
+
+    def constructTargetColumnAssignmentsFromMicrobatch(columnName: String): (String, Column) = {
+      // Map a column in the target table to its direct equivalent in the microbatch. Note that due
+      // to target table schema evolution during SDP dataset materialization, the microbatch's
+      // schema must always be a non-strict subset of the target table's schema.
+      val quotedCol = QuotingUtils.quoteIdentifier(columnName)
+      s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
+    }
+
+    // Most merge implementations require that join columns are not mutated, even when the
+    // mutation would be a no-op. The remaining microbatch columns (including the CDC metadata
+    // column) are overwritten outright when the incoming upsert wins.
     val columnsToUpdateWhenIncomingWinsUpsert: Map[String, Column] =
       microbatchDf.columns
         .filterNot(c => keyNames.exists(resolver(_, c)))
-        .map { c =>
-          val quotedCol = QuotingUtils.quoteIdentifier(c)
-          s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
-        }
+        .map(constructTargetColumnAssignmentsFromMicrobatch)
+        .toMap
+
+    val columnsToInsertOnNewKey: Map[String, Column] =
+      microbatchDf.columns
+        .map(constructTargetColumnAssignmentsFromMicrobatch)
         .toMap
 
     microbatchDf
@@ -391,7 +401,13 @@ case class Scd1BatchProcessor(
       // New key: only insert upserts; deletes for absent keys are no-ops for the target table
       // merge, and instead would have been inserted as tombstones into the auxiliary table.
       .whenNotMatched(microbatchDeleteVersionField.isNull)
-      .insertAll()
+      // When inserting a brand new row for a new key, construct column mappings from microbatch.
+      // It's possible the microbatch columns are a subset of the columns currently in the target
+      // table, due to changing and more restrictive column selection across runs, the source
+      // dropping a column, etc.
+      // It is not possible for the microbatch's schema to ever be a superset of the target table
+      // however, due to SDP's schema evolution always unioning old and new schemas.
+      .insert(columnsToInsertOnNewKey)
       .merge()
   }
 
@@ -426,8 +442,8 @@ object Scd1BatchProcessor {
   private[autocdc] val winningRowColName: String = s"${reservedColumnNamePrefix}winning_row"
   private[pipelines] val cdcMetadataColName: String = s"${reservedColumnNamePrefix}metadata"
 
-  private[autocdc] val cdcDeleteSequenceFieldName: String = "deleteSequence"
-  private[autocdc] val cdcUpsertSequenceFieldName: String = "upsertSequence"
+  private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
+  private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"
 
   /** Project the delete sequence out of the CDC metadata column. */
   private[autocdc] def deleteSequenceOf(cdcMetadataCol: Column): Column =
