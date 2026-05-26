@@ -27,10 +27,10 @@ import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMe
 /**
  * Connect-mode counterpart of [[org.apache.spark.sql.connector.DataSourceV2DataFrameSuite]].
  *
- * Runs DSv2 temp view tests ([[DSv2TempViewWithStoredPlanTests]]) and repeated table access
- * tests ([[DSv2RepeatedTableAccessTests]]) under Spark Connect. All test logic lives in the
- * shared traits; this class only provides the Connect-specific session, catalog access, and
- * result comparison.
+ * Runs DSv2 temp view tests ([[DSv2TempViewWithStoredPlanTests]]) and repeated table access tests
+ * ([[DSv2RepeatedTableAccessTests]]) under Spark Connect. All test logic lives in the shared
+ * traits; this class only provides the Connect-specific session, catalog access, and result
+ * comparison.
  */
 class DataSourceV2DataFrameConnectSuite
     extends SparkConnectServerTest
