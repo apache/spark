@@ -347,14 +347,8 @@ trait AutoCdcMergeWriteBase {
    * and return its [[TableIdentifier]].
    *
    * Note that this is `CREATE TABLE IF NOT EXISTS`: when the aux table already exists, its
-   * schema is left untouched and `auxiliaryTableSchema` is ignored. This is safe for the
-   * additive evolution we support today (new non-key columns on the target), but it means we
-   * do not catch user-side AutoCDC key drift here - if a subsequent run renames, swaps,
-   * grows, shrinks, or changes the type of a key column, the aux table keeps its old key
-   * layout and the resulting MERGE will fail downstream with a confusing error rather than a
-   * targeted "keys changed, full-refresh required" error. The contract is therefore that
-   * changing the AutoCDC key set requires fully refreshing the target table; see the
-   * [[create_auto_cdc_flow]] Python docstring for the user-facing version of this rule.
+   * schema is left untouched and `auxiliaryTableSchema` is ignored. For SCD1, they keys must be
+   * invariant across executions and the CDC metadata will always be present, so this is correct.
    */
   protected def createAuxiliaryTableIfNotExists(spark: SparkSession): TableIdentifier = {
     val auxIdent = AutoCdcAuxiliaryTable.identifier(destination.identifier)

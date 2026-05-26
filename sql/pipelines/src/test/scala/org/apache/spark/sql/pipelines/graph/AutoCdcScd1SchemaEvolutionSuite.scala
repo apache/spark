@@ -661,7 +661,7 @@ class AutoCdcScd1SchemaEvolutionSuite
       spark.table(s"$catalog.$namespace.target").select("id", "name", "version", "extra"),
       Seq(
         Row(1, "alice", 1L, 42), // extra preserved on the upsert
-        Row(2, "bob",   1L, null) // extra is NULL for inserts
+        Row(2, "bob", 1L, null) // extra is NULL for inserts
       )
     )
   }
