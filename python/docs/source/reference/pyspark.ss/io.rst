@@ -30,6 +30,7 @@ Input/Output
     DataStreamReader.format
     DataStreamReader.json
     DataStreamReader.load
+    DataStreamReader.name
     DataStreamReader.option
     DataStreamReader.options
     DataStreamReader.orc
