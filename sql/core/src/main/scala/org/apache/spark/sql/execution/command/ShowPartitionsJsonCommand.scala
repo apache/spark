@@ -70,7 +70,7 @@ case class ShowPartitionsJsonCommand(
             tableName.quotedString)
         }
 
-        DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS")
+        DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS AS JSON")
 
         val normalizedSpec = spec.map(partitionSpec =>
           PartitioningUtils.normalizePartitionSpec(
@@ -83,7 +83,7 @@ case class ShowPartitionsJsonCommand(
         Seq(Row(compact(render(JObject("partitions" ->
           JArray(partNames.map(JString(_)).toList))))))
 
-      // ResolvedTempView and ResolvedPersistentView are currently not supported.
+      // Non-V1 tables are currently not supported.
       case _ =>
         throw QueryCompilationErrors.showPartitionsAsJsonNotSupportedForV2TablesError()
     }
