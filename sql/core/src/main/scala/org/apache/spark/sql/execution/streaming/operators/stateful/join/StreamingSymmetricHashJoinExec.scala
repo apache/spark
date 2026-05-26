@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -38,7 +39,6 @@ import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -286,7 +286,8 @@ case class StreamingSymmetricHashJoinExec(
     val raw = SymmetricHashJoinStateManager
       .getSchemasForStateStoreWithColFamily(LeftSide, left.output, leftKeys, stateFormatVersion) ++
       SymmetricHashJoinStateManager
-        .getSchemasForStateStoreWithColFamily(RightSide, right.output, rightKeys, stateFormatVersion)
+        .getSchemasForStateStoreWithColFamily(
+          RightSide, right.output, rightKeys, stateFormatVersion)
     raw.map { case (name, cf) =>
       name -> cf.copy(
         keySchema = WidenStatefulOpNullability.widenStateSchema(cf.keySchema),

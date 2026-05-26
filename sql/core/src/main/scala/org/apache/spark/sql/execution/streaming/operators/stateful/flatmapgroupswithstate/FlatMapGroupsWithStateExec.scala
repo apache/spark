@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -36,7 +37,6 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.join.Streamin
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.streaming.GroupStateTimeout.NoTimeout
-import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 /**

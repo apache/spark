@@ -20,6 +20,7 @@ import org.apache.spark.{JobArtifactSet, SparkException, SparkUnsupportedOperati
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
@@ -35,7 +36,6 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroups
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.util.CompletionIterator
 
 /**
