@@ -139,11 +139,7 @@ case class TransformWithStateInPySparkExec(
       shouldCheckNullable = shouldBeNullable,
       shouldSetNullable = shouldBeNullable
     )
-    schemas.map { case (name, cf) =>
-      name -> cf.copy(
-        keySchema = WidenStatefulOpNullability.widenStateSchema(cf.keySchema),
-        valueSchema = WidenStatefulOpNullability.widenStateSchema(cf.valueSchema))
-    }
+    schemas
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {

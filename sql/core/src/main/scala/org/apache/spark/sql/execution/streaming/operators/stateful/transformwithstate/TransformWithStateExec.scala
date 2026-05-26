@@ -154,11 +154,7 @@ case class TransformWithStateExec(
         shouldCheckNullable = false, shouldSetNullable = shouldBeNullable) ++
         Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
-    columnFamilySchemas.map { case (name, cf) =>
-      name -> cf.copy(
-        keySchema = WidenStatefulOpNullability.widenStateSchema(cf.keySchema),
-        valueSchema = WidenStatefulOpNullability.widenStateSchema(cf.valueSchema))
-    }
+    columnFamilySchemas
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {

@@ -3443,6 +3443,7 @@ object SQLConf {
   val STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT =
     buildConf("spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled")
       .internal()
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .doc("When true, every streaming stateful operator reports its output schema with " +
         "nullable=true on all columns (including nested struct fields, array elements, and " +
         "map values), and the state schema is widened at every construction site, so the " +
