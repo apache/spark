@@ -154,7 +154,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     runPipeline(ctx)
 
     val auxSchema = spark.table(auxTableNameFor("target")).schema
-    
+
     // The auxiliary table only contains keys and the metadata column, hence "name" should not be
     // included.
     assert(auxSchema.fieldNames.toSeq == Seq("id", Scd1BatchProcessor.cdcMetadataColName))
@@ -193,7 +193,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     runPipeline(ctx)
 
     val auxSchema = spark.table(auxTableNameFor("target")).schema
-    assert(auxSchema.fieldNames.toSeq == 
+    assert(auxSchema.fieldNames.toSeq ==
       Seq("region", "id", Scd1BatchProcessor.cdcMetadataColName))
     assert(getAuxTableNumKeyColumns(target = "target") == 2)
   }
@@ -237,6 +237,95 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     checkAnswer(
       spark.table(s"$catalog.$namespace.target"),
       Seq(Row(1, 2L, cdcMeta(None, Some(2L))))
+    )
+  }
+
+  test("an auxiliary table missing the numKeyColumns property fails with INTERNAL_ERROR") {
+    val session = spark
+    import session.implicits._
+
+    val auxIdent = AutoCdcAuxiliaryTable.identifier(
+      fullyQualifiedIdentifier("target", Some(catalog), Some(namespace))
+    )
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+    // Pre-create the auxiliary table without the numKeyColumns property to simulate corrupt
+    // internal state (e.g. a stale auxiliary table written by an older code path). The pipeline
+    // is expected to surface this as INTERNAL_ERROR rather than silently mis-validate keys.
+    spark.sql(
+      s"CREATE TABLE ${auxIdent.unquotedString} " +
+      s"(id INT NOT NULL, $cdcMetadataDdl)"
+    )
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 1L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "auto_cdc_flow",
+        target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")
+      ))
+    }
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" ->
+          (s"Auxiliary table ${auxIdent.quotedString} is missing the " +
+            s"${AutoCdcAuxiliaryTable.numKeyColumnsProperty} table property; cannot validate " +
+            s"AutoCDC key columns. Full-refresh the target table to recreate the auxiliary table.")
+      )
+    )
+  }
+
+  test("an auxiliary table with a malformed numKeyColumns property fails with INTERNAL_ERROR") {
+    val session = spark
+    import session.implicits._
+
+    val auxIdent = AutoCdcAuxiliaryTable.identifier(
+      fullyQualifiedIdentifier("target", Some(catalog), Some(namespace))
+    )
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+    // Pre-create the auxiliary table with a non-integer numKeyColumns property; the pipeline
+    // should surface INTERNAL_ERROR rather than NumberFormatException.
+    spark.sql(
+      s"CREATE TABLE ${auxIdent.unquotedString} " +
+      s"(id INT NOT NULL, $cdcMetadataDdl) " +
+      s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.numKeyColumnsProperty}' = 'not-an-int')"
+    )
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 1L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "auto_cdc_flow",
+        target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")
+      ))
+    }
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" ->
+          (s"Auxiliary table ${auxIdent.quotedString} has a malformed " +
+            s"${AutoCdcAuxiliaryTable.numKeyColumnsProperty} property: 'not-an-int'.")
+      )
     )
   }
 

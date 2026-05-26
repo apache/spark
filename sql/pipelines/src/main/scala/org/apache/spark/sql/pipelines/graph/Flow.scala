@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.pipelines.AnalysisWarning
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   CaseSensitivityLabels,
   ChangeArgs,
   ColumnSelection,
@@ -335,7 +336,7 @@ class AutoCdcMergeFlow(
    */
   private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
     val resolver = spark.sessionState.conf.resolver
-    val reservedPrefix = Scd1BatchProcessor.reservedColumnNamePrefix
+    val reservedPrefix = AutoCdcReservedNames.prefix
 
     def nameContainsReservedPrefix(name: String): Boolean = {
       name.length >= reservedPrefix.length && resolver(

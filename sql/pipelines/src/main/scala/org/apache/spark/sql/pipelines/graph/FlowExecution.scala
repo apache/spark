@@ -35,7 +35,12 @@ import org.apache.spark.sql.connector.catalog.{
   SupportsRowLevelOperations,
   TableCatalog
 }
-import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, Scd1BatchProcessor, Scd1ForeachBatchHandler}
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  ChangeArgs,
+  Scd1BatchProcessor,
+  Scd1ForeachBatchHandler
+}
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SparkSessionUtils
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, Trigger}
@@ -313,6 +318,27 @@ class SinkWrite(
   }
 }
 
+object AutoCdcAuxiliaryTable {
+  /**
+   * Helper for deriving the auxiliary AutoCDC catalog table identifier from a target table. The
+   * derived name is anchored on [[AutoCdcReservedNames.prefix]] so it is unambiguously
+   * AutoCDC-managed and cannot collide with a user-managed table.
+   */
+  def identifier(destination: TableIdentifier): TableIdentifier = TableIdentifier(
+    table = s"${AutoCdcReservedNames.prefix}aux_state_${destination.table}",
+    database = destination.database,
+    catalog = destination.catalog
+  )
+
+  /**
+   * Table property recording the number of AutoCDC key columns persisted at the front of an
+   * auxiliary table when it was first created. The number can only change after a full refresh of
+   * the target, which drops and recreates the auxiliary table.
+   */
+  val numKeyColumnsProperty: String =
+    PipelinesTableProperties.pipelinesPrefix + "autoCdc.numKeyColumns"
+}
+
 /**
  * Helper mixin for AutoCDC merge-based write flows.
  */
@@ -332,11 +358,11 @@ trait AutoCdcMergeWriteMixin {
   /**
    * Full schema of the auxiliary table for this SCD type. The first `changeArgs.keys.length`
    * fields MUST be the AutoCDC key columns (in `changeArgs.keys` declaration order, with
-   * fully-resolved dataType and nullability)
+   * fully-resolved dataType).
    */
-  protected def auxiliaryTableSchema(): StructType
+  protected def auxiliaryTableSchema: StructType
 
-  // Immediately validate that the destination table supports row level operations.
+  // Eagerly validate at construction time that the destination supports row-level ops.
   requireDestinationSupportsRowLevelOps()
 
   /**
@@ -345,8 +371,8 @@ trait AutoCdcMergeWriteMixin {
    * that must remain invariant across incremental pipeline runs; users who want to change
    * keys must full-refresh the target.
    */
-  private def autoCdcKeyColumns(): StructType =
-    StructType(auxiliaryTableSchema().fields.take(changeArgs.keys.length))
+  private lazy val autoCdcKeyColumns: StructType =
+    StructType(auxiliaryTableSchema.fields.take(changeArgs.keys.length))
 
   /**
    * Idempotently bring the auxiliary table for [[destination]] into a state consistent with the
@@ -354,7 +380,7 @@ trait AutoCdcMergeWriteMixin {
    */
   protected def createOrValidateAuxiliaryTable(spark: SparkSession): TableIdentifier = {
     val auxIdent = AutoCdcAuxiliaryTable.identifier(destination.identifier)
-    val (catalog, v2Identifier) = resolveAuxiliaryTableCatalog(spark, auxIdent)
+    val (catalog, v2Identifier) = resolveTableCatalog(spark, auxIdent)
 
     if (!catalog.tableExists(v2Identifier)) {
       // The auxiliary table inherits the target's format so MERGE semantics line up. When the
@@ -365,7 +391,7 @@ trait AutoCdcMergeWriteMixin {
       spark.sql(
         s"""CREATE TABLE IF NOT EXISTS
            |${auxIdent.quotedString}
-           |(${auxiliaryTableSchema().toDDL}) $usingClause
+           |(${auxiliaryTableSchema.toDDL}) $usingClause
            |TBLPROPERTIES (
            |  '${AutoCdcAuxiliaryTable.numKeyColumnsProperty}' = '$numKeyColumns'
            |)""".stripMargin
@@ -379,39 +405,28 @@ trait AutoCdcMergeWriteMixin {
   /**
    * Validate that the AutoCDC key columns the flow expects exactly match the keys recorded
    * in the existing auxiliary table at [[auxIdent]]: same number of key columns, same names
-   * (per the session resolver), same dataTypes.
+   * (per the session resolver), same `dataType`s.
    */
   private def validateNoAutoCdcKeyDrift(
       spark: SparkSession,
       auxIdent: TableIdentifier): Unit = {
-    val (catalog, v2Identifier) = resolveAuxiliaryTableCatalog(spark, auxIdent)
+    val (catalog, v2Identifier) = resolveTableCatalog(spark, auxIdent)
     val existingAuxTable = catalog.loadTable(v2Identifier)
     val existingAuxSchema = CatalogV2Util.v2ColumnsToStructType(existingAuxTable.columns())
-    val expectedKeySchema = autoCdcKeyColumns()
+    val expectedKeySchema = autoCdcKeyColumns
     val resolver = spark.sessionState.conf.resolver
 
-    val numRecordedKeys = Option(
-      existingAuxTable.properties().get(AutoCdcAuxiliaryTable.numKeyColumnsProperty)
-    ).map { raw =>
-      try raw.toInt catch {
-        case _: NumberFormatException =>
-          throw SparkException.internalError(
-            s"Auxiliary table ${auxIdent.quotedString} has a malformed " +
-            s"${AutoCdcAuxiliaryTable.numKeyColumnsProperty} property: '$raw'."
-          )
-      }
-    }.getOrElse {
-      throw SparkException.internalError(
-        s"Auxiliary table ${auxIdent.quotedString} is missing the " +
-        s"${AutoCdcAuxiliaryTable.numKeyColumnsProperty} table property; cannot validate " +
-        s"AutoCDC key columns. Full-refresh the target table to recreate the auxiliary table."
-      )
-    }
-
+    val numRecordedKeys = parseRecordedNumKeyColumns(existingAuxTable, auxIdent)
     val recordedKeyFields = existingAuxSchema.fields.take(numRecordedKeys)
     val drifted =
+      // The key count persisted to table properties should match against the number of keys in the
+      // current pipeline execution's expected aux table schema.
       recordedKeyFields.length != expectedKeySchema.length ||
+      // The number of keys in the existing aux table schema should be no less than what was
+      // recorded in the aux table's properties.
       recordedKeyFields.length != numRecordedKeys ||
+      // Each key in the existing aux table schema should should also exist in the current pipeline
+      // execution's expected aux table schema.
       recordedKeyFields.zip(expectedKeySchema.fields).exists { case (recorded, expected) =>
         !resolver(recorded.name, expected.name) ||
         recorded.dataType != expected.dataType
@@ -431,23 +446,40 @@ trait AutoCdcMergeWriteMixin {
   }
 
   /**
+   * Read the integer [[AutoCdcAuxiliaryTable.numKeyColumnsProperty]] off an existing auxiliary
+   * table. Both "missing property" and "non-integer value" indicate corrupt internal state and
+   * surface as `internalError`s; the property is written by [[createOrValidateAuxiliaryTable]] on
+   * first run and is not expected to be missing or malformed on a healthy auxiliary table.
+   */
+  private def parseRecordedNumKeyColumns(
+      existingAuxTable: org.apache.spark.sql.connector.catalog.Table,
+      auxIdent: TableIdentifier): Int = {
+    val rawNumKeyColumns = Option(
+      existingAuxTable.properties().get(AutoCdcAuxiliaryTable.numKeyColumnsProperty)
+    ).getOrElse {
+      throw SparkException.internalError(
+        s"Auxiliary table ${auxIdent.quotedString} is missing the " +
+        s"${AutoCdcAuxiliaryTable.numKeyColumnsProperty} table property; cannot validate " +
+        s"AutoCDC key columns. Full-refresh the target table to recreate the auxiliary table."
+      )
+    }
+    try rawNumKeyColumns.toInt catch {
+      case _: NumberFormatException =>
+        throw SparkException.internalError(
+          s"Auxiliary table ${auxIdent.quotedString} has a malformed " +
+          s"${AutoCdcAuxiliaryTable.numKeyColumnsProperty} property: '$rawNumKeyColumns'."
+        )
+    }
+  }
+
+  /**
    * Validate that the target table's underlying connector implements
    * [[SupportsRowLevelOperations]], which is the V2 connector contract for MERGE/UPDATE/DELETE
    * with rewrite - all operations that the AutoCDC transformation executes.
    */
   private def requireDestinationSupportsRowLevelOps(): Unit = {
-    val catalogManager = spark.sessionState.catalogManager
-    val catalog = destination.identifier.catalog
-      .map(catalogManager.catalog)
-      .getOrElse(catalogManager.currentCatalog)
-      .asInstanceOf[TableCatalog]
-
-    val destinationTable = catalog.loadTable(
-      Identifier.of(
-        Array(destination.identifier.database.get),
-        destination.identifier.identifier
-      )
-    )
+    val (catalog, v2Identifier) = resolveTableCatalog(spark, destination.identifier)
+    val destinationTable = catalog.loadTable(v2Identifier)
 
     if (!destinationTable.isInstanceOf[SupportsRowLevelOperations]) {
       throw new AnalysisException(
@@ -460,36 +492,21 @@ trait AutoCdcMergeWriteMixin {
     }
   }
 
-  private def resolveAuxiliaryTableCatalog(
+  private def resolveTableCatalog(
       spark: SparkSession,
-      auxIdent: TableIdentifier): (TableCatalog, Identifier) = {
+      ident: TableIdentifier): (TableCatalog, Identifier) = {
     val catalogManager = spark.sessionState.catalogManager
-    val catalog = (auxIdent.catalog match {
-      case Some(catalogName) => catalogManager.catalog(catalogName)
-      case None => catalogManager.currentCatalog
-    }).asInstanceOf[TableCatalog]
-    val v2Identifier = Identifier.of(Array(auxIdent.database.get), auxIdent.table)
-    (catalog, v2Identifier)
+    val catalog = ident.catalog
+      .map(catalogManager.catalog)
+      .getOrElse(catalogManager.currentCatalog)
+      .asInstanceOf[TableCatalog]
+    val namespace = ident.database.getOrElse(
+      throw SparkException.internalError(
+        s"Cannot resolve table identifier ${ident.quotedString}: namespace is unspecified."
+      )
+    )
+    (catalog, Identifier.of(Array(namespace), ident.table))
   }
-}
-
-object AutoCdcAuxiliaryTable {
-  /**
-   * Helper for deriving the auxiliary AutoCDC catalog table identifier from a target table.
-   */
-  def identifier(destination: TableIdentifier): TableIdentifier = TableIdentifier(
-    table = s"__auxiliary_auto_cdc_state_${destination.table}",
-    database = destination.database,
-    catalog = destination.catalog
-  )
-
-  /**
-   * Table property recording the number of AutoCDC key columns persisted at the front of an
-   * auxiliary table when it was first created. The number can only change after a full refresh of
-   * the target, which drops and recreates the auxiliary table.
-   */
-  val numKeyColumnsProperty: String =
-    PipelinesTableProperties.pipelinesPrefix + "autoCdc.numKeyColumns"
 }
 
 /**
@@ -539,10 +556,10 @@ class Scd1MergeStreamingWrite(
       .start()
   }
 
-  override protected def auxiliaryTableSchema(): StructType =
-    // SCD1's auxiliary table is just keys + the CDC metadata struct; no user data columns.
-    // Keys come first, in `changeArgs.keys` declaration order, to satisfy the keys-first
-    // invariant that [[AutoCdcMergeWriteMixin]] relies on for drift detection.
+  override protected lazy val auxiliaryTableSchema: StructType =
+    // SCD1's auxiliary table is just keys + the CDC metadata struct; no user data columns. Keys
+    // come first, in `changeArgs.keys` declaration order, to satisfy the keys-first invariant that
+    // [[AutoCdcMergeWriteMixin]] relies on for drift detection.
     StructType(autoCdcKeyFields :+ cdcMetadataField)
 
   /**
@@ -550,7 +567,7 @@ class Scd1MergeStreamingWrite(
    * `changeArgs.keys` declaration order. Keys are guaranteed to be present in the schema
    * because [[AutoCdcMergeFlow.schema]] validates that.
    */
-  private def autoCdcKeyFields: Seq[StructField] = {
+  private lazy val autoCdcKeyFields: Seq[StructField] = {
     val resolver = updateContext.spark.sessionState.conf.resolver
     val targetTableSchema = flow.schema
     flow.changeArgs.keys.map { key =>
@@ -565,7 +582,7 @@ class Scd1MergeStreamingWrite(
   }
 
   /** CDC metadata field resolved out of the flow's augmented schema. */
-  private def cdcMetadataField: StructField = {
+  private lazy val cdcMetadataField: StructField = {
     val resolver = updateContext.spark.sessionState.conf.resolver
     flow.schema.fields
       .find(field => resolver(field.name, Scd1BatchProcessor.cdcMetadataColName))

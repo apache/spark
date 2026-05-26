@@ -306,13 +306,16 @@ object DatasetManager extends Logging {
     if (isFullRefresh) {
       // On full refresh, drop the AutoCDC auxiliary state associated with this table (if any) so
       // that stale delete-tracking data and table properties are not carried forward into the new
-      // table generation.
+      // table generation. We unconditionally issue the DROP for every fully-refreshed target; for
+      // non-AutoCDC tables this is a no-op because [[AutoCdcAuxiliaryTable.identifier]] derives
+      // its name from [[AutoCdcReservedNames.prefix]], which is reserved across AutoCDC and
+      // therefore cannot collide with a user-managed table.
 
       // Intentionally DROP and not TRUNCATE for two reasons; First, the auxiliary table may
       // contain table properties that represent stateful information (ex. SCD key count) that
       // should not be carried forward on a full refresh. Second, the auxiliary table is an
       // internal table and not part of the dataflow graph. That means it does not go through
-      // schema evolution like other tables and hence on a full refresh, we should explicitly be
+      // schema evolution like other tables and hence on a full refresh, we should explicitly
       // drop the existing auxiliary table schema so it can be recomputed.
 
       val auxiliaryTableId = AutoCdcAuxiliaryTable.identifier(table.identifier)

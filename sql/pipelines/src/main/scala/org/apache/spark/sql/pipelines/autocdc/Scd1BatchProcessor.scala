@@ -371,9 +371,9 @@ case class Scd1BatchProcessor(
     val keyNames = changeArgs.keys.map(_.name)
 
     def constructTargetColumnAssignmentsFromMicrobatch(columnName: String): (String, Column) = {
-      // Map a column in the target table to its direct equivalent in the microbatch. Note that due
-      // to target table schema evolution during SDP dataset materialization, the microbatch's
-      // schema must always be a non-strict subset of the target table's schema.
+      // Map a column in the target table to its direct equivalent in the microbatch. Note that
+      // because of target-table schema evolution during SDP dataset materialization, the
+      // microbatch's columns are always a subset of (or equal to) the target's columns.
       val quotedCol = QuotingUtils.quoteIdentifier(columnName)
       s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
     }
@@ -402,11 +402,10 @@ case class Scd1BatchProcessor(
       // merge, and instead would have been inserted as tombstones into the auxiliary table.
       .whenNotMatched(microbatchDeleteVersionField.isNull)
       // When inserting a brand new row for a new key, construct column mappings from microbatch.
-      // It's possible the microbatch columns are a subset of the columns currently in the target
-      // table, due to changing and more restrictive column selection across runs, the source
-      // dropping a column, etc.
-      // It is not possible for the microbatch's schema to ever be a superset of the target table
-      // however, due to SDP's schema evolution always unioning old and new schemas.
+      // The microbatch's columns may be a strict subset of the target's columns -- e.g. the user
+      // narrowed `column_list` between runs, or the source DF dropped a column. The target's
+      // columns can never be a strict subset of the microbatch's however, because SDP's schema
+      // evolution always unions old and new schemas onto the target.
       .insert(columnsToInsertOnNewKey)
       .merge()
   }
@@ -433,14 +432,12 @@ case class Scd1BatchProcessor(
 
 object Scd1BatchProcessor {
   /**
-   * Reserved column-name prefix for internal SDP AutoCDC processing. Source change-data-feed
-   * dataframes must not contain any columns starting with this prefix; the invariant is
+   * Internal columns inserted by AutoCDC reconciliation. Source change-data-feed dataframes must
+   * not contain any columns starting with [[AutoCdcReservedNames.prefix]]; the invariant is
    * enforced at [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction.
    */
-  private[pipelines] val reservedColumnNamePrefix: String = "__spark_autocdc_"
-
-  private[autocdc] val winningRowColName: String = s"${reservedColumnNamePrefix}winning_row"
-  private[pipelines] val cdcMetadataColName: String = s"${reservedColumnNamePrefix}metadata"
+  private[autocdc] val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
+  private[pipelines] val cdcMetadataColName: String = s"${AutoCdcReservedNames.prefix}metadata"
 
   private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
   private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"

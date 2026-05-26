@@ -366,6 +366,118 @@ class AutoCdcScd1SchemaEvolutionSuite
     )
   }
 
+  test("a same-named key whose dataType differs from what the auxiliary table recorded " +
+    "fails with KEY_SCHEMA_DRIFT") {
+    val session = spark
+    import session.implicits._
+
+    // Synthetic setup: the target carries `id BIGINT NOT NULL` but a stale auxiliary table
+    // (recorded by a hypothetical earlier code path / earlier source schema) claims the recorded
+    // key was `id INT NOT NULL`. The flow's expected key columns therefore don't match the
+    // recorded key columns at the per-position dataType comparison even though the key arity and
+    // names line up. This is the case where naming-based comparisons alone would silently let
+    // through a contract change.
+    val auxIdent = AutoCdcAuxiliaryTable.identifier(
+      fullyQualifiedIdentifier("target", Some(catalog), Some(namespace))
+    )
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(id BIGINT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+    spark.sql(
+      s"CREATE TABLE ${auxIdent.unquotedString} " +
+      s"(id INT NOT NULL, $cdcMetadataDdl) " +
+      s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.numKeyColumnsProperty}' = '1')"
+    )
+
+    val stream = MemoryStream[(Long, Long)]
+    stream.addData((1L, 1L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "auto_cdc_flow",
+        target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")
+      ))
+    }
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "flowName" ->
+          fullyQualifiedIdentifier("auto_cdc_flow", Some(catalog), Some(namespace)).unquotedString,
+        "auxTableName" -> auxTableNameFor("target"),
+        "expectedKeySchema" -> "id BIGINT NOT NULL",
+        "recordedKeySchema" -> "id INT NOT NULL"
+      )
+    )
+  }
+
+  test("reordering a composite key set across runs ([a,b] -> [b,a]) fails with " +
+    "KEY_SCHEMA_DRIFT") {
+    val session = spark
+    import session.implicits._
+
+    // Target carries both candidate key columns so the source DF is structurally compatible
+    // across both runs; only the AutoCDC `keys` declaration order changes. The auxiliary table
+    // records keys positionally in declared order, so a reorder must fail per-position name
+    // comparison.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.target " +
+      s"(a INT NOT NULL, b STRING NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+
+    // Run #1: keys = [a, b]. Auxiliary table records positions 0=a, 1=b.
+    val stream1 = MemoryStream[(Int, String, Long)]
+    stream1.addData((1, "x", 1L))
+    val ctx1 = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "auto_cdc_flow",
+        target = "target",
+        query = dfFlowFunc(stream1.toDF().toDF("a", "b", "version")),
+        keys = Seq("a", "b"),
+        sequencing = functions.col("version")
+      ))
+    }
+    runPipeline(ctx1)
+
+    // Run #2: same arity (2) and same key set ({a, b}), but reordered. The validator should
+    // reject because of per-position name comparison: position 0 is `b` expected vs recorded
+    // `a`.
+    val stream2 = MemoryStream[(Int, String, Long)]
+    stream2.addData((1, "x", 2L))
+    val ctx2 = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "auto_cdc_flow",
+        target = "target",
+        query = dfFlowFunc(stream2.toDF().toDF("a", "b", "version")),
+        keys = Seq("b", "a"),
+        sequencing = functions.col("version")
+      ))
+    }
+
+    val ex = intercept[RuntimeException] { runPipeline(ctx2) }
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
+      sqlState = Some("42000"),
+      parameters = Map(
+        "flowName" ->
+          fullyQualifiedIdentifier("auto_cdc_flow", Some(catalog), Some(namespace)).unquotedString,
+        "auxTableName" -> auxTableNameFor("target"),
+        "expectedKeySchema" -> "b STRING NOT NULL,a INT NOT NULL",
+        "recordedKeySchema" -> "a INT NOT NULL,b STRING NOT NULL"
+      )
+    )
+  }
+
   test("a new top-level nullable column appearing in the source DF between runs is " +
     "added to the target") {
     val session = spark
