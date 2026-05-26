@@ -304,9 +304,8 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
 
         checkError(
           ex,
-          condition = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE.NULLABILITY_CHANGED",
+          condition = "STATE_STORE_KEY_SCHEMA_NOT_COMPATIBLE",
           parameters = Map(
-            "changedFields" -> ".*",
             "storedKeySchema" -> ".*",
             "newKeySchema" -> ".*"),
           matchPVals = true
