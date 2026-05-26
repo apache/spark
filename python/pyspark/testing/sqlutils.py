@@ -361,6 +361,9 @@ class SQLTestUtils:
         assert sum(diff) == len(a), f"sum: {sum(diff)}, len: {len(a)}"
 
 
+with_sql_conf = SQLTestUtils.with_sql_conf
+
+
 class ReusedSQLTestCase(ReusedPySparkTestCase, SQLTestUtils, PySparkErrorTestUtils):
     @classmethod
     def setUpClass(cls):

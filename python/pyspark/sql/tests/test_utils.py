@@ -37,9 +37,7 @@ from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
 )
-from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
-
-with_sql_conf = SQLTestUtils.with_sql_conf
+from pyspark.testing.sqlutils import ReusedSQLTestCase, with_sql_conf
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime

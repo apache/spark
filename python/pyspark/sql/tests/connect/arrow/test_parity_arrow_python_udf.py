@@ -19,9 +19,7 @@ import unittest
 
 from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
 from pyspark.sql.tests.arrow.test_arrow_python_udf import ArrowPythonUDFTestsMixin
-from pyspark.testing.sqlutils import SQLTestUtils
-
-with_sql_conf = SQLTestUtils.with_sql_conf
+from pyspark.testing.sqlutils import with_sql_conf
 
 
 @with_sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"})

@@ -19,9 +19,7 @@ import unittest
 
 from pyspark.sql.tests.test_column import ColumnTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
-
-with_sql_conf = SQLTestUtils.with_sql_conf
+from pyspark.testing.sqlutils import with_sql_conf
 
 
 @with_sql_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": "true"})

@@ -18,9 +18,7 @@
 
 from pyspark.sql.tests.test_udf_combinations import UDFCombinationsTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
-
-with_sql_conf = SQLTestUtils.with_sql_conf
+from pyspark.testing.sqlutils import with_sql_conf
 
 
 @with_sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "false"})
