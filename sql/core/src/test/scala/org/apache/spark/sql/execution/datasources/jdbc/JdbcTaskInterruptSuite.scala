@@ -289,7 +289,7 @@ class JdbcTaskInterruptSuite extends SparkFunSuite with SharedSparkSession {
         options = options,
         databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(getConnection),
         groupByColumns = None,
-        sample = None,
+        sampleClause = None,
         limit = 0,
         sortOrders = Array.empty,
         offset = 0,
