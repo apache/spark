@@ -49,6 +49,8 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
 
   def appName: String = get("spark.app.name", "spark")
 
+  def sparkVersion: String = SPARK_VERSION
+
   def namespace: String = get(KUBERNETES_NAMESPACE)
 
   def imagePullPolicy: String = get(CONTAINER_IMAGE_PULL_POLICY)
@@ -122,7 +124,7 @@ class KubernetesDriverConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
-      SPARK_VERSION_LABEL -> SPARK_VERSION,
+      SPARK_VERSION_LABEL -> sparkVersion,
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),
       SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
@@ -199,7 +201,7 @@ private[spark] class KubernetesExecutorConf(
 
   override def labels: Map[String, String] = {
     val presetLabels = Map(
-      SPARK_VERSION_LABEL -> SPARK_VERSION,
+      SPARK_VERSION_LABEL -> sparkVersion,
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> appId,
       SPARK_APP_NAME_LABEL -> KubernetesConf.getAppNameLabel(appName),

@@ -33,6 +33,9 @@ import com.typesafe.tools.mima.core.*
  */
 object MimaExcludes {
 
+  // Exclude rules for 5.0.x from 4.2.0 (add 5.0-specific filters below as needed).
+  lazy val v50excludes: Seq[Problem => Boolean] = v42excludes
+
   // Exclude rules for 4.2.x from 4.1.0
   lazy val v42excludes = v41excludes ++ Seq(
     // [SQL] SafeJsonSerializer.safeMapToJValue: second parameter widened from Function1 to
@@ -55,7 +58,13 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.copy"),
     ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo$"),
     // [SPARK-56330][CORE] Add TaskInterruptListener to TaskContext for interrupt notifications
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
+    // [SPARK-56700][SS] Make DataStreamReader.name public
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name"),
+    // [SPARK-34591][ML] Add pruneTree parameter to Strategy
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this"),
+    // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin")
   )
 
   // Exclude rules for 4.1.x from 4.0.0
@@ -88,7 +97,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.artifact.ArtifactManager.cachedBlockIdList"),
 
     // [SPARK-54323][PYTHON] Change the way to access logs to TVF instead of system view
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.TableValuedFunction.python_worker_logs")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.TableValuedFunction.python_worker_logs"),
+
+    // [SPARK-56719][SS] Add DataStreamWriter.name() API for sink evolution
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamWriter.name")
   )
 
   // Default exclude rules
@@ -147,6 +159,7 @@ object MimaExcludes {
   )
 
   def excludes(version: String): Seq[Problem => Boolean] = version match {
+    case v if v.startsWith("5.0") => v50excludes
     case v if v.startsWith("4.2") => v42excludes
     case v if v.startsWith("4.1") => v41excludes
     case _ => Seq()

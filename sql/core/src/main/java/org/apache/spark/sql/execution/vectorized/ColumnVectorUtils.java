@@ -31,8 +31,10 @@ import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.execution.RowToColumnConverter;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
@@ -49,9 +51,22 @@ import org.apache.spark.unsafe.types.VariantVal;
 public class ColumnVectorUtils {
 
   /**
-   * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`.
+   * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`. For complex types
+   * (array / map) this allocates a small backing `WritableColumnVector` on-heap by default. Use
+   * the {@link #populate(ConstantColumnVector, InternalRow, int, MemoryMode)} overload to control
+   * the backing memory mode.
    */
   public static void populate(ConstantColumnVector col, InternalRow row, int fieldIdx) {
+    populate(col, row, fieldIdx, MemoryMode.ON_HEAP);
+  }
+
+  /**
+   * Populates the value of `row[fieldIdx]` into `ConstantColumnVector`. For array / map values,
+   * `memMode` selects on-heap vs off-heap allocation for the backing `WritableColumnVector` that
+   * holds the constant element data; it has no effect on primitive types.
+   */
+  public static void populate(
+      ConstantColumnVector col, InternalRow row, int fieldIdx, MemoryMode memMode) {
     DataType t = col.dataType();
     PhysicalDataType pdt = PhysicalDataType.apply(t);
 
@@ -93,6 +108,34 @@ public class ColumnVectorUtils {
         col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
       } else if (pdt instanceof PhysicalVariantType) {
         col.setVariant((VariantVal)row.get(fieldIdx, t));
+      } else if (pdt instanceof PhysicalStructType) {
+        StructType st = (StructType) t;
+        InternalRow inner = row.getStruct(fieldIdx, st.fields().length);
+        InternalRow tmpRow = new GenericInternalRow(1);
+        for (int i = 0; i < st.fields().length; i++) {
+          StructField field = st.fields()[i];
+          tmpRow.update(0, inner.isNullAt(i) ? null : inner.get(i, field.dataType()));
+          // ConstantColumnVector's constructor pre-allocates struct children, so the recursive
+          // populate call below has a target vector to write into.
+          populate((ConstantColumnVector) col.getChild(i), tmpRow, 0, memMode);
+        }
+      } else if (pdt instanceof PhysicalArrayType || pdt instanceof PhysicalMapType) {
+        // Allocate a 1-row backing vector (on-heap or off-heap per `memMode`) to hold the
+        // constant complex value.
+        WritableColumnVector backing = memMode == MemoryMode.OFF_HEAP
+            ? new OffHeapColumnVector(1, t)
+            : new OnHeapColumnVector(1, t);
+        // Reuse RowToColumnConverter by wrapping `t` as a single-field struct schema and
+        // converting the one-row input. This recursively handles all element types correctly.
+        StructType wrapperSchema = new StructType().add("v", t, true);
+        RowToColumnConverter converter = new RowToColumnConverter(wrapperSchema);
+        InternalRow wrapped = new GenericInternalRow(new Object[]{row.get(fieldIdx, t)});
+        converter.convert(wrapped, new WritableColumnVector[]{backing});
+        if (pdt instanceof PhysicalArrayType) {
+          col.setArrayWithBacking(backing.getArray(0), backing);
+        } else {
+          col.setMapWithBacking(backing.getMap(0), backing);
+        }
       } else {
         throw new RuntimeException(String.format("DataType %s is not supported" +
             " in column vectorized reader.", t.sql()));

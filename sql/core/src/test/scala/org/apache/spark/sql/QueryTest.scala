@@ -714,7 +714,7 @@ trait QueryTestBase
  * Subclasses should *not* create `SparkSession`s in the test suite constructor, which is
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
-trait QueryTest extends SparkFunSuite with QueryTestBase with PlanTest {
+trait QueryTest extends SparkFunSuite with QueryTestBase {
 
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
@@ -1073,14 +1073,13 @@ object QueryTest extends Assertions {
       }
     }
 
-    val classicSession = spark.asInstanceOf[classic.SparkSession]
-    classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
-    classicSession.listenerManager.register(listener)
+    spark.sparkContext.listenerBus.waitUntilEmpty(15000)
+    spark.listenerManager.register(listener)
     try {
       thunk
-      classicSession.sparkContext.listenerBus.waitUntilEmpty(15000)
+      spark.sparkContext.listenerBus.waitUntilEmpty(15000)
     } finally {
-      classicSession.listenerManager.unregister(listener)
+      spark.listenerManager.unregister(listener)
     }
 
     capturedQueryExecutions

@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.{CoalescedBoundary, CoalescedHashPartitioning, HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{CoalescedBoundary, CoalescedHashPartitioning, CoalescedNullAwareHashPartitioning, HashPartitioning, NullAwareHashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeLike}
@@ -83,6 +83,13 @@ case class AQEShuffleReadExec private(
               throw SparkException.internalError(s"Unexpected ShufflePartitionSpec: $unexpected")
           }
           CurrentOrigin.withOrigin(h.origin)(CoalescedHashPartitioning(h, partitions))
+        case h: NullAwareHashPartitioning =>
+          val partitions = partitionSpecs.map {
+            case CoalescedPartitionSpec(start, end, _) => CoalescedBoundary(start, end)
+            case unexpected =>
+              throw SparkException.internalError(s"Unexpected ShufflePartitionSpec: $unexpected")
+          }
+          CurrentOrigin.withOrigin(h.origin)(CoalescedNullAwareHashPartitioning(h, partitions))
         case r: RangePartitioning =>
           CurrentOrigin.withOrigin(r.origin)(r.copy(numPartitions = partitionSpecs.length))
         // This can only happen for `REBALANCE_PARTITIONS_BY_NONE`, which uses

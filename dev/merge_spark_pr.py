@@ -25,9 +25,14 @@
 # absorb work for the next minors on major M. Maintenance branches branch-M.N are cut from
 # branch-M.x. Cherry-pick prompts sort by semver via semver_branch_rank (branch-M.x before branch-M.N).
 #
-# Fix Version defaults when resolving JIRA: master contributes the largest unreleased N.0.0.
-# Master + branch-M.x also defaults per listed integration branch to that major's unreleased Spark
-# minor line versions (multiple branch-M.x entries each add one; e.g. 6.0.0 + 5.2.0 + 4.3.0).
+# Fix Version defaults when resolving JIRA aim for the minimal set of versions that tells users
+# which Spark releases will contain the commit, leveraging the Upstream-First backporting policy
+# (cherry-picks flow master -> branch-M.x -> branch-M.N). master contributes the greatest
+# unreleased N.0.0, but is omitted when any branch-M.x is in the merge set (a cherry-pick to
+# branch-M.x has already landed on master). Each branch-M.x contributes that major's greatest
+# unreleased minor.0, but is omitted when a sibling branch-M.N contributes M.N.0 (M.N.0 still
+# unreleased means branch-M.N is still a subset of branch-M.x). Patch merges on branch-M.N use
+# unreleased versions starting with M.N.
 # This utility assumes you already have a local Spark git folder and that you
 # have added remotes corresponding to both (i) the github apache Spark
 # mirror and (ii) the apache git repo.
@@ -38,6 +43,7 @@ import re
 import subprocess
 import sys
 import traceback
+from typing import List
 from urllib.request import urlopen
 from urllib.request import Request
 from urllib.error import HTTPError
@@ -151,36 +157,6 @@ def _sort_version_names_lex_desc(names):
     return sorted(names, reverse=True)
 
 
-def _dedupe_fix_versions_adjacent_major_zero(default_fix_versions):
-    """Preserve order; drop duplicate names, then drop V when V is M.minor.0 and
-    predecessor (minor-1).0.0 exists in the list.
-
-    >>> _dedupe_fix_versions_adjacent_major_zero(["6.0.0", "4.3.0", "4.3.0"])
-    ['6.0.0', '4.3.0']
-    >>> _dedupe_fix_versions_adjacent_major_zero(["2.0.0", "1.1.0", "1.0.0"])
-    ['2.0.0', '1.0.0']
-    >>> _dedupe_fix_versions_adjacent_major_zero(["1.0.0", "2.0.0"])
-    ['1.0.0', '2.0.0']
-    """
-    out = list(dict.fromkeys(default_fix_versions))
-    for v in list(out):
-        major, minor, patch = v.split(".")
-        if patch == "0":
-            previous = "%s.%s.%s" % (major, int(minor) - 1, 0)
-            if previous in out:
-                out = list(filter(lambda x: x != v, out))
-    return out
-
-
-def _append_max_fix_or_warn(defaults, warnings, candidates, warn_if_none):
-    """Append _semver_max_version(candidates) when defined; else optionally append warn_if_none."""
-    chosen = _semver_max_version(candidates)
-    if chosen:
-        defaults.append(chosen)
-    elif warn_if_none is not None:
-        warnings.append(warn_if_none)
-
-
 def compute_merge_default_fix_versions(merge_branches, unreleased_version_names):
     """
     Build suggested SPARK Fix Version names from merged git refs (no JIRA I/O).
@@ -189,22 +165,29 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
 
     Returns (default_version_names, warning_messages).
 
-    Master always suggests the greatest unreleased N.0.0. Each branch-M.x with master also adds the
-    greatest unreleased Spark M.*.* Fix Version for that major (multiple branch-M.x entries each
-    contribute). Patch merges on branch-M.N use unreleased versions starting with M.N.
+    The output is the minimal set of Fix Versions that tells users which Spark releases will
+    contain the commit, leveraging the Upstream-First backporting policy (cherry-picks flow
+    master -> branch-M.x -> branch-M.N):
+      - master contributes the greatest unreleased N.0.0;
+      - branch-M.x with master contributes that major's greatest unreleased minor.0;
+      - branch-M.N contributes its greatest unreleased M.N.patch.
+    Redundant entries are then suppressed: master's N.0.0 is dropped when any branch-M.x is in
+    the merge set (a cherry-pick to branch-M.x has already landed on master); branch-M.x's
+    minor.0 is dropped when a branch-M.N for the same major contributes M.N.0 (M.N.0 still
+    unreleased means branch-M.N is still a subset of branch-M.x).
 
     >>> compute_merge_default_fix_versions(["master"], ["4.3.0", "5.0.0", "6.0.0"])[0]
     ['6.0.0']
 
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-4.x"], ["6.0.0", "5.0.0", "4.3.0", "4.2.1"])[0]
-    ['6.0.0', '4.3.0']
+    ['4.3.0']
 
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-5.x"],
     ...     ["7.0.0", "6.0.0", "5.2.0", "5.1.2", "5.1.1", "5.0.1"],
     ... )[0]
-    ['7.0.0', '5.2.0']
+    ['5.2.0']
 
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-3.5"],
@@ -232,58 +215,103 @@ def compute_merge_default_fix_versions(merge_branches, unreleased_version_names)
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-5.x", "branch-4.x"], ["5.2.0", "4.3.0", "6.0.0"]
     ... )[0]
-    ['6.0.0', '5.2.0', '4.3.0']
+    ['5.2.0', '4.3.0']
 
     >>> compute_merge_default_fix_versions(
     ...     ["master", "branch-4.x", "branch-4.x"], ["6.0.0", "4.3.0"]
     ... )[0]
-    ['6.0.0', '4.3.0']
+    ['4.3.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], ["5.0.0", "4.3.0", "4.2.0"]
+    ... )[0]
+    ['4.2.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.x", "branch-4.2"], ["5.0.0", "4.3.0", "4.2.1"]
+    ... )[0]
+    ['4.3.0', '4.2.1']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.2"], ["5.0.0", "4.2.0"]
+    ... )[0]
+    ['5.0.0', '4.2.0']
+
+    >>> compute_merge_default_fix_versions(
+    ...     ["master", "branch-4.2"], ["5.0.0", "4.2.1"]
+    ... )[0]
+    ['5.0.0', '4.2.1']
     """
     names = _sort_version_names_lex_desc(list(unreleased_version_names))
-    merged_set = set(merge_branches)
+    has_integration_branch = any(
+        _integration_major_from_branch(b) is not None for b in merge_branches
+    )
 
-    defaults = []
+    # Collect each merge branch's candidate Fix Version. We track (branch, version) so we can
+    # later suppress redundant entries (master, branch-M.x) based on which branches contributed.
+    contributions = []
     warnings = []
 
     for b in merge_branches:
         if b == "master":
             majors = [n for n in names if re.match(r"^\d+\.0\.0$", n)]
-            _append_max_fix_or_warn(
-                defaults,
-                warnings,
-                majors,
-                "No unreleased N.0.0 Fix Version found in JIRA for master; "
-                "enter comma-separated Fix Version(s) manually when prompted.",
-            )
+            chosen = _semver_max_version(majors)
+            if chosen:
+                contributions.append((b, chosen))
+            else:
+                warnings.append(
+                    "No unreleased N.0.0 Fix Version found in JIRA for master; "
+                    "enter comma-separated Fix Version(s) manually when prompted."
+                )
             continue
         line_major = _integration_major_from_branch(b)
         if line_major is not None:
-            if "master" in merged_set:
-                line_versions = [n for n in names if re.match(r"^%s\.\d+\.\d+$" % line_major, n)]
-                _append_max_fix_or_warn(
-                    defaults,
-                    warnings,
-                    line_versions,
-                    (
-                        "Could not infer an unreleased Spark %s (minor.maintenance) fix version "
-                        "for branch-%s.x + master merge; enter version(s) manually when prompted."
-                        % (line_major, line_major)
-                    ),
+            if "master" not in merge_branches:
+                continue
+            line_versions = [n for n in names if re.match(r"^%s\.\d+\.\d+$" % line_major, n)]
+            chosen = _semver_max_version(line_versions)
+            if chosen:
+                contributions.append((b, chosen))
+            else:
+                warnings.append(
+                    "Could not infer an unreleased Spark %s (minor.maintenance) fix version "
+                    "for branch-%s.x + master merge; enter version(s) manually when prompted."
+                    % (line_major, line_major)
                 )
             continue
         prefix = b.replace("branch-", "")
         found_versions = [n for n in names if n.startswith(prefix)]
-        _append_max_fix_or_warn(
-            defaults,
-            warnings,
-            found_versions,
-            (
+        chosen = _semver_max_version(found_versions)
+        if chosen:
+            contributions.append((b, chosen))
+        else:
+            warnings.append(
                 "Target version for %s is not found on JIRA, it may be archived or "
                 "not created. Skipping it." % b
-            ),
-        )
+            )
 
-    return _dedupe_fix_versions_adjacent_major_zero(defaults), warnings
+    # Majors where a release branch's M.N.0 contribution makes the sibling branch-M.x's
+    # minor.0 redundant: an unreleased M.N.0 means branch-M.N has not diverged from branch-M.x
+    # yet, so anything that's on branch-M.N is also on branch-M.x.
+    suppress_integration_majors = set()
+    for b, v in contributions:
+        if b == "master" or _integration_major_from_branch(b) is not None:
+            continue
+        m = re.match(r"^(\d+)\.\d+\.0$", v)
+        if m:
+            suppress_integration_majors.add(int(m.group(1)))
+
+    def keep(item):
+        b, _ = item
+        if b == "master":
+            return not has_integration_branch
+        major = _integration_major_from_branch(b)
+        if major is not None:
+            return major not in suppress_integration_majors
+        return True
+
+    filtered = [item for item in contributions if keep(item)]
+    return list(dict.fromkeys(v for _, v in filtered)), warnings
 
 
 def print_error(msg):
@@ -316,6 +344,21 @@ def get_json(url):
         else:
             print_error("Unable to fetch URL, exiting: %s" % url)
         sys.exit(-1)
+
+
+def close_pr(pr_num):
+    url = "%s/pulls/%s" % (GITHUB_API_BASE, pr_num)
+    data = json.dumps({"state": "closed"}).encode("utf-8")
+    request = Request(url, data=data, method="PATCH")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/vnd.github+json")
+    if GITHUB_OAUTH_KEY:
+        request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+    try:
+        return json.load(urlopen(request))
+    except HTTPError as e:
+        print_error("Failed to close PR #%s: HTTP %s %s" % (pr_num, e.code, e.reason))
+        return None
 
 
 def fail(msg):
@@ -428,11 +471,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     return merge_hash
 
 
-def cherry_pick(pr_num, merge_hash, default_branch):
-    pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
-    if pick_ref == "":
-        pick_ref = default_branch
-
+def _do_cherry_pick(pr_num, merge_hash, pick_ref):
+    """Cherry-pick `merge_hash` onto `pick_ref` and push. Returns the pushed ref."""
     pick_branch_name = "%s_PICK_PR_%s_%s" % (BRANCH_PREFIX, pr_num, pick_ref.upper())
 
     run_cmd("git fetch %s %s:%s" % (PUSH_REMOTE_NAME, pick_ref, pick_branch_name))
@@ -453,7 +493,6 @@ def cherry_pick(pr_num, merge_hash, default_branch):
     try:
         run_cmd("git push %s %s:%s" % (PUSH_REMOTE_NAME, pick_branch_name, pick_ref))
     except Exception as e:
-        clean_up()
         fail("Exception while pushing: %s" % e)
 
     pick_hash = run_cmd("git rev-parse %s" % pick_branch_name)[:8]
@@ -462,6 +501,85 @@ def cherry_pick(pr_num, merge_hash, default_branch):
     print("Pull request #%s picked into %s!" % (pr_num, pick_ref))
     print("Pick hash: %s" % pick_hash)
     return pick_ref
+
+
+def _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked):
+    """Return the sibling branch-M.x if Upstream-First should prompt, else None.
+
+    The policy only applies when the PR was merged into master: that's the only case
+    where the committer can type branch-M.N at the cherry-pick prompt and bypass the
+    rolling branch-M.x. When the PR was opened against branch-M.x the merge itself
+    lands there (nothing to bypass), and when it was opened against branch-M.N the
+    author already chose per-branch scope.
+
+    >>> _upstream_first_sibling("master", "branch-4.2", ["branch-4.x", "branch-4.2"], ())
+    'branch-4.x'
+    >>> _upstream_first_sibling("master", "branch-4.2", ["branch-4.x", "branch-4.2"],
+    ...                         ("branch-4.x",))
+    >>> _upstream_first_sibling("master", "branch-4.x", ["branch-4.x"], ())
+    >>> _upstream_first_sibling("master", "branch-4.99", ["branch-4.2"], ())
+    >>> _upstream_first_sibling("branch-4.x", "branch-4.2", ["branch-4.x", "branch-4.2"], ())
+    >>> _upstream_first_sibling("branch-4.2", "branch-3.5", ["branch-4.x", "branch-3.5"], ())
+    """
+    if target_ref != "master":
+        return None
+    m = re.match(r"^branch-(\d+)\.(\d+)$", pick_ref)
+    if not m:
+        return None
+    candidate = "branch-%s.x" % m.group(1)
+    if candidate in branch_names and candidate not in already_picked:
+        return candidate
+    return None
+
+
+def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, already_picked=()):
+    """Prompt for a target branch and cherry-pick `merge_hash` onto it.
+
+    Enforces the Upstream-First policy (see header comment) via
+    `_upstream_first_sibling`: when the PR was merged into master and the committer
+    types a branch-M.N target while branch-M.x is also a known release branch AND
+    has not already received this commit, prompt to confirm whether to pick into
+    BOTH (the policy-compliant default) or branch-M.N only (treated as a
+    maintenance-only bugfix). Returns the list of refs actually picked into, so
+    the main loop can advance its remaining-branches list correctly.
+    """
+    pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
+    if pick_ref == "":
+        pick_ref = default_branch
+
+    sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
+    if sibling_x is not None:
+        print()
+        print("=" * 80)
+        print(
+            "Upstream-First policy: non-bugfix commits on %s should also land on %s."
+            % (pick_ref, sibling_x)
+        )
+        print(
+            "If this is a %s-only maintenance bugfix, you may pick %s alone." % (pick_ref, pick_ref)
+        )
+        print("Otherwise, pick both (%s first, then %s)." % (sibling_x, pick_ref))
+        print("=" * 80)
+        choice = (
+            bold_input(
+                "Pick into [b]oth %s + %s / [o]nly %s / [a]bort (default: both): "
+                % (sibling_x, pick_ref, pick_ref)
+            )
+            .strip()
+            .lower()
+        )
+        if choice in ("", "b", "both"):
+            picked_x = _do_cherry_pick(pr_num, merge_hash, sibling_x)
+            picked_n = _do_cherry_pick(pr_num, merge_hash, pick_ref)
+            return [picked_x, picked_n]
+        elif choice in ("o", "only"):
+            return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
+        elif choice in ("a", "abort"):
+            fail("Aborted by user at Upstream-First policy prompt.")
+        else:
+            fail("Unrecognized choice %r; aborting." % choice)
+
+    return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
 
 
 def print_jira_issue_summary(issue):
@@ -658,77 +776,273 @@ def resolve_jira_issues(title, merge_branches, comment):
         resolve_jira_issue(merge_branches, comment, jira_id)
 
 
-def standardize_jira_ref(text):
+class Component:
+    """A Spark PR-title tag, paired with its canonical JIRA component name.
+
+    ``jira_name`` is the canonical name of the SPARK JIRA component (e.g.
+    "Documentation"); empty for status markers like [MINOR] that are not
+    JIRA components but are still recognized in PR titles.
+
+    ``tag`` is the preferred PR-title abbreviation (uppercase, no brackets,
+    e.g. "DOC"). ``aliases`` lists other accepted spellings that resolve to
+    the same component (e.g. "DOCS", "DOCUMENTATION" -> "DOC").
+
+    ``primary`` marks components whose presence alone satisfies the merge-time
+    requirement. Non-primary JIRA components (e.g. [TEST], [SHUFFLE], [DEPLOY])
+    remain recognized — they normalize and pass through validation — but
+    they must be paired with a primary tag (e.g. [SQL][TEST]). Status
+    markers are never primary. [WIP] is intentionally absent from the
+    registry: a WIP PR should be aborted at the earlier WIP warning, not
+    merged.
     """
-    Standardize the [SPARK-XXXXX] [MODULE] prefix
-    Converts "[SPARK-XXX][mllib] Issue", "[MLLib] SPARK-XXX. Issue" or "SPARK XXX [MLLIB]: Issue" to
-    "[SPARK-XXX][MLLIB] Issue"
 
-    >>> standardize_jira_ref(
-    ...     "[SPARK-5821] [SQL] ParquetRelation2 CTAS should check if delete is successful")
-    '[SPARK-5821][SQL] ParquetRelation2 CTAS should check if delete is successful'
-    >>> standardize_jira_ref(
-    ...     "[SPARK-4123][Project Infra][WIP]: Show new dependencies added in pull requests")
-    '[SPARK-4123][PROJECT INFRA][WIP] Show new dependencies added in pull requests'
-    >>> standardize_jira_ref("[MLlib] Spark  5954: Top by key")
-    '[SPARK-5954][MLLIB] Top by key'
-    >>> standardize_jira_ref("[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl")
-    '[SPARK-979] a LRU scheduler for load balancing in TaskSchedulerImpl'
-    >>> standardize_jira_ref(
-    ...     "SPARK-1094 Support MiMa for reporting binary compatibility across versions.")
-    '[SPARK-1094] Support MiMa for reporting binary compatibility across versions.'
-    >>> standardize_jira_ref("[WIP]  [SPARK-1146] Vagrant support for Spark")
-    '[SPARK-1146][WIP] Vagrant support for Spark'
-    >>> standardize_jira_ref(
-    ...     "SPARK-1032. If Yarn app fails before registering, app master stays aroun...")
-    '[SPARK-1032] If Yarn app fails before registering, app master stays aroun...'
-    >>> standardize_jira_ref(
-    ...     "[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.")
-    '[SPARK-6250][SPARK-6146][SPARK-5911][SQL] Types are now reserved words in DDL parser.'
-    >>> standardize_jira_ref(
-    ...     'Revert "[SPARK-48591][PYTHON] Simplify the if-else branches with F.lit"')
-    'Revert "[SPARK-48591][PYTHON] Simplify the if-else branches with F.lit"'
-    >>> standardize_jira_ref("Additional information for users building from source code")
-    'Additional information for users building from source code'
+    def __init__(self, tag, aliases=(), primary=False, jira_name=""):
+        self.tag = tag
+        self.aliases = frozenset(aliases)
+        self.primary = primary
+        self.jira_name = jira_name
+
+    def matches(self, token):
+        return token == self.tag or token in self.aliases
+
+    @classmethod
+    def find(cls, token):
+        """Return the Component matching ``token`` (case-insensitive), or None."""
+        if token is None:
+            return None
+        token = token.strip().upper()
+        for c in COMPONENTS:
+            if c.matches(token):
+                return c
+        return None
+
+
+# Full SPARK JIRA component list (sorted alphabetically by tag), followed
+# by status markers. Keep in sync with the components in JIRA — fetch the
+# current list with:
+#   curl -s https://issues.apache.org/jira/rest/api/2/project/SPARK/components
+# A `primary=True` marker indicates the tag alone satisfies the merge-time
+# component requirement; non-primary JIRA components must be paired with a
+# primary one (e.g. [SQL][TEST], [CORE][SHUFFLE]). Status
+# markers leave `jira_name` empty.
+COMPONENTS = (
+    Component("BLOCK_MANAGER", jira_name="Block Manager"),
+    Component("BUILD", primary=True, jira_name="Build"),
+    Component("CONNECT", primary=True, jira_name="Connect"),
+    Component("CORE", ("SPARK_CORE",), primary=True, jira_name="Spark Core"),
+    Component("DEPLOY", jira_name="Deploy"),
+    Component("DOC", ("DOCS", "DOCUMENTATION"), primary=True, jira_name="Documentation"),
+    Component("DOCKER", primary=True, jira_name="Spark Docker"),
+    Component("EC2", jira_name="EC2"),
+    Component("EXAMPLE", ("EXAMPLES",), jira_name="Examples"),
+    Component("GRAPHX", primary=True, jira_name="GraphX"),
+    Component("INFRA", ("PROJECT_INFRA",), primary=True, jira_name="Project Infra"),
+    Component("IO", jira_name="Input/Output"),
+    Component("JAVA", ("JAVA_API", "JAVAAPI"), jira_name="Java API"),
+    Component("K8S", ("KUBERNETES",), primary=True, jira_name="Kubernetes"),
+    Component("MESOS", jira_name="Mesos"),
+    Component("ML", primary=True, jira_name="ML"),
+    Component("MLLIB", primary=True, jira_name="MLlib"),
+    Component("OPTIMIZER", jira_name="Optimizer"),
+    Component("PROTOBUF", jira_name="Protobuf"),
+    Component("PS", primary=True, jira_name="Pandas API on Spark"),
+    Component("PYTHON", ("PYSPARK",), primary=True, jira_name="PySpark"),
+    Component("R", ("SPARKR",), primary=True, jira_name="R"),
+    Component("REPL", ("SHELL", "SPARK_SHELL"), jira_name="Spark Shell"),
+    Component("SCHEDULER", jira_name="Scheduler"),
+    Component("SDP", ("PIPELINES",), primary=True, jira_name="Declarative Pipelines"),
+    Component("SECURITY", primary=True, jira_name="Security"),
+    Component("SHUFFLE", jira_name="Shuffle"),
+    Component("SQL", primary=True, jira_name="SQL"),
+    Component("SS", primary=True, jira_name="Structured Streaming"),
+    Component("STREAMING", ("DSTREAM", "DSTREAMS"), primary=True, jira_name="DStreams"),
+    Component("SUBMIT", jira_name="Spark Submit"),
+    Component("TEST", ("TESTS", "TEST-ONLY", "TESTS-ONLY"), jira_name="Tests"),
+    Component("UI", ("WEBUI", "WEB_UI"), primary=True, jira_name="Web UI"),
+    Component("WINDOWS", primary=True, jira_name="Windows"),
+    Component("YARN", primary=True, jira_name="YARN"),
+    # Status markers — recognized in PR titles, but not JIRA components.
+    Component("FOLLOWUP", ("FOLLOW-UP",)),
+    Component("MINOR"),
+    Component("TRIVIAL"),
+)
+
+
+_BRACKET_TAG_RE = re.compile(r"\[\s*([A-Za-z0-9._-]+)\s*\]")
+_SPARK_ID_RE = re.compile(r"^SPARK-\d+$", re.IGNORECASE)
+_VERSION_TAG_RE = re.compile(r"^\d+\.(\d+|X)$")
+_LEADING_TAGS = frozenset({"MINOR", "TRIVIAL"})
+
+
+class Title:
+    """Structured PR title: SPARK refs, component tags, and body.
+
+    ``leading``    — SPARK-NNNNN IDs and [MINOR]/[TRIVIAL] markers, in order.
+    ``components`` — all other bracket tags, in order.
+    ``text``       — body text following the bracket sequence.
+
+    >>> t = Title.parse("[SPARK-1234][SQL] Fix something")
+    >>> t.leading, t.components, t.text
+    (['SPARK-1234'], ['SQL'], 'Fix something')
+    >>> str(t)
+    '[SPARK-1234][SQL] Fix something'
+    >>> t = Title.parse("[SPARK-1234][SQL][FOLLOWUP] Fix something")
+    >>> t.leading, t.components, t.text
+    (['SPARK-1234'], ['SQL', 'FOLLOWUP'], 'Fix something')
+    >>> str(t)
+    '[SPARK-1234][SQL][FOLLOWUP] Fix something'
+    >>> t = Title.parse("[SPARK-1234]")
+    >>> t.leading, t.components, t.text
+    (['SPARK-1234'], [], '')
+    >>> str(t)
+    '[SPARK-1234]'
     """
-    jira_refs = []
-    components = []
 
-    # If this is a Revert PR, no need to process any further
-    if text.startswith('Revert "') and text.endswith('"'):
-        return text
+    def __init__(
+        self,
+        leading: List[str],
+        components: List[str],
+        text: str,
+    ) -> None:
+        self.leading = leading
+        self.components = components
+        self.text = text
 
-    # If the string is compliant, no need to process any further
-    if re.search(r"^\[SPARK-[0-9]{3,6}\](\[[A-Z0-9_\s,]+\] )+\S+", text):
-        return text
+    @classmethod
+    def parse(cls, raw: str) -> "Title":
+        """Parse a PR title string into a :class:`Title`.
 
-    # Extract JIRA ref(s):
-    pattern = re.compile(r"(SPARK[-\s]*[0-9]{3,6})+", re.IGNORECASE)
-    for ref in pattern.findall(text):
-        # Add brackets, replace spaces with a dash, & convert to uppercase
-        jira_refs.append("[" + re.sub(r"\s+", "-", ref.upper()) + "]")
-        text = text.replace(ref, "")
+        A title must open with a leading tag ([SPARK-NNNNN], [MINOR], or
+        [TRIVIAL]); otherwise :exc:`ValueError` is raised.  Subsequent bracket
+        tokens (spaces trimmed, separated by optional whitespace) go to
+        ``components``.  The remainder is ``text``.
 
-    # Extract spark component(s):
-    # Look for alphanumeric chars, spaces, dashes, periods, and/or commas
-    pattern = re.compile(r"(\[[\w\s,.-]+\])", re.IGNORECASE)
-    for component in pattern.findall(text):
-        components.append(component.upper())
-        text = text.replace(component, "")
+        >>> t = Title.parse("[SPARK-1234][SQL][TESTS] Fix something")
+        >>> t.leading, t.components, t.text
+        (['SPARK-1234'], ['SQL', 'TESTS'], 'Fix something')
+        >>> t = Title.parse("  [ SPARK-1234 ]  [ SQL ] [  TESTS  ]   Fix something")
+        >>> t.leading, t.components, t.text
+        (['SPARK-1234'], ['SQL', 'TESTS'], 'Fix something')
+        >>> t = Title.parse("[SPARK-1234 ][ sql ][ followup ] Fix")
+        >>> t.leading, t.components, t.text
+        (['SPARK-1234'], ['SQL', 'FOLLOWUP'], 'Fix')
+        >>> str(t)
+        '[SPARK-1234][SQL][FOLLOWUP] Fix'
+        >>> Title.parse("[MINOR] Fix typo").leading
+        ['MINOR']
+        >>> t = Title.parse("[spark-1234][sql][followup] Fix")
+        >>> t.leading, t.components
+        (['SPARK-1234'], ['SQL', 'FOLLOWUP'])
+        >>> Title.parse("[SPARK-1234][SPARK-5678][SQL] Fix").leading
+        ['SPARK-1234', 'SPARK-5678']
+        >>> Title.parse("[SPARK-1234][4.X][SQL] Fix").components
+        ['4.X', 'SQL']
+        >>> Title.parse("[SPARK-1234][SQL][4.2] Fix").components
+        ['SQL', '4.2']
+        >>> Title.parse("[SQL] Fix")
+        Traceback (most recent call last):
+            ...
+        ValueError: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: '[SQL] Fix'
+        >>> Title.parse("No brackets")
+        Traceback (most recent call last):
+            ...
+        ValueError: title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: 'No brackets'
+        >>> Title.parse("[SPARK-1234][SQL][SPARK-123] Fix")
+        Traceback (most recent call last):
+            ...
+        ValueError: [SPARK-NNNNN] tags must all appear before other tags: '[SPARK-1234][SQL][SPARK-123] Fix'
+        >>> Title.parse("[SPARK-1234][MINOR][SQL] Fix")
+        Traceback (most recent call last):
+            ...
+        ValueError: [SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist
+        >>> Title.parse("[MINOR][TRIVIAL][SQL] Fix")
+        Traceback (most recent call last):
+            ...
+        ValueError: [SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist
+        """
+        leading: List[str] = []
+        components: List[str] = []
 
-    # Cleanup any remaining symbols:
-    pattern = re.compile(r"^\W+(.*)", re.IGNORECASE)
-    if pattern.search(text) is not None:
-        text = pattern.search(text).groups()[0]
+        raw = raw.strip()
+        m0 = _BRACKET_TAG_RE.match(raw)
+        first = m0.group(1).upper() if m0 else ""
+        if not (_SPARK_ID_RE.match(first) or first in _LEADING_TAGS):
+            raise ValueError("title must start with [SPARK-NNNNN], [MINOR], or [TRIVIAL]: %r" % raw)
 
-    # Assemble full text (JIRA ref(s), module(s), remaining text)
-    clean_text = "".join(jira_refs).strip() + "".join(components).strip() + " " + text.strip()
+        past_leading = False
+        pos = 0
+        while pos < len(raw):
+            m = _BRACKET_TAG_RE.match(raw, pos)
+            if not m:
+                break
+            tag = m.group(1).upper()
+            if _SPARK_ID_RE.match(tag):
+                if past_leading:
+                    raise ValueError(
+                        "[SPARK-NNNNN] tags must all appear before other tags: %r" % raw
+                    )
+                leading.append(tag)
+            elif tag in _LEADING_TAGS:
+                leading.append(tag)
+            else:
+                components.append(tag)
+                past_leading = True
+            pos = m.end()
+            while pos < len(raw) and raw[pos] == " ":
+                pos += 1
 
-    # Replace multiple spaces with a single space, e.g. if no jira refs and/or components were
-    # included
-    clean_text = re.sub(r"\s+", " ", clean_text.strip())
+        text = raw[pos:].lstrip()
+        markers = [t for t in leading if t in _LEADING_TAGS]
+        if len(markers) > 1 or (markers and len(leading) > len(markers)):
+            raise ValueError("[SPARK-NNNNN], [MINOR], and [TRIVIAL] cannot coexist")
+        return cls(leading, components, text)
 
-    return clean_text
+    def __str__(self) -> str:
+        parts = "".join("[%s]" % t for t in self.leading)
+        parts += "".join("[%s]" % c for c in self.components)
+        if not self.text:
+            return parts
+        return parts + (" " if parts else "") + self.text
+
+
+def prompt_for_components():
+    """
+    Prompt the committer for component(s) when the PR title lacks a primary
+    component. Each entered token is normalized via Component.find
+    (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"). Unrecognized tokens are
+    passed through as-is. Re-prompts until at least one entered token resolves
+    to a primary Component (one with primary=True). Returns an uppercase list
+    of tags in insertion order.
+    """
+    print("PR title is missing a primary [COMPONENT] tag.")
+    print("Primary components (one of these is required):")
+    primary = [c for c in COMPONENTS if c.primary]
+    width = max(len(c.tag) for c in primary)
+    for c in primary:
+        print("  [%s]%s - %s" % (c.tag, " " * (width - len(c.tag)), c.jira_name))
+    while True:
+        raw = bold_input(
+            "Enter comma-separated component(s) to insert into the title (e.g. CORE,SQL): "
+        )
+        components = []
+        has_primary = False
+        for token in raw.split(","):
+            t = token.strip().upper()
+            if t:
+                c = Component.find(t)
+                if c is not None and c.primary:
+                    has_primary = True
+                components.append(c.tag if c else t)
+        if not components:
+            print_error("Component(s) cannot be empty. Please enter at least one.")
+            continue
+        if not has_primary:
+            print_error(
+                "At least one component must be a primary tag (see list above). "
+                "Got: %s" % ", ".join(components)
+            )
+            continue
+        return components
 
 
 def get_current_ref():
@@ -790,7 +1104,6 @@ def main():
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
-    branch_iter = iter(branch_names)
 
     if len(sys.argv) == 1:
         pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
@@ -801,28 +1114,62 @@ def main():
     pr_events = get_json("%s/issues/%s/events" % (GITHUB_API_BASE, pr_num))
 
     url = pr["url"]
+    title = pr["title"]
 
-    # Warn if the PR is WIP
-    if "[WIP]" in pr["title"]:
-        msg = "The PR title has `[WIP]`:\n%s\nContinue?" % pr["title"]
-        continue_maybe(msg)
+    # Fail hard on WIP or DO-NOT-MERGE to prevent accidental merges.
+    if "[WIP]" in title or "[DO-NOT-MERGE]" in title:
+        fail("Cannot merge a PR with [WIP] or [DO-NOT-MERGE] in the title:\n%s" % title)
 
-    # Decide whether to use the modified title or not
-    modified_title = standardize_jira_ref(pr["title"]).rstrip(".")
-    if modified_title != pr["title"]:
-        print("I've re-written the title as follows to match the standard format:")
-        print("Original: %s" % pr["title"])
-        print("Modified: %s" % modified_title)
-        result = bold_input("Would you like to use the modified title? (y/N): ")
-        if result.lower() == "y":
-            title = modified_title
-            print("Using modified title:")
-        else:
-            title = pr["title"]
-            print("Using original title:")
-        print(title)
-    else:
-        title = pr["title"]
+    # e.g. 'Revert "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
+    is_revert_pr = title.startswith('Revert "') and title.endswith('"')
+    # e.g. 'Reapply "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
+    is_reapply_pr = title.startswith('Reapply "') and title.endswith('"')
+
+    # Revert and Reapply PRs keep their title verbatim.
+    if not (is_revert_pr or is_reapply_pr):
+        # Parse; fail on a malformed title.
+        try:
+            parsed = Title.parse(title)
+        except ValueError as e:
+            fail("Malformed PR title: %s" % e)
+
+        # Normalize component tags via the registry and track primary.
+        components = []
+        has_primary = False
+        for tag in parsed.components:
+            c = Component.find(tag)
+            if c is not None and c.primary:
+                has_primary = True
+            components.append(c.tag if c is not None else tag)
+        if not has_primary:
+            new_tags = prompt_for_components()
+            components = new_tags + components
+
+        # Deduplicate tags in insertion order.
+        components = list(dict.fromkeys(components))
+
+        # Move version tags (e.g. [4.X], [4.2]) to the head of components.
+        versions = [t for t in components if _VERSION_TAG_RE.match(t)]
+        if versions:
+            others = [t for t in components if not _VERSION_TAG_RE.match(t)]
+            components = versions + others
+
+        # Move FOLLOWUP to the last tag.
+        non_followup = [t for t in components if t != "FOLLOWUP"]
+        if len(non_followup) < len(components):
+            components = non_followup + ["FOLLOWUP"]
+
+        # Warn about tags that are neither known components nor version tags.
+        unknown = [
+            t for t in components if Component.find(t) is None and not _VERSION_TAG_RE.match(t)
+        ]
+        if unknown:
+            print_error("Title has unknown tag(s): %s" % ", ".join("[%s]" % t for t in unknown))
+
+        parsed.components = components
+        title = str(parsed)
+        if title != pr["title"]:
+            print("Normalized title: %s" % title)
 
     body = pr["body"]
     if body is None:
@@ -900,7 +1247,8 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
-        cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
+        default = branch_names[0]
+        cherry_pick(pr_num, merge_hash, default, branch_names, target_ref, already_picked=())
         sys.exit(0)
 
     if not bool(pr["mergeable"]):
@@ -926,11 +1274,35 @@ def main():
 
     merge_hash = merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_authors)
 
+    # The "Closes #N" keyword in the commit message only auto-closes the PR when the commit
+    # lands on the default branch. For merges into other branches (e.g. branch-X.Y backport
+    # PRs), GitHub leaves the PR open, so close it explicitly through the API.
+    pr_state = get_json("%s/pulls/%s" % (GITHUB_API_BASE, pr_num)).get("state")
+    if pr_state != "closed":
+        print("PR #%s is still open after push; closing it explicitly." % pr_num)
+        close_pr(pr_num)
+
+    # Walk a mutable remaining-branches list so the next default correctly skips any
+    # branches already picked, including branches consumed by the Upstream-First two-branch
+    # path inside cherry_pick (e.g. picking branch-M.x + branch-M.N in a single prompt).
+    # merged_refs doubles as the already_picked set passed to cherry_pick: it starts with
+    # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
+    remaining_branches = [b for b in branch_names if b != target_ref]
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
     while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
-        merged_refs = merged_refs + [
-            cherry_pick(pr_num, merge_hash, next(branch_iter, branch_names[0]))
-        ]
+        default = remaining_branches[0] if remaining_branches else branch_names[0]
+        picked = cherry_pick(
+            pr_num,
+            merge_hash,
+            default,
+            branch_names,
+            target_ref,
+            already_picked=tuple(merged_refs),
+        )
+        merged_refs = merged_refs + picked
+        for b in picked:
+            if b in remaining_branches:
+                remaining_branches.remove(b)
 
     if asf_jira is not None:
         continue_maybe("Would you like to update an associated JIRA?")

@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.util.Utils.getUriBuilder
 
@@ -359,15 +360,7 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitSetPath(ctx: SetPathContext): LogicalPlan = withOrigin(ctx) {
-    val elements = ctx.pathElement().asScala.map { pe =>
-      if (pe.DEFAULT_PATH() != null) PathElement.DefaultPath
-      else if (pe.SYSTEM_PATH() != null) PathElement.SystemPath
-      else if (pe.PATH() != null) PathElement.PathRef
-      else if (pe.CURRENT_DATABASE() != null) PathElement.CurrentDatabase
-      else if (pe.CURRENT_SCHEMA() != null) PathElement.CurrentSchema
-      else PathElement.SchemaInPath(visitMultipartIdentifier(pe.multipartIdentifier()))
-    }.toSeq
-    SetPathCommand(elements)
+    SetPathCommand(ctx.pathElement().asScala.map(visitPathElement).toSeq)
   }
 
   /**
@@ -871,7 +864,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       .getOrElse(Map.empty)
     val codeLiteral = visitCodeLiteral(ctx.codeLiteral())
 
-    CreateMetricViewCommand(
+    CreateMetricView(
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       userSpecifiedColumns,
       visitCommentSpecList(ctx.commentSpec()),

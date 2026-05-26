@@ -2738,19 +2738,23 @@ case class ElementAt(
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
 
   @transient private lazy val doElementAt: (Any, Any) => Any = left.dataType match {
+    // ArrayType is split into ANSI (failOnError) and non-ANSI branches.
+    // Order matters: the guarded case must come first.
+    case _: ArrayType if failOnError =>
+      (value, ordinal) => {
+        val array = value.asInstanceOf[ArrayData]
+        val idx = ArrayExpressionUtils.resolveArrayIndex(
+          array.numElements(), ordinal.asInstanceOf[Int], getContextOrNull())
+        if (arrayElementNullable && array.isNullAt(idx)) null else array.get(idx, dataType)
+      }
     case _: ArrayType =>
       (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
-          if (failOnError) {
-            throw QueryExecutionErrors.invalidElementAtIndexError(
-              index, array.numElements(), getContextOrNull())
-          } else {
-            defaultValueOutOfBound match {
-              case Some(value) => value.eval()
-              case None => null
-            }
+          defaultValueOutOfBound match {
+            case Some(value) => value.eval()
+            case None => null
           }
         } else {
           val idx = if (index == 0) {
@@ -2773,6 +2777,31 @@ case class ElementAt(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     left.dataType match {
+      // ArrayType is split into ANSI (failOnError) and non-ANSI branches.
+      // Order matters: the guarded case must come first.
+      case _: ArrayType if failOnError =>
+        nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+          val index = ctx.freshName("elementAtIndex")
+          val errorContext = getContextOrNullCode(ctx)
+          val utils = classOf[ArrayExpressionUtils].getName
+          val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
+          val body = if (arrayElementNullable) {
+            s"""
+               |if ($eval1.isNullAt($index)) {
+               |  ${ev.isNull} = true;
+               |} else {
+               |  $assignment
+               |}
+             """.stripMargin
+          } else {
+            assignment
+          }
+          s"""
+             |int $index = $utils.resolveArrayIndex(
+             |  $eval1.numElements(), (int) $eval2, $errorContext);
+             |$body
+           """.stripMargin
+        })
       case _: ArrayType =>
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
@@ -2786,21 +2815,15 @@ case class ElementAt(
             ""
           }
           val errorContext = getContextOrNullCode(ctx)
-          val indexOutOfBoundBranch = if (failOnError) {
-            // scalastyle:off line.size.limit
-            s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
-            // scalastyle:on line.size.limit
-          } else {
-            defaultValueOutOfBound match {
-              case Some(value) =>
-                val defaultValueEval = value.genCode(ctx)
-                s"""
-                  ${defaultValueEval.code}
-                  ${ev.isNull} = ${defaultValueEval.isNull};
-                  ${ev.value} = ${defaultValueEval.value};
-                """.stripMargin
-              case None => s"${ev.isNull} = true;"
-            }
+          val indexOutOfBoundBranch = defaultValueOutOfBound match {
+            case Some(value) =>
+              val defaultValueEval = value.genCode(ctx)
+              s"""
+                ${defaultValueEval.code}
+                ${ev.isNull} = ${defaultValueEval.isNull};
+                ${ev.value} = ${defaultValueEval.value};
+              """.stripMargin
+            case None => s"${ev.isNull} = true;"
           }
 
           s"""

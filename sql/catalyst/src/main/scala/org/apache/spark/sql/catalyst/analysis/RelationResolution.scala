@@ -24,7 +24,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{
   CatalogTable,
-  CatalogTableType,
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
@@ -34,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
   CatalogPlugin,
   CatalogV2Util,
-  ChangelogInfo,
+  ChangelogContext,
   Identifier,
   LookupCatalog,
   MetadataTable,
@@ -331,19 +330,17 @@ class RelationResolution(
    * Resolve a CDC (CHANGES) query: look up the catalog, call loadChangelog(), wrap in
    * ChangelogTable, and return a DataSourceV2Relation.
    */
-  def resolveChangelog(
-      u: UnresolvedRelation,
-      changelogInfo: ChangelogInfo): Option[LogicalPlan] = {
+  def resolveChangelog(u: UnresolvedRelation, ctx: ChangelogContext): Option[LogicalPlan] = {
     expandIdentifier(u.multipartIdentifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
         val tableCatalog = catalog.asTableCatalog
         val changelog = try {
-          tableCatalog.loadChangelog(ident, changelogInfo)
+          tableCatalog.loadChangelog(ident, ctx, u.options)
         } catch {
           case _: UnsupportedOperationException =>
             throw QueryCompilationErrors.cdcNotSupportedError(tableCatalog.name())
         }
-        val changelogTable = ChangelogTable(changelog, changelogInfo)
+        val changelogTable = ChangelogTable(changelog, ctx)
         val relation = if (u.isStreaming) {
           StreamingRelationV2(
             None, changelogTable.name, changelogTable, u.options,
@@ -382,7 +379,7 @@ class RelationResolution(
       timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     def createDataSourceV1Scan(v1Table: CatalogTable): LogicalPlan = {
       if (isStreaming) {
-        if (v1Table.tableType == CatalogTableType.VIEW) {
+        if (v1Table.isViewLike) {
           throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
             ident.quoted
           )
@@ -461,7 +458,11 @@ class RelationResolution(
   }
 
   def resolveReference(ref: V2TableReference): LogicalPlan = {
-    val relation = getOrLoadRelation(ref)
+    val relation = if (ref.context.cacheable) {
+      getOrLoadRelation(ref)
+    } else {
+      loadRelation(ref)
+    }
     val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
     cloneWithPlanId(relation, planId)
   }

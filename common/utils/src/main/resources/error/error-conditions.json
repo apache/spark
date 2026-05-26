@@ -191,6 +191,71 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
+    ],
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_EMPTY_KEYS" : {
+    "message" : [
+      "AutoCDC requires at least one key column to identify rows, but received an empty key set."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MICROBATCH_VALIDATION" : {
+    "message" : [
+      "AutoCDC flow on table <tableName> in batch <batchId> failed microbatch validation."
+    ],
+    "subClass" : {
+      "NON_ORDERABLE_SEQUENCE" : {
+        "message" : [
+          "The sequencing column has non-orderable type <dataType>. The sequencing column must be of a type that supports ordering."
+        ]
+      },
+      "NULL_KEY" : {
+        "message" : [
+          "The microbatch contains rows with null values in the following key column(s): <nullKeyCounts>. All rows must have non-null values for every key column."
+        ]
+      },
+      "NULL_SEQUENCE" : {
+        "message" : [
+          "The microbatch contains <nullCount> row(s) with a null sequencing value. All rows must have a non-null sequencing value."
+        ]
+      }
+    },
+    "sqlState" : "22000"
+  },
+  "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
+    ],
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET" : {
+    "message" : [
+      "Invalid AutoCDC destination <tableName> with multiple flows: <flows>. An AutoCDC target table must have exactly one flow writing to it."
+    ],
+    "sqlState" : "42000"
+  },
+  "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
+    ],
+    "sqlState" : "42710"
+  },
+  "AUTOCDC_SCD2_NOT_SUPPORTED" : {
+    "message" : [
+      "AutoCDC flows do not currently support SCD Type 2 transformations."
+    ],
+    "sqlState" : "0A000"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -1385,6 +1450,18 @@
       "Cannot convert the catalog function '<identifier>' into a SQL function due to corrupted function information in catalog. If the function is not a SQL function, please make sure the class name '<className>' is loadable."
     ],
     "sqlState" : "0A000"
+  },
+  "COUNTER_DIFF_NEGATIVE_COUNTER_VALUE" : {
+    "message" : [
+      "A negative counter value <value> was provided to function <function>. Negative counter values are not allowed."
+    ],
+    "sqlState" : "22003"
+  },
+  "COUNTER_DIFF_START_TIME_DECREASED" : {
+    "message" : [
+      "Start time provided to function <function> decreased from <previousStartTime> to <currentStartTime>. Start time is required to be non-decreasing."
+    ],
+    "sqlState" : "22023"
   },
   "CREATE_PERMANENT_VIEW_WITHOUT_ALIAS" : {
     "message" : [
@@ -2997,6 +3074,13 @@
     ],
     "sqlState" : "0A000"
   },
+  "INSERT_REPLACE_WHERE_TABLE_ALIAS_NOT_ALLOWED" : {
+    "message" : [
+      "Table alias is not allowed with INSERT INTO ... REPLACE WHERE because the WHERE condition is evaluated against the target table directly.",
+      "Use INSERT INTO ... REPLACE ON if you need to reference the target table via an alias."
+    ],
+    "sqlState" : "42000"
+  },
   "INSUFFICIENT_TABLE_PROPERTY" : {
     "message" : [
       "Can't find table property:"
@@ -3644,6 +3728,11 @@
       "Flow <flowIdentifier> returns an invalid relation type."
     ],
     "subClass" : {
+      "AUTOCDC_RELATION_FOR_TEMPORARY_VIEW" : {
+        "message" : [
+          "AutoCDC flows must target a streaming table because their reconciliation semantics require a streaming-table sink, but the flow <flowIdentifier> attempts to write an AutoCDC relation to the temporary view <viewIdentifier>."
+        ]
+      },
       "BATCH_RELATION_FOR_STREAMING_TABLE" : {
         "message" : [
           "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
@@ -4105,6 +4194,29 @@
     },
     "sqlState" : "42K0E"
   },
+  "INVALID_LINE_SEPARATOR" : {
+    "message" : [
+      "Invalid line separator configuration."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The 'lineSep' option cannot be an empty string."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "The 'lineSep' option cannot be a null value."
+        ]
+      },
+      "TOO_LONG" : {
+        "message" : [
+          "The 'lineSep' option can contain at most 2 characters, but got <length> characters."
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "INVALID_LOG_VERSION" : {
     "message" : [
       "UnsupportedLogVersion."
@@ -4122,6 +4234,12 @@
       }
     },
     "sqlState" : "KD002"
+  },
+  "INVALID_METRIC_VIEW_YAML" : {
+    "message" : [
+      "Failed to parse metric view YAML: <message>"
+    ],
+    "sqlState" : "42K0L"
   },
   "INVALID_NAME_IN_USE_COMMAND" : {
     "message" : [
@@ -4726,6 +4844,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIMESTAMP_PRECISION" : {
+    "message" : [
+      "The seconds precision <precision> of <type> is invalid. Expected an integer in [7, 9], or parameterless <type> for precision <= 6."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TIMEZONE" : {
     "message" : [
       "The timezone: <timeZone> is invalid. The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm’ or '(+|-)HH:mm:ss', e.g '-08' , '+01:00' or '-13:33:33', and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
@@ -5263,6 +5387,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "MULTIPLE_EVENT_TIME_COLUMNS" : {
+    "message" : [
+      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
+    ],
+    "sqlState" : "42K09"
+  },
   "MULTIPLE_PRIMARY_KEYS" : {
     "message" : [
       "Multiple primary keys are defined: <columns>. Please ensure that only one primary key is defined for the table."
@@ -5324,6 +5454,11 @@
       "Invalid nearest-by join."
     ],
     "subClass" : {
+      "CROSS_JOIN_NOT_ENABLED" : {
+        "message" : [
+          "Nearest-by join is implemented as a bounded cross-product internally and is therefore rejected when `spark.sql.crossJoin.enabled = false`. Set `spark.sql.crossJoin.enabled = true` to permit it, or rewrite the query without nearest-by."
+        ]
+      },
       "EXACT_WITH_NONDETERMINISTIC_EXPRESSION" : {
         "message" : [
           "EXACT nearest-by join is incompatible with the nondeterministic ranking expression <expression>. Use APPROX, or replace the expression with a deterministic one."
@@ -6021,6 +6156,12 @@
       "Recursive definitions cannot be used when legacy inline flag is set to true (spark.sql.legacy.inlineCTEInCommands=true)."
     ],
     "sqlState" : "42836"
+  },
+  "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE" : {
+    "message" : [
+      "Recursive file loading is not supported when the data source has explicit partition columns. Either remove the option \"recursiveFileLookup\", or read the data without supplying partition columns (for example, do not read a partitioned table)."
+    ],
+    "sqlState" : "0A000"
   },
   "RECURSIVE_PROTOBUF_SCHEMA" : {
     "message" : [
@@ -6898,6 +7039,11 @@
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
         ]
       },
+      "INVALID_SINK_NAME" : {
+        "message" : [
+          "Invalid streaming sink name: '<sinkName>'. Sink names must only contain ASCII letters ('a'-'z', 'A'-'Z'), digits ('0'-'9'), and underscores ('_')."
+        ]
+      },
       "INVALID_SOURCE_NAME" : {
         "message" : [
           "Invalid streaming source name '<sourceName>'. Source names must only contain ASCII letters (a-z, A-Z), digits (0-9), and underscores (_)."
@@ -6906,6 +7052,11 @@
       "SOURCE_NAMING_NOT_SUPPORTED" : {
         "message" : [
           "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
+        ]
+      },
+      "UNNAMED_STREAMING_SINKS_WITH_ENFORCEMENT" : {
+        "message" : [
+          "Streaming sink must be named when spark.sql.streaming.queryEvolution.enableSinkEvolution is enabled. Use the name() method on DataStreamWriter to assign a name to the streaming sink."
         ]
       },
       "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {
@@ -7018,6 +7169,12 @@
   "ST_INVALID_CRS_VALUE" : {
     "message" : [
       "Invalid or unsupported CRS (coordinate reference system) value: '<crs>'."
+    ],
+    "sqlState" : "22023"
+  },
+  "ST_INVALID_ENDIANNESS_VALUE" : {
+    "message" : [
+      "Endianness '<endianness>' must be either 'NDR' (little-endian) or 'XDR' (big-endian)."
     ],
     "sqlState" : "22023"
   },
@@ -8078,6 +8235,26 @@
           "Store backend <stateStoreProvider> is not supported by TransformWithState operator. Please use RocksDBStateStoreProvider."
         ]
       },
+      "TABLESAMPLE_SYSTEM" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM is only supported by data sources that implement block-level sampling."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_NO_SCAN" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM requires a direct reference to a data source table that supports block-level sampling. It cannot be applied to subqueries, views, or tables with intervening operations."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_REPEATABLE" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM does not support the REPEATABLE clause. Use TABLESAMPLE BERNOULLI for repeatable sampling with a seed."
+        ]
+      },
+      "TABLESAMPLE_SYSTEM_SAMPLE_METHOD" : {
+        "message" : [
+          "TABLESAMPLE SYSTEM does not support <sampleMethod> sampling. Only PERCENT sampling is supported."
+        ]
+      },
       "TABLE_OPERATION" : {
         "message" : [
           "Table <tableName> does not support <operation>. Please check the current catalog and namespace to make sure the qualified table name is expected, and also check the catalog implementation which is configured by \"spark.sql.catalog\"."
@@ -8307,6 +8484,11 @@
       "ON_DATA_SOURCE_TABLE_WITH_AS_SERDE" : {
         "message" : [
           "The table <tableName> is a Spark data source table. Please use SHOW CREATE TABLE without AS SERDE instead."
+        ]
+      },
+      "ON_METRIC_VIEW" : {
+        "message" : [
+          "The command is not supported on a metric view <tableName>."
         ]
       },
       "ON_TEMPORARY_VIEW" : {
@@ -10873,11 +11055,6 @@
   "_LEGACY_ERROR_TEMP_3076" : {
     "message" : [
       "Redefining watermark is disallowed. You can set the config '<config>' to 'false' to restore the previous behavior. Note that multiple stateful operators will be disallowed."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3077" : {
-    "message" : [
-      "More than one event time columns are available. Please ensure there is at most one event time column per stream. event time columns: <eventTimeCols>"
     ]
   },
   "_LEGACY_ERROR_TEMP_3079" : {

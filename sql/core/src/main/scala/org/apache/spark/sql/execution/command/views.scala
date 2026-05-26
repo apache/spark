@@ -172,7 +172,7 @@ case class CreateViewCommand(
       if (allowExisting) {
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
-      } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
+      } else if (!tableMetadata.isViewLike) {
         throw QueryCompilationErrors.unsupportedCreateOrReplaceViewOnTableError(
           name.nameParts, replace)
       } else if (replace) {
@@ -866,24 +866,23 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
     if (originalText.isEmpty) {
       throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
     }
+    // For metric views, preserve the per-column metadata (`metric_view.type` / `metric_view.expr`)
+    // that the analyzer attaches to each dimension/measure `Alias`, even when the user supplies
+    // column names with comments.
     val aliasedSchema = CharVarcharUtils.getRawSchema(
-      aliasPlan(session, analyzedPlan, userSpecifiedColumns).schema, session.sessionState.conf)
+      aliasPlan(session, analyzedPlan, userSpecifiedColumns, retainMetadata = isMetricView).schema,
+      session.sessionState.conf)
     val newProperties = generateViewProperties(
       properties, session, analyzedPlan.schema.fieldNames, aliasedSchema.fieldNames, viewSchemaMode)
 
-    // Add property to indicate if this is a metric view
-    val finalProperties = if (isMetricView) {
-      newProperties + (CatalogTable.VIEW_WITH_METRICS -> "true")
-    } else {
-      newProperties
-    }
+    val tableType = if (isMetricView) CatalogTableType.METRIC_VIEW else CatalogTableType.VIEW
 
     CatalogTable(
       identifier = name,
-      tableType = CatalogTableType.VIEW,
+      tableType = tableType,
       storage = CatalogStorageFormat.empty,
       schema = aliasedSchema,
-      properties = finalProperties,
+      properties = newProperties,
       viewOriginalText = originalText,
       viewText = originalText,
       comment = comment,
@@ -894,18 +893,30 @@ object ViewHelper extends SQLConfHelper with Logging with CapturesConfig {
   /**
    * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
    * else return the analyzed plan directly.
+   *
+   * When `retainMetadata` is true, any existing column metadata on the analyzed attribute
+   * (for example the `metric_view.type` / `metric_view.expr` keys the analyzer attaches to
+   * metric-view columns) is preserved in the re-aliased projection. The no-comment branch
+   * already preserves `attr.metadata` transitively via `child.metadata` on the new `Alias`;
+   * the comment branch needs an explicit merge because it sets `explicitMetadata` to a
+   * freshly constructed metadata object.
    */
   def aliasPlan(
       session: SparkSession,
       analyzedPlan: LogicalPlan,
-      userSpecifiedColumns: Seq[(String, Option[String])]): LogicalPlan = {
+      userSpecifiedColumns: Seq[(String, Option[String])],
+      retainMetadata: Boolean = false): LogicalPlan = {
     if (userSpecifiedColumns.isEmpty) {
       analyzedPlan
     } else {
       val projectList = analyzedPlan.output.zip(userSpecifiedColumns).map {
         case (attr, (colName, None)) => Alias(attr, colName)()
         case (attr, (colName, Some(colComment))) =>
-          val meta = new MetadataBuilder().putString("comment", colComment).build()
+          val builder = new MetadataBuilder()
+          if (retainMetadata) {
+            builder.withMetadata(attr.metadata)
+          }
+          val meta = builder.putString("comment", colComment).build()
           Alias(attr, colName)(explicitMetadata = Some(meta))
       }
       session.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{EvaluateUnresolvedInlineTable, IntervalUtils}
-import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
+import org.apache.spark.sql.connector.catalog.{ChangelogContext, ChangelogRange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -376,9 +376,9 @@ class PlanParserSuite extends AnalysisTest {
     val limitWindowClauses = Seq(
       ("", (p: LogicalPlan) => p),
       (" limit 10", (p: LogicalPlan) => p.limit(10)),
-      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p, forPipeSQL = false)),
+      (" window w1 as ()", (p: LogicalPlan) => WithWindowDefinition(ws, p)),
       (" window w1 as () limit 10", (p: LogicalPlan) =>
-        WithWindowDefinition(ws, p, forPipeSQL = false).limit(10))
+        WithWindowDefinition(ws, p).limit(10))
     )
 
     val orderSortDistrClusterClauses = Seq(
@@ -529,7 +529,7 @@ class PlanParserSuite extends AnalysisTest {
          |window w1 as (partition by a, b order by c rows between 1 preceding and 1 following),
          |       w2 as w1,
          |       w3 as w1""".stripMargin,
-      WithWindowDefinition(ws1, plan, forPipeSQL = false))
+      WithWindowDefinition(ws1, plan))
   }
 
   test("lateral view") {
@@ -1022,6 +1022,207 @@ class PlanParserSuite extends AnalysisTest {
         fragment = fragment4,
         start = 25,
         stop = 65))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM and BERNOULLI - basic parsing") {
+    val sql = "select * from t"
+    // SYSTEM produces SampleMethod.System
+    assertEqual(
+      s"$sql tablesample system (43 percent) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    // BERNOULLI produces SampleMethod.Bernoulli
+    assertEqual(
+      s"$sql tablesample bernoulli (43 percent) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.Bernoulli).select(star()))
+    // No qualifier defaults to Bernoulli (backward compat)
+    assertEqual(
+      s"$sql tablesample(43 percent) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x")).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - case insensitivity") {
+    val sql = "select * from t"
+    // Keywords are case-insensitive
+    assertEqual(
+      s"$sql TABLESAMPLE SYSTEM (43 PERCENT) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    assertEqual(
+      s"$sql TabLeSaMpLe SyStEm (43 PeRcEnT) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    assertEqual(
+      s"$sql TABLESAMPLE BERNOULLI (43 PERCENT) as x",
+      Sample(0, .43d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.Bernoulli).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - boundary fractions") {
+    val sql = "select * from t"
+    // 0 PERCENT
+    assertEqual(
+      s"$sql tablesample system (0 percent) as x",
+      Sample(0, 0d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    // 100 PERCENT
+    assertEqual(
+      s"$sql tablesample system (100 percent) as x",
+      Sample(0, 1d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+    // Fractional percent
+    assertEqual(
+      s"$sql tablesample system (0.1 percent) as x",
+      Sample(0, 0.001d, withReplacement = false, None,
+        table("t").as("x"), SampleMethod.System).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - unsupported sample methods") {
+    val sql = "select * from t"
+    // SYSTEM + ROWS -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (100 rows)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "ROWS"),
+      context = ExpectedContext(
+        fragment = "tablesample system (100 rows)",
+        start = 16,
+        stop = 44))
+    // SYSTEM + BYTES -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (300M)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BYTES"),
+      context = ExpectedContext(
+        fragment = "tablesample system (300M)",
+        start = 16,
+        stop = 40))
+    // SYSTEM + BUCKET -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (bucket 4 out of 10)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET"),
+      context = ExpectedContext(
+        fragment = "tablesample system (bucket 4 out of 10)",
+        start = 16,
+        stop = 54))
+    // SYSTEM + BUCKET ON colname -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (bucket 4 out of 10 on x)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET"),
+      context = ExpectedContext(
+        fragment = "tablesample system (bucket 4 out of 10 on x)",
+        start = 16,
+        stop = 59))
+    // SYSTEM + BUCKET ON function -> error
+    checkError(
+      exception = parseException(s"$sql tablesample system (bucket 3 out of 32 on rand())"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_SAMPLE_METHOD",
+      sqlState = "0A000",
+      parameters = Map("sampleMethod" -> "BUCKET"),
+      context = ExpectedContext(
+        fragment = "tablesample system (bucket 3 out of 32 on rand())",
+        start = 16,
+        stop = 64))
+  }
+
+  test("SPARK-55978: TABLESAMPLE BERNOULLI - REPEATABLE is supported") {
+    assertEqual(
+      "select * from t tablesample bernoulli (43 percent) repeatable (123) as x",
+      Sample(0, .43d, withReplacement = false, 123L,
+        table("t").as("x"), SampleMethod.Bernoulli).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - REPEATABLE not supported") {
+    val sql = "select * from t"
+    checkError(
+      exception = parseException(s"$sql tablesample system (43 percent) repeatable (123)"),
+      condition = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_REPEATABLE",
+      sqlState = "0A000",
+      context = ExpectedContext(
+        fragment = "tablesample system (43 percent) repeatable (123)",
+        start = 16,
+        stop = 63))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - fraction out of range") {
+    val sql = "select * from t"
+    // > 100 PERCENT
+    checkError(
+      exception = parseException(s"$sql tablesample system (150 percent) as x"),
+      condition = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> "Sampling fraction (1.5) must be on interval [0, 1]"),
+      context = ExpectedContext(
+        fragment = "tablesample system (150 percent)",
+        start = 16,
+        stop = 47))
+    // Negative PERCENT
+    checkError(
+      exception = parseException(s"$sql tablesample system (-10 percent) as x"),
+      condition = "_LEGACY_ERROR_TEMP_0064",
+      parameters = Map("msg" -> "Sampling fraction (-0.1) must be on interval [0, 1]"),
+      context = ExpectedContext(
+        fragment = "tablesample system (-10 percent)",
+        start = 16,
+        stop = 47))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM and BERNOULLI as identifiers") {
+    // SYSTEM usable as column name (nonReserved)
+    assertEqual("SELECT system FROM t",
+      table("t").select($"system"))
+    // BERNOULLI usable as column name
+    assertEqual("SELECT bernoulli FROM t",
+      table("t").select($"bernoulli"))
+    // Usable as table alias
+    assertEqual("SELECT * FROM t system",
+      table("t").as("system").select(star()))
+    assertEqual("SELECT * FROM t bernoulli",
+      table("t").as("bernoulli").select(star()))
+    // SYSTEM as table name with default (Bernoulli) TABLESAMPLE
+    assertEqual("SELECT * FROM system TABLESAMPLE(10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("system").as("x")).select(star()))
+    // SYSTEM as table name with TABLESAMPLE SYSTEM qualifier
+    assertEqual("SELECT * FROM system TABLESAMPLE SYSTEM (10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("system").as("x"), SampleMethod.System).select(star()))
+    // SYSTEM as both table name and alias with TABLESAMPLE
+    assertEqual("SELECT * FROM system TABLESAMPLE(10 PERCENT) system",
+      Sample(0, .1d, withReplacement = false, None,
+        table("system").as("system")).select(star()))
+    // BERNOULLI as table name with TABLESAMPLE BERNOULLI qualifier
+    assertEqual("SELECT * FROM bernoulli TABLESAMPLE BERNOULLI (10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("bernoulli").as("x"), SampleMethod.Bernoulli).select(star()))
+    // SYSTEM as table name with TABLESAMPLE BERNOULLI (cross-keyword)
+    assertEqual("SELECT * FROM system TABLESAMPLE BERNOULLI (10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("system").as("x"), SampleMethod.Bernoulli).select(star()))
+    // BERNOULLI as both table name and alias with TABLESAMPLE
+    assertEqual("SELECT * FROM bernoulli TABLESAMPLE(10 PERCENT) bernoulli",
+      Sample(0, .1d, withReplacement = false, None,
+        table("bernoulli").as("bernoulli")).select(star()))
+    // Schema-qualified SYSTEM table name with TABLESAMPLE SYSTEM
+    assertEqual("SELECT * FROM mydb.system TABLESAMPLE SYSTEM (10 PERCENT) AS x",
+      Sample(0, .1d, withReplacement = false, None,
+        table("mydb", "system").as("x"), SampleMethod.System).select(star()))
+  }
+
+  test("SPARK-55978: TABLESAMPLE SYSTEM - subquery and join contexts") {
+    // SYSTEM sample in subquery
+    assertEqual(
+      "SELECT * FROM (SELECT * FROM t TABLESAMPLE SYSTEM (50 PERCENT)) sub",
+      Sample(0, .5d, withReplacement = false, None,
+        table("t"), SampleMethod.System)
+        .select(star()).as("sub").select(star()))
   }
 
   test("sub-query") {
@@ -1993,14 +2194,14 @@ class PlanParserSuite extends AnalysisTest {
         endInclusive: Boolean = true): RelationChanges = {
       RelationChanges(
         UnresolvedRelation(Seq("a", "b", "c")),
-        new ChangelogInfo(
+        new ChangelogContext(
           new ChangelogRange.VersionRange(
             startVersion,
             endVersion.map(java.util.Optional.of[String])
               .getOrElse(java.util.Optional.empty[String]),
             startInclusive,
             endInclusive),
-          ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+          ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
           false))
     }
 
@@ -2061,7 +2262,7 @@ class PlanParserSuite extends AnalysisTest {
         case rc: RelationChanges => rc
         case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
       }
-      changes.changelogInfo.range().asInstanceOf[ChangelogRange.TimestampRange]
+      changes.changelogContext.range().asInstanceOf[ChangelogRange.TimestampRange]
     }
 
     // Basic timestamp range
@@ -2099,54 +2300,54 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("CHANGES clause - with options") {
-    def assertChangelogInfo(sql: String): ChangelogInfo = {
+    def assertChangelogContext(sql: String): ChangelogContext = {
       val plan = parsePlan(sql)
       val project = plan.asInstanceOf[Project]
       val changes = project.child match {
         case rc: RelationChanges => rc
         case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
       }
-      changes.changelogInfo
+      changes.changelogContext
     }
 
     // Default: DROP_CARRYOVERS and computeUpdates = false
-    val info1 = assertChangelogInfo(
+    val info1 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20")
-    assert(info1.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info1.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(!info1.computeUpdates())
 
     // deduplicationMode = none
-    val info2 = assertChangelogInfo(
+    val info2 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none')")
-    assert(info2.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info2.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
     assert(!info2.computeUpdates())
 
     // deduplicationMode = netChanges
-    val info3 = assertChangelogInfo(
+    val info3 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'netChanges')")
-    assert(info3.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES)
+    assert(info3.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES)
 
     // computeUpdates = true
-    val info4 = assertChangelogInfo(
+    val info4 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (computeUpdates = 'true')")
-    assert(info4.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info4.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(info4.computeUpdates())
 
     // Both options together
-    val info5 = assertChangelogInfo(
+    val info5 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none', computeUpdates = 'true')")
-    assert(info5.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info5.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
     assert(info5.computeUpdates())
 
     // Case-insensitive deduplicationMode value
-    val info6 = assertChangelogInfo(
+    val info6 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'DROPCARRYOVERS')")
-    assert(info6.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info6.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
   }
 
   test("CHANGES clause - invalid deduplicationMode") {
@@ -2177,10 +2378,10 @@ class PlanParserSuite extends AnalysisTest {
       Project(Seq(UnresolvedStar(None)),
         RelationChanges(
           UnresolvedRelation(Seq("my_table")),
-          new ChangelogInfo(
+          new ChangelogContext(
             new ChangelogRange.VersionRange(
               "1", java.util.Optional.empty[String], true, true),
-            ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+            ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
             false))))
   }
 
