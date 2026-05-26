@@ -19,15 +19,17 @@ import unittest
 
 from pyspark.sql.tests.connect.test_parity_udf import UDFParityTests
 from pyspark.sql.tests.arrow.test_arrow_python_udf import ArrowPythonUDFTestsMixin
-from pyspark.testing.sqlutils import with_class_conf
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-@with_class_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"})
+@SQLTestUtils.with_sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"})
 class ArrowPythonUDFParityTests(UDFParityTests, ArrowPythonUDFTestsMixin):
     pass
 
 
-@with_class_conf({"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "true"})
+@SQLTestUtils.with_sql_conf(
+    {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "true"}
+)
 class ArrowPythonUDFParityLegacyTestsMixin(ArrowPythonUDFTestsMixin):
     @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFLegacyTests.")
     def test_udf_binary_type(self):
@@ -38,7 +40,9 @@ class ArrowPythonUDFParityLegacyTestsMixin(ArrowPythonUDFTestsMixin):
         super().test_udf_binary_type_in_nested_structures(self)
 
 
-@with_class_conf({"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "false"})
+@SQLTestUtils.with_sql_conf(
+    {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "false"}
+)
 class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
     @unittest.skip("Duplicate test as it is already tested in ArrowPythonUDFNonLegacyTests.")
     def test_udf_binary_type(self):
@@ -49,12 +53,12 @@ class ArrowPythonUDFParityNonLegacyTestsMixin(ArrowPythonUDFTestsMixin):
         super().test_udf_binary_type_in_nested_structures(self)
 
 
-@with_class_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"})
+@SQLTestUtils.with_sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"})
 class ArrowPythonUDFParityLegacyTests(UDFParityTests, ArrowPythonUDFParityLegacyTestsMixin):
     pass
 
 
-@with_class_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"})
+@SQLTestUtils.with_sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "true"})
 class ArrowPythonUDFParityNonLegacyTests(UDFParityTests, ArrowPythonUDFParityNonLegacyTestsMixin):
     pass
 

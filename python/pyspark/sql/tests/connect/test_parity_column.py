@@ -19,10 +19,10 @@ import unittest
 
 from pyspark.sql.tests.test_column import ColumnTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.sqlutils import with_class_conf
+from pyspark.testing.sqlutils import SQLTestUtils
 
 
-@with_class_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": "true"})
+@SQLTestUtils.with_sql_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": "true"})
 class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
     @unittest.skip("Requires JVM access.")
     def test_validate_column_types(self):
@@ -35,7 +35,7 @@ class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
         )
 
 
-@with_class_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": "false"})
+@SQLTestUtils.with_sql_conf({"spark.sql.analyzer.strictDataFrameColumnResolution": "false"})
 class ColumnParityTestsWithNonStrictDFColResolution(ColumnParityTests):
     """Re-run the Column parity tests with
     `spark.sql.analyzer.strictDataFrameColumnResolution=false` to exercise the
