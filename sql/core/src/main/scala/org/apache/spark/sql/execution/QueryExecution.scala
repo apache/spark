@@ -22,6 +22,7 @@ import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -41,7 +42,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.LookupCatalog
-import org.apache.spark.sql.connector.catalog.transactions.{CachedScan, Transaction}
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
@@ -736,28 +737,19 @@ object QueryExecution {
   // if reusing the cached snapshot is consistent with its isolation contract.
   private def validateCachedEntryForTransaction(cd: CachedData, txn: Transaction): Boolean = {
     val txnCatalogName = txn.catalog().name()
-    val txnTables = scala.collection.mutable.Set.empty[org.apache.spark.sql.connector.catalog.Table]
-    cd.plan.foreach {
-      case r: DataSourceV2Relation if r.catalog.exists(_.name() == txnCatalogName) =>
-        txnTables += r.table
-      case _ =>
-    }
+    val txnTables = cd.plan.collect {
+      case r: DataSourceV2Relation if r.catalog.exists(_.name() == txnCatalogName) => r.table
+    }.toSet
+
     if (txnTables.isEmpty) return true
 
-    val cachedSparkPlan = cd.cachedRepresentation.cacheBuilder.cachedPlan
-    val scans = new java.util.ArrayList[CachedScan]()
-    cachedSparkPlan.foreach {
-      case b: BatchScanExec if txnTables.contains(b.table) =>
-        scans.add(new CachedScan(b.table, b.scan))
-      case _ =>
+    val scans = cd.cachedRepresentation.cacheBuilder.cachedPlan.collect {
+      case b: BatchScanExec if txnTables.contains(b.table) => b.scan
     }
-    if (scans.isEmpty) {
-      // Logical plan referenced txn tables but no corresponding physical scans were found in
-      // the cached representation. Skip conservatively.
-      false
-    } else {
-      txn.registerScans(scans)
-    }
+    // An empty scan list means the optimizer eliminated every actual read of the txn-catalog
+    // tables referenced in the logical plan, so the cached data doesn't depend on those tables'
+    // state — safe to reuse the cache without consulting the connector.
+    scans.isEmpty || txn.registerScans(scans.asJava)
   }
 
   private[execution] def create(

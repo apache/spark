@@ -23,7 +23,8 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.connector.catalog.transactions.{CachedScan, Transaction}
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, RowLevelOperationBuilder, RowLevelOperationInfo, WriteBuilder}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -41,19 +42,25 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
 
   // Records every batch of scans the connector accepted via registerScans. Tests assert on this
   // to confirm cache substitution went through the txn path.
-  val registeredScans: ArrayBuffer[Seq[CachedScan]] = ArrayBuffer.empty
-
-  // Controls how registerScans responds. By default accept everything. Tests can swap this to
-  // exercise the rejection path. Mutated only from the test thread before a query runs.
-  var registerScansDecision: Seq[CachedScan] => Boolean = _ => true
+  val registeredScans: ArrayBuffer[Seq[Scan]] = ArrayBuffer.empty
 
   def currentState: TransactionState = state
 
   def isClosed: Boolean = closed
 
-  override def registerScans(scans: java.util.List[CachedScan]): Boolean = {
+  // Snapshot-isolation-style check: accept the batch iff every cached scan was built against the
+  // table at exactly the version the table is at now. Any intervening write bumps the version
+  // and forces a refusal — the cached snapshot would no longer be consistent with the txn's view.
+  // A real connector might be more permissive (e.g. Serializable connectors can accept older
+  // snapshots and record them in the read set for commit-time conflict detection), but the
+  // strict-equality rule is sufficient for testing the API plumbing.
+  override def registerScans(scans: java.util.List[Scan]): Boolean = {
     val asScala = scans.asScala.toSeq
-    val accepted = registerScansDecision(asScala)
+    val accepted = asScala.forall {
+      case s: InMemoryBaseTable#InMemoryBatchScan =>
+        s.builtAtTableVersion == s.currentTableVersion
+      case _ => false
+    }
     if (accepted) registeredScans += asScala
     accepted
   }

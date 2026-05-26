@@ -122,6 +122,23 @@ case class DataSourceV2Relation(
     copy(output = output.map(_.newInstance()))
   }
 
+  // Replace the `table` field with a stable identity placeholder when we have enough information
+  // to identify the table independently of the concrete `Table` object reference. This lets two
+  // relations that point at the same logical table compare equal even when one is wrapped (e.g.
+  // by a transaction-aware catalog) - the wrapper preserves `Table.id()` per the public contract.
+  // Drop-and-recreate detection is preserved because the connector must return a fresh id after
+  // recreate. Falls back to the default canonical form when identifier or id is missing.
+  override def doCanonicalize(): LogicalPlan = {
+    val base = super.doCanonicalize().asInstanceOf[DataSourceV2Relation]
+    val tableId = Option(base.table.id())
+    val catalogName = base.catalog.map(_.name())
+    (catalogName, base.identifier, tableId) match {
+      case (Some(cn), Some(ident), Some(id)) =>
+        base.copy(table = DataSourceV2Relation.IdentityKeyTable(cn, ident, id))
+      case _ => base
+    }
+  }
+
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
     case hasMeta: SupportsMetadataColumns =>
       metadataOutputWithOutConflicts(
@@ -320,6 +337,20 @@ object ExtractV2ScanInfo {
 }
 
 object DataSourceV2Relation {
+
+  // Sentinel substituted into a canonicalized `DataSourceV2Relation.table` field so that two
+  // relations targeting the same metastore entity compare equal regardless of which concrete
+  // `Table` instance backs each side. Only ever appears in canonicalized plans — never reaches
+  // execution. Comparison relies on the case-class equality on (catalogName, identifier, id).
+  private[v2] case class IdentityKeyTable(
+      catalogName: String,
+      identifier: Identifier,
+      override val id: String) extends Table {
+    override def name(): String = s"$catalogName.$identifier"
+    override def capabilities(): java.util.Set[TableCapability] =
+      throw new UnsupportedOperationException("IdentityKeyTable is canonicalization-only")
+  }
+
   def create(
       table: Table,
       catalog: Option[CatalogPlugin],

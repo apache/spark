@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog.transactions;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.CatalogPlugin;
 import org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin;
+import org.apache.spark.sql.connector.read.Scan;
 
 import java.io.Closeable;
 import java.util.List;
@@ -76,6 +77,9 @@ public interface Transaction extends Closeable {
    * transaction's isolation contract (e.g. snapshot isolation may require all reads to be
    * pinned to the same version).
    * <p>
+   * Each {@link Scan} was produced by this connector, so the connector can downcast to recover
+   * any internal state it needs (table identity, snapshot/version, pushed filters).
+   * <p>
    * The call is atomic: an implementation must either accept all of the supplied scans (return
    * {@code true}) and add them to the read set, or accept none of them (return {@code false})
    * and leave the read set unchanged.
@@ -83,12 +87,11 @@ public interface Transaction extends Closeable {
    * The default implementation returns {@code false}, causing Spark to skip cache substitution
    * for the corresponding cache entry.
    *
-   * @param scans non-empty list of cached scans whose tables belong to this transaction's
-   *              catalog.
+   * @param scans non-empty list of cached scans against tables in this transaction's catalog.
    * @return true if all scans were accepted and the cache entry is safe to reuse;
    *         false otherwise.
    */
-  default boolean registerScans(List<CachedScan> scans) {
+  default boolean registerScans(List<Scan> scans) {
     return false;
   }
 

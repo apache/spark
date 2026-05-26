@@ -684,6 +684,16 @@ abstract class InMemoryBaseTable(
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
+    // Snapshot of the table version when this scan was built. Real connectors (Iceberg, Delta)
+    // pin a snapshot id on the scan; this is the in-memory equivalent. Used by
+    // [[org.apache.spark.sql.connector.catalog.Txn.registerScans]] to decide whether a cached
+    // scan still reflects the current state of the table.
+    val builtAtTableVersion: Int = InMemoryBaseTable.this.tableVersion
+
+    // The current table version, read fresh on each access. Compare against
+    // [[builtAtTableVersion]] to detect intervening writes.
+    def currentTableVersion: Int = InMemoryBaseTable.this.tableVersion
+
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet
       partitioning.flatMap(_.references)
