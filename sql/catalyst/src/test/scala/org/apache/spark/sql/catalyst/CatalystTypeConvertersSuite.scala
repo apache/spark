@@ -488,6 +488,18 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(STUtils.stSrid(resultVal) === 4326)
   }
 
+  test("converting Geography with non-default SRID via convertToCatalyst") {
+    // Geography supports a variety of geographic SRIDs beyond the default 4326.
+    Seq(4267, 4269, 4612, 37001, 104030).foreach { srid =>
+      val geog = Geography.fromWKB(pointWkb, srid)
+      val result = CatalystTypeConverters.convertToCatalyst(geog)
+      assert(result.isInstanceOf[GeographyVal])
+      val resultVal = result.asInstanceOf[GeographyVal]
+      assert(java.util.Arrays.equals(STUtils.stAsBinary(resultVal, NDR), pointWkb))
+      assert(STUtils.stSrid(resultVal) === srid)
+    }
+  }
+
   test("convertToCatalyst null handling for geospatial types") {
     assert(CatalystTypeConverters.convertToCatalyst(null: Geometry) === null)
     assert(CatalystTypeConverters.convertToCatalyst(null: Geography) === null)
@@ -501,6 +513,19 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "ST_INVALID_SRID_VALUE",
       parameters = Map("srid" -> "1"))
+  }
+
+  test("convertToCatalyst with Geography with invalid SRID") {
+    // Geography only accepts geographic SRIDs (e.g. 0 and 3857 are not geographic).
+    Seq(0, 1, 3857).foreach { invalidSrid =>
+      val geog = Geography.fromWKB(pointWkb, invalidSrid)
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          CatalystTypeConverters.convertToCatalyst(geog)
+        },
+        condition = "ST_INVALID_SRID_VALUE",
+        parameters = Map("srid" -> invalidSrid.toString))
+    }
   }
 
   test("createToCatalystConverter for GeometryType") {
