@@ -16,6 +16,7 @@
  */
 
 package org.apache.spark
+
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor}
 
 import scala.jdk.CollectionConverters._
@@ -173,7 +174,7 @@ private[spark] abstract class StreamingShuffleOutputTracker(conf: SparkConf) ext
   /**
    * Get all shuffle writer tasks that are part of the shuffle. This API will return None until
    * all shuffle writer task location info is available.
-   * @param shuffleId  The id of the shuffle to get the lacation information about writer tasks
+   * @param shuffleId  The id of the shuffle to get the location information about writer tasks
    * @return A map in which the key is the shuffle writer task map id and the value
    *         is the location information of the task.
    */
@@ -185,7 +186,7 @@ private[spark] abstract class StreamingShuffleOutputTracker(conf: SparkConf) ext
    * that this function may not return all the shuffle writer locations if not all of them are
    * available. This contrast with the method "getAllShuffleWriterTaskLocations" in which all
    * locations will be returned or none with be returned.
-   * @param shuffleId  The id of the shuffle to get the lacation information about writer tasks
+   * @param shuffleId  The id of the shuffle to get the location information about writer tasks
    * @return ShuffleLocationResponse which contains a map shuffle writer task locations and the
    *         total number of shuffle writers to expect.
    */
@@ -194,7 +195,7 @@ private[spark] abstract class StreamingShuffleOutputTracker(conf: SparkConf) ext
 
 private[spark] case class StreamingShuffleInfo(numMaps: Int, numReduces: Int, jobId: Int)
 
-class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
+private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
   extends StreamingShuffleOutputTracker(conf) {
 
   // map that stores task location information organized in the following fashion
@@ -223,7 +224,10 @@ class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
     logInfo(log"Registering shuffleId ${MDC(LogKeys.SHUFFLE_ID, shuffleId)} with ${
       MDC(LogKeys.NUM_MAPPERS, numMaps)} mappers and ${
       MDC(LogKeys.NUM_REDUCERS, numReduces)} reducers")
-    shuffleInfos.put(shuffleId, StreamingShuffleInfo(numMaps, numReduces, jobId))
+    if (shuffleInfos.putIfAbsent(
+        shuffleId, StreamingShuffleInfo(numMaps, numReduces, jobId)) != null) {
+      throw new IllegalArgumentException(s"Shuffle ID $shuffleId registered twice")
+    }
   }
 
   // for testing purposes
@@ -278,7 +282,7 @@ class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
 
             }
           } catch {
-            case NonFatal(e) => logError(e.getMessage, e)
+            case NonFatal(e) => logError(log"${MDC(LogKeys.ERROR, e.getMessage)}", e)
           }
         }
       } catch {
@@ -299,7 +303,7 @@ class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
       logWarning(
         log"Attempting to register shuffle writer task for shuffle with id ${
           MDC(LogKeys.SHUFFLE_ID, shuffleId)} that hasn't been registered. Map id ${
-          MDC(LogKeys.MAP_ID, mapId)}} location ${MDC(LogKeys.TASK_LOCATION, location)}}")
+          MDC(LogKeys.MAP_ID, mapId)} location ${MDC(LogKeys.TASK_LOCATION, location)}")
       return false
     }
     taskLocations.compute(
@@ -344,13 +348,15 @@ class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
   override def stop(): Unit = {
     trackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
-    try {
-      sendTracker(StopStreamingShuffleOutputTracker)
-    } catch {
-      case e: SparkException =>
-        logError(log"Could not tell tracker we are stopping.", e)
+    if (trackerEndpoint != null) {
+      try {
+        sendTracker(StopStreamingShuffleOutputTracker)
+      } catch {
+        case e: SparkException =>
+          logError(log"Could not tell tracker we are stopping.", e)
+      }
+      trackerEndpoint = null
     }
-    trackerEndpoint = null
   }
 
   override def getAvailableShuffleWriterTaskLocations(
@@ -372,7 +378,7 @@ class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
   }
 }
 
-class StreamingShuffleOutputTrackerWorker(conf: SparkConf)
+private[spark] class StreamingShuffleOutputTrackerWorker(conf: SparkConf)
   extends StreamingShuffleOutputTracker(conf) {
 
   override def registerShuffleWriterTask(

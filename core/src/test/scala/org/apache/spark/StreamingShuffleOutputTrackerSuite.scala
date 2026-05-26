@@ -17,6 +17,9 @@
 
 package org.apache.spark
 
+import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
+
 import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.should.Matchers
 
@@ -35,18 +38,33 @@ class StreamingShuffleOutputTrackerSuite
   }
 
   after {
+    trackersToStop.foreach { t =>
+      try t.stop() catch { case NonFatal(_) => }
+    }
+    trackersToStop.clear()
+    rpcEnvsToShutdown.foreach { e =>
+      try e.shutdown() catch { case NonFatal(_) => }
+    }
+    rpcEnvsToShutdown.clear()
     doThreadPostAudit()
   }
 
   protected val conf = new SparkConf
 
+  private val trackersToStop = ArrayBuffer.empty[StreamingShuffleOutputTracker]
+  private val rpcEnvsToShutdown = ArrayBuffer.empty[RpcEnv]
+
   protected def newTrackerMaster(sparkConf: SparkConf = conf) = {
-    new StreamingShuffleOutputTrackerMaster(sparkConf)
+    val tracker = new StreamingShuffleOutputTrackerMaster(sparkConf)
+    trackersToStop += tracker
+    tracker
   }
 
   protected def newTrackerWorker(
       sparkConf: SparkConf = conf): StreamingShuffleOutputTrackerWorker = {
-    new StreamingShuffleOutputTrackerWorker(sparkConf)
+    val tracker = new StreamingShuffleOutputTrackerWorker(sparkConf)
+    trackersToStop += tracker
+    tracker
   }
 
   def createRpcEnv(
@@ -54,7 +72,9 @@ class StreamingShuffleOutputTrackerSuite
       host: String = "localhost",
       port: Int = 0,
       securityManager: SecurityManager = new SecurityManager(conf)): RpcEnv = {
-    RpcEnv.create(name, host, port, conf, securityManager)
+    val rpcEnv = RpcEnv.create(name, host, port, conf, securityManager)
+    rpcEnvsToShutdown += rpcEnv
+    rpcEnv
   }
 
   test("master start and stop") {
@@ -63,8 +83,6 @@ class StreamingShuffleOutputTrackerSuite
     tracker.trackerEndpoint = rpcEnv.setupEndpoint(
       StreamingShuffleOutputTracker.ENDPOINT_NAME,
       new StreamingShuffleOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
-    tracker.stop()
-    rpcEnv.shutdown()
   }
 
   test("test tracker workflow") {
@@ -103,8 +121,6 @@ class StreamingShuffleOutputTrackerSuite
     master.unregisterShuffle(shuffleId)
 
     master.getShuffleInfo(shuffleId) should be(None)
-    worker.stop()
-    master.stop()
   }
 
   test("register task for shuffle that doesn't exist") {
@@ -123,9 +139,6 @@ class StreamingShuffleOutputTrackerSuite
       0,
       0,
       StreamingShuffleTaskLocation("executor-1", "host-1", 0)) should be(false)
-
-    worker.stop()
-    master.stop()
   }
 
   test("get task location for shuffle that doesn't exist") {
@@ -141,14 +154,11 @@ class StreamingShuffleOutputTrackerSuite
     worker.trackerEndpoint = rpcEndpoint
 
     worker.getAllShuffleWriterTaskLocations(0) should be(None)
-
-    worker.stop()
-    master.stop()
   }
 
   test("StreamingShuffleOutputTrackerMaster - register shuffle") {
     val conf = new SparkConf(false)
-    val tracker = new StreamingShuffleOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster(conf)
 
     // Register a shuffle with 3 mappers and 2 reducers
     tracker.registerShuffle(shuffleId = 0, numMaps = 3, numReduces = 2, jobId = 1)
@@ -161,9 +171,20 @@ class StreamingShuffleOutputTrackerSuite
     assert(shuffleInfo.get.jobId === 1)
   }
 
+  test("StreamingShuffleOutputTrackerMaster - registering same shuffle twice fails") {
+    val conf = new SparkConf(false)
+    val tracker = newTrackerMaster(conf)
+
+    tracker.registerShuffle(shuffleId = 0, numMaps = 2, numReduces = 2, jobId = 1)
+
+    intercept[IllegalArgumentException] {
+      tracker.registerShuffle(shuffleId = 0, numMaps = 2, numReduces = 2, jobId = 1)
+    }
+  }
+
   test("StreamingShuffleOutputTrackerMaster - register and get writer task locations") {
     val conf = new SparkConf(false)
-    val tracker = new StreamingShuffleOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster(conf)
 
     // Register a shuffle
     tracker.registerShuffle(shuffleId = 0, numMaps = 2, numReduces = 2, jobId = 1)
@@ -191,7 +212,7 @@ class StreamingShuffleOutputTrackerSuite
 
   test("StreamingShuffleOutputTrackerMaster - get available writer task locations") {
     val conf = new SparkConf(false)
-    val tracker = new StreamingShuffleOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster(conf)
 
     // Register a shuffle
     tracker.registerShuffle(shuffleId = 0, numMaps = 3, numReduces = 2, jobId = 1)
@@ -228,7 +249,7 @@ class StreamingShuffleOutputTrackerSuite
 
   test("StreamingShuffleOutputTrackerMaster - unregister shuffle") {
     val conf = new SparkConf(false)
-    val tracker = new StreamingShuffleOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster(conf)
 
     // Register a shuffle and a writer task
     tracker.registerShuffle(shuffleId = 0, numMaps = 1, numReduces = 1, jobId = 1)
@@ -249,7 +270,7 @@ class StreamingShuffleOutputTrackerSuite
 
   test("StreamingShuffleOutputTrackerMaster - register writer before shuffle fails") {
     val conf = new SparkConf(false)
-    val tracker = new StreamingShuffleOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster(conf)
 
     // Try to register writer task without registering shuffle first
     val location = StreamingShuffleTaskLocation("executor1", "host1", 8000)
@@ -262,7 +283,7 @@ class StreamingShuffleOutputTrackerSuite
   test("StreamingShuffleOutputTrackerMaster - concurrent registration") {
     val conf = new SparkConf(false)
       .set(SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS, 4)
-    val tracker = new StreamingShuffleOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster(conf)
 
     // Register a shuffle with many mappers
     val numMaps = 100
@@ -292,7 +313,7 @@ class StreamingShuffleOutputTrackerSuite
 
   test("StreamingShuffleOutputTrackerMaster - multiple shuffles") {
     val conf = new SparkConf(false)
-    val tracker = new StreamingShuffleOutputTrackerMaster(conf)
+    val tracker = newTrackerMaster(conf)
 
     // Register multiple shuffles
     tracker.registerShuffle(shuffleId = 0, numMaps = 2, numReduces = 2, jobId = 1)
