@@ -236,7 +236,7 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
     }
   }
 
-  test("show partitions non-partitioned table AS JSON") {
+  test("show partitions of non-partitioned table AS JSON") {
     withNamespaceAndTable("ns", "not_partitioned_table") { t =>
       sql(s"CREATE TABLE $t (col1 int) $defaultUsing")
       val tableName =
