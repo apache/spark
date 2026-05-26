@@ -118,6 +118,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
   /**
    * Rewrites references rooted at one bound lambda element to use its projected type and
    * recomputes nested field ordinals against each projected struct in the access path.
+   * This must support the same access paths collected by `SchemaPruning` for lambda variables;
+   * currently both sides support only `GetStructField` chains.
    */
   private case class ProjectionOverLambdaVariable(
       original: NamedLambdaVariable,

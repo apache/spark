@@ -204,6 +204,10 @@ object SchemaPruning extends SQLConfHelper {
    * `Some(fields)` means every reference can be satisfied by the listed nested fields. `None`
    * means the full element is required somewhere (for example, `x => struct(x.a, x)`), so it is
    * not safe to prune the element struct.
+   *
+   * Currently only `GetStructField` chains rooted at `elementVar` are collected; array or map
+   * traversal within the lambda conservatively requires the full element. Keep this set of
+   * supported paths in sync with `ProjectionOverLambdaVariable` in `ProjectionOverSchema`.
    */
   private def collectLambdaVariableFields(
       expr: Expression,

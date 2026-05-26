@@ -381,7 +381,7 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
-  test("select ArrayTransform over deep nested fields of array of struct") {
+  testSchemaPruning("select ArrayTransform over deep nested fields of array of struct") {
     withDataSourceTable(teams, "teams") {
       val query = spark.table("teams")
         .select(transform(col("members"), member =>
@@ -392,7 +392,21 @@ abstract class SchemaPruningSuite
     }
   }
 
-  test("select ArrayTransform over nested array path with null elements") {
+  testSchemaPruning("select ArrayTransform merging nested parent and child fields") {
+    withDataSourceTable(teams, "teams") {
+      val query = spark.table("teams")
+        .select(transform(col("members"), member =>
+          struct(
+            member.getField("company").as("company"),
+            member.getField("company").getField("address").as("address"))))
+
+      checkScan(query, "struct<members:array<struct<company:struct<name:string,address:string>>>>")
+      checkAnswer(query,
+        Row(Array(Row(Row("abc", "123 Business Street"), "123 Business Street"))) :: Nil)
+    }
+  }
+
+  testSchemaPruning("select ArrayTransform over nested array path with null elements") {
     withDataSourceTable(organizations, "organizations") {
       val query = spark.table("organizations")
         .select(transform(col("team.members"), member =>
