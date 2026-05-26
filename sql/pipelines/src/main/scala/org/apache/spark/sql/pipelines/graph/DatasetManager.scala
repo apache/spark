@@ -311,12 +311,10 @@ object DatasetManager extends Logging {
       // its name from [[AutoCdcReservedNames.prefix]], which is reserved across AutoCDC and
       // therefore cannot collide with a user-managed table.
 
-      // Intentionally DROP and not TRUNCATE for two reasons; First, the auxiliary table may
-      // contain table properties that represent stateful information (ex. SCD key count) that
-      // should not be carried forward on a full refresh. Second, the auxiliary table is an
-      // internal table and not part of the dataflow graph. That means it does not go through
-      // schema evolution like other tables and hence on a full refresh, we should explicitly
-      // drop the existing auxiliary table schema so it can be recomputed.
+      // Intentionally DROP and not TRUNCATE: the auxiliary table is an internal state store
+      // that is not part of the dataflow graph, so it does not participate in regular schema
+      // evolution like user tables do. On a full refresh we want a clean recreation against
+      // the new target schema rather than carrying forward the previous generation's layout.
 
       val auxiliaryTableId = AutoCdcAuxiliaryTable.identifier(table.identifier)
       context.spark.sql(s"DROP TABLE IF EXISTS ${auxiliaryTableId.quotedString}")

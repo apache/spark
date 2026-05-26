@@ -258,7 +258,7 @@
   },
   "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE" : {
     "message" : [
-      "Cannot start AutoCDC flow because the target table <tableName> (format: <format>) does not support row-level MERGE operations. AutoCDC requires a target table whose format implements `SupportsRowLevelOperations`."
+      "Cannot start AutoCDC flow: the target table <tableName> (format: <format>) does not support row-level operations. AutoCDC requires a target backed by a connector that supports MERGE."
     ],
     "sqlState" : "0A000"
   },

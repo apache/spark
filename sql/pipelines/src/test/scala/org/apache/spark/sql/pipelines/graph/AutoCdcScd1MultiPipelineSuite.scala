@@ -54,8 +54,8 @@ class AutoCdcScd1MultiPipelineSuite
       s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
     )
 
-    // Pipeline #1 only knows about `t_a`. Its auxiliary table cat.ns1.__auxiliary_..._t_a
-    // must not affect pipeline #2's `t_b`.
+    // Pipeline #1 only knows about `t_a`. Its auxiliary table
+    // cat.ns1.__spark_autocdc_aux_state_t_a must not affect pipeline #2's `t_b`.
     val streamA = MemoryStream[(Int, String, Long)]
     streamA.addData((1, "alice", 100L))
     val ctxA = new TestGraphRegistrationContext(spark) {

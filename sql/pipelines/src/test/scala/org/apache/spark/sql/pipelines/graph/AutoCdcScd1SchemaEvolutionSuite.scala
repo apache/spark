@@ -452,12 +452,13 @@ class AutoCdcScd1SchemaEvolutionSuite
     // the target's `value.b.c` column.
     stream.addData((1, 2L, 10, 99, 10), (3, 1L, 3, 99, 3))
     val ex = intercept[RuntimeException] { runPipeline(buildCtx(includeC = false)) }
-    val all = Iterator(ex) ++ ex.getSuppressed.iterator
-    assert(
-      all.exists(t => Option(t.getMessage).exists(m =>
-        m.contains("INCOMPATIBLE_DATA_FOR_TABLE") && m.contains("value") && m.contains("b") &&
-          m.contains("c"))),
-      s"Expected INCOMPATIBLE_DATA_FOR_TABLE failure for value.b.c, got: ${ex.getMessage}"
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      parameters = Map(
+        "tableName" -> s"`$catalog`.`$namespace`.`target`",
+        "colName" -> "`value`.`b`.`c`"
+      )
     )
   }
 
@@ -564,11 +565,13 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     stream.addData((1, 2L, 10, 10, 99), (3, 1L, 3, 3, 99))
     val ex = intercept[RuntimeException] { runPipeline(buildCtx(includeD = false)) }
-    val all = Iterator(ex) ++ ex.getSuppressed.iterator
-    assert(
-      all.exists(t => Option(t.getMessage).exists(m =>
-        m.contains("INCOMPATIBLE_DATA_FOR_TABLE") && m.contains("vals"))),
-      s"Expected INCOMPATIBLE_DATA_FOR_TABLE failure for vals element, got: ${ex.getMessage}"
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
+      parameters = Map(
+        "tableName" -> s"`$catalog`.`$namespace`.`target`",
+        "colName" -> "`vals`.`element`.`b`.`d`"
+      )
     )
   }
 
@@ -607,10 +610,16 @@ class AutoCdcScd1SchemaEvolutionSuite
       }
 
       val ex = intercept[RuntimeException] { runPipeline(ctx) }
-      val all = Iterator(ex) ++ ex.getSuppressed.iterator
-      assert(
-        all.exists(t => Option(t.getMessage).exists(_.contains("AMBIGUOUS_REFERENCE"))),
-        s"Expected AMBIGUOUS_REFERENCE failure, got: ${ex.getMessage}"
+      // The exact `name` and `referenceNames` parameters depend on internal merge-plan
+      // synthesis; the condition match is the meaningful invariant for this test.
+      checkErrorInPipelineFailure(
+        failure = ex,
+        condition = "AMBIGUOUS_REFERENCE",
+        parameters = Map(
+          "name" -> ".*",
+          "referenceNames" -> ".*"
+        ),
+        matchPVals = true
       )
     }
   }
@@ -699,12 +708,15 @@ class AutoCdcScd1SchemaEvolutionSuite
     }
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
-    val all = Iterator(ex) ++ ex.getSuppressed.iterator
-    assert(
-      all.exists(t => Option(t.getMessage).exists(
-        _.contains("CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE"))
-      ),
-      s"Expected CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE failure, got: ${ex.getMessage}"
+    checkErrorInPipelineFailure(
+      failure = ex,
+      condition = "CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE",
+      sqlState = Some("42825"),
+      // `left` is the persisted (run #1) TIMESTAMP type; `right` is run #2's STRING.
+      parameters = Map(
+        "left" -> "\"TIMESTAMP\"",
+        "right" -> "\"STRING\""
+      )
     )
   }
 }

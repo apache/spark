@@ -327,9 +327,9 @@ object AutoCdcAuxiliaryTable {
 }
 
 /**
- * Helper mixin for AutoCDC merge-based write flows.
+ * Base trait for AutoCDC merge-based write flows.
  */
-trait AutoCdcMergeWriteMixin {
+trait AutoCdcMergeWriteBase {
   /** The spark session the AutoCDC flow is going to be planned in. */
   protected def spark: SparkSession
 
@@ -342,12 +342,19 @@ trait AutoCdcMergeWriteMixin {
   /** Full schema of the auxiliary table for this SCD type. */
   protected def auxiliaryTableSchema: StructType
 
-  // Eagerly validate at construction time that the destination supports row-level ops.
-  requireDestinationSupportsRowLevelOps()
-
   /**
    * Idempotently create the auxiliary table for [[destination]] if it does not already exist
    * and return its [[TableIdentifier]].
+   *
+   * Note that this is `CREATE TABLE IF NOT EXISTS`: when the aux table already exists, its
+   * schema is left untouched and `auxiliaryTableSchema` is ignored. This is safe for the
+   * additive evolution we support today (new non-key columns on the target), but it means we
+   * do not catch user-side AutoCDC key drift here - if a subsequent run renames, swaps,
+   * grows, shrinks, or changes the type of a key column, the aux table keeps its old key
+   * layout and the resulting MERGE will fail downstream with a confusing error rather than a
+   * targeted "keys changed, full-refresh required" error. The contract is therefore that
+   * changing the AutoCDC key set requires fully refreshing the target table; see the
+   * [[create_auto_cdc_flow]] Python docstring for the user-facing version of this rule.
    */
   protected def createAuxiliaryTableIfNotExists(spark: SparkSession): TableIdentifier = {
     val auxIdent = AutoCdcAuxiliaryTable.identifier(destination.identifier)
@@ -368,7 +375,7 @@ trait AutoCdcMergeWriteMixin {
    * [[SupportsRowLevelOperations]], which is the V2 connector contract for MERGE/UPDATE/DELETE
    * with rewrite - all operations that the AutoCDC transformation executes.
    */
-  private def requireDestinationSupportsRowLevelOps(): Unit = {
+  protected def requireDestinationSupportsRowLevelOps(): Unit = {
     val (catalog, v2Identifier) = resolveTableCatalog(spark, destination.identifier)
     val destinationTable = catalog.loadTable(v2Identifier)
 
@@ -413,7 +420,7 @@ class Scd1MergeStreamingWrite(
     val trigger: Trigger,
     val destination: Table,
     val sqlConf: Map[String, String]
-) extends StreamingFlowExecution with AutoCdcMergeWriteMixin {
+) extends StreamingFlowExecution with AutoCdcMergeWriteBase {
 
   override def getOrigin: QueryOrigin = flow.origin
 
@@ -422,12 +429,14 @@ class Scd1MergeStreamingWrite(
   /**
    * Resolved Spark [[DataType]] of the sequencing expression.
    */
-  private def sequencingType: DataType =
+  private lazy val sequencingType: DataType =
     flow.df.select(flow.changeArgs.sequencing).schema.head.dataType
 
   override def startStream(): StreamingQuery = {
+    requireDestinationSupportsRowLevelOps()
+
     val sourceChangeDataFeed = graph.reanalyzeFlow(flow).df
-    
+
     // The auxiliary table is created here (at flow execution) rather than during flow resolution
     // or dataset materialization for two reasons:
     //   1. It is an internal state store: we deliberately keep it out of the graph registration
@@ -437,19 +446,20 @@ class Scd1MergeStreamingWrite(
     //      materialized. Flow resolution must also stay side-effect free (e.g. for dry runs).
     val auxiliaryTableIdentifier = createAuxiliaryTableIfNotExists(spark = updateContext.spark)
 
+    val foreachBatchHandler = Scd1ForeachBatchHandler(
+      batchProcessor = Scd1BatchProcessor(
+        changeArgs = flow.changeArgs,
+        resolvedSequencingType = sequencingType
+      ),
+      auxiliaryTableIdentifier = auxiliaryTableIdentifier,
+      targetTableIdentifier = destination.identifier
+    )
+
     sourceChangeDataFeed.writeStream
       .queryName(displayName)
       .option("checkpointLocation", checkpointPath)
       .trigger(trigger)
       .foreachBatch((batch: Dataset[Row], batchId: Long) => {
-        val foreachBatchHandler = Scd1ForeachBatchHandler(
-          batchProcessor = Scd1BatchProcessor(
-            changeArgs = flow.changeArgs,
-            resolvedSequencingType = sequencingType
-          ),
-          auxiliaryTableIdentifier = auxiliaryTableIdentifier,
-          targetTableIdentifier = destination.identifier
-        )
         foreachBatchHandler.execute(batch, batchId)
       })
       .start()
