@@ -144,6 +144,155 @@ class AutoCdcScd1MultiPipelineSuite
     )
   }
 
+  test("two AutoCDC pipelines targeting the same table with identical key and data " +
+    "schemas merge into a shared target table") {
+    val session = spark
+    import session.implicits._
+
+    // Target table is created once up-front; both pipelines target it with the same
+    // AutoCDC `keys` and the same source-DF data schema. The two pipelines have distinct
+    // flow names ("flow_v1" / "flow_v2") so they own independent streaming checkpoints,
+    // but share the target table and its auxiliary table.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.shared_target " +
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+
+    // Pipeline #1: inserts rows with id=1 and id=2 at version=1.
+    val stream1 = MemoryStream[(Int, String, Long)]
+    stream1.addData((1, "alice", 1L), (2, "bob", 1L))
+    val ctx1 = new TestGraphRegistrationContext(spark) {
+      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "flow_v1",
+        target = "shared_target",
+        query = dfFlowFunc(stream1.toDF().toDF("id", "name", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")
+      ))
+    }
+    runPipeline(ctx1)
+
+    // Sanity-check pipeline #1's effect before pipeline #2 runs.
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.shared_target"),
+      Seq(
+        Row(1, "alice", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L))),
+        Row(2, "bob", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L)))
+      )
+    )
+
+    // Pipeline #2: updates id=2 (existing key) to a higher sequence and inserts id=3
+    // (new key). id=1 is untouched and must survive into the final target unchanged.
+    val stream2 = MemoryStream[(Int, String, Long)]
+    stream2.addData((2, "bob-v2", 2L), (3, "carol", 1L))
+    val ctx2 = new TestGraphRegistrationContext(spark) {
+      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "flow_v2",
+        target = "shared_target",
+        query = dfFlowFunc(stream2.toDF().toDF("id", "name", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")
+      ))
+    }
+    runPipeline(ctx2)
+
+    // Final target: id=1 untouched (pipeline #1's state), id=2 updated by pipeline #2,
+    // id=3 freshly inserted by pipeline #2.
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.shared_target"),
+      Seq(
+        Row(1, "alice", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L))),
+        Row(2, "bob-v2", 2L, cdcMeta(deleteSeq = None, upsertSeq = Some(2L))),
+        Row(3, "carol", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L)))
+      )
+    )
+
+    // The auxiliary table for the shared target is itself shared across both pipelines.
+    assert(spark.catalog.tableExists(auxTableNameFor("shared_target")))
+  }
+
+  test("two AutoCDC pipelines targeting the same table with the same key but different " +
+    "data columns evolve the shared target schema") {
+    val session = spark
+    import session.implicits._
+
+    // Target is created up-front with pipeline #1's schema only; pipeline #2 brings a new
+    // top-level nullable `age` column that the dataset materialization layer is expected
+    // to schema-merge into the target.
+    spark.sql(
+      s"CREATE TABLE $catalog.$namespace.shared_target " +
+      s"(id INT NOT NULL, name STRING, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+
+    // Pipeline #1: source DF schema is (id, name, version); inserts id=1 and id=2.
+    val stream1 = MemoryStream[(Int, String, Long)]
+    stream1.addData((1, "alice", 1L), (2, "bob", 1L))
+    val ctx1 = new TestGraphRegistrationContext(spark) {
+      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "flow_v1",
+        target = "shared_target",
+        query = dfFlowFunc(stream1.toDF().toDF("id", "name", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")
+      ))
+    }
+    runPipeline(ctx1)
+
+    // Sanity-check pipeline #1's state before schema evolution kicks in.
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.shared_target"),
+      Seq(
+        Row(1, "alice", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L))),
+        Row(2, "bob", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L)))
+      )
+    )
+
+    // Pipeline #2: source DF schema is (id, name, age, version). The new nullable `age` column
+    // should be added to the target by dataset materialization; pipeline #1's untouched id=1 row
+    // is backfilled to NULL.
+    val stream2 = MemoryStream[(Int, String, Option[Int], Long)]
+    stream2.addData((2, "bob-v2", Some(25), 2L), (3, "carol", Some(30), 1L))
+    val ctx2 = new TestGraphRegistrationContext(spark) {
+      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
+      registerFlow(autoCdcFlow(
+        name = "flow_v2",
+        target = "shared_target",
+        query = dfFlowFunc(stream2.toDF().toDF("id", "name", "age", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")
+      ))
+    }
+    runPipeline(ctx2)
+
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.shared_target"),
+      Seq(
+        Row(1, "alice", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L)), null),
+        Row(2, "bob-v2", 2L, cdcMeta(deleteSeq = None, upsertSeq = Some(2L)), 25),
+        Row(3, "carol", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L)), 30)
+      )
+    )
+
+    // Pipeline #1 runs again with its original (id, name, version) schema. The evolved
+    // target schema with `age` must persist: id=1's update leaves age untouched, id=4 is
+    // inserted with age=NULL, and pipeline #2's id=2/id=3 rows are unchanged.
+    stream1.addData((1, "alice-v2", 2L), (4, "dave", 1L))
+    runPipeline(ctx1)
+
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.shared_target"),
+      Seq(
+        Row(1, "alice-v2", 2L, cdcMeta(deleteSeq = None, upsertSeq = Some(2L)), null),
+        Row(2, "bob-v2", 2L, cdcMeta(deleteSeq = None, upsertSeq = Some(2L)), 25),
+        Row(3, "carol", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L)), 30),
+        Row(4, "dave", 1L, cdcMeta(deleteSeq = None, upsertSeq = Some(1L)), null)
+      )
+    )
+  }
+
   test("a second pipeline targeting an existing AutoCDC table with different keys " +
     "fails with KEY_SCHEMA_DRIFT") {
     val session = spark
