@@ -3445,8 +3445,8 @@ object SQLConf {
       .internal()
       .doc("When true, every streaming stateful operator reports its output schema with " +
         "nullable=true on all columns (including nested struct fields, array elements, and " +
-        "map values), the state schema is widened at every construction site, and the state " +
-        "schema is widened at every construction site, so the existing state schema " +
+        "map values), and the state schema is widened at every construction site, so the " +
+        "existing state schema " +
         "compatibility check trivially passes regardless of input nullability. " +
         "This prevents query-optimizer decisions (e.g., PropagateEmptyRelation dropping a " +
         "Union branch) from flipping the state schema nullability across microbatches or " +
