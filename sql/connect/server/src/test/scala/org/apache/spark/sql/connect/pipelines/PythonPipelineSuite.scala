@@ -32,12 +32,14 @@ import org.scalatest.Tag
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.classic.ColumnConversions._
 import org.apache.spark.sql.connect.PythonTestDepsChecker
 import org.apache.spark.sql.connect.service.SparkConnectService
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.pipelines.Language.Python
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.common.FlowStatus
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
+import org.apache.spark.sql.pipelines.graph.{AutoCdcFlow, DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 import org.apache.spark.sql.types.StructType
@@ -933,6 +935,286 @@ class PythonPipelineSuite
     val ex = intercept[AnalysisException] { graph.validate() }
     assert(ex.getMessage.contains("has a user-specified schema that is incompatible"))
     assert(ex.getMessage.contains("table_with_wrong_struct_schema"))
+  }
+
+  private def buildAutoCdcFlow(pipelineSource: String): AutoCdcFlow = {
+    val graph = buildGraph(pipelineSource)
+    graph.flows
+      .collectFirst { case f: AutoCdcFlow => f }
+      .getOrElse(
+        throw new AssertionError(
+          s"Expected an AutoCdcFlow in the graph, got: ${graph.flows}"))
+  }
+
+  test("AutoCDC API: minimal flow registers an AutoCdcFlow with default name and SCD1 default") {
+    val flow = buildAutoCdcFlow(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin)
+
+    assert(flow.identifier == graphIdentifier("target"))
+    assert(flow.destinationIdentifier == graphIdentifier("target"))
+    assert(flow.changeArgs.keys == Seq(UnqualifiedColumnName("value")))
+    assert(flow.changeArgs.sequencing.expr.sql == "timestamp")
+    assert(flow.changeArgs.deleteCondition.isEmpty)
+    assert(flow.changeArgs.columnSelection.isEmpty)
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type1)
+  }
+
+  test("AutoCDC API: composite keys are forwarded to ChangeArgs in order") {
+    val flow = buildAutoCdcFlow(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value", "timestamp"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.keys ==
+      Seq(UnqualifiedColumnName("value"), UnqualifiedColumnName("timestamp")))
+  }
+
+  test("AutoCDC API: apply_as_deletes is forwarded as a delete condition column") {
+    val flow = buildAutoCdcFlow(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    apply_as_deletes = "value % 2 = 0",
+        |)
+        |""".stripMargin)
+
+    val deleteCondition = flow.changeArgs.deleteCondition.getOrElse(
+      throw new AssertionError("expected apply_as_deletes to populate deleteCondition"))
+    assert(deleteCondition.expr.sql.contains("value"))
+    assert(deleteCondition.expr.sql.contains("0"))
+  }
+
+  test("AutoCDC API: column_list is forwarded as IncludeColumns") {
+    val flow = buildAutoCdcFlow(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    column_list = ["value", "timestamp"],
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.columnSelection.contains(
+      ColumnSelection.IncludeColumns(
+        Seq(UnqualifiedColumnName("value"), UnqualifiedColumnName("timestamp")))))
+  }
+
+  test("AutoCDC API: except_column_list is forwarded as ExcludeColumns") {
+    val flow = buildAutoCdcFlow(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    except_column_list = ["timestamp"],
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.columnSelection.contains(
+      ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("timestamp")))))
+  }
+
+  test("AutoCDC API: explicit `name` is honored as the flow identifier") {
+    val flow = buildAutoCdcFlow(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    name = "my_flow",
+        |)
+        |""".stripMargin)
+
+    assert(flow.identifier == graphIdentifier("my_flow"))
+    assert(flow.destinationIdentifier == graphIdentifier("target"))
+  }
+
+  test("AutoCDC API: omitted stored_as_scd_type defaults to ScdType.Type1") {
+    val flow = buildAutoCdcFlow(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type1)
+  }
+
+  test("AutoCDC API: explicit stored_as_scd_type=1 is forwarded as ScdType.Type1") {
+    val flow = buildAutoCdcFlow(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    stored_as_scd_type = 1,
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.storedAsScdType == ScdType.Type1)
+  }
+
+  test("AutoCDC API: multi-part `keys` column is rejected at flow registration") {
+    val ex = intercept[RuntimeException] {
+      buildAutoCdcFlow(
+        """
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = ["a.b"],
+          |    sequence_by = "timestamp",
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("AUTOCDC_MULTIPART_COLUMN_IDENTIFIER"))
+  }
+
+  test("AutoCDC API: multi-part `column_list` entry is rejected at flow registration") {
+    val ex = intercept[RuntimeException] {
+      buildAutoCdcFlow(
+        """
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = ["value"],
+          |    sequence_by = "timestamp",
+          |    column_list = ["nested.field"],
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("AUTOCDC_MULTIPART_COLUMN_IDENTIFIER"))
+  }
+
+  test("AutoCDC API: Column-object form of keys/sequence_by/apply_as_deletes is honored") {
+    val flow = buildAutoCdcFlow(
+      """
+        |from pyspark.sql.functions import col, expr
+        |
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = [col("value")],
+        |    sequence_by = col("timestamp"),
+        |    apply_as_deletes = expr("value % 2 = 0"),
+        |)
+        |""".stripMargin)
+
+    assert(flow.changeArgs.keys == Seq(UnqualifiedColumnName("value")))
+    assert(flow.changeArgs.sequencing.expr.sql == "timestamp")
+    val deleteCondition = flow.changeArgs.deleteCondition.getOrElse(
+      throw new AssertionError("expected apply_as_deletes to populate deleteCondition"))
+    assert(deleteCondition.expr.sql.contains("value"))
+    assert(deleteCondition.expr.sql.contains("0"))
+  }
+
+  test("AutoCDC API: graph resolves with the source streaming table as the flow's input") {
+    val graph = buildGraph(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin).resolve()
+
+    val resolvedFlow = graph.resolvedFlow(graphIdentifier("target"))
+    assert(resolvedFlow.inputs == Set(graphIdentifier("src")))
   }
 
   /**

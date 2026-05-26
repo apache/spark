@@ -26,15 +26,19 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
 import org.apache.spark.sql.pipelines.Language.Python
+import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.common.RunState.{CANCELED, FAILED}
-import org.apache.spark.sql.pipelines.graph.{AllTables, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UntypedFlow}
+import org.apache.spark.sql.pipelines.graph.{AllTables, AutoCdcFlow, FlowAnalysis, GraphIdentifierManager, GraphRegistrationContext, IdentifierHelper, NoTables, PipelineUpdateContextImpl, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, SomeTables, SqlGraphRegistrationContext, Table, TableFilter, TemporaryView, UntypedFlow}
 import org.apache.spark.sql.pipelines.logging.{PipelineEvent, RunProgress}
 import org.apache.spark.sql.types.StructType
 
@@ -52,6 +56,10 @@ private[connect] object PipelinesHandler extends Logging {
    * @param transformRelationFunc
    *   Function used to convert a relation to a LogicalPlan. This is used when determining the
    *   LogicalPlan that a flow returns.
+   * @param transformExpressionFunc
+   *   Function used to convert a proto expression to a Catalyst expression. Used for typed flows
+   *   (e.g. AutoCDC) whose definition includes expression-shaped fields such as keys,
+   *   sequence-by, and delete predicates.
    * @return
    *   The response after handling the command
    */
@@ -59,7 +67,8 @@ private[connect] object PipelinesHandler extends Logging {
       sessionHolder: SessionHolder,
       cmd: proto.PipelineCommand,
       responseObserver: StreamObserver[ExecutePlanResponse],
-      transformRelationFunc: Relation => LogicalPlan): PipelineCommandResult = {
+      transformRelationFunc: Relation => LogicalPlan,
+      transformExpressionFunc: proto.Expression => Expression): PipelineCommandResult = {
     // Currently most commands do not include any information in the response. We just send back
     // an empty response to the client to indicate that the command was handled successfully
     val defaultResponse = PipelineCommandResult.getDefaultInstance
@@ -99,7 +108,11 @@ private[connect] object PipelinesHandler extends Logging {
       case proto.PipelineCommand.CommandTypeCase.DEFINE_FLOW =>
         logInfo(s"Define pipelines flow cmd received: $cmd")
         val resolvedFlow =
-          defineFlow(cmd.getDefineFlow, transformRelationFunc, sessionHolder)
+          defineFlow(
+            cmd.getDefineFlow,
+            transformRelationFunc,
+            transformExpressionFunc,
+            sessionHolder)
         val identifierBuilder = ResolvedIdentifier.newBuilder()
         resolvedFlow.catalog.foreach(identifierBuilder.setCatalogName)
         resolvedFlow.database.foreach { ns =>
@@ -315,6 +328,7 @@ private[connect] object PipelinesHandler extends Logging {
   private def defineFlow(
       flow: proto.PipelineCommand.DefineFlow,
       transformRelationFunc: Relation => LogicalPlan,
+      transformExpressionFunc: proto.Expression => Expression,
       sessionHolder: SessionHolder): TableIdentifier = {
     if (flow.hasOnce) {
       throw new AnalysisException(
@@ -388,11 +402,110 @@ private[connect] object PipelinesHandler extends Logging {
               objectName = Option(flowIdentifier.unquotedString),
               language = Some(Python()))))
       case proto.PipelineCommand.DefineFlow.DetailsCase.AUTO_CDC_FLOW_DETAILS =>
-        throw new UnsupportedOperationException("AutoCdcFlowDetails is not yet implemented.")
+        val autoCdcDetails = flow.getAutoCdcFlowDetails
+        graphElementRegistry.registerFlow(
+          buildAutoCdcFlow(
+            autoCdcDetails = autoCdcDetails,
+            flow = flow,
+            flowIdentifier = flowIdentifier,
+            destinationIdentifier = destinationIdentifier,
+            defaultCatalog = defaultCatalog,
+            defaultDatabase = defaultDatabase,
+            transformExpressionFunc = transformExpressionFunc))
       case other =>
         throw new UnsupportedOperationException(s"Unsupported DefineFlow details case: $other")
     }
     flowIdentifier
+  }
+
+  /**
+   * Build an [[AutoCdcFlow]] from the proto-supplied AutoCDC flow details.
+   *
+   * The flow's source expression is encoded by the Python client as a streaming-table name; we
+   * model that on the server side as a streaming [[UnresolvedRelation]] so that pipelines flow
+   * analysis (which already handles `STREAM(t)` references) can resolve it against the rest of
+   * the dataflow graph.
+   */
+  private def buildAutoCdcFlow(
+      autoCdcDetails: proto.PipelineCommand.DefineFlow.AutoCdcFlowDetails,
+      flow: proto.PipelineCommand.DefineFlow,
+      flowIdentifier: TableIdentifier,
+      destinationIdentifier: TableIdentifier,
+      defaultCatalog: String,
+      defaultDatabase: String,
+      transformExpressionFunc: proto.Expression => Expression): AutoCdcFlow = {
+    val sourcePlan: LogicalPlan = UnresolvedRelation(
+      multipartIdentifier = scala.collection.immutable.Seq(autoCdcDetails.getSource),
+      isStreaming = true
+    )
+
+    val toColumn: proto.Expression => Column = expr => Column(transformExpressionFunc(expr))
+
+    // Resolve a proto expression that the Python AutoCDC API treats as an unqualified column
+    // identifier (e.g. an entry in `keys`, `column_list`, or `except_column_list`) into an
+    // [[UnqualifiedColumnName]]. We round-trip through [[Expression.sql]] so that
+    // [[UnqualifiedColumnName.apply]]'s parser-based single-part validation is the authority on
+    // what is acceptable; non-identifier expressions are rejected by that parser.
+    val asUnqualifiedColumnName: proto.Expression => UnqualifiedColumnName =
+      expr => UnqualifiedColumnName(transformExpressionFunc(expr).sql)
+
+    val keys = autoCdcDetails.getKeysList.asScala.toSeq.map(asUnqualifiedColumnName)
+
+    val columnSelection: Option[ColumnSelection] = {
+      val included = autoCdcDetails.getColumnListList.asScala.toSeq
+      val excluded = autoCdcDetails.getExceptColumnListList.asScala.toSeq
+      if (included.nonEmpty && excluded.nonEmpty) {
+        // The Python API enforces the "at most one" contract; we don't expect both to be set
+        // here, but reject defensively to surface client/server mismatches loudly.
+        throw new IllegalArgumentException(
+          "AutoCDC flow specifies both column_list and except_column_list; at most one " +
+            "may be provided.")
+      } else if (included.nonEmpty) {
+        Some(ColumnSelection.IncludeColumns(included.map(asUnqualifiedColumnName)))
+      } else if (excluded.nonEmpty) {
+        Some(ColumnSelection.ExcludeColumns(excluded.map(asUnqualifiedColumnName)))
+      } else {
+        None
+      }
+    }
+
+    // Get user specified SCD type, or default to SCD1 if unspecified.
+    val scdType: ScdType = autoCdcDetails.getStoredAsScdType match {
+      case proto.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_1 |
+          proto.PipelineCommand.DefineFlow.SCDType.SCD_TYPE_UNSPECIFIED =>
+        ScdType.Type1
+      case other =>
+        throw new UnsupportedOperationException(s"Unsupported AutoCDC SCD type: $other")
+    }
+
+    val changeArgs = ChangeArgs(
+      keys = keys,
+      sequencing = toColumn(autoCdcDetails.getSequenceBy),
+      storedAsScdType = scdType,
+      deleteCondition =
+        Option.when(autoCdcDetails.hasApplyAsDeletes)(
+          toColumn(autoCdcDetails.getApplyAsDeletes)
+        ),
+      columnSelection = columnSelection
+    )
+
+    AutoCdcFlow(
+      identifier = flowIdentifier,
+      destinationIdentifier = destinationIdentifier,
+      func = FlowAnalysis.createFlowFunctionFromLogicalPlan(sourcePlan),
+      sqlConf = flow.getSqlConfMap.asScala.toMap,
+      queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
+      origin = QueryOrigin(
+        filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
+          flow.getSourceCodeLocation.getFileName),
+        line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
+          flow.getSourceCodeLocation.getLineNumber),
+        objectType = Some(QueryOriginType.Flow.toString),
+        objectName = Option(flowIdentifier.unquotedString),
+        language = Some(Python())
+      ),
+      changeArgs = changeArgs
+    )
   }
 
   private def startRun(
