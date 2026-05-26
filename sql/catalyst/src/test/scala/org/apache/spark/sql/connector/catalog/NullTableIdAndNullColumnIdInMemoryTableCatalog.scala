@@ -22,82 +22,75 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.connector.ColumnImpl
 
 /**
- * An [[InMemoryTableCatalog]] that strips column IDs from all columns
- * ([[Column.id]] returns null). This simulates connectors that do not
- * support column identity tracking.
+ * An [[InMemoryTableCatalog]] that strips both table IDs ([[Table.id]]
+ * returns null) and column IDs ([[Column.id]] returns null). This simulates
+ * connectors that support neither table nor column identity tracking.
  *
- * Tables are stored as [[NullColumnIdInMemoryTable]] instances that
- * override [[columns]] to strip IDs. Data is copied from the table
- * created by the parent [[InMemoryTableCatalog]].
- *
- * When column IDs are null, [[V2TableUtil.validateColumnIds]]
- * skips validation entirely, meaning drop/re-add of a column is NOT
- * detected via column IDs.
+ * When both IDs are null, neither [[V2TableRefreshUtil.validateTableIdentity]]
+ * nor [[V2TableUtil.validateColumnIds]] fires, so drop/recreate of a table
+ * or drop/re-add of a column goes undetected.
  */
-class NullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
+class NullTableIdAndNullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
 
-  private def toNullColumnIdTable(table: InMemoryTable): NullColumnIdInMemoryTable = {
-    val nullColIdTable = new NullColumnIdInMemoryTable(
+  private def toNullIdsTable(
+      table: InMemoryTable): NullTableIdAndNullColumnIdInMemoryTable = {
+    val nullTable = new NullTableIdAndNullColumnIdInMemoryTable(
       name = table.name,
       columns = table.columns(),
       partitioning = table.partitioning,
       properties = table.properties,
-      constraints = table.constraints,
-      id = table.id)
-    nullColIdTable.alterTableWithData(table.data, table.schema)
-    nullColIdTable.setVersionAndValidatedVersionFrom(table)
-    nullColIdTable
+      constraints = table.constraints)
+    nullTable.alterTableWithData(table.data, table.schema)
+    nullTable.setVersionAndValidatedVersionFrom(table)
+    nullTable
   }
 
   override def createTable(
       ident: Identifier,
       info: TableInfo): Table = {
     val table = super.createTable(ident, info).asInstanceOf[InMemoryTable]
-    val nullColIdTable = toNullColumnIdTable(table)
-    tables.put(ident, nullColIdTable)
-    nullColIdTable
+    val nullTable = toNullIdsTable(table)
+    tables.put(ident, nullTable)
+    nullTable
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
     val table = super.alterTable(ident, changes: _*).asInstanceOf[InMemoryTable]
-    val nullColIdTable = toNullColumnIdTable(table)
-    tables.put(ident, nullColIdTable)
-    nullColIdTable
+    val nullTable = toNullIdsTable(table)
+    tables.put(ident, nullTable)
+    nullTable
   }
 }
 
 /**
- * An [[InMemoryTable]] whose [[columns]] method always returns null
- * column IDs, simulating a connector that does not support column
- * identity tracking.
+ * An [[InMemoryTable]] with both null table ID and null column IDs,
+ * simulating a connector that supports neither identity tracking mechanism.
  */
-class NullColumnIdInMemoryTable(
+class NullTableIdAndNullColumnIdInMemoryTable(
     name: String,
     columns: Array[Column],
     partitioning: Array[Transform],
     properties: java.util.Map[String, String],
-    constraints: Array[Constraint] = Array.empty,
-    override val id: String = java.util.UUID.randomUUID().toString)
+    constraints: Array[Constraint] = Array.empty)
   extends InMemoryTable(
     name = name,
     columns = columns,
     partitioning = partitioning,
     properties = properties,
     constraints = constraints,
-    id = id) {
+    id = null) {
 
   override def columns(): Array[Column] = {
     super.columns().map(_.asInstanceOf[ColumnImpl].copy(id = null))
   }
 
   override def copy(): Table = {
-    val copiedTable = new NullColumnIdInMemoryTable(
+    val copiedTable = new NullTableIdAndNullColumnIdInMemoryTable(
       name,
       columns(),
       partitioning,
       properties,
-      constraints,
-      id)
+      constraints)
     dataMap.synchronized {
       copiedTable.alterTableWithData(data, schema)
     }

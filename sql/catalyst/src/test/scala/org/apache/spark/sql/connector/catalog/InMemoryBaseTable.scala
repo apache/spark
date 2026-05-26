@@ -97,6 +97,17 @@ abstract class InMemoryBaseTable(
     tableVersion = version.toInt
   }
 
+  /**
+   * Copies version and validated version from another table so that
+   * [[V2TableRefreshUtil]] can detect changes and refresh stale references.
+   */
+  def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
+    setVersion(sourceTable.version())
+    if (sourceTable.validatedVersion() != null) {
+      setValidatedVersion(sourceTable.validatedVersion())
+    }
+  }
+
   def increaseVersion(): Unit = {
     tableVersion += 1
   }

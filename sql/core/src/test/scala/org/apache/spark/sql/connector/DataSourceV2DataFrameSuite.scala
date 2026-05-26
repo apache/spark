@@ -26,9 +26,10 @@ import scala.reflect.ClassTag
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{BufferedRows, CachingInMemoryTableCatalog, CatalogV2Util, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryBaseTable, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -49,7 +50,8 @@ class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
   with DSv2TempViewWithStoredPlanTests
   with DSv2RepeatedTableAccessTests
-  with DSv2CacheTableReadTests {
+  with DSv2CacheTableReadTests
+  with DSv2JoinRefreshTests {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
@@ -67,6 +69,9 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.nullcolidcat",
       classOf[NullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullbothidscat",
+      classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
     .set("spark.sql.catalog.resetidcat",
       classOf[TypeChangeResetsColIdTableCatalog].getName)
     .set("spark.sql.catalog.resetidcat.copyOnLoad", "true")
@@ -2630,7 +2635,8 @@ class DataSourceV2DataFrameSuite
 
   // Column ID tests: Null column ID connector
 
-  // When a connector does not support column IDs, validation is skipped.
+  // When a connector does not support column IDs, validation is skipped, but version
+  // tracking still detects the schema change and refreshes the table reference.
   test("connector with null column IDs: drop+re-add column not detected") {
     val t = "nullcolidcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -2646,8 +2652,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // succeeds because column ID validation is skipped when IDs are null
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because IDs are null. The table is refreshed via version
+      // tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2695,8 +2702,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() == null, "salary should have a null ID after re-add")
 
-      // succeeds because current column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because current ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2725,8 +2733,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() != null, "salary should have a non-null ID after re-add")
 
-      // succeeds because original column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because original ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -3402,6 +3411,256 @@ class DataSourceV2DataFrameSuite
     catalog(catalogName) match {
       case inMemory: BasicInMemoryTableCatalog => inMemory.pinTable(ident, version)
       case _ => fail(s"can't pin $ident in $catalogName")
+    }
+  }
+
+  // Classic-only join refresh tests: these tests rely on eager analysis in classic mode
+  // where spark.table(T) captures the schema at call time. In Connect mode, DataFrames
+  // are lazy and re-analyzed at collect time, so these behaviors differ.
+
+  /** Append a single row to the table via the catalog API, bypassing SQL. */
+  private def externalAppendRow(
+      catalogName: String,
+      ident: Identifier,
+      row: InternalRow): Unit = {
+    val extTable = catalog(catalogName).loadTable(ident,
+      util.Set.of(TableWritePrivilege.INSERT)).asInstanceOf[InMemoryBaseTable]
+    val schema = CatalogV2Util.v2ColumnsToStructType(extTable.columns())
+    extTable.withData(Array(new BufferedRows(Seq.empty, schema).withRow(row)))
+  }
+
+  // Scenario 2: join after ADD COLUMN refreshes versions but df1 keeps original schema
+  test("SPARK-54157: join after external ADD COLUMN preserves df1 schema" +
+      " (table with both table and column ID support)") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      val addCol = TableChange.addColumn(Array("new_column"), IntegerType, true)
+      catalog("testcat").alterTable(ident, addCol)
+
+      externalAppendRow(catalogName = "testcat", ident = ident,
+        row = InternalRow(2, 200, -1))
+
+      val df2 = spark.table(t)
+
+      checkAnswer(
+        df1.join(df2, df1("id") === df2("id")),
+        Seq(Row(1, 100, 1, 100, null), Row(2, 200, 2, 200, -1)))
+    }
+  }
+
+  test("SPARK-54157: join after same-session ADD COLUMN preserves df1 schema" +
+      " (table with both table and column ID support)") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      sql(s"ALTER TABLE $t ADD COLUMN new_column INT")
+      sql(s"INSERT INTO $t VALUES (2, 200, -1)")
+
+      val df2 = spark.table(t)
+
+      checkAnswer(
+        df1.join(df2, df1("id") === df2("id")),
+        Seq(Row(1, 100, 1, 100, null), Row(2, 200, 2, 200, -1)))
+    }
+  }
+
+  // Scenario 3: join after DROP COLUMN fails with analysis exception
+  test("SPARK-54157: join after external DROP COLUMN fails" +
+      " (table with both table and column ID support)") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      val dropCol = TableChange.deleteColumn(Array("salary"), false)
+      catalog("testcat").alterTable(ident, dropCol)
+
+      externalAppendRow(catalogName = "testcat", ident = ident, row = InternalRow(2))
+
+      val df2 = spark.table(t)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  test("SPARK-54157: join after same-session DROP COLUMN fails" +
+      " (table with both table and column ID support)") {
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      sql(s"ALTER TABLE $t DROP COLUMN salary")
+      sql(s"INSERT INTO $t VALUES (2)")
+
+      val df2 = spark.table(t)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Scenario 4a: join after external drop and recreate table fails with TABLE_ID_MISMATCH
+  test("SPARK-54157: join detects external table drop and recreate via table ID" +
+      " (table with both table and column ID support)") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+      val originTableId = catalog("testcat").loadTable(ident).id
+
+      catalog("testcat").dropTable(ident)
+      catalog("testcat").createTable(
+        ident,
+        new TableInfo.Builder()
+          .withColumns(Array(
+            Column.create("id", IntegerType),
+            Column.create("salary", IntegerType)))
+          .build())
+
+      externalAppendRow(catalogName = "testcat", ident = ident, row = InternalRow(2, 200))
+
+      val df2 = spark.table(t)
+      val newTableId = catalog("testcat").loadTable(ident).id
+      assert(originTableId != newTableId)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.TABLE_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map(
+          "tableName" -> ".*",
+          "capturedTableId" -> ".*",
+          "currentTableId" -> ".*"))
+    }
+  }
+
+  // Scenario 4b: when table ID is null, column IDs still detect external drop+recreate.
+  test("SPARK-54157: join detects external drop/recreate via column IDs" +
+      " (table without table ID support, but with column ID support)") {
+    val t = "nullidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+      assert(catalog("nullidcat").loadTable(ident).id == null,
+        "NullTableIdInMemoryTableCatalog should produce null table IDs")
+
+      catalog("nullidcat").dropTable(ident)
+      catalog("nullidcat").createTable(
+        ident,
+        new TableInfo.Builder()
+          .withColumns(Array(
+            Column.create("id", IntegerType),
+            Column.create("salary", IntegerType)))
+          .build())
+
+      externalAppendRow(catalogName = "nullidcat", ident = ident, row = InternalRow(2, 200))
+
+      val df2 = spark.table(t)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
+    }
+  }
+
+  // Scenario 5a: two separate external alterTable calls assign a fresh column ID.
+  test("SPARK-54157: join detects external drop+re-add column via column IDs" +
+      " (table without table ID support, but with column ID support)") {
+    val t = "nullidcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      catalog("nullidcat").alterTable(
+        ident, TableChange.deleteColumn(Array("salary"), false))
+      catalog("nullidcat").alterTable(
+        ident, TableChange.addColumn(Array("salary"), IntegerType, true))
+
+      val df2 = spark.table(t)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+    }
+  }
+
+  // Scenario 6: external drop+re-add column with a different type.
+  // The delete removes the old column ID and the add assigns a fresh one,
+  // so the column ID check fires (COLUMN_ID_MISMATCH) before schema
+  // validation gets a chance to compare data types.
+  test("SPARK-54157: join detects external drop+re-add different-type column" +
+      " (table with both table and column ID support)") {
+    val t = "testcat.ns1.ns2.tbl"
+    val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
+      sql(s"INSERT INTO $t VALUES (1, 100)")
+
+      val df1 = spark.table(t)
+
+      catalog("testcat").alterTable(
+        ident, TableChange.deleteColumn(Array("salary"), false))
+      catalog("testcat").alterTable(
+        ident, TableChange.addColumn(Array("salary"), StringType, true))
+
+      externalAppendRow(catalogName = "testcat", ident = ident,
+        row = InternalRow(2, UTF8String.fromString("high")))
+
+      val df2 = spark.table(t)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          df1.join(df2, df1("id") === df2("id")).collect()
+        },
+        condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
+        matchPVals = true,
+        parameters = Map("tableName" -> ".*", "errors" -> ".*"))
     }
   }
 
