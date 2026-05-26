@@ -71,7 +71,9 @@ object TreePattern extends Enumeration  {
   val MAP_FROM_ARRAYS: Value = Value
   val MAP_FROM_ENTRIES: Value = Value
   val MAP_OBJECTS: Value = Value
+  val MAX: Value = Value
   val MEASURE: Value = Value
+  val MIN: Value = Value
   val MULTI_ALIAS: Value = Value
   val NEW_INSTANCE: Value = Value
   val NOT: Value = Value

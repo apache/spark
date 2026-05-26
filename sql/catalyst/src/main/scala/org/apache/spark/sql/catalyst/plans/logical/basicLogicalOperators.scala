@@ -827,6 +827,8 @@ case class Join(
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Join = copy(left = newLeft, right = newRight)
+
+  override def isStateful: Boolean = left.isStreaming && right.isStreaming
 }
 
 /**
@@ -1242,6 +1244,8 @@ case class Aggregate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
+
+  override def isStateful: Boolean = child.isStreaming
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
@@ -1757,6 +1761,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
 
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
+
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -2002,6 +2008,9 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
+  // Distinct is rewritten to Aggregate by ReplaceDistinctWithAggregate, hence potentially
+  // stateful (same criteria as Aggregate).
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -2169,6 +2178,7 @@ case class Deduplicate(
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
@@ -2180,6 +2190,7 @@ case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) 
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): DeduplicateWithinWatermark =
     copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**

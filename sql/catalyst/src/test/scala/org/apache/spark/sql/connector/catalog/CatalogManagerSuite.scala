@@ -41,7 +41,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("CatalogManager should reflect the changes of default catalog") {
-    val catalogManager = new CatalogManager(FakeV2SessionCatalog, createSessionCatalog())
+    val catalogManager = new DefaultCatalogManager(FakeV2SessionCatalog, createSessionCatalog())
     assert(catalogManager.currentCatalog.name() == CatalogManager.SESSION_CATALOG_NAME)
     assert(catalogManager.currentNamespace.sameElements(Array("default")))
 
@@ -54,7 +54,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("CatalogManager should keep the current catalog once set") {
-    val catalogManager = new CatalogManager(FakeV2SessionCatalog, createSessionCatalog())
+    val catalogManager = new DefaultCatalogManager(FakeV2SessionCatalog, createSessionCatalog())
     assert(catalogManager.currentCatalog.name() == CatalogManager.SESSION_CATALOG_NAME)
     withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName) {
       catalogManager.setCurrentCatalog("dummy")
@@ -70,7 +70,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("current namespace should be updated when switching current catalog") {
-    val catalogManager = new CatalogManager(FakeV2SessionCatalog, createSessionCatalog())
+    val catalogManager = new DefaultCatalogManager(FakeV2SessionCatalog, createSessionCatalog())
     withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName) {
       catalogManager.setCurrentCatalog("dummy")
       assert(catalogManager.currentNamespace.sameElements(Array("a", "b")))
@@ -95,7 +95,7 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
       CatalogDatabase(
         "test", "", v1SessionCatalog.getDefaultDBPath("test"), Map.empty),
       ignoreIfExists = false)
-    val catalogManager = new CatalogManager(FakeV2SessionCatalog, v1SessionCatalog)
+    val catalogManager = new DefaultCatalogManager(FakeV2SessionCatalog, v1SessionCatalog)
 
     // If the current catalog is session catalog, setting current namespace actually sets
     // `SessionCatalog.currentDb`.

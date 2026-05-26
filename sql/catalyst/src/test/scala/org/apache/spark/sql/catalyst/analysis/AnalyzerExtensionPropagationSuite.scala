@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.analysis.resolver.{ResolverExtension, TreeN
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultCatalogManager}
 
 /**
  * Verifies that [[Analyzer.withCatalogManager]] propagates all extension points.
@@ -49,7 +49,7 @@ class AnalyzerExtensionPropagationSuite extends SparkFunSuite {
   }
 
   private def newCatalogManager(): CatalogManager =
-    new CatalogManager(
+    new DefaultCatalogManager(
       FakeV2SessionCatalog,
       new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry))
 

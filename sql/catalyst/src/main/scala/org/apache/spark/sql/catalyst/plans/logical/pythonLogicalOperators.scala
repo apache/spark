@@ -165,6 +165,7 @@ case class FlatMapGroupsInPandasWithState(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): FlatMapGroupsInPandasWithState = copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -215,6 +216,7 @@ case class TransformWithStateInPySpark(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPySpark =
     copy(child = newLeft, initialState = newRight)
+  override def isStateful: Boolean = child.isStreaming
 
   def leftAttributes: Seq[Attribute] = {
     assert(resolved, "This method is expected to be called after resolution.")

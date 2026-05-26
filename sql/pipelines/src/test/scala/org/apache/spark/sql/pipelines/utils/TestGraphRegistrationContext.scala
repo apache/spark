@@ -21,7 +21,7 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{LocalTempView, PersistedView => PersistedViewType, UnresolvedRelation, ViewType}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, Table, TemporaryView, UnresolvedFlow}
+import org.apache.spark.sql.pipelines.graph.{DataflowGraph, FlowAnalysis, FlowFunction, GraphIdentifierManager, GraphRegistrationContext, PersistedView, QueryContext, QueryOrigin, QueryOriginType, Sink, SinkImpl, Table, TemporaryView, UntypedFlow}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -176,7 +176,7 @@ class TestGraphRegistrationContext(
 
     if (query.isDefined) {
       registerFlow(
-        new UnresolvedFlow(
+        UntypedFlow(
           identifier = qualifiedIdentifier,
           destinationIdentifier = qualifiedIdentifier,
           func = query.get,
@@ -267,7 +267,7 @@ class TestGraphRegistrationContext(
     )
 
     registerFlow(
-      new UnresolvedFlow(
+      UntypedFlow(
         identifier = viewIdentifier,
         destinationIdentifier = viewIdentifier,
         func = query,
@@ -339,7 +339,7 @@ class TestGraphRegistrationContext(
       }
 
     registerFlow(
-      new UnresolvedFlow(
+      UntypedFlow(
         identifier = flowIdentifier,
         destinationIdentifier = flowDestinationIdentifier,
         func = query,
