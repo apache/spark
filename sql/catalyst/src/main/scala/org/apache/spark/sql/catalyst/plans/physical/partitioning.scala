@@ -578,13 +578,13 @@ case class KeyedPartitioning(
           c.areAllClusterKeysMatched(expressions)
         } else {
           // We'll need to find leaf attributes from the partition expressions first.
-          lazy val attributes = expressions.flatMap(_.collectLeaves())
+          lazy val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
 
           if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
             // check that operation keys (required clustering keys)
             // overlap with partition keys (KeyedPartitioning attributes)
             requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
-              expressions.forall(_.collectLeaves().size == 1)
+              expressions.forall(_.references.size == 1)
           } else if (isNarrowed && !isGrouped) {
             // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
             // partition keys for a join: GroupPartitionsExec will merge partitions that held
@@ -1218,9 +1218,9 @@ case class KeyedShuffleSpec(
       distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
     }
     partitioning.expressions.map { e =>
-      val leaves = e.collectLeaves()
-      assert(leaves.size == 1, s"Expected exactly one child from $e, but found ${leaves.size}")
-      distKeyToPos.getOrElse(leaves.head.canonicalized, mutable.BitSet.empty)
+      val refs = e.references
+      assert(refs.size == 1, s"Expected exactly one child from $e, but found ${refs.size}")
+      distKeyToPos.getOrElse(refs.head.canonicalized, mutable.BitSet.empty)
     }
   }
 
