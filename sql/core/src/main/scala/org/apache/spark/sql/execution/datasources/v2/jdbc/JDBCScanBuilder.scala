@@ -21,11 +21,12 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
-import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{SampleMethod, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -57,7 +58,7 @@ case class JDBCScanBuilder(
 
   private var finalSchema = schema
 
-  private var tableSample: Option[TableSampleInfo] = None
+  private var tableSampleClause: Option[String] = None
 
   private var pushedLimit = 0
 
@@ -251,7 +252,7 @@ case class JDBCScanBuilder(
     pushedPredicate = Array.empty[Predicate]
     // Table sample is pushed down already as well, so we need to reset it to None to not push it
     // down again when join pushdown is triggered again on this JDBCScanBuilder.
-    tableSample = None
+    tableSampleClause = None
 
     true
   }
@@ -275,10 +276,13 @@ case class JDBCScanBuilder(
       lowerBound: Double,
       upperBound: Double,
       withReplacement: Boolean,
-      seed: Long): Boolean = {
-    if (jdbcOptions.pushDownTableSample && dialect.supportsTableSample) {
-      this.tableSample = Some(TableSampleInfo(lowerBound, upperBound, withReplacement, seed))
-      return true
+      seed: Long,
+      sampleMethod: SampleMethod): Boolean = {
+    if (jdbcOptions.pushDownTableSample) {
+      val sample = TableSampleInfo(
+        lowerBound, upperBound, withReplacement, seed, V2ExpressionUtils.toCatalyst(sampleMethod))
+      this.tableSampleClause = dialect.compileTableSample(sample)
+      return this.tableSampleClause.isDefined
     }
     false
   }
@@ -343,7 +347,7 @@ case class JDBCScanBuilder(
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
       finalSchema, pushedPredicate, pushedAggregateList, pushedGroupBys,
-      tableSample, pushedLimit, sortOrders, pushedOffset)
+      tableSampleClause, pushedLimit, sortOrders, pushedOffset)
   }
 
 }
