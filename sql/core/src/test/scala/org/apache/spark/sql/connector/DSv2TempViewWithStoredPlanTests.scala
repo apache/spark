@@ -42,7 +42,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         session.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
@@ -58,7 +58,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
@@ -76,7 +76,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(cachingTestTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
@@ -99,7 +99,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         session.sql(s"ALTER TABLE $testTable ADD COLUMN new_column INT").collect()
@@ -118,7 +118,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // external schema change via catalog API
@@ -141,7 +141,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(cachingTestTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
@@ -167,7 +167,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         session.sql(s"ALTER TABLE $testTable DROP COLUMN salary").collect()
@@ -191,7 +191,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
@@ -217,7 +217,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(cachingTestTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
@@ -248,7 +248,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
@@ -276,7 +276,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
@@ -310,7 +310,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(cachingTestTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
@@ -341,9 +341,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
-        session.table(T).createOrReplaceTempView("v_no_filter")
-        session.table(T).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).createOrReplaceTempView("v_no_filter")
+        session.table(testTable).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
         checkRows(session.table("v"), Seq(Row(1, 100)))
         checkRows(session.table("v_no_filter"), Seq(Row(1, 100), Row(10, 1000)))
         checkRows(session.table("v_filter_is_null"), Seq.empty)
@@ -370,9 +370,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
-        session.table(T).createOrReplaceTempView("v_no_filter")
-        session.table(T).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).createOrReplaceTempView("v_no_filter")
+        session.table(testTable).filter("salary IS NULL").createOrReplaceTempView("v_filter_is_null")
         checkRows(session.table("v"), Seq(Row(1, 100)))
         checkRows(session.table("v_no_filter"), Seq(Row(1, 100), Row(10, 1000)))
         checkRows(session.table("v_filter_is_null"), Seq.empty)
@@ -401,7 +401,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(cachingTestTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
@@ -426,7 +426,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         session.sql(s"ALTER TABLE $testTable DROP COLUMN salary").collect()
@@ -451,7 +451,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
@@ -478,7 +478,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(cachingTestTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
@@ -510,7 +510,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         session.sql(s"ALTER TABLE $testTable ALTER COLUMN salary TYPE LONG").collect()
@@ -534,7 +534,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(T).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(testTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
@@ -560,7 +560,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
         session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
-        session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
+        session.table(cachingTestTable).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         val catalog = getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
