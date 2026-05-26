@@ -17,23 +17,26 @@
 
 package org.apache.spark.unsafe.types;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.annotation.Unstable;
 
 import java.io.Serializable;
+import java.util.Map;
 import java.util.Objects;
 
 /**
- * Physical representation of {@code TIMESTAMP_NTZ(p)} with nanosecond-capable fractional precision
- * ({@code p} in [7, 9]). Analogous to microsecond {@code TimestampNTZType}, which stores a single
- * {@code long} epoch micros value, but with sub-microsecond resolution.
+ * Physical representation for nanosecond-capable timestamp types ({@code TIMESTAMP_NTZ(p)} and
+ * {@code TIMESTAMP_LTZ(p)} with {@code p} in [7, 9]). Analogous to {@link GeometryVal} for
+ * GEOMETRY: this class is only a container for the composite value; NTZ vs LTZ semantics live in
+ * {@link org.apache.spark.sql.catalyst.util.TimestampNTZNanos} and
+ * {@link org.apache.spark.sql.catalyst.util.TimestampLTZNanos}.
  *
  * <p>Values are stored as two components:
  * <ul>
- *   <li>{@link #epochMicros} - microseconds since the Unix epoch in the proleptic Gregorian
- *   calendar (same unit as {@code TimestampNTZType}),</li>
+ *   <li>{@link #epochMicros} - microseconds since the Unix epoch (same unit as microsecond
+ *   timestamp types),</li>
  *   <li>{@link #nanosWithinMicro} - additional nanoseconds within that microsecond, in [0, 999].
- *   The SQL fractional-second precision {@code p} applies when converting to and from external
- *   representations; the physical value always retains up to three sub-micro digits.</li>
+ *   </li>
  * </ul>
  *
  * <p>Logical row-size estimation uses 10 bytes (8 + 2). In {@code UnsafeRow}, values are stored in
@@ -41,15 +44,15 @@ import java.util.Objects;
  * {@link org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues}), the same pattern as
  * {@link CalendarInterval}.
  *
- * <p>NTZ and LTZ nanosecond timestamps share this composite layout at the row layer; time-zone
- * semantics are enforced in the SQL and conversion layers, not in this class.
- *
  * @since 4.2.0
  */
 @Unstable
-public final class TimestampNTZNanos implements Serializable {
+public final class TimestampNanosVal implements Serializable {
   /** Size of the {@code UnsafeRow} variable-length payload for this type (two 8-byte words). */
   public static final int SIZE_IN_BYTES = 16;
+
+  /** Maximum valid value for {@link #nanosWithinMicro} (three sub-micro decimal digits). */
+  public static final int MAX_NANOS_WITHIN_MICRO = 999;
 
   /** Microseconds since the Unix epoch. */
   public final long epochMicros;
@@ -60,17 +63,31 @@ public final class TimestampNTZNanos implements Serializable {
    * @param epochMicros microseconds since the Unix epoch
    * @param nanosWithinMicro nanoseconds within {@code epochMicros}, must be in [0, 999]
    */
-  public TimestampNTZNanos(long epochMicros, short nanosWithinMicro) {
-    TimestampNanosUtils.validateNanosWithinMicro(nanosWithinMicro);
+  public TimestampNanosVal(long epochMicros, short nanosWithinMicro) {
+    if (nanosWithinMicro < 0 || nanosWithinMicro > MAX_NANOS_WITHIN_MICRO) {
+      throw new SparkIllegalArgumentException(
+        "INTERNAL_ERROR",
+        Map.of(
+          "message",
+          "nanosWithinMicro must be in [0, " + MAX_NANOS_WITHIN_MICRO + "], got: "
+            + nanosWithinMicro));
+    }
     this.epochMicros = epochMicros;
     this.nanosWithinMicro = nanosWithinMicro;
+  }
+
+  /**
+   * Creates a non-null value from its components.
+   */
+  public static TimestampNanosVal fromParts(long epochMicros, short nanosWithinMicro) {
+    return new TimestampNanosVal(epochMicros, nanosWithinMicro);
   }
 
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
-    TimestampNTZNanos that = (TimestampNTZNanos) o;
+    TimestampNanosVal that = (TimestampNanosVal) o;
     return epochMicros == that.epochMicros && nanosWithinMicro == that.nanosWithinMicro;
   }
 
@@ -81,6 +98,6 @@ public final class TimestampNTZNanos implements Serializable {
 
   @Override
   public String toString() {
-    return "TimestampNTZNanos(" + epochMicros + ", " + nanosWithinMicro + ")";
+    return "TimestampNanosVal(" + epochMicros + ", " + nanosWithinMicro + ")";
   }
 }

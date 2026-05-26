@@ -24,8 +24,7 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
-import org.apache.spark.unsafe.types.TimestampLTZNanos;
-import org.apache.spark.unsafe.types.TimestampNTZNanos;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
@@ -164,12 +163,7 @@ public abstract class UnsafeWriter {
     increaseCursor(16);
   }
 
-  public void write(int ordinal, TimestampNTZNanos input) {
-    writeTimestampNanos(ordinal, input == null, input == null ? 0L : input.epochMicros,
-      input == null ? 0 : input.nanosWithinMicro);
-  }
-
-  public void write(int ordinal, TimestampLTZNanos input) {
+  public void write(int ordinal, TimestampNanosVal input) {
     writeTimestampNanos(ordinal, input == null, input == null ? 0L : input.epochMicros,
       input == null ? 0 : input.nanosWithinMicro);
   }

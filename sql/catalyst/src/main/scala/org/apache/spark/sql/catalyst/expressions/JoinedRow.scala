@@ -126,11 +126,11 @@ class JoinedRow extends InternalRow {
   override def getInterval(i: Int): CalendarInterval =
     if (i < row1.numFields) row1.getInterval(i) else row2.getInterval(i - row1.numFields)
 
-  override def getTimestampNTZNanos(i: Int): TimestampNTZNanos =
+  override def getTimestampNTZNanos(i: Int): TimestampNanosVal =
     if (i < row1.numFields) row1.getTimestampNTZNanos(i)
     else row2.getTimestampNTZNanos(i - row1.numFields)
 
-  override def getTimestampLTZNanos(i: Int): TimestampLTZNanos =
+  override def getTimestampLTZNanos(i: Int): TimestampNanosVal =
     if (i < row1.numFields) row1.getTimestampLTZNanos(i)
     else row2.getTimestampLTZNanos(i - row1.numFields)
 

@@ -1531,8 +1531,7 @@ object CodeGenerator extends Logging {
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
-      classOf[org.apache.spark.unsafe.types.TimestampNTZNanos].getName,
-      classOf[org.apache.spark.unsafe.types.TimestampLTZNanos].getName,
+      classOf[org.apache.spark.unsafe.types.TimestampNanosVal].getName,
       classOf[VariantVal].getName,
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
@@ -1989,8 +1988,8 @@ object CodeGenerator extends Logging {
       case PhysicalBooleanType => JAVA_BOOLEAN
       case PhysicalByteType => JAVA_BYTE
       case PhysicalCalendarIntervalType => "CalendarInterval"
-      case PhysicalTimestampNTZNanosType => "TimestampNTZNanos"
-      case PhysicalTimestampLTZNanosType => "TimestampLTZNanos"
+      case PhysicalTimestampNTZNanosType => "TimestampNanosVal"
+      case PhysicalTimestampLTZNanosType => "TimestampNanosVal"
       case PhysicalIntegerType => JAVA_INT
       case _: PhysicalDecimalType => "Decimal"
       case PhysicalDoubleType => JAVA_DOUBLE
@@ -2023,8 +2022,8 @@ object CodeGenerator extends Logging {
     case _: GeometryType => classOf[GeometryVal]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
-    case _: TimestampNTZNanosType => classOf[org.apache.spark.unsafe.types.TimestampNTZNanos]
-    case _: TimestampLTZNanosType => classOf[org.apache.spark.unsafe.types.TimestampLTZNanos]
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+      classOf[org.apache.spark.unsafe.types.TimestampNanosVal]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]
     case _: MapType => classOf[MapData]

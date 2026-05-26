@@ -25,11 +25,11 @@ import static org.junit.jupiter.api.Assertions.*;
 public class TimestampNanosSuite {
 
   @Test
-  public void timestampNTZNanosEqualsAndHashCode() {
-    TimestampNTZNanos t1 = new TimestampNTZNanos(1000L, (short) 100);
-    TimestampNTZNanos t2 = new TimestampNTZNanos(1001L, (short) 100);
-    TimestampNTZNanos t3 = new TimestampNTZNanos(1000L, (short) 101);
-    TimestampNTZNanos t4 = new TimestampNTZNanos(1000L, (short) 100);
+  public void timestampNanosValEqualsAndHashCode() {
+    TimestampNanosVal t1 = TimestampNanosVal.fromParts(1000L, (short) 100);
+    TimestampNanosVal t2 = TimestampNanosVal.fromParts(1001L, (short) 100);
+    TimestampNanosVal t3 = TimestampNanosVal.fromParts(1000L, (short) 101);
+    TimestampNanosVal t4 = TimestampNanosVal.fromParts(1000L, (short) 100);
 
     assertNotEquals(t1, t2);
     assertNotEquals(t1, t3);
@@ -38,28 +38,10 @@ public class TimestampNanosSuite {
   }
 
   @Test
-  public void timestampLTZNanosEqualsAndHashCode() {
-    TimestampLTZNanos t1 = new TimestampLTZNanos(2000L, (short) 0);
-    TimestampLTZNanos t2 = new TimestampLTZNanos(2000L, (short) 1);
-    TimestampLTZNanos t3 = new TimestampLTZNanos(2000L, (short) 0);
-
-    assertNotEquals(t1, t2);
-    assertEquals(t1, t3);
-  }
-
-  @Test
-  public void invalidNanosWithinMicroNTZ() {
+  public void invalidNanosWithinMicro() {
     assertThrows(SparkIllegalArgumentException.class,
-      () -> new TimestampNTZNanos(0L, (short) -1));
+      () -> TimestampNanosVal.fromParts(0L, (short) -1));
     assertThrows(SparkIllegalArgumentException.class,
-      () -> new TimestampNTZNanos(0L, (short) 1000));
-  }
-
-  @Test
-  public void invalidNanosWithinMicroLTZ() {
-    assertThrows(SparkIllegalArgumentException.class,
-      () -> new TimestampLTZNanos(0L, (short) -1));
-    assertThrows(SparkIllegalArgumentException.class,
-      () -> new TimestampLTZNanos(0L, (short) 1000));
+      () -> TimestampNanosVal.fromParts(0L, (short) 1000));
   }
 }

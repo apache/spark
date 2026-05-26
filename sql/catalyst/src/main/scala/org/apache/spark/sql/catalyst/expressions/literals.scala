@@ -149,8 +149,11 @@ object Literal {
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
-    case _ if clz == classOf[TimestampNTZNanos] => TimestampNTZNanosType()
-    case _ if clz == classOf[TimestampLTZNanos] => TimestampLTZNanosType()
+    case _ if clz == classOf[TimestampNanosVal] => TimestampNTZNanosType()
+    case _ if clz == classOf[org.apache.spark.sql.catalyst.util.TimestampNTZNanos] =>
+      TimestampNTZNanosType()
+    case _ if clz == classOf[org.apache.spark.sql.catalyst.util.TimestampLTZNanos] =>
+      TimestampLTZNanosType()
     case _ if clz == classOf[VariantVal] => VariantType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
@@ -205,8 +208,8 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case TimestampNTZType => create(0L, TimestampNTZType)
-    case t: TimestampNTZNanosType => create(new TimestampNTZNanos(0L, 0.toShort), t)
-    case t: TimestampLTZNanosType => create(new TimestampLTZNanos(0L, 0.toShort), t)
+    case t: TimestampNTZNanosType => create(new TimestampNanosVal(0L, 0.toShort), t)
+    case t: TimestampLTZNanosType => create(new TimestampNanosVal(0L, 0.toShort), t)
     case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
@@ -246,8 +249,8 @@ object Literal {
         case PhysicalBooleanType => v.isInstanceOf[Boolean]
         case PhysicalByteType => v.isInstanceOf[Byte]
         case PhysicalCalendarIntervalType => v.isInstanceOf[CalendarInterval]
-        case PhysicalTimestampNTZNanosType => v.isInstanceOf[TimestampNTZNanos]
-        case PhysicalTimestampLTZNanosType => v.isInstanceOf[TimestampLTZNanos]
+        case PhysicalTimestampNTZNanosType => v.isInstanceOf[TimestampNanosVal]
+        case PhysicalTimestampLTZNanosType => v.isInstanceOf[TimestampNanosVal]
         case PhysicalIntegerType => v.isInstanceOf[Int]
         case _: PhysicalDecimalType => v.isInstanceOf[Decimal]
         case PhysicalDoubleType => v.isInstanceOf[Double]

@@ -38,8 +38,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
-import org.apache.spark.unsafe.types.TimestampLTZNanos;
-import org.apache.spark.unsafe.types.TimestampNTZNanos;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -332,17 +331,17 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * pass {@code null} here so the variable-length offset is retained for future updates.
    */
   @Override
-  public void setTimestampNTZNanos(int ordinal, TimestampNTZNanos value) {
+  public void setTimestampNTZNanos(int ordinal, TimestampNanosVal value) {
     setTimestampNanosPayload(ordinal, value == null, value == null ? 0L : value.epochMicros,
       value == null ? 0 : value.nanosWithinMicro);
   }
 
   /**
    * Updates a nanosecond LTZ timestamp column in place. See {@link #setTimestampNTZNanos(int,
-   * TimestampNTZNanos)}.
+   * TimestampNanosVal)}.
    */
   @Override
-  public void setTimestampLTZNanos(int ordinal, TimestampLTZNanos value) {
+  public void setTimestampLTZNanos(int ordinal, TimestampNanosVal value) {
     setTimestampNanosPayload(ordinal, value == null, value == null ? 0L : value.epochMicros,
       value == null ? 0 : value.nanosWithinMicro);
   }
@@ -491,22 +490,22 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   @Override
-  public TimestampNTZNanos getTimestampNTZNanos(int ordinal) {
+  public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
     } else {
       final int offset = (int) (getLong(ordinal) >> 32);
-      return TimestampNanosRowValues.readNTZ(baseObject, baseOffset, offset);
+      return TimestampNanosRowValues.readVal(baseObject, baseOffset, offset);
     }
   }
 
   @Override
-  public TimestampLTZNanos getTimestampLTZNanos(int ordinal) {
+  public TimestampNanosVal getTimestampLTZNanos(int ordinal) {
     if (isNullAt(ordinal)) {
       return null;
     } else {
       final int offset = (int) (getLong(ordinal) >> 32);
-      return TimestampNanosRowValues.readLTZ(baseObject, baseOffset, offset);
+      return TimestampNanosRowValues.readVal(baseObject, baseOffset, offset);
     }
   }
 

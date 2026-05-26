@@ -90,8 +90,8 @@ object AlwaysNull extends InternalRow {
   override def getGeography(ordinal: Int): GeographyVal = notSupported
   override def getGeometry(ordinal: Int): GeometryVal = notSupported
   override def getInterval(ordinal: Int): CalendarInterval = notSupported
-  override def getTimestampNTZNanos(ordinal: Int): TimestampNTZNanos = notSupported
-  override def getTimestampLTZNanos(ordinal: Int): TimestampLTZNanos = notSupported
+  override def getTimestampNTZNanos(ordinal: Int): TimestampNanosVal = notSupported
+  override def getTimestampLTZNanos(ordinal: Int): TimestampNanosVal = notSupported
   override def getVariant(ordinal: Int): VariantVal = notSupported
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = notSupported
   override def getArray(ordinal: Int): ArrayData = notSupported
@@ -124,8 +124,8 @@ object AlwaysNonNull extends InternalRow {
   override def getGeography(ordinal: Int): GeographyVal = notSupported
   override def getGeometry(ordinal: Int): GeometryVal = notSupported
   override def getInterval(ordinal: Int): CalendarInterval = notSupported
-  override def getTimestampNTZNanos(ordinal: Int): TimestampNTZNanos = notSupported
-  override def getTimestampLTZNanos(ordinal: Int): TimestampLTZNanos = notSupported
+  override def getTimestampNTZNanos(ordinal: Int): TimestampNanosVal = notSupported
+  override def getTimestampLTZNanos(ordinal: Int): TimestampNanosVal = notSupported
   override def getVariant(ordinal: Int): VariantVal = notSupported
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = notSupported
   override def getArray(ordinal: Int): ArrayData = stringToUTF8Array(Array("1", "2", "3"))

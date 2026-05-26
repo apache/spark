@@ -23,8 +23,7 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
-import org.apache.spark.unsafe.types.TimestampLTZNanos;
-import org.apache.spark.unsafe.types.TimestampNTZNanos;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 
 import static org.apache.spark.sql.catalyst.expressions.UnsafeArrayData.calculateHeaderPortionInBytes;
 
@@ -210,17 +209,7 @@ public final class UnsafeArrayWriter extends UnsafeWriter {
   }
 
   @Override
-  public void write(int ordinal, TimestampNTZNanos input) {
-    assertIndexIsValid(ordinal);
-    if (input == null) {
-      setNull(ordinal);
-    } else {
-      super.write(ordinal, input);
-    }
-  }
-
-  @Override
-  public void write(int ordinal, TimestampLTZNanos input) {
+  public void write(int ordinal, TimestampNanosVal input) {
     assertIndexIsValid(ordinal);
     if (input == null) {
       setNull(ordinal);

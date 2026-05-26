@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, TimestampLTZNanos, TimestampNTZNanos, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
@@ -170,7 +170,7 @@ case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
 
 /**
  * Physical type for [[org.apache.spark.sql.types.TimestampNTZNanosType]]. Internal values are
- * [[TimestampNTZNanos]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
  * 16-byte variable-length payload; see
  * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
  *
@@ -180,14 +180,14 @@ class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
   override private[sql] def ordering =
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
       "PhysicalTimestampNTZNanosType")
-  override private[sql] type InternalType = TimestampNTZNanos
+  override private[sql] type InternalType = TimestampNanosVal
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
 
 /**
  * Physical type for [[org.apache.spark.sql.types.TimestampLTZNanosType]]. Internal values are
- * [[TimestampLTZNanos]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
  * 16-byte variable-length payload; see
  * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
  *
@@ -197,7 +197,7 @@ class PhysicalTimestampLTZNanosType() extends PhysicalDataType {
   override private[sql] def ordering =
     throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
       "PhysicalTimestampLTZNanosType")
-  override private[sql] type InternalType = TimestampLTZNanos
+  override private[sql] type InternalType = TimestampNanosVal
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalTimestampLTZNanosType extends PhysicalTimestampLTZNanosType

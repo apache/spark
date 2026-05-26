@@ -21,13 +21,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{TimestampLTZNanos, TimestampNTZNanos}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 
 class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  private val ntzValue = new TimestampNTZNanos(1234567890123L, 42.toShort)
-  private val ltzValue = new TimestampLTZNanos(9876543210987L, 999.toShort)
+  private val ntzValue = TimestampNanosVal.fromParts(1234567890123L, 42.toShort)
+  private val ltzValue = TimestampNanosVal.fromParts(9876543210987L, 999.toShort)
 
   test("GenerateUnsafeProjection.canSupport for nanos timestamp types") {
     assert(GenerateUnsafeProjection.canSupport(TimestampNTZNanosType(9)))
@@ -73,7 +73,7 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(unsafeRow.getTimestampNTZNanos(0) === ntzValue)
     assert(unsafeRow.getTimestampLTZNanos(1) === ltzValue)
 
-    val updatedNtz = new TimestampNTZNanos(1L, 0.toShort)
+    val updatedNtz = TimestampNanosVal.fromParts(1L, 0.toShort)
     unsafeRow.setTimestampNTZNanos(0, updatedNtz)
     assert(unsafeRow.getTimestampNTZNanos(0) === updatedNtz)
 
@@ -104,8 +104,8 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(nullAtCreation.isNullAt(i))
     }
 
-    val ntz = new TimestampNTZNanos(100L, 50.toShort)
-    val ltz = new TimestampLTZNanos(200L, 100.toShort)
+    val ntz = TimestampNanosVal.fromParts(100L, 50.toShort)
+    val ltz = TimestampNanosVal.fromParts(200L, 100.toShort)
     nullAtCreation.setTimestampNTZNanos(0, ntz)
     nullAtCreation.setTimestampLTZNanos(1, ltz)
     assert(nullAtCreation.getTimestampNTZNanos(0) === ntz)
@@ -123,8 +123,10 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("literal validation for nanosecond timestamp types") {
     Literal.validateLiteralValue(ntzValue, TimestampNTZNanosType(9))
     Literal.validateLiteralValue(ltzValue, TimestampLTZNanosType(7))
+    // NTZ and LTZ share the same physical TimestampNanosVal; logical type is schema metadata.
+    Literal.validateLiteralValue(ntzValue, TimestampLTZNanosType(7))
     intercept[IllegalArgumentException] {
-      Literal.validateLiteralValue(ntzValue, TimestampLTZNanosType(7))
+      Literal.validateLiteralValue(0L, TimestampNTZNanosType(9))
     }
   }
 }

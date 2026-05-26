@@ -105,11 +105,11 @@ case class ProjectingInternalRow(schema: StructType,
     row.getInterval(colOrdinals(ordinal))
   }
 
-  override def getTimestampNTZNanos(ordinal: Int): TimestampNTZNanos = {
+  override def getTimestampNTZNanos(ordinal: Int): TimestampNanosVal = {
     row.getTimestampNTZNanos(colOrdinals(ordinal))
   }
 
-  override def getTimestampLTZNanos(ordinal: Int): TimestampLTZNanos = {
+  override def getTimestampLTZNanos(ordinal: Int): TimestampNanosVal = {
     row.getTimestampLTZNanos(colOrdinals(ordinal))
   }
 

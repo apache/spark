@@ -113,10 +113,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             // Can't call setNullAt() for DecimalType with precision larger than 18.
             s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
           case CalendarIntervalType => s"$rowWriter.write($index, (CalendarInterval) null);"
-          case _: TimestampNTZNanosType =>
-            s"$rowWriter.write($index, (TimestampNTZNanos) null);"
-          case _: TimestampLTZNanosType =>
-            s"$rowWriter.write($index, (TimestampLTZNanos) null);"
+          case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+            s"$rowWriter.write($index, (TimestampNanosVal) null);"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
@@ -185,10 +183,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
         s"$arrayWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
       case CalendarIntervalType => s"$arrayWriter.write($index, (CalendarInterval) null);"
-      case _: TimestampNTZNanosType =>
-        s"$arrayWriter.write($index, (TimestampNTZNanos) null);"
-      case _: TimestampLTZNanosType =>
-        s"$arrayWriter.write($index, (TimestampLTZNanos) null);"
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        s"$arrayWriter.write($index, (TimestampNanosVal) null);"
       case _ => s"$arrayWriter.setNull${elementOrOffsetSize}Bytes($index);"
     }
 

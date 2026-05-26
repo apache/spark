@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.types.TimestampLTZNanos;
-import org.apache.spark.unsafe.types.TimestampNTZNanos;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 
 /**
  * Shared read/write helpers for nanosecond timestamp values in {@link UnsafeRow} and
@@ -41,7 +40,7 @@ import org.apache.spark.unsafe.types.TimestampNTZNanos;
  */
 public final class TimestampNanosRowValues {
   /** Payload size in the UnsafeRow variable-length region (two 8-byte words). */
-  public static final int SIZE_IN_BYTES = TimestampNTZNanos.SIZE_IN_BYTES;
+  public static final int SIZE_IN_BYTES = TimestampNanosVal.SIZE_IN_BYTES;
 
   private TimestampNanosRowValues() {
   }
@@ -74,14 +73,8 @@ public final class TimestampNanosRowValues {
     return (short) (Platform.getLong(baseObject, baseOffset + offset + 8) & 0xFFFFL);
   }
 
-  public static TimestampNTZNanos readNTZ(Object baseObject, long baseOffset, int offset) {
-    return new TimestampNTZNanos(
-        readEpochMicros(baseObject, baseOffset, offset),
-        readNanosWithinMicro(baseObject, baseOffset, offset));
-  }
-
-  public static TimestampLTZNanos readLTZ(Object baseObject, long baseOffset, int offset) {
-    return new TimestampLTZNanos(
+  public static TimestampNanosVal readVal(Object baseObject, long baseOffset, int offset) {
+    return TimestampNanosVal.fromParts(
         readEpochMicros(baseObject, baseOffset, offset),
         readNanosWithinMicro(baseObject, baseOffset, offset));
   }

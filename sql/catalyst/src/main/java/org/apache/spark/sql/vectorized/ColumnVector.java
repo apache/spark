@@ -24,8 +24,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.UserDefinedType;
 import org.apache.spark.unsafe.types.CalendarInterval;
-import org.apache.spark.unsafe.types.TimestampLTZNanos;
-import org.apache.spark.unsafe.types.TimestampNTZNanos;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -329,11 +328,11 @@ public abstract class ColumnVector implements AutoCloseable {
     return new CalendarInterval(months, days, microseconds);
   }
 
-  public TimestampNTZNanos getTimestampNTZNanos(int rowId) {
+  public TimestampNanosVal getTimestampNTZNanos(int rowId) {
     throw SparkUnsupportedOperationException.apply();
   }
 
-  public TimestampLTZNanos getTimestampLTZNanos(int rowId) {
+  public TimestampNanosVal getTimestampLTZNanos(int rowId) {
     throw SparkUnsupportedOperationException.apply();
   }
 
