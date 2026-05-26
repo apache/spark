@@ -3677,7 +3677,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     try:
         message_receiver.get_finish_signal_from_stream()
         write_int(SpecialLengths.END_OF_STREAM, outfile)
-    except AssertionError:
+    except Exception:
         # Write a different value to tell JVM to not reuse this worker
         write_int(SpecialLengths.END_OF_DATA_SECTION, outfile)
         sys.exit(-1)
