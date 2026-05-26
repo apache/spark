@@ -74,28 +74,35 @@ class FlowPlanner(
               trigger = triggerFor(sf),
               checkpointPath = flowMetadata.latestCheckpointLocation
             )
-          case _ =>
-            throw new UnsupportedOperationException(
-              s"Unsupported destination type: ${output.getClass.getSimpleName} for " +
-              s"streaming flow ${sf.identifier} (${flow.destinationIdentifier})"
-            )
+          case _ => unsupportedDestinationType(sf, output)
         }
       case acmf: AutoCdcMergeFlow if acmf.changeArgs.storedAsScdType == ScdType.Type1 =>
         val flowMetadata = FlowSystemMetadata(updateContext, acmf, graph)
-        new Scd1MergeStreamingWrite(
-          identifier = acmf.identifier,
-          flow = acmf,
-          graph = graph,
-          updateContext = updateContext,
-          checkpointPath = flowMetadata.latestCheckpointLocation,
-          trigger = triggerFor(acmf),
-          destination = output.asInstanceOf[Table],
-          sqlConf = acmf.sqlConf
-        )
+        output match {
+          case o: Table =>
+            new Scd1MergeStreamingWrite(
+              identifier = acmf.identifier,
+              flow = acmf,
+              graph = graph,
+              updateContext = updateContext,
+              checkpointPath = flowMetadata.latestCheckpointLocation,
+              trigger = triggerFor(acmf),
+              destination = o,
+              sqlConf = acmf.sqlConf
+            )
+          case _ => unsupportedDestinationType(acmf, output)
+        }
       case _ =>
         throw new UnsupportedOperationException(
           s"Unable to plan flow of type ${flow.getClass.getSimpleName}"
         )
     }
+  }
+
+  private def unsupportedDestinationType(flow: ResolvedFlow, output: Output): Nothing = {
+    throw new UnsupportedOperationException(
+      s"Unsupported destination type: ${output.getClass.getSimpleName} for " +
+      s"flow ${flow.identifier} writing to ${flow.destinationIdentifier}"
+    )
   }
 }

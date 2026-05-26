@@ -404,7 +404,7 @@ case class Scd1BatchProcessor(
       // When inserting a brand new row for a new key, construct column mappings from microbatch.
       // The microbatch's columns may be a strict subset of the target's columns -- e.g. the user
       // narrowed `column_list` between runs, or the source DF dropped a column. The target's
-      // columns can never be a strict subset of the microbatch's however, because SDP's schema
+      // columns can never be a strict subset of the microbatch's, however, because SDP's schema
       // evolution always unions old and new schemas onto the target.
       .insert(columnsToInsertOnNewKey)
       .merge()

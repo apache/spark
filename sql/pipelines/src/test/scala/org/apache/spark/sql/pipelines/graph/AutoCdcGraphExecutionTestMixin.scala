@@ -98,7 +98,7 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
 
   /**
    * Walk every [[Throwable]] reachable from `failure` via [[Throwable#getSuppressed]] and
-   * [[Throwable#getCause]] for the first [[SparkThrowable]] whose
+   * [[Throwable#getCause]], searching for the first [[SparkThrowable]] whose
    * [[SparkThrowable#getCondition]] equals `condition`, then run [[checkError]] against that
    * exception with all of its other arguments propagated through.
    */

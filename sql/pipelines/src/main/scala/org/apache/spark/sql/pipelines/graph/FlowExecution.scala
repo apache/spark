@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRowLevelOperations, TableCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   ChangeArgs,
@@ -39,7 +40,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SparkSessionUtils
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, Trigger}
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -388,10 +389,13 @@ trait AutoCdcMergeWriteBase {
       spark: SparkSession,
       ident: TableIdentifier): (TableCatalog, Identifier) = {
     val catalogManager = spark.sessionState.catalogManager
-    val catalog = ident.catalog
+    val catalogPlugin = ident.catalog
       .map(catalogManager.catalog)
       .getOrElse(catalogManager.currentCatalog)
-      .asInstanceOf[TableCatalog]
+    val catalog = catalogPlugin match {
+      case t: TableCatalog => t
+      case _ => throw QueryCompilationErrors.missingCatalogTablesAbilityError(catalogPlugin)
+    }
     val namespace = ident.database.getOrElse(
       throw SparkException.internalError(
         s"Cannot resolve table identifier ${ident.quotedString}: namespace is unspecified."
@@ -420,12 +424,6 @@ class Scd1MergeStreamingWrite(
 
   override protected def changeArgs: ChangeArgs = flow.changeArgs
 
-  /**
-   * Resolved Spark [[DataType]] of the sequencing expression.
-   */
-  private lazy val sequencingType: DataType =
-    flow.df.select(flow.changeArgs.sequencing).schema.head.dataType
-
   override def startStream(): StreamingQuery = {
     requireDestinationSupportsRowLevelOps()
 
@@ -443,7 +441,7 @@ class Scd1MergeStreamingWrite(
     val foreachBatchHandler = Scd1ForeachBatchHandler(
       batchProcessor = Scd1BatchProcessor(
         changeArgs = flow.changeArgs,
-        resolvedSequencingType = sequencingType
+        resolvedSequencingType = flow.sequencingType
       ),
       auxiliaryTableIdentifier = auxiliaryTableIdentifier,
       targetTableIdentifier = destination.identifier

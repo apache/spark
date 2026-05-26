@@ -272,7 +272,7 @@ class AutoCdcMergeFlow(
   }
 
   /** The DataType of the sequencing expression, derived once from the source change feed. */
-  private val sequencingType: DataType =
+  private[graph] val sequencingType: DataType =
     df.select(changeArgs.sequencing).schema.head.dataType
 
   /**

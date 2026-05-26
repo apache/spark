@@ -308,7 +308,7 @@ object DatasetManager extends Logging {
       // that stale delete-tracking data and table properties are not carried forward into the new
       // table generation. We unconditionally issue the DROP for every fully-refreshed target; for
       // non-AutoCDC tables this is a no-op because [[AutoCdcAuxiliaryTable.identifier]] derives
-      // its name from [[AutoCdcReservedNames.prefix]], which is reserved across AutoCDC and
+      // its name from [[AutoCdcReservedNames.prefix]], which is reserved by AutoCDC and
       // therefore cannot collide with a user-managed table.
 
       // Intentionally DROP and not TRUNCATE: the auxiliary table is an internal state store

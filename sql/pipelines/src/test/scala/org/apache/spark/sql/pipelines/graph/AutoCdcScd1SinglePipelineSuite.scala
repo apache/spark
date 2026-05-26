@@ -108,7 +108,7 @@ class AutoCdcScd1SinglePipelineSuite
     runPipeline(ctx)
 
     // After all three events at seqs 1, 2, 3: row "alice2" wins as the highest-sequenced
-    // upsert; the delete at seq=2 is bounded by the seq=3 upsert.
+    // upsert; the delete at seq=2 is superseded by the seq=3 upsert.
     checkAnswer(
       spark.table(s"$catalog.$namespace.target"),
       Seq(Row(1, "alice2", 3L, cdcMeta(None, Some(3L))))
@@ -171,7 +171,7 @@ class AutoCdcScd1SinglePipelineSuite
     val session = spark
     import session.implicits._
 
-    // Intentionally use a non-merge compatible catalog, whose default table format is parquet.
+    // Intentionally use a non-merge-compatible catalog, whose default table format is parquet.
     val catalog = TestGraphRegistrationContext.DEFAULT_CATALOG
     val database = TestGraphRegistrationContext.DEFAULT_DATABASE
 
