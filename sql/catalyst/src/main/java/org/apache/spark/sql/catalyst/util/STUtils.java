@@ -31,14 +31,16 @@ public final class STUtils {
 
   /** Conversion methods from physical values to Geography/Geometry objects. */
 
-  // Converts a GEOGRAPHY physical value to the corresponding `Geography` object. The bytes are
-  // copied so the resulting Geography owns its buffer (it may be mutated by `setSrid`).
+  // Converts a GEOGRAPHY physical value to the corresponding `Geography` object. The returned
+  // Geography may share its backing array with {@code value} (see {@link BinaryView#getBytes}),
+  // so callers that need to mutate it (e.g. via `setSrid`) must first call `Geography.copy()`.
   static Geography geogFromPhysVal(BinaryView value) {
     return Geography.fromBytes(value.getBytes());
   }
 
-  // Converts a GEOMETRY physical value to the corresponding `Geometry` object. The bytes are
-  // copied so the resulting Geometry owns its buffer.
+  // Converts a GEOMETRY physical value to the corresponding `Geometry` object. The returned
+  // Geometry may share its backing array with {@code value} (see {@link BinaryView#getBytes}),
+  // so callers that need to mutate it (e.g. via `setSrid`) must first call `Geometry.copy()`.
   static Geometry geomFromPhysVal(BinaryView value) {
     return Geometry.fromBytes(value.getBytes());
   }
@@ -115,12 +117,12 @@ public final class STUtils {
 
   /** Methods for implementing ST expressions.
    *
-   * The {@code stAsBinary}, {@code stAsEwkt}, {@code stSrid}, and {@code stSetSrid} families
-   * each split into a {@code stGeog…} and a {@code stGeom…} variant. The variants exist for
-   * {@link org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke} dispatch only —
+   * The ST_AsBinary, ST_AsEWKT, ST_Srid, and ST_SetSrid expression families each have a
+   * {@code stGeog*} and a {@code stGeom*} variant. The variants exist for
+   * {@link org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke} dispatch only:
    * the GEOMETRY/GEOGRAPHY physical type is the same opaque byte chunk, but the WKB
    * validation rules and SRID checks differ, so the ST expressions pick the variant from
-   * the input's logical {@link DataType}.
+   * the input's logical {@link org.apache.spark.sql.types.DataType}.
    */
 
   private static ByteOrder parseEndianness(UTF8String endianness) {

@@ -293,7 +293,7 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Returns the opaque-bytes physical value at {@code rowId} as a {@link BinaryView}. Used by
-   * logical types whose physical representation is "an opaque chunk of bytes" — currently
+   * logical types whose physical representation is "an opaque chunk of bytes" - currently
    * GEOMETRY and GEOGRAPHY. Returns {@code null} if the slot is null.
    */
   public BinaryView getBinaryView(int rowId) {

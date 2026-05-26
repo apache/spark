@@ -54,7 +54,7 @@ public interface SpecializedGetters {
 
   /**
    * Returns the opaque-bytes physical value at {@code ordinal} as a {@link BinaryView}. Used by
-   * logical types whose physical representation is "an opaque chunk of bytes" — currently
+   * logical types whose physical representation is "an opaque chunk of bytes" - currently
    * GEOMETRY and GEOGRAPHY. Returns {@code null} if the slot is null. The returned view may
    * alias the underlying buffer; callers that need to retain it past the source's lifetime
    * must call {@link BinaryView#copy()}.

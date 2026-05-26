@@ -462,8 +462,8 @@ object UninitializedPhysicalType extends PhysicalDataType {
 }
 
 // Physical type for opaque, variable-length byte payloads that are addressed as a zero-copy
-// view ({@link BinaryView}) into the row backing buffer. Today GEOMETRY and GEOGRAPHY share
-// this physical type; future opaque-bytes logical types can plug into it as well.
+// BinaryView into the row backing buffer. Today GEOMETRY and GEOGRAPHY share this physical
+// type; future opaque-bytes logical types can plug into it as well.
 class PhysicalBinaryViewType extends PhysicalDataType {
   private[sql] type InternalType = BinaryView
   @transient private[sql] lazy val tag = typeTag[InternalType]
