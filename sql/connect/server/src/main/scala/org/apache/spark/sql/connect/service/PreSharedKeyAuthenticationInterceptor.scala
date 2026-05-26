@@ -40,7 +40,8 @@ class PreSharedKeyAuthenticationInterceptor(token: String) extends ServerInterce
       call.close(status, new Metadata())
       new ServerCall.Listener[ReqT]() {}
     } else if (!MessageDigest.isEqual(
-        authHeaderValue.getBytes(UTF_8), expectedValue.getBytes(UTF_8))) {
+        authHeaderValue.getBytes(UTF_8),
+        expectedValue.getBytes(UTF_8))) {
       val status = Status.UNAUTHENTICATED.withDescription("Invalid authentication token")
       call.close(status, new Metadata())
       new ServerCall.Listener[ReqT]() {}
