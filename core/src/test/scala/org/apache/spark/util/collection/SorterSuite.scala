@@ -17,25 +17,12 @@
 
 package org.apache.spark.util.collection
 
-import java.lang.ref.WeakReference
 import java.util.Arrays
-import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.random.XORShiftRandom
 
 class SorterSuite extends SparkFunSuite {
-
-  /** Run GC and wait until it has actually run, to free memory used by prior tests. */
-  private def runGC(): Unit = {
-    val weakRef = new WeakReference(new Object())
-    val startTimeNs = System.nanoTime()
-    System.gc()
-    while (System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(10) && weakRef.get != null) {
-      System.gc()
-      Thread.sleep(200)
-    }
-  }
 
   test("equivalent to Arrays.sort") {
     val rand = new XORShiftRandom(123)
@@ -152,16 +139,10 @@ class SorterSuite extends SparkFunSuite {
       21, 20, 22, 18, 452, 114, 95, 18, 17, 21, 36, 18, 17, 115, 76, 144, 44, 38, 61,20, 19, 21, 17)
     // scalastyle:on
     val arrayToSortSize = 1091482190
-    // Retry once after forcing GC: memory held by the previous test (e.g. the ~256 MB
-    // int array in "SPARK-5984 TimSort bug") may not be reclaimed before this >1 GB
-    // allocation, causing flaky OOM in CI.
-    val arrayToSort = try {
-      new Array[Byte](arrayToSortSize)
-    } catch {
-      case _: OutOfMemoryError =>
-        runGC()
-        new Array[Byte](arrayToSortSize)
-    }
+    // Memory held by the previous test (e.g. the ~256 MB int array in "SPARK-5984
+    // TimSort bug") may not be reclaimed before this >1 GB allocation, causing flaky
+    // OOM in CI. Force a GC and retry once on OOM.
+    val arrayToSort = retryOnOOM(new Array[Byte](arrayToSortSize))
     var sum: Int = -1
     for (i <- runLengths) {
       sum += i
