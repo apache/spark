@@ -25,6 +25,7 @@ Input/Output
 .. autosummary::
     :toctree: api/
 
+    DataStreamReader.changes
     DataStreamReader.csv
     DataStreamReader.format
     DataStreamReader.json
