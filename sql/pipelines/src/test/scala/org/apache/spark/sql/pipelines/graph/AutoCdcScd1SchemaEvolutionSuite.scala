@@ -651,7 +651,7 @@ class AutoCdcScd1SchemaEvolutionSuite
     checkAnswer(
       spark.table(s"$catalog.$namespace.target").select("id", "name", "version", "extra"),
       Seq(
-        Row(1, "alice", 1L, 42),  // extra preserved on the upsert
+        Row(1, "alice", 1L, 42), // extra preserved on the upsert
         Row(2, "bob",   1L, null) // extra is NULL for inserts
       )
     )
@@ -701,7 +701,9 @@ class AutoCdcScd1SchemaEvolutionSuite
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     val all = Iterator(ex) ++ ex.getSuppressed.iterator
     assert(
-      all.exists(t => Option(t.getMessage).exists(_.contains("CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE"))),
+      all.exists(t => Option(t.getMessage).exists(
+        _.contains("CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE"))
+      ),
       s"Expected CANNOT_MERGE_INCOMPATIBLE_DATA_TYPE failure, got: ${ex.getMessage}"
     )
   }
