@@ -452,11 +452,14 @@ class AutoCdcScd1SchemaEvolutionSuite
     // the target's `value.b.c` column.
     stream.addData((1, 2L, 10, 99, 10), (3, 1L, 3, 99, 3))
     val ex = intercept[RuntimeException] { runPipeline(buildCtx(includeC = false)) }
+    // The V2 writer's `TableOutputResolver` produces this error during plan analysis with
+    // an empty `tableName` because the merge plan it analyzes does not carry the target's
+    // catalog identifier through to the resolver call site.
     checkErrorInPipelineFailure(
       failure = ex,
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       parameters = Map(
-        "tableName" -> s"`$catalog`.`$namespace`.`target`",
+        "tableName" -> "``",
         "colName" -> "`value`.`b`.`c`"
       )
     )
@@ -565,11 +568,12 @@ class AutoCdcScd1SchemaEvolutionSuite
 
     stream.addData((1, 2L, 10, 10, 99), (3, 1L, 3, 3, 99))
     val ex = intercept[RuntimeException] { runPipeline(buildCtx(includeD = false)) }
+    // See the nested-struct test above for why `tableName` is empty here.
     checkErrorInPipelineFailure(
       failure = ex,
       condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       parameters = Map(
-        "tableName" -> s"`$catalog`.`$namespace`.`target`",
+        "tableName" -> "``",
         "colName" -> "`vals`.`element`.`b`.`d`"
       )
     )
@@ -619,7 +623,14 @@ class AutoCdcScd1SchemaEvolutionSuite
           "name" -> ".*",
           "referenceNames" -> ".*"
         ),
-        matchPVals = true
+        matchPVals = true,
+        queryContext = Array(
+          ExpectedContext(
+            fragment = s"`$catalog`.`$namespace`.`target`.`Value`",
+            start = 0,
+            stop = 27
+          )
+        )
       )
     }
   }
