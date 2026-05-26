@@ -72,6 +72,42 @@ object WidenStatefulOpNullability {
    */
   def widenOutputForStatefulOp(base: Seq[Attribute]): Seq[Attribute] =
     if (isEnabled) base.map(deepWidenAttribute) else base
+
+  /**
+   * Recursively walks a schema and replaces any nested `StructType` that
+   * structurally matches `original` (by field names and base types, ignoring
+   * nullability) with `widened`. Used by TransformWithState execs to widen
+   * the grouping-key portion of col-family key schemas without touching
+   * user-defined key/value portions.
+   */
+  def widenGroupingKeyInSchema(
+      schema: StructType,
+      original: StructType,
+      widened: StructType): StructType = {
+    if (!isEnabled) return schema
+    if (structurallyMatches(schema, original)) {
+      widened
+    } else {
+      StructType(schema.fields.map { field =>
+        field.dataType match {
+          case st: StructType if structurallyMatches(st, original) =>
+            field.copy(dataType = widened)
+          case st: StructType =>
+            field.copy(dataType =
+              widenGroupingKeyInSchema(st, original, widened))
+          case _ => field
+        }
+      })
+    }
+  }
+
+  private def structurallyMatches(
+      a: StructType, b: StructType): Boolean = {
+    a.length == b.length && a.zip(b).forall { case (fa, fb) =>
+      fa.name == fb.name &&
+        fa.dataType.typeName == fb.dataType.typeName
+    }
+  }
 }
 
 /**

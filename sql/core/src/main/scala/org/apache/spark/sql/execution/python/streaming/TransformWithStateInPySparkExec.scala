@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOper
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper.StateStoreAwareZipPartitionsHelper
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.{TransformWithStateExecBase, TransformWithStateVariableInfo}
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.{DriverStatefulProcessorHandleImpl, StatefulProcessorHandleImpl}
-import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId}
+import org.apache.spark.sql.execution.streaming.state.{NoPrefixKeyStateEncoderSpec, PrefixKeyScanStateEncoderSpec, RangeKeyScanStateEncoderSpec, RocksDBStateStoreProvider, StateSchemaValidationResult, StateStore, StateStoreColFamilySchema, StateStoreConf, StateStoreId, StateStoreOps, StateStoreProvider, StateStoreProviderId, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode}
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
@@ -131,6 +131,9 @@ case class TransformWithStateInPySparkExec(
   // Each state variable has its own schema, this is a dummy one.
   protected val schemaForValueRow: StructType = new StructType().add("value", BinaryType)
 
+  private lazy val widenedGroupingKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(groupingKeySchema)
+
   override def getColFamilySchemas(
       shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
     // For Python, the user can explicitly set nullability on schema, so
@@ -139,7 +142,35 @@ case class TransformWithStateInPySparkExec(
       shouldCheckNullable = shouldBeNullable,
       shouldSetNullable = shouldBeNullable
     )
-    schemas
+    widenColFamilyGroupingKeys(schemas)
+  }
+
+  private def widenColFamilyGroupingKeys(
+      schemas: Map[String, StateStoreColFamilySchema])
+      : Map[String, StateStoreColFamilySchema] = {
+    val original = groupingKeySchema
+    val widened = widenedGroupingKeySchema
+    if (original == widened) return schemas
+    def widenKey(ks: StructType): StructType =
+      WidenStatefulOpNullability.widenGroupingKeyInSchema(
+        ks, original, widened)
+    schemas.map { case (name, cf) =>
+      val widenedSpec = cf.keyStateEncoderSpec.map {
+        case NoPrefixKeyStateEncoderSpec(ks) =>
+          NoPrefixKeyStateEncoderSpec(widenKey(ks))
+        case PrefixKeyScanStateEncoderSpec(ks, n) =>
+          PrefixKeyScanStateEncoderSpec(widenKey(ks), n)
+        case RangeKeyScanStateEncoderSpec(ks, o) =>
+          RangeKeyScanStateEncoderSpec(widenKey(ks), o)
+        case TimestampAsPrefixKeyStateEncoderSpec(ks) =>
+          TimestampAsPrefixKeyStateEncoderSpec(widenKey(ks))
+        case TimestampAsPostfixKeyStateEncoderSpec(ks) =>
+          TimestampAsPostfixKeyStateEncoderSpec(widenKey(ks))
+      }
+      name -> cf.copy(
+        keySchema = widenKey(cf.keySchema),
+        keyStateEncoderSpec = widenedSpec)
+    }
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {

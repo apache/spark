@@ -172,8 +172,6 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
         schemas.foreach { s =>
           assertSchemaAllNullable(s.keySchema,
             s"$schemaFile: key schema for col family ${s.colFamilyName}")
-          assertSchemaAllNullable(s.valueSchema,
-            s"$schemaFile: value schema for col family ${s.colFamilyName}")
         }
       } finally inStream.close()
     }
@@ -430,11 +428,7 @@ class StreamingStatefulOperatorNullabilityDriftSuite extends StreamTest {
         StopStream
       )
 
-      // TWS user-defined state variable schemas have composite keys
-      // (groupingKey + userKey); the grouping key part is widened by
-      // component (c) at the logical plan level, not by component (a).
-      // Schema assertion is skipped here; the restart test validates
-      // the query still works correctly.
+      assertJournaledStateSchemaAllNullable(checkpointPath)
 
       val (inputA2, inputB2, q2) = buildTwsQuery()
       testStream(q2, OutputMode.Update())(

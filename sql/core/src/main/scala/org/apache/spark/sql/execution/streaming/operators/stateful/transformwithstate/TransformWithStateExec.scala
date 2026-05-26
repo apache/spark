@@ -154,7 +154,34 @@ case class TransformWithStateExec(
         shouldCheckNullable = false, shouldSetNullable = shouldBeNullable) ++
         Map(StateStore.DEFAULT_COL_FAMILY_NAME -> defaultSchema)
     closeProcessorHandle()
-    columnFamilySchemas
+    widenColFamilyGroupingKeys(columnFamilySchemas)
+  }
+
+  private def widenColFamilyGroupingKeys(
+      schemas: Map[String, StateStoreColFamilySchema])
+      : Map[String, StateStoreColFamilySchema] = {
+    val original = keyEncoder.schema
+    val widened = stateKeySchema
+    if (original == widened) return schemas
+    def widenKey(ks: StructType): StructType =
+      WidenStatefulOpNullability.widenGroupingKeyInSchema(ks, original, widened)
+    schemas.map { case (name, cf) =>
+      val widenedSpec = cf.keyStateEncoderSpec.map {
+        case NoPrefixKeyStateEncoderSpec(ks) =>
+          NoPrefixKeyStateEncoderSpec(widenKey(ks))
+        case PrefixKeyScanStateEncoderSpec(ks, n) =>
+          PrefixKeyScanStateEncoderSpec(widenKey(ks), n)
+        case RangeKeyScanStateEncoderSpec(ks, o) =>
+          RangeKeyScanStateEncoderSpec(widenKey(ks), o)
+        case TimestampAsPrefixKeyStateEncoderSpec(ks) =>
+          TimestampAsPrefixKeyStateEncoderSpec(widenKey(ks))
+        case TimestampAsPostfixKeyStateEncoderSpec(ks) =>
+          TimestampAsPostfixKeyStateEncoderSpec(widenKey(ks))
+      }
+      name -> cf.copy(
+        keySchema = widenKey(cf.keySchema),
+        keyStateEncoderSpec = widenedSpec)
+    }
   }
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
