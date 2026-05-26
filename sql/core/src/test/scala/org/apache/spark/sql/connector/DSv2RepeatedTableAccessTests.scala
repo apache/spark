@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.IntegerType
  *  - Scenario 3 (external drop/recreate): external drop and recreate via the catalog API
  *    resolves to the new empty table.
  *
- * Each scenario includes a session-write baseline, an external-write test, and a
+ * Each scenario includes a session mutation baseline, an external mutation test, and a
  * caching-connector variant showing stale results until `REFRESH TABLE`.
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
