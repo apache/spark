@@ -392,13 +392,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * @since 3.5.0
    */
   override def createTable(tableName: String, path: String): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getCatalogBuilder.getCreateTableBuilder
-        .setTableName(tableName)
-        .setSchema(DataTypeProtoConverter.toConnectProtoType(new StructType))
-        .setDescription("")
-        .putOptions("path", path)
-    }
+    createTable(tableName, path, "parquet")
   }
 
   /**
@@ -484,7 +478,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
       schema: StructType,
       description: String,
       options: Map[String, String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
+    sparkSession.execute { builder =>
       val createTableBuilder = builder.getCatalogBuilder.getCreateTableBuilder
         .setTableName(tableName)
         .setSource(source)
@@ -494,6 +488,7 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
         createTableBuilder.putOptions(k, v)
       }
     }
+    sparkSession.table(tableName)
   }
 
   /**
