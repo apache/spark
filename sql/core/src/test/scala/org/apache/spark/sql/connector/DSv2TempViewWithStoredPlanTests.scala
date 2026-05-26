@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, Identifier, InMemoryTableCatalog, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, InMemoryTableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
 
 /**
@@ -33,21 +33,19 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType}
  */
 trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
 
-  private val T = "testcat.ns1.ns2.tbl"
-  private val CT = "cachingcat.ns1.ns2.tbl"
-  private val testIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
+  // Uses testTable, cachingTestTable, and testIdent from DSv2ExternalMutationTestBase.
 
   // Scenario 1.1 (session write)
   test(s"${testPrefix}temp view with stored plan reflects session write") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
         checkRows(session.table("v"), Seq(Row(1, 100), Row(2, 200)))
       }
     }
@@ -56,9 +54,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 1.2 (external write)
   test(s"${testPrefix}temp view with stored plan reflects external write") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -74,9 +72,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 1.2 connector w/ cache (external write, caching connector)
   test(s"${testPrefix}connector w/ cache: temp view stale after external write") {
     withTestSession { session =>
-      withTestTableAndViews(session, CT, Seq("v")) {
-        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, cachingTestTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -88,7 +86,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // REFRESH TABLE invalidates the connector cache, external write becomes visible
-        session.sql(s"REFRESH TABLE $CT").collect()
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
         checkRows(session.table("v"), Seq(Row(1, 100), Row(2, 200)))
       }
     }
@@ -97,15 +95,15 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 2.1 (session ADD COLUMN)
   test(s"${testPrefix}temp view with stored plan preserves schema after session ADD COLUMN") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        session.sql(s"ALTER TABLE $T ADD COLUMN new_column INT").collect()
-        session.sql(s"INSERT INTO $T VALUES (2, 200, -1)").collect()
+        session.sql(s"ALTER TABLE $testTable ADD COLUMN new_column INT").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (2, 200, -1)").collect()
 
         // view preserves original 2-column schema, filter still applied
         checkRows(session.table("v"), Seq(Row(1, 100), Row(2, 200)))
@@ -116,9 +114,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 2.2 (external ADD COLUMN)
   test(s"${testPrefix}temp view with stored plan preserves schema after external ADD COLUMN") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -139,9 +137,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 2.2 connector w/ cache (external ADD COLUMN, caching connector)
   test(s"${testPrefix}connector w/ cache: temp view stale after external ADD COLUMN") {
     withTestSession { session =>
-      withTestTableAndViews(session, CT, Seq("v")) {
-        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, cachingTestTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -156,7 +154,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // REFRESH TABLE invalidates the connector cache, view preserves original 2-column schema
-        session.sql(s"REFRESH TABLE $CT").collect()
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
         checkRows(session.table("v"), Seq(Row(1, 100), Row(2, 200)))
       }
     }
@@ -165,14 +163,14 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 3.1 (session column removal)
   test(s"${testPrefix}temp view with stored plan detects session column removal") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
+        session.sql(s"ALTER TABLE $testTable DROP COLUMN salary").collect()
 
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
@@ -189,9 +187,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 3.2 (external column removal)
   test(s"${testPrefix}temp view with stored plan detects external column removal") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -215,9 +213,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 3.2 connector w/ cache (external column removal, caching connector)
   test(s"${testPrefix}connector w/ cache: temp view stale after external column removal") {
     withTestSession { session =>
-      withTestTableAndViews(session, CT, Seq("v")) {
-        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, cachingTestTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -230,7 +228,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // REFRESH TABLE invalidates the connector cache, column removal detected
-        session.sql(s"REFRESH TABLE $CT").collect()
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
           condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
@@ -246,9 +244,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 4.1 (session drop and recreate table)
   test(s"${testPrefix}temp view with stored plan resolves to session-recreated table") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -256,8 +254,8 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
         val originalTableId = catalog.loadTable(testIdent).id
 
-        session.sql(s"DROP TABLE $T").collect()
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
+        session.sql(s"DROP TABLE $testTable").collect()
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
 
         val newTableId = catalog.loadTable(testIdent).id
         assert(originalTableId != newTableId)
@@ -265,7 +263,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         // view resolves to the new empty table
         checkRows(session.table("v"), Seq.empty)
 
-        session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
         checkRows(session.table("v"), Seq(Row(2, 200)))
       }
     }
@@ -274,9 +272,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 4.2 (external drop and recreate table)
   test(s"${testPrefix}temp view with stored plan resolves to externally recreated table") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -299,7 +297,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         // view resolves to the new empty table
         checkRows(session.table("v"), Seq.empty)
 
-        session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
         checkRows(session.table("v"), Seq(Row(2, 200)))
       }
     }
@@ -308,9 +306,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 4.2 connector w/ cache (external drop/recreate, caching connector)
   test(s"${testPrefix}connector w/ cache: temp view stale after external drop/recreate") {
     withTestSession { session =>
-      withTestTableAndViews(session, CT, Seq("v")) {
-        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, cachingTestTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -329,7 +327,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // REFRESH TABLE invalidates the connector cache, view resolves to new empty table
-        session.sql(s"REFRESH TABLE $CT").collect()
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
         checkRows(session.table("v"), Seq.empty)
       }
     }
@@ -339,9 +337,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   test(s"${testPrefix}temp view with stored plan after session drop and re-add column same type" +
       " with unfiltered view") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v", "v_no_filter", "v_filter_is_null")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v", "v_no_filter", "v_filter_is_null")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         session.table(T).createOrReplaceTempView("v_no_filter")
@@ -351,8 +349,8 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v_filter_is_null"), Seq.empty)
 
         // drop and re-add column with same name and type
-        session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-        session.sql(s"ALTER TABLE $T ADD COLUMN salary INT").collect()
+        session.sql(s"ALTER TABLE $testTable DROP COLUMN salary").collect()
+        session.sql(s"ALTER TABLE $testTable ADD COLUMN salary INT").collect()
 
         // salary values are now null, so the filtered view returns nothing
         checkRows(session.table("v"), Seq.empty)
@@ -368,9 +366,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   test(s"${testPrefix}temp view with stored plan after external drop and re-add column " +
       "same type") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v", "v_no_filter", "v_filter_is_null")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v", "v_no_filter", "v_filter_is_null")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         session.table(T).createOrReplaceTempView("v_no_filter")
@@ -399,9 +397,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   test(s"${testPrefix}connector w/ cache: temp view stale after external drop/re-add column " +
       "same type") {
     withTestSession { session =>
-      withTestTableAndViews(session, CT, Seq("v")) {
-        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, cachingTestTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -415,7 +413,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // REFRESH TABLE invalidates the connector cache, salary values are null
-        session.sql(s"REFRESH TABLE $CT").collect()
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
         checkRows(session.table("v"), Seq.empty)
       }
     }
@@ -424,15 +422,15 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 6.1 (session drop and re-add column with different type)
   test(s"${testPrefix}temp view with stored plan detects session column type change") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        session.sql(s"ALTER TABLE $T DROP COLUMN salary").collect()
-        session.sql(s"ALTER TABLE $T ADD COLUMN salary STRING").collect()
+        session.sql(s"ALTER TABLE $testTable DROP COLUMN salary").collect()
+        session.sql(s"ALTER TABLE $testTable ADD COLUMN salary STRING").collect()
 
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
@@ -449,9 +447,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 6.2 (external drop and re-add column with different type)
   test(s"${testPrefix}temp view with stored plan detects external column type change") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -476,9 +474,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 6.2 connector w/ cache (external column type change, caching connector)
   test(s"${testPrefix}connector w/ cache: temp view stale after external column type change") {
     withTestSession { session =>
-      withTestTableAndViews(session, CT, Seq("v")) {
-        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, cachingTestTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -492,7 +490,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // REFRESH TABLE invalidates the connector cache, type change detected
-        session.sql(s"REFRESH TABLE $CT").collect()
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
           condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
@@ -508,14 +506,14 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 7.1 (session type widening from INT to BIGINT)
   test(s"${testPrefix}temp view with stored plan detects session type widening") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
-        session.sql(s"ALTER TABLE $T ALTER COLUMN salary TYPE LONG").collect()
+        session.sql(s"ALTER TABLE $testTable ALTER COLUMN salary TYPE LONG").collect()
 
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
@@ -532,9 +530,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 7.2 (external type widening from INT to BIGINT)
   test(s"${testPrefix}temp view with stored plan detects external type widening") {
     withTestSession { session =>
-      withTestTableAndViews(session, T, Seq("v")) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, testTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(T).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -558,9 +556,9 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
   // Scenario 7.2 connector w/ cache (external type widening, caching connector)
   test(s"${testPrefix}connector w/ cache: temp view stale after external type widening") {
     withTestSession { session =>
-      withTestTableAndViews(session, CT, Seq("v")) {
-        session.sql(s"CREATE TABLE $CT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $CT VALUES (1, 100), (10, 1000)").collect()
+      withTestTableAndViews(session, cachingTestTable, Seq("v")) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100), (10, 1000)").collect()
 
         session.table(CT).filter("salary < 999").createOrReplaceTempView("v")
         checkRows(session.table("v"), Seq(Row(1, 100)))
@@ -573,7 +571,7 @@ trait DSv2TempViewWithStoredPlanTests extends DSv2ExternalMutationTestBase {
         checkRows(session.table("v"), Seq(Row(1, 100)))
 
         // REFRESH TABLE invalidates the connector cache, type change detected
-        session.sql(s"REFRESH TABLE $CT").collect()
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
         checkError(
           exception = intercept[AnalysisException] { session.table("v").collect() },
           condition = "INCOMPATIBLE_COLUMN_CHANGES_AFTER_VIEW_WITH_PLAN_CREATION",
