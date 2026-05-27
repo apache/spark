@@ -51,6 +51,9 @@ public final class TimestampNanosVal implements Serializable {
   /** Maximum valid value for {@link #nanosWithinMicro} (three sub-micro decimal digits). */
   public static final int MAX_NANOS_WITHIN_MICRO = 999;
 
+  /** Shared zero value, suitable for default-value lookups during analysis. */
+  public static final TimestampNanosVal ZERO = new TimestampNanosVal(0L, (short) 0);
+
   /** Microseconds since the Unix epoch. */
   public final long epochMicros;
   /** Nanoseconds within {@link #epochMicros}, in [0, 999]. */
