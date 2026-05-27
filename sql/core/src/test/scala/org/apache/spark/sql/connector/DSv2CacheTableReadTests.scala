@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{Column, InMemoryTableCatalog, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, InMemoryTableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -35,14 +35,12 @@ import org.apache.spark.sql.types.IntegerType
  *    cache, subsequent external write invisible until REFRESH.
  *  - Scenario 5 (external drop and recreate table): query sees new empty table.
  *
- * Unlike the peer traits [[DSv2TempViewWithStoredPlanTests]] and
- * [[DSv2RepeatedTableAccessTests]], this trait does not include `cachingcat` (caching
- * connector) variants. For scenarios 1 through 4, the CacheManager pins reads regardless of
- * the connector, and REFRESH TABLE clears both layers, so behavior is the same. Scenario 5
- * (drop and recreate) would differ: `cachingcat` returns the old cached table object after
- * external drop/recreate (since [[CachingInMemoryTableCatalog]] does not invalidate on
- * drop/create), so CacheManager would still match and serve stale data. cachingcat variants
- * can be added in a follow-up.
+ * Scenarios 1 through 4 do not include `cachingcat` (caching connector) variants because the
+ * CacheManager pins reads regardless of the connector, and REFRESH TABLE clears both layers,
+ * so behavior is the same. Scenario 5 (drop and recreate) includes a `cachingcat` variant
+ * because it differs: [[CachingInMemoryTableCatalog]] does not invalidate on drop/create, so
+ * `loadTable` still returns the old cached table object, CacheManager still matches, and stale
+ * data is served until REFRESH TABLE.
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on
@@ -194,6 +192,44 @@ trait DSv2CacheTableReadTests extends DSv2ExternalMutationTestBase {
 
         session.sql(s"REFRESH TABLE $testTable").collect()
         checkRows(session.table(testTable), Seq.empty)
+      }
+    }
+  }
+
+  test(s"${testPrefix}SPARK-54022: connector w/ cache: cached table stale after " +
+      "external drop and recreate") {
+    withTestSession { session =>
+      withTestTableAndViews(session, cachingTestTable) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100)").collect()
+
+        session.table(cachingTestTable).cache()
+        assertTableCached(session, cachingTestTable)
+        checkRows(session.table(cachingTestTable), Seq(Row(1, 100)))
+
+        val catalog =
+          getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        val originalTableId = catalog.loadTable(testIdent).id
+
+        catalog.dropTable(testIdent)
+        catalog.createTable(
+          testIdent,
+          new TableInfo.Builder()
+            .withColumns(Array(
+              Column.create("id", IntegerType),
+              Column.create("salary", IntegerType)))
+            .build())
+
+        // CachingInMemoryTableCatalog does not invalidate on drop/create, so loadTable
+        // still returns the old cached table object. CacheManager still matches and
+        // serves the stale cached data.
+        assertTableCached(session, cachingTestTable)
+        checkRows(session.table(cachingTestTable), Seq(Row(1, 100)))
+
+        // REFRESH TABLE calls invalidateTable (clears connector cache) and rebuilds
+        // the CacheManager entry, so the new empty table becomes visible.
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
+        checkRows(session.table(cachingTestTable), Seq.empty)
       }
     }
   }
