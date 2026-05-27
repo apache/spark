@@ -545,7 +545,8 @@ abstract class InMemoryBaseTable(
     override def json(): String = rowCount.toString
   }
 
-  class InMemoryMicroBatchStream extends MicroBatchStream {
+  class InMemoryMicroBatchStream(readSchema: StructType, tableSchema: StructType)
+      extends MicroBatchStream {
     override def initialOffset(): Offset = new InMemoryTableOffset(0)
     override def latestOffset(): Offset =
       new InMemoryTableOffset(InMemoryBaseTable.this.rows.size.toLong)
@@ -554,14 +555,16 @@ abstract class InMemoryBaseTable(
       val e = end.asInstanceOf[InMemoryTableOffset].rowCount.toInt
       Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e)))
     }
-    override def createReaderFactory(): PartitionReaderFactory = { partition =>
-      val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
-      new PartitionReader[InternalRow] {
-        private var idx = -1
-        override def next(): Boolean = { idx += 1; idx < rows.size }
-        override def get(): InternalRow = rows(idx)
-        override def close(): Unit = {}
+    override def createReaderFactory(): PartitionReaderFactory = {
+      val metadataColNames = new mutable.ArrayBuffer[String]()
+      val nonMetadataFields = readSchema.filter {
+        case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name; false
+        case _ => true
       }
+      new InMemoryMicroBatchReaderFactory(
+        nonMetadataFields.map(f => tableSchema.fieldIndex(f.name)).toArray,
+        tableSchema.fields,
+        metadataColNames.toArray)
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
@@ -655,7 +658,7 @@ abstract class InMemoryBaseTable(
     }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-      new InMemoryMicroBatchStream
+      new InMemoryMicroBatchStream(readSchema, tableSchema)
   }
 
   case class InMemoryBatchScan(
@@ -952,6 +955,34 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
   override def filesCount(): OptionalLong = OptionalLong.of(100L)
 
   def clear(): Unit = rows.clear()
+}
+
+private class InMemoryMicroBatchReaderFactory(
+    fieldIndices: Array[Int],
+    tableFields: Array[StructField],
+    metaNames: Array[String]) extends PartitionReaderFactory with Serializable {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
+    new PartitionReader[InternalRow] {
+      private var idx = -1
+      override def next(): Boolean = { idx += 1; idx < rows.size }
+      override def get(): InternalRow = {
+        val rawRow = rows(idx)
+        val dataRow = new GenericInternalRow(
+          fieldIndices.map(i => rawRow.get(i, tableFields(i).dataType)))
+        if (metaNames.isEmpty) dataRow
+        else {
+          val metaRow = new GenericInternalRow(metaNames.map {
+            case "index" => idx.asInstanceOf[Any]
+            case "_partition" => UTF8String.fromString("").asInstanceOf[Any]
+            case _ => null
+          })
+          new JoinedRow(dataRow, metaRow)
+        }
+      }
+      override def close(): Unit = {}
+    }
+  }
 }
 
 object BufferedRows {
