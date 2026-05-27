@@ -502,8 +502,8 @@ private[connect] object PipelinesHandler extends Logging {
   private def flowOrigin(
       flow: proto.PipelineCommand.DefineFlow,
       flowIdentifier: TableIdentifier): QueryOrigin = QueryOrigin(
-    filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
-      flow.getSourceCodeLocation.getFileName),
+    filePath =
+      Option.when(flow.getSourceCodeLocation.hasFileName)(flow.getSourceCodeLocation.getFileName),
     line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
       flow.getSourceCodeLocation.getLineNumber),
     objectType = Some(QueryOriginType.Flow.toString),

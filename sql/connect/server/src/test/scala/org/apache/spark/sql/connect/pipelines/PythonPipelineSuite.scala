@@ -170,7 +170,7 @@ class PythonPipelineSuite
           QueryOrigin(
             language = Option(Python()),
             filePath = Option("<string>"),
-            line = Option(34),
+            line = Option(36),
             objectName = Option("spark_catalog.default.table1"),
             objectType = Option(QueryOriginType.Flow.toString))),
       errorChecker = ex =>
@@ -222,7 +222,7 @@ class PythonPipelineSuite
             QueryOrigin(
               language = Option(Python()),
               filePath = Option("<string>"),
-              line = Option(40),
+              line = Option(42),
               objectName = Option("spark_catalog.default.mv2"),
               objectType = Option(QueryOriginType.Flow.toString))),
         expectedEventLevel = EventLevel.INFO)
@@ -236,7 +236,7 @@ class PythonPipelineSuite
             QueryOrigin(
               language = Option(Python()),
               filePath = Option("<string>"),
-              line = Option(44),
+              line = Option(46),
               objectName = Option("spark_catalog.default.mv"),
               objectType = Option(QueryOriginType.Flow.toString))),
         expectedEventLevel = EventLevel.INFO)
@@ -254,7 +254,7 @@ class PythonPipelineSuite
               QueryOrigin(
                 language = Option(Python()),
                 filePath = Option("<string>"),
-                line = Option(34),
+                line = Option(36),
                 objectName = Option("spark_catalog.default.table1"),
                 objectType = Option(QueryOriginType.Flow.toString))),
           expectedEventLevel = EventLevel.INFO)
@@ -268,7 +268,7 @@ class PythonPipelineSuite
               QueryOrigin(
                 language = Option(Python()),
                 filePath = Option("<string>"),
-                line = Option(49),
+                line = Option(51),
                 objectName = Option("spark_catalog.default.standalone_flow1"),
                 objectType = Option(QueryOriginType.Flow.toString))),
           expectedEventLevel = EventLevel.INFO)
