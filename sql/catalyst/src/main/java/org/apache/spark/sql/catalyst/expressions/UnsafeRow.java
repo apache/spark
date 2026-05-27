@@ -330,7 +330,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * {@link #setInterval(int, CalendarInterval)}. For null values, do not call {@link #setNullAt};
    * pass {@code null} here so the variable-length offset is retained for future updates.
    *
-   * <p>NTZ and LTZ share the byte layout — the duplicated setter/getter pairs track the
+   * <p>NTZ and LTZ share the byte layout; the duplicated setter/getter pairs track the
    * {@link SpecializedGetters} interface, where the distinction is preserved at the logical-type
    * level.
    */

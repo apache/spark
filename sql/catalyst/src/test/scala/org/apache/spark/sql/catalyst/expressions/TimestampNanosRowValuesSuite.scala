@@ -24,8 +24,8 @@ import org.apache.spark.unsafe.Platform
  * Direct, byte-level tests for [[TimestampNanosRowValues]]. The roundtrip tests in
  * [[TimestampNanosRowSuite]] write and read through the same helper, so a consistent
  * encoder/decoder bug (swapped word order, wrong offset arithmetic) would pass them.
- * These tests pin the layout — word 0 = epoch micros, word 1 = nanos in the low 16 bits
- * with the upper 48 bits zero — against a raw byte buffer.
+ * These tests pin the layout (word 0 = epoch micros, word 1 = nanos in the low 16 bits with the
+ * upper 48 bits zero) against a raw byte buffer.
  */
 class TimestampNanosRowValuesSuite extends SparkFunSuite {
 
