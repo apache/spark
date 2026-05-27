@@ -1276,13 +1276,14 @@ def main():
             if issuetype in blocking_issue_types:
                 blockers.append((jira_id, issuetype))
         if blockers:
+            ids_with_types = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
             ids_str = ", ".join(jid for jid, _ in blockers)
             fail(
                 "Cannot merge PR #%s. Linked JIRA(s) %s are umbrella or epic "
                 "tickets and must not be resolved by a single PR. File "
                 "Sub-task(s) under %s and update the PR title to reference "
                 "the Sub-task(s) instead."
-                % (pr_num, ids_str, ids_str)
+                % (pr_num, ids_with_types, ids_str)
             )
 
     print("\n=== Pull Request #%s ===" % pr_num)
