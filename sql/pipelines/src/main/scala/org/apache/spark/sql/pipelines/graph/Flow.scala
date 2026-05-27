@@ -321,6 +321,12 @@ class AutoCdcMergeFlow(
         "flows, and must be loaded as such."
       )
     }
+    if (!df.isStreaming) {
+      throw SparkException.internalError(
+        "AutoCDC source dataframe is not streaming. AutoCDC flows are strictly streaming flows, " +
+        "and must be backed by a streaming source."
+      )
+    }
     changeArgs.storedAsScdType match {
       case ScdType.Type1 =>
         val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)

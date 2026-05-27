@@ -115,7 +115,7 @@ class ReadOptionsPropagationOnAnalysisSuite extends ExecutionTest with SharedSpa
 
     val flowFunctionResultTracker = FlowFunctionResultTracker()
 
-    withTable("a", "b") {
+    withTable("spark_catalog.test_db.a", "spark_catalog.test_db.b") {
       val graphRegistrationContext =
         new InstrumentedTestGraphRegistrationContext(spark, flowFunctionResultTracker) {
           registerMaterializedView(name = "a", query = dfFlowFunc(Seq(1, 2).toDF("id")))
@@ -147,7 +147,7 @@ class ReadOptionsPropagationOnAnalysisSuite extends ExecutionTest with SharedSpa
   test("internal pipeline stream read options are propagated during flow function analysis") {
     val flowFunctionResultTracker = FlowFunctionResultTracker()
 
-    withTable("spark_catalog.default.a", "b", "c") {
+    withTable("spark_catalog.default.a", "spark_catalog.test_db.b", "spark_catalog.test_db.c") {
       // Create a regular external table that ST "b" can stream from, then have ST "c" stream from
       // "b".
       spark.range(10).write.saveAsTable("spark_catalog.default.a")
@@ -191,7 +191,7 @@ class ReadOptionsPropagationOnAnalysisSuite extends ExecutionTest with SharedSpa
   test("external pipeline batch read options are propagated during flow function analysis") {
     val flowFunctionResultTracker = FlowFunctionResultTracker()
 
-    withTable("spark_catalog.default.a", "b") {
+    withTable("spark_catalog.default.a", "spark_catalog.test_db.b") {
       // Create regular external table to batch read from with options.
       spark.range(10).write.saveAsTable("spark_catalog.default.a")
 
@@ -225,7 +225,7 @@ class ReadOptionsPropagationOnAnalysisSuite extends ExecutionTest with SharedSpa
   test("external pipeline stream read options are propagated during flow function analysis") {
     val flowFunctionResultTracker = FlowFunctionResultTracker()
 
-    withTable("spark_catalog.default.a", "b") {
+    withTable("spark_catalog.default.a", "spark_catalog.test_db.b") {
       // Create regular external table to stream from with read options.
       spark.range(10).write.saveAsTable("spark_catalog.default.a")
 

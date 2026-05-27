@@ -94,7 +94,7 @@ sealed trait Dataset extends Output {
   def path: String
 }
 
-/** A type of [[Input]] where data is loaded from a table. */
+/** A graph element backed by a table: either a concrete [[Table]] or a [[VirtualTableInput]]. */
 sealed trait TableElement extends GraphElement {
 
   /** The user-specified schema for this table. */
