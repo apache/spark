@@ -18,11 +18,13 @@ package org.apache.spark.sql.vectorized;
 
 import scala.PartialFunction;
 
+import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.UserDefinedType;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -324,6 +326,14 @@ public abstract class ColumnVector implements AutoCloseable {
     final int days = getChild(1).getInt(rowId);
     final long microseconds = getChild(2).getLong(rowId);
     return new CalendarInterval(months, days, microseconds);
+  }
+
+  public TimestampNanosVal getTimestampNTZNanos(int rowId) {
+    throw SparkUnsupportedOperationException.apply();
+  }
+
+  public TimestampNanosVal getTimestampLTZNanos(int rowId) {
+    throw SparkUnsupportedOperationException.apply();
   }
 
   /**

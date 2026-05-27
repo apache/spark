@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -189,6 +190,16 @@ public final class ColumnarArray extends ArrayData {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     return data.getInterval(offset + ordinal);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
+    return data.getTimestampNTZNanos(offset + ordinal);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int ordinal) {
+    return data.getTimestampLTZNanos(offset + ordinal);
   }
 
   @Override

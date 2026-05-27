@@ -426,6 +426,15 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION), 10)
   checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION), 10)
 
+  test("PhysicalDataType for nanosecond timestamp types") {
+    for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+      assert(PhysicalDataType(TimestampNTZNanosType(p)) != UninitializedPhysicalType)
+    }
+    for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
+      assert(PhysicalDataType(TimestampLTZNanosType(p)) != UninitializedPhysicalType)
+    }
+  }
+
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
       to: DataType,
