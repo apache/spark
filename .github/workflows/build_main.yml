@@ -29,4 +29,8 @@ jobs:
     permissions:
       packages: write
     name: Run
+    # Skip pushes to `master` on forks: the "Sync fork" button mirrors
+    # apache/spark and would otherwise re-run the full build on every sync.
+    # Upstream pushes and pushes to non-master branches on forks are unaffected.
+    if: github.repository == 'apache/spark' || github.ref != 'refs/heads/master'
     uses: ./.github/workflows/build_and_test.yml
