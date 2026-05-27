@@ -619,7 +619,7 @@ private[parquet] class ParquetRowConverter(
   }
 
   /**
-   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   * Parquet converter for geometries. A dictionary is used to minimize WKB decoding cost.
    */
   private final class ParquetGeometryConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
@@ -655,7 +655,7 @@ private[parquet] class ParquetRowConverter(
   }
 
   /**
-   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   * Parquet converter for geographies. A dictionary is used to minimize WKB decoding cost.
    */
   private final class ParquetGeographyConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
