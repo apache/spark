@@ -225,6 +225,8 @@ class MicroBatchExecution(
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
             // TODO: operator pushdown.
+            // Passes the full output schema (not a pruned subset) so that connectors
+            // implementing SupportsMetadataColumns can include metadata columns in readSchema().
             val scanBuilder = table.newScanBuilder(options)
             scanBuilder match {
               case r: SupportsPushDownRequiredColumns =>
@@ -246,8 +248,6 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
-            // output is trusted to match scan.readSchema() because pruneColumns was called
-            // with output.toStructType, so a well-behaved connector will produce the same fields.
             StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
           })
         } else if (v1.isEmpty) {

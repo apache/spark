@@ -93,6 +93,8 @@ class ContinuousExecution(
             log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
           // TODO: operator pushdown.
+          // Passes the full output schema (not a pruned subset) so that connectors
+          // implementing SupportsMetadataColumns can include metadata columns in readSchema().
           val scanBuilder = table.newScanBuilder(options)
           scanBuilder match {
             case r: SupportsPushDownRequiredColumns =>
