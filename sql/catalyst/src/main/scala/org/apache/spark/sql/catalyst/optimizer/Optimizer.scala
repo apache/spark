@@ -372,11 +372,23 @@ abstract class Optimizer(catalogManager: CatalogManager)
     }
 
     private def optimizeSubquery(s: SubqueryExpression): SubqueryExpression = {
+      val hasRowLimitingOperator = s match {
+        case _: ListQuery =>
+          s.plan.exists {
+            case _: GlobalLimit | _: LocalLimit | _: Offset => true
+            case _ => false
+          }
+        case _ => false
+      }
       val Subquery(newPlan, _) = Optimizer.this.execute(Subquery.fromExpression(s))
       // At this point we have an optimized subquery plan that we are going to attach
       // to this subquery expression. Here we can safely remove any top level sort
       // in the plan as tuples produced by a subquery are un-ordered.
-      s.withNewPlan(removeTopLevelSort(newPlan))
+      val optimizedPlan = removeTopLevelSort(newPlan)
+      if (hasRowLimitingOperator) {
+        optimizedPlan.setTagValue(RewritePredicateSubquery.NOT_IN_SUBQUERY_WITH_ROW_LIMIT, ())
+      }
+      s.withNewPlan(optimizedPlan)
     }
 
     // optimizes subquery expressions, ignoring row-level operation conditions

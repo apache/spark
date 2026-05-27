@@ -28,7 +28,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkIllegalArgumentExceptio
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, IndexAlreadyExistsException, NoSuchIndexException}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, GlobalLimit, LocalLimit, Offset, Sort, Union}
 import org.apache.spark.sql.connector.{IntegralAverage, StrLen}
 import org.apache.spark.sql.connector.catalog.{Catalogs, Identifier, TableCatalog}
 import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
@@ -803,6 +803,39 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkOffsetRemoved(df11, false)
     checkPushedInfo(df11, "PushedFilters: []")
     checkAnswer(df11, Seq(Row(9000.00, 1200.0, "cat")))
+  }
+
+  test("NOT IN skips UNION rewrite after JDBC pushes RHS LIMIT away") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      val df = sql(
+        "SELECT id FROM h2.test.people " +
+          "WHERE id NOT IN (SELECT dept FROM h2.test.employee LIMIT 1)")
+      val optimizedPlan = df.queryExecution.optimizedPlan
+
+      assert(!optimizedPlan.exists(_.isInstanceOf[Union]))
+      assert(!optimizedPlan.exists {
+        case _: GlobalLimit | _: LocalLimit => true
+        case _ => false
+      })
+      checkPushedInfo(df, "PushedLimit: LIMIT 1")
+    }
+  }
+
+  test("NOT IN skips UNION rewrite after JDBC pushes RHS OFFSET away") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      val df = sql(
+        "SELECT id FROM h2.test.people " +
+          "WHERE id NOT IN (SELECT dept FROM h2.test.employee OFFSET 1)")
+      val optimizedPlan = df.queryExecution.optimizedPlan
+
+      assert(!optimizedPlan.exists(_.isInstanceOf[Union]))
+      assert(!optimizedPlan.exists(_.isInstanceOf[Offset]))
+      checkPushedInfo(df, "PushedOffset: OFFSET 1")
+    }
   }
 
   private def checkSortRemoved(df: DataFrame, removed: Boolean = true): Unit = {

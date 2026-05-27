@@ -312,6 +312,15 @@ class SubquerySuite extends SharedSparkSession
       sql("select a from l l1 where a in (select a from l where a < 3 group by a)"),
       Row(1) :: Row(1) :: Row(2) :: Row(2) :: Nil
     )
+
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      val df = sql("select a from l l1 where a not in " +
+        "(select a from l where a < 3 group by a)")
+      checkAnswer(df, Row(3) :: Row(6) :: Nil)
+      assert(df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Union]))
+    }
   }
 
   test("having with function in subquery") {
@@ -1961,6 +1970,164 @@ class SubquerySuite extends SharedSparkSession
         }
       }
     }
+  }
+
+  test("single-column top-level NOT IN union rewrite can plan a regular anti hash join") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "false",
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      val df = sql("select * from l where a not in (select c from r where d < 6.0)")
+      checkAnswer(df, Seq.empty)
+      assert(df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Union]))
+
+      val regularAntiHashJoin = collect(df.queryExecution.sparkPlan) {
+        case join: BroadcastHashJoinExec
+            if join.joinType == LeftAnti && !join.isNullAwareAntiJoin => join
+      }
+      assert(regularAntiHashJoin.nonEmpty)
+      assert(collect(df.queryExecution.sparkPlan) {
+        case _: BroadcastNestedLoopJoinExec => true
+      }.isEmpty)
+    }
+  }
+
+  test("single-column top-level NOT IN union rewrite preserves empty RHS semantics") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      val df = sql("select * from l where a not in (select c from r where c > 10)")
+      checkAnswer(df, spark.table("l"))
+      assert(df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Union]))
+    }
+  }
+
+  test("single-column top-level NOT IN keeps broadcast null-aware anti join when available") {
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      val df = sql("select * from l where a not in (select c from r where d < 6.0)")
+      checkAnswer(df, Seq.empty)
+      assert(!df.queryExecution.optimizedPlan.exists(_.isInstanceOf[Union]))
+
+      val nullAwareAntiHashJoin = collect(df.queryExecution.sparkPlan) {
+        case join: BroadcastHashJoinExec
+            if join.joinType == LeftAnti && join.isNullAwareAntiJoin => join
+      }
+      assert(nullAwareAntiHashJoin.nonEmpty)
+    }
+  }
+
+  test("single-column top-level NOT IN with nondeterministic RHS skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan = sql(
+        "select * from l where a not in " +
+          "(select cast(rand() * 10 as int) from range(1))")
+        .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with nondeterministic LHS skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan = sql(
+        "select * from l where if(rand() > 0.5, 1, null) not in " +
+          "(select 1 from r)")
+        .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with RHS limit skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan =
+        sql("select * from l where a not in (select c from r limit 1)")
+          .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with RHS offset skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan =
+        sql("select * from l where a not in (select c from r offset 1)")
+          .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with unseeded RHS TABLESAMPLE skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan =
+        sql("select * from l where a not in " +
+          "(select c from r tablesample (50 percent))")
+          .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with another top-level subquery skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan =
+        sql("select * from l where a not in (select c from r) " +
+          "and b in (select d from r)")
+          .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("correlated single-column top-level NOT IN skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan =
+        sql("select * from l where a not in (select c from r where d = b + 10)")
+          .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("multi-column top-level NOT IN skips union rewrite") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimizedPlan =
+        sql("select * from l where (a, b) not in (select c, d from r where c > 10)")
+          .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN union rewrite can be disabled") {
+    var optimizedPlan: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "false") {
+      optimizedPlan =
+        sql("select * from l where a = 1 and a not in (select c from r where c is not null)")
+          .queryExecution.optimizedPlan
+    }
+
+    assert(!optimizedPlan.exists(
+      _.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
   }
 
   test("SPARK-28379: non-aggregated zero row scalar subquery") {

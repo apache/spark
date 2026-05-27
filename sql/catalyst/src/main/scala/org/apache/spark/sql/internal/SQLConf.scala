@@ -6477,6 +6477,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION =
+    buildConf("spark.sql.optimizeTopLevelSingleColumnNotInWithUnion")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("When true, deterministic top-level single-column NOT IN subqueries without " +
+        "correlation predicates may be rewritten into a UNION fallback that separates the " +
+        "empty-right case from a regular equi left anti join when the broadcast null-aware " +
+        "anti join path is unavailable.")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
       .internal()
@@ -8538,6 +8549,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def legacyDuplicateBetweenInput: Boolean =
     getConf(SQLConf.LEGACY_DUPLICATE_BETWEEN_INPUT)
+
+  def optimizeTopLevelSingleColumnNotInWithUnion: Boolean =
+    getConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 

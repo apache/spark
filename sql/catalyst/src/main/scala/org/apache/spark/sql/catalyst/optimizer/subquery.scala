@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{EXISTS_SUBQUERY, IN_SUBQUERY, LATERAL_JOIN, LIST_SUBQUERY, PLAN_EXPRESSION, SCALAR_SUBQUERY}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -53,7 +54,104 @@ import org.apache.spark.util.Utils
  *    be pulled out as join conditions, value = selected column will also be used as join
  *    condition.
  */
-object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
+object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper
+  with JoinSelectionHelper {
+
+  private[optimizer] val NOT_IN_SUBQUERY_WITH_ROW_LIMIT =
+    TreeNodeTag[Unit]("notInSubqueryWithRowLimit")
+
+  private def existenceScalarSubquery(
+      plan: LogicalPlan,
+      hint: Option[HintInfo]): ScalarSubquery = {
+    ScalarSubquery(
+      plan = Limit(Literal(1), Project(Seq(Alias(Literal(1), "col")()), plan)),
+      hint = hint)
+  }
+
+  private def rewriteSingleColumnNotIn(
+      outerPlan: LogicalPlan,
+      value: Expression,
+      subplan: LogicalPlan,
+      subHint: Option[HintInfo]): LogicalPlan = {
+    val rightKey = subplan.output.head
+    val rightExists = existenceScalarSubquery(subplan, subHint)
+    val rightNullKeyExists =
+      existenceScalarSubquery(Filter(IsNull(rightKey), subplan), subHint)
+
+    // NULL-aware NOT IN has two mutually exclusive result-producing cases:
+    //   1. The right side is empty, so every left row passes.
+    //   2. The right side is non-empty, has no NULL key, the left key is non-null,
+    //      and no equality match exists.
+    val emptyRightBranch = Project(
+      outerPlan.output,
+      Filter(IsNull(rightExists), outerPlan))
+
+    val leftBranch = Filter(
+      And(
+        And(IsNotNull(rightExists), IsNull(rightNullKeyExists)),
+        IsNotNull(value)),
+      outerPlan)
+    val rightBranch = Filter(IsNotNull(rightKey), subplan)
+    val antiJoinBranch = Project(
+      outerPlan.output,
+      Join(
+        leftBranch,
+        rightBranch,
+        LeftAnti,
+        Some(EqualTo(value, rightKey)),
+        JoinHint(None, subHint)))
+
+    Union(Seq(emptyRightBranch, antiJoinBranch))
+  }
+
+  private def rewriteTopLevelNotInAsNullAwareAntiJoin(
+      outerPlan: LogicalPlan,
+      values: Seq[Expression],
+      subplan: LogicalPlan,
+      conditions: Seq[Expression],
+      subHint: Option[HintInfo]): Join = {
+    val inConditions = values.zip(subplan.output).map(EqualTo.tupled)
+    val (joinCond, rewrittenOuterPlan) =
+      rewriteExistentialExpr(inConditions, outerPlan)
+    // Expand the NOT IN expression with the NULL-aware semantic
+    // to its full form. That is from:
+    //   (a1,a2,...) = (b1,b2,...)
+    // to
+    //   (a1=b1 OR isnull(a1=b1)) AND (a2=b2 OR isnull(a2=b2)) AND ...
+    val baseJoinConds = splitConjunctivePredicates(joinCond.get)
+    val nullAwareJoinConds = baseJoinConds.map(c => Or(c, IsNull(c)))
+    // After that, add back the correlated join predicate(s) in the subquery
+    // Example:
+    // SELECT ... FROM A WHERE A.A1 NOT IN
+    // (SELECT B.B1 FROM B WHERE B.B2 = A.A2 AND B.B3 > 1)
+    // will have the final conditions in the LEFT ANTI as
+    // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
+    val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
+    Join(
+      rewrittenOuterPlan,
+      rewriteDomainJoinsIfPresent(rewrittenOuterPlan, subplan, Some(finalJoinCond)),
+      LeftAnti,
+      Option(finalJoinCond),
+      JoinHint(None, subHint))
+  }
+
+  private def isSafeToDuplicateNotInSubquery(subplan: LogicalPlan): Boolean = {
+    // The UNION rewrite evaluates the RHS in multiple places:
+    //   1. whether the RHS is empty,
+    //   2. whether it contains a NULL key, and
+    //   3. the anti-join branch over non-null keys.
+    // Only duplicate plans whose repeated evaluation preserves the original NOT IN semantics.
+    !subplan.containsTag(NOT_IN_SUBQUERY_WITH_ROW_LIMIT) &&
+      subplan.deterministic && !subplan.exists {
+      // LIMIT / OFFSET are order- or cardinality-sensitive when re-evaluated independently, so
+      // duplicating them across those branches can change which RHS rows each branch observes.
+      case _: GlobalLimit | _: LocalLimit | _: Offset => true
+      // An unseeded sample resolves its random seed in physical planning. Duplicating the RHS
+      // would let the scalar subqueries and anti-join branch observe different sampled rows.
+      case Sample(_, _, _, None, _, _) => true
+      case _ => false
+    }
+  }
 
   private def buildJoin(
       outerPlan: LogicalPlan,
@@ -149,6 +247,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         case Nil => child
         case conditions => Filter(conditions.reduce(And), child)
       }
+      // Avoid nesting Union rewrites, or duplicating other top-level subquery rewrites across the
+      // Union branches, which would repeatedly duplicate the evolving outer plan.
+      val hasSingleTopLevelSubquery = withSubquery.lengthCompare(1) == 0
+      val singleColumnNotInRewriteCandidateCount = withSubquery.count {
+        case Not(InSubquery(values,
+            ListQuery(sub, outerAttrs, _, _, conditions, _))) =>
+          values.length == 1 && values.head.deterministic &&
+            outerAttrs.isEmpty && conditions.isEmpty &&
+            isSafeToDuplicateNotInSubquery(sub)
+        case _ => false
+      }
 
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
@@ -170,6 +279,22 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val join = Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, JoinHint(None, subHint))
           Project(p.output, join)
+        case (p, Not(InSubquery(values,
+            ListQuery(sub, outerAttrs, _, _, conditions, subHint))))
+            if conf.optimizeTopLevelSingleColumnNotInWithUnion &&
+              hasSingleTopLevelSubquery &&
+              singleColumnNotInRewriteCandidateCount == 1 &&
+              values.length == 1 && values.head.deterministic &&
+              outerAttrs.isEmpty && conditions.isEmpty &&
+              isSafeToDuplicateNotInSubquery(sub) =>
+          val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
+          val nullAwareAntiJoin =
+            rewriteTopLevelNotInAsNullAwareAntiJoin(p, values, newSub, conditions, subHint)
+          if (canPlanAsBroadcastHashJoin(nullAwareAntiJoin, conf)) {
+            nullAwareAntiJoin
+          } else {
+            rewriteSingleColumnNotIn(p, values.head, newSub, subHint)
+          }
         case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
@@ -180,23 +305,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
 
           // Deduplicate conflicting attributes if any.
           val newSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
-          val inConditions = values.zip(newSub.output).map(EqualTo.tupled)
-          val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions, p)
-          // Expand the NOT IN expression with the NULL-aware semantic
-          // to its full form. That is from:
-          //   (a1,a2,...) = (b1,b2,...)
-          // to
-          //   (a1=b1 OR isnull(a1=b1)) AND (a2=b2 OR isnull(a2=b2)) AND ...
-          val baseJoinConds = splitConjunctivePredicates(joinCond.get)
-          val nullAwareJoinConds = baseJoinConds.map(c => Or(c, IsNull(c)))
-          // After that, add back the correlated join predicate(s) in the subquery
-          // Example:
-          // SELECT ... FROM A WHERE A.A1 NOT IN (SELECT B.B1 FROM B WHERE B.B2 = A.A2 AND B.B3 > 1)
-          // will have the final conditions in the LEFT ANTI as
-          // (A.A1 = B.B1 OR ISNULL(A.A1 = B.B1)) AND (B.B2 = A.A2) AND B.B3 > 1
-          val finalJoinCond = (nullAwareJoinConds ++ conditions).reduceLeft(And)
-          Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, Some(finalJoinCond)),
-            LeftAnti, Option(finalJoinCond), JoinHint(None, subHint))
+          rewriteTopLevelNotInAsNullAwareAntiJoin(p, values, newSub, conditions, subHint)
         case (p, predicate) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))

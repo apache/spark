@@ -20,10 +20,11 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, IsNull, ListQuery, Not}
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, IsNull, ListQuery, Not}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftAnti, LeftSemi, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
 
@@ -70,6 +71,155 @@ class RewriteSubquerySuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("single-column top-level NOT IN decomposes into a union and equi anti join") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+
+    val query = relation1.where(Not($"a".in(ListQuery(relation2)))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+    assert(optimized.exists {
+      case Join(_, _, LeftAnti, Some(_: EqualTo), _) => true
+      case _ => false
+    })
+    assert(!optimized.exists {
+      case Join(_, _, LeftAnti, Some(condition), _) =>
+        condition.exists {
+          case IsNull(_: EqualTo) => true
+          case _ => false
+        }
+      case _ => false
+    })
+  }
+
+  test("single-column top-level NOT IN union rewrite can be disabled") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+
+    val query = relation1.where(Not($"a".in(ListQuery(relation2)))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "false") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN keeps broadcast null-aware anti join when available") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+
+    val query = relation1.where(Not($"a".in(ListQuery(relation2)))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString,
+      SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("multiple single-column top-level NOT IN predicates skip union rewrite") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+    val relation3 = LocalRelation($"d".int)
+
+    val query = relation1
+      .where(Not($"a".in(ListQuery(relation2))) && Not($"b".in(ListQuery(relation3))))
+      .select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with another top-level subquery skips union rewrite") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+    val relation3 = LocalRelation($"d".int)
+
+    val query = relation1
+      .where(Not($"a".in(ListQuery(relation2))) && $"b".in(ListQuery(relation3)))
+      .select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with RHS limit skips union rewrite") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+
+    val query = relation1.where(
+      Not($"a".in(ListQuery(relation2.limit(1))))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with RHS offset skips union rewrite") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+
+    val query = relation1.where(
+      Not($"a".in(ListQuery(relation2.offset(1))))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with preserved RHS row-limit marker skips union rewrite") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+    relation2.setTagValue(RewritePredicateSubquery.NOT_IN_SUBQUERY_WITH_ROW_LIMIT, ())
+
+    val query = relation1.where(Not($"a".in(ListQuery(relation2)))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
+  }
+
+  test("single-column top-level NOT IN with unseeded RHS sample skips union rewrite") {
+    val relation1 = LocalRelation($"a".int, $"b".int)
+    val relation2 = LocalRelation($"c".int)
+
+    val sampledRelation2 =
+      org.apache.spark.sql.catalyst.plans.logical.Sample(
+        lowerBound = 0.0,
+        upperBound = 0.5,
+        withReplacement = false,
+        seed = None,
+        child = relation2)
+    val query = relation1.where(Not($"a".in(ListQuery(sampledRelation2)))).select($"a")
+    var optimized: LogicalPlan = null
+    withSQLConf(SQLConf.OPTIMIZE_TOP_LEVEL_SINGLE_COLUMN_NOT_IN_WITH_UNION.key -> "true") {
+      optimized = Optimize.execute(query.analyze)
+    }
+
+    assert(!optimized.exists(_.isInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Union]))
   }
 
   test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {
