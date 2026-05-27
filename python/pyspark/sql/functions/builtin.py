@@ -27606,7 +27606,7 @@ def kll_merge_agg_bigint(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------
@@ -27650,7 +27650,7 @@ def kll_merge_agg_float(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------
@@ -27694,7 +27694,7 @@ def kll_merge_agg_double(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------
