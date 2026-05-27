@@ -25,7 +25,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.1 to 4.2
 
-- Since Spark 4.2, `DataStreamReader.table(tableName)` rejects user-specified schemas with an `AnalysisException` (error class `STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE`). Catalog tables declare their own schema, so any schema passed to `DataStreamReader.schema(...)` was always silently dropped; the new check surfaces this misconfiguration as a clear error instead. To restore the previous behavior of silently ignoring the user-specified schema, set `spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled` to `false`.
+- Since Spark 4.2, calling `DataStreamReader.schema(...)` before `DataStreamReader.table(tableName)` raises an `AnalysisException` (error class `STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE`); previously the user-specified schema was silently ignored. Remove the `.schema(...)` call to fix this — the stream still gets its schema from the catalog table, exactly as before. To restore the previous behavior of silently ignoring the user-specified schema, set `spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled` to `false`.
 
 ## Upgrading from Structured Streaming 4.0 to 4.1
 

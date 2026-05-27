@@ -3884,6 +3884,7 @@ object SQLConf {
 
   val STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED =
     buildConf("spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled")
+      .internal()
       .doc("When true, DataStreamReader.table() throws an analysis error if the caller " +
         "supplied a user-specified schema via DataStreamReader.schema(...). Catalog tables " +
         "declare their own schema and any user-specified schema is silently dropped, so this " +

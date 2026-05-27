@@ -36,7 +36,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
-import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
@@ -98,6 +98,14 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
         parameters = Map(
           "config" ->
             SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key))
+
+      // After removing the user-specified schema, the query runs using the table's schema.
+      val df = spark.readStream.table(tblName)
+      assert(df.schema === new StructType().add("id", LongType, nullable = false))
+      testStream(df)(
+        ProcessAllAvailable(),
+        CheckAnswer(Row(0), Row(1), Row(2))
+      )
     }
   }
 
@@ -107,10 +115,12 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       spark.range(3).write.format("parquet").saveAsTable(tblName)
       withSQLConf(
           SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key -> "false") {
-        testStream(
-            spark.readStream
-              .schema(new StructType().add("a", IntegerType))
-              .table(tblName))(
+        val df = spark.readStream
+          .schema(new StructType().add("a", IntegerType))
+          .table(tblName)
+        // The user-specified `a: Int` is dropped; the catalog table's `id: Long` is used.
+        assert(df.schema === new StructType().add("id", LongType, nullable = false))
+        testStream(df)(
           ProcessAllAvailable(),
           CheckAnswer(Row(0), Row(1), Row(2))
         )
