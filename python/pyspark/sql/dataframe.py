@@ -6499,12 +6499,12 @@ class DataFrame:
             Use barrier mode execution, ensuring that all Python workers in the stage will be
             launched concurrently.
 
-            .. versionadded: 3.5.0
+            .. versionadded:: 3.5.0
 
         profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
             to be used for mapInPandas.
 
-            .. versionadded: 4.0.0
+            .. versionadded:: 4.0.0
 
 
         Examples
@@ -6601,12 +6601,12 @@ class DataFrame:
             Use barrier mode execution, ensuring that all Python workers in the stage will be
             launched concurrently.
 
-            .. versionadded: 3.5.0
+            .. versionadded:: 3.5.0
 
         profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
             to be used for mapInArrow.
 
-            .. versionadded: 4.0.0
+            .. versionadded:: 4.0.0
 
         Examples
         --------

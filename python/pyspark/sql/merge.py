@@ -31,7 +31,7 @@ class MergeIntoWriter:
     `MergeIntoWriter` provides methods to define and execute merge actions based
     on specified conditions.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def __init__(self, df: "DataFrame", table: str, condition: Column):
