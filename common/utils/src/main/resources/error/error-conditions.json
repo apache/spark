@@ -238,11 +238,23 @@
     },
     "sqlState" : "22000"
   },
+  "AUTOCDC_MISSING_SEQUENCE_BY" : {
+    "message" : [
+      "AutoCDC flow is missing a required `sequence_by` expression. Specify a `sequence_by` column or expression that orders incoming change events."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MISSING_SOURCE" : {
+    "message" : [
+      "AutoCDC flow is missing a required `source` table name. Specify the name of the streaming source table the flow should read from."
+    ],
+    "sqlState" : "22023"
+  },
   "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
     "message" : [
       "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
     ],
-    "sqlState" : "42703"
+    "sqlState" : "22023"
   },
   "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET" : {
     "message" : [
@@ -254,7 +266,7 @@
     "message" : [
       "Expected a column identifier; got the non-attribute expression `<expression>`. AutoCDC keys, sequence_by, column_list, and except_column_list must reference unqualified column names."
     ],
-    "sqlState" : "42703"
+    "sqlState" : "22023"
   },
   "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
     "message" : [

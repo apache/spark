@@ -438,14 +438,19 @@ private[connect] object PipelinesHandler extends Logging {
     // TODO(SPARK-57093): ignore_null_updates_column_list and ignore_null_updates_except_column_list
     //   are declared on AutoCdcFlowDetails but are not yet honored by the engine; wire them
     //   through once SCD1 ignore-null support lands.
+
+    if (!autoCdcDetails.hasSource) {
+      throw new AnalysisException("AUTOCDC_MISSING_SOURCE", Map.empty)
+    }
+    if (!autoCdcDetails.hasSequenceBy) {
+      throw new AnalysisException("AUTOCDC_MISSING_SEQUENCE_BY", Map.empty)
+    }
+
     val sourcePlan: LogicalPlan = UnresolvedRelation(
       multipartIdentifier = GraphIdentifierManager
-        .parseTableIdentifier(
-          name = autoCdcDetails.getSource,
-          spark = sessionHolder.session
-        ).nameParts,
-      isStreaming = true
-    )
+        .parseTableIdentifier(name = autoCdcDetails.getSource, spark = sessionHolder.session)
+        .nameParts,
+      isStreaming = true)
 
     val toColumn: proto.Expression => Column = expr => Column(transformExpressionFunc(expr))
 
@@ -455,8 +460,7 @@ private[connect] object PipelinesHandler extends Logging {
         case other =>
           throw new AnalysisException(
             "AUTOCDC_NON_COLUMN_IDENTIFIER",
-            Map("expression" -> other.sql)
-          )
+            Map("expression" -> other.sql))
       }
 
     val keys = autoCdcDetails.getKeysList.asScala.toSeq.map(asUnqualifiedColumnName)
@@ -465,10 +469,7 @@ private[connect] object PipelinesHandler extends Logging {
       val included = autoCdcDetails.getColumnListList.asScala.toSeq
       val excluded = autoCdcDetails.getExceptColumnListList.asScala.toSeq
       if (included.nonEmpty && excluded.nonEmpty) {
-        throw new AnalysisException(
-          "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST",
-          Map.empty
-        )
+        throw new AnalysisException("AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST", Map.empty)
       } else if (included.nonEmpty) {
         Some(ColumnSelection.IncludeColumns(included.map(asUnqualifiedColumnName)))
       } else if (excluded.nonEmpty) {
@@ -492,11 +493,8 @@ private[connect] object PipelinesHandler extends Logging {
       sequencing = toColumn(autoCdcDetails.getSequenceBy),
       storedAsScdType = scdType,
       deleteCondition =
-        Option.when(autoCdcDetails.hasApplyAsDeletes)(
-          toColumn(autoCdcDetails.getApplyAsDeletes)
-        ),
-      columnSelection = columnSelection
-    )
+        Option.when(autoCdcDetails.hasApplyAsDeletes)(toColumn(autoCdcDetails.getApplyAsDeletes)),
+      columnSelection = columnSelection)
 
     AutoCdcFlow(
       identifier = flowIdentifier,
@@ -511,10 +509,8 @@ private[connect] object PipelinesHandler extends Logging {
           flow.getSourceCodeLocation.getLineNumber),
         objectType = Some(QueryOriginType.Flow.toString),
         objectName = Option(flowIdentifier.unquotedString),
-        language = Some(Python())
-      ),
-      changeArgs = changeArgs
-    )
+        language = Some(Python())),
+      changeArgs = changeArgs)
   }
 
   private def startRun(
