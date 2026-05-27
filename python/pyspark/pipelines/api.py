@@ -16,7 +16,7 @@
 #
 from typing import Callable, Dict, List, Literal, Optional, Union, overload
 
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import PySparkTypeError
 from pyspark.pipelines.graph_element_registry import get_active_graph_element_registry
 from pyspark.pipelines.type_error_utils import validate_optional_list_of_str_arg
 from pyspark.pipelines.flow import AutoCdcFlow, Flow, QueryFunction
@@ -617,21 +617,7 @@ def create_auto_cdc_flow(
     if name is None:
         name = target
 
-    if column_list is not None and except_column_list is not None:
-        raise PySparkValueError(
-            errorClass="INVALID_MULTIPLE_ARGUMENT_CONDITIONS",
-            messageParameters={
-                "arg_names": "column_list, except_column_list",
-                "condition": "specified together",
-            },
-        )
-
     keys = _normalize_column_list(arg_name="keys", column_list=keys)
-    if len(keys) == 0:
-        raise PySparkValueError(
-            errorClass="CANNOT_BE_EMPTY",
-            messageParameters={"item": "key column"},
-        )
     column_list = _normalize_optional_column_list(arg_name="column_list", column_list=column_list)
     except_column_list = _normalize_optional_column_list(
         arg_name="except_column_list", column_list=except_column_list

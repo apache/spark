@@ -73,7 +73,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       func: FlowFunction = noOpFlowFunction,
       queryContext: QueryContext = testQueryContext,
       sqlConf: Map[String, String] = Map.empty,
-      comment: Option[String] = None,
       origin: QueryOrigin = QueryOrigin.empty,
       changeArgs: ChangeArgs = testChangeArgs): AutoCdcFlow = {
     AutoCdcFlow(
@@ -82,7 +81,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       func = func,
       queryContext = queryContext,
       sqlConf = sqlConf,
-      comment = comment,
       origin = origin,
       changeArgs = changeArgs
     )
@@ -90,8 +88,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
   test("AutoCdcFlow exposes its constructor fields") {
     val flow = newAutoCdcFlow(
-      sqlConf = Map("spark.sql.shuffle.partitions" -> "8"),
-      comment = Some("my CDC flow")
+      sqlConf = Map("spark.sql.shuffle.partitions" -> "8")
     )
 
     assert(flow.identifier == testIdentifier)
@@ -99,12 +96,11 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(flow.func eq noOpFlowFunction)
     assert(flow.queryContext == testQueryContext)
     assert(flow.sqlConf == Map("spark.sql.shuffle.partitions" -> "8"))
-    assert(flow.comment.contains("my CDC flow"))
     assert(flow.origin == QueryOrigin.empty)
     assert(flow.changeArgs == testChangeArgs)
   }
 
-  test("AutoCdcFlow defaults sqlConf to empty and comment to None") {
+  test("AutoCdcFlow defaults sqlConf to empty") {
     // Confirms the case-class default values match the documented contract; downstream
     // registration code relies on `sqlConf` being a non-null empty map by default so that
     // `defaultSqlConf ++ flowDef.sqlConf` is well-defined in [[GraphRegistrationContext]].
@@ -118,7 +114,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     )
 
     assert(flow.sqlConf.isEmpty)
-    assert(flow.comment.isEmpty)
   }
 
   test("AutoCdcFlow.once is always false") {
@@ -142,7 +137,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(updated.destinationIdentifier == original.destinationIdentifier)
     assert(updated.func eq original.func)
     assert(updated.queryContext == original.queryContext)
-    assert(updated.comment == original.comment)
     assert(updated.origin == original.origin)
     assert(updated.changeArgs == original.changeArgs)
     // The original must not be mutated.

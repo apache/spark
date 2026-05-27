@@ -130,9 +130,6 @@ case class FlowFunctionResult(
 
 /** A [[Flow]] whose output schema and dependencies aren't known. */
 sealed trait UnresolvedFlow extends Flow {
-  /** Optional user-supplied comment attached to this flow at definition time. */
-  def comment: Option[String]
-
   /** Returns a copy of this flow with the given SQL confs overriding the existing ones. */
   def withSqlConf(newSqlConf: Map[String, String]): UnresolvedFlow
 }
@@ -153,8 +150,7 @@ case class UntypedFlow(
     queryContext: QueryContext,
     sqlConf: Map[String, String],
     override val once: Boolean,
-    override val origin: QueryOrigin,
-    comment: Option[String] = None
+    override val origin: QueryOrigin
 ) extends UnresolvedFlow {
   override def withSqlConf(newSqlConf: Map[String, String]): UntypedFlow =
     copy(sqlConf = newSqlConf)
@@ -175,8 +171,7 @@ case class AutoCdcFlow(
     queryContext: QueryContext,
     override val origin: QueryOrigin,
     changeArgs: ChangeArgs,
-    sqlConf: Map[String, String] = Map.empty,
-    comment: Option[String] = None
+    sqlConf: Map[String, String] = Map.empty
 ) extends UnresolvedFlow {
   override val once: Boolean = false
 

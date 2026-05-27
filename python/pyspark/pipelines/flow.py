@@ -51,8 +51,7 @@ class AutoCdcFlow:
     An Auto CDC flow applies Change Data Capture (CDC) events from a source to a target
     streaming table.
 
-    :param name: The name of the flow. The API layer defaults this to the target name when
-        the user does not supply one.
+    :param name: Optional name of the flow. When None, defaults to the target name.
     :param target: The name of the target streaming table.
     :param source: The name of the CDC source to stream from.
     :param keys: Column(s) that uniquely identify a row in source and target data.
@@ -65,7 +64,7 @@ class AutoCdcFlow:
     :param source_code_location: The location of the source code that created this flow.
     """
 
-    name: str
+    name: Optional[str]
     target: str
     source: str
     keys: List[Column]
