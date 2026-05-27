@@ -34,9 +34,11 @@ import org.apache.spark.unsafe.types.TimestampNanosVal;
  *   word 1: nanosWithinMicro in the low 16 bits; upper 48 bits are zero
  * </pre>
  *
- * <p>{@code nanosWithinMicro} is written with {@link Platform#putLong} and read with
- * {@link Platform#getLong} masked to 16 bits, not {@code putShort}/{@code getShort}, so the layout
- * is endian-safe on all platforms.
+ * <p>The second word is written and read as a full {@code long} (not {@code short}) so the upper
+ * 48 padding bits are deterministically zero. {@link UnsafeRow} compares and hashes rows
+ * byte-wise, so any non-deterministic padding would make logically-equal values look different.
+ * Byte order is not a concern because writes and reads both go through {@link Platform} and
+ * therefore share the same native endianness.
  */
 public final class TimestampNanosRowValues {
   /** Payload size in the UnsafeRow variable-length region (two 8-byte words). */
@@ -50,9 +52,11 @@ public final class TimestampNanosRowValues {
    */
   public static void writePayload(
       Object baseObject, long baseOffset, int cursor, long epochMicros, short nanosWithinMicro) {
+    assert nanosWithinMicro >= 0 && nanosWithinMicro <= TimestampNanosVal.MAX_NANOS_WITHIN_MICRO :
+      "nanosWithinMicro out of range: " + nanosWithinMicro;
     Platform.putLong(baseObject, baseOffset + cursor, epochMicros);
-    // Store nanos in the low 16 bits; upper 48 bits remain zero.
-    Platform.putLong(baseObject, baseOffset + cursor + 8, ((long) nanosWithinMicro) & 0xFFFFL);
+    // Validated to [0, 999], so widening to long zero-extends; upper 48 bits become zero.
+    Platform.putLong(baseObject, baseOffset + cursor + 8, nanosWithinMicro);
   }
 
   /**
@@ -69,8 +73,8 @@ public final class TimestampNanosRowValues {
   }
 
   public static short readNanosWithinMicro(Object baseObject, long baseOffset, int offset) {
-    // Use getLong (not getShort) to match writePayload's putLong; endian-safe.
-    return (short) (Platform.getLong(baseObject, baseOffset + offset + 8) & 0xFFFFL);
+    // Match writePayload's putLong; the (short) cast truncates to the low 16 bits.
+    return (short) Platform.getLong(baseObject, baseOffset + offset + 8);
   }
 
   public static TimestampNanosVal readVal(Object baseObject, long baseOffset, int offset) {
