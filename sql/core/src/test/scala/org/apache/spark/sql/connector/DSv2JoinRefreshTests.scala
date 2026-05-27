@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -37,24 +37,21 @@ import org.apache.spark.sql.types.IntegerType
  */
 trait DSv2JoinRefreshTests extends DSv2ExternalMutationTestBase {
 
-  private val T = "testcat.ns1.ns2.tbl"
-  private val testIdent = Identifier.of(Array("ns1", "ns2"), "tbl")
-
   // Scenario 1: join after insert refreshes both sides to latest version
 
   test(s"${testPrefix}SPARK-54157: join refreshes both sides after external insert" +
       " (table with both table and column ID support)") {
     withTestSession { session =>
-      withTestTableAndViews(session, T) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      withTestTableAndViews(session, testTable) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(T)
+        val df1 = session.table(testTable)
 
         val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
         externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
-        val df2 = session.table(T)
+        val df2 = session.table(testTable)
 
         checkRows(
           df1.join(df2, df1("id") === df2("id")),
@@ -66,15 +63,15 @@ trait DSv2JoinRefreshTests extends DSv2ExternalMutationTestBase {
   test(s"${testPrefix}SPARK-54157: join refreshes both sides after same-session insert" +
       " (table with both table and column ID support)") {
     withTestSession { session =>
-      withTestTableAndViews(session, T) {
-        session.sql(s"CREATE TABLE $T (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $T VALUES (1, 100)").collect()
+      withTestTableAndViews(session, testTable) {
+        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(T)
+        val df1 = session.table(testTable)
 
-        session.sql(s"INSERT INTO $T VALUES (2, 200)").collect()
+        session.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
 
-        val df2 = session.table(T)
+        val df2 = session.table(testTable)
 
         checkRows(
           df1.join(df2, df1("id") === df2("id")),
