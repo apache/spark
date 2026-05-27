@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
+import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
@@ -224,7 +225,13 @@ class MicroBatchExecution(
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
             // TODO: operator pushdown.
-            val scan = table.newScanBuilder(options).build()
+            val scanBuilder = table.newScanBuilder(options)
+            scanBuilder match {
+              case r: SupportsPushDownRequiredColumns =>
+                r.pruneColumns(output.toStructType)
+              case _ =>
+            }
+            val scan = scanBuilder.build()
             val stream = scan.toMicroBatchStream(metadataPath)
             val relation = StreamingDataSourceV2Relation(
                 table,

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
-import org.apache.spark.sql.connector.read.ScanBuilder
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
@@ -564,6 +564,40 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("pruneColumns called on SupportsPushDownRequiredColumns V2 streaming scan builder") {
+    val tblName = "teststream.table_name"
+    withTable(tblName) {
+      spark.sql(s"CREATE TABLE $tblName (data int) USING foo")
+      val stream = MemoryStream[Int]
+      val testCatalog = spark.sessionState.catalogManager.catalog("teststream").asTableCatalog
+      val table = testCatalog.loadTable(Identifier.of(Array(), "table_name"))
+        .asInstanceOf[InMemoryStreamTable]
+      table.setStream(stream)
+
+      // Wrap the table's scan builder so we can record pruneColumns calls.
+      val recorded = new PrunedSchemaRecorder
+      table.scanBuilderWrapper = Some(inner => new RecordingPruneScanBuilder(inner, recorded))
+
+      withTempDir { checkpointDir =>
+        val q = spark.readStream.table(tblName)
+          .select("value", "_seq")
+          .writeStream.format("noop")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start()
+        try {
+          stream.addData(1, 2, 3)
+          q.processAllAvailable()
+          assert(recorded.called, "pruneColumns should have been called on the streaming scan builder")
+          // Output schema includes both the data column and the metadata column
+          assert(recorded.schema.fieldNames.toSet === Set("value", "_seq"),
+            s"Expected pruneColumns to receive {value, _seq}, got ${recorded.schema}")
+        } finally {
+          q.stop()
+        }
+      }
+    }
+  }
+
   private def checkForStreamTable(dir: Option[File], tableName: String): Unit = {
     val memory = MemoryStream[Int]
     val dsw = memory.toDS().writeStream.format("parquet")
@@ -683,6 +717,7 @@ class InMemoryStreamTable(override val name: String)
   with SupportsRead
   with SupportsMetadataColumns {
   var stream: MemoryStream[Int] = _
+  var scanBuilderWrapper: Option[MemoryStreamScanBuilder => ScanBuilder] = None
 
   def setStream(inputData: MemoryStream[Int]): Unit = stream = inputData
 
@@ -693,7 +728,8 @@ class InMemoryStreamTable(override val name: String)
   }
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
-    new MemoryStreamScanBuilder(stream)
+    val inner = new MemoryStreamScanBuilder(stream)
+    scanBuilderWrapper.map(_(inner)).getOrElse(inner)
   }
 
   private object SeqColumn extends MetadataColumn {
@@ -703,6 +739,23 @@ class InMemoryStreamTable(override val name: String)
   }
 
   override val metadataColumns: Array[MetadataColumn] = Array(SeqColumn)
+}
+
+class PrunedSchemaRecorder {
+  @volatile var called = false
+  @volatile var schema: StructType = new StructType()
+}
+
+class RecordingPruneScanBuilder(inner: MemoryStreamScanBuilder, recorder: PrunedSchemaRecorder)
+    extends ScanBuilder
+    with SupportsPushDownRequiredColumns {
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    recorder.called = true
+    recorder.schema = requiredSchema
+  }
+
+  override def build(): Scan = inner.build()
 }
 
 class NonStreamV2Table(override val name: String)
