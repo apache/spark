@@ -142,10 +142,42 @@ class STUtilsSuite {
 
   // ST_GeogFromWKB
   @Test
-  void testStGeogFromWKB() {
+  void testStGeogFromWKBNoSrid() {
     GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkb);
     assertNotNull(geographyVal);
     assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKBWithDefaultSrid() {
+    GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkb, testGeographySrid);
+    assertNotNull(geographyVal);
+    assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKBWithValidSrid() {
+    // Geography supports a variety of geographic SRIDs (not just the default 4326).
+    for (int validGeographySrid : new int[]{4267, 4269, 4326, 4612, 37001, 104030}) {
+      GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkb, validGeographySrid);
+      assertNotNull(geographyVal);
+      byte[] expectedBytes = new byte[testWkb.length + sridLen];
+      byte[] geogSrid = ByteBuffer.allocate(sridLen).order(end).putInt(validGeographySrid).array();
+      System.arraycopy(geogSrid, 0, expectedBytes, 0, sridLen);
+      System.arraycopy(testWkb, 0, expectedBytes, sridLen, testWkb.length);
+      assertArrayEquals(expectedBytes, geographyVal.getBytes());
+    }
+  }
+
+  @Test
+  void testStGeogFromWKBWithInvalidSrid() {
+    // SRIDs that are either out of range or correspond to non-geographic SRSes (e.g. 0, 3857).
+    for (int invalidGeographySrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+              () -> STUtils.stGeogFromWKB(testWkb, invalidGeographySrid));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidGeographySrid + "."));
+    }
   }
 
   // ST_GeomFromWKB
