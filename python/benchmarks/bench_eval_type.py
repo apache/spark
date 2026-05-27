@@ -35,7 +35,7 @@ import numpy as np
 import pyarrow as pa
 
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
-from pyspark.serializers import write_int, write_long
+from pyspark.serializers import write_int, write_long, SpecialLengths
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -128,6 +128,46 @@ class MockProtocolWriter:
         write_int(0, buf)  # num_broadcast_variables
 
     @classmethod
+    def write_init_message(
+        cls,
+        eval_type: int,
+        write_udf: Callable[[io.BufferedIOBase], None],
+        target_buffer: io.BytesIO,
+        runner_conf: dict[str, str] | None = None,
+        eval_conf: dict[str, str] | None = None,
+    ) -> None:
+        """Write the initial message with header, length + its data."""
+
+        # Write everything to a seperate buffer so we can
+        # determine the length of the initial message.
+        buf = io.BytesIO()
+        cls.write_preamble(buf)
+        write_int(eval_type, buf)
+        if runner_conf:
+            write_int(len(runner_conf), buf)
+            for k, v in runner_conf.items():
+                cls.write_utf8(k, buf)
+                cls.write_utf8(v, buf)
+        else:
+            write_int(0, buf)  # RunnerConf  (0 key-value pairs)
+        if eval_conf:
+            write_int(len(eval_conf), buf)
+            for k, v in eval_conf.items():
+                cls.write_utf8(k, buf)
+                cls.write_utf8(v, buf)
+        else:
+            write_int(0, buf)  # EvalConf    (0 key-value pairs)
+        write_udf(buf)
+
+        # Write the actual data
+        # header...
+        write_int(SpecialLengths.START_OF_INIT_MESSAGE, target_buffer)
+        write_int(buf.getbuffer().nbytes, target_buffer)
+        # ... + previously buffered data
+        buf.seek(0)
+        target_buffer.write(buf.read())
+
+    @classmethod
     def write_udf_payload(
         cls,
         udf_func: Callable[..., Any],
@@ -165,25 +205,11 @@ class MockProtocolWriter:
         eval_conf: dict[str, str] | None = None,
     ) -> None:
         """Write the full worker binary stream: preamble + command + data + end."""
-        cls.write_preamble(buf)
-        write_int(eval_type, buf)
-        if runner_conf:
-            write_int(len(runner_conf), buf)
-            for k, v in runner_conf.items():
-                cls.write_utf8(k, buf)
-                cls.write_utf8(v, buf)
-        else:
-            write_int(0, buf)  # RunnerConf  (0 key-value pairs)
-        if eval_conf:
-            write_int(len(eval_conf), buf)
-            for k, v in eval_conf.items():
-                cls.write_utf8(k, buf)
-                cls.write_utf8(v, buf)
-        else:
-            write_int(0, buf)  # EvalConf    (0 key-value pairs)
-        write_udf(buf)
+        cls.write_init_message(
+            eval_type, write_udf, buf, runner_conf=runner_conf, eval_conf=eval_conf
+        )
         write_data(buf)
-        write_int(-4, buf)  # SpecialLengths.END_OF_STREAM
+        write_int(SpecialLengths.END_OF_STREAM, buf)
 
     @classmethod
     def write_arrow_udtf_payload(
