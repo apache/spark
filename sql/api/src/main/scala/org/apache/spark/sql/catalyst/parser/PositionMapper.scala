@@ -91,6 +91,32 @@ case class PositionMapper(
   }
 
   /**
+   * Extract the original text fragment corresponding to a range in the substituted text.
+   * Maps both start and stop positions back to the original text and returns the substring.
+   *
+   * For the stop position, mapToOriginal maps positions within a substitution range to the
+   * start of the original marker. To get the correct end, we map stopIndex + 1 (which lands
+   * in the unmapped region after the substitution) and subtract 1.
+   *
+   * @param substitutedStart
+   *   Inclusive start position in the substituted text
+   * @param substitutedStop
+   *   Inclusive stop position in the substituted text
+   * @return
+   *   The corresponding fragment from the original text
+   */
+  def originalFragment(substitutedStart: Int, substitutedStop: Int): String = {
+    val mappedStart = mapToOriginal(substitutedStart)
+    val mappedStop =
+      if (substitutedStop + 1 < substitutedText.length) {
+        mapToOriginal(substitutedStop + 1) - 1
+      } else {
+        originalText.length - 1
+      }
+    originalText.substring(mappedStart, mappedStop + 1)
+  }
+
+  /**
    * Build sparse position ranges using functional approach. O(k) space complexity where k =
    * number of substitutions.
    *
