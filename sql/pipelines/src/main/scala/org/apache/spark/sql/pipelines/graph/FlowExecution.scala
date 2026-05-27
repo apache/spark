@@ -325,6 +325,12 @@ object AutoCdcAuxiliaryTable {
     database = destination.database,
     catalog = destination.catalog
   )
+
+  /**
+   * Reserved table property key set on the auxiliary table to record which SCD strategy it
+   * serves.
+   */
+  val scdTypePropertyKey: String = s"${PipelinesTableProperties.pipelinesPrefix}autocdc.scd_type"
 }
 
 /**
@@ -357,10 +363,13 @@ trait AutoCdcMergeWriteBase {
     // target's format is unspecified (None), omit the USING clause and fall back to the
     // session's default source provider.
     val usingClause = destination.format.map(fmt => s"USING $fmt").getOrElse("")
+    val tblPropertiesClause =
+      s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.scdTypePropertyKey}' = " +
+        s"'${changeArgs.storedAsScdType.label}')"
     spark.sql(
       s"""CREATE TABLE IF NOT EXISTS
          |${auxIdent.quotedString}
-         |(${auxiliaryTableSchema.toDDL}) $usingClause""".stripMargin
+         |(${auxiliaryTableSchema.toDDL}) $usingClause $tblPropertiesClause""".stripMargin
     )
     auxIdent
   }
@@ -379,7 +388,12 @@ trait AutoCdcMergeWriteBase {
         errorClass = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
         messageParameters = Map(
           "tableName" -> destination.identifier.quotedString,
-          "format" -> destination.format.getOrElse("<session default>")
+          "format" -> destination.format.orElse(
+              Option(
+                destinationTable.properties.get(TableCatalog.PROP_PROVIDER)
+              )
+            )
+            .getOrElse("<unknown>")
         )
       )
     }
@@ -420,13 +434,13 @@ class Scd1MergeStreamingWrite(
     val sqlConf: Map[String, String]
 ) extends StreamingFlowExecution with AutoCdcMergeWriteBase {
 
+  requireDestinationSupportsRowLevelOps()
+
   override def getOrigin: QueryOrigin = flow.origin
 
   override protected def changeArgs: ChangeArgs = flow.changeArgs
 
   override def startStream(): StreamingQuery = {
-    requireDestinationSupportsRowLevelOps()
-
     val sourceChangeDataFeed = graph.reanalyzeFlow(flow).df
 
     // The auxiliary table is created here (at flow execution) rather than during flow resolution
