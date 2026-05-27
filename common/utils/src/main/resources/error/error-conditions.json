@@ -7153,6 +7153,13 @@
     ],
     "sqlState" : "55019"
   },
+  "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE" : {
+    "message" : [
+      "User specified schema is not allowed with DataStreamReader.table(). Catalog tables declare their own schema, so the schema passed to DataStreamReader.schema(...) is ignored.",
+      "Remove the .schema(...) call, or set '<config>' to false to restore the previous behavior of silently ignoring the user-specified schema."
+    ],
+    "sqlState" : "42K03"
+  },
   "STREAM_FAILED" : {
     "message" : [
       "Query [id = <id>, runId = <runId>] terminated with exception: <message>"

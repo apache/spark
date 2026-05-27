@@ -2472,6 +2472,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     DataTypeErrors.userSpecifiedSchemaUnsupportedError(operation)
   }
 
+  def streamingUserSpecifiedSchemaNotAllowedInTableError(): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+      messageParameters = Map(
+        "config" -> SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key))
+  }
+
   def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1190",

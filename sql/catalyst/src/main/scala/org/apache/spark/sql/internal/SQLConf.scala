@@ -3882,6 +3882,17 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED =
+    buildConf("spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled")
+      .doc("When true, DataStreamReader.table() throws an analysis error if the caller " +
+        "supplied a user-specified schema via DataStreamReader.schema(...). Catalog tables " +
+        "declare their own schema and any user-specified schema is silently dropped, so this " +
+        "guards against misconfigurations. Set this to false to restore the pre-4.2 behavior " +
+        "of silently ignoring the user-specified schema.")
+      .version("4.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_POLLING_DELAY =
     buildConf("spark.sql.streaming.pollingDelay")
       .internal()
@@ -7716,6 +7727,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def fileSourceLogCleanupDelay: Long = getConf(FILE_SOURCE_LOG_CLEANUP_DELAY)
 
   def streamingSchemaInference: Boolean = getConf(STREAMING_SCHEMA_INFERENCE)
+
+  def streamingDisallowUserSpecifiedSchemaInTableEnabled: Boolean =
+    getConf(STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED)
 
   def streamingPollingDelay: Long = getConf(STREAMING_POLLING_DELAY)
 

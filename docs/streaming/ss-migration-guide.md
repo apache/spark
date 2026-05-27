@@ -23,6 +23,10 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.1 to 4.2
+
+- Since Spark 4.2, `DataStreamReader.table(tableName)` rejects user-specified schemas with an `AnalysisException` (error class `STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE`). Catalog tables declare their own schema, so any schema passed to `DataStreamReader.schema(...)` was always silently dropped; the new check surfaces this misconfiguration as a clear error instead. To restore the previous behavior of silently ignoring the user-specified schema, set `spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled` to `false`.
+
 ## Upgrading from Structured Streaming 4.0 to 4.1
 
 - Since Spark 4.1, AQE is supported for stateless workloads, and it could affect the behavior of the query after upgrade (especially since AQE is turned on by default). In general, it helps to achieve better performance including resolution of skewed partition, but you can turn off AQE via changing `spark.sql.adaptive.streaming.stateless.enabled` to `false` to restore the behavior if you see regression.

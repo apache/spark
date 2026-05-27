@@ -94,8 +94,27 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       }
       checkError(
         exception = e,
-        condition = "_LEGACY_ERROR_TEMP_1189",
-        parameters = Map("operation" -> "table"))
+        condition = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+        parameters = Map(
+          "config" ->
+            SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key))
+    }
+  }
+
+  test("read: user-specified schema is silently ignored when flag is flipped off") {
+    val tblName = "my_table"
+    withTable(tblName) {
+      spark.range(3).write.format("parquet").saveAsTable(tblName)
+      withSQLConf(
+          SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key -> "false") {
+        testStream(
+            spark.readStream
+              .schema(new StructType().add("a", IntegerType))
+              .table(tblName))(
+          ProcessAllAvailable(),
+          CheckAnswer(Row(0), Row(1), Row(2))
+        )
+      }
     }
   }
 
