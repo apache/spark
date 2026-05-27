@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{catalyst, Encoder, Row}
-import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedDeserializer}
+import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedDeserializer, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
@@ -568,6 +568,11 @@ case class FlatMapGroupsWithState(
       newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapGroupsWithState =
     copy(child = newLeft, initialState = newRight)
   override def isStateful: Boolean = child.isStreaming
+
+  override def output: Seq[Attribute] = {
+    val base = super.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
 }
 
 object TransformWithState {
@@ -657,6 +662,11 @@ case class TransformWithState(
       newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithState =
     copy(child = newLeft, initialState = newRight)
   override def isStateful: Boolean = child.isStreaming
+
+  override def output: Seq[Attribute] = {
+    val base = super.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
 }
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */

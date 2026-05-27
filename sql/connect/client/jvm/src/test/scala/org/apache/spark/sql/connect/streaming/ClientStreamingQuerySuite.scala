@@ -86,7 +86,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         .count()
         .selectExpr("window.start as timestamp", "count as num_events")
 
-      assert(countsDF.schema.toDDL == "timestamp TIMESTAMP,num_events BIGINT NOT NULL")
+      assert(countsDF.schema.toDDL == "timestamp TIMESTAMP,num_events BIGINT")
 
       // Start the query
       val queryName = "sparkConnectStreamingQuery"
