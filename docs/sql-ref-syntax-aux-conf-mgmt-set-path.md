@@ -116,11 +116,11 @@ path_element
   `USE SCHEMA` statements are picked up without re-issuing `SET PATH`.
   `CURRENT_DATABASE` is a synonym for `CURRENT_SCHEMA`.
 
-* **`schema_name`**
+* **`catalog_name . namespace [ . namespace ... ]`**
 
-  An explicit catalog-qualified schema reference (`catalog.schema` or, for catalogs with
+  An explicit catalog-qualified namespace reference (`catalog.schema` or, for catalogs with
   multi-level namespaces, `catalog.ns1.ns2...`). At least two parts are required.
-  The catalog and schema do not need to exist at the time of `SET PATH`; non-existent entries
+  The catalog and namespace do not need to exist at the time of `SET PATH`; non-existent entries
   are silently skipped during name resolution.
 
   Identifier quoting follows the usual rules. Backtick-quoted parts that contain a dot are
