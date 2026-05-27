@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+from unittest.mock import patch
+
 import numpy as np
 import pandas as pd
 
@@ -256,6 +258,46 @@ class FrameComputeMixin:
         psdf.columns = columns
 
         self.assert_eq(pdf.diff(), psdf.diff())
+
+        # Test periods > number of rows (should produce all NaN for data cols)
+        pdf_short = pd.DataFrame({"a": [1, 2, 3]})
+        psdf_short = ps.from_pandas(pdf_short)
+        self.assert_eq(pdf_short.diff(periods=10), psdf_short.diff(periods=10))
+
+        # Test all-NaN column
+        pdf_nan = pd.DataFrame({"a": [float("nan")] * 5})
+        psdf_nan = ps.from_pandas(pdf_nan)
+        self.assert_eq(pdf_nan.diff(), psdf_nan.diff())
+
+        # Test integer overflow-prone values
+        pdf_large = pd.DataFrame({"a": [2**53, 2**53 + 1, 2**53 - 1]}, dtype=float)
+        psdf_large = ps.from_pandas(pdf_large)
+        self.assert_eq(pdf_large.diff(), psdf_large.diff())
+
+        # Test periods=-1 cross-boundary (negative direction)
+        self.assert_eq(pdf.diff(periods=-1), psdf.diff(periods=-1))
+
+    def test_diff_spark_connect(self):
+        """
+        Verify that DataFrame.diff falls back gracefully to the Window-based
+        path under Spark Connect (is_remote() == True) and still returns
+        correct results.
+        """
+        pdf = pd.DataFrame(
+            {"a": [1, 4, 2, 7, 3], "b": [10, 20, 30, 40, 50]},
+            index=np.arange(5),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        # Simulate Spark Connect environment by patching is_remote to True
+        with patch("pyspark.pandas.frame.is_remote", return_value=True):
+            result = psdf.diff()
+            self.assert_eq(pdf.diff(), result)
+
+        # Also verify that the non-remote path matches
+        with patch("pyspark.pandas.frame.is_remote", return_value=False):
+            result = psdf.diff()
+            self.assert_eq(pdf.diff(), result)
 
     def test_pct_change(self):
         pdf = pd.DataFrame(

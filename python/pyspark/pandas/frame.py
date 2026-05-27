@@ -4953,6 +4953,35 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         def to_pdf(rows: List[Dict[str, Any]]) -> pd.DataFrame:
             return pd.DataFrame(rows, columns=selected_column_names)
 
+        # Correctness guarantee at partition boundaries
+        # ------------------------------------------------
+        # After repartitionByRange + sortWithinPartitions, rows within each
+        # partition are contiguous in NATURAL_ORDER and non-overlapping across
+        # partitions.
+        #
+        # For periods > 0: partition P needs the last `periods` rows of the
+        # combined logical prefix [P_0, P_1, ..., P_{k-1}]. summarize_partition
+        # collects tail[-periods:] from each partition. take_previous() walks
+        # partitions in reverse order, accumulating tail rows until it has
+        # `periods` rows; it then passes exactly those rows as the left context
+        # for P. diff_partition prepends the context, calls pandas .diff(periods)
+        # on (context + partition_rows), then slices off the first len(context)
+        # rows so only results for the partition's own rows are emitted.
+        #
+        # For periods < 0: symmetric - take_next() collects head[:abs_periods]
+        # from successor partitions as right context; diff_partition appends the
+        # context, calls pandas .diff(periods) on (partition_rows + context), and
+        # slices to [:len(rows)].
+        #
+        # Edge cases handled:
+        # - periods == 0: summarize_partition yields (pid, [], []) immediately;
+        #   diff_partition calls pandas .diff(0) which returns zeros (x - x).
+        # - Empty partitions: diff_partition returns early if len(rows) == 0.
+        # - abs_periods spans multiple partitions: take_previous/take_next loop
+        #   across as many predecessor/successor partitions as needed.
+        # - Single partition: ordered_pids has one entry; take_previous returns []
+        #   so the first partition rows correctly produce NaN for their first
+        #   `periods` positions.
         def summarize_partition(
             pid: int, iterator: Iterator[Row]
         ) -> Iterator[Tuple[int, List[Dict[str, Any]], List[Dict[str, Any]]]]:
