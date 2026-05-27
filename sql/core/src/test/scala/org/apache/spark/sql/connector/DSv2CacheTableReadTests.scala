@@ -28,12 +28,17 @@ import org.apache.spark.sql.types.IntegerType
  * SQL or external catalog API calls:
  *
  *  - Scenario 1 (external write): cache pins the read, external write invisible until REFRESH.
- *  - Scenario 2 (session write and more external changes): session write rebuilds cache,
+ *  - Scenario 2 (session write then external write): session write rebuilds cache,
  *    subsequent external write invisible until REFRESH.
- *  - Scenario 3 (external schema changes): cache pinned at original schema until REFRESH.
- *  - Scenario 4 (session schema changes and more external changes): session ALTER rebuilds
+ *  - Scenario 3 (external schema change): cache pinned at original schema until REFRESH.
+ *  - Scenario 4 (session schema change then external write): session ALTER rebuilds
  *    cache, subsequent external write invisible until REFRESH.
  *  - Scenario 5 (external drop and recreate table): query sees new empty table.
+ *
+ * Unlike the peer traits [[DSv2TempViewWithStoredPlanTests]] and
+ * [[DSv2RepeatedTableAccessTests]], this trait does not include `cachingcat` (caching
+ * connector) variants. CACHE TABLE behavior is orthogonal to connector-level caching;
+ * cachingcat variants can be added in a follow-up if needed.
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on
@@ -177,6 +182,11 @@ trait DSv2CacheTableReadTests extends DSv2ExternalMutationTestBase {
         val result = session.table(testTable)
         assert(result.schema.fieldNames.toSeq == Seq("id", "salary"))
         checkRows(result, Seq.empty)
+
+        // External drop+recreate produces a new table identity, so the prior cache entry
+        // is unreachable via name lookup (unlike external write/schema change where the
+        // cache stays pinned).
+        assert(!session.catalog.isCached(testTable))
 
         session.sql(s"REFRESH TABLE $testTable").collect()
         checkRows(session.table(testTable), Seq.empty)
