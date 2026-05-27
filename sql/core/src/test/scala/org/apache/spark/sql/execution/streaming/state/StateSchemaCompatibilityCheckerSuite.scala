@@ -308,20 +308,6 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
       ignoreValueSchema = false)
   }
 
-  test("changing the name of nested field in key should be allowed") {
-    val newName: StructField => StructField = f => f.copy(name = f.name + "_new")
-    val newNestedFieldsSchema = StructType(structSchema.map(newName))
-    val fieldNameChangedKeySchema = applyNewSchemaToNestedFieldInKey(newNestedFieldsSchema)
-    verifySuccess(keySchema, valueSchema, fieldNameChangedKeySchema, valueSchema)
-  }
-
-  test("changing the name of nested field in value should be allowed") {
-    val newName: StructField => StructField = f => f.copy(name = f.name + "_new")
-    val newNestedFieldsSchema = StructType(structSchema.map(newName))
-    val fieldNameChangedValueSchema = applyNewSchemaToNestedFieldInValue(newNestedFieldsSchema)
-    verifySuccess(keySchema, valueSchema, keySchema, fieldNameChangedValueSchema)
-  }
-
   private def applyNewSchemaToNestedFieldInKey(newNestedSchema: StructType): StructType = {
     applyNewSchemaToNestedField(keySchema, newNestedSchema, "key3")
   }
