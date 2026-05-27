@@ -101,8 +101,7 @@ public final class TimestampNanosVal implements Serializable {
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
-    TimestampNanosVal that = (TimestampNanosVal) o;
+    if (!(o instanceof TimestampNanosVal that)) return false;
     return epochMicros == that.epochMicros && nanosWithinMicro == that.nanosWithinMicro;
   }
 
