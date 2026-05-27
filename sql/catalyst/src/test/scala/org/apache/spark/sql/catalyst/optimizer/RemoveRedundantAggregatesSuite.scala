@@ -19,14 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{EvalMode, Expression, Literal, NumericEvalContext}
-import org.apache.spark.sql.catalyst.expressions.PythonUDAF
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, PythonUDAF}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
-import org.apache.spark.sql.catalyst.expressions.aggregate.Sum
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 
 class RemoveRedundantAggregatesSuite extends PlanTest {
@@ -158,88 +155,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, expected)
-  }
-
-  test("Collapse grouped sum of count in legacy mode") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val query = relation
-        .groupBy($"a", $"b")($"a", $"b", count(Literal(1)).as("cnt"))
-        .groupBy($"a")($"a", sum($"cnt").as("total"))
-        .analyze
-      val expected = relation
-        .select($"a")
-        .groupBy($"a")($"a", sum(Literal(1L)).as("total"))
-        .analyze
-      comparePlans(Optimize.execute(query), expected)
-    }
-  }
-
-  test("Collapse grouped sum of count in ANSI mode") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      val query = relation
-        .groupBy($"a", $"b")($"a", $"b", count(Literal(1)).as("cnt"))
-        .groupBy($"a")($"a", sum($"cnt").as("total"))
-        .analyze
-      val expected = relation
-        .select($"a")
-        .groupBy($"a")($"a", sum(Literal(1L)).as("total"))
-        .analyze
-      comparePlans(Optimize.execute(query), expected)
-    }
-  }
-
-  test("Collapse global sum of grouped count while preserving empty input semantics") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val query = relation
-        .groupBy($"a", $"b")($"a", $"b", count(Literal(1)).as("cnt"))
-        .groupBy()(sum($"cnt").as("total"))
-        .analyze
-      val expected = relation
-        .select()
-        .groupBy()(sum(Literal(1L)).as("total"))
-        .analyze
-      comparePlans(Optimize.execute(query), expected)
-    }
-  }
-
-  test("Keep grouped try_sum of count because overflow behavior differs") {
-    val query = relation
-      .groupBy($"a", $"b")($"a", $"b", count(Literal(1)).as("cnt"))
-      .groupBy($"a")(
-        $"a",
-        Sum($"cnt", NumericEvalContext(EvalMode.TRY)).toAggregateExpression().as("total"))
-      .analyze
-    comparePlans(Optimize.execute(query), query)
-  }
-
-  test("Keep grouped sum of nullable count") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val query = relation
-        .groupBy($"a", $"b")($"a", $"b", count($"b").as("cnt"))
-        .groupBy($"a")($"a", sum($"cnt").as("total"))
-        .analyze
-      comparePlans(Optimize.execute(query), query)
-    }
-  }
-
-  test("Keep sum of global count to preserve empty input semantics") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val query = relation
-        .groupBy()(count(Literal(1)).as("cnt"))
-        .groupBy()(sum($"cnt").as("total"))
-        .analyze
-      comparePlans(Optimize.execute(query), query)
-    }
-  }
-
-  test("Keep grouped sum of count with another upper aggregate") {
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val query = relation
-        .groupBy($"a", $"b")($"a", $"b", count(Literal(1)).as("cnt"))
-        .groupBy($"a")($"a", sum($"cnt").as("total"), max($"b").as("max_b"))
-        .analyze
-      comparePlans(Optimize.execute(query), query)
-    }
   }
 
   test("Remove redundant aggregate - upper has contains foldable expressions") {
