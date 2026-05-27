@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.V1Table
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{MetadataBuilder, StringType}
-import org.apache.spark.sql.util.PartitioningUtils
 
 /**
  * A command for users to list the partition names of a table as a JSON document. If a partition
@@ -38,7 +37,7 @@ import org.apache.spark.sql.util.PartitioningUtils
  * The output is a single row with a `json_metadata` column containing a JSON object of the form:
  * `{"partitions": ["col=val/col=val", ...]}`.
  *
- * This command is the AS JSON variant of [[ShowPartitionsCommand]] and is produced by the parser
+ * This command is the AS JSON variant of [[ShowPartitions]] and is produced by the parser
  * when `SHOW PARTITIONS ... AS JSON` is issued. Only V1 (session catalog / Hive metastore) tables
  * are supported.
  *
@@ -61,25 +60,8 @@ case class ShowPartitionsJsonCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
       case ResolvedTable(_, _, t: V1Table, _) =>
-        val catalog = sparkSession.sessionState.catalog
-        val table = t.catalogTable
-        val tableName = table.identifier
-
-        if (table.partitionColumnNames.isEmpty) {
-          throw QueryCompilationErrors.showPartitionNotAllowedOnTableNotPartitionedError(
-            tableName.quotedString)
-        }
-
-        DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS AS JSON")
-
-        val normalizedSpec = spec.map(partitionSpec =>
-          PartitioningUtils.normalizePartitionSpec(
-            partitionSpec,
-            table.partitionSchema,
-            tableName.quotedString,
-            sparkSession.sessionState.conf.resolver))
-
-        val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
+        val partNames = ShowPartitionsHelper.listV1PartitionNames(
+          sparkSession, t.catalogTable, spec, "SHOW PARTITIONS AS JSON")
         Seq(Row(compact(render(JObject("partitions" ->
           JArray(partNames.map(JString(_)).toList))))))
 

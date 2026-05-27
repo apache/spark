@@ -1062,37 +1062,34 @@ case class ShowPartitionsCommand(
     spec: Option[TablePartitionSpec]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
-    val table = catalog.getTableMetadata(tableName)
+    val table = sparkSession.sessionState.catalog.getTableMetadata(tableName)
+    ShowPartitionsHelper.listV1PartitionNames(sparkSession, table, spec).map(Row(_))
+  }
+}
+
+object ShowPartitionsHelper {
+  /**
+   * Used by [[ShowPartitionsCommand]] and [[ShowPartitionsJsonCommand]] to
+   * extract partition names of V1 tables.
+   */
+  def listV1PartitionNames(
+      sparkSession: SparkSession,
+      table: CatalogTable,
+      spec: Option[TablePartitionSpec],
+      commandName: String = "SHOW PARTITIONS"): Seq[String] = {
     val tableIdentWithDB = table.identifier.quotedString
-
-    /**
-     * Validate and throws an [[AnalysisException]] exception under the following conditions:
-     * 1. If the table is not partitioned.
-     * 2. If it is a datasource table.
-     */
-
     if (table.partitionColumnNames.isEmpty) {
       throw QueryCompilationErrors.showPartitionNotAllowedOnTableNotPartitionedError(
         tableIdentWithDB)
     }
-
-    DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, "SHOW PARTITIONS")
-
-    /**
-     * Normalizes the partition spec w.r.t the partition columns and case sensitivity settings,
-     * and validates the spec by making sure all the referenced columns are
-     * defined as partitioning columns in table definition. An AnalysisException exception is
-     * thrown if the partitioning spec is invalid.
-     */
-    val normalizedSpec = spec.map(partitionSpec => PartitioningUtils.normalizePartitionSpec(
-      partitionSpec,
-      table.partitionSchema,
-      table.identifier.quotedString,
-      sparkSession.sessionState.conf.resolver))
-
-    val partNames = catalog.listPartitionNames(tableName, normalizedSpec)
-    partNames.map(Row(_))
+    DDLUtils.verifyPartitionProviderIsHive(sparkSession, table, commandName)
+    val normalizedSpec = spec.map(partitionSpec =>
+      PartitioningUtils.normalizePartitionSpec(
+        partitionSpec,
+        table.partitionSchema,
+        tableIdentWithDB,
+        sparkSession.sessionState.conf.resolver))
+    sparkSession.sessionState.catalog.listPartitionNames(table.identifier, normalizedSpec)
   }
 }
 

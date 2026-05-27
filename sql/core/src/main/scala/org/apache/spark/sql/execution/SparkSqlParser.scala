@@ -1497,7 +1497,8 @@ class SparkSqlAstBuilder extends AstBuilder {
    */
   override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
     val asJson = ctx.JSON != null
-    val relation = createUnresolvedTable(ctx.identifierReference, "SHOW PARTITIONS")
+    val relation = createUnresolvedTable(
+      ctx.identifierReference, if (asJson) "SHOW PARTITIONS AS JSON" else "SHOW PARTITIONS")
     val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
     }
