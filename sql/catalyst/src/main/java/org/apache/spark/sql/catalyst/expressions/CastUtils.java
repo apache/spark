@@ -99,9 +99,8 @@ public final class CastUtils {
   }
 
   // ----- decimal precision adjustment -----
-  // Mutates the input Decimal in place. Used by Cast.changePrecision (and by
-  // BinaryArithmetic / DivModLike in follow-up PRs) to apply the target
-  // precision/scale on the per-row hot path.
+  // Mutates the input Decimal in place to apply the target precision/scale on
+  // the per-row hot path.
 
   public static Decimal changePrecisionExact(
       Decimal d, int precision, int scale, QueryContext context) {
