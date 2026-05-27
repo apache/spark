@@ -249,6 +249,8 @@ public final class UnsafeArrayData extends ArrayData implements Externalizable, 
     return new CalendarInterval(months, days, microseconds);
   }
 
+  // NTZ and LTZ share the byte layout; the duplicated getters track the SpecializedGetters
+  // interface, where the distinction is preserved at the logical-type level.
   @Override
   public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
     if (isNullAt(ordinal)) return null;

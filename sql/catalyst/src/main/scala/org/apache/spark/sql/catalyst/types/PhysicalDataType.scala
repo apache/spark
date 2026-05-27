@@ -174,6 +174,9 @@ case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
  * 16-byte variable-length payload; see
  * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
  *
+ * Storage layout is identical to [[PhysicalTimestampLTZNanosType]]; both types exist so the
+ * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
+ *
  * Ordering, compare, and hash are not implemented yet and will be added in a follow-up issue.
  */
 class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
@@ -190,6 +193,9 @@ case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
  * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
  * 16-byte variable-length payload; see
  * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Storage layout is identical to [[PhysicalTimestampNTZNanosType]]; both types exist so the
+ * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
  *
  * Ordering, compare, and hash are not implemented yet and will be added in a follow-up issue.
  */

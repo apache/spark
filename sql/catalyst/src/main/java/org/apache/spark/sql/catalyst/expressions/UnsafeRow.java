@@ -329,6 +329,10 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    * Updates a nanosecond NTZ timestamp column in place. Uses the same variable-length layout as
    * {@link #setInterval(int, CalendarInterval)}. For null values, do not call {@link #setNullAt};
    * pass {@code null} here so the variable-length offset is retained for future updates.
+   *
+   * <p>NTZ and LTZ share the byte layout — the duplicated setter/getter pairs track the
+   * {@link SpecializedGetters} interface, where the distinction is preserved at the logical-type
+   * level.
    */
   @Override
   public void setTimestampNTZNanos(int ordinal, TimestampNanosVal value) {

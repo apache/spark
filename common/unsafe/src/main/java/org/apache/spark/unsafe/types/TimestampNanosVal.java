@@ -59,6 +59,9 @@ public final class TimestampNanosVal implements Serializable {
   public final short nanosWithinMicro;
 
   /**
+   * Equivalent to {@link #fromParts}; prefer the factory for new callers. Kept for symmetry with
+   * other value types (e.g. {@link CalendarInterval}) and for callers that need a constructor.
+   *
    * @param epochMicros microseconds since the Unix epoch
    * @param nanosWithinMicro nanoseconds within {@code epochMicros}, must be in [0, 999]
    */

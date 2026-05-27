@@ -39,6 +39,11 @@ import org.apache.spark.unsafe.types.TimestampNanosVal;
  * byte-wise, so any non-deterministic padding would make logically-equal values look different.
  * Byte order is not a concern because writes and reads both go through {@link Platform} and
  * therefore share the same native endianness.
+ *
+ * <p>The {@code read*} methods do not check the null bit; callers must verify
+ * {@link SpecializedGetters#isNullAt(int)} first. Reads from a null cell return unspecified
+ * bytes (zero for slots that went through {@link #zeroPayload}, otherwise whatever the buffer
+ * was initialized with).
  */
 public final class TimestampNanosRowValues {
   /** Payload size in the UnsafeRow variable-length region (two 8-byte words). */
