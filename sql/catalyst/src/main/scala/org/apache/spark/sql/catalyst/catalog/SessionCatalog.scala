@@ -114,7 +114,7 @@ class SessionCatalog(
 
   /**
    * When set, unqualified builtin/temp function resolution uses this fixed kind order instead of
-   * [[catalogManagerForSessionFunctionKinds]] / [[SQLConf.systemPathOrder]]. For unit tests only;
+   * [[catalogManagerForSessionFunctionKinds]] / [[SQLConf.defaultPathOrder]]. For unit tests only;
    * production relies on the catalog manager binding.
    */
   @volatile private var sessionFunctionKindsTestOverride: Option[Seq[SessionFunctionKind]] = None
@@ -128,8 +128,9 @@ class SessionCatalog(
    * applied).
    *
    * When unset (e.g. standalone [[SessionCatalog]] in tests), kinds derive from
-   * [[SQLConf.systemPathOrder]] -- the seeded default path -- without assuming other legacy
-   * resolution-order conf beyond seeding `defaultPathOrder`.
+   * [[SQLConf.defaultPathOrder]] with no catalog entries -- equivalent to the system slots of
+   * the spark-built-in default path. This includes both `system.builtin` and `system.session`
+   * so unqualified temp functions are still resolvable in test setups.
    */
   @volatile private var catalogManagerForSessionFunctionKinds: Option[CatalogManager] = None
 
@@ -154,7 +155,8 @@ class SessionCatalog(
   /**
    * Session function kinds in resolution order for unqualified lookups: test override if set,
    * else live PATH from [[catalogManagerForSessionFunctionKinds]], else
-   * [[SQLConf.systemPathOrder]].
+   * [[SQLConf.defaultPathOrder]] with no catalog entries (so `system.builtin` and
+   * `system.session` are both reachable in standalone test mode).
    *
    * MUST NOT be called while holding [[SessionCatalog]]'s intrinsic lock (see SPARK-56939):
    * the path-driven branch delegates to [[CatalogManager]], which has its own intrinsic lock
@@ -169,7 +171,7 @@ class SessionCatalog(
           // (currentCatalog, currentNamespace, path) triple in a single critical section.
           cm.sessionFunctionKindsForUnqualifiedResolution()
         case None =>
-          CatalogManager.systemFunctionKindsFromPath(conf.systemPathOrder)
+          CatalogManager.systemFunctionKindsFromPath(conf.defaultPathOrder(Seq.empty))
       }
     }
 
