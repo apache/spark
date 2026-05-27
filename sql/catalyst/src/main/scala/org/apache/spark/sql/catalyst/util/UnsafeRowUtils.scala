@@ -173,6 +173,7 @@ object UnsafeRowUtils {
   def avoidSetNullAt(dt: DataType): Boolean = dt match {
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS => true
     case CalendarIntervalType => true
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
     case _ => false
   }
 
