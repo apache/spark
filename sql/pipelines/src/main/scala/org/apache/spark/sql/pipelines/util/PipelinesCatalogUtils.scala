@@ -21,6 +21,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /** Catalog-resolution helpers shared across the pipelines module. */
 object PipelinesCatalogUtils {
@@ -28,17 +29,19 @@ object PipelinesCatalogUtils {
   /**
    * Resolve a v1 [[TableIdentifier]] to a `(TableCatalog, Identifier)` pair usable against the
    * v2 connector APIs. If `ident.catalog` is unset, falls back to the session's
-   * `currentCatalog`. The catalog is required to be a [[TableCatalog]]; namespace must be
-   * non-empty.
+   * `currentCatalog`.
    */
   def resolveTableCatalog(
       spark: SparkSession,
       ident: TableIdentifier): (TableCatalog, Identifier) = {
     val catalogManager = spark.sessionState.catalogManager
-    val catalog = ident.catalog
+    val catalogPlugin = ident.catalog
       .map(catalogManager.catalog)
       .getOrElse(catalogManager.currentCatalog)
-      .asInstanceOf[TableCatalog]
+    val catalog = catalogPlugin match {
+      case t: TableCatalog => t
+      case _ => throw QueryCompilationErrors.missingCatalogTablesAbilityError(catalogPlugin)
+    }
     val namespace = ident.database.getOrElse(
       throw SparkException.internalError(
         s"Cannot resolve table identifier ${ident.quotedString}: namespace is unspecified."
