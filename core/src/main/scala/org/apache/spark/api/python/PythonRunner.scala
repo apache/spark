@@ -415,13 +415,17 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      */
     def writeNextInputToStream(dataOut: DataOutputStream): Boolean
 
-    def open(dataOut: DataOutputStream): Unit = Utils.logUncaughtExceptions {
+    def open(outputStream: DataOutputStream): Unit = Utils.logUncaughtExceptions {
       val isUnixDomainSock = authHelper.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
       lazy val sockPath = new File(
         authHelper.conf.get(PYTHON_UNIX_DOMAIN_SOCKET_DIR)
           .getOrElse(System.getProperty("java.io.tmpdir")),
         s".${UUID.randomUUID()}.sock")
       try {
+        // Buffer the initialization message, and send it together with its length.
+        val buffer = new ByteArrayOutputStream()
+        val dataOut = new DataOutputStream(buffer)
+
         // Partition index
         dataOut.writeInt(partitionIndex)
 
@@ -522,6 +526,13 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         writeCommand(dataOut)
 
         dataOut.flush()
+
+        // The initialization message is complete, write it to the stream with its length.
+        val messageBytes = buffer.toByteArray
+        outputStream.writeInt(SpecialLengths.START_OF_INIT_MESSAGE)
+        outputStream.writeInt(messageBytes.length)
+        outputStream.write(messageBytes)
+        outputStream.flush()
       } catch {
         case t: Throwable if NonFatal(t) || t.isInstanceOf[Exception] =>
           if (context.isCompleted() || context.isInterrupted()) {
@@ -1085,6 +1096,7 @@ private[spark] object SpecialLengths {
   val NULL = -5
   val START_ARROW_STREAM = -6
   val END_OF_MICRO_BATCH = -7
+  val START_OF_INIT_MESSAGE = -8
 }
 
 private[spark] object BarrierTaskContextMessageProtocol {
