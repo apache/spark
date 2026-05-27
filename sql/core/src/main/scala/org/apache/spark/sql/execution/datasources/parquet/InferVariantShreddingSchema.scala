@@ -97,7 +97,9 @@ class InferVariantShreddingSchema(val schema: StructType) {
 
   // Node for tree-based field tracking
   private case class FieldNode(
-    var dataType: DataType,          // type summary of the field, not fully defined
+    // Scalar type, or a marker (StructType(empty) / ArrayType(NullType)); structural
+    // shape lives in `children` and `arrayElementNode`.
+    var dataType: DataType,
     var rowCount: Int = 0,           // Count of distinct rows containing this field
     var lastSeenRow: Int = -1,       // Last row index that incremented rowCount
     var arrayElementCount: Long = 0, // Total occurrences across all array elements
@@ -347,7 +349,7 @@ class InferVariantShreddingSchema(val schema: StructType) {
   }
 
   /**
-   * Recursively traverse a variant value and build field statistics tree.
+   * Recursively traverse a variant value and build a field statistics tree.
    * For each field encountered, record its type and track distinct row count.
    * For fields inside arrays, also increment the occurrence count.
    */
@@ -496,8 +498,12 @@ class InferVariantShreddingSchema(val schema: StructType) {
       if (currentNode.dataType == VariantType) {
         return VariantType
       }
-      // Case 2: object elements and inner-array elements coexist on the same element aggregate
-      //         (children from objects, arrayElementNode from inner arrays): element is variant.
+      // Case 2 (defensive): every reachable isArray=true call site is paired with a guard that
+      //         already rules this out -- the root call collapses to VariantType (Case 1), the
+      //         Case 3 recursion short-circuits via the `elemNode.children.nonEmpty &&
+      //         elemNode.arrayElementNode.isDefined` check below, and the struct-field
+      //         ArrayType recursion only fires when the child was uniformly an array (so
+      //         `children` is empty). Keep this as a backstop for future call sites.
       if (currentNode.children.nonEmpty && currentNode.arrayElementNode.isDefined) {
         return ArrayType(VariantType)
       }

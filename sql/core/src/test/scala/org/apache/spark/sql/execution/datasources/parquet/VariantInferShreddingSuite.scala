@@ -322,10 +322,9 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
   }
 
   testWithTempDir("infer shredding key as data") { dir =>
-      // The first 50 fields include the row ID in the field name, so they're
-      // unique (low cardinality). The last 50 fields are shared across all rows
-      // (high cardinality). With cardinality-based sorting,
-      // we now correctly shred the high-cardinality last_* fields
+      // The 50 first_*_<id> fields are unique per row (low cardinality) and are filtered
+      // out; the 50 last_* fields are shared across all rows (high cardinality) and are
+      // shredded into typed_value. v2 is shredded independently.
       val bigObject = (0 until 100).map { i =>
         if (i < 50) {
           s""" "first_${i}_' || id || '": {"x": $i, "y": "${i + 1}"}  """
@@ -342,17 +341,23 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
       val footers = getFooters(dir)
       assert(footers.size == 1)
 
-      // With cardinality-based sorting, v should now have a shredded schema
-      // for the high-cardinality last_* fields (not an unshredded schema like
-      // master would produce). v2 should still be shredded correctly.
       val actual = getFileSchema(dir)
       val v_schema = actual.fields(0).dataType.asInstanceOf[StructType]
       val v2_schema = actual.fields(1).dataType.asInstanceOf[StructType]
 
-      // v should have shredded typed_value (struct with nested last_* fields)
+      // v should have shredded typed_value containing exactly the 50 last_* fields, each
+      // with the struct<x long, y string> shape (matching the literal types in the input).
+      // No first_*_<id> field should survive.
       assert(v_schema.fieldNames.contains("typed_value"))
       val v_typed = v_schema("typed_value").dataType.asInstanceOf[StructType]
-      assert(v_typed.fields.exists(_.name.startsWith("last_")))
+      assert(!v_typed.fieldNames.exists(_.startsWith("first_")))
+      assert(v_typed.fieldNames.count(_.startsWith("last_")) == 50)
+      val perElementExpected = SparkShreddingUtils.variantShreddingSchema(
+        DataType.fromDDL("struct<x long, y string>"), isTopLevel = false)
+      v_typed.fields.foreach { f =>
+        assert(f.name.startsWith("last_"))
+        assert(f.dataType == perElementExpected)
+      }
 
       // v2 should be fully shredded
       val smallExpected = SparkShreddingUtils.variantShreddingSchema(
@@ -776,9 +781,8 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
     assert(typedValue.fieldNames.contains("another.dotted.field"))
     assert(typedValue.fieldNames.contains("field.with.dots"))
 
-    // Verify we can read the data back
-    val result = spark.read.parquet(dir.getAbsolutePath)
-    assert(result.count() == 100)
+    // Verify the variant values round-trip correctly (catches metadata mis-encoding).
+    checkStringAndSchema(dir, df)
   }
 
   testWithTempDir("special characters in field names - brackets") { dir =>
@@ -798,9 +802,8 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
     assert(typedValue.fieldNames.contains("another[key]"))
     assert(typedValue.fieldNames.contains("field[0]"))
 
-    // Verify we can read the data back
-    val result = spark.read.parquet(dir.getAbsolutePath)
-    assert(result.count() == 100)
+    // Verify the variant values round-trip correctly (catches metadata mis-encoding).
+    checkStringAndSchema(dir, df)
   }
 
   testWithTempDir("special characters in field names - mixed") { dir =>
@@ -821,9 +824,8 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
     assert(typedValue.fieldNames.contains("c[d].e"))
     assert(typedValue.fieldNames.contains("normal_field"))
 
-    // Verify we can read the data back
-    val result = spark.read.parquet(dir.getAbsolutePath)
-    assert(result.count() == 100)
+    // Verify the variant values round-trip correctly (catches metadata mis-encoding).
+    checkStringAndSchema(dir, df)
   }
 
   testWithTempDir("special characters in field names - literal empty brackets") { dir =>
@@ -842,8 +844,8 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
     assert(typedValue.fieldNames.contains("[]"))
     assert(typedValue.fieldNames.contains("normal_field"))
 
-    val result = spark.read.parquet(dir.getAbsolutePath)
-    assert(result.count() == 100)
+    // Verify the variant values round-trip correctly (catches metadata mis-encoding).
+    checkStringAndSchema(dir, df)
   }
 
   testWithTempDir("special characters in field names - literal empty brackets with array") { dir =>
@@ -862,7 +864,7 @@ class VariantInferShreddingSuite extends SharedSparkSession with ParquetTest {
     assert(typedValue.fieldNames.contains("[]"))
     assert(typedValue.fieldNames.contains("arr"))
 
-    val result = spark.read.parquet(dir.getAbsolutePath)
-    assert(result.count() == 100)
+    // Verify the variant values round-trip correctly (catches metadata mis-encoding).
+    checkStringAndSchema(dir, df)
   }
 }
