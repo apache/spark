@@ -169,11 +169,16 @@ class AutoCdcScd1FullRefreshSuite
       s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
     )
 
-    // Run #1: populate both targets at seq=10.
+    // streamA is replaced across runs because t_a is full-refreshed in run #2 (its streaming
+    // checkpoint is reset by full-refresh, so a fresh source is fine and matches the user-visible
+    // semantics). streamB is reused across runs because t_b is NOT full-refreshed -- its
+    // streaming checkpoint must resume against the same MemoryStream instance, otherwise the
+    // seq=5 assertion below could pass for the wrong reason (the source never produced seq=5
+    // in run #2 instead of the aux watermark suppressing it).
     val streamA1 = MemoryStream[(Int, Long)]
-    val streamB1 = MemoryStream[(Int, Long)]
+    val streamB = MemoryStream[(Int, Long)]
     streamA1.addData((1, 10L))
-    streamB1.addData((1, 10L))
+    streamB.addData((1, 10L))
     val ctx1 = new TestGraphRegistrationContext(spark) {
       registerTable("t_a", catalog = Some(catalog), database = Some(namespace))
       registerTable("t_b", catalog = Some(catalog), database = Some(namespace))
@@ -187,7 +192,7 @@ class AutoCdcScd1FullRefreshSuite
       registerFlow(autoCdcFlow(
         name = "flow_b",
         target = "t_b",
-        query = dfFlowFunc(streamB1.toDF().toDF("id", "version")),
+        query = dfFlowFunc(streamB.toDF().toDF("id", "version")),
         keys = Seq("id"),
         sequencing = functions.col("version")
       ))
@@ -196,9 +201,8 @@ class AutoCdcScd1FullRefreshSuite
 
     // Run #2: full refresh ONLY on t_a; t_b's auxiliary state must persist.
     val streamA2 = MemoryStream[(Int, Long)]
-    val streamB2 = MemoryStream[(Int, Long)]
     streamA2.addData((1, 5L))   // would have been suppressed pre-refresh; now wins
-    streamB2.addData((1, 5L))   // must be suppressed (auxiliary table retains seq=10)
+    streamB.addData((1, 5L))    // must be suppressed (auxiliary table retains seq=10)
     val ctx2 = new TestGraphRegistrationContext(spark) {
       registerTable("t_a", catalog = Some(catalog), database = Some(namespace))
       registerTable("t_b", catalog = Some(catalog), database = Some(namespace))
@@ -212,7 +216,7 @@ class AutoCdcScd1FullRefreshSuite
       registerFlow(autoCdcFlow(
         name = "flow_b",
         target = "t_b",
-        query = dfFlowFunc(streamB2.toDF().toDF("id", "version")),
+        query = dfFlowFunc(streamB.toDF().toDF("id", "version")),
         keys = Seq("id"),
         sequencing = functions.col("version")
       ))

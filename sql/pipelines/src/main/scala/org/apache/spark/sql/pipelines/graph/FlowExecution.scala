@@ -316,9 +316,9 @@ class SinkWrite(
 
 object AutoCdcAuxiliaryTable {
   /**
-   * Helper for deriving the auxiliary AutoCDC catalog table identifier from a target table. The
-   * derived name is anchored on [[AutoCdcReservedNames.prefix]] so it is unambiguously
-   * AutoCDC-managed and cannot collide with a user-managed table.
+   * Helper for deriving the auxiliary AutoCDC catalog table identifier from a target table. If a
+   * table exists with a name matching the name derived here, it is assumed to be an AutoCDC
+   * auxiliary table that should be managed by the pipeline.
    */
   def identifier(destination: TableIdentifier): TableIdentifier = TableIdentifier(
     table = s"${AutoCdcReservedNames.prefix}aux_state_${destination.table}",

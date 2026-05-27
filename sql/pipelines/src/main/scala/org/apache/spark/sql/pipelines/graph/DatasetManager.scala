@@ -306,10 +306,7 @@ object DatasetManager extends Logging {
     if (isFullRefresh) {
       // On full refresh, drop the AutoCDC auxiliary state associated with this table (if any) so
       // that stale delete-tracking data and table properties are not carried forward into the new
-      // table generation. We unconditionally issue the DROP for every fully-refreshed target; for
-      // non-AutoCDC tables this is a no-op because [[AutoCdcAuxiliaryTable.identifier]] derives
-      // its name from [[AutoCdcReservedNames.prefix]], which is reserved by AutoCDC and
-      // therefore cannot collide with a user-managed table.
+      // table generation. We unconditionally issue the DROP for every fully-refreshed target.
 
       // Intentionally DROP and not TRUNCATE: the auxiliary table is an internal state store
       // that is not part of the dataflow graph, so it does not participate in regular schema
