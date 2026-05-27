@@ -32,13 +32,15 @@ case class UnqualifiedColumnName private (name: String) {
 }
 
 object UnqualifiedColumnName {
-  def apply(input: String): UnqualifiedColumnName = {
-    val nameParts = CatalystSqlParser.parseMultipartIdentifier(input)
+  def apply(nameParts: Seq[String]): UnqualifiedColumnName = {
     if (nameParts.length != 1) {
-      throw multipartColumnIdentifierError(input, nameParts)
+      throw multipartColumnIdentifierError(nameParts.mkString("."), nameParts)
     }
     new UnqualifiedColumnName(nameParts.head)
   }
+
+  def apply(input: String): UnqualifiedColumnName =
+    apply(CatalystSqlParser.parseMultipartIdentifier(input))
 
   private def multipartColumnIdentifierError(
       columnName: String,
