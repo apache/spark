@@ -21,6 +21,7 @@ import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
@@ -29,8 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRowLevelOperations, TableCatalog}
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsRowLevelOperations, TableCatalog, TableInfo}
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   ChangeArgs,
@@ -38,7 +38,7 @@ import org.apache.spark.sql.pipelines.autocdc.{
   Scd1ForeachBatchHandler
 }
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
-import org.apache.spark.sql.pipelines.util.SparkSessionUtils
+import org.apache.spark.sql.pipelines.util.{PipelinesCatalogUtils, SparkSessionUtils}
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, Trigger}
 import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ThreadUtils
@@ -331,6 +331,33 @@ object AutoCdcAuxiliaryTable {
    * serves.
    */
   val scdTypePropertyKey: String = s"${PipelinesTableProperties.pipelinesPrefix}autocdc.scd_type"
+
+  /**
+   * Table property recording the auxiliary table's AutoCDC key column names as a JSON string
+   * array (e.g. `["id","region"]`). Written once when the auxiliary table is created and is
+   * considered immutable; full-refresh is the only way to change it.
+   */
+  val keyColumnNamesProperty: String =
+    PipelinesTableProperties.pipelinesPrefix + "autoCdc.keyColumnNames"
+
+  /** Serialize key column names to the JSON form stored at [[keyColumnNamesProperty]]. */
+  def serializeKeyColumnNames(names: Seq[String]): String = {
+    import org.json4s.JsonAST.{JArray, JString}
+    import org.json4s.jackson.JsonMethods.compact
+    compact(JArray(names.map(JString(_)).toList))
+  }
+
+  /** Parse a [[keyColumnNamesProperty]] value. `None` if it is not a JSON array of strings. */
+  def parseKeyColumnNames(raw: String): Option[Seq[String]] = {
+    import org.json4s.JsonAST.{JArray, JString}
+    import org.json4s.jackson.JsonMethods.parse
+    scala.util.Try(parse(raw)).toOption.flatMap {
+      case JArray(elems) =>
+        val names = elems.collect { case JString(s) => s }
+        if (names.size == elems.size) Some(names) else None
+      case _ => None
+    }
+  }
 }
 
 /**
@@ -343,6 +370,9 @@ trait AutoCdcMergeWriteBase {
   /** The destination (target) table entity the AutoCDC flow will be writing to. */
   protected def destination: Table
 
+  /** The AutoCDC flow's identifier, used as `flowName` in error messages emitted by this mixin. */
+  protected def identifier: TableIdentifier
+
   /** The AutoCDC flow's [[ChangeArgs]] (keys, sequencing, columnSelection, ...). */
   protected def changeArgs: ChangeArgs
 
@@ -350,28 +380,71 @@ trait AutoCdcMergeWriteBase {
   protected def auxiliaryTableSchema: StructType
 
   /**
-   * Idempotently create the auxiliary table for [[destination]] if it does not already exist
-   * and return its [[TableIdentifier]].
+   * Create the auxiliary table for [[destination]] if it does not already exist and return its
+   * [[TableIdentifier]].
    *
-   * Note that this is `CREATE TABLE IF NOT EXISTS`: when the aux table already exists, its
-   * schema is left untouched and `auxiliaryTableSchema` is ignored. For SCD1, they keys must be
-   * invariant across executions and the CDC metadata will always be present, so this is correct.
+   * When the aux table already exists, its schema and properties are left untouched. For SCD1
+   * the keys must be invariant across executions and the CDC metadata is always present, so
+   * this is correct; drift validation reads the recorded `keyColumnNamesProperty` to enforce
+   * the invariant before this method is called.
    */
   protected def createAuxiliaryTableIfNotExists(spark: SparkSession): TableIdentifier = {
     val auxIdent = AutoCdcAuxiliaryTable.identifier(destination.identifier)
-    // The auxiliary table inherits the target's format so MERGE semantics line up. When the
-    // target's format is unspecified (None), omit the USING clause and fall back to the
-    // session's default source provider.
-    val usingClause = destination.format.map(fmt => s"USING $fmt").getOrElse("")
-    val tblPropertiesClause =
-      s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.scdTypePropertyKey}' = " +
-        s"'${changeArgs.storedAsScdType.label}')"
-    spark.sql(
-      s"""CREATE TABLE IF NOT EXISTS
-         |${auxIdent.quotedString}
-         |(${auxiliaryTableSchema.toDDL}) $usingClause $tblPropertiesClause""".stripMargin
-    )
+    val (catalog, v2Identifier) = PipelinesCatalogUtils.resolveTableCatalog(spark, auxIdent)
+
+    if (!catalog.tableExists(v2Identifier)) {
+      val properties = scala.collection.mutable.Map.empty[String, String]
+
+      // Inherit the target's format so MERGE semantics line up. When unspecified, omit the
+      // provider so the catalog falls back to its default.
+      destination.format.foreach { fmt => properties(TableCatalog.PROP_PROVIDER) = fmt }
+
+      // Record which SCD strategy this auxiliary table serves so downstream readers can
+      // identify it without having to inspect the schema.
+      properties(AutoCdcAuxiliaryTable.scdTypePropertyKey) = changeArgs.storedAsScdType.label
+
+      // Persist the AutoCDC key column names as a JSON list on first creation. The value
+      // is stored verbatim by the catalog.
+      properties(AutoCdcAuxiliaryTable.keyColumnNamesProperty) =
+        AutoCdcAuxiliaryTable.serializeKeyColumnNames(auxiliaryKeyColumnNames)
+
+      // Table creation is not atomic with the table exists check, and [[createTable]] will fail
+      // with TableAlreadyExistsException if some asynchronous process creates the table between
+      // the [[tableExists]] check and [[createTable]]. This is both rare (we don't support
+      // multi-AutoCDC-flow targets so there are no race conditions within a single pipeline) and
+      // acceptable - users can cleanly retry the failed flow when this happens. SQL offers an
+      // atomic CREATE IF NOT EXISTS, but would require special casing of the table properties
+      // in DDL and we would lose compile-time syntax and type safety.
+      catalog.createTable(
+        v2Identifier,
+        new TableInfo.Builder()
+          .withColumns(CatalogV2Util.structTypeToV2Columns(auxiliaryTableSchema))
+          .withProperties(properties.asJava)
+          .build()
+      )
+    }
     auxIdent
+  }
+
+  /**
+   * Returns the resolved AutoCDC key column names as they appear in the auxiliary schema, in
+   * `changeArgs.keys` declaration order.
+   */
+  private def auxiliaryKeyColumnNames: Seq[String] = {
+    val resolver = spark.sessionState.conf.resolver
+    changeArgs.keys.map { key =>
+      auxiliaryTableSchema.fields
+        .find(field => resolver(field.name, key.name))
+        .map(_.name)
+        .getOrElse(
+          // This should never happen at this point, as [[AutoCdcMergeFlow]] should have validated
+          // all changeArgs.keys exist in the deduced aux/target table schemas by now.
+          throw SparkException.internalError(
+            s"AutoCDC key column '${key.name}' is missing from the auxiliary table schema " +
+            s"for target ${destination.identifier.quotedString}."
+          )
+        )
+    }
   }
 
   /**
@@ -380,7 +453,8 @@ trait AutoCdcMergeWriteBase {
    * with rewrite - all operations that the AutoCDC transformation executes.
    */
   protected def requireDestinationSupportsRowLevelOps(): Unit = {
-    val (catalog, v2Identifier) = resolveTableCatalog(spark, destination.identifier)
+    val (catalog, v2Identifier) =
+      PipelinesCatalogUtils.resolveTableCatalog(spark, destination.identifier)
     val destinationTable = catalog.loadTable(v2Identifier)
 
     if (!destinationTable.isInstanceOf[SupportsRowLevelOperations]) {
@@ -397,25 +471,6 @@ trait AutoCdcMergeWriteBase {
         )
       )
     }
-  }
-
-  private def resolveTableCatalog(
-      spark: SparkSession,
-      ident: TableIdentifier): (TableCatalog, Identifier) = {
-    val catalogManager = spark.sessionState.catalogManager
-    val catalogPlugin = ident.catalog
-      .map(catalogManager.catalog)
-      .getOrElse(catalogManager.currentCatalog)
-    val catalog = catalogPlugin match {
-      case t: TableCatalog => t
-      case _ => throw QueryCompilationErrors.missingCatalogTablesAbilityError(catalogPlugin)
-    }
-    val namespace = ident.database.getOrElse(
-      throw SparkException.internalError(
-        s"Cannot resolve table identifier ${ident.quotedString}: namespace is unspecified."
-      )
-    )
-    (catalog, Identifier.of(Array(namespace), ident.table))
   }
 }
 
@@ -473,8 +528,8 @@ class Scd1MergeStreamingWrite(
 
   override protected lazy val auxiliaryTableSchema: StructType =
     // SCD1's auxiliary table is just keys + the CDC metadata struct; no user data columns. Keys
-    // come first, in `changeArgs.keys` declaration order, to anchor the per-key sequence
-    // watermark used to gate out-of-order events.
+    // come first, in `changeArgs.keys` declaration order, to satisfy the keys-first invariant
+    // [[AutoCdcMergeFlow]] relies on for drift detection at graph-resolution time.
     StructType(autoCdcKeyFields :+ cdcMetadataField)
 
   /**
