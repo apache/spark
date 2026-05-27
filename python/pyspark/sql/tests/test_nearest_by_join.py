@@ -220,16 +220,13 @@ class NearestByJoinTestsMixin:
     def test_exact_with_nondeterministic_ranking_accepted(self):
         users, products = self.users, self.products
         # Result rows are nondeterministic; only assert that each left row gets exactly one match.
-        count = (
-            users.nearestByJoin(
-                products,
-                sf.rand(0) + products.pscore,
-                numResults=1,
-                mode="exact",
-                direction="similarity",
-            )
-            .count()
-        )
+        count = users.nearestByJoin(
+            products,
+            sf.rand(0) + products.pscore,
+            numResults=1,
+            mode="exact",
+            direction="similarity",
+        ).count()
         self.assertEqual(count, 3)
 
     def test_streaming_inputs_rejected(self):
