@@ -163,20 +163,14 @@ public abstract class UnsafeWriter {
     increaseCursor(16);
   }
 
-  public void write(int ordinal, TimestampNanosVal input) {
-    writeTimestampNanos(ordinal, input == null, input == null ? 0L : input.epochMicros,
-      input == null ? 0 : input.nanosWithinMicro);
-  }
-
   // 16-byte variable-length payload; same layout as UnsafeRow#setTimestampNanosPayload.
-  private void writeTimestampNanos(
-      int ordinal, boolean isNull, long epochMicros, short nanosWithinMicro) {
+  public void write(int ordinal, TimestampNanosVal input) {
     grow(TimestampNanosRowValues.SIZE_IN_BYTES);
-    if (isNull) {
+    if (input == null) {
       BitSetMethods.set(getBuffer(), startingOffset, ordinal);
     } else {
       TimestampNanosRowValues.writePayload(
-        getBuffer(), 0, (int) cursor(), epochMicros, nanosWithinMicro);
+        getBuffer(), 0, (int) cursor(), input.epochMicros, input.nanosWithinMicro);
     }
     setOffsetAndSize(ordinal, TimestampNanosRowValues.SIZE_IN_BYTES);
     increaseCursor(TimestampNanosRowValues.SIZE_IN_BYTES);

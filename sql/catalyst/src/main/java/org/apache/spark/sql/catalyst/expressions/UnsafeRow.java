@@ -332,8 +332,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   @Override
   public void setTimestampNTZNanos(int ordinal, TimestampNanosVal value) {
-    setTimestampNanosPayload(ordinal, value == null, value == null ? 0L : value.epochMicros,
-      value == null ? 0 : value.nanosWithinMicro);
+    setTimestampNanosPayload(ordinal, value);
   }
 
   /**
@@ -342,26 +341,23 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   @Override
   public void setTimestampLTZNanos(int ordinal, TimestampNanosVal value) {
-    setTimestampNanosPayload(ordinal, value == null, value == null ? 0L : value.epochMicros,
-      value == null ? 0 : value.nanosWithinMicro);
+    setTimestampNanosPayload(ordinal, value);
   }
 
   // 16-byte payload in the variable-length region; see TimestampNanosRowValues.
-  private void setTimestampNanosPayload(
-      int ordinal, boolean isNull, long epochMicros, short nanosWithinMicro) {
+  private void setTimestampNanosPayload(int ordinal, TimestampNanosVal value) {
     assertIndexIsValid(ordinal);
     long cursor = getLong(ordinal) >>> 32;
     assert cursor > 0 : "invalid cursor " + cursor;
-    if (isNull) {
+    long offsetAndSize = (cursor << 32) | TimestampNanosRowValues.SIZE_IN_BYTES;
+    if (value == null) {
       setNullAt(ordinal);
       TimestampNanosRowValues.zeroPayload(baseObject, baseOffset, (int) cursor);
-      Platform.putLong(
-        baseObject, getFieldOffset(ordinal),
-        (cursor << 32) | TimestampNanosRowValues.SIZE_IN_BYTES);
+      Platform.putLong(baseObject, getFieldOffset(ordinal), offsetAndSize);
     } else {
       TimestampNanosRowValues.writePayload(
-        baseObject, baseOffset, (int) cursor, epochMicros, nanosWithinMicro);
-      setLong(ordinal, (cursor << 32) | TimestampNanosRowValues.SIZE_IN_BYTES);
+        baseObject, baseOffset, (int) cursor, value.epochMicros, value.nanosWithinMicro);
+      setLong(ordinal, offsetAndSize);
     }
   }
 
