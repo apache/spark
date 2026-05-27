@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.concurrent.CyclicBarrier
+
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
@@ -340,5 +342,118 @@ class StreamingShuffleOutputTrackerSuite
     val shuffle1Locations = tracker.getAllShuffleWriterTaskLocations(1)
     assert(shuffle1Locations.isDefined)
     assert(shuffle1Locations.get.size === 3)
+  }
+
+  test("get available writer task locations through worker RPC") {
+    val master = newTrackerMaster()
+    val worker = newTrackerWorker()
+
+    val rpcEnv = createRpcEnv("test")
+    val rpcEndpoint = rpcEnv.setupEndpoint(
+      StreamingShuffleOutputTracker.ENDPOINT_NAME,
+      new StreamingShuffleOutputTrackerMasterEndpoint(rpcEnv, master, conf))
+
+    master.trackerEndpoint = rpcEndpoint
+    worker.trackerEndpoint = rpcEndpoint
+
+    val shuffleId = 0
+    val numMaps = 2
+    val location = StreamingShuffleTaskLocation("executor-1", "host-1", 0)
+
+    master.registerShuffle(shuffleId, numMaps = numMaps, numReduces = 2, jobId = 0)
+    worker.registerShuffleWriterTask(shuffleId, 0, location)
+
+    val response = worker.getAvailableShuffleWriterTaskLocations(shuffleId)
+    assert(response.isDefined)
+    assert(response.get.shuffleTaskLocations.size === 1)
+    assert(response.get.numShuffleWriterTasks === numMaps)
+    assert(response.get.shuffleTaskLocations(0L) === location)
+  }
+
+  test("get available writer task locations for shuffle that doesn't exist through worker RPC") {
+    val master = newTrackerMaster()
+    val worker = newTrackerWorker()
+
+    val rpcEnv = createRpcEnv("test")
+    val rpcEndpoint = rpcEnv.setupEndpoint(
+      StreamingShuffleOutputTracker.ENDPOINT_NAME,
+      new StreamingShuffleOutputTrackerMasterEndpoint(rpcEnv, master, conf))
+
+    master.trackerEndpoint = rpcEndpoint
+    worker.trackerEndpoint = rpcEndpoint
+
+    worker.getAvailableShuffleWriterTaskLocations(0) should be(None)
+  }
+
+  test("StreamingShuffleOutputTrackerMaster - re-registering same mapId overwrites location") {
+    val conf = new SparkConf(false)
+    val tracker = newTrackerMaster(conf)
+
+    tracker.registerShuffle(shuffleId = 0, numMaps = 1, numReduces = 1, jobId = 1)
+
+    val location1 = StreamingShuffleTaskLocation("executor1", "host1", 8000)
+    assert(tracker.registerShuffleWriterTask(shuffleId = 0, mapId = 0, location1))
+
+    // Simulate a task retry: same mapId, different location.
+    val location2 = StreamingShuffleTaskLocation("executor2", "host2", 8001)
+    assert(tracker.registerShuffleWriterTask(shuffleId = 0, mapId = 0, location2))
+
+    // The newer registration should overwrite the older one.
+    val allLocations = tracker.getAllShuffleWriterTaskLocations(0)
+    assert(allLocations.isDefined)
+    assert(allLocations.get.size === 1)
+    assert(allLocations.get(0L) === location2)
+  }
+
+  test("StreamingShuffleOutputTrackerMaster - " +
+      "concurrent register/unregister leaves no orphan taskLocations") {
+    val conf = new SparkConf(false)
+      .set(SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS, 4)
+    val tracker = newTrackerMaster(conf)
+
+    val numShuffles = 200
+    val numMappersPerShuffle = 50
+    // Use a CyclicBarrier so all 2*numShuffles threads release simultaneously,
+    // maximizing the chance of hitting the race window between
+    // registerShuffleWriterTask's outer containsKey check and its taskLocations.compute.
+    val barrier = new CyclicBarrier(2 * numShuffles)
+
+    // Pre-register all shuffles so registerShuffleWriterTask passes its outer
+    // containsKey check and exercises the race window with unregisterShuffle.
+    (0 until numShuffles).foreach { shuffleId =>
+      tracker.registerShuffle(shuffleId, numMappersPerShuffle, 2, jobId = 1)
+    }
+
+    // Spawn one thread per shuffle that registers all its mapper tasks, and one
+    // thread per shuffle that unregisters it. Barrier-aligned starts maximize the race.
+    val registerThreads = (0 until numShuffles).map { shuffleId =>
+      new Thread {
+        override def run(): Unit = {
+          barrier.await()
+          (0 until numMappersPerShuffle).foreach { mapId =>
+            tracker.registerShuffleWriterTask(
+              shuffleId,
+              mapId.toLong,
+              StreamingShuffleTaskLocation(s"executor$mapId", s"host$mapId", 8000 + mapId))
+          }
+        }
+      }
+    }
+    val unregisterThreads = (0 until numShuffles).map { shuffleId =>
+      new Thread {
+        override def run(): Unit = {
+          barrier.await()
+          tracker.unregisterShuffle(shuffleId)
+        }
+      }
+    }
+
+    (registerThreads ++ unregisterThreads).foreach(_.start())
+    (registerThreads ++ unregisterThreads).foreach(_.join())
+
+    // Every shuffle was unregistered; taskLocations should contain no orphan entries.
+    assert(tracker.numShufflesWithTaskLocations === 0,
+      s"Found orphan entries in taskLocations after concurrent register/unregister; " +
+        s"size = ${tracker.numShufflesWithTaskLocations}")
   }
 }

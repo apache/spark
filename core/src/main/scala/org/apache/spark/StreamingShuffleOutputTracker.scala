@@ -235,6 +235,10 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
     Option(shuffleInfos.get(shuffleId))
   }
 
+  // for testing purposes -- size of the per-shuffle taskLocations map, used to assert
+  // the absence of orphan entries left behind by a register/unregister race.
+  private[spark] def numShufflesWithTaskLocations: Int = taskLocations.size()
+
   override def unregisterShuffle(shuffleId: Int): Unit = {
     logInfo(log"Unregistering shuffleId ${MDC(LogKeys.SHUFFLE_ID, shuffleId)}")
 
@@ -242,8 +246,21 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
       logWarning(log"Attempting to unregister a shuffle with id ${
         MDC(LogKeys.SHUFFLE_ID, shuffleId)} that hasn't been registered")
     }
-    taskLocations.remove(shuffleId)
+    // Order matters here: remove from shuffleInfos BEFORE taskLocations.
+    //
+    // A concurrent registerShuffleWriterTask installs into taskLocations from inside a
+    // compute() lambda that holds ConcurrentHashMap's per-key bucket lock. Our
+    // taskLocations.remove below acquires the same lock, so the two operations are
+    // strictly serialized for the same shuffleId. The lambda re-reads
+    // shuffleInfos.containsKey, with two possible outcomes:
+    //   - If that read happens after our shuffleInfos.remove, the lambda returns null
+    //     and no entry is installed.
+    //   - If that read happens before our shuffleInfos.remove, the lambda installs the
+    //     entry, but our taskLocations.remove then runs strictly after the lambda
+    //     releases the bucket lock and clears the entry.
+    // Either way, no orphan remains. See registerShuffleWriterTask.
     shuffleInfos.remove(shuffleId)
+    taskLocations.remove(shuffleId)
   }
 
   def post(message: StreamingShuffleTaskLocationTrackerMasterMessage): Unit = {
@@ -306,21 +323,41 @@ private[spark] class StreamingShuffleOutputTrackerMaster(conf: SparkConf)
           MDC(LogKeys.MAP_ID, mapId)} location ${MDC(LogKeys.TASK_LOCATION, location)}")
       return false
     }
+    // Re-check shuffleInfos from inside the compute lambda to make register/unregister
+    // concurrency-safe. The lambda runs under ConcurrentHashMap's per-key bucket lock,
+    // which serializes with unregisterShuffle's taskLocations.remove. Together with
+    // unregisterShuffle's (shuffleInfos.remove, then taskLocations.remove) ordering,
+    // any concurrent unregisterShuffle ends with no orphan entry in taskLocations:
+    //   - If the lambda observes the already-cleared shuffleInfos, it returns null and
+    //     no entry is installed.
+    //   - If the lambda observes shuffleInfos still present, it installs the entry, and
+    //     the matching unregisterShuffle's taskLocations.remove (which had to wait for
+    //     this bucket lock) clears it strictly after.
+    var registered = true
     taskLocations.compute(
       shuffleId,
       (
-          shuffleId: Int,
+          _: Int,
           shuffleTaskLocationMap: ConcurrentHashMap[Long, StreamingShuffleTaskLocation]) => {
-        val newShuffleTaskLocationMap = if (shuffleTaskLocationMap == null) {
-          new ConcurrentHashMap[Long, StreamingShuffleTaskLocation]()
+        if (!shuffleInfos.containsKey(shuffleId)) {
+          registered = false
+          null
         } else {
-          shuffleTaskLocationMap
+          val newShuffleTaskLocationMap = if (shuffleTaskLocationMap == null) {
+            new ConcurrentHashMap[Long, StreamingShuffleTaskLocation]()
+          } else {
+            shuffleTaskLocationMap
+          }
+          newShuffleTaskLocationMap.put(mapId, location)
+          newShuffleTaskLocationMap
         }
-
-        newShuffleTaskLocationMap.put(mapId, location)
-        newShuffleTaskLocationMap
       })
-    true
+    if (!registered) {
+      logWarning(
+        log"Shuffle ${MDC(LogKeys.SHUFFLE_ID, shuffleId)} was unregistered " +
+          log"during registration of writer task ${MDC(LogKeys.MAP_ID, mapId)}")
+    }
+    registered
   }
 
   override def getAllShuffleWriterTaskLocations(
