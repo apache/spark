@@ -150,10 +150,6 @@ object Literal {
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
     case _ if clz == classOf[TimestampNanosVal] => TimestampNTZNanosType()
-    case _ if clz == classOf[org.apache.spark.sql.catalyst.util.TimestampNTZNanos] =>
-      TimestampNTZNanosType()
-    case _ if clz == classOf[org.apache.spark.sql.catalyst.util.TimestampLTZNanos] =>
-      TimestampLTZNanosType()
     case _ if clz == classOf[VariantVal] => VariantType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))

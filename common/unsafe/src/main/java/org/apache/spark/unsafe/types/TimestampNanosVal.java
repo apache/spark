@@ -26,10 +26,7 @@ import java.util.Objects;
 
 /**
  * Physical representation for nanosecond-capable timestamp types ({@code TIMESTAMP_NTZ(p)} and
- * {@code TIMESTAMP_LTZ(p)} with {@code p} in [7, 9]). Analogous to {@link GeometryVal} for
- * GEOMETRY: this class is only a container for the composite value; NTZ vs LTZ semantics live in
- * {@link org.apache.spark.sql.catalyst.util.TimestampNTZNanos} and
- * {@link org.apache.spark.sql.catalyst.util.TimestampLTZNanos}.
+ * {@code TIMESTAMP_LTZ(p)} with {@code p} in [7, 9]).
  *
  * <p>Values are stored as two components:
  * <ul>
