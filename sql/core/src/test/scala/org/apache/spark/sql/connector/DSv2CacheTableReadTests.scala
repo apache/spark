@@ -37,8 +37,11 @@ import org.apache.spark.sql.types.IntegerType
  *
  * Unlike the peer traits [[DSv2TempViewWithStoredPlanTests]] and
  * [[DSv2RepeatedTableAccessTests]], this trait does not include `cachingcat` (caching
- * connector) variants. CACHE TABLE behavior is orthogonal to connector-level caching;
- * cachingcat variants can be added in a follow-up if needed.
+ * connector) variants. When CACHE TABLE is active, Spark's CacheManager pins reads
+ * regardless of the connector, and REFRESH TABLE calls both
+ * [[org.apache.spark.sql.connector.catalog.TableCatalog#invalidateTable]] (clearing
+ * any connector cache) and the CacheManager rebuild, so the observable behavior is the
+ * same with either catalog. cachingcat variants can be added in a follow-up if needed.
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on
