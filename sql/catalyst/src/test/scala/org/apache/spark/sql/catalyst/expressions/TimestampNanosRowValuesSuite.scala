@@ -70,6 +70,17 @@ class TimestampNanosRowValuesSuite extends SparkFunSuite {
     assert(TimestampNanosRowValues.readNanosWithinMicro(buf, BASE, 0) === 999.toShort)
   }
 
+  test("writePayload preserves Long.MinValue and Long.MaxValue epoch micros") {
+    val buf = new Array[Byte](16)
+    TimestampNanosRowValues.writePayload(buf, BASE, 0, Long.MaxValue, 999.toShort)
+    assert(TimestampNanosRowValues.readEpochMicros(buf, BASE, 0) === Long.MaxValue)
+    assert(TimestampNanosRowValues.readNanosWithinMicro(buf, BASE, 0) === 999.toShort)
+
+    TimestampNanosRowValues.writePayload(buf, BASE, 0, Long.MinValue, 0.toShort)
+    assert(TimestampNanosRowValues.readEpochMicros(buf, BASE, 0) === Long.MinValue)
+    assert(TimestampNanosRowValues.readNanosWithinMicro(buf, BASE, 0) === 0.toShort)
+  }
+
   test("writePayload honours the cursor offset") {
     // Two payloads back-to-back; reads at the corresponding cursors must not see each other.
     val buf = new Array[Byte](32)

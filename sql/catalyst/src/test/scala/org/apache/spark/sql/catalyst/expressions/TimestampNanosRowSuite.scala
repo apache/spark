@@ -178,4 +178,25 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(ntzValue, TimestampNTZNanosType(9)), ntzValue)
     checkEvaluation(Literal.create(ltzValue, TimestampLTZNanosType(7)), ltzValue)
   }
+
+  test("null Literal of nanos timestamp type") {
+    checkEvaluation(Literal.create(null, TimestampNTZNanosType(9)), null)
+    checkEvaluation(Literal.create(null, TimestampLTZNanosType(7)), null)
+  }
+
+  testBothCodegenAndInterpreted("UnsafeRow handles extreme epoch micros for nanos") {
+    val fieldTypes: Array[DataType] = Array(TimestampNTZNanosType(9))
+    val converter = UnsafeProjection.create(fieldTypes)
+    val input = new SpecificInternalRow(fieldTypes.toImmutableArraySeq)
+
+    val maxVal = TimestampNanosVal.fromParts(Long.MaxValue, 999.toShort)
+    input.update(0, maxVal)
+    val maxRow = converter.apply(input)
+    assert(maxRow.getTimestampNTZNanos(0) === maxVal)
+
+    val minVal = TimestampNanosVal.fromParts(Long.MinValue, 0.toShort)
+    input.update(0, minVal)
+    val minRow = converter.apply(input)
+    assert(minRow.getTimestampNTZNanos(0) === minVal)
+  }
 }
