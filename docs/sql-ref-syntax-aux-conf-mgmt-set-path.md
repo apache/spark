@@ -139,7 +139,7 @@ path_element
 | Condition | Cause |
 | :-------- | :---- |
 | `UNSUPPORTED_FEATURE.SET_PATH_WHEN_DISABLED` | `SET PATH` was issued while `spark.sql.path.enabled` is `false`. |
-| `INVALID_SQL_PATH_SCHEMA_REFERENCE` | A `schema_name` was given with fewer than two parts. |
+| `INVALID_SQL_PATH_SCHEMA_REFERENCE` | An entry with fewer than two parts was given. |
 | `DUPLICATE_SQL_PATH_ENTRY` | Two entries collapsed to the same concrete namespace after expansion. |
 
 ### Examples
