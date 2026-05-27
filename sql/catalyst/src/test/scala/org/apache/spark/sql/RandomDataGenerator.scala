@@ -28,6 +28,7 @@ import scala.util.{Random, Try}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -283,6 +284,30 @@ object RandomDataGenerator {
             DateTimeUtils.microsToLocalDateTime(uniformMicrosRand(rand))
           },
           specialTs.map { s => LocalDateTime.parse(s.replace(" ", "T")) }
+        )
+      case _: TimestampNTZNanosType =>
+        randomNumeric[LocalDateTime](
+          rand,
+          (rand: Random) => {
+            // Uniform micros for the high-order Long + an independent [0, 999] for the
+            // sub-microsecond nanos. plusNanos is safe here because microsToLocalDateTime
+            // returns a value whose nano-of-second is a multiple of 1000, so adding [0, 999]
+            // never crosses a microsecond boundary.
+            DateTimeUtils.microsToLocalDateTime(uniformMicrosRand(rand))
+              .plusNanos(rand.nextInt(NANOS_PER_MICROS.toInt).toLong)
+          },
+          TimestampNanosTestUtils.specialNanosTs
+            .map(TimestampNanosTestUtils.parseSpecialNanosNTZ)
+        )
+      case _: TimestampLTZNanosType =>
+        randomNumeric[Instant](
+          rand,
+          (rand: Random) => {
+            DateTimeUtils.microsToInstant(uniformMicrosRand(rand))
+              .plusNanos(rand.nextInt(NANOS_PER_MICROS.toInt).toLong)
+          },
+          TimestampNanosTestUtils.specialNanosTs
+            .map(s => TimestampNanosTestUtils.parseSpecialNanosLTZ(s, ZoneId.systemDefault()))
         )
       case _: TimeType =>
         val specialTimes = Seq(
