@@ -528,8 +528,8 @@ class Scd1MergeStreamingWrite(
 
   override protected lazy val auxiliaryTableSchema: StructType =
     // SCD1's auxiliary table is just keys + the CDC metadata struct; no user data columns. Keys
-    // come first, in `changeArgs.keys` declaration order, to satisfy the keys-first invariant
-    // [[AutoCdcMergeFlow]] relies on for drift detection at graph-resolution time.
+    // come first, in `changeArgs.keys` declaration order, to anchor the per-key sequence
+    // watermark used to gate out-of-order events.
     StructType(autoCdcKeyFields :+ cdcMetadataField)
 
   /**
