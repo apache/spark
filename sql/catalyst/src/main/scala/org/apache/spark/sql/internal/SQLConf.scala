@@ -3445,6 +3445,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val STREAMING_V2_PRUNE_COLUMNS_ENABLED =
+    buildConf("spark.sql.streaming.v2.pruneColumns.enabled")
+      .internal()
+      .doc("When true, pruneColumns is called on V2 streaming scan builders that implement " +
+        "SupportsPushDownRequiredColumns. This communicates metadata columns to the scan " +
+        "builder so they appear in readSchema(). Disable if a connector's pruneColumns " +
+        "implementation is not compatible with being called in the streaming path.")
+      .booleanConf
+      .createWithDefault(true)
+
   val STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED =
     buildConf("spark.sql.streaming.triggerAvailableNowWrapper.enabled")
       .internal()

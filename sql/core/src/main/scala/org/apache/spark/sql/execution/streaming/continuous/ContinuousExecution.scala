@@ -37,6 +37,7 @@ import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.streaming._
@@ -96,10 +97,12 @@ class ContinuousExecution(
           // Passes the full output schema (not a pruned subset) so that connectors
           // implementing SupportsMetadataColumns can include metadata columns in readSchema().
           val scanBuilder = table.newScanBuilder(options)
-          scanBuilder match {
-            case r: SupportsPushDownRequiredColumns =>
-              r.pruneColumns(output.toStructType)
-            case _ =>
+          if (sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_V2_PRUNE_COLUMNS_ENABLED)) {
+            scanBuilder match {
+              case r: SupportsPushDownRequiredColumns =>
+                r.pruneColumns(output.toStructType)
+              case _ =>
+            }
           }
           val scan = scanBuilder.build()
           val stream = scan.toContinuousStream(metadataPath)
