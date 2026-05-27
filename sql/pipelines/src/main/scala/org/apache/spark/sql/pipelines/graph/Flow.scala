@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.connector.catalog.CatalogV2Util
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table => CatalogTable}
 import org.apache.spark.sql.pipelines.AnalysisWarning
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
@@ -411,8 +411,8 @@ class AutoCdcMergeFlow(
   private def validateNoAutoCdcKeyDrift(
       existingAuxTable: org.apache.spark.sql.connector.catalog.Table,
       auxIdent: TableIdentifier): Unit = {
-    val existingAuxSchema = CatalogV2Util.v2ColumnsToStructType(existingAuxTable.columns())
     val resolver = spark.sessionState.conf.resolver
+    val existingAuxSchema = CatalogV2Util.v2ColumnsToStructType(existingAuxTable.columns())
 
     val expectedKeyFields: Seq[StructField] = changeArgs.keys.map { key =>
       userSelectedSchema.fields
@@ -426,8 +426,6 @@ class AutoCdcMergeFlow(
           )
         )
     }
-    val expectedKeySchema = StructType(expectedKeyFields)
-
     val recordedKeyNames = parseRecordedKeyColumnNames(existingAuxTable, auxIdent)
     val recordedKeyFields: Seq[StructField] = recordedKeyNames.map { name =>
       existingAuxSchema.fields
@@ -450,7 +448,7 @@ class AutoCdcMergeFlow(
 
     val drifted =
       // Arity drift (added or dropped keys).
-      recordedKeyFields.length != expectedKeySchema.length ||
+      recordedKeyFields.length != expectedKeyFields.length ||
       // Name or dataType drift: every expected key must have a same-name (resolver-aware)
       // recorded counterpart with a matching dataType. An expected name that is absent from
       // the recorded set indicates the key set has changed; a same-name recorded counterpart
@@ -468,7 +466,7 @@ class AutoCdcMergeFlow(
         messageParameters = Map(
           "flowName" -> flow.identifier.unquotedString,
           "auxTableName" -> auxIdent.unquotedString,
-          "expectedKeySchema" -> expectedKeySchema.toDDL,
+          "expectedKeySchema" -> StructType(expectedKeyFields).toDDL,
           "recordedKeySchema" -> StructType(recordedKeyFields).toDDL
         )
       )
@@ -480,7 +478,7 @@ class AutoCdcMergeFlow(
    * and parse it into the ordered list of recorded AutoCDC key column names.
    */
   private def parseRecordedKeyColumnNames(
-      existingAuxTable: org.apache.spark.sql.connector.catalog.Table,
+      existingAuxTable: CatalogTable,
       auxIdent: TableIdentifier): Seq[String] = {
     val rawValue = Option(
       existingAuxTable.properties().get(AutoCdcAuxiliaryTable.keyColumnNamesProperty)

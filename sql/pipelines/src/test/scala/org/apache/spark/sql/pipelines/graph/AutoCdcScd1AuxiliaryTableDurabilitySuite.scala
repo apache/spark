@@ -314,12 +314,12 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val rows = spark.sql(s"SHOW TBLPROPERTIES $auxName").collect()
     val prop = rows
       .find(_.getString(0) == AutoCdcAuxiliaryTable.keyColumnNamesProperty)
-      .getOrElse(throw new AssertionError(
+      .getOrElse(fail(
         s"auxiliary table $auxName is missing the " +
         s"${AutoCdcAuxiliaryTable.keyColumnNamesProperty} property; got: ${rows.toSeq}"
       ))
     AutoCdcAuxiliaryTable.parseKeyColumnNames(prop.getString(1))
-      .getOrElse(throw new AssertionError(
+      .getOrElse(fail(
         s"auxiliary table $auxName has a malformed " +
         s"${AutoCdcAuxiliaryTable.keyColumnNamesProperty} property: '${prop.getString(1)}'"
       ))

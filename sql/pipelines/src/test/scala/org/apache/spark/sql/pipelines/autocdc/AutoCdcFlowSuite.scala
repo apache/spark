@@ -21,12 +21,13 @@ import java.util.Locale
 
 import org.scalatest.BeforeAndAfterEach
 
+import scala.jdk.CollectionConverters._
 import scala.util.Success
 
 import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.connector.catalog.SharedTablesInMemoryRowLevelOperationTableCatalog
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SharedTablesInMemoryRowLevelOperationTableCatalog, TableInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.{
   AutoCdcAuxiliaryTable,
@@ -38,6 +39,7 @@ import org.apache.spark.sql.pipelines.graph.{
   QueryContext,
   QueryOrigin
 }
+import org.apache.spark.sql.pipelines.util.PipelinesCatalogUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructField, StructType}
 
@@ -700,44 +702,27 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
   // AutoCdcMergeFlow KEY_SCHEMA_DRIFT validation tests
   // ===========================================================================================
 
-  /** DDL fragment for the AutoCDC metadata column appended to every SCD1 auxiliary table. */
-  private val cdcMetadataDdl: String = {
-    val col = Scd1BatchProcessor.cdcMetadataColName
-    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
-    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
-    s"$col STRUCT<$del:BIGINT,$ups:BIGINT> NOT NULL"
-  }
-
   /** Fully-qualified destination identifier under the test V2 catalog/namespace. */
   private def driftTargetIdent(name: String): TableIdentifier =
     TableIdentifier(name, Some(driftTestNamespace), Some(driftTestCatalog))
 
-  /**
-   * Pre-create the auxiliary table for a drift test. `auxSchemaDdl` is the full key portion of
-   * the aux schema in the order the test wants those columns persisted (e.g. `"id INT NOT
-   * NULL"`); the CDC metadata column is appended automatically. `keyColumnNamesProperty`
-   * controls the [[AutoCdcAuxiliaryTable.keyColumnNamesProperty]] value:
-   *   - `Some(jsonArrayString)` writes the property verbatim. Pass a JSON array of strings
-   *     (e.g. `"""["id","region"]"""`) for healthy tables, or any other shape to simulate a
-   *     malformed property.
-   *   - `None` omits the table property entirely to simulate a corrupt aux table.
-   */
   private def createAuxTableForDriftTest(
       targetName: String,
-      auxSchemaDdl: String,
+      auxSchemaFields: Seq[StructField],
       keyColumnNamesProperty: Option[String]): TableIdentifier = {
     val auxIdent = AutoCdcAuxiliaryTable.identifier(driftTargetIdent(targetName))
-    val tblPropsClause = keyColumnNamesProperty match {
-      case Some(value) =>
-        // The raw JSON contains double-quotes; SQL string-literal escape is doubled single
-        // quotes. We use a backtick-quoted property key and a single-quoted string value with
-        // each embedded `'` escaped to `''` (none today, since the JSON only uses `"`).
-        s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = " +
-        s"'${value.replace("'", "''")}')"
-      case None => ""
+    val (catalog, v2Identifier) = PipelinesCatalogUtils.resolveTableCatalog(spark, auxIdent)
+    val schema = StructType(auxSchemaFields)
+    val properties = scala.collection.mutable.Map.empty[String, String]
+    keyColumnNamesProperty.foreach { value =>
+      properties(AutoCdcAuxiliaryTable.keyColumnNamesProperty) = value
     }
-    spark.sql(
-      s"CREATE TABLE ${auxIdent.unquotedString} ($auxSchemaDdl, $cdcMetadataDdl) $tblPropsClause"
+    catalog.createTable(
+      v2Identifier,
+      new TableInfo.Builder()
+        .withColumns(CatalogV2Util.structTypeToV2Columns(schema))
+        .withProperties(properties.asJava)
+        .build()
     )
     auxIdent
   }
@@ -777,8 +762,8 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     val targetName = "target"
     val auxIdent = createAuxTableForDriftTest(
       targetName = targetName,
-      auxSchemaDdl = "id INT NOT NULL",
-      keyColumnNamesProperty = Some("""["id"]""")
+      auxSchemaFields = Seq(StructField("id", IntegerType, nullable = false)),
+      keyColumnNamesProperty = Some("[\"id\"]")
     )
     val sourceDf = driftSourceDf(
       StructField("region", StringType),
@@ -811,8 +796,11 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     val targetName = "target"
     val auxIdent = createAuxTableForDriftTest(
       targetName = targetName,
-      auxSchemaDdl = "region STRING NOT NULL, id INT NOT NULL",
-      keyColumnNamesProperty = Some("""["region","id"]""")
+      auxSchemaFields = Seq(
+        StructField("region", StringType, nullable = false),
+        StructField("id", IntegerType, nullable = false)
+      ),
+      keyColumnNamesProperty = Some("[\"region\",\"id\"]")
     )
     val sourceDf = driftSourceDf(
       StructField("region", StringType, nullable = false),
@@ -846,8 +834,11 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     val targetName = "target"
     val auxIdent = createAuxTableForDriftTest(
       targetName = targetName,
-      auxSchemaDdl = "id INT NOT NULL, region STRING",
-      keyColumnNamesProperty = Some("""["id","region"]""")
+      auxSchemaFields = Seq(
+        StructField("id", IntegerType, nullable = false),
+        StructField("region", StringType)
+      ),
+      keyColumnNamesProperty = Some("[\"id\",\"region\"]")
     )
     val sourceDf = driftSourceDf(
       StructField("id", IntegerType, nullable = false),
@@ -880,8 +871,8 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     val targetName = "target"
     val auxIdent = createAuxTableForDriftTest(
       targetName = targetName,
-      auxSchemaDdl = "id INT NOT NULL",
-      keyColumnNamesProperty = Some("""["id"]""")
+      auxSchemaFields = Seq(StructField("id", IntegerType, nullable = false)),
+      keyColumnNamesProperty = Some("[\"id\"]")
     )
     val sourceDf = driftSourceDf(
       StructField("id", LongType, nullable = false)
@@ -915,8 +906,11 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     val targetName = "target"
     createAuxTableForDriftTest(
       targetName = targetName,
-      auxSchemaDdl = "a INT NOT NULL, b STRING NOT NULL",
-      keyColumnNamesProperty = Some("""["a","b"]""")
+      auxSchemaFields = Seq(
+        StructField("a", IntegerType, nullable = false),
+        StructField("b", StringType, nullable = false)
+      ),
+      keyColumnNamesProperty = Some("[\"a\",\"b\"]")
     )
     val sourceDf = driftSourceDf(
       StructField("a", IntegerType, nullable = false),
@@ -930,6 +924,25 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     )
   }
 
+  test("AutoCdcMergeFlow allows backtick-quoted user-supplied keys equivalent to bare-quoted " +
+    "names recorded in the auxiliary table") {
+    // Backticks are a SQL-parse syntactic device, not part of the identifier itself. A user
+    // adding or removing backticks around the same logical column must NOT be detected as drift.
+    val targetName = "target"
+    createAuxTableForDriftTest(
+      targetName = targetName,
+      auxSchemaFields = Seq(StructField("id", IntegerType, nullable = false)),
+      keyColumnNamesProperty = Some("[\"id\"]")
+    )
+    val sourceDf = driftSourceDf(StructField("id", IntegerType, nullable = false))
+
+    newAutoCdcMergeFlowAt(
+      destination = driftTargetIdent(targetName),
+      sourceDf = sourceDf,
+      keys = Seq(UnqualifiedColumnName("`id`"))
+    )
+  }
+
   test("AutoCdcMergeFlow surfaces AUXILIARY_TABLE_PROPERTY_MISSING when the auxiliary table is " +
     "missing the keyColumnNames property") {
     // Pre-create an aux table without the `keyColumnNames` property to simulate corrupt
@@ -938,7 +951,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     val targetName = "target"
     val auxIdent = createAuxTableForDriftTest(
       targetName = targetName,
-      auxSchemaDdl = "id INT NOT NULL",
+      auxSchemaFields = Seq(StructField("id", IntegerType, nullable = false)),
       keyColumnNamesProperty = None
     )
     val sourceDf = driftSourceDf(StructField("id", IntegerType, nullable = false))
@@ -969,7 +982,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     val malformedValue = "not-a-json-array"
     val auxIdent = createAuxTableForDriftTest(
       targetName = targetName,
-      auxSchemaDdl = "id INT NOT NULL",
+      auxSchemaFields = Seq(StructField("id", IntegerType, nullable = false)),
       keyColumnNamesProperty = Some(malformedValue)
     )
     val sourceDf = driftSourceDf(StructField("id", IntegerType, nullable = false))
@@ -1002,8 +1015,8 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
     val targetName = "target"
     val auxIdent = createAuxTableForDriftTest(
       targetName = targetName,
-      auxSchemaDdl = "id INT NOT NULL",
-      keyColumnNamesProperty = Some("""["region"]""")
+      auxSchemaFields = Seq(StructField("id", IntegerType, nullable = false)),
+      keyColumnNamesProperty = Some("[\"region\"]")
     )
     val sourceDf = driftSourceDf(StructField("region", StringType, nullable = false))
 
@@ -1023,30 +1036,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession with BeforeAndA
         "keyColumnName" -> "region",
         "propertyName" -> AutoCdcAuxiliaryTable.keyColumnNamesProperty
       )
-    )
-  }
-
-  test("AutoCdcMergeFlow validates drift by name lookup, not by aux schema position") {
-    // Future-proofing: the aux table layout is allowed to interleave non-key columns or place
-    // keys after auxiliary-only columns (e.g. a hypothetical SCD2 aux schema with current/
-    // history flags up front). Today's SCD1 layout is keys-first, but the validator must still
-    // locate recorded keys *by name*, not by position. This test pre-creates an aux table whose
-    // schema places the CDC metadata column ahead of the key column and confirms drift
-    // validation still passes when the user-declared key matches the recorded key by name.
-    val targetName = "target"
-    val auxIdent = AutoCdcAuxiliaryTable.identifier(driftTargetIdent(targetName))
-    spark.sql(
-      s"CREATE TABLE ${auxIdent.unquotedString} ($cdcMetadataDdl, id INT NOT NULL) " +
-      s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '[\"id\"]')"
-    )
-    val sourceDf = driftSourceDf(StructField("id", IntegerType, nullable = false))
-
-    // Should NOT throw -- the recorded key name `id` is found in the aux schema regardless of
-    // its position, and its dataType matches the flow's expected key dataType.
-    newAutoCdcMergeFlowAt(
-      destination = driftTargetIdent(targetName),
-      sourceDf = sourceDf,
-      keys = Seq(UnqualifiedColumnName("id"))
     )
   }
 }
