@@ -91,10 +91,22 @@ def _bin_op(
     else:
         other_expr = other._expr  # type: ignore[assignment]
 
+    # For comparison ops, replace NULL results with boolean fillers to match
+    # pandas-on-Spark semantics on the client side. See SPARK-43877.
+    compare_ops = {"<", "<=", ">", ">=", "==", "!="}
+
     if not reverse:
-        return Column(UnresolvedFunction(name, [self._expr, other_expr]))  # type: ignore[list-item]
+        base_expr = UnresolvedFunction(name, [self._expr, other_expr])
     else:
-        return Column(UnresolvedFunction(name, [other_expr, self._expr]))  # type: ignore[list-item]
+        base_expr = UnresolvedFunction(name, [other_expr, self._expr])
+
+    if name in compare_ops:
+        # If comparison yields NULL, fill with False for most ops, True for "!="
+        filler = True if name == "!=" else False
+        isnull_expr = UnresolvedFunction("isnull", [base_expr])
+        return Column(CaseWhen(branches=[(isnull_expr, LiteralExpression._from_value(filler))], else_value=base_expr))  # type: ignore[list-item]
+
+    return Column(base_expr)  # type: ignore[list-item]
 
 
 def _unary_op(name: str, self: ParentColumn) -> ParentColumn:

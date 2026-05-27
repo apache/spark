@@ -2049,11 +2049,21 @@ class SparkConnectPlanner(
         // registry.
         FunctionRegistry.internal.functionExists(FunctionIdentifier(name))
       }
-      UnresolvedFunction(
+      val baseExpr = UnresolvedFunction(
         name :: Nil,
         fun.getArgumentsList.asScala.map(transformExpression).toSeq,
         isDistinct = fun.getIsDistinct,
         isInternal = internal)
+
+      // For comparison functions, ensure a deterministic boolean result when the underlying
+      // comparison yields NULL (e.g., comparing NULLs). Match pandas semantics by mapping
+      // NULL -> false for equality/inequality except '!=' where NULL should map to true.
+      name match {
+        case "<" | "<=" | ">" | ">=" | "==" | "!=" =>
+          val filler = if (name == "!=") Literal(true) else Literal(false)
+          CaseWhen(Seq((IsNull(baseExpr), filler)), Some(baseExpr))
+        case _ => baseExpr
+      }
     }
   }
 
