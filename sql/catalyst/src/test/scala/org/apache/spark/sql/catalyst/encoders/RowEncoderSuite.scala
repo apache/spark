@@ -381,6 +381,47 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(readback.get(0) === localDateTime)
   }
 
+  test("SPARK-57033: encoding/decoding TimestampNTZNanosType to/from java.time.LocalDateTime") {
+    val localDateTime = java.time.LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+      val schema = new StructType().add("t", TimestampNTZNanosType(p))
+      val encoder = ExpressionEncoder(schema).resolveAndBind()
+      val row = toRow(encoder, Row(localDateTime))
+      assert(row.getTimestampNTZNanos(0) ===
+        DateTimeUtils.localDateTimeToTimestampNanos(localDateTime))
+      val readback = fromRow(encoder, row)
+      assert(readback.get(0) === localDateTime)
+    }
+  }
+
+  test("SPARK-57033: encoding/decoding TimestampLTZNanosType to/from java.time.Instant") {
+    val instant = java.time.Instant.parse("2019-02-26T16:56:00.123456789Z")
+    for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
+      val schema = new StructType().add("t", TimestampLTZNanosType(p))
+      val encoder = ExpressionEncoder(schema).resolveAndBind()
+      val row = toRow(encoder, Row(instant))
+      assert(row.getTimestampLTZNanos(0) ===
+        DateTimeUtils.instantToTimestampNanos(instant))
+      val readback = fromRow(encoder, row)
+      assert(readback.get(0) === instant)
+    }
+  }
+
+  test("SPARK-57033: encoding/decoding TimestampLTZNanosType ignores java8 API flag") {
+    val instant = java.time.Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val schema = new StructType().add("t", TimestampLTZNanosType())
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> flag) {
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(instant))
+        assert(row.getTimestampLTZNanos(0) ===
+          DateTimeUtils.instantToTimestampNanos(instant))
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === instant)
+      }
+    }
+  }
+
   test("encoding/decoding DateType to/from java.time.LocalDate") {
     withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
       val schema = new StructType().add("d", DateType)

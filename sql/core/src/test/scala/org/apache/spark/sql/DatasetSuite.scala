@@ -2631,6 +2631,32 @@ class DatasetSuite extends SharedSparkSession
     assert(Seq(localDateTime).toDS().head() === localDateTime)
   }
 
+  test("SPARK-57033: Dataset[Row] roundtrip preserves nanosecond precision") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val ldt = java.time.LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+      val ldt2 = java.time.LocalDateTime.parse("9999-12-31T23:59:59.999999999")
+      val instant = java.time.Instant.parse("2019-02-26T16:56:00.987654321Z")
+      val instant2 = java.time.Instant.parse("9999-12-31T23:59:59.999999999Z")
+      val schema = StructType(
+        StructField("ntz", TimestampNTZNanosType(9), nullable = true) ::
+          StructField("ltz", TimestampLTZNanosType(9), nullable = true) :: Nil)
+      val rows = java.util.Arrays.asList(
+        Row(ldt, instant),
+        Row(ldt2, instant2),
+        Row(null, null))
+      val df = spark.createDataFrame(rows, schema)
+      assert(df.schema === schema)
+      val collected = df.collect()
+      assert(collected.length === 3)
+      assert(collected(0).get(0) === ldt)
+      assert(collected(0).get(1) === instant)
+      assert(collected(1).get(0) === ldt2)
+      assert(collected(1).get(1) === instant2)
+      assert(collected(2).isNullAt(0))
+      assert(collected(2).isNullAt(1))
+    }
+  }
+
   test("SPARK-34605: implicit encoder for java.time.Duration") {
     val duration = java.time.Duration.ofMinutes(10)
     assert(spark.range(1).map { _ => duration }.head() === duration)

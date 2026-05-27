@@ -36,7 +36,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
@@ -1849,6 +1849,66 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // Extreme ts: instantToMicros overflow on the converted bucket boundary.
     intercept[ArithmeticException] {
       timeBucketYMInterval(1, Long.MinValue, 0L, utc)
+    }
+  }
+
+  test("SPARK-57033: java.time.LocalDateTime <-> TimestampNanosVal roundtrip") {
+    val cases = Seq(
+      LocalDateTime.parse("0001-01-01T00:00:00"),
+      LocalDateTime.parse("1582-10-02T01:02:03.04"),
+      LocalDateTime.parse("1582-12-31T23:59:59.999999999"),
+      LocalDateTime.parse("1969-12-31T23:59:59.999999999"),
+      LocalDateTime.parse("1970-01-01T00:00:00"),
+      LocalDateTime.parse("1970-01-01T00:00:00.000000001"),
+      LocalDateTime.parse("1970-01-01T00:00:00.123456789"),
+      LocalDateTime.parse("2019-02-26T16:56:00.123456789"),
+      LocalDateTime.parse("9999-12-31T23:59:59.999999999"))
+    for (ldt <- cases) {
+      val v = localDateTimeToTimestampNanos(ldt)
+      assert(v.nanosWithinMicro >= 0 && v.nanosWithinMicro <= 999,
+        s"nanosWithinMicro out of range for $ldt: $v")
+      assert(v.nanosWithinMicro === (ldt.getNano % 1000).toShort)
+      assert(v.epochMicros === DateTimeUtils.localDateTimeToMicros(ldt))
+      assert(timestampNanosToLocalDateTime(v) === ldt)
+    }
+  }
+
+  test("SPARK-57033: java.time.Instant <-> TimestampNanosVal roundtrip") {
+    val cases = Seq(
+      Instant.EPOCH,
+      Instant.parse("0001-01-01T00:00:00Z"),
+      Instant.parse("1582-10-02T01:02:03.04Z"),
+      Instant.parse("1582-12-31T23:59:59.999999999Z"),
+      Instant.parse("1969-12-31T23:59:59.999999999Z"),
+      Instant.parse("1970-01-01T00:00:00.000000001Z"),
+      Instant.parse("2019-02-26T16:56:00.123456789Z"),
+      Instant.parse("9999-12-31T23:59:59.999999999Z"))
+    for (i <- cases) {
+      val v = instantToTimestampNanos(i)
+      assert(v.nanosWithinMicro >= 0 && v.nanosWithinMicro <= 999,
+        s"nanosWithinMicro out of range for $i: $v")
+      assert(v.nanosWithinMicro === (i.getNano % 1000).toShort)
+      assert(v.epochMicros === instantToMicros(i))
+      assert(timestampNanosToInstant(v) === i)
+    }
+  }
+
+  test("SPARK-57033: TimestampNanosVal random roundtrip") {
+    val rnd = new scala.util.Random(0)
+    // Random instants across the valid range with every possible sub-micro digit.
+    val min = Instant.parse("0001-01-01T00:00:00Z").getEpochSecond
+    val max = Instant.parse("9999-12-31T23:59:59.999999999Z").getEpochSecond
+    for (_ <- 0 until 200) {
+      val secs = min + math.abs(rnd.nextLong()) % (max - min + 1)
+      val nano = rnd.nextInt(1_000_000_000)
+      val i = Instant.ofEpochSecond(secs, nano.toLong)
+      val v = instantToTimestampNanos(i)
+      assert(timestampNanosToInstant(v) === i)
+      val ldt = LocalDateTime.ofInstant(i, ZoneOffset.UTC)
+      val v2 = localDateTimeToTimestampNanos(ldt)
+      assert(timestampNanosToLocalDateTime(v2) === ldt)
+      // Internal layout matches direct decomposition.
+      assert(v === TimestampNanosVal.fromParts(instantToMicros(i), (nano % 1000).toShort))
     }
   }
 }
