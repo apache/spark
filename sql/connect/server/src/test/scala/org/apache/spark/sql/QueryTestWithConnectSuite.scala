@@ -17,27 +17,15 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.test.connect.{QueryTest => ConnectQueryTest, SharedSparkSession => ConnectSharedSparkSession}
+import org.apache.spark.sql.test.connect.{SharedSparkSession => ConnectSharedSparkSession}
 
 /**
  * Demonstrator: runs [[QueryTestSuite]] tests through a Connect session.
  *
- * This suite validates that the lifted [[QueryTestBase]] infrastructure works end-to-end with a
- * Connect-providing session trait.
+ * This validates the `FooSuite with connect.SharedSparkSession` pattern: the existing
+ * [[QueryTestSuite]] tests are inherited unchanged, but execute against a Connect
+ * [[org.apache.spark.sql.connect.SparkSession]] instead of a classic one.
  */
 class QueryTestWithConnectSuite
-  extends ConnectQueryTest
-    with ConnectSharedSparkSession {
-
-  test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
-    intercept[org.scalatest.exceptions.TestFailedException] {
-      checkAnswer(sql("SELECT 1"), Row(2) :: Nil)
-    }
-  }
-
-  test("SPARK-51349: null string and true null are distinguished") {
-    checkAnswer(sql("select case when id == 0 then struct('null') else struct(null) end s " +
-      "from range(2)"),
-      Seq(Row(Row(null)), Row(Row("null"))))
-  }
-}
+  extends QueryTestSuite
+    with ConnectSharedSparkSession

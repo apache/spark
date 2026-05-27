@@ -19,6 +19,11 @@ package org.apache.spark.sql.test.connect
 
 import java.util.UUID
 
+import scala.concurrent.duration._
+
+import org.scalatest.concurrent.Eventually
+
+import org.apache.spark.DebugFilesystem
 import org.apache.spark.sql.{classic => classicApi, connect => connectApi}
 import org.apache.spark.sql.connect.client.SparkConnectClient
 import org.apache.spark.sql.connect.common.config.ConnectCommon
@@ -33,11 +38,14 @@ import org.apache.spark.sql.test.{SharedSparkSession => BaseSharedSparkSession}
  * [[classicApi.SparkSession SparkSession]] and SparkContext), then layers a Connect client
  * session on top by starting the gRPC service in-process.
  *
- * Use this trait to exercise tests through the Connect path.
+ * Mix in this trait to exercise existing sql/core test suites through the Connect path:
+ * {{{
+ *   class FooWithConnectSuite extends FooSuite with connect.SharedSparkSession
+ * }}}
  */
 trait SharedSparkSession
   extends BaseSharedSparkSession
-    with SparkSessionProvider {
+    with QueryTest {
 
   private val serverPort: Int =
     ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
@@ -76,6 +84,16 @@ trait SharedSparkSession
       SparkConnectService.stop()
     } finally {
       super.afterAll()
+    }
+  }
+
+  // The base SharedSparkSessionBase.afterEach calls spark.sharedState which is not supported
+  // on Connect. Override to use the classic session for cleanup.
+  protected override def afterEach(): Unit = {
+    // super.afterEach() from BeforeAndAfterEach (skipping SharedSparkSessionBase)
+    classicSpark.sharedState.cacheManager.clearCache()
+    Eventually.eventually(Eventually.timeout(10.seconds), Eventually.interval(2.seconds)) {
+      DebugFilesystem.assertNoOpenStreams()
     }
   }
 }
