@@ -121,7 +121,9 @@ Each annotation contains the test class, test name, and failure message.
 
 ## Pull Request Workflow
 
-PR title format is `[SPARK-xxxx][COMPONENT] Title`. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
+PR title format is `[SPARK-XXXXX][COMPONENT] Title`. Use the canonical PR-title tag from the `COMPONENTS` table in `dev/merge_spark_pr.py` — not the JIRA component name verbatim, and not an alias. Many tags are just the last word of the JIRA name uppercased (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `SQL` → `[SQL]`), but several are not: `PySpark` → `[PYTHON]` (not `[PYSPARK]`), `Documentation` → `[DOC]` (not `[DOCS]`), `Structured Streaming` → `[SS]` (not `[STREAMING]`), `DStreams` → `[STREAMING]`, `Pandas API on Spark` → `[PS]`, `Declarative Pipelines` → `[SDP]`.
+
+The title must include at least one *primary* component tag. The primary tags are: `[BUILD]`, `[CONNECT]`, `[CORE]`, `[DOC]`, `[DOCKER]`, `[GRAPHX]`, `[INFRA]`, `[K8S]`, `[ML]`, `[MLLIB]`, `[PS]`, `[PYTHON]`, `[R]`, `[SDP]`, `[SECURITY]`, `[SQL]`, `[SS]`, `[STREAMING]`, `[UI]`, `[WINDOWS]`, `[YARN]`. Non-primary JIRA components (e.g. `[TEST]`, `[SHUFFLE]`, `[DEPLOY]`) are still recognized but must be paired with a primary tag (e.g. `[SQL][TEST]`).
 
 Infer the PR title from the changes. If no ticket ID is given, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
 
