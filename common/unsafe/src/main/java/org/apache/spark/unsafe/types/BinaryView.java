@@ -93,44 +93,44 @@ public final class BinaryView implements Comparable<BinaryView>, Externalizable,
   // ---------- accessors ----------
 
   /** The backing object: a primitive array when on-heap, or {@code null} when off-heap. */
-  public final Object getBaseObject() { return base; }
+  public Object getBaseObject() { return base; }
 
   /** Tungsten-style offset: see the class javadoc. */
-  public final long getBaseOffset() { return offset; }
+  public long getBaseOffset() { return offset; }
 
-  public final int numBytes() { return numBytes; }
+  public int numBytes() { return numBytes; }
 
-  public final boolean isOffHeap() { return base == null; }
+  public boolean isOffHeap() { return base == null; }
 
   // ---------- random-access primitive reads ----------
   // Coordinates are relative to the start of this view, i.e. i in [0, numBytes).
 
-  public final byte getByte(int i) {
+  public byte getByte(int i) {
     assert i >= 0 && i < numBytes : invalidRangeMessage(i, 1);
     return Platform.getByte(base, offset + i);
   }
 
-  public final short getShort(int i) {
+  public short getShort(int i) {
     assert i >= 0 && i + 2 <= numBytes : invalidRangeMessage(i, 2);
     return Platform.getShort(base, offset + i);
   }
 
-  public final int getInt(int i) {
+  public int getInt(int i) {
     assert i >= 0 && i + 4 <= numBytes : invalidRangeMessage(i, 4);
     return Platform.getInt(base, offset + i);
   }
 
-  public final long getLong(int i) {
+  public long getLong(int i) {
     assert i >= 0 && i + 8 <= numBytes : invalidRangeMessage(i, 8);
     return Platform.getLong(base, offset + i);
   }
 
-  public final float getFloat(int i) {
+  public float getFloat(int i) {
     assert i >= 0 && i + 4 <= numBytes : invalidRangeMessage(i, 4);
     return Platform.getFloat(base, offset + i);
   }
 
-  public final double getDouble(int i) {
+  public double getDouble(int i) {
     assert i >= 0 && i + 8 <= numBytes : invalidRangeMessage(i, 8);
     return Platform.getDouble(base, offset + i);
   }
@@ -154,7 +154,7 @@ public final class BinaryView implements Comparable<BinaryView>, Externalizable,
    * it is shared with the view itself. Use {@link #copy()} to obtain an independent owned
    * value.
    */
-  public final byte[] getBytes() {
+  public byte[] getBytes() {
     if (offset == BYTE_ARRAY_OFFSET
         && base instanceof byte[] bytes
         && bytes.length == numBytes) {
@@ -181,7 +181,7 @@ public final class BinaryView implements Comparable<BinaryView>, Externalizable,
   }
 
   /** Returns a sub-view (no copy). */
-  public final BinaryView slice(int start, int len) {
+  public BinaryView slice(int start, int len) {
     assert start >= 0 && len >= 0 && start + len <= numBytes
       : "Invalid slice start=" + start + " len=" + len + " of view with " + numBytes + " bytes";
     return new BinaryView(base, offset + start, len);
@@ -191,7 +191,7 @@ public final class BinaryView implements Comparable<BinaryView>, Externalizable,
    * Copies this view's bytes to the given target memory address. Used by writers that
    * already know where the bytes should land (e.g. {@code UnsafeWriter}).
    */
-  public final void writeToMemory(Object target, long targetOffset) {
+  public void writeToMemory(Object target, long targetOffset) {
     Platform.copyMemory(base, offset, target, targetOffset, numBytes);
   }
 
@@ -201,7 +201,7 @@ public final class BinaryView implements Comparable<BinaryView>, Externalizable,
    * because there is no portable way to expose an off-heap address through the public
    * {@code ByteBuffer} API.
    */
-  public final ByteBuffer toByteBuffer() {
+  public ByteBuffer toByteBuffer() {
     if (base instanceof byte[] bytes && offset >= BYTE_ARRAY_OFFSET) {
       long arrayOffset = offset - BYTE_ARRAY_OFFSET;
       if ((long) bytes.length < arrayOffset + numBytes) {
