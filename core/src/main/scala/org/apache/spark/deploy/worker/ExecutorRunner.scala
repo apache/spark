@@ -55,7 +55,7 @@ private[deploy] class ExecutorRunner(
     val sparkHome: File,
     val executorDir: File,
     val workerUrl: String,
-    conf: SparkConf,
+    val conf: SparkConf,
     val appLocalDirs: Seq[String],
     @volatile var state: ExecutorState.Value,
     val rpId: Int,
