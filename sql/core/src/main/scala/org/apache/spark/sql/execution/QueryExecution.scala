@@ -748,7 +748,7 @@ object QueryExecution {
     }
     // An empty scan list means the optimizer eliminated every actual read of the txn-catalog
     // tables referenced in the logical plan, so the cached data doesn't depend on those tables'
-    // state — safe to reuse the cache without consulting the connector.
+    // state - safe to reuse the cache without consulting the connector.
     scans.isEmpty || txn.registerScans(scans.asJava)
   }
 

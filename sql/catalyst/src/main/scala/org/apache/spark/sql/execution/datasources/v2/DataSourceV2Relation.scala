@@ -126,15 +126,20 @@ case class DataSourceV2Relation(
   // to identify the table independently of the concrete `Table` object reference. This lets two
   // relations that point at the same logical table compare equal even when one is wrapped (e.g.
   // by a transaction-aware catalog) - the wrapper preserves `Table.id()` per the public contract.
-  // Drop-and-recreate detection is preserved because the connector must return a fresh id after
-  // recreate. Falls back to the default canonical form when identifier or id is missing.
+  // When the connector returns a non-null `Table.id()`, drop-and-recreate is still distinguished
+  // because a fresh id is required after recreate. When `Table.id()` is null (the default for
+  // connectors that don't support table IDs), we key only on (catalog, identifier) - permissive
+  // because the connector has given us no signal to detect drop+recreate, so the safest default
+  // mirrors the "if we can't prove they differ, treat them as compatible" policy used elsewhere
+  // (e.g. refresh-time schema validation). Falls back to the default canonical form when
+  // catalog or identifier is missing.
   override def doCanonicalize(): LogicalPlan = {
     val base = super.doCanonicalize().asInstanceOf[DataSourceV2Relation]
-    val tableId = Option(base.table.id())
     val catalogName = base.catalog.map(_.name())
-    (catalogName, base.identifier, tableId) match {
-      case (Some(cn), Some(ident), Some(id)) =>
-        base.copy(table = DataSourceV2Relation.IdentityKeyTable(cn, ident, id))
+    (catalogName, base.identifier) match {
+      case (Some(cn), Some(ident)) =>
+        base.copy(table = DataSourceV2Relation.CanonicalTableKey(
+          cn, ident, Option(base.table.id())))
       case _ => base
     }
   }
@@ -340,15 +345,16 @@ object DataSourceV2Relation {
 
   // Sentinel substituted into a canonicalized `DataSourceV2Relation.table` field so that two
   // relations targeting the same metastore entity compare equal regardless of which concrete
-  // `Table` instance backs each side. Only ever appears in canonicalized plans — never reaches
-  // execution. Comparison relies on the case-class equality on (catalogName, identifier, id).
-  private[v2] case class IdentityKeyTable(
+  // `Table` instance backs each side. Should only appear in canonicalized plans.
+  private[v2] case class CanonicalTableKey(
       catalogName: String,
       identifier: Identifier,
-      override val id: String) extends Table {
+      idOpt: Option[String]) extends Table {
+    override def id(): String = idOpt.orNull
     override def name(): String = s"$catalogName.$identifier"
     override def capabilities(): java.util.Set[TableCapability] =
-      throw new UnsupportedOperationException("IdentityKeyTable is canonicalization-only")
+      throw SparkException.internalError(
+        "CanonicalTableKey is canonicalization-only and must not appear in execution plans")
   }
 
   def create(

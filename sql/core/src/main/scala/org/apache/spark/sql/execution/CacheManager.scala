@@ -479,8 +479,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     lookupCachedDataInternal(normalized)
   }
 
-  private def lookupCachedDataInternal(plan: LogicalPlan): Option[CachedData] = {
-    val result = cachedData.find(cd => plan.sameResult(cd.plan))
+  private def lookupCachedDataInternal(
+      plan: LogicalPlan,
+      cacheFilter: CachedData => Boolean = _ => true): Option[CachedData] = {
+    val result = cachedData.find(cd => plan.sameResult(cd.plan) && cacheFilter(cd))
     if (result.isDefined) {
       CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
         log"\n${MDC(QUERY_PLAN, plan)} matched with cache entry:" +
@@ -504,7 +506,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment).filter(cacheFilter).map { cached =>
+        lookupCachedDataInternal(currentFragment, cacheFilter).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
