@@ -23,12 +23,24 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connector.catalog.{Identifier, SupportsRowLevelOperations, TableCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  ChangeArgs,
+  Scd1BatchProcessor,
+  Scd1ForeachBatchHandler
+}
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SparkSessionUtils
 import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery, Trigger}
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -299,5 +311,201 @@ class SinkWrite(
       .format(destination.format)
       .options(destination.options)
       .start()
+  }
+}
+
+object AutoCdcAuxiliaryTable {
+  /**
+   * Helper for deriving the auxiliary AutoCDC catalog table identifier from a target table. If a
+   * table exists with a name matching the name derived here, it is assumed to be an AutoCDC
+   * auxiliary table that should be managed by the pipeline.
+   */
+  def identifier(destination: TableIdentifier): TableIdentifier = TableIdentifier(
+    table = s"${AutoCdcReservedNames.prefix}aux_state_${destination.table}",
+    database = destination.database,
+    catalog = destination.catalog
+  )
+
+  /**
+   * Reserved table property key set on the auxiliary table to record which SCD strategy it
+   * serves.
+   */
+  val scdTypePropertyKey: String = s"${PipelinesTableProperties.pipelinesPrefix}autocdc.scd_type"
+}
+
+/**
+ * Base trait for AutoCDC merge-based write flows.
+ */
+trait AutoCdcMergeWriteBase {
+  /** The spark session the AutoCDC flow is going to be planned in. */
+  protected def spark: SparkSession
+
+  /** The destination (target) table entity the AutoCDC flow will be writing to. */
+  protected def destination: Table
+
+  /** The AutoCDC flow's [[ChangeArgs]] (keys, sequencing, columnSelection, ...). */
+  protected def changeArgs: ChangeArgs
+
+  /** Full schema of the auxiliary table for this SCD type. */
+  protected def auxiliaryTableSchema: StructType
+
+  /**
+   * Idempotently create the auxiliary table for [[destination]] if it does not already exist
+   * and return its [[TableIdentifier]].
+   *
+   * Note that this is `CREATE TABLE IF NOT EXISTS`: when the aux table already exists, its
+   * schema is left untouched and `auxiliaryTableSchema` is ignored. For SCD1, they keys must be
+   * invariant across executions and the CDC metadata will always be present, so this is correct.
+   */
+  protected def createAuxiliaryTableIfNotExists(spark: SparkSession): TableIdentifier = {
+    val auxIdent = AutoCdcAuxiliaryTable.identifier(destination.identifier)
+    // The auxiliary table inherits the target's format so MERGE semantics line up. When the
+    // target's format is unspecified (None), omit the USING clause and fall back to the
+    // session's default source provider.
+    val usingClause = destination.format.map(fmt => s"USING $fmt").getOrElse("")
+    val tblPropertiesClause =
+      s"TBLPROPERTIES ('${AutoCdcAuxiliaryTable.scdTypePropertyKey}' = " +
+        s"'${changeArgs.storedAsScdType.label}')"
+    spark.sql(
+      s"""CREATE TABLE IF NOT EXISTS
+         |${auxIdent.quotedString}
+         |(${auxiliaryTableSchema.toDDL}) $usingClause $tblPropertiesClause""".stripMargin
+    )
+    auxIdent
+  }
+
+  /**
+   * Validate that the target table's underlying connector implements
+   * [[SupportsRowLevelOperations]], which is the V2 connector contract for MERGE/UPDATE/DELETE
+   * with rewrite - all operations that the AutoCDC transformation executes.
+   */
+  protected def requireDestinationSupportsRowLevelOps(): Unit = {
+    val (catalog, v2Identifier) = resolveTableCatalog(spark, destination.identifier)
+    val destinationTable = catalog.loadTable(v2Identifier)
+
+    if (!destinationTable.isInstanceOf[SupportsRowLevelOperations]) {
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
+        messageParameters = Map(
+          "tableName" -> destination.identifier.quotedString,
+          "format" -> destination.format.orElse(
+              Option(
+                destinationTable.properties.get(TableCatalog.PROP_PROVIDER)
+              )
+            )
+            .getOrElse("<unknown>")
+        )
+      )
+    }
+  }
+
+  private def resolveTableCatalog(
+      spark: SparkSession,
+      ident: TableIdentifier): (TableCatalog, Identifier) = {
+    val catalogManager = spark.sessionState.catalogManager
+    val catalogPlugin = ident.catalog
+      .map(catalogManager.catalog)
+      .getOrElse(catalogManager.currentCatalog)
+    val catalog = catalogPlugin match {
+      case t: TableCatalog => t
+      case _ => throw QueryCompilationErrors.missingCatalogTablesAbilityError(catalogPlugin)
+    }
+    val namespace = ident.database.getOrElse(
+      throw SparkException.internalError(
+        s"Cannot resolve table identifier ${ident.quotedString}: namespace is unspecified."
+      )
+    )
+    (catalog, Identifier.of(Array(namespace), ident.table))
+  }
+}
+
+/**
+ * A [[StreamingFlowExecution]] that applies a CDC event stream to a target [[Table]] via
+ * SCD Type 1 MERGE semantics.
+ */
+class Scd1MergeStreamingWrite(
+    val identifier: TableIdentifier,
+    val flow: AutoCdcMergeFlow,
+    val graph: DataflowGraph,
+    val updateContext: PipelineUpdateContext,
+    val checkpointPath: String,
+    val trigger: Trigger,
+    val destination: Table,
+    val sqlConf: Map[String, String]
+) extends StreamingFlowExecution with AutoCdcMergeWriteBase {
+
+  requireDestinationSupportsRowLevelOps()
+
+  override def getOrigin: QueryOrigin = flow.origin
+
+  override protected def changeArgs: ChangeArgs = flow.changeArgs
+
+  override def startStream(): StreamingQuery = {
+    val sourceChangeDataFeed = graph.reanalyzeFlow(flow).df
+
+    // The auxiliary table is created here (at flow execution) rather than during flow resolution
+    // or dataset materialization for two reasons:
+    //   1. It is an internal state store: we deliberately keep it out of the graph registration
+    //      context's table set so that it is invisible to other flows and the [[DatasetManager]]
+    //      will never materialize it.
+    //   2. Its format must match the target table's, which only exists after the target is
+    //      materialized. Flow resolution must also stay side-effect free (e.g. for dry runs).
+    val auxiliaryTableIdentifier = createAuxiliaryTableIfNotExists(spark = updateContext.spark)
+
+    val foreachBatchHandler = Scd1ForeachBatchHandler(
+      batchProcessor = Scd1BatchProcessor(
+        changeArgs = flow.changeArgs,
+        resolvedSequencingType = flow.sequencingType
+      ),
+      auxiliaryTableIdentifier = auxiliaryTableIdentifier,
+      targetTableIdentifier = destination.identifier
+    )
+
+    sourceChangeDataFeed.writeStream
+      .queryName(displayName)
+      .option("checkpointLocation", checkpointPath)
+      .trigger(trigger)
+      .foreachBatch((batch: Dataset[Row], batchId: Long) => {
+        foreachBatchHandler.execute(batch, batchId)
+      })
+      .start()
+  }
+
+  override protected lazy val auxiliaryTableSchema: StructType =
+    // SCD1's auxiliary table is just keys + the CDC metadata struct; no user data columns. Keys
+    // come first, in `changeArgs.keys` declaration order, to anchor the per-key sequence
+    // watermark used to gate out-of-order events.
+    StructType(autoCdcKeyFields :+ cdcMetadataField)
+
+  /**
+   * AutoCDC key columns resolved out of the flow's augmented schema, in
+   * `changeArgs.keys` declaration order. Keys are guaranteed to be present in the schema
+   * because [[AutoCdcMergeFlow.schema]] validates that.
+   */
+  private lazy val autoCdcKeyFields: Seq[StructField] = {
+    val resolver = updateContext.spark.sessionState.conf.resolver
+    val targetTableSchema = flow.schema
+    flow.changeArgs.keys.map { key =>
+      targetTableSchema.fields
+        .find(field => resolver(field.name, key.name))
+        .getOrElse(
+          throw SparkException.internalError(
+            s"Key column '${key.name}' was not found in the AutoCDC flow's selected schema."
+          )
+        )
+    }
+  }
+
+  /** CDC metadata field resolved out of the flow's augmented schema. */
+  private lazy val cdcMetadataField: StructField = {
+    val resolver = updateContext.spark.sessionState.conf.resolver
+    flow.schema.fields
+      .find(field => resolver(field.name, Scd1BatchProcessor.cdcMetadataColName))
+      .getOrElse(
+        throw SparkException.internalError(
+          s"CDC metadata column '${Scd1BatchProcessor.cdcMetadataColName}' was not found in the " +
+          s"AutoCDC flow's target table schema."
+        )
+      )
   }
 }
