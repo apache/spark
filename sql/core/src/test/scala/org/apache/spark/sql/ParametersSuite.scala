@@ -2706,4 +2706,17 @@ class ParametersSuite extends SharedSparkSession {
       case _ =>
     }
   }
+  test("named parameters without legacy config - issue #55392 regression") {
+    // Regression test for https://github.com/apache/spark/issues/55392
+    // PySpark 4.1.1 incorrectly rejected named parameters like :x
+    // even when provided in the args dict.
+    checkAnswer(
+      spark.sql("SELECT :x", args = Map("x" -> 1)),
+      Row(1))
+    
+    checkAnswer(
+      spark.sql("SELECT :x, :y", args = Map("x" -> 1, "y" -> 2)),
+      Row(1, 2))
+  }
+}
 }
