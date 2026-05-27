@@ -246,6 +246,8 @@ class MicroBatchExecution(
                 },
                 sourceIdentifyingName
               )
+            // output is trusted to match scan.readSchema() because pruneColumns was called
+            // with output.toStructType, so a well-behaved connector will produce the same fields.
             StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
           })
         } else if (v1.isEmpty) {

@@ -31,6 +31,7 @@ import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomS
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
@@ -564,7 +565,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("pruneColumns called on SupportsPushDownRequiredColumns V2 streaming scan builder") {
+  test("SPARK-56132: pruneColumns called on SupportsPushDownRequiredColumns V2 streaming scan builder") {
     val tblName = "teststream.table_name"
     withTable(tblName) {
       spark.sql(s"CREATE TABLE $tblName (data int) USING foo")
@@ -585,10 +586,11 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           .option("checkpointLocation", checkpointDir.getCanonicalPath)
           .start()
         try {
-          stream.addData(1, 2, 3)
-          q.processAllAvailable()
-          assert(recorded.called, "pruneColumns should have been called on the streaming scan builder")
-          // Output schema includes both the data column and the metadata column
+          // logicalPlan is initialized lazily when the query thread starts; wait for it.
+          eventually(timeout(streamingTimeout)) {
+            assert(recorded.called,
+              "pruneColumns should have been called on the streaming scan builder")
+          }
           assert(recorded.schema.fieldNames.toSet === Set("value", "_seq"),
             s"Expected pruneColumns to receive {value, _seq}, got ${recorded.schema}")
         } finally {
@@ -755,7 +757,20 @@ class RecordingPruneScanBuilder(inner: MemoryStreamScanBuilder, recorder: Pruned
     recorder.schema = requiredSchema
   }
 
-  override def build(): Scan = inner.build()
+  override def build(): Scan = {
+    val innerScan = inner.build()
+    val prunedSchema = recorder.schema
+    // Return a scan whose readSchema() reflects the pruned schema so the streaming plan
+    // and scan agree on output columns. Without the fix, pruneColumns is never called and
+    // readSchema() defaults to the full table schema, causing ArrayIndexOutOfBoundsException
+    // when metadata columns are in the plan output but absent from the scan output.
+    new Scan {
+      override def readSchema(): StructType =
+        if (recorder.called) prunedSchema else innerScan.readSchema()
+      override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
+        innerScan.toMicroBatchStream(checkpointLocation)
+    }
+  }
 }
 
 class NonStreamV2Table(override val name: String)
