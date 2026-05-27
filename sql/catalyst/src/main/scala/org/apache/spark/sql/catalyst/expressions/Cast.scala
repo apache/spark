@@ -1563,7 +1563,7 @@ case class Cast(
          |}
        """.stripMargin
     } else {
-      val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
+      val errorContextCode = getContextOrNullCode(ctx)
       val castUtils = classOf[CastUtils].getName
       code"""
          |$evPrim = $castUtils.changePrecisionExact(
