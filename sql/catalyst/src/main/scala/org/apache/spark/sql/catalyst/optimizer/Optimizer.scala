@@ -320,6 +320,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       EliminateSQLFunctionNode,
       ReplaceExpressions,
+      NormalizeFloatingNumbers,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,

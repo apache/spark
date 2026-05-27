@@ -29,7 +29,12 @@ object TreePattern extends Enumeration  {
   val ALIAS: Value = Value
   val ANALYSIS_AWARE_EXPRESSION: Value = Value
   val AND: Value = Value
+  val ARRAYS_OVERLAP: Value = Value
   val ARRAYS_ZIP: Value = Value
+  val ARRAY_DISTINCT: Value = Value
+  val ARRAY_EXCEPT: Value = Value
+  val ARRAY_INTERSECT: Value = Value
+  val ARRAY_UNION: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val AVERAGE: Value = Value
   val BINARY_ARITHMETIC: Value = Value
