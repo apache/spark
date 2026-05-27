@@ -150,6 +150,23 @@ object WritableColumnVectorBulkFillBenchmark extends BenchmarkBase {
         () => new OffHeapColumnVector(CAPACITY, IntegerType),
         (v, n) => v.putNulls(0, n),
         (v, idx) => intSink = if (v.isNullAt(idx)) 1 else 0)
+
+      // putNotNulls(rowId, count) -- the inverse of putNulls; called from
+      // WritableColumnVector.reset() once per batch. It early-outs unless numNulls > 0,
+      // so the factories seed one null before measurement begins.
+      runFor("putNotNulls", "(no value)",
+        () => {
+          val v = new OnHeapColumnVector(CAPACITY, IntegerType)
+          v.putNull(0)
+          v
+        },
+        () => {
+          val v = new OffHeapColumnVector(CAPACITY, IntegerType)
+          v.putNull(0)
+          v
+        },
+        (v, n) => v.putNotNulls(0, n),
+        (v, idx) => intSink = if (v.isNullAt(idx)) 1 else 0)
     }
   }
 }
