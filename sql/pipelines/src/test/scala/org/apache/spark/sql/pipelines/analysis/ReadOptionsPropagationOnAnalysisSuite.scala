@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.analysis
 
-import scala.collection.mutable.{Map => MutableMap}
+import scala.collection.concurrent.TrieMap
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -32,10 +32,17 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Tracker for flow function results.
- * @param flowFunctionResults Mutable map storing the latest FlowFunctionResult per flow function
+ *
+ * SDP analyzes flows in parallel (see [[DataflowGraphTransformer.transformDownNodes]]), so the
+ * backing map must tolerate concurrent writes from worker threads. A [[TrieMap]] gives lock-free
+ * per-key atomicity while remaining a [[scala.collection.mutable.Map]] for read sites.
+ *
+ * @param flowFunctionResults Concurrent map storing the latest FlowFunctionResult per flow
+ *                            function.
  */
 case class FlowFunctionResultTracker(
-    flowFunctionResults: MutableMap[String, FlowFunctionResult]
+    flowFunctionResults: scala.collection.concurrent.Map[String, FlowFunctionResult] =
+      TrieMap.empty
 )
 
 /**
@@ -102,11 +109,11 @@ class InstrumentedTestGraphRegistrationContext(
  * Test suite for verifying propagation of read options during pipelines analysis.
  */
 class ReadOptionsPropagationOnAnalysisSuite extends ExecutionTest with SharedSparkSession {
-  test("Internal pipeline batch read options are propagated during flow function analysis") {
+  test("internal pipeline batch read options are propagated during flow function analysis") {
     val session = spark
     import session.implicits._
 
-    val flowFunctionResultTracker = FlowFunctionResultTracker(MutableMap.empty)
+    val flowFunctionResultTracker = FlowFunctionResultTracker()
 
     withTable("a", "b") {
       val graphRegistrationContext =
@@ -137,8 +144,8 @@ class ReadOptionsPropagationOnAnalysisSuite extends ExecutionTest with SharedSpa
     }
   }
 
-  test("Internal pipeline stream read options are propagated during flow function analysis") {
-    val flowFunctionResultTracker = FlowFunctionResultTracker(MutableMap.empty)
+  test("internal pipeline stream read options are propagated during flow function analysis") {
+    val flowFunctionResultTracker = FlowFunctionResultTracker()
 
     withTable("spark_catalog.default.a", "b", "c") {
       // Create a regular external table that ST "b" can stream from, then have ST "c" stream from
@@ -181,8 +188,8 @@ class ReadOptionsPropagationOnAnalysisSuite extends ExecutionTest with SharedSpa
     }
   }
 
-  test("External pipeline batch read options are propagated during flow function analysis") {
-    val flowFunctionResultTracker = FlowFunctionResultTracker(MutableMap.empty)
+  test("external pipeline batch read options are propagated during flow function analysis") {
+    val flowFunctionResultTracker = FlowFunctionResultTracker()
 
     withTable("spark_catalog.default.a", "b") {
       // Create regular external table to batch read from with options.
@@ -215,8 +222,8 @@ class ReadOptionsPropagationOnAnalysisSuite extends ExecutionTest with SharedSpa
     }
   }
 
-  test("External pipeline stream read options are propagated during flow function analysis") {
-    val flowFunctionResultTracker = FlowFunctionResultTracker(MutableMap.empty)
+  test("external pipeline stream read options are propagated during flow function analysis") {
+    val flowFunctionResultTracker = FlowFunctionResultTracker()
 
     withTable("spark_catalog.default.a", "b") {
       // Create regular external table to stream from with read options.

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import scala.util.{Failure, Success, Try}
+import scala.util.Try
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
@@ -223,29 +223,25 @@ object FlowAnalysis {
       ctx.availableInput(datasetIdentifier)
     }
 
-    val inputDF = Try {
-      input.load(asStreaming = isStreamingRead)
-    } match {
-      case Success(df) => df
-      case Failure(ex: AnalysisException) => ex.errorClass match {
-        // Views are simply resolved as the flows they read from during graph construction, so we
-        // know a flow load exception here directly corresponds to a reading a view specifically.
-        // Rethrow relevant exceptions appropriately, with the view's identifier.
-        case Some("INCOMPATIBLE_FLOW_READ.BATCH_READ_ON_STREAMING_FLOW") =>
-          throw new AnalysisException(
-            "INCOMPATIBLE_BATCH_VIEW_READ",
-            Map("datasetIdentifier" -> datasetIdentifier.toString)
-          )
-        case Some("INCOMPATIBLE_FLOW_READ.STREAMING_READ_ON_BATCH_FLOW") =>
-          throw new AnalysisException(
-            "INCOMPATIBLE_STREAMING_VIEW_READ",
-            Map("datasetIdentifier" -> datasetIdentifier.toString)
-          )
-        case _ =>
-          throw ex
-      }
-      case Failure(ex: Throwable) =>
-        throw ex
+    val inputDF = input.load(asStreaming = isStreamingRead)
+
+    // Validate that the loaded DataFrame's streaming-ness matches the requested read mode. Tables
+    // pass through trivially as their [[VirtualTableInput.load]] honors `asStreaming` by
+    // construction. The check only ever fires for flows.
+    val incompatibleViewReadCheck =
+      ctx.spark.conf.get("pipelines.incompatibleViewCheck.enabled", "true").toBoolean
+
+    if (incompatibleViewReadCheck && isStreamingRead && !inputDF.isStreaming) {
+      throw new AnalysisException(
+        "INCOMPATIBLE_BATCH_VIEW_READ",
+        Map("datasetIdentifier" -> datasetIdentifier.toString)
+      )
+    }
+    if (incompatibleViewReadCheck && !isStreamingRead && inputDF.isStreaming) {
+      throw new AnalysisException(
+        "INCOMPATIBLE_STREAMING_VIEW_READ",
+        Map("datasetIdentifier" -> datasetIdentifier.toString)
+      )
     }
 
     input match {

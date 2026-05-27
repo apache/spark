@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import scala.util.Try
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
@@ -213,22 +214,8 @@ trait ResolvedFlow extends ResolutionCompletedFlow with Input {
 
   /** Returns the schema of the output of this [[Flow]]. */
   def schema: StructType = df.schema
+  override def load(asStreaming: Boolean): DataFrame = df
 
-  override def load(asStreaming: Boolean): DataFrame = {
-    if (asStreaming && !df.isStreaming) {
-      throw new AnalysisException(
-        "INCOMPATIBLE_FLOW_READ.BATCH_READ_ON_STREAMING_FLOW",
-        Map("flowIdentifier" -> identifier.quotedString)
-      )
-    }
-    if (!asStreaming && df.isStreaming) {
-      throw new AnalysisException(
-        "INCOMPATIBLE_FLOW_READ.STREAMING_READ_ON_BATCH_FLOW",
-        Map("flowIdentifier" -> identifier.quotedString)
-      )
-    }
-    df
-  }
   def inputs: Set[TableIdentifier] = funcResult.inputs
 }
 
@@ -314,31 +301,42 @@ class AutoCdcMergeFlow(
   }
 
   /**
-   * Returns an empty dataframe whose schema matches [[AutoCdcMergeFlow.schema]].
+   * Returns an empty dataframe whose schema matches [[AutoCdcMergeFlow.schema]]. By construction,
+   * the returned dataframe will be a streaming dataframe.
    *
-   * Today, [[AutoCdcMergeFlow.load]] is not actually ever called during graph analysis or
-   * execution. An AutoCdcMergeFlow can only be an input to a streaming table (not an MV or
-   * persisted/temp view), and streaming tables take a [[VirtualTableInput]] as input, not
-   * the producing [[Flow]] directly. [[VirtualTableInput]] overrides its own [[load]] to do
-   * schema inference on its input flows, rather than a transitive [[Flow.load]].
+   * In practice, [[AutoCdcMergeFlow.load]] is not invoked during graph analysis or execution.
+   * An AutoCdcMergeFlow can only be an input to a streaming table (not an MV or
+   * persisted/temp view), and streaming tables consume a [[VirtualTableInput]] rather than the
+   * producing [[Flow]] directly. [[VirtualTableInput]] overrides its own [[load]] to do schema
+   * inference on its input flows, rather than a transitive [[Flow.load]].
    *
-   * The [[AutoCdcMergeFlow.load]] implementation exists solely for API consistency.
+   * The implementation exists for API consistency and throws an internal error if invoked with
+   * `asStreaming = false`, or if the underlying source dataframe is not streaming, to surface
+   * a misuse loudly rather than silently producing a non-streaming dataframe.
    */
-  override def load(asStreaming: Boolean): DataFrame = changeArgs.storedAsScdType match {
-    case ScdType.Type1 =>
-      val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
-      val emptyCdcMetadataCol: Column = Scd1BatchProcessor.constructCdcMetadataCol(
-        deleteSequence = F.lit(null),
-        upsertSequence = F.lit(null),
-        sequencingType = sequencingType
-      ).as(Scd1BatchProcessor.cdcMetadataColName)
-
-      df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
-    case ScdType.Type2 =>
-      throw new AnalysisException(
-        errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
-        messageParameters = Map.empty
+  override def load(asStreaming: Boolean): DataFrame = {
+    if (!asStreaming) {
+      throw SparkException.internalError(
+        "Attempted to load AutoCDC flow as a batch flow. AutoCDC flows are strictly streaming " +
+        "flows, and must be loaded as such."
       )
+    }
+    changeArgs.storedAsScdType match {
+      case ScdType.Type1 =>
+        val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
+        val emptyCdcMetadataCol: Column = Scd1BatchProcessor.constructCdcMetadataCol(
+          deleteSequence = F.lit(null),
+          upsertSequence = F.lit(null),
+          sequencingType = sequencingType
+        ).as(Scd1BatchProcessor.cdcMetadataColName)
+
+        df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
+      case ScdType.Type2 =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
+          messageParameters = Map.empty
+        )
+    }
   }
 
   /**

@@ -161,14 +161,12 @@ case class Table(
  * @param specifiedSchema The user-specified schema for the parent table.
  * @param incomingFlowIdentifiers The identifiers of all flows that write to the parent table.
  * @param availableFlows  All resolved flows that write to the parent table.
- * @param isStreamingTable  Whether the parent table is a streaming table or not.
  */
 case class VirtualTableInput(
     identifier: TableIdentifier,
     specifiedSchema: Option[StructType],
     incomingFlowIdentifiers: Set[TableIdentifier],
-    availableFlows: Seq[ResolvedFlow] = Nil,
-    isStreamingTable: Boolean
+    availableFlows: Seq[ResolvedFlow] = Nil
 ) extends TableElement with Input
     with Logging {
   override def origin: QueryOrigin = QueryOrigin()

@@ -25,13 +25,13 @@ import org.apache.spark.sql.AnalysisException
 object State extends Logging {
 
   /**
-   * Find the graph elements to reset given the current update context.
+   * Find the flows to reset given the current update context.
    * @param graph The graph to reset.
    * @param env The current update context.
    */
-  private def findElementsToReset(
+  private def findFlowsToReset(
       graph: DataflowGraph,
-      env: PipelineUpdateContext): Seq[GraphElement] = {
+      env: PipelineUpdateContext): Seq[ResolvedFlow] = {
     // If tableFilter is an instance of SomeTables, this is a refresh selection and all tables
     // to reset should be resettable; Otherwise, this is a full graph update, and we reset all
     // tables that are resettable.
@@ -64,25 +64,17 @@ object State extends Logging {
       }
     }
 
-    specifiedTablesToReset.flatMap(t => t +: graph.resolvedFlowsTo(t.identifier)) ++
+    specifiedTablesToReset.flatMap(t => graph.resolvedFlowsTo(t.identifier)) ++
     specifiedSinksToReset.flatMap(s => graph.resolvedFlowsTo(s.identifier))
   }
 
   /**
-   * Performs the following on targets selected for full refresh:
-   * - Clearing checkpoint data
-   * - Truncating table data
+   * Rolls the streaming checkpoint directory of every flow selected for full refresh. Table
+   * truncation is handled in [[DatasetManager.materializeTables]] since the Hive metastore does
+   * not support removing all columns from a table.
    */
-  def reset(resolvedGraph: DataflowGraph, env: PipelineUpdateContext): Seq[GraphElement] = {
-    val elementsToReset: Seq[GraphElement] = findElementsToReset(resolvedGraph, env)
-
-    elementsToReset.foreach {
-      case f: ResolvedFlow => reset(f, env, resolvedGraph)
-      case _ => // tables is handled in materializeTables since hive metastore does not support
-                // removing all columns from a table.
-    }
-
-    elementsToReset
+  def reset(resolvedGraph: DataflowGraph, env: PipelineUpdateContext): Unit = {
+    findFlowsToReset(resolvedGraph, env).foreach(reset(_, env, resolvedGraph))
   }
 
   /**
