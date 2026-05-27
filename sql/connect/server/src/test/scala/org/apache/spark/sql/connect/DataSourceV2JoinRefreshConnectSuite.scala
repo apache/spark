@@ -25,9 +25,8 @@ import org.apache.spark.sql.connector.DSv2JoinRefreshTests
 import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, TableCatalog}
 
 /**
- * Connect-mode runner for [[DSv2JoinRefreshTests]]. All test logic lives in the shared
- * trait; this class only provides the Connect-specific session, catalog access, and result
- * comparison.
+ * Connect-mode runner for [[DSv2JoinRefreshTests]]. All test logic lives in the shared trait;
+ * this class only provides the Connect-specific session, catalog access, and result comparison.
  */
 class DataSourceV2JoinRefreshConnectSuite
     extends SparkConnectServerTest
@@ -38,7 +37,8 @@ class DataSourceV2JoinRefreshConnectSuite
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.nullidcat", classOf[NullTableIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.nullbothidscat",
+    .set(
+      "spark.sql.catalog.nullbothidscat",
       classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
 
