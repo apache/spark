@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -380,6 +381,7 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     withTable(tbl) {
       prepareTable()
       withTempDir { checkpointDir =>
+        // "index" is a metadata column (not in the table schema); "id" and "data" are data columns.
         val df = spark.readStream.table(tbl).select("id", "data", "index")
         val q = df.writeStream
           .format("memory")
@@ -396,6 +398,31 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
             "index metadata column should be non-null in streaming output")
         } finally {
           q.stop()
+        }
+      }
+    }
+  }
+
+  test("SPARK-56132: streaming read of metadata columns fails when pruneColumns disabled") {
+    withSQLConf(SQLConf.STREAMING_V2_PRUNE_COLUMNS_ENABLED.key -> "false") {
+      withTable(tbl) {
+        prepareTable()
+        withTempDir { checkpointDir =>
+          // With the flag disabled, pruneColumns is not called on the streaming scan builder.
+          val df = spark.readStream.table(tbl).select("id", "data", "index")
+          val q = df.writeStream
+            .format("memory")
+            .queryName("result_56132_disabled")
+            .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            .start()
+          try {
+            val ex = intercept[StreamingQueryException] {
+              q.processAllAvailable()
+            }
+            assert(ex.getMessage.contains("ArrayIndexOutOfBoundsException"))
+          } finally {
+            q.stop()
+          }
         }
       }
     }
