@@ -29,13 +29,14 @@ import scala.util.Try
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.SparkConf
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ColumnConversions._
 import org.apache.spark.sql.connect.PythonTestDepsChecker
 import org.apache.spark.sql.connect.service.SparkConnectService
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.common.FlowStatus
@@ -53,15 +54,27 @@ class PythonPipelineSuite
     with TestPipelineUpdateContextMixin
     with EventVerificationTestHelpers {
 
+  // Register a V2 in-memory catalog so AutoCDC tests can exercise pipeline-default-catalog
+  // inheritance against a name that is never the session default `spark_catalog`. The V2 in-memory
+  // catalog doesn't support streaming reads, but the AutoCDC tests that touch it only run graph
+  // resolution -- not pipeline execution -- so this is sufficient.
+  override def sparkConf: SparkConf = super.sparkConf
+    .set("spark.sql.catalog.my_catalog", classOf[InMemoryTableCatalog].getName)
+
   def buildGraph(
       pythonText: String,
       defaultCatalog: Option[String] = None,
-      defaultDatabase: Option[String] = None): DataflowGraph = {
+      defaultDatabase: Option[String] = None,
+      setupSql: Seq[String] = Nil): DataflowGraph = {
     val indentedPythonText = pythonText.linesIterator.map("        " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
     val customSessionIdentifier = UUID.randomUUID().toString
     val defaultCatalogPyExpr = defaultCatalog.map(c => s""""$c"""").getOrElse("None")
     val defaultDatabasePyExpr = defaultDatabase.map(d => s""""$d"""").getOrElse("None")
+    val setupSqlLines = setupSql
+      .map(stmt => s"""spark.sql(\"\"\"$stmt\"\"\")""")
+      .map("|" + _)
+      .mkString("\n")
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -82,6 +95,8 @@ class PythonPipelineSuite
          |    .config("spark.connect.grpc.channel.timeout", "5s") \\
          |    .config("spark.custom.identifier", "$customSessionIdentifier") \\
          |    .create()
+         |
+         $setupSqlLines
          |
          |dataflow_graph_id = create_dataflow_graph(
          |    spark,
@@ -1171,10 +1186,12 @@ class PythonPipelineSuite
     assert(resolvedFlow.inputs == Set(graphIdentifier("src")))
   }
 
-  test("AutoCDC API: single-part `source` inherits the pipeline's default database") {
-    // Pick a non-default database (`my_db`) inside the registered `spark_catalog` so the
-    // pipeline-default database differs from the connect session's current database (`default`).
-    spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.my_db")
+  test("AutoCDC API: single-part `source` inherits the pipeline's default catalog and database") {
+    // Use `my_catalog` (registered in `sparkConf`) so the pipeline-default catalog differs from
+    // the session default (`spark_catalog`), and a non-default namespace `my_db` so the
+    // pipeline-default database differs from the session default (`default`). The CREATE NAMESPACE
+    // runs on the same Connect session that subsequently creates the dataflow graph, so the
+    // namespace is visible to that session's per-session V2 catalog instance.
     val graph = buildGraph(
       """
         |@dp.table
@@ -1190,14 +1207,15 @@ class PythonPipelineSuite
         |    sequence_by = "timestamp",
         |)
         |""".stripMargin,
-      defaultCatalog = Some("spark_catalog"),
-      defaultDatabase = Some("my_db")).resolve()
+      defaultCatalog = Some("my_catalog"),
+      defaultDatabase = Some("my_db"),
+      setupSql = Seq("CREATE NAMESPACE IF NOT EXISTS my_catalog.my_db")).resolve()
 
     val resolvedFlow =
-      graph.resolvedFlow(TableIdentifier("target", Some("my_db"), Some("spark_catalog")))
+      graph.resolvedFlow(TableIdentifier("target", Some("my_db"), Some("my_catalog")))
     assert(
       resolvedFlow.inputs ==
-        Set(TableIdentifier("src", Some("my_db"), Some("spark_catalog"))))
+        Set(TableIdentifier("src", Some("my_db"), Some("my_catalog"))))
   }
 
   test("AutoCDC API: multi-part `source` resolves to the corresponding qualified dataset") {

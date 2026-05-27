@@ -391,14 +391,7 @@ private[connect] object PipelinesHandler extends Logging {
             sqlConf = flow.getSqlConfMap.asScala.toMap,
             once = false,
             queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
-            origin = QueryOrigin(
-              filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
-                flow.getSourceCodeLocation.getFileName),
-              line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
-                flow.getSourceCodeLocation.getLineNumber),
-              objectType = Some(QueryOriginType.Flow.toString),
-              objectName = Option(flowIdentifier.unquotedString),
-              language = Some(Python()))))
+            origin = flowOrigin(flow, flowIdentifier)))
       case proto.PipelineCommand.DefineFlow.DetailsCase.AUTO_CDC_FLOW_DETAILS =>
         graphElementRegistry.registerFlow(
           buildAutoCdcFlow(
@@ -502,16 +495,20 @@ private[connect] object PipelinesHandler extends Logging {
       func = FlowAnalysis.createFlowFunctionFromLogicalPlan(sourcePlan),
       sqlConf = flow.getSqlConfMap.asScala.toMap,
       queryContext = QueryContext(Option(defaultCatalog), Option(defaultDatabase)),
-      origin = QueryOrigin(
-        filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
-          flow.getSourceCodeLocation.getFileName),
-        line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
-          flow.getSourceCodeLocation.getLineNumber),
-        objectType = Some(QueryOriginType.Flow.toString),
-        objectName = Option(flowIdentifier.unquotedString),
-        language = Some(Python())),
+      origin = flowOrigin(flow, flowIdentifier),
       changeArgs = changeArgs)
   }
+
+  private def flowOrigin(
+      flow: proto.PipelineCommand.DefineFlow,
+      flowIdentifier: TableIdentifier): QueryOrigin = QueryOrigin(
+    filePath = Option.when(flow.getSourceCodeLocation.hasFileName)(
+      flow.getSourceCodeLocation.getFileName),
+    line = Option.when(flow.getSourceCodeLocation.hasLineNumber)(
+      flow.getSourceCodeLocation.getLineNumber),
+    objectType = Some(QueryOriginType.Flow.toString),
+    objectName = Option(flowIdentifier.unquotedString),
+    language = Some(Python()))
 
   private def startRun(
       cmd: proto.PipelineCommand.StartRun,
