@@ -684,8 +684,8 @@ class CliSuite extends SparkFunSuite {
       "SELECT 1; /* outer /* inner */ */" -> Seq("SELECT 1"),
       // SPARK-54876: preceding closed block comment + line comment (no SQL statement)
       "/* a */ -- foo\n/* b */" -> Seq(),
-      // SPARK-54876: semicolon inside backtick-quoted identifier should not split
-      "SELECT `col;name` FROM t" -> Seq("SELECT `col;name` FROM t")
+      // SPARK-54876: semicolons inside backtick-quoted identifiers are not split points
+      "SELECT * FROM `t;a`; SELECT 1" -> Seq("SELECT * FROM `t;a`", " SELECT 1")
     ).foreach { case (query, ret) =>
       assert(cli.splitSemiColon(query).asScala === ret)
     }
