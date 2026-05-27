@@ -409,7 +409,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     "Contract: a source df column with the reserved AutoCDC prefix is rejected at flow " +
     "construction"
   ) {
-    val conflictingName = s"${Scd1BatchProcessor.reservedColumnNamePrefix}foo"
+    val conflictingName = s"${AutoCdcReservedNames.prefix}foo"
     val sourceDf = sourceDfWithExtraColumns(conflictingName -> StringType)
 
     checkError(
@@ -422,7 +422,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> conflictingName,
         "schemaName" -> "changeDataFeed",
-        "reservedColumnNamePrefix" -> Scd1BatchProcessor.reservedColumnNamePrefix
+        "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
       )
     )
   }
@@ -435,7 +435,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     // from any ChangeArgs path still fails at construction with a different error. The
     // reservation is on the name itself, not on its presence in the source feed.
     val cleanSourceDf = threeColumnSourceDf()
-    val reservedName = s"${Scd1BatchProcessor.reservedColumnNamePrefix}foo"
+    val reservedName = s"${AutoCdcReservedNames.prefix}foo"
 
     val keysEx = intercept[AnalysisException] {
       newAutoCdcMergeFlow(
@@ -487,7 +487,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "columnName" -> Scd1BatchProcessor.cdcMetadataColName,
         "schemaName" -> "changeDataFeed",
-        "reservedColumnNamePrefix" -> Scd1BatchProcessor.reservedColumnNamePrefix
+        "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
       )
     )
   }
@@ -497,7 +497,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   ) {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val conflictingName =
-        s"${Scd1BatchProcessor.reservedColumnNamePrefix}foo".toUpperCase(Locale.ROOT)
+        s"${AutoCdcReservedNames.prefix}foo".toUpperCase(Locale.ROOT)
       val sourceDf = sourceDfWithExtraColumns(conflictingName -> StringType)
 
       checkError(
@@ -510,7 +510,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
           "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
           "columnName" -> conflictingName,
           "schemaName" -> "changeDataFeed",
-          "reservedColumnNamePrefix" -> Scd1BatchProcessor.reservedColumnNamePrefix
+          "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
         )
       )
     }
@@ -524,7 +524,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     // `spark.sql.caseSensitive`, consistent with the schema-augmentation logic in this class.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       val nonConflictingName =
-        s"${Scd1BatchProcessor.reservedColumnNamePrefix}foo".toUpperCase(Locale.ROOT)
+        s"${AutoCdcReservedNames.prefix}foo".toUpperCase(Locale.ROOT)
       val sourceDf = sourceDfWithExtraColumns(nonConflictingName -> StringType)
 
       // No exception expected: construction succeeds.
