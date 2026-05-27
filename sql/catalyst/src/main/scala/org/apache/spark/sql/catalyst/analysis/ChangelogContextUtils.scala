@@ -24,8 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.connector.catalog.ChangelogContext
 import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode
 import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode.DROP_CARRYOVERS
-import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode.NET_CHANGES
-import org.apache.spark.sql.connector.catalog.ChangelogContext.DeduplicationMode.NONE
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.TimestampType
