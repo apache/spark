@@ -22,7 +22,6 @@ import org.apache.spark.annotation.Unstable;
 
 import java.io.Serializable;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Physical representation for nanosecond-capable timestamp types ({@code TIMESTAMP_NTZ(p)} and
@@ -109,7 +108,9 @@ public final class TimestampNanosVal implements Serializable {
 
   @Override
   public int hashCode() {
-    return Objects.hash(epochMicros, nanosWithinMicro);
+    // Manual mix, not Objects.hash: avoids the varargs array + autoboxing on every call. This
+    // shows up on hash-bound paths (HashAggregate, HashJoin, distinct, set membership).
+    return 31 * Long.hashCode(epochMicros) + nanosWithinMicro;
   }
 
   @Override
