@@ -35,12 +35,19 @@ import org.apache.spark.sql.types.IntegerType
  *    cache, subsequent external write invisible until REFRESH.
  *  - Scenario 5 (external drop and recreate table): query sees new empty table.
  *
- * Scenarios 1 through 4 do not include `cachingcat` (caching connector) variants because the
- * CacheManager pins reads regardless of the connector, and REFRESH TABLE clears both layers,
- * so behavior is the same. Scenario 5 (drop and recreate) includes a `cachingcat` variant
- * because it differs: [[CachingInMemoryTableCatalog]] does not invalidate on drop/create, so
- * `loadTable` still returns the old cached table object, CacheManager still matches, and stale
- * data is served until REFRESH TABLE.
+ * Scenario 1 includes a `cachingcat` variant to verify the two-layer REFRESH behavior:
+ * [[org.apache.spark.sql.execution.datasources.v2.RefreshTableExec]] calls both
+ * `invalidateTable` (clearing the connector cache) and the CacheManager rebuild, so external
+ * writes become visible after REFRESH even with a caching connector. Scenarios 2 through 4
+ * omit `cachingcat` because the CacheManager pins reads regardless of the connector, making
+ * the observable behavior the same. Scenario 5 (drop and recreate) includes a `cachingcat`
+ * variant because it differs: [[CachingInMemoryTableCatalog]] does not invalidate on
+ * drop/create, so `loadTable` still returns the old cached table object, CacheManager still
+ * matches, and stale data is served until REFRESH TABLE.
+ *
+ * Only external mutations are tested. Session DROP TABLE automatically uncaches the table
+ * (via the CacheManager), making a session drop+recreate scenario trivially different from
+ * the external variant.
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on
@@ -70,6 +77,34 @@ trait DSv2CacheTableReadTests extends DSv2ExternalMutationTestBase {
         session.sql(s"REFRESH TABLE $testTable").collect()
         assertTableCached(session, testTable)
         checkRows(session.table(testTable), Seq(Row(1, 100), Row(2, 200)))
+      }
+    }
+  }
+
+  test(s"${testPrefix}SPARK-54022: connector w/ cache: cached table pinned, " +
+      "REFRESH clears both layers") {
+    withTestSession { session =>
+      withTestTableAndViews(session, cachingTestTable) {
+        session.sql(s"CREATE TABLE $cachingTestTable (id INT, salary INT) USING foo").collect()
+        session.sql(s"INSERT INTO $cachingTestTable VALUES (1, 100)").collect()
+
+        session.table(cachingTestTable).cache()
+        assertTableCached(session, cachingTestTable)
+        checkRows(session.table(cachingTestTable), Seq(Row(1, 100)))
+
+        val catalog =
+          getTableCatalog[CachingInMemoryTableCatalog](session, "cachingcat")
+        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
+
+        // Both CacheManager and connector cache are stale: external write invisible
+        assertTableCached(session, cachingTestTable)
+        checkRows(session.table(cachingTestTable), Seq(Row(1, 100)))
+
+        // REFRESH TABLE calls invalidateTable (clears connector cache) and rebuilds
+        // the CacheManager entry, so the external write becomes visible.
+        session.sql(s"REFRESH TABLE $cachingTestTable").collect()
+        assertTableCached(session, cachingTestTable)
+        checkRows(session.table(cachingTestTable), Seq(Row(1, 100), Row(2, 200)))
       }
     }
   }
