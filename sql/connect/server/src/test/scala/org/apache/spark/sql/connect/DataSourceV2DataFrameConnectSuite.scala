@@ -29,9 +29,8 @@ import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMe
  *
  * Runs DSv2 temp view tests ([[DSv2TempViewWithStoredPlanTests]]), repeated table access tests
  * ([[DSv2RepeatedTableAccessTests]]), and CACHE TABLE read tests ([[DSv2CacheTableReadTests]])
- * under Spark Connect. All test logic lives in the shared
- * traits; this class only provides the Connect-specific session, catalog access, and result
- * comparison.
+ * under Spark Connect. All test logic lives in the shared traits; this class only provides the
+ * Connect-specific session, catalog access, and result comparison.
  */
 class DataSourceV2DataFrameConnectSuite
     extends SparkConnectServerTest
