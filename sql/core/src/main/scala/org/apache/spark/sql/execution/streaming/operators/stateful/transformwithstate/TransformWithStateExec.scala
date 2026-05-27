@@ -160,9 +160,9 @@ case class TransformWithStateExec(
   private def widenColFamilyGroupingKeys(
       schemas: Map[String, StateStoreColFamilySchema])
       : Map[String, StateStoreColFamilySchema] = {
+    if (!WidenStatefulOpNullability.isEnabled) return schemas
     val original = keyEncoder.schema
     val widened = stateKeySchema
-    if (original == widened) return schemas
     def widenKey(ks: StructType): StructType =
       WidenStatefulOpNullability.widenGroupingKeyInSchema(ks, original, widened)
     schemas.map { case (name, cf) =>
@@ -180,10 +180,10 @@ case class TransformWithStateExec(
       }
       name -> cf.copy(
         keySchema = widenKey(cf.keySchema),
-        valueSchema = WidenStatefulOpNullability.widenStateSchema(cf.valueSchema),
         keyStateEncoderSpec = widenedSpec)
     }
   }
+
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
     val stateVariableInfos = getDriverProcessorHandle().getStateVariableInfos

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Shared helpers for the stateful-operator nullability fix. The fix has three
@@ -85,12 +85,13 @@ object WidenStatefulOpNullability {
       original: StructType,
       widened: StructType): StructType = {
     if (!isEnabled) return schema
-    if (structurallyMatches(schema, original)) {
+    if (DataType.equalsIgnoreNullability(schema, original)) {
       widened
     } else {
       StructType(schema.fields.map { field =>
         field.dataType match {
-          case st: StructType if structurallyMatches(st, original) =>
+          case st: StructType
+              if DataType.equalsIgnoreNullability(st, original) =>
             field.copy(dataType = widened)
           case st: StructType =>
             field.copy(dataType =
@@ -98,14 +99,6 @@ object WidenStatefulOpNullability {
           case _ => field
         }
       })
-    }
-  }
-
-  private def structurallyMatches(
-      a: StructType, b: StructType): Boolean = {
-    a.length == b.length && a.zip(b).forall { case (fa, fb) =>
-      fa.name == fb.name &&
-        fa.dataType.typeName == fb.dataType.typeName
     }
   }
 }

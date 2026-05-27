@@ -148,9 +148,9 @@ case class TransformWithStateInPySparkExec(
   private def widenColFamilyGroupingKeys(
       schemas: Map[String, StateStoreColFamilySchema])
       : Map[String, StateStoreColFamilySchema] = {
+    if (!WidenStatefulOpNullability.isEnabled) return schemas
     val original = groupingKeySchema
     val widened = widenedGroupingKeySchema
-    if (original == widened) return schemas
     def widenKey(ks: StructType): StructType =
       WidenStatefulOpNullability.widenGroupingKeyInSchema(
         ks, original, widened)
@@ -169,10 +169,10 @@ case class TransformWithStateInPySparkExec(
       }
       name -> cf.copy(
         keySchema = widenKey(cf.keySchema),
-        valueSchema = WidenStatefulOpNullability.widenStateSchema(cf.valueSchema),
         keyStateEncoderSpec = widenedSpec)
     }
   }
+
 
   override def getStateVariableInfos(): Map[String, TransformWithStateVariableInfo] = {
     driverProcessorHandle.getStateVariableInfos
