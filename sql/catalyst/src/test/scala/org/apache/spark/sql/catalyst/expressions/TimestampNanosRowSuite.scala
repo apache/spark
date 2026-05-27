@@ -142,6 +142,20 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(arr.getTimestampLTZNanos(2) === ltzValue)
   }
 
+  // containsNull = false exercises the codegen branch in writeArrayToBuffer that elides
+  // the per-element isNullAt check.
+  testBothCodegenAndInterpreted("UnsafeArrayWriter for non-nullable nanos timestamp arrays") {
+    val arrType = ArrayType(TimestampNTZNanosType(9), containsNull = false)
+    val converter = UnsafeProjection.create(Array[DataType](arrType))
+    val input = new GenericInternalRow(Array[Any](
+      new GenericArrayData(Array[Any](ntzValue, ntzValue))))
+    val output = converter.apply(input)
+    val arr = output.getArray(0)
+    assert(arr.numElements() == 2)
+    assert(arr.getTimestampNTZNanos(0) === ntzValue)
+    assert(arr.getTimestampNTZNanos(1) === ntzValue)
+  }
+
   testBothCodegenAndInterpreted("codegen projection reads nanos timestamp column") {
     val boundRef = BoundReference(0, TimestampNTZNanosType(9), nullable = false)
     val projection = GenerateUnsafeProjection.generate(Seq(boundRef))
