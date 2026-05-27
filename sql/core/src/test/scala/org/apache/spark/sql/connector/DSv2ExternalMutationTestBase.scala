@@ -33,10 +33,19 @@ import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Iden
  * (where the test session IS the server session) and Connect mode (where the test session
  * is a Connect client and catalog access requires the server session).
  *
- * Concrete suites override the abstract methods and mix in the test trait
- * [[DSv2TempViewWithStoredPlanTests]].
+ * Concrete suites override the abstract methods and mix in a test trait such as
+ * [[DSv2TempViewWithStoredPlanTests]] or [[DSv2RepeatedTableAccessTests]].
  */
 trait DSv2ExternalMutationTestBase extends QueryTest {
+
+  /** Fully qualified table name under the non-caching test catalog. */
+  protected val testTable: String = "testcat.ns1.ns2.tbl"
+
+  /** Fully qualified table name under the caching test catalog. */
+  protected val cachingTestTable: String = "cachingcat.ns1.ns2.tbl"
+
+  /** Identifier for the test table within its namespace. */
+  protected val testIdent: Identifier = Identifier.of(Array("ns1", "ns2"), "tbl")
 
   /** Prefix for test names, e.g. "" or "[connect] ". */
   protected def testPrefix: String
