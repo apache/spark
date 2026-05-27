@@ -351,7 +351,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     assert cursor > 0 : "invalid cursor " + cursor;
     long offsetAndSize = (cursor << 32) | TimestampNanosRowValues.SIZE_IN_BYTES;
     if (value == null) {
-      setNullAt(ordinal);
+      // Set the null bit directly instead of via setNullAt; setNullAt would zero the field slot
+      // that we immediately overwrite with offsetAndSize below.
+      BitSetMethods.set(baseObject, baseOffset, ordinal);
       TimestampNanosRowValues.zeroPayload(baseObject, baseOffset, (int) cursor);
       Platform.putLong(baseObject, getFieldOffset(ordinal), offsetAndSize);
     } else {
