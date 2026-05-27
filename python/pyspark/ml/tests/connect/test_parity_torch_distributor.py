@@ -81,7 +81,7 @@ class TorchDistributorLocalUnitTestsOnConnect(
         ]
 
 
-@unittest.skipIf("SPARK_SKIP_CONNECT_COMPAT_TESTS" in os.environ, "Requires JVM access")
+@unittest.skipIf(not have_torch, "torch is required")
 class TorchDistributorLocalUnitTestsIIOnConnect(
     TorchDistributorLocalUnitTestsMixin, unittest.TestCase
 ):
