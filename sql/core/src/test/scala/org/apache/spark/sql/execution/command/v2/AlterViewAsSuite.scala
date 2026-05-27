@@ -31,26 +31,24 @@ class AlterViewAsSuite extends command.AlterViewAsSuiteBase with ViewCommandSuit
     // unset). Then set the namespace default and ALTER VIEW AS -- the new ViewInfo must end
     // up with PROP_COLLATION = UTF8_LCASE (so v1Table.toCatalogTable's `collation` field is
     // set, and view-read time picks up UTF8_LCASE via AnalysisContext.collation).
-    withSQLConf(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED.key -> "true") {
-      val viewName = "v2_alter_collation_inherit"
-      val view = s"$catalog.$namespace.$viewName"
-      sql(s"CREATE VIEW $view AS SELECT 'a' AS c1")
-      assert(Option(viewCatalog
-        .getStoredView(Array(namespace), viewName)
-        .properties()
-        .get(TableCatalog.PROP_COLLATION))
-        .isEmpty)
+    val viewName = "v2_alter_collation_inherit"
+    val view = s"$catalog.$namespace.$viewName"
+    sql(s"CREATE VIEW $view AS SELECT 'a' AS c1")
+    assert(Option(viewCatalog
+      .getStoredView(Array(namespace), viewName)
+      .properties()
+      .get(TableCatalog.PROP_COLLATION))
+      .isEmpty)
 
-      sql(s"ALTER NAMESPACE $catalog.$namespace DEFAULT COLLATION UTF8_LCASE")
-      sql(s"ALTER VIEW $view AS SELECT 'x' AS c1, 'y' AS c2")
+    sql(s"ALTER NAMESPACE $catalog.$namespace DEFAULT COLLATION UTF8_LCASE")
+    sql(s"ALTER VIEW $view AS SELECT 'x' AS c1, 'y' AS c2")
 
-      val stored = viewCatalog.getStoredView(Array(namespace), viewName)
-      assert(stored.properties().get(TableCatalog.PROP_COLLATION) == "UTF8_LCASE")
-      // Read-time the view body's literal types reflect the inherited collation.
-      val df = spark.table(view)
-      assert(df.schema("c1").dataType === StringType("UTF8_LCASE"))
-      assert(df.schema("c2").dataType === StringType("UTF8_LCASE"))
-    }
+    val stored = viewCatalog.getStoredView(Array(namespace), viewName)
+    assert(stored.properties().get(TableCatalog.PROP_COLLATION) == "UTF8_LCASE")
+    // Read-time the view body's literal types reflect the inherited collation.
+    val df = spark.table(view)
+    assert(df.schema("c1").dataType === StringType("UTF8_LCASE"))
+    assert(df.schema("c2").dataType === StringType("UTF8_LCASE"))
   }
 
   test("V2: ALTER VIEW preserves PROP_OWNER (v1-parity)") {

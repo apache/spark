@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.DatasourceV2SQLBase
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
 
@@ -34,17 +33,11 @@ abstract class DefaultCollationTestSuite extends SharedSparkSession {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    spark.conf.set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
 
     if (resetCatalog) {
       sql(s"CREATE NAMESPACE IF NOT EXISTS $testCatalog.$DEFAULT_DATABASE")
       sql(s"USE $testCatalog.$DEFAULT_DATABASE")
     }
-  }
-
-  override def afterEach(): Unit = {
-    spark.conf.set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, false)
-    super.afterEach()
   }
 
   val defaultStringProducingExpressions: Seq[String] = Seq(
