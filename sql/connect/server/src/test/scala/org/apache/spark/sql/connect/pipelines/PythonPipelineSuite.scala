@@ -1171,7 +1171,10 @@ class PythonPipelineSuite
     assert(resolvedFlow.inputs == Set(graphIdentifier("src")))
   }
 
-  test("AutoCDC API: single-part `source` inherits the pipeline's default catalog/database") {
+  test("AutoCDC API: single-part `source` inherits the pipeline's default database") {
+    // Pick a non-default database (`my_db`) inside the registered `spark_catalog` so the
+    // pipeline-default database differs from the connect session's current database (`default`).
+    spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.my_db")
     val graph = buildGraph(
       """
         |@dp.table
@@ -1187,14 +1190,14 @@ class PythonPipelineSuite
         |    sequence_by = "timestamp",
         |)
         |""".stripMargin,
-      defaultCatalog = Some("my_catalog"),
+      defaultCatalog = Some("spark_catalog"),
       defaultDatabase = Some("my_db")).resolve()
 
     val resolvedFlow =
-      graph.resolvedFlow(TableIdentifier("target", Some("my_db"), Some("my_catalog")))
+      graph.resolvedFlow(TableIdentifier("target", Some("my_db"), Some("spark_catalog")))
     assert(
       resolvedFlow.inputs ==
-        Set(TableIdentifier("src", Some("my_db"), Some("my_catalog"))))
+        Set(TableIdentifier("src", Some("my_db"), Some("spark_catalog"))))
   }
 
   test("AutoCDC API: multi-part `source` resolves to the corresponding qualified dataset") {
