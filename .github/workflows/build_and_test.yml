@@ -149,9 +149,11 @@ jobs:
             java25=false
           fi
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
               \"build\": \"$build\",
+              \"build-core-utils\": \"$build_core_utils\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"pyspark-install\": \"$pyspark_install\",
@@ -280,16 +282,15 @@ jobs:
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
-            core, unsafe, kvstore, avro, utils, utils-java,
-            network-common, network-shuffle, repl, launcher,
-            examples, sketch, variant
+            core, unsafe, kvstore, utils, utils-java,
+            network-common, network-shuffle, sketch, variant, launcher
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler, pipelines
+            mllib-local, mllib, graphx, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
+            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
           - yarn
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -333,6 +334,10 @@ jobs:
           # In practice, the build will run in individual PR, but not against the individual commit
           # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
+          # Skip the core/utils group when a PR doesn't touch those modules (e.g. SQL-only or
+          # PySpark-only changes). The precondition is opt-out: omitted means run (so periodic
+          # full-build workflows that set only "build": "true" keep running this entry).
+          - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, network-common, network-shuffle, sketch, variant, launcher' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
