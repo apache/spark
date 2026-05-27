@@ -281,14 +281,12 @@ jobs:
             core, unsafe, kvstore, utils, utils-java,
             network-common, network-shuffle, sketch, variant, launcher
           - >-
-            avro, repl, examples
-          - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler, pipelines
+            mllib-local, mllib, graphx, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
+            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
           - yarn
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
