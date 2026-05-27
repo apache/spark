@@ -1272,13 +1272,13 @@ def main():
                 print_error("Unable to fetch summary of %s" % jira_id)
                 continue
             print_jira_issue_summary(issue)
-            issuetype = issue.fields.issuetype.name
-            if issuetype in blocking_issue_types:
-                blockers.append((jira_id, issuetype))
+            issue_type = issue.fields.issuetype.name
+            if issue_type in blocking_issue_types:
+                blockers.append((jira_id, issue_type))
         if blockers:
             ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
             fail(
-                "Cannot merge PR #%s. Linked JIRA(s) %s are umbrella or epic "
+                "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
                 "tickets and MUST not be resolved by a single PR. File "
                 "Sub-task(s) under %s and update the PR title to reference "
                 "the Sub-task(s) instead."
