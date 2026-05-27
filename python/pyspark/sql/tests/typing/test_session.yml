@@ -98,3 +98,16 @@
         spark.sparkContext.emptyRDD(),
         schema=StructType(),
     )
+
+
+- case: sessionContextAndNewSession
+  main: |
+    from pyspark.sql import SparkSession
+
+    spark = SparkSession.builder.getOrCreate()
+    sc = spark.sparkContext
+    _parallelism = sc.defaultParallelism
+    
+    new_spark = spark.newSession()
+    _df = new_spark.range(1)
+

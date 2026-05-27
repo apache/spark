@@ -2412,7 +2412,7 @@ class DataFrame(ParentDataFrame):
     def toJSON(self) -> ParentDataFrame:
         return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
 
-    if not is_remote_only():
+    if TYPE_CHECKING or not is_remote_only():
 
         @property
         def rdd(self) -> "RDD[Row]":
