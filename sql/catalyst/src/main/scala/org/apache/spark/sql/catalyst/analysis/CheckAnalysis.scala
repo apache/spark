@@ -701,12 +701,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "expression" -> toSQLExpr(rankingExpression),
                 "type" -> toSQLType(rankingExpression.dataType)))
 
-          case j @ NearestByJoin(_, _, _, false, _, rankingExpression, _)
-              if !rankingExpression.deterministic =>
-            j.failAnalysis(
-              errorClass = "NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
-              messageParameters = Map("expression" -> toSQLExpr(rankingExpression)))
-
           case a: Aggregate =>
             a.groupingExpressions.foreach(
               expression =>
