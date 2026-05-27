@@ -65,16 +65,13 @@ class PythonPipelineSuite
       pythonText: String,
       defaultCatalog: Option[String] = None,
       defaultDatabase: Option[String] = None,
-      setupSql: Seq[String] = Nil): DataflowGraph = {
+      setupSql: Option[String] = None): DataflowGraph = {
     val indentedPythonText = pythonText.linesIterator.map("        " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
     val customSessionIdentifier = UUID.randomUUID().toString
     val defaultCatalogPyExpr = defaultCatalog.map(c => s""""$c"""").getOrElse("None")
     val defaultDatabasePyExpr = defaultDatabase.map(d => s""""$d"""").getOrElse("None")
-    val setupSqlLines = setupSql
-      .map(stmt => s"""spark.sql(\"\"\"$stmt\"\"\")""")
-      .map("|" + _)
-      .mkString("\n")
+    val setupSqlLine = setupSql.map(stmt => s"""spark.sql(\"\"\"$stmt\"\"\")""").getOrElse("")
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -96,7 +93,7 @@ class PythonPipelineSuite
          |    .config("spark.custom.identifier", "$customSessionIdentifier") \\
          |    .create()
          |
-         $setupSqlLines
+         |$setupSqlLine
          |
          |dataflow_graph_id = create_dataflow_graph(
          |    spark,
@@ -1209,7 +1206,7 @@ class PythonPipelineSuite
         |""".stripMargin,
       defaultCatalog = Some("my_catalog"),
       defaultDatabase = Some("my_db"),
-      setupSql = Seq("CREATE NAMESPACE IF NOT EXISTS my_catalog.my_db")).resolve()
+      setupSql = Some("CREATE NAMESPACE IF NOT EXISTS my_catalog.my_db")).resolve()
 
     val resolvedFlow =
       graph.resolvedFlow(TableIdentifier("target", Some("my_db"), Some("my_catalog")))
