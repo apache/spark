@@ -780,7 +780,11 @@ jobs:
       if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
       run: |
         # Build Spark
-        ./build/sbt -Phive Test/package
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        else
+          ./build/sbt -Phive Test/package
+        fi
 
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
