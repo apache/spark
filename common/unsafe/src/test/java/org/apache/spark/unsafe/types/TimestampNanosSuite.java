@@ -44,4 +44,35 @@ public class TimestampNanosSuite {
     assertThrows(SparkIllegalArgumentException.class,
       () -> TimestampNanosVal.fromParts(0L, (short) 1000));
   }
+
+  @Test
+  public void boundaryNanosWithinMicro() {
+    assertEquals((short) 0, TimestampNanosVal.fromParts(0L, (short) 0).nanosWithinMicro);
+    assertEquals((short) TimestampNanosVal.MAX_NANOS_WITHIN_MICRO,
+      TimestampNanosVal.fromParts(0L, (short) TimestampNanosVal.MAX_NANOS_WITHIN_MICRO)
+        .nanosWithinMicro);
+  }
+
+  @Test
+  public void fromTrustedRowBytesSkipsValidation() {
+    // Documents the trust contract: callers on the row-read path may pass any short without
+    // the [0, 999] check. The fields are stored as-given.
+    TimestampNanosVal v = TimestampNanosVal.fromTrustedRowBytes(0L, (short) 1234);
+    assertEquals((short) 1234, v.nanosWithinMicro);
+  }
+
+  @Test
+  public void equalsHandlesNullAndOtherTypes() {
+    TimestampNanosVal v = TimestampNanosVal.fromParts(0L, (short) 0);
+    assertNotEquals(v, null);
+    assertNotEquals(v, "not a timestamp");
+  }
+
+  @Test
+  public void constants() {
+    assertEquals(16, TimestampNanosVal.SIZE_IN_BYTES);
+    assertEquals(999, TimestampNanosVal.MAX_NANOS_WITHIN_MICRO);
+    assertEquals(0L, TimestampNanosVal.ZERO.epochMicros);
+    assertEquals((short) 0, TimestampNanosVal.ZERO.nanosWithinMicro);
+  }
 }

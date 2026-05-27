@@ -129,6 +129,19 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(arr.getTimestampNTZNanos(2) === ntzValue)
   }
 
+  testBothCodegenAndInterpreted("UnsafeArrayWriter for LTZ nanos timestamp arrays") {
+    val arrType = ArrayType(TimestampLTZNanosType(7), containsNull = true)
+    val converter = UnsafeProjection.create(Array[DataType](arrType))
+    val input = new GenericInternalRow(Array[Any](
+      new GenericArrayData(Array[Any](ltzValue, null, ltzValue))))
+    val output = converter.apply(input)
+    val arr = output.getArray(0)
+    assert(arr.numElements() == 3)
+    assert(arr.getTimestampLTZNanos(0) === ltzValue)
+    assert(arr.isNullAt(1))
+    assert(arr.getTimestampLTZNanos(2) === ltzValue)
+  }
+
   testBothCodegenAndInterpreted("codegen projection reads nanos timestamp column") {
     val boundRef = BoundReference(0, TimestampNTZNanosType(9), nullable = false)
     val projection = GenerateUnsafeProjection.generate(Seq(boundRef))
@@ -145,5 +158,10 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
     intercept[IllegalArgumentException] {
       Literal.validateLiteralValue(0L, TimestampNTZNanosType(9))
     }
+  }
+
+  test("checkEvaluation roundtrip for nanos timestamp Literal") {
+    checkEvaluation(Literal.create(ntzValue, TimestampNTZNanosType(9)), ntzValue)
+    checkEvaluation(Literal.create(ltzValue, TimestampLTZNanosType(7)), ltzValue)
   }
 }
