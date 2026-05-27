@@ -191,6 +191,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies both `column_list` and `except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
   "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
@@ -243,6 +249,12 @@
       "Invalid AutoCDC destination <tableName> with multiple flows: <flows>. An AutoCDC target table must have exactly one flow writing to it."
     ],
     "sqlState" : "42000"
+  },
+  "AUTOCDC_NON_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a column identifier; got the non-attribute expression `<expression>`. AutoCDC keys, sequence_by, column_list, and except_column_list must reference unqualified column names."
+    ],
+    "sqlState" : "42703"
   },
   "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
     "message" : [

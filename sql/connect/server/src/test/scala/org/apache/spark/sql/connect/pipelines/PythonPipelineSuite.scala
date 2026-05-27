@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.pipelines.Language.Python
 import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.common.FlowStatus
-import org.apache.spark.sql.pipelines.graph.{AutoCdcFlow, DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
+import org.apache.spark.sql.pipelines.graph.{AutoCdcFlow, AutoCdcMergeFlow, DataflowGraph, PipelineUpdateContextImpl, QueryOrigin, QueryOriginType}
 import org.apache.spark.sql.pipelines.logging.EventLevel
 import org.apache.spark.sql.pipelines.utils.{EventVerificationTestHelpers, TestPipelineUpdateContextMixin}
 import org.apache.spark.sql.types.StructType
@@ -53,10 +53,15 @@ class PythonPipelineSuite
     with TestPipelineUpdateContextMixin
     with EventVerificationTestHelpers {
 
-  def buildGraph(pythonText: String): DataflowGraph = {
+  def buildGraph(
+      pythonText: String,
+      defaultCatalog: Option[String] = None,
+      defaultDatabase: Option[String] = None): DataflowGraph = {
     val indentedPythonText = pythonText.linesIterator.map("        " + _).mkString("\n")
     // create a unique identifier to allow identifying the session and dataflow graph
     val customSessionIdentifier = UUID.randomUUID().toString
+    val defaultCatalogPyExpr = defaultCatalog.map(c => s""""$c"""").getOrElse("None")
+    val defaultDatabasePyExpr = defaultDatabase.map(d => s""""$d"""").getOrElse("None")
     val pythonCode =
       s"""
          |from pyspark.sql import SparkSession
@@ -80,8 +85,8 @@ class PythonPipelineSuite
          |
          |dataflow_graph_id = create_dataflow_graph(
          |    spark,
-         |    default_catalog=None,
-         |    default_database=None,
+         |    default_catalog=$defaultCatalogPyExpr,
+         |    default_database=$defaultDatabasePyExpr,
          |    sql_conf={},
          |)
          |
@@ -1082,26 +1087,6 @@ class PythonPipelineSuite
     assert(flow.destinationIdentifier == graphIdentifier("target"))
   }
 
-  test("AutoCDC API: omitted stored_as_scd_type defaults to ScdType.Type1") {
-    val flow = buildAutoCdcFlow(
-      """
-        |@dp.table
-        |def src():
-        |  return spark.readStream.format("rate").load()
-        |
-        |dp.create_streaming_table("target")
-        |
-        |dp.create_auto_cdc_flow(
-        |    target = "target",
-        |    source = "src",
-        |    keys = ["value"],
-        |    sequence_by = "timestamp",
-        |)
-        |""".stripMargin)
-
-    assert(flow.changeArgs.storedAsScdType == ScdType.Type1)
-  }
-
   test("AutoCDC API: explicit stored_as_scd_type=1 is forwarded as ScdType.Type1") {
     val flow = buildAutoCdcFlow(
       """
@@ -1213,6 +1198,140 @@ class PythonPipelineSuite
 
     val resolvedFlow = graph.resolvedFlow(graphIdentifier("target"))
     assert(resolvedFlow.inputs == Set(graphIdentifier("src")))
+  }
+
+  test("AutoCDC API: single-part `source` inherits the pipeline's default catalog/database") {
+    // Source registers with the pipeline's defaults; the AutoCDC flow references it by single-part
+    // name. The resolved input should carry the qualified TableIdentifier, demonstrating that
+    // FlowAnalysis qualifies the UnresolvedRelation against the flow's QueryContext (same path
+    // used by RelationFlowDetails flows).
+    val graph = buildGraph(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin,
+      defaultCatalog = Some("spark_catalog"),
+      defaultDatabase = Some("default")).resolve()
+
+    val resolvedFlow = graph.resolvedFlow(
+      TableIdentifier("target", Some("default"), Some("spark_catalog")))
+    assert(
+      resolvedFlow.inputs ==
+        Set(TableIdentifier("src", Some("default"), Some("spark_catalog"))))
+  }
+
+  test("AutoCDC API: multi-part `source` resolves to the corresponding qualified dataset") {
+    val graph = buildGraph(
+      """
+        |@dp.table(name = "some_catalog.some_schema.src")
+        |def irrelevant():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table(name = "some_catalog.some_schema.target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "some_catalog.some_schema.target",
+        |    source = "some_catalog.some_schema.src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |)
+        |""".stripMargin).resolve()
+
+    val targetIdent = TableIdentifier("target", Some("some_schema"), Some("some_catalog"))
+    val srcIdent = TableIdentifier("src", Some("some_schema"), Some("some_catalog"))
+    val resolvedFlow = graph.resolvedFlow(targetIdent)
+    assert(resolvedFlow.inputs == Set(srcIdent))
+  }
+
+  test("AutoCDC API: non-attribute expression in keys is rejected") {
+    val ex = intercept[RuntimeException] {
+      buildGraph(
+        """
+          |from pyspark.sql.functions import expr
+          |
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = [expr("value + 1")],
+          |    sequence_by = "timestamp",
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("AUTOCDC_NON_COLUMN_IDENTIFIER"))
+  }
+
+  test("AutoCDC API: specifying both column_list and except_column_list is rejected") {
+    // The Python create_auto_cdc_flow API does not currently enforce the "at most one" contract
+    // client-side, so the proto carries both lists to the server, where the structured error is
+    // raised. If/when a Python-side check is added, this test guards against the server-side
+    // defense being silently bypassed.
+    val ex = intercept[RuntimeException] {
+      buildGraph(
+        """
+          |@dp.table
+          |def src():
+          |  return spark.readStream.format("rate").load()
+          |
+          |dp.create_streaming_table("target")
+          |
+          |dp.create_auto_cdc_flow(
+          |    target = "target",
+          |    source = "src",
+          |    keys = ["value"],
+          |    sequence_by = "timestamp",
+          |    column_list = ["value"],
+          |    except_column_list = ["timestamp"],
+          |)
+          |""".stripMargin)
+    }
+    assert(ex.getMessage.contains("AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
+  }
+
+  test("AutoCDC API: registered flow survives graph resolution and validation end-to-end") {
+    val graph = buildGraph(
+      """
+        |@dp.table
+        |def src():
+        |  return spark.readStream.format("rate").load()
+        |
+        |dp.create_streaming_table("target")
+        |
+        |dp.create_auto_cdc_flow(
+        |    target = "target",
+        |    source = "src",
+        |    keys = ["value"],
+        |    sequence_by = "timestamp",
+        |    apply_as_deletes = "value % 2 = 0",
+        |    column_list = ["value", "timestamp"],
+        |)
+        |""".stripMargin).resolve().validate()
+
+    val resolvedFlow = graph.resolvedFlow(graphIdentifier("target"))
+    assert(resolvedFlow.isInstanceOf[AutoCdcMergeFlow])
+    val mergeFlow = resolvedFlow.asInstanceOf[AutoCdcMergeFlow]
+    assert(mergeFlow.changeArgs.keys == Seq(UnqualifiedColumnName("value")))
+    assert(mergeFlow.changeArgs.sequencing.expr.sql == "timestamp")
+    assert(mergeFlow.changeArgs.deleteCondition.isDefined)
+    assert(mergeFlow.changeArgs.columnSelection.contains(
+      ColumnSelection.IncludeColumns(
+        Seq(UnqualifiedColumnName("value"), UnqualifiedColumnName("timestamp")))))
+    assert(mergeFlow.changeArgs.storedAsScdType == ScdType.Type1)
   }
 
   /**

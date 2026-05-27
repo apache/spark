@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.connect.pipelines
 
-import scala.collection.Seq
 import scala.jdk.CollectionConverters._
 import scala.util.Using
 
@@ -25,10 +24,11 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
+import org.apache.spark.connect.proto.PipelineCommand.DefineFlow.AutoCdcFlowDetails
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -400,15 +400,15 @@ private[connect] object PipelinesHandler extends Logging {
               objectName = Option(flowIdentifier.unquotedString),
               language = Some(Python()))))
       case proto.PipelineCommand.DefineFlow.DetailsCase.AUTO_CDC_FLOW_DETAILS =>
-        val autoCdcDetails = flow.getAutoCdcFlowDetails
         graphElementRegistry.registerFlow(
           buildAutoCdcFlow(
-            autoCdcDetails = autoCdcDetails,
+            autoCdcDetails = flow.getAutoCdcFlowDetails,
             flow = flow,
             flowIdentifier = flowIdentifier,
             destinationIdentifier = destinationIdentifier,
             defaultCatalog = defaultCatalog,
             defaultDatabase = defaultDatabase,
+            sessionHolder = sessionHolder,
             transformExpressionFunc = transformExpressionFunc))
       case other =>
         throw new UnsupportedOperationException(s"Unsupported DefineFlow details case: $other")
@@ -425,22 +425,39 @@ private[connect] object PipelinesHandler extends Logging {
    * the dataflow graph.
    */
   private def buildAutoCdcFlow(
-      autoCdcDetails: proto.PipelineCommand.DefineFlow.AutoCdcFlowDetails,
+      autoCdcDetails: AutoCdcFlowDetails,
       flow: proto.PipelineCommand.DefineFlow,
       flowIdentifier: TableIdentifier,
       destinationIdentifier: TableIdentifier,
       defaultCatalog: String,
       defaultDatabase: String,
+      sessionHolder: SessionHolder,
       transformExpressionFunc: proto.Expression => Expression): AutoCdcFlow = {
+    // TODO(SPARK-57092): apply_as_truncates is declared on AutoCdcFlowDetails but is not yet
+    //   honored by the engine; wire it through once SCD1 truncate support lands.
+    // TODO(SPARK-57093): ignore_null_updates_column_list and ignore_null_updates_except_column_list
+    //   are declared on AutoCdcFlowDetails but are not yet honored by the engine; wire them
+    //   through once SCD1 ignore-null support lands.
     val sourcePlan: LogicalPlan = UnresolvedRelation(
-      multipartIdentifier = scala.collection.immutable.Seq(autoCdcDetails.getSource),
+      multipartIdentifier = GraphIdentifierManager
+        .parseTableIdentifier(
+          name = autoCdcDetails.getSource,
+          spark = sessionHolder.session
+        ).nameParts,
       isStreaming = true
     )
 
     val toColumn: proto.Expression => Column = expr => Column(transformExpressionFunc(expr))
 
-    val asUnqualifiedColumnName: proto.Expression => UnqualifiedColumnName =
-      expr => UnqualifiedColumnName(transformExpressionFunc(expr).sql)
+    val asUnqualifiedColumnName: proto.Expression => UnqualifiedColumnName = expr =>
+      transformExpressionFunc(expr) match {
+        case a: UnresolvedAttribute => UnqualifiedColumnName(a.nameParts)
+        case other =>
+          throw new AnalysisException(
+            "AUTOCDC_NON_COLUMN_IDENTIFIER",
+            Map("expression" -> other.sql)
+          )
+      }
 
     val keys = autoCdcDetails.getKeysList.asScala.toSeq.map(asUnqualifiedColumnName)
 
@@ -448,11 +465,10 @@ private[connect] object PipelinesHandler extends Logging {
       val included = autoCdcDetails.getColumnListList.asScala.toSeq
       val excluded = autoCdcDetails.getExceptColumnListList.asScala.toSeq
       if (included.nonEmpty && excluded.nonEmpty) {
-        // The Python API enforces the "at most one" contract; we don't expect both to be set
-        // here, but reject defensively to surface client/server mismatches loudly.
-        throw new IllegalArgumentException(
-          "AutoCDC flow specifies both column_list and except_column_list; at most one " +
-            "may be provided.")
+        throw new AnalysisException(
+          "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST",
+          Map.empty
+        )
       } else if (included.nonEmpty) {
         Some(ColumnSelection.IncludeColumns(included.map(asUnqualifiedColumnName)))
       } else if (excluded.nonEmpty) {
