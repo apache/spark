@@ -1116,12 +1116,8 @@ def main():
     url = pr["url"]
     title = pr["title"]
 
-    # Fail hard on WIP or DO-NOT-MERGE to prevent accidental merges.
-    if "[WIP]" in title or "[DO-NOT-MERGE]" in title:
-        fail("Cannot merge a PR with [WIP] or [DO-NOT-MERGE] in the title:\n%s" % title)
-
-    # Fail hard on draft PRs to prevent accidental merges.
-    if pr.get("draft", False):
+    # Fail hard on draft, WIP, or DO-NOT-MERGE PRs to prevent accidental merges.
+    if pr.get("draft", False) or "[WIP]" in title or "[DO-NOT-MERGE]" in title:
         fail("Cannot merge a draft PR #%s: %s" % (pr_num, title))
 
     # e.g. 'Revert "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
