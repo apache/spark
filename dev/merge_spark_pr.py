@@ -1278,10 +1278,10 @@ def main():
         if blockers:
             ids_str = ", ".join(jid for jid, _ in blockers)
             fail(
-                "Cannot merge PR #%s. The following linked JIRA(s) are umbrella "
-                "or epic tickets and must not be resolved by a single PR: %s. "
-                "File Sub-task(s) under %s and update the PR title to "
-                "reference the Sub-task(s) instead."
+                "Cannot merge PR #%s. Linked JIRA(s) %s are umbrella or epic "
+                "tickets and must not be resolved by a single PR. File "
+                "Sub-task(s) under %s and update the PR title to reference "
+                "the Sub-task(s) instead."
                 % (pr_num, ids_str, ids_str)
             )
 
