@@ -319,7 +319,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
   test("AutoCdcMergeFlow.load() schema matches AutoCdcMergeFlow.schema") {
     val resolvedFlow = newAutoCdcMergeFlow(threeColumnSourceDf())
-    val loadedDf = resolvedFlow.load(readOptions = null)
+    val loadedDf = resolvedFlow.load(asStreaming = true)
     assert(loadedDf.schema == resolvedFlow.schema)
   }
 
@@ -332,7 +332,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         )
       )
     )
-    val loadedDf = resolvedFlow.load(readOptions = null)
+    val loadedDf = resolvedFlow.load(asStreaming = true)
     assert(loadedDf.schema == resolvedFlow.schema)
     // The user-selected portion drops `name`; the trailing column is the SCD1 metadata.
     assert(
@@ -348,7 +348,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
       )
     )
-    val loadedDf = resolvedFlow.load(readOptions = null)
+    val loadedDf = resolvedFlow.load(asStreaming = true)
     assert(loadedDf.schema == resolvedFlow.schema)
     assert(
       loadedDf.schema.fieldNames.toSeq ==
@@ -371,7 +371,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     val sourceDf = spark.createDataFrame(sourceRows, schema)
     val resolvedFlow = newAutoCdcMergeFlow(sourceDf)
 
-    val loadedDf = resolvedFlow.load(readOptions = null)
+    val loadedDf = resolvedFlow.load(asStreaming = true)
     val collected = loadedDf.collect()
     assert(collected.length == 2)
 
