@@ -20,7 +20,6 @@ import pandas as pd
 
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.typedef.typehints import extension_float_dtypes_available
 from pyspark.pandas.tests.diff_frames_ops.test_arithmetic import ArithmeticMixin
 
@@ -81,19 +80,11 @@ class ArithmeticExtFloatMixin(ArithmeticMixin):
 class ArithmeticExtFloatTests(
     ArithmeticExtFloatMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.diff_frames_ops.test_arithmetic_ext_float import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

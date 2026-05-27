@@ -30,6 +30,7 @@ import scala.language.existentials
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -61,13 +62,21 @@ object CatalystTypeConverters {
   }
 
   private def getConverterForType(dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
+    TypeUtils.failUnsupportedDataType(dataType, SQLConf.get)
+    TypeOps(dataType)
+      .map(ops => new TypeOpsConverter(ops))
+      .getOrElse(getConverterForTypeDefault(dataType))
+  }
+
+  private def getConverterForTypeDefault(
+      dataType: DataType): CatalystTypeConverter[Any, Any, Any] = {
     val converter = dataType match {
       case udt: UserDefinedType[_] => UDTConverter(udt)
       case arrayType: ArrayType => ArrayConverter(arrayType.elementType)
       case mapType: MapType => MapConverter(mapType.keyType, mapType.valueType)
       case structType: StructType => StructConverter(structType)
-      case CharType(length) => new CharConverter(length)
-      case VarcharType(length) => new VarcharConverter(length)
+      case c: CharType => new CharConverter(c.length)
+      case v: VarcharType => new VarcharConverter(v.length)
       case _: StringType => StringConverter
       case g: GeographyType =>
         new GeographyConverter(g)
@@ -147,6 +156,17 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue
     override def toScala(catalystValue: Any): Any = catalystValue
     override def toScalaImpl(row: InternalRow, column: Int): Any = row.get(column, dataType)
+  }
+
+  /**
+   * Adapter that wraps TypeOps to implement CatalystTypeConverter.
+   * Used by the Types Framework to provide type conversion for framework-supported types.
+   */
+  private class TypeOpsConverter(ops: TypeOps)
+      extends CatalystTypeConverter[Any, Any, Any] {
+    override def toCatalystImpl(scalaValue: Any): Any = ops.toCatalystImpl(scalaValue)
+    override def toScala(catalystValue: Any): Any = ops.toScala(catalystValue)
+    override def toScalaImpl(row: InternalRow, column: Int): Any = ops.toScalaImpl(row, column)
   }
 
   private case class UDTConverter[A >: Null](
@@ -349,10 +369,19 @@ object CatalystTypeConverters {
       row.getUTF8String(column).toString
   }
 
+  private def assertGeospatialEnabled(): Unit = {
+    if (!SQLConf.get.geospatialEnabled) {
+      throw new org.apache.spark.sql.AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = scala.collection.immutable.Map.empty)
+    }
+  }
+
   private class GeometryConverter(dataType: GeometryType)
       extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geometry, GeometryVal] {
     override def toCatalystImpl(scalaValue: Any): GeometryVal = scalaValue match {
-      case g: org.apache.spark.sql.types.Geometry => STUtils.serializeGeomFromWKB(g, dataType)
+      case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
+        STUtils.serializeGeomFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3219",
         messageParameters = scala.collection.immutable.Map(
@@ -360,17 +389,24 @@ object CatalystTypeConverters {
           "otherClass" -> other.getClass.getCanonicalName,
           "dataType" -> StringType.sql))
     }
-    override def toScala(catalystValue: GeometryVal): org.apache.spark.sql.types.Geometry =
+    override def toScala(catalystValue: GeometryVal): org.apache.spark.sql.types.Geometry = {
+      assertGeospatialEnabled()
       if (catalystValue == null) null
       else STUtils.deserializeGeom(catalystValue, dataType)
-    override def toScalaImpl(row: InternalRow, column: Int): org.apache.spark.sql.types.Geometry =
+    }
+
+    override def toScalaImpl(row: InternalRow, column: Int):
+        org.apache.spark.sql.types.Geometry = {
+      assertGeospatialEnabled()
       STUtils.deserializeGeom(row.getGeometry(0), dataType)
+    }
   }
 
   private class GeographyConverter(dataType: GeographyType)
       extends CatalystTypeConverter[Any, org.apache.spark.sql.types.Geography, GeographyVal] {
     override def toCatalystImpl(scalaValue: Any): GeographyVal = scalaValue match {
-      case g: org.apache.spark.sql.types.Geography => STUtils.serializeGeogFromWKB(g, dataType)
+      case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
+        STUtils.serializeGeogFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
         errorClass = "_LEGACY_ERROR_TEMP_3219",
         messageParameters = scala.collection.immutable.Map(
@@ -378,11 +414,17 @@ object CatalystTypeConverters {
           "otherClass" -> other.getClass.getCanonicalName,
           "dataType" -> StringType.sql))
     }
-    override def toScala(catalystValue: GeographyVal): org.apache.spark.sql.types.Geography =
+    override def toScala(catalystValue: GeographyVal): org.apache.spark.sql.types.Geography = {
+      assertGeospatialEnabled()
       if (catalystValue == null) null
       else STUtils.deserializeGeog(catalystValue, dataType)
-    override def toScalaImpl(row: InternalRow, column: Int): org.apache.spark.sql.types.Geography =
+    }
+
+    override def toScalaImpl(row: InternalRow, column: Int):
+        org.apache.spark.sql.types.Geography = {
+      assertGeospatialEnabled()
       STUtils.deserializeGeog(row.getGeography(0), dataType)
+    }
   }
 
   private object DateConverter extends CatalystTypeConverter[Any, Date, Any] {
@@ -623,6 +665,8 @@ object CatalystTypeConverters {
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr
+    case g: org.apache.spark.sql.types.Geometry => STUtils.stGeomFromWKB(g.getBytes, g.getSrid)
+    case g: org.apache.spark.sql.types.Geography => STUtils.stGeogFromWKB(g.getBytes)
     case arr: Array[Char] => StringConverter.toCatalyst(arr)
     case arr: Array[_] => new GenericArrayData(arr.map(convertToCatalyst))
     case map: Map[_, _] =>

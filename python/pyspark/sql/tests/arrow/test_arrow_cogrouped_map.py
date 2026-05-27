@@ -22,12 +22,8 @@ import logging
 from pyspark.errors import PythonException
 from pyspark.sql import Row
 from pyspark.sql import functions as sf
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
-    have_pyarrow,
-    pyarrow_requirement_message,
-)
-from pyspark.testing.utils import assertDataFrameEqual
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import assertDataFrameEqual, have_pyarrow, pyarrow_requirement_message
 from pyspark.util import is_remote_only
 
 if have_pyarrow:
@@ -37,7 +33,7 @@ if have_pyarrow:
 
 @unittest.skipIf(
     not have_pyarrow,
-    pyarrow_requirement_message,  # type: ignore[arg-type]
+    pyarrow_requirement_message,
 )
 class CogroupedMapInArrowTestsMixin:
     @property
@@ -125,6 +121,37 @@ class CogroupedMapInArrowTestsMixin:
         cogrouped_df = grouped_left_df.cogroup(grouped_right_df)
         self.do_test_apply_in_arrow(cogrouped_df, key_column=None)
 
+    def test_apply_in_arrow_large_var_types(self):
+        # SPARK-56929: when useLargeVarTypes=true, the expected schema computed by
+        # worker.py for result validation must also use large_string/large_binary,
+        # otherwise verify_arrow_result raises a spurious RESULT_COLUMN_TYPES_MISMATCH.
+        left = self.spark.createDataFrame(
+            [(0, "foo", b"foo"), (1, None, None)], "id long, s string, b binary"
+        )
+        right = self.spark.createDataFrame(
+            [(0, "bar", b"bar"), (1, "baz", b"baz")], "id long, s string, b binary"
+        )
+        schema = "s string, b binary"
+
+        def func(left_tbl, right_tbl):
+            assert pa.types.is_large_string(left_tbl.schema.field("s").type)
+            assert pa.types.is_large_binary(left_tbl.schema.field("b").type)
+            return left_tbl.select(["s", "b"])
+
+        expected = left.select("s", "b")
+        for assign_cols_by_name in [True, False]:
+            with self.subTest(assign_cols_by_name=assign_cols_by_name):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.useLargeVarTypes": True,
+                        "spark.sql.legacy.execution.pandas.groupedMap."
+                        "assignColumnsByName": assign_cols_by_name,
+                    }
+                ):
+                    cogrouped = left.groupBy("id").cogroup(right.groupBy("id"))
+                    actual = cogrouped.applyInArrow(func, schema)
+                    assertDataFrameEqual(actual, expected)
+
     def test_apply_in_arrow_not_returning_arrow_table(self):
         def func(key, left, right):
             return key
@@ -151,7 +178,8 @@ class CogroupedMapInArrowTestsMixin:
                 with self.quiet():
                     with self.assertRaisesRegex(
                         PythonException,
-                        f"Columns do not match in their data type: {expected}",
+                        "Column types of the returned data do not match specified schema. "
+                        f"Mismatch: {expected}",
                     ):
                         self.cogrouped.applyInArrow(
                             lambda left, right: left, schema=schema
@@ -175,7 +203,8 @@ class CogroupedMapInArrowTestsMixin:
                     with self.quiet():
                         with self.assertRaisesRegex(
                             PythonException,
-                            f"Columns do not match in their data type: {expected}",
+                            "Column types of the returned data do not match specified schema. "
+                            f"Mismatch: {expected}",
                         ):
                             self.cogrouped.applyInArrow(
                                 lambda left, right: left, schema=schema
@@ -195,11 +224,39 @@ class CogroupedMapInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m. Unexpected: v, v2.\n",
+                "Column names of the returned data do not match specified schema. "
+                "Missing: m. Unexpected: v, v2.",
             ):
                 # stats returns three columns while here we set schema with two columns
                 self.cogrouped.applyInArrow(stats, schema="id long, m double").collect()
+
+    def test_apply_in_arrow_returning_wrong_column_count_positional_assignment(self):
+        def too_many_cols(key, left, right):
+            return pa.Table.from_pydict(
+                {
+                    "a": [key[0].as_py()],
+                    "b": [pc.mean(left.column("v")).as_py()],
+                    "c": [pc.mean(right.column("v")).as_py()],
+                }
+            )
+
+        def too_few_cols(key, left, right):
+            return pa.Table.from_pydict({"a": [key[0].as_py()]})
+
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
+        ):
+            with self.quiet():
+                for func, expected, actual in [
+                    (too_many_cols, 2, 3),
+                    (too_few_cols, 2, 1),
+                ]:
+                    with self.subTest(func=func.__name__):
+                        with self.assertRaisesRegex(
+                            PythonException,
+                            rf"Expected: {expected}.*Actual: {actual}",
+                        ):
+                            self.cogrouped.applyInArrow(func, schema="a long, b double").collect()
 
     def test_apply_in_arrow_returning_empty_dataframe(self):
         def odd_means(key, left, right):
@@ -231,8 +288,7 @@ class CogroupedMapInArrowTestsMixin:
         with self.quiet():
             with self.assertRaisesRegex(
                 PythonException,
-                "Column names of the returned pyarrow.Table do not match specified schema. "
-                "Missing: m.\n",
+                "Column names of the returned data do not match specified schema. Missing: m.",
             ):
                 # stats returns one column for even keys while here we set schema with two columns
                 self.cogrouped.applyInArrow(odd_means, schema="id long, m double").collect()
@@ -396,20 +452,20 @@ class CogroupedMapInArrowTestsMixin:
                 + [Row(id=2, v1=20, v2=200)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg=f"arrow cogrouped map: {dict(v1=v1, v2=v2)}",
-                    context={"func_name": func_with_logging.__name__},
-                    logger="test_arrow_cogrouped_map",
-                )
-                for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg=f"arrow cogrouped map: {dict(v1=v1, v2=v2)}",
+                        context={"func_name": func_with_logging.__name__},
+                        logger="test_arrow_cogrouped_map",
+                    )
+                    for v1, v2 in [([10, 30], [100, 300]), ([20], [200])]
+                ],
+            )
 
 
 class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase):
@@ -436,12 +492,6 @@ class CogroupedMapInArrowTests(CogroupedMapInArrowTestsMixin, ReusedSQLTestCase)
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.arrow.test_arrow_cogrouped_map import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore[import]
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

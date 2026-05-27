@@ -21,12 +21,14 @@ import java.io.File
 import java.util
 import java.util.OptionalLong
 
+import scala.jdk.CollectionConverters._
+
 import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan => CatalystGreaterThan, Literal => CatalystLiteral, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.connector.catalog.{PartitionInternalRow, SupportsRead, Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability._
@@ -37,7 +39,7 @@ import org.apache.spark.sql.connector.read.Scan.ColumnarSupportMode
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, DataSourceV2ScanRelation, V2ScanPartitioningAndOrdering}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -46,12 +48,12 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
 
-class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
@@ -1008,6 +1010,52 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       "Canonicalized DataSourceV2ScanRelation instances should be equal")
   }
 
+  test("SPARK-54163: scan canonicalization for partitioning and ordering aware data source") {
+    val options = new CaseInsensitiveStringMap(Map(
+      "partitionKeys" -> "i",
+      "orderKeys" -> "i,j"
+    ).asJava)
+    val table = new OrderAndPartitionAwareDataSource().getTable(options)
+
+    def createDsv2ScanRelation(): DataSourceV2ScanRelation = {
+      val relation = DataSourceV2Relation.create(table, None, None, options)
+      val scan = relation.table.asReadable.newScanBuilder(relation.options).build()
+      val scanRelation = DataSourceV2ScanRelation(relation, scan, relation.output)
+      // Attach partitioning and ordering information to DataSourceV2ScanRelation
+      V2ScanPartitioningAndOrdering.apply(scanRelation).asInstanceOf[DataSourceV2ScanRelation]
+    }
+
+    // Create two DataSourceV2ScanRelation instances, representing the scan of the same table
+    val scanRelation1 = createDsv2ScanRelation()
+    val scanRelation2 = createDsv2ScanRelation()
+
+    // assert scanRelations have partitioning and ordering
+    assert(scanRelation1.keyGroupedPartitioning.isDefined &&
+      scanRelation1.keyGroupedPartitioning.get.nonEmpty,
+      "DataSourceV2ScanRelation should have key grouped partitioning")
+    assert(scanRelation1.ordering.isDefined && scanRelation1.ordering.get.nonEmpty,
+      "DataSourceV2ScanRelation should have ordering")
+
+    // the two instances should not be the same, as they should have different attribute IDs
+    assert(scanRelation1 != scanRelation2,
+      "Two created DataSourceV2ScanRelation instances should not be the same")
+    assert(scanRelation1.output.map(_.exprId).toSet != scanRelation2.output.map(_.exprId).toSet,
+      "Output attributes should have different expression IDs before canonicalization")
+    assert(scanRelation1.relation.output.map(_.exprId).toSet !=
+      scanRelation2.relation.output.map(_.exprId).toSet,
+      "Relation output attributes should have different expression IDs before canonicalization")
+    assert(scanRelation1.keyGroupedPartitioning.get.flatMap(_.references.map(_.exprId)).toSet !=
+      scanRelation2.keyGroupedPartitioning.get.flatMap(_.references.map(_.exprId)).toSet,
+      "Partitioning columns should have different expression IDs before canonicalization")
+    assert(scanRelation1.ordering.get.flatMap(_.references.map(_.exprId)).toSet !=
+      scanRelation2.ordering.get.flatMap(_.references.map(_.exprId)).toSet,
+      "Ordering columns should have different expression IDs before canonicalization")
+
+    // After canonicalization, the two instances should be equal
+    assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
+      "Canonicalized DataSourceV2ScanRelation instances should be equal")
+  }
+
   test("SPARK-53809: check mergeScalarSubqueries is effective for DataSourceV2ScanRelation") {
     val df = spark.read.format(classOf[SimpleDataSourceV2].getName).load()
     df.createOrReplaceTempView("df")
@@ -1052,6 +1100,274 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     // Verify the query produces correct results
     checkAnswer(query, Row(9, 0))
   }
+
+  test(
+    "SPARK-54163: check mergeScalarSubqueries is effective for OrderAndPartitionAwareDataSource"
+  ) {
+    withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true") {
+      val options = Map(
+        "partitionKeys" -> "i",
+        "orderKeys" -> "i,j"
+      )
+
+      // Create the OrderAndPartitionAwareDataSource DataFrame
+      val df = spark.read
+        .format(classOf[OrderAndPartitionAwareDataSource].getName)
+        .options(options)
+        .load()
+      df.createOrReplaceTempView("df")
+
+      val query = sql("select (select max(i) from df) as max_i, (select min(i) from df) as min_i")
+      val optimizedPlan = query.queryExecution.optimizedPlan
+
+      // check optimizedPlan merged scalar subqueries `select max(i), min(i) from df`
+      val sub1 = optimizedPlan.asInstanceOf[Project].projectList.head.collect {
+        case s: ScalarSubquery => s
+      }
+      val sub2 = optimizedPlan.asInstanceOf[Project].projectList(1).collect {
+        case s: ScalarSubquery => s
+      }
+
+      // Both subqueries should reference the same merged plan `select max(i), min(i) from df`
+      assert(sub1.nonEmpty && sub2.nonEmpty, "Both scalar subqueries should exist")
+      assert(sub1.head.plan == sub2.head.plan,
+        "Both subqueries should reference the same merged plan")
+
+      // Extract the aggregate from the merged plan sub1
+      val agg = sub1.head.plan.collect {
+        case a: Aggregate => a
+      }.head
+
+      // Check that the aggregate contains both max(i) and min(i)
+      val aggFunctionSet = agg.aggregateExpressions.flatMap { expr =>
+        expr.collect {
+          case ae: org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression =>
+            ae.aggregateFunction
+        }
+      }.toSet
+
+      assert(aggFunctionSet.size == 2, "Aggregate should contain exactly two aggregate functions")
+      assert(aggFunctionSet
+        .exists(_.isInstanceOf[org.apache.spark.sql.catalyst.expressions.aggregate.Max]),
+        "Aggregate should contain max(i)")
+      assert(aggFunctionSet
+        .exists(_.isInstanceOf[org.apache.spark.sql.catalyst.expressions.aggregate.Min]),
+        "Aggregate should contain min(i)")
+
+      // Verify the query produces correct results
+      checkAnswer(query, Row(4, 1))
+    }
+  }
+
+  private def getScanRelation(query: DataFrame): DataSourceV2ScanRelation = {
+    query.queryExecution.optimizedPlan.collect {
+      case s: DataSourceV2ScanRelation => s
+    }.head
+  }
+
+  test("pushedFilters are set for fully pushed filters") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    // AdvancedDataSourceV2 only supports pushing GreaterThan on column "i".
+    // i > 3 matches, so it is fully pushed.
+    val q = df.filter($"i" > 3)
+    checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+    val scanRelation = getScanRelation(q)
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should be non-empty when filters are fully pushed")
+    // The pushed filter should reference column i
+    assert(scanRelation.pushedFilters.flatMap(_.references.map(_.name)).contains("i"))
+  }
+
+  test("pushedFilters are empty when no filters are pushed") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    // AdvancedDataSourceV2 only supports pushing GreaterThan on column "i".
+    // j < -10 does not match, so it is not pushed.
+    val q = df.filter($"j" < -10)
+    checkAnswer(q, Nil)
+
+    val scanRelation = getScanRelation(q)
+    assert(scanRelation.pushedFilters.isEmpty,
+      "pushedFilters should be empty when no filters are pushed")
+  }
+
+  test("pushedFilters are empty when no filter is present") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    val q = df.select($"i", $"j")
+    checkAnswer(q, (0 until 10).map(i => Row(i, -i)))
+
+    val scanRelation = getScanRelation(q)
+    assert(scanRelation.pushedFilters.isEmpty,
+      "pushedFilters should be empty when there is no filter")
+  }
+
+  test("pushedFilters contains only pushed filters in mixed case") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    // AdvancedDataSourceV2 only supports pushing GreaterThan on column "i".
+    // i > 3 matches so it is pushed; j < 0 does not match so it is not pushed.
+    val q = df.filter($"i" > 3 && $"j" < 0)
+    checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+    val scanRelation = getScanRelation(q)
+    // Only i > 3 should be in pushedFilters, not j < 0
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should be non-empty for the pushed portion")
+    val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
+    assert(referencedCols.contains("i"),
+      "pushedFilters should contain the pushed filter on column i")
+    assert(!referencedCols.contains("j"),
+      "pushedFilters should not contain the unsupported filter on column j")
+  }
+
+  test("pushedFilters does not include filters that remain as post-scan") {
+    val df = spark.read.format(classOf[OverlappingFilterDataSourceV2].getName).load()
+    // OverlappingFilterDataSourceV2 only evaluates GreaterThan on column "i".
+    // i > 3 is fully pushed; j < 0 overlaps (reported by pushedFilters() but also post-scan).
+    val q = df.filter($"i" > 3 && $"j" < 0)
+    checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+    val scanRelation = getScanRelation(q)
+    // Only i > 3 should be in pushedFilters (fully pushed, not in post-scan).
+    // j < 0 is in post-scan so it should be excluded from pushedFilters despite being
+    // reported by the scan's pushedFilters() API.
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should contain the fully-pushed filter")
+    val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
+    assert(referencedCols.contains("i"),
+      "pushedFilters should contain the fully-pushed filter on column i")
+    assert(!referencedCols.contains("j"),
+      "pushedFilters should not contain the overlapping filter on column j")
+  }
+
+  test("pushedFilters with V2 filter API") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
+    // i > 3 is fully pushed via V2 filter API
+    val q = df.filter($"i" > 3)
+    checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+    val scanRelation = getScanRelation(q)
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should be non-empty with V2 filter API")
+    assert(scanRelation.pushedFilters.flatMap(_.references.map(_.name)).contains("i"))
+  }
+
+  test("pushedFilters with V2 filter API contains only pushed filters in mixed case") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2WithV2Filter].getName).load()
+    // AdvancedScanBuilderWithV2Filter only supports pushing ">" predicates.
+    // i > 3 has predicate name ">" so it is pushed; j < 0 has predicate name "<" so it is not.
+    val q = df.filter($"i" > 3 && $"j" < 0)
+    checkAnswer(q, (4 until 10).map(i => Row(i, -i)))
+
+    val scanRelation = getScanRelation(q)
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should be non-empty for the pushed portion")
+    val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
+    assert(referencedCols.contains("i"),
+      "pushedFilters should contain the pushed filter on column i")
+    assert(!referencedCols.contains("j"),
+      "pushedFilters should not contain the unsupported filter on column j")
+  }
+
+  test("pushedFilters are remapped by ProjectionOverSchema after nested schema pruning") {
+    val df = spark.read.format(classOf[NestedSchemaDataSourceV2].getName).load()
+    // NestedSchemaScanBuilder pushes GreaterThan on "s.a".
+    // Selecting only s.a triggers nested schema pruning: s goes from struct<a,b> to struct<a>.
+    val q = df.select($"s.a").filter($"s.a" > 3)
+    checkAnswer(q, (4 until 10).map(i => Row(i)))
+
+    val scanRelation = getScanRelation(q)
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should be non-empty")
+    // Find the struct attribute referenced by the pushed filter.
+    // Before remapping it would have type struct<a,b>; after remapping, struct<a>.
+    val structAttrs = scanRelation.pushedFilters
+      .flatMap(_.collect { case a: AttributeReference if a.name == "s" => a })
+    assert(structAttrs.nonEmpty, "pushed filter should reference struct column s")
+    val prunedStructType = structAttrs.head.dataType.asInstanceOf[StructType]
+    assert(prunedStructType.fieldNames.toSeq == Seq("a"),
+      s"struct column in pushed filter should be pruned to struct<a> but was $prunedStructType")
+  }
+
+  test("pushedFilters drops filters referencing pruned nested struct fields") {
+    // Disable constraint propagation so IsNotNull(s.a) is not added as a post-scan
+    // filter (it would keep field a alive in the struct).
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val df = spark.read.format(classOf[NestedSchemaDataSourceV2].getName).load()
+      // Filter on s.a but select only s.b. Column pruning narrows s to struct<b>,
+      // so the pushed filter on s.a can't be remapped and should be dropped.
+      val q = df.filter($"s.a" > 3).select($"s.b")
+      checkAnswer(q, (4 until 10).map(i => Row(-i)))
+
+      val scanRelation = getScanRelation(q)
+      val referencedStructFields = scanRelation.pushedFilters.flatMap { filter =>
+        filter.collect { case a: AttributeReference if a.name == "s" => a }
+          .flatMap(_.dataType.asInstanceOf[StructType].fieldNames)
+      }
+      assert(!referencedStructFields.contains("a"),
+        "pushedFilters should not reference pruned nested field a")
+    }
+  }
+
+  test("scan canonicalization with pushedFilters") {
+    // Use SimpleDataSourceV2 whose scan implements equals, so canonicalization comparison works
+    val table = new SimpleDataSourceV2().getTable(CaseInsensitiveStringMap.empty())
+
+    val relation1 = DataSourceV2Relation.create(
+      table, None, None, CaseInsensitiveStringMap.empty())
+    val relation2 = DataSourceV2Relation.create(
+      table, None, None, CaseInsensitiveStringMap.empty())
+    val scan1 = relation1.table.asReadable.newScanBuilder(relation1.options).build()
+    val scan2 = relation2.table.asReadable.newScanBuilder(relation2.options).build()
+
+    val filter1 = CatalystGreaterThan(relation1.output.head, CatalystLiteral(3))
+    val filter2 = CatalystGreaterThan(relation2.output.head, CatalystLiteral(3))
+
+    val scanRelation1 = DataSourceV2ScanRelation(relation1, scan1, relation1.output,
+      pushedFilters = Seq(filter1))
+    val scanRelation2 = DataSourceV2ScanRelation(relation2, scan2, relation2.output,
+      pushedFilters = Seq(filter2))
+
+    assert(scanRelation1 != scanRelation2,
+      "Two instances should not be equal before canonicalization")
+    assert(scanRelation1.canonicalized == scanRelation2.canonicalized,
+      "Canonicalized instances with equivalent pushedFilters should be equal")
+  }
+
+  test("pushedFilters excludes non-deterministic filters") {
+    val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+    // i > 3 is pushable and deterministic; rand() > 0.5 is non-deterministic and not pushable.
+    // Before the fix, ExpressionSet.contains would miss the non-deterministic filter,
+    // causing it to incorrectly appear in pushedFilterExpressions.
+    val q = df.filter($"i" > 3 && rand() > 0.5)
+
+    val scanRelation = getScanRelation(q)
+    // pushedFilters should only contain the deterministic pushed filter (i > 3).
+    assert(scanRelation.pushedFilters.nonEmpty,
+      "pushedFilters should contain the deterministic pushed filter")
+    assert(scanRelation.pushedFilters.forall(_.deterministic),
+      "pushedFilters should not contain non-deterministic filters")
+    val referencedCols = scanRelation.pushedFilters.flatMap(_.references.map(_.name)).toSet
+    assert(referencedCols.contains("i"),
+      "pushedFilters should contain the pushed filter on column i")
+  }
+
+  test("pushedFilters drops filters referencing pruned columns") {
+    // Disable constraint propagation so IsNotNull(i) is not added (it would keep
+    // column i in the scan output). This simulates a connector that pushes IsNotNull.
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val df = spark.read.format(classOf[AdvancedDataSourceV2].getName).load()
+      // i > 3 is fully pushed; selecting only j causes column pruning to drop i.
+      val q = df.filter($"i" > 3).select($"j")
+      checkAnswer(q, (4 until 10).map(i => Row(-i)))
+
+      val scanRelation = getScanRelation(q)
+      assert(!scanRelation.output.exists(_.name == "i"),
+        "column i should be pruned from scan output")
+      assert(scanRelation.pushedFilters.isEmpty,
+        "pushedFilters should drop filters referencing pruned columns")
+    }
+  }
+
 }
 
 case class RangeInputPartition(start: Int, end: Int) extends InputPartition
@@ -1093,6 +1409,18 @@ abstract class SimpleScanBuilder extends ScanBuilder
   override def readSchema(): StructType = TestingV2Source.schema
 
   override def createReaderFactory(): PartitionReaderFactory = SimpleReaderFactory
+
+  override def equals(obj: Any): Boolean = {
+    obj match {
+      case s: Scan =>
+        this.readSchema() == s.readSchema()
+      case _ => false
+    }
+  }
+
+  override def hashCode(): Int = {
+    this.readSchema().hashCode()
+  }
 }
 
 trait TestingV2Source extends TableProvider {
@@ -1156,18 +1484,6 @@ class SimpleDataSourceV2 extends TestingV2Source {
   class MyScanBuilder extends SimpleScanBuilder {
     override def planInputPartitions(): Array[InputPartition] = {
       Array(RangeInputPartition(0, 5), RangeInputPartition(5, 10))
-    }
-
-    override def equals(obj: Any): Boolean = {
-      obj match {
-        case s: Scan =>
-          this.readSchema() == s.readSchema()
-        case _ => false
-      }
-    }
-
-    override def hashCode(): Int = {
-      this.readSchema().hashCode()
     }
   }
 
@@ -1336,6 +1652,171 @@ class AdvancedReaderFactory(requiredSchema: StructType) extends PartitionReaderF
   }
 }
 
+
+// Data source where pushed filters overlap with post-scan filters.
+// pushFilters returns unsupported filters, but pushedFilters() returns ALL filters
+// (including the unsupported ones). This mimics the Parquet row-group filter pattern
+// where a filter is pushed for best-effort evaluation but must also be re-evaluated.
+class OverlappingFilterDataSourceV2 extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+      new OverlappingScanBuilder()
+    }
+  }
+}
+
+class OverlappingScanBuilder extends ScanBuilder
+  with Scan with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
+
+  var requiredSchema = TestingV2Source.schema
+  private var allFilters = Array.empty[Filter]
+  private var evaluableFilters = Array.empty[Filter]
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    val (supported, unsupported) = filters.partition {
+      case GreaterThan("i", _: Int) => true
+      case _ => false
+    }
+    this.evaluableFilters = supported
+    this.allFilters = filters
+    // Return unsupported filters as post-scan, but report ALL filters as pushed
+    unsupported
+  }
+
+  // Reports all filters as pushed (including unsupported ones that overlap with post-scan)
+  override def pushedFilters(): Array[Filter] = allFilters
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new AdvancedBatch(evaluableFilters, requiredSchema)
+}
+
+// Data source with a nested (struct) column to test ProjectionOverSchema remapping.
+// Schema: s: struct<a: int, b: int>, i: int
+// Pushes GreaterThan on nested field "s.a".
+class NestedSchemaDataSourceV2 extends TableProvider {
+
+  override def inferSchema(options: CaseInsensitiveStringMap): StructType =
+    NestedSchemaDataSourceV2.schema
+
+  override def getTable(
+      schema: StructType,
+      partitioning: Array[Transform],
+      properties: util.Map[String, String]): Table = {
+    new Table with SupportsRead {
+      override def name(): String = "nested-schema-test"
+      override def schema(): StructType = NestedSchemaDataSourceV2.schema
+      override def capabilities(): util.Set[TableCapability] =
+        util.EnumSet.of(TableCapability.BATCH_READ)
+      override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+        new NestedSchemaScanBuilder()
+    }
+  }
+}
+
+object NestedSchemaDataSourceV2 {
+  val schema: StructType = StructType(Seq(
+    StructField("s", StructType(Seq(
+      StructField("a", IntegerType),
+      StructField("b", IntegerType)
+    ))),
+    StructField("i", IntegerType)
+  ))
+}
+
+class NestedSchemaScanBuilder extends ScanBuilder
+  with Scan with SupportsPushDownFilters with SupportsPushDownRequiredColumns {
+
+  var requiredSchema: StructType = NestedSchemaDataSourceV2.schema
+  var filters = Array.empty[Filter]
+
+  override def pruneColumns(requiredSchema: StructType): Unit = {
+    this.requiredSchema = requiredSchema
+  }
+
+  override def readSchema(): StructType = requiredSchema
+
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+    // Push GreaterThan on nested field "s.a"
+    val (supported, unsupported) = filters.partition {
+      case GreaterThan("s.a", _: Int) => true
+      case _ => false
+    }
+    this.filters = supported
+    unsupported
+  }
+
+  override def pushedFilters(): Array[Filter] = filters
+
+  override def build(): Scan = this
+
+  override def toBatch: Batch = new NestedSchemaBatch(filters, requiredSchema)
+}
+
+class NestedSchemaBatch(
+    val filters: Array[Filter],
+    val requiredSchema: StructType) extends Batch {
+
+  override def planInputPartitions(): Array[InputPartition] = {
+    val lowerBound = filters.collectFirst {
+      case GreaterThan("s.a", v: Int) => v
+    }
+    val res = scala.collection.mutable.ArrayBuffer.empty[InputPartition]
+    if (lowerBound.isEmpty) {
+      res.append(RangeInputPartition(0, 5))
+      res.append(RangeInputPartition(5, 10))
+    } else if (lowerBound.get < 4) {
+      res.append(RangeInputPartition(lowerBound.get + 1, 5))
+      res.append(RangeInputPartition(5, 10))
+    } else if (lowerBound.get < 9) {
+      res.append(RangeInputPartition(lowerBound.get + 1, 10))
+    }
+    res.toArray
+  }
+
+  override def createReaderFactory(): PartitionReaderFactory =
+    new NestedSchemaReaderFactory(requiredSchema)
+}
+
+class NestedSchemaReaderFactory(
+    requiredSchema: StructType) extends PartitionReaderFactory {
+
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val RangeInputPartition(start, end) = partition
+    new PartitionReader[InternalRow] {
+      private var current = start - 1
+
+      override def next(): Boolean = {
+        current += 1
+        current < end
+      }
+
+      override def get(): InternalRow = {
+        val values = requiredSchema.map { field =>
+          field.name match {
+            case "s" =>
+              val structType = field.dataType.asInstanceOf[StructType]
+              val structValues = structType.map(_.name).map {
+                case "a" => current
+                case "b" => -current
+              }
+              InternalRow.fromSeq(structValues)
+            case "i" => current
+          }
+        }
+        InternalRow.fromSeq(values)
+      }
+
+      override def close(): Unit = {}
+    }
+  }
+}
 
 class SchemaRequiredDataSource extends TableProvider {
 

@@ -45,17 +45,21 @@ import scala.util.Try
 private[spark] class LazyTry[T](initialize: => T) extends Serializable {
   private lazy val tryT: Try[T] = Utils.doTryWithCallerStacktrace { initialize }
 
+  // Track whether the lazy val has been materialized or not.
+  @volatile private var materialized: Boolean = false
+
   /**
    * Get the lazy value. If the initialization block threw an exception, it will be re-thrown here.
    * The exception will be re-thrown with the current caller's stacktrace.
-   * An exception with stack trace from when the exception was first thrown can be accessed with
-   * ```
-   * ex.getSuppressed.find { e =>
-   *   e.getMessage == org.apache.spark.util.Utils.TRY_WITH_CALLER_STACKTRACE_FULL_STACKTRACE
-   * }
-   * ```
+   *
+   * On the first access, no suppressed exception is added. On subsequent accesses, the original
+   * stacktrace is added as a suppressed exception to help with debugging.
    */
-  def get: T = Utils.getTryWithCallerStacktrace(tryT)
+  def get: T = {
+    val isFirstAccess = !materialized
+    materialized = true
+    Utils.getTryWithCallerStacktrace(tryT, isFirstAccess)
+  }
 }
 
 private[spark] object LazyTry {

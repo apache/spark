@@ -122,7 +122,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   private def setLogicalLink(logicalPlan: LogicalPlan, inherited: Boolean = false): Unit = {
     // Stop at a descendant which is the root of a sub-tree transformed from another logical node.
-    if (inherited && getTagValue(SparkPlan.LOGICAL_PLAN_TAG).isDefined) {
+    if (inherited && containsTag(SparkPlan.LOGICAL_PLAN_TAG)) {
       return
     }
 
@@ -250,11 +250,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 
   /**
+   * A deterministic scope ID for RDDs created by this SparkPlan,
+   * used by LastAttemptAccumulator to track which RDD belongs
+   * to which SparkPlan node.
+   */
+  private[spark] def rddScopeId: String =
+    "spark_plan_" + id.toString
+
+  /**
    * Executes a query after preparing the query and adding query plan information to created RDDs
    * for visualization.
    */
   protected final def executeQuery[T](query: => T): T = {
-    RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
+    RDDOperationScope.withScope(
+        sparkContext, nodeName, false, true, rddScopeId) {
       prepare()
       waitForSubqueries()
       query
@@ -267,6 +276,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   @transient
   private val runningSubqueries = new ArrayBuffer[ExecSubqueryExpression]
+
+  @transient private val prepareLock = new Object()
 
   /**
    * Finds scalar subquery expressions in this plan node and starts evaluating them.
@@ -284,7 +295,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Blocks the thread until all subqueries finish evaluation and update the results.
    */
-  protected def waitForSubqueries(): Unit = synchronized {
+  protected def waitForSubqueries(): Unit = prepareLock.synchronized {
     // fill in the result of subqueries
     runningSubqueries.foreach { sub =>
       sub.updateResult()
@@ -303,7 +314,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def prepare(): Unit = {
     // doPrepare() may depend on it's children, we should call prepare() on all the children first.
     children.foreach(_.prepare())
-    synchronized {
+    prepareLock.synchronized {
       if (!prepared) {
         prepareSubqueries()
         doPrepare()
@@ -320,7 +331,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note `prepare` method has already walked down the tree, so the implementation doesn't have
    * to call children's `prepare` methods.
    *
-   * This will only be called once, protected by `this`.
+   * This will only be called once, protected by [[prepareLock]].
    */
   protected def doPrepare(): Unit = {}
 
@@ -375,6 +386,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    */
   private def getByteArrayRdd(
       n: Int = -1, takeFromEnd: Boolean = false): RDD[(Long, ChunkedByteBuffer)] = {
+    // Wrap in the plan's RDD scope so that the wrapper RDD created by mapPartitionsInternal
+    // inherits this plan's deterministic scope ID rather than getting an anonymous auto-generated
+    // one.
+    val rdd = RDDOperationScope.withScope(
+        sparkContext, nodeName, false, true, rddScopeId) {
     execute().mapPartitionsInternal { iter =>
       var count = 0
       val buffer = new Array[Byte](4 << 10)  // 4K
@@ -409,8 +425,10 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       out.writeInt(-1)
       out.flush()
       out.close()
-      Iterator((count, cbbos.toChunkedByteBuffer))
+      Iterator((count.toLong, cbbos.toChunkedByteBuffer))
     }
+    }
+    rdd
   }
 
   /**

@@ -34,6 +34,24 @@ trait GraphValidations extends Logging {
    */
   protected[pipelines] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
     val multiQueryTables = flowsTo.filter(_._2.size > 1)
+
+    // A multiflow table may not have an AutoCDC flow; AutoCDC flow targets must be single query.
+    multiQueryTables
+      .find { case (_, flows) => flows.exists(isAutoCdcFlow) }
+      .foreach {
+        case (dest, flows) =>
+          throw new AnalysisException(
+            "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET",
+            Map(
+              "tableName" -> dest.unquotedString,
+              "flows" -> flows
+                .map(_.displayName)
+                .sorted
+                .mkString(", ")
+            )
+          )
+      }
+
     // Non-streaming tables do not support multiflow.
     multiQueryTables
       .find {
@@ -47,12 +65,21 @@ trait GraphValidations extends Logging {
             "MATERIALIZED_VIEW_WITH_MULTIPLE_QUERIES",
             Map(
               "tableName" -> dest.unquotedString,
-              "queries" -> flows.map(_.identifier).mkString(",")
+              "flows" -> flows
+                .map(_.displayName)
+                .sorted
+                .mkString(", ")
             )
           )
       }
 
     multiQueryTables
+  }
+
+  /** Returns true iff the given flow is an [[AutoCdcFlow]] (resolved or not). */
+  private def isAutoCdcFlow(f: Flow): Boolean = f match {
+    case _: AutoCdcFlow | _: AutoCdcMergeFlow => true
+    case _ => false
   }
 
   /**
@@ -123,8 +150,21 @@ trait GraphValidations extends Logging {
                 )
               }
             case _: TemporaryView =>
-              // Temporary views' flows are allowed to be either streaming or batch, so no
-              // validation needs to be done for them
+              // Temporary views' flows are generally allowed to be either streaming or batch.
+              resolvedFlow match {
+                case _: AutoCdcMergeFlow =>
+                  // The exception is AutoCDC flows, which require a streaming-table sink to
+                  // immediately execute MERGE against.
+                  throw new AnalysisException(
+                    errorClass =
+                      "INVALID_FLOW_QUERY_TYPE.AUTOCDC_RELATION_FOR_TEMPORARY_VIEW",
+                    messageParameters = Map(
+                      "flowIdentifier" -> resolvedFlow.identifier.quotedString,
+                      "viewIdentifier" -> destTableIdentifier.quotedString
+                    )
+                  )
+                case _ => // OK: any other flow is permitted to target a temporary view.
+              }
           }
         }
       }
@@ -150,7 +190,7 @@ trait GraphValidations extends Logging {
           throw new AnalysisException(
             "PIPELINE_GRAPH_NOT_TOPOLOGICALLY_SORTED",
             Map(
-              "flowName" -> f.identifier.unquotedString,
+              "flowName" -> f.displayName,
               "inputName" -> unvisitedInput.unquotedString
             )
           )

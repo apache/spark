@@ -50,8 +50,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 abstract class CSVSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with TestCsvData
   with CommonFileDataSourceSuite {
 
@@ -2485,15 +2484,21 @@ abstract class CSVSuite
   // scalastyle:on nonascii
 
   test("lineSep restrictions") {
-    val errMsg1 = intercept[IllegalArgumentException] {
-      spark.read.option("lineSep", "").csv(testFile(carsFile)).collect()
-    }.getMessage
-    assert(errMsg1.contains("'lineSep' cannot be an empty string"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.option("lineSep", "").csv(testFile(carsFile)).collect()
+      },
+      condition = "INVALID_LINE_SEPARATOR.EMPTY",
+      parameters = Map.empty
+    )
 
-    val errMsg2 = intercept[IllegalArgumentException] {
-      spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect()
-    }.getMessage
-    assert(errMsg2.contains("'lineSep' can contain only 1 character"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.option("lineSep", "123").csv(testFile(carsFile)).collect()
+      },
+      condition = "INVALID_LINE_SEPARATOR.TOO_LONG",
+      parameters = Map("length" -> "3")
+    )
   }
 
   Seq(true, false).foreach { multiLine =>
@@ -3330,8 +3335,8 @@ abstract class CSVSuite
     }
   }
 
-  test("SPARK-40667: validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 41)
+  test("validate CSV Options") {
+    assert(CSVOptions.getAllOptions.size == 42)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3352,6 +3357,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("dateFormat"))
     assert(CSVOptions.isValidOption("timestampFormat"))
     assert(CSVOptions.isValidOption("timestampNTZFormat"))
+    assert(CSVOptions.isValidOption("timeFormat"))
     assert(CSVOptions.isValidOption("enableDateTimeParsingFallback"))
     assert(CSVOptions.isValidOption("multiLine"))
     assert(CSVOptions.isValidOption("samplingRatio"))
@@ -3374,7 +3380,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("delimiter"))
     assert(CSVOptions.isValidOption("singleVariantColumn"))
     assert(CSVOptions.isValidOption("columnPruning"))
-    // Please add validation on any new parquet options with alternative here
+    // Please add validation on any new CSV options with alternative here
     assert(CSVOptions.getAlternativeOption("sep").contains("delimiter"))
     assert(CSVOptions.getAlternativeOption("delimiter").contains("sep"))
     assert(CSVOptions.getAlternativeOption("encoding").contains("charset"))
@@ -3821,6 +3827,18 @@ abstract class CSVSuite
       }
     }
   }
+
+  test("SPARK-55866: CSV option value exceeds one character") {
+    Seq("quote", "escape", "comment", "charToEscapeQuoteEscaping").foreach { paramName =>
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.read.option(paramName, "<<").csv(testFile(carsFile))
+        },
+        condition = "OPTION_VALUE_EXCEEDS_ONE_CHARACTER",
+        parameters = Map("paramName" -> paramName, "actualValue" -> "<<")
+      )
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -3873,6 +3891,55 @@ class CSVv2Suite extends CSVSuite {
         parameters = Map("path" -> s".*$carsFile"),
         matchPVals = true
       )
+    }
+  }
+
+  test("TIME type roundtrip with CSV datasource - representative precisions") {
+    import java.time.LocalTime
+
+    def testTimesForPrecision(p: Int): Seq[LocalTime] = {
+      p match {
+        case 0 => Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45),
+          LocalTime.of(23, 59, 59))
+        case 3 => Seq(LocalTime.of(0, 0, 0, 0), LocalTime.of(14, 30, 45, 123000000),
+          LocalTime.of(23, 59, 59, 999000000))
+        case 6 => Seq(LocalTime.of(0, 0, 0, 0), LocalTime.of(14, 30, 45, 123456000),
+          LocalTime.of(23, 59, 59, 999999000))
+      }
+    }
+
+    withTempDir { dir =>
+      Seq(0, 3, 6).foreach { precision =>
+        val schema = new StructType().add("time", TimeType(precision))
+        val timeData = testTimesForPrecision(precision)
+        import testImplicits._
+        val df = timeData.toDF("time").select($"time".cast(TimeType(precision)))
+
+        val outputPath = s"${dir.getCanonicalPath}/time_p$precision.csv"
+        df.write.mode("overwrite").csv(outputPath)
+
+        val readBack = spark.read.schema(schema).csv(outputPath)
+        assert(readBack.schema === schema, s"Schema mismatch for precision $precision")
+        checkAnswer(readBack, df)
+      }
+
+      val customTime = LocalTime.of(14, 30, 45, 123456000)
+      val customSchema = new StructType().add("time", TimeType(6))
+      import testImplicits._
+      val customDF = Seq(customTime).toDF("time").select($"time".cast(TimeType(6)))
+      val customPath = s"${dir.getCanonicalPath}/time_custom.csv"
+
+      customDF.write.mode("overwrite")
+        .option("timeFormat", "HH-mm-ss.SSSSSS")
+        .csv(customPath)
+
+      val readBackCustom = spark.read
+        .schema(customSchema)
+        .option("timeFormat", "HH-mm-ss.SSSSSS")
+        .csv(customPath)
+
+      assert(readBackCustom.schema === customSchema, "Custom format schema mismatch")
+      checkAnswer(readBackCustom, customDF)
     }
   }
 }

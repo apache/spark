@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql.tests.pandas.streaming.test_transform_with_state import (
@@ -38,12 +37,6 @@ class TransformWithStateInPySparkWithCheckpointV2Tests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.pandas.streaming.test_transform_with_state_checkpoint_v2 import *  # noqa: F401,E501
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -20,7 +20,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupByApplyMixin:
@@ -60,23 +59,19 @@ class GroupByApplyMixin:
             pdf.groupby(["a", pkey]).apply(lambda x: x + x.min()).sort_index(),
         )
 
+    def test_apply_without_shortcut(self):
+        with ps.option_context("compute.shortcut_limit", 0):
+            self.test_apply()
+
 
 class GroupByApplyTests(
     GroupByApplyMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.diff_frames_ops.test_groupby_apply import *  # noqa
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

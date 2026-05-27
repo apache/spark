@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with BeforeAndAfter {
+class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import org.apache.spark.sql.functions._
   import testImplicits._
@@ -165,19 +165,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("Append: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").append()
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").append()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("Append: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").append()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").append()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Append: fail if it writes to a v1 table") {
@@ -270,19 +275,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("Overwrite: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").overwrite(lit(true))
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("Overwrite: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwrite(lit(true))
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwrite(lit(true))
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("Overwrite: fail if it writes to a v1 table") {
@@ -375,19 +385,24 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
 
   test("OverwritePartitions: fail if it writes to a temp view that is not v2 relation") {
     spark.range(10).createOrReplaceTempView("temp_view")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("temp_view").overwritePartitions()
-    }
-    assert(exc.getMessage.contains("Cannot write into temp view temp_view as it's not a " +
-      "data source v2 relation"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("temp_view").overwritePartitions()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "temp_view")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a view") {
     spark.sql("CREATE VIEW v AS SELECT 1")
-    val exc = intercept[AnalysisException] {
-      spark.table("source").writeTo("v").overwritePartitions()
-    }
-    assert(exc.getMessage.contains("Writing into a view is not allowed"))
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("v").overwritePartitions()
+      },
+      condition = "VIEW_WRITE_NOT_ALLOWED",
+      parameters = Map("name" -> "`spark_catalog`.`default`.`v`")
+    )
   }
 
   test("OverwritePartitions: fail if it writes to a v1 table") {
@@ -885,5 +900,95 @@ class DataFrameWriterV2Suite extends QueryTest with SharedSparkSession with Befo
     // Caching the DataFrame created from INSERT should not re-execute the command
     insertDF.cache()
     checkAnswer(spark.table("testcat.table_name"), Seq(Row(1, "a"), Row(2, "b")))
+  }
+
+  test("withSchemaEvolution: append evolves the table schema to add a new column") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint) USING foo")
+    val df = Seq((1L, "a")).toDF("id", "data")
+
+    // Without withSchemaEvolution the extra column is rejected.
+    checkError(
+      exception = intercept[AnalysisException](df.writeTo("testcat.table_name").append()),
+      condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "tableColumns" -> "`id`",
+        "dataColumns" -> "`id`, `data`"))
+
+    df.writeTo("testcat.table_name").withSchemaEvolution().append()
+
+    assert(spark.table("testcat.table_name").schema ===
+      new StructType().add("id", LongType).add("data", StringType))
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a")))
+  }
+
+  test("withSchemaEvolution: overwrite evolves the table schema to add a new column") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint) USING foo")
+    val df = Seq((1L, "a")).toDF("id", "data")
+
+    df.writeTo("testcat.table_name").withSchemaEvolution().overwrite(lit(true))
+
+    assert(spark.table("testcat.table_name").schema ===
+      new StructType().add("id", LongType).add("data", StringType))
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a")))
+  }
+
+  test("withSchemaEvolution: overwritePartitions evolves the table schema to add a new column") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint) USING foo PARTITIONED BY (id)")
+    val df = Seq((1L, "a")).toDF("id", "data")
+
+    df.writeTo("testcat.table_name").withSchemaEvolution().overwritePartitions()
+
+    assert(spark.table("testcat.table_name").schema ===
+      new StructType().add("id", LongType).add("data", StringType))
+    checkAnswer(spark.table("testcat.table_name"), Seq(Row(1L, "a")))
+  }
+
+  test("withSchemaEvolution: fails if the table does not support automatic schema evolution") {
+    spark.sql(
+      """CREATE TABLE testcat.table_name (id bigint) USING foo
+        |TBLPROPERTIES ('auto-schema-evolution' = 'false')""".stripMargin)
+    val df = Seq((1L, "a")).toDF("id", "data")
+
+    // With auto-schema-evolution disabled the extra column still fails.
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.writeTo("testcat.table_name").withSchemaEvolution().append()
+      },
+      condition = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
+      parameters = Map(
+        "tableName" -> "`testcat`.`table_name`",
+        "tableColumns" -> "`id`",
+        "dataColumns" -> "`id`, `data`"))
+  }
+
+  test("withSchemaEvolution: create fails with CREATE_TABLE sub-error") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("testcat.new_table").using("foo")
+          .withSchemaEvolution().create()
+      },
+      condition = "UNSUPPORTED_SCHEMA_EVOLUTION.CREATE_TABLE",
+      parameters = Map.empty)
+  }
+
+  test("withSchemaEvolution: replace/createOrReplace fail with REPLACE_TABLE sub-error") {
+    spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("testcat.table_name").using("foo")
+          .withSchemaEvolution().replace()
+      },
+      condition = "UNSUPPORTED_SCHEMA_EVOLUTION.REPLACE_TABLE",
+      parameters = Map.empty)
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.table("source").writeTo("testcat.table_name").using("foo")
+          .withSchemaEvolution().createOrReplace()
+      },
+      condition = "UNSUPPORTED_SCHEMA_EVOLUTION.REPLACE_TABLE",
+      parameters = Map.empty)
   }
 }

@@ -197,16 +197,6 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
           "expectedType" -> "\"BOOLEAN\"",
           "defaultValue" -> "41 + 1",
           "actualType" -> "\"INT\""))
-
-      // Make sure that constant-folding default values does not take place when the feature is
-      // disabled.
-      withSQLConf(SQLConf.ENABLE_DEFAULT_COLUMNS.key -> "false") {
-        val result: StructType = ResolveDefaultColumns.constantFoldCurrentDefaultsToExistDefaults(
-          db1tbl3.schema, "CREATE TABLE")
-        val columnEWithFeatureDisabled: StructField = findField("e", result)
-        // No constant-folding has taken place to the EXISTS_DEFAULT metadata.
-        assert(!columnEWithFeatureDisabled.metadata.contains("EXISTS_DEFAULT"))
-      }
     }
     withSQLConf(SQLConf.DEFAULT_COLUMN_ALLOWED_PROVIDERS.key -> "csv,hive,json,orc,parquet") {
       test
@@ -304,6 +294,102 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       intercept[AnalysisException] {
         catalog.dropDatabase("default", ignoreIfNotExists = false, cascade = true)
       }
+    }
+  }
+
+  test("drop database clears function registry cache (cache coherence)") {
+    val extCatalog = newEmptyCatalog()
+    extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    extCatalog.createDatabase(newDb("cache_coherence_db"), ignoreIfExists = false)
+    extCatalog.createFunction(
+      "cache_coherence_db", newFunc("cached_func", Some("cache_coherence_db")))
+    val registry = new SimpleFunctionRegistry()
+    val catalog = new SessionCatalog(extCatalog, registry)
+    try {
+      val ident = FunctionIdentifier(
+        "cached_func", Some("cache_coherence_db"), Some(CatalogManager.SESSION_CATALOG_NAME))
+      val info = new ExpressionInfo(
+        "test.Example",
+        "cache_coherence_db",
+        "cached_func",
+        "usage",
+        "arguments",
+        "\n    Examples:\n",
+        "\n    \n  ",
+        "misc_funcs",
+        "1.0.0",
+        "",
+        "sql_udf")
+      val builder = (e: Seq[Expression]) => e.head
+      registry.registerFunction(ident, info, builder)
+      assert(registry.functionExists(ident))
+      catalog.dropDatabase("cache_coherence_db", ignoreIfNotExists = false, cascade = true)
+      assert(!registry.functionExists(ident))
+    } finally {
+      catalog.reset()
+    }
+  }
+
+  test("drop database clears table function registry cache (cache coherence)") {
+    val extCatalog = newEmptyCatalog()
+    extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    extCatalog.createDatabase(newDb("cache_coherence_db2"), ignoreIfExists = false)
+    val scalarRegistry = new SimpleFunctionRegistry()
+    val tableRegistry = new SimpleTableFunctionRegistry()
+    val catalog = new SessionCatalog(extCatalog, scalarRegistry, tableRegistry)
+    try {
+      val ident = FunctionIdentifier(
+        "cached_table_func", Some("cache_coherence_db2"),
+        Some(CatalogManager.SESSION_CATALOG_NAME))
+      val info = new ExpressionInfo(
+        "test.Example",
+        "cache_coherence_db2",
+        "cached_table_func",
+        "usage",
+        "arguments",
+        "\n    Examples:\n",
+        "\n    \n  ",
+        "table_funcs",
+        "1.0.0",
+        "",
+        "sql_udf")
+      val builder = (_: Seq[Expression]) => Range(1, 1, 1, 1)
+      tableRegistry.registerFunction(ident, info, builder)
+      assert(tableRegistry.functionExists(ident))
+      catalog.dropDatabase("cache_coherence_db2", ignoreIfNotExists = false, cascade = true)
+      assert(!tableRegistry.functionExists(ident))
+    } finally {
+      catalog.reset()
+    }
+  }
+
+  test("drop database preserves functions in other databases (cache coherence)") {
+    val extCatalog = newEmptyCatalog()
+    extCatalog.createDatabase(newDb("default"), ignoreIfExists = true)
+    extCatalog.createDatabase(newDb("drop_me"), ignoreIfExists = false)
+    extCatalog.createDatabase(newDb("keep_me"), ignoreIfExists = false)
+    extCatalog.createFunction("drop_me", newFunc("func_drop", Some("drop_me")))
+    extCatalog.createFunction("keep_me", newFunc("func_keep", Some("keep_me")))
+    val registry = new SimpleFunctionRegistry()
+    val catalog = new SessionCatalog(extCatalog, registry)
+    try {
+      val dropIdent = FunctionIdentifier(
+        "func_drop", Some("drop_me"), Some(CatalogManager.SESSION_CATALOG_NAME))
+      val keepIdent = FunctionIdentifier(
+        "func_keep", Some("keep_me"), Some(CatalogManager.SESSION_CATALOG_NAME))
+      val builder = (e: Seq[Expression]) => e.head
+      val makeInfo = (db: String, name: String) => new ExpressionInfo(
+        "test.Example", db, name, "usage", "arguments",
+        "\n    Examples:\n", "\n    \n  ", "misc_funcs", "1.0.0", "", "sql_udf")
+      registry.registerFunction(dropIdent, makeInfo("drop_me", "func_drop"), builder)
+      registry.registerFunction(keepIdent, makeInfo("keep_me", "func_keep"), builder)
+      assert(registry.functionExists(dropIdent))
+      assert(registry.functionExists(keepIdent))
+      catalog.dropDatabase("drop_me", ignoreIfNotExists = false, cascade = true)
+      assert(!registry.functionExists(dropIdent))
+      assert(registry.functionExists(keepIdent))
+    } finally {
+      catalog.reset()
     }
   }
 
@@ -419,15 +505,14 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("drop table when database/table does not exist") {
     withBasicCatalog { catalog =>
-      // Should always throw exception when the database does not exist
-      intercept[NoSuchNamespaceException] {
+      // Should throw exception when the database does not exist and ignoreIfNotExists is false
+      intercept[NoSuchTableException] {
         catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = false,
           purge = false)
       }
-      intercept[NoSuchNamespaceException] {
-        catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
-          purge = false)
-      }
+      // Should succeed (no-op) when the database does not exist and ignoreIfNotExists is true
+      catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true,
+        purge = false)
       intercept[NoSuchTableException] {
         catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false,
           purge = false)
@@ -1666,7 +1751,8 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("func1")))
 
       // Returns false when the function is built-in or hive
-      assert(FunctionRegistry.builtin.functionExists(FunctionIdentifier("sum")))
+      assert(FunctionRegistry.builtin.functionExists(
+        FunctionRegistry.builtinFunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("sum")))
       assert(!catalog.isTemporaryFunction(FunctionIdentifier("histogram_numeric")))
     }
@@ -2030,132 +2116,133 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("corrupted view metadata: mismatch between viewQueryColumnNames and schema") {
     withSQLConf("spark.sql.viewSchemaBinding.enabled" -> "true") {
-      val catalog = new SessionCatalog(newBasicCatalog())
-      val db = "test_db"
-      catalog.createDatabase(newDb(db), ignoreIfExists = false)
+      withBasicCatalog { catalog =>
+        val db = "test_db"
+        catalog.createDatabase(newDb(db), ignoreIfExists = false)
 
-      // First create a base table for the view to reference
-      val baseTable = CatalogTable(
-        identifier = TableIdentifier("base_table", Some(db)),
+        // First create a base table for the view to reference
+        val baseTable = CatalogTable(
+          identifier = TableIdentifier("base_table", Some(db)),
+          tableType = CatalogTableType.MANAGED,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType()
+            .add("id", IntegerType)
+            .add("name", StringType)
+            .add("value", DoubleType)
+        )
+        catalog.createTable(baseTable, ignoreIfExists = false)
+
+        // Create a view with corrupted metadata where viewQueryColumnNames length
+        // doesn't match schema length
+        // We need to set the properties to define viewQueryColumnNames
+        val properties = Map(
+          "view.query.out.numCols" -> "2",
+          "view.query.out.col.0" -> "id",
+          "view.query.out.col.1" -> "name",
+          "view.schema.mode" -> "binding"  // Ensure it's not SchemaEvolution
+        )
+        val corruptedView = CatalogTable(
+          identifier = TableIdentifier("corrupted_view", Some(db)),
+          tableType = CatalogTableType.VIEW,
+          storage = CatalogStorageFormat.empty,
+          schema = new StructType()
+            .add("id", IntegerType)
+            .add("name", StringType)
+            .add("value", DoubleType),
+          viewText = Some("SELECT * FROM test_db.base_table"),
+          provider = Some("spark"),  // Ensure it's not Hive-created
+          properties = properties  // Only 2 query column names but schema has 3 columns
+        )
+
+        catalog.createTable(corruptedView, ignoreIfExists = false)
+
+        // Verify the view was created with corrupted metadata
+        val retrievedView = catalog.getTableMetadata(TableIdentifier("corrupted_view", Some(db)))
+        assert(retrievedView.viewQueryColumnNames.length == 2)
+        assert(retrievedView.schema.length == 3)
+
+        // Attempting to look up the view should throw an assertion error with detailed message
+        val exception = intercept[AssertionError] {
+          catalog.lookupRelation(TableIdentifier("corrupted_view", Some(db)))
+        }
+
+        // The expected message pattern allows for optional catalog prefix
+        val expectedPattern =
+          "assertion failed: Corrupted view metadata detected for view " +
+          "(\\`\\w+\\`\\.)?\\`test_db\\`\\.\\`corrupted_view\\`\\. " +
+          "The number of view query column names 2 " +
+          "does not match the number of columns in the view schema 3\\. " +
+          "View query column names: \\[id, name\\], " +
+          "View schema columns: \\[id, name, value\\]\\. " +
+          "This indicates corrupted view metadata that needs to be repaired\\."
+        assert(exception.getMessage.matches(expectedPattern))
+      }
+    }
+  }
+
+  test("UnresolvedCatalogRelation requires database in identifier") {
+    withEmptyCatalog { catalog =>
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = true)
+
+      // Create a table with database
+      val validTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some(db)),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty,
+        schema = new StructType().add("id", IntegerType)
+      )
+      catalog.createTable(validTable, ignoreIfExists = false)
+
+      // Try to create UnresolvedCatalogRelation without database - should fail
+      val tableMetaWithoutDb = validTable.copy(
+        identifier = TableIdentifier("test_table", None)
+      )
+
+      val exception = intercept[AssertionError] {
+        UnresolvedCatalogRelation(tableMetaWithoutDb)
+      }
+
+      val expectedMessage =
+        "assertion failed: Table identifier `test_table` is missing database name. " +
+        "UnresolvedCatalogRelation requires a fully qualified table identifier with database."
+      assert(exception.getMessage === expectedMessage)
+    }
+  }
+
+  test("HiveTableRelation requires database in identifier") {
+    withEmptyCatalog { catalog =>
+      val db = "test_db"
+      catalog.createDatabase(newDb(db), ignoreIfExists = true)
+
+      // Create a table with database
+      val validTable = CatalogTable(
+        identifier = TableIdentifier("test_table", Some(db)),
         tableType = CatalogTableType.MANAGED,
         storage = CatalogStorageFormat.empty,
         schema = new StructType()
           .add("id", IntegerType)
           .add("name", StringType)
-          .add("value", DoubleType)
-      )
-      catalog.createTable(baseTable, ignoreIfExists = false)
-
-      // Create a view with corrupted metadata where viewQueryColumnNames length
-      // doesn't match schema length
-      // We need to set the properties to define viewQueryColumnNames
-      val properties = Map(
-        "view.query.out.numCols" -> "2",
-        "view.query.out.col.0" -> "id",
-        "view.query.out.col.1" -> "name",
-        "view.schema.mode" -> "binding"  // Ensure it's not SchemaEvolution
-      )
-      val corruptedView = CatalogTable(
-        identifier = TableIdentifier("corrupted_view", Some(db)),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = new StructType()
-          .add("id", IntegerType)
-          .add("name", StringType)
-          .add("value", DoubleType),
-        viewText = Some("SELECT * FROM test_db.base_table"),
-        provider = Some("spark"),  // Ensure it's not Hive-created
-        properties = properties  // Only 2 query column names but schema has 3 columns
       )
 
-      catalog.createTable(corruptedView, ignoreIfExists = false)
+      // Try to create HiveTableRelation without database - should fail
+      val tableMetaWithoutDb = validTable.copy(
+        identifier = TableIdentifier("test_table", None)
+      )
 
-      // Verify the view was created with corrupted metadata
-      val retrievedView = catalog.getTableMetadata(TableIdentifier("corrupted_view", Some(db)))
-      assert(retrievedView.viewQueryColumnNames.length == 2)
-      assert(retrievedView.schema.length == 3)
-
-      // Attempting to look up the view should throw an assertion error with detailed message
       val exception = intercept[AssertionError] {
-        catalog.lookupRelation(TableIdentifier("corrupted_view", Some(db)))
+        HiveTableRelation(
+          tableMetaWithoutDb,
+          Seq(AttributeReference("id", IntegerType)()),
+          Seq.empty
+        )
       }
 
-      // The expected message pattern allows for optional catalog prefix
-      val expectedPattern =
-        "assertion failed: Corrupted view metadata detected for view " +
-        "(\\`\\w+\\`\\.)?\\`test_db\\`\\.\\`corrupted_view\\`\\. " +
-        "The number of view query column names 2 " +
-        "does not match the number of columns in the view schema 3\\. " +
-        "View query column names: \\[id, name\\], " +
-        "View schema columns: \\[id, name, value\\]\\. " +
-        "This indicates corrupted view metadata that needs to be repaired\\."
-      assert(exception.getMessage.matches(expectedPattern))
+      val expectedMessage =
+        "assertion failed: Table identifier `test_table` is missing database name. " +
+        "HiveTableRelation requires a fully qualified table identifier with database."
+      assert(exception.getMessage === expectedMessage)
     }
-  }
-
-  test("UnresolvedCatalogRelation requires database in identifier") {
-    val catalog = new SessionCatalog(newEmptyCatalog())
-    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
-    val db = "test_db"
-    catalog.createDatabase(newDb(db), ignoreIfExists = true)
-
-    // Create a table with database
-    val validTable = CatalogTable(
-      identifier = TableIdentifier("test_table", Some(db)),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType().add("id", IntegerType)
-    )
-    catalog.createTable(validTable, ignoreIfExists = false)
-
-    // Try to create UnresolvedCatalogRelation without database - should fail
-    val tableMetaWithoutDb = validTable.copy(
-      identifier = TableIdentifier("test_table", None)
-    )
-
-    val exception = intercept[AssertionError] {
-      UnresolvedCatalogRelation(tableMetaWithoutDb)
-    }
-
-    val expectedMessage =
-      "assertion failed: Table identifier `test_table` is missing database name. " +
-      "UnresolvedCatalogRelation requires a fully qualified table identifier with database."
-    assert(exception.getMessage === expectedMessage)
-  }
-
-  test("HiveTableRelation requires database in identifier") {
-    val catalog = new SessionCatalog(newEmptyCatalog())
-    catalog.createDatabase(newDb("default"), ignoreIfExists = true)
-    val db = "test_db"
-    catalog.createDatabase(newDb(db), ignoreIfExists = true)
-
-    // Create a table with database
-    val validTable = CatalogTable(
-      identifier = TableIdentifier("test_table", Some(db)),
-      tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat.empty,
-      schema = new StructType()
-        .add("id", IntegerType)
-        .add("name", StringType)
-    )
-
-    // Try to create HiveTableRelation without database - should fail
-    val tableMetaWithoutDb = validTable.copy(
-      identifier = TableIdentifier("test_table", None)
-    )
-
-    val exception = intercept[AssertionError] {
-      HiveTableRelation(
-        tableMetaWithoutDb,
-        Seq(AttributeReference("id", IntegerType)()),
-        Seq.empty
-      )
-    }
-
-    val expectedMessage =
-      "assertion failed: Table identifier `test_table` is missing database name. " +
-      "HiveTableRelation requires a fully qualified table identifier with database."
-    assert(exception.getMessage === expectedMessage)
   }
 
   test("SQLFunction requires either exprText or queryText") {
@@ -2168,6 +2255,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exprText = None,
         queryText = None,
         comment = None,
+        collation = None,
         deterministic = Some(true),
         containsSQL = Some(false),
         isTableFunc = false,
@@ -2191,6 +2279,7 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
         exprText = Some("SELECT 1"),
         queryText = None,
         comment = None,
+        collation = None,
         deterministic = Some(true),
         containsSQL = Some(true),
         isTableFunc = true,  // But marked as table function

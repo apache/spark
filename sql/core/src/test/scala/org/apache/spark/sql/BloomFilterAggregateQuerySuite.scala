@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLValue
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.internal.SQLConf
@@ -32,11 +33,14 @@ import org.apache.spark.tags.ExtendedSQLTest
  * Query tests for the Bloom filter aggregate and filter function.
  */
 @ExtendedSQLTest
-class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
+class BloomFilterAggregateQuerySuite extends SharedSparkSession {
   import testImplicits._
 
-  val funcId_bloom_filter_agg = new FunctionIdentifier("bloom_filter_agg")
-  val funcId_might_contain = new FunctionIdentifier("might_contain")
+  // Registry requires 3-part identifiers (catalog.database.funcName) for session functions
+  private def sessionFuncId(name: String): FunctionIdentifier = FunctionIdentifier(
+    name, Some(CatalogManager.SESSION_NAMESPACE), Some(CatalogManager.SYSTEM_CATALOG_NAME))
+  val funcId_bloom_filter_agg = sessionFuncId("bloom_filter_agg")
+  val funcId_might_contain = sessionFuncId("might_contain")
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -366,5 +370,24 @@ class BloomFilterAggregateQuerySuite extends QueryTest with SharedSparkSession {
     checkNumBits(10000, 197688)
     checkNumBits(100, 2935)
     checkNumBits(1, 38)
+  }
+
+  test("SPARK-54336: Fix BloomFilterMightContain type check with ScalarSubqueryReference") {
+    val table = "bloom_filter_test"
+    withTempView(table) {
+      Seq(0).toDF("col").createOrReplaceTempView(table)
+      val df = sql(
+        s"""
+          |SELECT
+          |  (SELECT
+          |    first(might_contain(
+          |      (SELECT bloom_filter_agg(col) FROM $table),
+          |      0L
+          |    ))
+          |  FROM $table)
+          |FROM $table
+          |""".stripMargin)
+      checkAnswer(df, Row(true))
+    }
   }
 }

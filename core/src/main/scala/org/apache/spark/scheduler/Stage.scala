@@ -21,7 +21,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{DeterministicLevel, RDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.CallSite
 
 /**
@@ -84,6 +84,14 @@ private[scheduler] abstract class Stage(
    */
   private[scheduler] var maxChecksumMismatchedId: Int = nextAttemptId
 
+  /**
+   * The max attempt id we should ignore results for this stage, indicating there are ancestor
+   * stages having been detected with checksum mismatches. This stage is probably also
+   * indeterminate, so we need to avoid completing the stage and the job with incorrect result
+   * by ignoring the task output from previous attempts which might consume inconsistent data
+   */
+  private[scheduler] var maxAttemptIdToIgnore: Option[Int] = None
+
   val name: String = callSite.shortForm
   val details: String = callSite.longForm
 
@@ -106,6 +114,14 @@ private[scheduler] abstract class Stage(
 
   private[scheduler] def clearFailures() : Unit = {
     failedAttemptIds.clear()
+  }
+
+  /** Mark the latest attempt as rollback */
+  private[scheduler] def markAsRollingBack(): Unit = {
+    // Only if the stage has been submitted
+    if (getNextAttemptId > 0) {
+      maxAttemptIdToIgnore = Some(latestInfo.attemptNumber())
+    }
   }
 
   /** Creates a new attempt for this stage by creating a new StageInfo with a new attempt ID. */
@@ -139,18 +155,4 @@ private[scheduler] abstract class Stage(
 
   /** Returns the sequence of partition ids that are missing (i.e. needs to be computed). */
   def findMissingPartitions(): Seq[Int]
-
-  def isIndeterminate: Boolean = {
-    rdd.outputDeterministicLevel == DeterministicLevel.INDETERMINATE
-  }
-
-  // Returns true if any parents of this stage are indeterminate.
-  def isParentIndeterminate: Boolean = {
-    parents.exists(_.isStageIndeterminate)
-  }
-
-  // Returns true if the stage itself is indeterminate.
-  def isStageIndeterminate: Boolean = {
-    !rdd.isReliablyCheckpointed && isChecksumMismatched
-  }
 }

@@ -78,12 +78,10 @@ class StringType private[sql] (
    * `string` due to backwards compatibility.
    */
   override def typeName: String =
-    if (isUTF8BinaryCollation) "string"
-    else s"string collate $collationName"
+    s"string collate $collationName"
 
   override def toString: String =
-    if (isUTF8BinaryCollation) "StringType"
-    else s"StringType($collationName)"
+    s"StringType($collationName)"
 
   private[sql] def collationName: String =
     CollationFactory.fetchCollation(collationId).collationName
@@ -119,6 +117,10 @@ case object StringType
     val collationId = CollationFactory.collationNameToId(collation)
     new StringType(collationId)
   }
+
+  override def typeName: String = "string"
+
+  override def toString: String = "StringType"
 }
 
 /**
@@ -177,8 +179,8 @@ case object StringHelper extends PartialOrdering[StringConstraint] {
   }
 
   def removeCollation(s: StringType): StringType = s match {
-    case CharType(length) => CharType(length)
-    case VarcharType(length) => VarcharType(length)
+    case c: CharType => CharType(c.length)
+    case v: VarcharType => VarcharType(v.length)
     case _: StringType => StringType
   }
 }
@@ -188,3 +190,40 @@ case object NoConstraint extends StringConstraint
 case class FixedLength(length: Int) extends StringConstraint
 
 case class MaxLength(length: Int) extends StringConstraint
+
+/**
+ * Used in the context of UDFs when resolving parameters/return types.
+ *
+ * For example, if a UDF parameter is defined as `p1 STRING COLLATE UTF8_BINARY`, calling
+ * [[typeName]] will return just `STRING`, omitting the collation information. This causes the
+ * parameter to be parsed into the companion object [[StringType]]. If the UDF has a default
+ * collation specified, it will be applied to the companion object [[StringType]], potentially
+ * resulting in the construction of a [[StringType]] with an invalid collation.
+ */
+object ExplicitUTF8BinaryStringType
+    extends StringType(CollationFactory.UTF8_BINARY_COLLATION_ID, NoConstraint) {
+  override def typeName: String = s"string collate $collationName"
+  override def toString: String = s"StringType($collationName)"
+
+  /**
+   * Transforms the given `dataType` by replacing each [[StringType]] that has an explicit
+   * `UTF8_BINARY` collation with `ExplicitUTF8BinaryStringType`.
+   */
+  def transform(dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case st: StringType if st.isUTF8BinaryCollation && !st.eq(StringType) =>
+        ExplicitUTF8BinaryStringType
+    }
+  }
+
+  /**
+   * Transforms the given `dataType` by replacing each companion object [[StringType]] with
+   * explicit `UTF8_BINARY` [[StringType]].
+   */
+  def transformDefaultStringType(dataType: DataType): DataType = {
+    dataType.transformRecursively {
+      case st: StringType if st.eq(StringType) =>
+        StringType(CollationFactory.UTF8_BINARY_COLLATION_ID)
+    }
+  }
+}

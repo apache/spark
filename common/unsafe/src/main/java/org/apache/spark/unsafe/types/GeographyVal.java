@@ -17,9 +17,12 @@
 
 package org.apache.spark.unsafe.types;
 
+import org.apache.spark.annotation.Unstable;
+
 import java.io.Serializable;
 
 // This class represents the physical type for the GEOGRAPHY data type.
+@Unstable
 public final class GeographyVal implements Comparable<GeographyVal>, Serializable {
 
   // The GEOGRAPHY type is implemented as a byte array. We provide `getBytes` and `fromBytes`

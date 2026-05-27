@@ -165,7 +165,7 @@ class FPGrowthSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
     val fPGrowth = new FPGrowth()
     testEstimatorAndModelReadWrite(fPGrowth, dataset, FPGrowthSuite.allParamSettings,
-      FPGrowthSuite.allParamSettings, checkModelData, skipTestSaveLocal = true)
+      FPGrowthSuite.allParamSettings, checkModelData)
   }
 }
 

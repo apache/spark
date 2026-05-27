@@ -31,6 +31,7 @@ import org.apache.spark.sql.connect.ConnectProtoUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.{SparkConnectPlanner, SparkConnectPlanTest}
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DummyPlugin extends RelationPlugin {
@@ -43,6 +44,19 @@ class DummyExpressionPlugin extends ExpressionPlugin {
   override def transform(
       relation: Array[Byte],
       planner: SparkConnectPlanner): Optional[Expression] = Optional.empty()
+}
+
+class DummyGetStatusPlugin extends GetStatusPlugin {
+  override def processRequestExtensions(
+      sessionHolder: SessionHolder,
+      requestExtensions: java.util.List[protobuf.Any]): Optional[java.util.List[protobuf.Any]] =
+    Optional.empty()
+
+  override def processOperationExtensions(
+      operationId: String,
+      sessionHolder: SessionHolder,
+      operationExtensions: java.util.List[protobuf.Any]): Optional[java.util.List[protobuf.Any]] =
+    Optional.empty()
 }
 
 class DummyPluginNoTrivialCtor(id: Int) extends RelationPlugin {
@@ -116,6 +130,9 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
     }
     if (SparkEnv.get.conf.contains(Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES)) {
       SparkEnv.get.conf.remove(Connect.CONNECT_EXTENSIONS_COMMAND_CLASSES)
+    }
+    if (SparkEnv.get.conf.contains(Connect.CONNECT_EXTENSIONS_GET_STATUS_CLASSES)) {
+      SparkEnv.get.conf.remove(Connect.CONNECT_EXTENSIONS_GET_STATUS_CLASSES)
     }
     SparkConnectPluginRegistry.reset()
   }
@@ -239,6 +256,31 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
     assert(SparkConnectPluginRegistry.loadCommandPlugins().isEmpty)
   }
 
+  test("GetStatus registry is empty by default") {
+    assert(SparkConnectPluginRegistry.loadGetStatusPlugins().isEmpty)
+  }
+
+  test("GetStatus plugin loaded dynamically from config") {
+    withSparkConf(
+      Connect.CONNECT_EXTENSIONS_GET_STATUS_CLASSES.key ->
+        "org.apache.spark.sql.connect.plugin.DummyGetStatusPlugin") {
+      val plugins = SparkConnectPluginRegistry.loadGetStatusPlugins()
+      assert(plugins.size == 1)
+      assert(plugins.head.isInstanceOf[GetStatusPlugin])
+    }
+  }
+
+  test("Multiple GetStatus plugins loaded dynamically from config") {
+    withSparkConf(
+      Connect.CONNECT_EXTENSIONS_GET_STATUS_CLASSES.key ->
+        ("org.apache.spark.sql.connect.plugin.DummyGetStatusPlugin," +
+          "org.apache.spark.sql.connect.plugin.DummyGetStatusPlugin")) {
+      val plugins = SparkConnectPluginRegistry.loadGetStatusPlugins()
+      assert(plugins.size == 2)
+      plugins.foreach(p => assert(p.isInstanceOf[GetStatusPlugin]))
+    }
+  }
+
   test("Building builders using factory methods") {
     val x = SparkConnectPluginRegistry.relation[DummyPlugin](classOf[DummyPlugin])
     assert(x != null)
@@ -247,6 +289,10 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
       SparkConnectPluginRegistry.expression[DummyExpressionPlugin](classOf[DummyExpressionPlugin])
     assert(y != null)
     assert(y().isInstanceOf[ExpressionPlugin])
+    val z =
+      SparkConnectPluginRegistry.getStatus[DummyGetStatusPlugin](classOf[DummyGetStatusPlugin])
+    assert(z != null)
+    assert(z().isInstanceOf[GetStatusPlugin])
   }
 
   test("Configured class not found is properly thrown") {
@@ -263,6 +309,14 @@ class SparkConnectPluginRegistrySuite extends SharedSparkSession with SparkConne
       assertThrows[ClassNotFoundException] {
         SparkConnectPluginRegistry.createConfiguredPlugins(
           SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_RELATION_CLASSES))
+      }
+    }
+
+    withSparkConf(
+      Connect.CONNECT_EXTENSIONS_GET_STATUS_CLASSES.key -> "this.class.does.not.exist") {
+      assertThrows[ClassNotFoundException] {
+        SparkConnectPluginRegistry.createConfiguredPlugins(
+          SparkEnv.get.conf.get(Connect.CONNECT_EXTENSIONS_GET_STATUS_CLASSES))
       }
     }
   }

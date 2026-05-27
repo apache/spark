@@ -171,18 +171,28 @@ private class HistoryServerDiskManager(
     }
 
     oldSizeOpt.foreach { oldSize =>
-      val path = appStorePath(appId, attemptId)
       updateUsage(-oldSize, committed = true)
-      if (path.isDirectory()) {
-        if (delete) {
-          deleteStore(path)
-        } else {
-          val newSize = sizeOf(path)
-          val newInfo = listing.read(classOf[ApplicationStoreInfo], path.getAbsolutePath())
-            .copy(size = newSize)
-          listing.write(newInfo)
-          updateUsage(newSize, committed = true)
+    }
+
+    // Apply the store operation regardless of whether the app was in the active map, since
+    // the store directory may still exist on disk (e.g., when the app was never opened after
+    // a restart).
+    val path = appStorePath(appId, attemptId)
+    if (path.isDirectory()) {
+      if (delete) {
+        // If the app was not actively tracked, its size was not deducted above; do it now.
+        if (oldSizeOpt.isEmpty) {
+          val size = sizeOf(path)
+          updateUsage(-size, committed = true)
         }
+        deleteStore(path)
+      } else if (oldSizeOpt.isDefined) {
+        // Re-measure the size since the store may have changed while it was open.
+        val newSize = sizeOf(path)
+        val newInfo = listing.read(classOf[ApplicationStoreInfo], path.getAbsolutePath())
+          .copy(size = newSize)
+        listing.write(newInfo)
+        updateUsage(newSize, committed = true)
       }
     }
   }

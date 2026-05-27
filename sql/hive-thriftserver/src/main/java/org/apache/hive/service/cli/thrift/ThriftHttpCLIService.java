@@ -40,9 +40,11 @@ import org.apache.thrift.protocol.TProtocolFactory;
 import org.eclipse.jetty.server.AbstractConnectionFactory;
 import org.eclipse.jetty.server.ConnectionFactory;
 import org.eclipse.jetty.server.HttpConnectionFactory;
+import org.eclipse.jetty.server.HttpConfiguration;
+import org.eclipse.jetty.server.SecureRequestCustomizer;
 import org.eclipse.jetty.server.ServerConnector;
-import org.eclipse.jetty.servlet.ServletContextHandler;
-import org.eclipse.jetty.servlet.ServletHolder;
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
+import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 import org.eclipse.jetty.util.thread.ExecutorThreadPool;
 import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
@@ -50,9 +52,11 @@ import org.eclipse.jetty.util.thread.ScheduledExecutorScheduler;
 public class ThriftHttpCLIService extends ThriftCLIService {
 
   protected org.eclipse.jetty.server.Server httpServer;
+  private final boolean sniHostCheckEnabled;
 
-  public ThriftHttpCLIService(CLIService cliService) {
+  public ThriftHttpCLIService(CLIService cliService, boolean sniHostCheckEnabled) {
     super(cliService, ThriftHttpCLIService.class.getSimpleName());
+    this.sniHostCheckEnabled = sniHostCheckEnabled;
   }
 
   @Override
@@ -91,8 +95,15 @@ public class ThriftHttpCLIService extends ThriftCLIService {
           Arrays.toString(sslContextFactoryServer.getExcludeProtocols()));
         sslContextFactoryServer.setKeyStorePath(keyStorePath);
         sslContextFactoryServer.setKeyStorePassword(keyStorePassword);
+        // SPARK-54293: Configure SNI host check, which defaults to true since Jetty 10.
+        // Controlled by spark.sql.hive.thriftServer.http.sniHostCheckEnabled (default: true),
+        // consistent with the behavior since SPARK-45522 (Jetty 10+).
+        HttpConfiguration httpConfig = new HttpConfiguration();
+        SecureRequestCustomizer src = new SecureRequestCustomizer();
+        src.setSniHostCheck(sniHostCheckEnabled);
+        httpConfig.addCustomizer(src);
         connectionFactories = AbstractConnectionFactory.getFactories(
-            sslContextFactoryServer, new HttpConnectionFactory());
+            sslContextFactoryServer, new HttpConnectionFactory(httpConfig));
       } else {
         connectionFactories = new ConnectionFactory[] { new HttpConnectionFactory() };
       }

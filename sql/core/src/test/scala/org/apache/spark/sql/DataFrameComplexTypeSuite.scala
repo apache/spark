@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * A test suite to test DataFrame/SQL functionalities with complex types (i.e. array, struct, map).
  */
-class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
+class DataFrameComplexTypeSuite extends SharedSparkSession {
   import testImplicits._
 
   test("ArrayTransform with scan input") {
@@ -69,6 +69,14 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSparkSession {
     val f = udf((a: String) => a)
     val df = Seq("a" -> 1).toDF("a", "b")
     df.select(map($"a", $"b").as("s")).select(f($"s".getItem("a"))).collect()
+  }
+
+  test("SPARK-53635 array of structure to Seq[Row]") {
+    val f = udf((items: Seq[Row], num: Int) => items.length + num)
+    val df = spark.sql("SELECT array(struct(1 as a), struct(2 as a), struct(3 as a)) as items")
+    val result = df.select(f($"items", lit(3)).alias("countNum")).collect()
+    assert(result.length == 1)
+    assert(result(0).getAs[Int]("countNum") == 6)
   }
 
   test("SPARK-12477 accessing null element in array field") {

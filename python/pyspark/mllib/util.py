@@ -20,7 +20,7 @@ from functools import reduce
 
 import numpy as np
 
-from pyspark import SparkContext, since
+from pyspark import since
 from pyspark.mllib.common import callMLlibFunc, inherit_doc
 from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 from pyspark.sql import DataFrame
@@ -28,7 +28,6 @@ from typing import Generic, Iterable, List, Optional, Tuple, Type, TypeVar, cast
 from pyspark.core.context import SparkContext
 from pyspark.mllib.linalg import Vector
 from pyspark.core.rdd import RDD
-from pyspark.sql.dataframe import DataFrame
 
 T = TypeVar("T")
 L = TypeVar("L", bound="Loader")
@@ -41,7 +40,6 @@ if TYPE_CHECKING:
 
 
 class MLUtils:
-
     """
     Helper methods to load, save and pre-process data used in MLlib.
 
@@ -146,11 +144,7 @@ class MLUtils:
         if numFeatures <= 0:
             parsed.cache()
             numFeatures = parsed.map(lambda x: -1 if x[1].size == 0 else x[1][-1]).reduce(max) + 1
-        return parsed.map(
-            lambda x: LabeledPoint(
-                x[0], Vectors.sparse(numFeatures, x[1], x[2])  # type: ignore[arg-type]
-            )
-        )
+        return parsed.map(lambda x: LabeledPoint(x[0], Vectors.sparse(numFeatures, x[1], x[2])))
 
     @staticmethod
     def saveAsLibSVMFile(data: RDD["LabeledPoint"], dir: str) -> None:
@@ -650,7 +644,7 @@ def _test() -> None:
     spark = SparkSession.builder.master("local[2]").appName("mllib.util tests").getOrCreate()
     globs["spark"] = spark
     globs["sc"] = spark.sparkContext
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

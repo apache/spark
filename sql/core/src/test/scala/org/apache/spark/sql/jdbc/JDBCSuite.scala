@@ -30,7 +30,7 @@ import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
@@ -47,7 +47,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends QueryTest with SharedSparkSession {
+class JDBCSuite extends SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -528,6 +528,62 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, size.toString)
       assert(spark.read.jdbc(
         urlWithUserAndPass, "TEST.PEOPLE", properties).collect().length === 3)
+    }
+  }
+
+  test("SPARK-56251: Dialect getFetchSize is applied when user does not specify fetchsize") {
+    JDBCSuite.capturedFetchSize = -1
+
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override def getFetchSize(options: JDBCOptions): Int = {
+        val result = options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
+          case Some(v) => v.toInt
+          case None => 100
+        }
+        JDBCSuite.capturedFetchSize = result
+        result
+      }
+    }
+
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
+      assert(df.collect().length === 3)
+      assert(JDBCSuite.capturedFetchSize === 100,
+        s"Expected getFetchSize to return 100 (dialect default), " +
+          s"got ${JDBCSuite.capturedFetchSize}")
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
+    }
+  }
+
+  test("SPARK-56251: User-specified fetchsize takes precedence over dialect getFetchSize") {
+    JDBCSuite.capturedFetchSize = -1
+
+    val testDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:h2")
+      override def getFetchSize(options: JDBCOptions): Int = {
+        val result = options.parameters.get(JDBCOptions.JDBC_BATCH_FETCH_SIZE) match {
+          case Some(v) => v.toInt
+          case None => 100
+        }
+        JDBCSuite.capturedFetchSize = result
+        result
+      }
+    }
+
+    JdbcDialects.registerDialect(testDialect)
+    try {
+      val properties = new Properties()
+      properties.setProperty(JDBCOptions.JDBC_BATCH_FETCH_SIZE, "42")
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties)
+      assert(df.collect().length === 3)
+      assert(JDBCSuite.capturedFetchSize === 42,
+        s"Expected getFetchSize to return 42 (user-specified), " +
+          s"got ${JDBCSuite.capturedFetchSize}")
+    } finally {
+      JdbcDialects.unregisterDialect(testDialect)
     }
   }
 
@@ -1088,7 +1144,8 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "SELECT TOP (123) a,b FROM test")
   }
 
-  test("SPARK-42534: DB2Dialect Limit query test") {
+  // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
+  ignore("SPARK-42534: DB2Dialect Limit query test") {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
     assert(
@@ -1939,17 +1996,20 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(getRowCount(df2) < df3.count())
   }
 
-  test("SPARK-26383 throw IllegalArgumentException if wrong kind of driver to the given url") {
-    val e = intercept[IllegalArgumentException] {
-      val opts = Map(
-        "url" -> "jdbc:mysql://localhost/db",
-        "dbtable" -> "table",
-        "driver" -> "org.postgresql.Driver"
-      )
-      spark.read.format("jdbc").options(opts).load()
-    }.getMessage
-    assert(e.contains("The driver could not open a JDBC connection. " +
-      "Check the URL: jdbc:mysql://localhost/db"))
+  test("SPARK-26383 throw FAILED_JDBC.CONNECTION if wrong kind of driver to the given url") {
+    val url = "jdbc:mysql://localhost/db"
+    checkError(
+      exception = intercept[AnalysisException] {
+        val opts = Map(
+          "url" -> url,
+          "dbtable" -> "table",
+          "driver" -> "org.postgresql.Driver"
+        )
+        spark.read.format("jdbc").options(opts).load()
+      },
+      condition = "FAILED_JDBC.CONNECTION",
+      parameters = Map("url" -> url)
+    )
   }
 
   test("support casting patterns for lower/upper bounds of TimestampType") {
@@ -2258,7 +2318,9 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
     // not supported
     Seq(
-      "jdbc:db2://host:port", "jdbc:derby:memory", "jdbc:h2://host:port",
+      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
+      // "jdbc:db2://host:port",
+      "jdbc:derby:memory", "jdbc:h2://host:port",
       "jdbc:sqlserver://host:port", "jdbc:postgresql://host:5432/postgres",
       "jdbc:snowflake://host:443?account=test", "jdbc:teradata://host:port").foreach { url =>
       val options = new JDBCOptions(baseParameters + ("url" -> url))
@@ -2273,4 +2335,40 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
         parameters = Map("jdbcDialect" -> dialect.getClass.getSimpleName))
     }
   }
+
+  test("FAILED_JDBC.CONNECTION") {
+    val testUrls = Seq(
+      "jdbc:mysql",
+      "jdbc:postgresql",
+      "jdbc:sqlserver",
+      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
+      // "jdbc:db2",
+      "jdbc:h2",
+      "jdbc:teradata",
+      "jdbc:databricks"
+    )
+
+    testUrls.foreach { connectionUrl =>
+      val url = s"$connectionUrl://invalid_url/"
+      val options = new JDBCOptions(Map(
+        "url" -> url,
+        "dbtable" -> "invalid_table"
+      ))
+      checkError(
+        exception = intercept[AnalysisException] {
+          JdbcUtils.withConnection(options) { conn =>
+            conn.getMetaData
+          }
+        },
+        condition = "FAILED_JDBC.CONNECTION",
+        parameters = Map("url" -> url)
+      )
+    }
+  }
+}
+
+object JDBCSuite {
+  // SPARK-56251: Spark tasks use deserialized dialect instances, so closure-captured variables
+  // from the test method won't be updated. Use a companion object singleton to pass values instead.
+  @volatile var capturedFetchSize: Int = -1
 }

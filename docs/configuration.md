@@ -1549,7 +1549,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.rolling.enabled</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether rolling over event log files is enabled. If set to true, it cuts down each event
     log file to the configured size.

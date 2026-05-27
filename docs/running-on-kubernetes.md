@@ -34,17 +34,17 @@ Please see [Spark Security](security.html) and the specific security sections in
 
 Images built from the project provided Dockerfiles contain a default [`USER`](https://docs.docker.com/engine/reference/builder/#user) directive with a default UID of `185`.  This means that the resulting images will be running the Spark processes as this UID inside the container. Security conscious deployments should consider providing custom images with `USER` directives specifying their desired unprivileged UID and GID.  The resulting UID should include the root group in its supplementary groups in order to be able to run the Spark executables.  Users building their own images with the provided `docker-image-tool.sh` script can use the `-u <uid>` option to specify the desired UID.
 
-Alternatively the [Pod Template](#pod-template) feature can be used to add a [Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#volumes-and-file-systems) with a `runAsUser` to the pods that Spark submits.  This can be used to override the `USER` directives in the images themselves.  Please bear in mind that this requires cooperation from your users and as such may not be a suitable solution for shared environments.  Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/#users-and-groups) if they wish to limit the users that pods may run as.
+Alternatively the [Pod Template](#pod-template) feature can be used to add a [Security Context](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#volumes-and-file-systems) with a `runAsUser` to the pods that Spark submits.  This can be used to override the `USER` directives in the images themselves.  Please bear in mind that this requires cooperation from your users and as such may not be a suitable solution for shared environments.  Cluster administrators should use the [Pod Security Admission Controller](https://kubernetes.io/docs/concepts/security/pod-security-admission/) if they wish to limit the users that pods may run as.
 
 ## Volume Mounts
 
 As described later in this document under [Using Kubernetes Volumes](#using-kubernetes-volumes) Spark on K8S provides configuration options that allow for mounting certain volume types into the driver and executor pods.  In particular it allows for [`hostPath`](https://kubernetes.io/docs/concepts/storage/volumes/#hostpath) volumes which as described in the Kubernetes documentation have known security vulnerabilities.
 
-Cluster administrators should use [Pod Security Policies](https://kubernetes.io/docs/concepts/policy/pod-security-policy/) to limit the ability to mount `hostPath` volumes appropriately for their environments.
+Cluster administrators should use the [Pod Security Admission Controller](https://kubernetes.io/docs/concepts/security/pod-security-admission/) to limit the ability to mount `hostPath` volumes appropriately for their environments.
 
 # Prerequisites
 
-* A running Kubernetes cluster at version >= 1.32 with access configured to it using
+* A running Kubernetes cluster at version >= 1.34 with access configured to it using
 [kubectl](https://kubernetes.io/docs/reference/kubectl/).  If you do not already have a working Kubernetes cluster,
 you may set up a test cluster on your local machine using
 [minikube](https://kubernetes.io/docs/getting-started-guides/minikube/).
@@ -685,7 +685,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.batch.size</code></td>
-  <td><code>10</code></td>
+  <td><code>20</code></td>
   <td>
     Number of pods to launch at once in each round of executor pod allocation.
   </td>
@@ -707,6 +707,18 @@ See the [configuration page](configuration.html) for information on Spark config
     The maximum number of executor pods to try to create during the whole job lifecycle.
   </td>
   <td>4.1.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.recoveryMode.enabled</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    When Spark driver detects an executor termination due to OOM, Spark starts to
+    allocate the recovery-mode executors which accept only a single task per executor JVM.
+    In other words, the recovery-mode executors replace the OOM-terminated executors to
+    survive from the resource-hungry tasks for the remaining tasks and stages.
+    If set to <code>false</code>, Spark will not use the recovery-mode executors.
+  </td>
+  <td>4.2.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.jars.avoidDownloadSchemes</code></td>
@@ -1546,6 +1558,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.2.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.driver.annotateExitException</code></td>
+  <td><code>false</code></td>
+  <td>
+    If set to true, Spark will store the exit exception failed applications in the Kubernetes API server using the <code>spark.exit-exception</code> annotation.
+  </td>
+  <td>4.1.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.driver.service.ipFamilyPolicy</code></td>
   <td><code>SingleStack</code></td>
   <td>
@@ -1562,6 +1582,14 @@ See the [configuration page](configuration.html) for information on Spark config
     <code>IPv4</code> and <code>IPv6</code>.
   </td>
   <td>3.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.useDriverPodIP</code></td>
+  <td><code>false</code></td>
+  <td>
+    If true, executor pods use Driver pod IP directly instead of Driver Service.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.driver.ownPersistentVolumeClaim</code></td>
@@ -1611,7 +1639,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Class names of an extra driver pod feature step implementing
-    `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
+    `KubernetesFeatureConfigStep`. This is a stable developer API. Comma separated.
     Runs after all of Spark internal feature steps. Since 3.3.0, your driver feature step
     can implement `KubernetesDriverCustomFeatureConfigStep` where the driver config
     is also available.
@@ -1632,7 +1660,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Class names of an extra executor pod feature step implementing
-    `KubernetesFeatureConfigStep`. This is a developer API. Comma separated.
+    `KubernetesFeatureConfigStep`. This is a stable developer API. Comma separated.
     Runs after all of Spark internal feature steps. Since 3.3.0, your executor feature step
     can implement `KubernetesExecutorCustomFeatureConfigStep` where the executor config
     is also available.
@@ -1659,6 +1687,17 @@ See the [configuration page](configuration.html) for information on Spark config
     allocation for all the used resource profiles.
   </td>
   <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.allocation.maxPendingPodsPerRp</code></td>
+  <td><code>Int.MaxValue</code></td>
+  <td>
+    Maximum number of pending PODs allowed per resource profile ID during executor
+    allocation. This provides finer-grained control over pending pods by limiting them
+    per resource profile rather than globally. When set, this limit is enforced
+    independently for each resource profile ID.
+  </td>
+  <td>4.1.0</td>
 </tr>
 <tr>
   <td><code>spark.kubernetes.allocation.pods.allocator</code></td>
@@ -1746,6 +1785,67 @@ See the [configuration page](configuration.html) for information on Spark config
     If there is no outlier, it works like TOTAL_DURATION policy.
   </td>
   <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeInterval</code></td>
+  <td><code>0s</code></td>
+  <td>
+    Interval between executor resize operations. To disable, set 0 (default).
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeThreshold</code></td>
+  <td><code>0.9</code></td>
+  <td>
+    The threshold to resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.resizeFactor</code></td>
+  <td><code>0.1</code></td>
+  <td>
+    The factor to resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeInterval</code></td>
+  <td><code>5min</code></td>
+  <td>
+    Interval between executor PVC resize operations, in minutes. Defaults to 5 minutes.
+    Set to 0 to disable. Must be 0 or a positive multiple of 5 minutes.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeThreshold</code></td>
+  <td><code>0.5</code></td>
+  <td>
+    The PVC usage ratio (used / capacity) above which the driver triggers a resize.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pvc.resizeFactor</code></td>
+  <td><code>1.0</code></td>
+  <td>
+    The factor to grow PVC storage by, relative to the current request.
+    Takes effect only when <code>org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin</code>
+    is registered via <code>spark.plugins</code>.
+  </td>
+  <td>4.2.0</td>
 </tr>
 </table>
 
@@ -1953,10 +2053,10 @@ Spark allows users to specify a custom Kubernetes schedulers.
 #### Using Volcano as Customized Scheduler for Spark on Kubernetes
 
 ##### Prerequisites
-* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.7.0:
+* Spark on Kubernetes with [Volcano](https://volcano.sh/en) as a custom scheduler is supported since Spark v3.3.0 and Volcano v1.7.0. Below is an example to install Volcano 1.14.2:
 
   ```bash
-  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.7.0/installer/volcano-development.yaml
+  kubectl apply -f https://raw.githubusercontent.com/volcano-sh/volcano/v1.14.2/installer/volcano-development.yaml
   ```
 
 ##### Build
@@ -1990,7 +2090,6 @@ Note that currently only driver/job level PodGroup is supported in Volcano Featu
 Volcano defines PodGroup spec using [CRD yaml](https://volcano.sh/en/docs/podgroup/#example).
 
 Similar to [Pod template](#pod-template), Spark users can use Volcano PodGroup Template to define the PodGroup spec configurations.
-To do so, specify the Spark property `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process.
 Below is an example of PodGroup template:
 
 ```yaml
@@ -2011,6 +2110,17 @@ spec:
   queue: default
 ```
 
+You have two options to provide the PodGroup template in spark. If both are provided, the `podGroupTemplateFile` will takes precedence.
+1. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateFile` to point to files accessible to the `spark-submit` process
+```bash
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateFile=/path/to/podgroup
+```
+
+2. Use `spark.kubernetes.scheduler.volcano.podGroupTemplateJson` to pass the template directly in JSON format:.
+```bash
+--conf spark.kubernetes.scheduler.volcano.podGroupTemplateJson={"spec": {"minMember": 1,"minResources": {"cpu": "2","memory": "3Gi"},"priorityClassName": "system-node-critical","queue": "default"}}
+```
+
 #### Using Apache YuniKorn as Customized Scheduler for Spark on Kubernetes
 
 [Apache YuniKorn](https://yunikorn.apache.org/) is a resource scheduler for Kubernetes that provides advanced batch scheduling
@@ -2024,10 +2134,10 @@ Install Apache YuniKorn:
 ```bash
 helm repo add yunikorn https://apache.github.io/yunikorn-release
 helm repo update
-helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.7.0 --create-namespace --set embedAdmissionController=false
+helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.8.0 --create-namespace --set embedAdmissionController=false
 ```
 
-The above steps will install YuniKorn v1.7.0 on an existing Kubernetes cluster.
+The above steps will install YuniKorn v1.8.0 on an existing Kubernetes cluster.
 
 ##### Get started
 

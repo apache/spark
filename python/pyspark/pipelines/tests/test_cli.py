@@ -22,6 +22,7 @@ from pathlib import Path
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import (
+    ReusedConnectTestCase,
     should_test_connect,
     connect_requirement_message,
 )
@@ -45,11 +46,10 @@ if should_test_connect and have_yaml:
     not should_test_connect or not have_yaml,
     connect_requirement_message or yaml_requirement_message,
 )
-class CLIUtilityTests(unittest.TestCase):
+class CLIUtilityTests(ReusedConnectTestCase):
     def test_load_pipeline_spec(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
-            tmpfile.write(
-                """
+            tmpfile.write("""
                 {
                     "name": "test_pipeline",
                     "catalog": "test_catalog",
@@ -63,8 +63,7 @@ class CLIUtilityTests(unittest.TestCase):
                     ],
                     "storage": "storage_path",
                 }
-                """
-            )
+                """)
             tmpfile.flush()
             spec = load_pipeline_spec(Path(tmpfile.name))
             assert spec.name == "test_pipeline"
@@ -77,8 +76,7 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_load_pipeline_spec_name_is_required(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
-            tmpfile.write(
-                """
+            tmpfile.write("""
                 {
                     "catalog": "test_catalog",
                     "database": "test_database",
@@ -91,8 +89,7 @@ class CLIUtilityTests(unittest.TestCase):
                     ],
                     "storage": "storage_path",
                 }
-                """
-            )
+                """)
             tmpfile.flush()
             with self.assertRaises(PySparkException) as context:
                 load_pipeline_spec(Path(tmpfile.name))
@@ -103,8 +100,7 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_load_pipeline_spec_schema_fallback(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
-            tmpfile.write(
-                """
+            tmpfile.write("""
                 {
                     "name": "test_pipeline",
                     "catalog": "test_catalog",
@@ -118,8 +114,7 @@ class CLIUtilityTests(unittest.TestCase):
                     ],
                     "storage": "storage_path",
                 }
-                """
-            )
+                """)
             tmpfile.flush()
             spec = load_pipeline_spec(Path(tmpfile.name))
             assert spec.catalog == "test_catalog"
@@ -130,8 +125,7 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_load_pipeline_spec_invalid(self):
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
-            tmpfile.write(
-                """
+            tmpfile.write("""
                 {
                     "catalogtypo": "test_catalog",
                     "configuration": {
@@ -142,8 +136,7 @@ class CLIUtilityTests(unittest.TestCase):
                         {"glob": {"include": "test_include"}}
                     ]
                 }
-                """
-            )
+                """)
             tmpfile.flush()
             with self.assertRaises(PySparkException) as context:
                 load_pipeline_spec(Path(tmpfile.name))
@@ -190,44 +183,40 @@ class CLIUtilityTests(unittest.TestCase):
 
     def test_find_pipeline_spec_in_current_directory(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / "pipeline.yaml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
-                f.write(
-                    """
+                f.write("""
                     {
                         "catalog": "test_catalog",
                         "configuration": {},
                         "libraries": []
                     }
-                    """
-                )
+                    """)
 
             found_spec = find_pipeline_spec(Path(temp_dir))
             self.assertEqual(found_spec, spec_path)
 
     def test_find_pipeline_spec_in_current_directory_yml(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            spec_path = Path(temp_dir) / "pipeline.yml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yml"
             with spec_path.open("w") as f:
-                f.write(
-                    """
+                f.write("""
                     {
                         "catalog": "test_catalog",
                         "configuration": {},
                         "libraries": []
                     }
-                    """
-                )
+                    """)
 
             found_spec = find_pipeline_spec(Path(temp_dir))
             self.assertEqual(found_spec, spec_path)
 
     def test_find_pipeline_spec_in_current_directory_yml_and_yaml(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            with (Path(temp_dir) / "pipeline.yml").open("w") as f:
+            with (Path(temp_dir) / "spark-pipeline.yml").open("w") as f:
                 f.write("")
 
-            with (Path(temp_dir) / "pipeline.yaml").open("w") as f:
+            with (Path(temp_dir) / "spark-pipeline.yaml").open("w") as f:
                 f.write("")
 
             with self.assertRaises(PySparkException) as context:
@@ -240,17 +229,15 @@ class CLIUtilityTests(unittest.TestCase):
             parent_dir = Path(temp_dir)
             child_dir = Path(temp_dir) / "child"
             child_dir.mkdir()
-            spec_path = parent_dir / "pipeline.yaml"
+            spec_path = parent_dir / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
-                f.write(
-                    """
+                f.write("""
                     {
                         "catalog": "test_catalog",
                         "configuration": {},
                         "libraries": []
                     }
-                    """
-                )
+                    """)
 
             found_spec = find_pipeline_spec(Path(child_dir))
             self.assertEqual(found_spec, spec_path)
@@ -272,29 +259,27 @@ class CLIUtilityTests(unittest.TestCase):
             subdir2.mkdir()
             with (subdir1 / "libraries.py").open("w") as f:
                 f.write(
-                    textwrap.dedent(
-                        """
+                    textwrap.dedent("""
                         from pyspark import pipelines as dp
                         @dp.materialized_view
                         def mv1():
                             raise NotImplementedError()
-                    """
-                    )
+                    """)
                 )
 
             with (subdir2 / "libraries.py").open("w") as f:
                 f.write(
-                    textwrap.dedent(
-                        """
+                    textwrap.dedent("""
                         from pyspark import pipelines as dp
                         def mv2():
                             raise NotImplementedError()
-                    """
-                    )
+                    """)
                 )
 
             registry = LocalGraphElementRegistry()
-            register_definitions(outer_dir / "pipeline.yaml", registry, spec)
+            register_definitions(
+                outer_dir / "spark-pipeline.yaml", registry, spec, self.spark, "test_graph_id"
+            )
             self.assertEqual(len(registry.outputs), 1)
             self.assertEqual(registry.outputs[0].name, "mv1")
 
@@ -315,7 +300,9 @@ class CLIUtilityTests(unittest.TestCase):
 
             registry = LocalGraphElementRegistry()
             with self.assertRaises(RuntimeError) as context:
-                register_definitions(outer_dir / "pipeline.yml", registry, spec)
+                register_definitions(
+                    outer_dir / "spark-pipeline.yml", registry, spec, self.spark, "test_graph_id"
+                )
             self.assertIn("This is a test exception", str(context.exception))
 
     def test_register_definitions_unsupported_file_extension_matches_glob(self):
@@ -334,7 +321,7 @@ class CLIUtilityTests(unittest.TestCase):
 
             registry = LocalGraphElementRegistry()
             with self.assertRaises(PySparkException) as context:
-                register_definitions(outer_dir, registry, spec)
+                register_definitions(outer_dir, registry, spec, self.spark, "test_graph_id")
             self.assertEqual(
                 context.exception.getCondition(), "PIPELINE_UNSUPPORTED_DEFINITIONS_FILE_EXTENSION"
             )
@@ -351,13 +338,11 @@ class CLIUtilityTests(unittest.TestCase):
 
             with (inner_dir1 / "defs.py").open("w") as f:
                 f.write(
-                    textwrap.dedent(
-                        """
+                    textwrap.dedent("""
                         import sys
                         sys.path.append(".")
                         import mypackage.my_module
-                        """
-                    )
+                        """)
                 )
 
             inner_dir1_mypackage = inner_dir1 / "mypackage"
@@ -372,7 +357,7 @@ class CLIUtilityTests(unittest.TestCase):
             registry = LocalGraphElementRegistry()
             with change_dir(inner_dir2):
                 register_definitions(
-                    inner_dir1 / "pipeline.yaml",
+                    inner_dir1 / "spark-pipeline.yaml",
                     registry,
                     PipelineSpec(
                         name="test_pipeline",
@@ -382,12 +367,14 @@ class CLIUtilityTests(unittest.TestCase):
                         configuration={},
                         libraries=[LibrariesGlob(include="defs.py")],
                     ),
+                    self.spark,
+                    "test_graph_id",
                 )
 
     def test_full_refresh_all_conflicts_with_full_refresh(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a minimal pipeline spec
-            spec_path = Path(temp_dir) / "pipeline.yaml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
 
@@ -411,7 +398,7 @@ class CLIUtilityTests(unittest.TestCase):
     def test_full_refresh_all_conflicts_with_refresh(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a minimal pipeline spec
-            spec_path = Path(temp_dir) / "pipeline.yaml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
 
@@ -436,7 +423,7 @@ class CLIUtilityTests(unittest.TestCase):
     def test_full_refresh_all_conflicts_with_both(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             # Create a minimal pipeline spec
-            spec_path = Path(temp_dir) / "pipeline.yaml"
+            spec_path = Path(temp_dir) / "spark-pipeline.yaml"
             with spec_path.open("w") as f:
                 f.write('{"name": "test_pipeline"}')
 
@@ -521,8 +508,7 @@ class CLIUtilityTests(unittest.TestCase):
     def test_pipeline_spec_with_invalid_glob_pattern(self):
         """Test that pipeline spec with invalid glob pattern is rejected."""
         with tempfile.NamedTemporaryFile(mode="w") as tmpfile:
-            tmpfile.write(
-                """
+            tmpfile.write("""
                 {
                     "name": "test_pipeline",
                     "storage": "storage_path",
@@ -530,8 +516,7 @@ class CLIUtilityTests(unittest.TestCase):
                         {"glob": {"include": "transformations/**/*.py"}}
                     ]
                 }
-                """
-            )
+                """)
             tmpfile.flush()
             with self.assertRaises(PySparkException) as context:
                 load_pipeline_spec(Path(tmpfile.name))
@@ -543,10 +528,6 @@ class CLIUtilityTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    try:
-        import xmlrunner  # type: ignore
+    from pyspark.testing import main
 
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

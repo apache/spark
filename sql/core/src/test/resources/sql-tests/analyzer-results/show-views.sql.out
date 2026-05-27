@@ -116,13 +116,13 @@ org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 -- !query
 DROP VIEW global_temp.view_3
 -- !query analysis
-DropTempViewCommand global_temp.view_3
+DropTempViewCommand global_temp.view_3, false
 
 
 -- !query
 DROP VIEW view_4
 -- !query analysis
-DropTempViewCommand view_4
+DropTempViewCommand view_4, false
 
 
 -- !query

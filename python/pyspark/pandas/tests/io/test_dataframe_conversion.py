@@ -25,7 +25,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import (
     have_openpyxl,
     openpyxl_requirement_message,
@@ -51,8 +50,7 @@ class DataFrameConversionMixin:
         return str.translate({ord(c): None for c in string.whitespace})
 
     def test_to_html(self):
-        expected = self.strip_all_whitespace(
-            """
+        expected = self.strip_all_whitespace("""
             <table border="1" class="dataframe">
               <thead>
                 <tr style="text-align: right;"><th></th><th>a</th><th>b</th></tr>
@@ -63,14 +61,12 @@ class DataFrameConversionMixin:
                 <tr><th>3</th><td>3</td><td>6</td></tr>
               </tbody>
             </table>
-            """
-        )
+            """)
         got = self.strip_all_whitespace(self.psdf.to_html())
         self.assert_eq(got, expected)
 
         # with max_rows set
-        expected = self.strip_all_whitespace(
-            """
+        expected = self.strip_all_whitespace("""
             <table border="1" class="dataframe">
               <thead>
                 <tr style="text-align: right;"><th></th><th>a</th><th>b</th></tr>
@@ -80,8 +76,7 @@ class DataFrameConversionMixin:
                 <tr><th>1</th><td>2</td><td>5</td></tr>
               </tbody>
             </table>
-            """
-        )
+            """)
         got = self.strip_all_whitespace(self.psdf.to_html(max_rows=2))
         self.assert_eq(got, expected)
 
@@ -266,19 +261,12 @@ class DataFrameConversionMixin:
 class DataFrameConversionTests(
     DataFrameConversionMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
     TestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.io.test_dataframe_conversion import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

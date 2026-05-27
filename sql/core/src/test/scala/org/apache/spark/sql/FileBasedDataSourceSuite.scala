@@ -45,8 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class FileBasedDataSourceSuite extends QueryTest
-  with SharedSparkSession
+class FileBasedDataSourceSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
   import testImplicits._
 
@@ -879,6 +878,29 @@ class FileBasedDataSourceSuite extends QueryTest
     assert(fileList.toSet === expectedFileList.toSet)
   }
 
+  test("recursiveFileLookup with a partitioned catalog table is rejected") {
+    withTable("part_tbl") {
+      sql(
+        """
+          |CREATE TABLE part_tbl (id INT, value STRING)
+          |USING parquet
+          |PARTITIONED BY (year INT)
+          |""".stripMargin)
+      sql("INSERT INTO part_tbl PARTITION (year = 2024) VALUES (1, 'a')")
+      sql("INSERT INTO part_tbl PARTITION (year = 2025) VALUES (2, 'b')")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read
+            .option("recursiveFileLookup", "true")
+            .table("part_tbl")
+            .collect()
+        },
+        condition = "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE",
+        parameters = Map.empty[String, String]
+      )
+    }
+  }
+
   test("Return correct results when data columns overlap with partition columns") {
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>
@@ -1247,7 +1269,7 @@ class FileBasedDataSourceSuite extends QueryTest
   }
 
   test("SPARK-51590: unsupported the TIME data types in data sources") {
-    val datasources = Seq("orc", "xml", "csv", "json", "text")
+    val datasources = Seq("text")
     Seq(true, false).foreach { useV1 =>
       val useV1List = if (useV1) {
         datasources.mkString(",")
@@ -1268,6 +1290,45 @@ class FileBasedDataSourceSuite extends QueryTest
                 "columnName" -> "`t`",
                 "columnType" -> s"\"${TimeType().sql}\"",
                 "format" -> formatMapping(format)))
+          }
+        }
+      }
+    }
+  }
+
+  test("Geospatial types are not supported in file data sources other than Parquet") {
+    // All of these file formats do NOT support geospatial types (GEOMETRY and GEOGRAPHY).
+    val unsupportedDataSources = Seq("csv", "json", "orc", "text", "xml")
+    // Test both v1 and v2 data sources.
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) {
+        unsupportedDataSources.mkString(",")
+      } else {
+        ""
+      }
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withTempDir { dir =>
+          // Temporary directory for writing the test data.
+          val tempDir = new File(dir, "files").getCanonicalPath
+          // Test data: WKB representation of POINT(1 2).
+          val wkb = "0101000000000000000000F03F0000000000000040"
+          // Test GEOMETRY and GEOGRAPHY data types.
+          val geoTestCases = Seq(
+            (s"ST_GeomFromWKB(X'$wkb')", "\"GEOMETRY(0)\""),
+            (s"ST_GeogFromWKB(X'$wkb')", "\"GEOGRAPHY(4326)\"")
+          )
+          unsupportedDataSources.foreach { format =>
+            geoTestCases.foreach { case (expr, expectedType) =>
+              checkError(
+                exception = intercept[AnalysisException] {
+                  sql(s"select $expr as g").write.format(format).mode("overwrite").save(tempDir)
+                },
+                condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+                parameters = Map(
+                  "columnName" -> "`g`",
+                  "columnType" -> expectedType,
+                  "format" -> formatMapping(format)))
+            }
           }
         }
       }

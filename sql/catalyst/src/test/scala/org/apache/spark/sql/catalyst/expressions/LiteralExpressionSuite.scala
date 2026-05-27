@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, UTF8String}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -654,5 +654,35 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(expr.contextIndependentFoldable,
         s"Expression $expr should not be context independent foldable")
     }
+  }
+
+  test("Literal.create with null Geography value") {
+    val lit = Literal.create(null, GeographyType(4326))
+    assert(lit.dataType === GeographyType(4326))
+    assert(lit.value === null)
+  }
+
+  test("Literal.create with Geography value") {
+    val pointBytes = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    val geog = Geography.fromWKB(pointBytes, 4326)
+    val lit = Literal.create(geog, GeographyType(4326))
+    assert(lit.dataType === GeographyType(4326))
+    assert(lit.value.isInstanceOf[GeographyVal])
+  }
+
+  test("Literal.create with null Geometry value") {
+    val lit = Literal.create(null, GeometryType(0))
+    assert(lit.dataType === GeometryType(0))
+    assert(lit.value === null)
+  }
+
+  test("Literal.create with Geometry value") {
+    val pointBytes = "010100000000000000000031400000000000001C40"
+      .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+    val geom = Geometry.fromWKB(pointBytes, 0)
+    val lit = Literal.create(geom, GeometryType(0))
+    assert(lit.dataType === GeometryType(0))
+    assert(lit.value.isInstanceOf[GeometryVal])
   }
 }

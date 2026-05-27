@@ -27,15 +27,16 @@ import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericR
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
+import org.apache.spark.sql.avro.functions.{from_avro, to_avro}
 import org.apache.spark.sql.execution.LocalTableScanExec
 import org.apache.spark.sql.functions.{col, lit, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 
-class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
+class AvroFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("roundtrip in to_avro and from_avro - int and string") {
@@ -664,5 +665,115 @@ class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
         |}""".stripMargin
     checkAnswer(df.select(functions.schema_of_avro(avroMultiType)),
       Row("STRUCT<u: STRUCT<member0: INT, member1: STRING> NOT NULL>"))
+  }
+
+  test("roundtrip in to_avro and from_avro - TIME type with different precisions") {
+    val df = spark.sql("""
+      SELECT
+        TIME'12:34:56' as time_p0,
+        TIME'12:34:56.1' as time_p1,
+        TIME'12:34:56.12' as time_p2,
+        TIME'12:34:56.123' as time_p3,
+        TIME'12:34:56.1234' as time_p4,
+        TIME'12:34:56.12345' as time_p5,
+        TIME'12:34:56.123456' as time_p6
+    """)
+
+    val precisions = Seq(0, 1, 2, 3, 4, 5, 6)
+    precisions.foreach { p =>
+      val fieldName = s"time_p$p"
+      // Generate correct schema for each precision
+      val avroTimeSchema = s"""
+        |{
+        |  "type": "long",
+        |  "logicalType": "time-micros",
+        |  "spark.sql.catalyst.type": "time($p)"
+        |}
+      """.stripMargin
+
+      val avroDF = df.select(to_avro(col(fieldName)).as("avro"))
+      val readBack = avroDF.select(from_avro($"avro", avroTimeSchema).as(fieldName))
+
+      checkAnswer(readBack, df.select(col(fieldName)))
+    }
+  }
+
+  test("roundtrip in to_avro and from_avro - TIME type in struct") {
+    val df = spark.sql("""
+      SELECT
+        struct(
+          TIME'09:00:00.123' as start,
+          TIME'17:30:45.987654' as end,
+          'Morning Shift' as description
+        ) as schedule
+    """)
+
+    val avroStructDF = df.select(to_avro($"schedule").as("avro"))
+
+    val avroStructSchema = """
+      |{
+      |  "type": "record",
+      |  "name": "schedule",
+      |  "fields": [
+      |    {
+      |      "name": "start",
+      |      "type": {
+      |        "type": "long",
+      |        "logicalType": "time-micros",
+      |        "spark.sql.catalyst.type": "time(3)"
+      |      }
+      |    },
+      |    {
+      |      "name": "end",
+      |      "type": {
+      |        "type": "long",
+      |        "logicalType": "time-micros",
+      |        "spark.sql.catalyst.type": "time(6)"
+      |      }
+      |    },
+      |    {
+      |      "name": "description",
+      |      "type": "string"
+      |    }
+      |  ]
+      |}
+    """.stripMargin
+
+    val readBack = avroStructDF.select(
+      from_avro($"avro", avroStructSchema).as("schedule"))
+    checkAnswer(readBack, df)
+  }
+
+  test("SPARK-56043: from_avro with invalid schema should not throw NPE") {
+    // An Avro schema that references an undefined type should produce MALFORMED_AVRO_MESSAGE
+    // rather than a raw NullPointerException from the Avro library's ParseContext.resolve().
+    val invalidSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "TestRecord",
+        |  "fields": [
+        |    {"name": "value", "type": "UndefinedType"}
+        |  ]
+        |}
+      """.stripMargin
+
+    val df = spark.range(1).select(lit(Array[Byte](1, 2, 3)).as("data"))
+    val ex = intercept[Exception] {
+      df.select(from_avro($"data", invalidSchema)).collect()
+    }
+    assert(!ex.isInstanceOf[NullPointerException],
+      s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
+  }
+
+  test("SPARK-56043: from_avro with completely unparseable schema should not throw NPE") {
+    val garbageSchema = "this is not valid JSON at all"
+
+    val df = spark.range(1).select(lit(Array[Byte](1, 2, 3)).as("data"))
+    val ex = intercept[Exception] {
+      df.select(from_avro($"data", garbageSchema)).collect()
+    }
+    assert(!ex.isInstanceOf[NullPointerException],
+      s"Should not throw NPE, but got: ${ex.getClass.getName}: ${ex.getMessage}")
   }
 }

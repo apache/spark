@@ -46,7 +46,6 @@ from pyspark.sql.dataframe import DataFrame
 from pyspark.sql import SparkSession
 from pyspark.sql.utils import is_remote
 
-
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 
@@ -118,7 +117,7 @@ class _CrossValidatorParams(_ValidatorParams):
     )
 
     def __init__(self, *args: Any):
-        super(_CrossValidatorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(numFolds=3, foldCol="")
 
     @since("1.4.0")
@@ -204,14 +203,10 @@ class _CrossValidatorReadWrite(MetaAlgorithmReadWrite):
 
     def _save_meta_algorithm(self, root_path: str, node_path: List[str]) -> Dict[str, Any]:
         metadata = self._get_metadata_to_save()
-        metadata[
-            "estimator"
-        ] = self.getEstimator()._save_to_node_path(  # type: ignore[attr-defined]
+        metadata["estimator"] = self.getEstimator()._save_to_node_path(  # type: ignore[attr-defined]
             root_path, node_path + ["crossvalidator_estimator"]
         )
-        metadata[
-            "evaluator"
-        ] = self.getEvaluator()._save_to_node_path(  # type: ignore[attr-defined]
+        metadata["evaluator"] = self.getEvaluator()._save_to_node_path(  # type: ignore[attr-defined]
             root_path, node_path + ["crossvalidator_evaluator"]
         )
         metadata["estimator_param_maps"] = [
@@ -326,7 +321,7 @@ class CrossValidator(
         __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
                  seed=None, parallelism=1, foldCol="")
         """
-        super(CrossValidator, self).__init__()
+        super().__init__()
         self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
@@ -539,7 +534,7 @@ class CrossValidatorModel(Model, _CrossValidatorParams, _CrossValidatorReadWrite
         avgMetrics: Optional[List[float]] = None,
         stdMetrics: Optional[List[float]] = None,
     ) -> None:
-        super(CrossValidatorModel, self).__init__()
+        super().__init__()
         #: best model from cross validation
         self.bestModel = bestModel
         #: Average cross-validation metrics for each paramMap in

@@ -148,7 +148,7 @@ abstract class PropagateEmptyRelationBase extends Rule[LogicalPlan] with CastSup
       case _: LocalLimit if !p.isStreaming => empty(p)
       case _: Offset => empty(p)
       case _: RepartitionOperation =>
-        if (p.getTagValue(ROOT_REPARTITION).isEmpty) {
+        if (!p.containsTag(ROOT_REPARTITION)) {
           empty(p)
         } else {
           p.unsetTagValue(ROOT_REPARTITION)

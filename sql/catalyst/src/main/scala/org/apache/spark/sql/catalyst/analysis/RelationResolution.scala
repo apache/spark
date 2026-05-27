@@ -23,30 +23,38 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{
-  CatalogTableType,
+  CatalogTable,
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, PythonWorkerLogs, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
   CatalogPlugin,
   CatalogV2Util,
+  ChangelogContext,
   Identifier,
   LookupCatalog,
+  MetadataTable,
   Table,
+  TableCatalog,
+  TableViewCatalog,
   V1Table,
-  V2TableWithV1Fallback
+  V2TableWithV1Fallback,
+  ViewCatalog,
+  ViewInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
-class RelationResolution(override val catalogManager: CatalogManager)
+class RelationResolution(
+    override val catalogManager: CatalogManager,
+    sharedRelationCache: RelationCache)
     extends DataTypeErrorsBase
     with Logging
     with LookupCatalog
@@ -79,6 +87,8 @@ class RelationResolution(override val catalogManager: CatalogManager)
 
   /**
    * Lookup temporary view by `identifier`. Returns `None` if the view wasn't found.
+   * For session-qualified names (session.v or system.session.v), normalizes to the view name
+   * before lookup so that SessionCatalog is queried for local temp view only.
    */
   def lookupTempView(identifier: Seq[String]): Option[TemporaryViewRelation] = {
     // We are resolving a view and this name is not a temp view when that view was created. We
@@ -87,7 +97,63 @@ class RelationResolution(override val catalogManager: CatalogManager)
       return None
     }
 
-    v1SessionCatalog.getRawLocalOrGlobalTempView(identifier)
+    val lookupIdentifier = if (CatalogManager.isSessionQualifiedViewName(identifier)) {
+      normalizeSessionQualifiedViewIdentifier(identifier)
+    } else {
+      identifier
+    }
+    v1SessionCatalog.getRawLocalOrGlobalTempView(lookupIdentifier)
+  }
+
+  /**
+   * For session-qualified view names (session.v or system.session.v), returns Seq(v).
+   * Call only when [[CatalogManager.isSessionQualifiedViewName]] is true.
+   */
+  private def normalizeSessionQualifiedViewIdentifier(nameParts: Seq[String]): Seq[String] = {
+    Seq(nameParts.last)
+  }
+
+  /**
+   * Scope in the relation resolution search path. Used to interpret
+   * [[CatalogManager.sqlResolutionPathEntries]] when resolving unqualified table/view names.
+   */
+  private sealed trait RelationResolutionStep
+  private case object SessionScopeStep extends RelationResolutionStep
+  private case class PersistentCatalogStep(catalogAndNamespace: Seq[String])
+      extends RelationResolutionStep
+
+  /**
+   * Path entries for unqualified relation resolution.
+   *
+   * Inside a view or SQL function, [[AnalysisContext.resolutionPathEntries]] uses the
+   * persisted frozen path from metadata when available.
+   * When PATH is disabled, legacy resolution rules apply.
+   */
+  private def relationResolutionEntries: Seq[Seq[String]] = {
+    catalogManager.resolutionPathEntriesForAnalysis(
+      AnalysisContext.get.resolutionPathEntries,
+      AnalysisContext.get.catalogAndNamespace)
+  }
+
+  /**
+   * Ordered resolution steps for unqualified relation names. Each persistent path entry is kept
+   * with its catalog/namespace so lookup qualifies the object name under that entry (not only
+   * under the session's current namespace).
+   */
+  private def relationResolutionSteps: Seq[RelationResolutionStep] = {
+    relationResolutionEntries.flatMap {
+      case p if CatalogManager.isSystemSessionPathEntry(p) => Some(SessionScopeStep)
+      case Seq("system", "builtin") => None
+      case entry => Some(PersistentCatalogStep(entry))
+    }
+  }
+
+  /**
+   * Resolution search path formatted for TABLE_OR_VIEW_NOT_FOUND error messages.
+   * Same order as [[relationResolutionSteps]]; each entry is quoted (e.g. "`system`.`session`").
+   */
+  def resolutionSearchPathForError: Seq[String] = {
+    relationResolutionEntries.map(toSQLId)
   }
 
   /**
@@ -107,47 +173,201 @@ class RelationResolution(override val catalogManager: CatalogManager)
       throw new AnalysisException("MULTIPLE_TIME_TRAVEL_SPEC", Map.empty[String, String])
     }
     val finalTimeTravelSpec = timeTravelSpec.orElse(timeTravelSpecFromOptions)
-    resolveTempView(
-      u.multipartIdentifier,
-      u.isStreaming,
-      finalTimeTravelSpec.isDefined
-    ).orElse {
-      resolveSystemSessionView(u.multipartIdentifier)
-    }.orElse {
-      expandIdentifier(u.multipartIdentifier) match {
-        case CatalogAndIdentifier(catalog, ident) =>
-          val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
-          val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
-          relationCache
-            .get(key)
-            .map { cache =>
-              val cachedRelation = cache.transform {
-                case multi: MultiInstanceRelation =>
-                  val newRelation = multi.newInstance()
-                  newRelation.copyTagsFrom(multi)
-                  newRelation
-              }
-              cloneWithPlanId(cachedRelation, planId)
+    val identifier = u.multipartIdentifier
+
+    // system.session.v (3 parts): only local temp view by name; same as SessionCatalog matching.
+    if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
+      val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
+      return resolveTempView(
+        normalized,
+        u.isStreaming,
+        finalTimeTravelSpec.isDefined
+      )
+    }
+
+    // Two-part session.v: local temp view `v`, or persistent relation `v` in schema `session`.
+    // Order follows [[SQLConf.prioritizeSystemCatalog]] (inverse of `PERSISTENT_CATALOG_FIRST`).
+    if (identifier.length == 2 &&
+        identifier.head.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)) {
+      val viewNameOnly = Seq(identifier.last)
+      val tempSession = () =>
+        resolveTempView(viewNameOnly, u.isStreaming, finalTimeTravelSpec.isDefined)
+      val persistentSessionDb = () =>
+        tryResolvePersistent(u, identifier, finalTimeTravelSpec)
+      return if (conf.prioritizeSystemCatalog) {
+        tempSession().orElse(persistentSessionDb())
+      } else {
+        persistentSessionDb().orElse(tempSession())
+      }
+    }
+
+    // Multi-part (but not session-qualified): try temp view first (e.g. global_temp.tbl1), then
+    // persistent.
+    if (identifier.length > 1) {
+      return resolveTempView(
+        identifier,
+        u.isStreaming,
+        finalTimeTravelSpec.isDefined
+      ).orElse(tryResolvePersistent(u, identifier, finalTimeTravelSpec))
+    }
+
+    // 1-part name: try each step in [[relationResolutionSteps]] order (from
+    // [[CatalogManager.sqlResolutionPathEntries]]).
+    val steps = relationResolutionSteps
+    for (step <- steps) {
+      val result = step match {
+        case SessionScopeStep =>
+          resolveTempView(identifier, u.isStreaming, finalTimeTravelSpec.isDefined)
+        case PersistentCatalogStep(prefix) =>
+          tryResolvePersistent(u, prefix ++ identifier, finalTimeTravelSpec)
+      }
+      if (result.isDefined) return result
+    }
+    None
+  }
+
+  /**
+   * Try to resolve the identifier as a persistent table/view (current catalog/namespace).
+   */
+  private def tryResolvePersistent(
+      u: UnresolvedRelation,
+      identifier: Seq[String],
+      finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
+    expandIdentifier(identifier) match {
+      case CatalogAndIdentifier(catalog, ident) =>
+        val key = toCacheKey(catalog, ident, finalTimeTravelSpec)
+        val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
+        relationCache
+          .get(key)
+          .map(adaptCachedRelation(_, planId))
+          .orElse {
+            val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
+            val finalOptions = u.clearWritePrivileges.options
+            // For a `TableViewCatalog` with no time-travel / write privileges, the single-RPC
+            // `loadTableOrView` answers both "is there a table?" and "is there a view?" in one
+            // call. Time-travel and write privileges apply to tables only, so for those the
+            // lookup falls through to the table-only `loadTable` path below; views are not
+            // reachable via the v2 fallback in those cases.
+            //
+            // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
+            // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
+            // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
+            val tableOrView: Option[Table] = catalog match {
+              case mc: TableViewCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
+                try {
+                  Some(mc.loadTableOrView(ident))
+                } catch {
+                  case _: NoSuchTableException => None
+                }
+              case _ =>
+                val tableSide: Option[Table] = if (
+                  CatalogV2Util.isSessionCatalog(catalog) || catalog.isInstanceOf[TableCatalog]
+                ) {
+                  CatalogV2Util.loadTable(
+                    catalog,
+                    ident,
+                    finalTimeTravelSpec,
+                    Option(writePrivileges))
+                } else {
+                  None
+                }
+                // Fallback to ViewCatalog for catalogs that host views but where loadTable
+                // returned None (or was skipped because there's no TableCatalog mixin).
+                // Time-travel / write privileges only apply to tables, not views, so the
+                // fallback only fires when both are absent.
+                tableSide.orElse {
+                  if (finalTimeTravelSpec.isEmpty && writePrivileges == null) {
+                    catalog match {
+                      case vc: ViewCatalog =>
+                        try {
+                          Some(new MetadataTable(vc.loadView(ident), ident.toString))
+                        } catch {
+                          case _: NoSuchViewException => None
+                        }
+                      case _ => None
+                    }
+                  } else {
+                    None
+                  }
+                }
             }
-            .orElse {
-              val writePrivilegesString =
-                Option(u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES))
-              val table =
-                CatalogV2Util.loadTable(catalog, ident, finalTimeTravelSpec, writePrivilegesString)
+            // `table` is `tableOrView` filtered to tables only -- used for cache lookup since
+            // we don't share-cache views.
+            val table: Option[Table] = tableOrView.filter {
+              case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
+              case _ => true
+            }
+
+            val sharedRelationCacheMatch = for {
+              t <- table
+              if finalTimeTravelSpec.isEmpty && writePrivileges == null && !u.isStreaming
+              cached <- lookupSharedRelationCache(catalog, ident, t)
+            } yield {
+              val updatedRelation = cached.copy(options = finalOptions)
+              val nameParts = ident.toQualifiedNameParts(catalog)
+              val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
+              relationCache.update(key, aliasedRelation)
+              adaptCachedRelation(aliasedRelation, planId)
+            }
+
+            sharedRelationCacheMatch.orElse {
               val loaded = createRelation(
                 catalog,
                 ident,
-                table,
-                u.clearWritePrivileges.options,
+                tableOrView,
+                finalOptions,
                 u.isStreaming,
-                finalTimeTravelSpec
-              )
+                finalTimeTravelSpec)
               loaded.foreach(relationCache.update(key, _))
               loaded.map(cloneWithPlanId(_, planId))
             }
-        case _ => None
-      }
+          }
+      case _ => None
     }
+  }
+
+  /**
+   * Resolve a CDC (CHANGES) query: look up the catalog, call loadChangelog(), wrap in
+   * ChangelogTable, and return a DataSourceV2Relation.
+   */
+  def resolveChangelog(u: UnresolvedRelation, ctx: ChangelogContext): Option[LogicalPlan] = {
+    expandIdentifier(u.multipartIdentifier) match {
+      case CatalogAndIdentifier(catalog, ident) =>
+        val tableCatalog = catalog.asTableCatalog
+        val changelog = try {
+          tableCatalog.loadChangelog(ident, ctx, u.options)
+        } catch {
+          case _: UnsupportedOperationException =>
+            throw QueryCompilationErrors.cdcNotSupportedError(tableCatalog.name())
+        }
+        val changelogTable = ChangelogTable(changelog, ctx)
+        val relation = if (u.isStreaming) {
+          StreamingRelationV2(
+            None, changelogTable.name, changelogTable, u.options,
+            changelogTable.columns.toAttributes, Some(catalog), Some(ident), None)
+        } else {
+          DataSourceV2Relation.create(changelogTable, Some(catalog), Some(ident), u.options)
+        }
+        Some(SubqueryAlias(catalog.name +: ident.asMultipartIdentifier, relation))
+      case _ => None
+    }
+  }
+
+  private def lookupSharedRelationCache(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      table: Table): Option[DataSourceV2Relation] = {
+    CatalogV2Util.lookupCachedRelation(sharedRelationCache, catalog, ident, table, conf)
+  }
+
+  private def adaptCachedRelation(cached: LogicalPlan, planId: Option[Long]): LogicalPlan = {
+    val plan = cached transform {
+      case multi: MultiInstanceRelation =>
+        val newRelation = multi.newInstance()
+        newRelation.copyTagsFrom(multi)
+        newRelation
+    }
+    cloneWithPlanId(plan, planId)
   }
 
   private def createRelation(
@@ -157,6 +377,22 @@ class RelationResolution(override val catalogManager: CatalogManager)
       options: CaseInsensitiveStringMap,
       isStreaming: Boolean,
       timeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
+    def createDataSourceV1Scan(v1Table: CatalogTable): LogicalPlan = {
+      if (isStreaming) {
+        if (v1Table.isViewLike) {
+          throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
+            ident.quoted
+          )
+        }
+        SubqueryAlias(
+          v1Table.fullIdent,
+          UnresolvedCatalogRelation(v1Table, options, isStreaming = true)
+        )
+      } else {
+        v1SessionCatalog.getRelation(v1Table, options)
+      }
+    }
+
     table.map {
       // To utilize this code path to execute V1 commands, e.g. INSERT,
       // either it must be session catalog, or tracksPartitionsInCatalog
@@ -167,19 +403,13 @@ class RelationResolution(override val catalogManager: CatalogManager)
       case v1Table: V1Table
           if CatalogV2Util.isSessionCatalog(catalog)
           || !v1Table.catalogTable.tracksPartitionsInCatalog =>
-        if (isStreaming) {
-          if (v1Table.v1Table.tableType == CatalogTableType.VIEW) {
-            throw QueryCompilationErrors.permanentViewNotSupportedByStreamingReadingAPIError(
-              ident.quoted
-            )
-          }
-          SubqueryAlias(
-            catalog.name +: ident.asMultipartIdentifier,
-            UnresolvedCatalogRelation(v1Table.v1Table, options, isStreaming = true)
-          )
-        } else {
-          v1SessionCatalog.getRelation(v1Table.v1Table, options)
-        }
+        createDataSourceV1Scan(v1Table.v1Table)
+
+      // MetadataTable is a sentinel meaning "interpret via v1", so unlike the V1Table
+      // case above we apply no session-catalog / tracksPartitionsInCatalog guard -- any catalog
+      // returning MetadataTable has opted into v1 read semantics.
+      case t: MetadataTable =>
+        createDataSourceV1Scan(V1Table.toCatalogTable(catalog, ident, t))
 
       case table =>
         if (isStreaming) {
@@ -227,6 +457,63 @@ class RelationResolution(override val catalogManager: CatalogManager)
     }
   }
 
+  def resolveReference(ref: V2TableReference): LogicalPlan = {
+    val relation = if (ref.context.cacheable) {
+      getOrLoadRelation(ref)
+    } else {
+      loadRelation(ref)
+    }
+    val planId = ref.getTagValue(LogicalPlan.PLAN_ID_TAG)
+    cloneWithPlanId(relation, planId)
+  }
+
+  private def getOrLoadRelation(ref: V2TableReference): LogicalPlan = {
+    val key = toCacheKey(ref.catalog, ref.identifier)
+    relationCache.get(key) match {
+      case Some(cached) =>
+        adaptCachedRelation(cached, ref)
+      case None =>
+        val relation = loadRelation(ref)
+        relationCache.update(key, relation)
+        relation
+    }
+  }
+
+  /**
+   * Loads the table for a [[V2TableReference]] and returns a resolved [[DataSourceV2Relation]].
+   *
+   * The catalog is re-resolved by name through the [[CatalogManager]] rather than reusing
+   * [[V2TableReference#catalog]] directly. When a transaction is active, the
+   * [[TransactionAwareCatalogManager]] redirects catalog lookups to the transaction's catalog
+   * instance, so the [[TableCatalog#loadTable]] call is intercepted by the transaction catalog,
+   * which uses it to track which tables are read as part of the transaction.
+   */
+  private def loadRelation(ref: V2TableReference): LogicalPlan = {
+    val resolvedCatalog = catalogManager.catalog(ref.catalog.name).asTableCatalog
+    val table = resolvedCatalog.loadTable(ref.identifier)
+    V2TableReferenceUtils.validateLoadedTable(table, ref)
+    DataSourceV2Relation(
+      table = table,
+      output = ref.output,
+      catalog = Some(resolvedCatalog),
+      identifier = Some(ref.identifier),
+      options = ref.options)
+  }
+
+  private def adaptCachedRelation(cached: LogicalPlan, ref: V2TableReference): LogicalPlan = {
+    cached transform {
+      case r: DataSourceV2Relation if matchesReference(r, ref) =>
+        V2TableReferenceUtils.validateLoadedTable(r.table, ref)
+        r.copy(output = ref.output, options = ref.options)
+    }
+  }
+
+  private def matchesReference(
+      relation: DataSourceV2Relation,
+      ref: V2TableReference): Boolean = {
+    relation.catalog.contains(ref.catalog) && relation.identifier.contains(ref.identifier)
+  }
+
   private def isResolvingView: Boolean = AnalysisContext.get.catalogAndNamespace.nonEmpty
 
   private def isReferredTempViewName(nameParts: Seq[String]): Boolean = {
@@ -236,22 +523,6 @@ class RelationResolution(override val catalogManager: CatalogManager)
         case (a, b) => resolver(a, b)
       }
     }
-  }
-
-  private def isSystemSessionIdentifier(identifier: Seq[String]): Boolean = {
-    identifier.length > 2 &&
-      identifier(0).equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) &&
-      identifier(1).equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
-  }
-
-  private def resolveSystemSessionView(
-      identifier: Seq[String]): Option[LogicalPlan] = {
-    if (isSystemSessionIdentifier(identifier)) {
-      Option(identifier.drop(2)).collect {
-        case Seq(viewName) if viewName.equalsIgnoreCase(PythonWorkerLogs.ViewName) =>
-          PythonWorkerLogs.viewDefinition()
-      }
-    } else None
   }
 
   private def toCacheKey(

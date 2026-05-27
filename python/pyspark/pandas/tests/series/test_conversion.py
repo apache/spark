@@ -18,9 +18,9 @@ import unittest
 
 import pandas as pd
 
+from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import have_tabulate, tabulate_requirement_message
 
 
@@ -43,10 +43,12 @@ class SeriesConversionMixin:
         pser = pd.Series(["3/11/2000", "3/12/2000", "3/13/2000"] * 100)
         psser = ps.from_pandas(pser)
 
-        self.assert_eq(
-            pd.to_datetime(pser, infer_datetime_format=True),
-            ps.to_datetime(psser, infer_datetime_format=True),
-        )
+        self.assert_eq(pd.to_datetime(pser), ps.to_datetime(psser))
+        if LooseVersion(pd.__version__) < "3.0.0":
+            self.assert_eq(
+                pd.to_datetime(pser, infer_datetime_format=True),
+                ps.to_datetime(psser, infer_datetime_format=True),
+            )
 
     def test_to_list(self):
         self.assert_eq(self.psser.tolist(), self.pser.tolist())
@@ -75,18 +77,11 @@ class SeriesConversionMixin:
 class SeriesConversionTests(
     SeriesConversionMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.series.test_conversion import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

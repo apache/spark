@@ -29,7 +29,7 @@ def create_dataflow_graph(
     default_database: Optional[str],
     sql_conf: Optional[Mapping[str, str]],
 ) -> str:
-    """Create a dataflow graph in in the Spark Connect server.
+    """Create a dataflow graph in the Spark Connect server.
 
     :returns: The ID of the created dataflow graph.
     """
@@ -42,7 +42,7 @@ def create_dataflow_graph(
     command.pipeline_command.create_dataflow_graph.CopyFrom(inner_command)
     # Cast because mypy seems to think `spark`` is a function, not an object. Likely related to
     # SPARK-47544.
-    (_, properties, _) = cast(Any, spark).client.execute_command(command)
+    _, properties, _ = cast(Any, spark).client.execute_command(command)
     return properties["pipeline_command_result"].create_dataflow_graph_result.dataflow_graph_id
 
 
@@ -57,7 +57,7 @@ def handle_pipeline_events(iter: Iterator[Dict[str, Any]]) -> None:
             continue
         elif "pipeline_event_result" not in result.keys():
             raise PySparkValueError(
-                "Pipeline logs stream handler received an unexpected result: " f"{result}"
+                f"Pipeline logs stream handler received an unexpected result: {result}"
             )
         else:
             event = result["pipeline_event_result"].event
@@ -76,6 +76,7 @@ def start_run(
 ) -> Iterator[Dict[str, Any]]:
     """Start a run of the dataflow graph in the Spark Connect server.
 
+    :param spark: SparkSession.
     :param dataflow_graph_id: The ID of the dataflow graph to start.
     :param full_refresh: List of datasets to reset and recompute.
     :param full_refresh_all: Perform a full graph reset and recompute.

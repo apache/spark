@@ -27,13 +27,15 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.SQL_TEXT
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, TaskInterruptListener}
 
 /**
  * Data corresponding to one partition of a JDBCRDD.
@@ -49,12 +51,19 @@ object JDBCRDD extends Logging {
    * schema.
    *
    * @param options - JDBC options that contains url, table and other information.
+   * @param conn - JDBC connection to use for fetching the schema.
+   * @param ident - Optional table identifier used for error reporting.
+   * @param catalogName - Optional catalog name used for error reporting.
    *
    * @return A StructType giving the table's Catalyst schema.
    * @throws java.sql.SQLException if the table specification is garbage.
    * @throws java.sql.SQLException if the table contains an unsupported type.
    */
-  def resolveTable(options: JDBCOptions, conn: Connection): StructType = {
+  def resolveTable(
+      options: JDBCOptions,
+      conn: Connection,
+      ident: Option[Identifier] = None,
+      catalogName: Option[String] = None): StructType = {
     val url = options.url
     val prepareQuery = options.prepareQuery
     val table = options.tableOrQuery
@@ -64,6 +73,13 @@ object JDBCRDD extends Logging {
     try {
       getQueryOutputSchema(fullQuery, options, dialect, conn)
     } catch {
+      // By checking isObjectNotFoundException before isSyntaxErrorBestEffort, we can reliably
+      // distinguish between the case where the table does not exist and other SQL syntax errors.
+      // This order is important because when a table does not exist, the exception raised can
+      // also match the criteria for isSyntaxErrorBestEffort.
+      case e: SQLException if ident.isDefined &&
+        dialect.isObjectNotFoundException(e) =>
+        throw QueryCompilationErrors.noSuchTableError(catalogName.get, ident.get)
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
@@ -305,8 +321,7 @@ class JDBCRDD(
     val inputMetrics = context.taskMetrics().inputMetrics
     val part = thePart.asInstanceOf[JDBCPartition]
     conn = getConnection(part.idx)
-    import scala.jdk.CollectionConverters._
-    dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
+    dialect.beforeFetch(conn, options)
 
     // This executes a generic SQL statement (or PL/SQL block) before reading
     // the table/query via JDBC. Use this feature to initialize the database
@@ -328,8 +343,29 @@ class JDBCRDD(
     logInfo(log"Generated JDBC query to fetch data: ${MDC(SQL_TEXT, sqlText)}")
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
-    stmt.setFetchSize(options.fetchSize)
+    stmt.setFetchSize(dialect.getFetchSize(options))
     stmt.setQueryTimeout(options.queryTimeout)
+
+    // JDBC socket reads (e.g., from executeQuery() / ResultSet.next()) are not interruptible via
+    // Thread.interrupt(). Register the listener immediately before executeQuery() so we close the
+    // partition connection on kill and unblock the native read. We capture conn in a local val
+    // (after connection setup) so the listener closes the same reference the task thread uses;
+    // we only close the connection (not rs/stmt) to avoid races with the completion listener.
+    // Tradeoff: interrupts during getConnection / sessionInitStatement / prepareStatement are not
+    // covered here; those steps are usually short compared to the main query + fetch loop.
+    val connForInterrupt = conn
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit = {
+        try {
+          if (connForInterrupt != null && !connForInterrupt.isClosed) {
+            connForInterrupt.close()
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning("Exception closing JDBC connection on task interrupt", e)
+        }
+      }
+    })
 
     rs = SQLMetrics.withTimingNs(queryExecutionTimeMetric) {
       try {

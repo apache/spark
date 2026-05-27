@@ -50,7 +50,6 @@ private[spark] class WholeTextFileRecordReader(
   extends RecordReader[Text, Text] with Configurable {
 
   private[this] val path = split.getPath(index)
-  private[this] val fs = path.getFileSystem(context.getConfiguration)
 
   // True means the current file has been processed, then skip it.
   private[this] var processed = false

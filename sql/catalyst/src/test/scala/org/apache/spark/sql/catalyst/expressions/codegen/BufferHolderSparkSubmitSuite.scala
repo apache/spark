@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.scalatest.{Assertions, BeforeAndAfterEach}
+import org.scalatest.Assertions
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.SpanSugar._
@@ -33,7 +33,6 @@ import org.apache.spark.util.ResetSystemProperties
 class BufferHolderSparkSubmitSuite
   extends SparkSubmitTestUtils
     with Matchers
-    with BeforeAndAfterEach
     with ResetSystemProperties {
 
   test("SPARK-22222: Buffer holder should be able to allocate memory larger than 1GB") {

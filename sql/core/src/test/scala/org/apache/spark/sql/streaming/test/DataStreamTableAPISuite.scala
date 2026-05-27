@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.{FakeV2Provider, FakeV2ProviderWithCustomSchema, InMemoryTableSessionCatalog}
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTable, InMemoryTableCatalog, MetadataColumn, SupportsMetadataColumns, SupportsRead, Table, TableCapability, TableInfo, V2TableWithV1Fallback}
 import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, MemoryStreamScanBuilder, StreamingQueryWrapper}
@@ -83,6 +83,22 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     checkErrorTableNotFound(e, "`non_exist_table`")
   }
 
+  test("read: user-specified schema is not allowed with table API") {
+    val tblName = "my_table"
+    withTable(tblName) {
+      spark.range(3).write.format("parquet").saveAsTable(tblName)
+      val e = intercept[AnalysisException] {
+        spark.readStream
+          .schema(new StructType().add("a", IntegerType))
+          .table(tblName)
+      }
+      checkError(
+        exception = e,
+        condition = "_LEGACY_ERROR_TEMP_1189",
+        parameters = Map("operation" -> "table"))
+    }
+  }
+
   test("read: stream table API with temp view") {
     val tblName = "my_table"
     val stream = MemoryStream[Int]
@@ -109,20 +125,23 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
   }
 
   test("read: read table without streaming capability support") {
-    val tableIdentifier = "testcat.table_name"
+    withSQLConf("spark.sql.catalog.testcat" ->
+        classOf[DataStreamTableAPISuite.NonStreamingInMemoryTableCatalog].getName) {
+      val tableIdentifier = "testcat.table_name"
 
-    spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
+      spark.sql(s"CREATE TABLE $tableIdentifier (id bigint, data string) USING foo")
 
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.readStream.table(tableIdentifier)
-      },
-      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      parameters = Map(
-        "tableName" -> "`testcat`.`table_name`",
-        "operation" -> "either micro-batch or continuous scan"
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.readStream.table(tableIdentifier)
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        parameters = Map(
+          "tableName" -> "`testcat`.`table_name`",
+          "operation" -> "either micro-batch or continuous scan"
+        )
       )
-    )
+    }
   }
 
   test("read: read table with custom catalog") {
@@ -638,6 +657,25 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
 object DataStreamTableAPISuite {
   val V1FallbackTestTableName = "fallbackV1Test"
+
+  class NonStreamingInMemoryTableCatalog extends InMemoryTableCatalog {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+    override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+      if (tables.containsKey(ident)) {
+        throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
+      }
+      val tableName = s"$name.${ident.quoted}"
+      val table = new InMemoryTable(tableName, tableInfo.columns(), tableInfo.partitions(),
+          tableInfo.properties, tableInfo.constraints()) {
+        override def baseCapabiilities: Set[TableCapability] =
+          super.baseCapabiilities - TableCapability.MICRO_BATCH_READ
+      }
+      tables.put(ident, table)
+      namespaces.putIfAbsent(ident.namespace.toList, Map())
+      table
+    }
+  }
 }
 
 class InMemoryStreamTable(override val name: String)

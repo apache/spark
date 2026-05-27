@@ -64,7 +64,8 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]] and
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
-case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
+case class ColumnarToRowExec(child: SparkPlan)
+    extends ColumnarToRowTransition with CodegenSupport with SafeForKWayMerge {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning

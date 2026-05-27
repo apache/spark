@@ -24,7 +24,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
 import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -37,8 +37,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-class AvroCatalystDataConversionSuite extends SparkFunSuite
-  with SharedSparkSession
+class AvroCatalystDataConversionSuite extends SharedSparkSession
   with ExpressionEvalHelper {
 
   private def roundTripTest(data: Literal): Unit = {
@@ -385,5 +384,54 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     val expected = InternalRow(Array[Byte](97, 48, 53))
     checkDeserialization(avroSchema, avroRecord, Some(expected))
     checkDeserialization(avroSchema, avroRecord, Some(expected))
+  }
+
+  test("SPARK-56043: AvroDataToCatalyst with unresolvable schema reference") {
+    // Avro 1.12.x throws NPE from ParseContext.resolve() for undefined named types.
+    // Our fix wraps the NPE in SchemaParseException so the existing parseMode error
+    // handling works correctly (FAILFAST -> MALFORMED_AVRO_MESSAGE).
+    val invalidSchema =
+      """
+        |{
+        |  "type": "record",
+        |  "name": "TestRecord",
+        |  "fields": [
+        |    {"name": "value", "type": "UndefinedType"}
+        |  ]
+        |}
+      """.stripMargin
+
+    val data = Literal(Array[Byte](1, 2, 3))
+    intercept[SparkException] {
+      AvroDataToCatalyst(data, invalidSchema, Map("mode" -> "FAILFAST")).eval()
+    }
+  }
+
+  test("SPARK-56043: AvroDataToCatalyst with malformed JSON schema") {
+    val malformedSchema = "not valid json"
+    val data = Literal(Array[Byte](1, 2, 3))
+    intercept[SparkException] {
+      AvroDataToCatalyst(data, malformedSchema, Map("mode" -> "FAILFAST")).eval()
+    }
+  }
+
+  test("SPARK-56043: bare string schema reference triggers NPE in Avro 1.12.x") {
+    // This is the exact pattern that triggers NPE from ParseContext.resolve() in 1.12.x.
+    // In 1.11.x this threw SchemaParseException. Our fix wraps NPE in SchemaParseException.
+    val bareStringRef = "\"com.test.Missing\""
+
+    // Verify raw Avro 1.12.x parser throws NPE for bare string references
+    val rawException = intercept[Exception] {
+      new Schema.Parser().setValidateDefaults(false).parse(bareStringRef)
+    }
+    assert(rawException.isInstanceOf[NullPointerException],
+      s"Expected NullPointerException from Avro 1.12.x ParseContext.resolve(), " +
+      s"but got ${rawException.getClass.getName}: ${rawException.getMessage}")
+
+    // Verify our fix wraps it in SchemaParseException
+    val wrappedException = intercept[org.apache.avro.SchemaParseException] {
+      AvroUtils.parseAvroSchema(bareStringRef)
+    }
+    assert(wrappedException.getCause.isInstanceOf[NullPointerException])
   }
 }

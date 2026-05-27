@@ -23,6 +23,7 @@ import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, NamedRelation}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
@@ -31,12 +32,14 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkStrategy => Strategy}
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{WriteFiles, WriteFilesExec}
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, WriteFiles, WriteFilesExec}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
@@ -325,7 +328,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             .getOrElse(createJoinWithoutHint())
         }
 
-      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys) =>
+      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+          if canBroadcastBySize(j.right, conf) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
           None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
@@ -784,6 +788,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           outputAttr,
           stateInfo = None,
           batchTimestampMs = None,
+          prevBatchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           planLater(child),
@@ -812,6 +817,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           func, t.leftAttributes, outputAttrs, outputMode, timeMode,
           stateInfo = None,
           batchTimestampMs = None,
+          prevBatchTimestampMs = None,
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           userFacingDataType,
@@ -966,8 +972,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.MapInPandasExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.MapInArrow(func, output, child, isBarrier, profile) =>
         execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
-      case logical.AttachDistributedSequence(attr, child) =>
-        execution.python.AttachDistributedSequenceExec(attr, planLater(child)) :: Nil
+      case logical.MapPartitionsExternalUDF(
+          workerSpec, functionExpr, isBarrier, child) =>
+        execution.externalUDF.MapPartitionsExternalUDFExec(
+          workerSpec, functionExpr,
+          isBarrier, planLater(child)) :: Nil
+      case logical.AttachDistributedSequence(attr, child, cache) =>
+        execution.python.AttachDistributedSequenceExec(attr, planLater(child), cache) :: Nil
       case logical.PythonWorkerLogs(jsonAttr) =>
         execution.python.PythonWorkerLogsExec(jsonAttr) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
@@ -1034,7 +1045,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
-      case logical.Sample(lb, ub, withReplacement, seed, child) =>
+      case logical.Sample(lb, ub, withReplacement, seed, child, sampleMethod) =>
+        if (sampleMethod == logical.SampleMethod.System) {
+          // V2ScanRelationPushDown is non-excludable and always handles SYSTEM samples
+          // (either pushes down or throws). Reaching here indicates an internal invariant
+          // violation.
+          throw SparkException.internalError(
+            "TABLESAMPLE SYSTEM node was not properly handled by V2ScanRelationPushDown.")
+        }
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _, stream) =>
         LocalTableScanExec(output, data, stream) :: Nil
@@ -1091,10 +1109,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering,
           r.stream) :: Nil
-      case _: UpdateTable =>
-        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("UPDATE TABLE")
-      case _: MergeIntoTable =>
-        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("MERGE INTO TABLE")
+      case u: UpdateTable =>
+        val tableName = extractTableNameForError(u.table)
+        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("UPDATE TABLE", tableName)
+      case m: MergeIntoTable =>
+        val tableName = extractTableNameForError(m.targetTable)
+        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("MERGE INTO TABLE", tableName)
       case logical.CollectMetrics(name, metrics, child, _) =>
         execution.CollectMetricsExec(name, metrics, planLater(child)) :: Nil
       case WriteFiles(child, fileFormat, partitionColumns, bucket, options, staticPartitions) =>
@@ -1103,6 +1123,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case MultiResult(children) =>
         MultiResultExec(children.map(planLater)) :: Nil
       case _ => Nil
+    }
+  }
+
+  /**
+   * Extracts a user-friendly table name from a logical plan for error messages.
+   */
+  private def extractTableNameForError(table: LogicalPlan): String = {
+    val unwrapped = EliminateSubqueryAliases(table)
+    unwrapped match {
+      // Check specific types before NamedRelation since they extend it
+      case DataSourceV2Relation(_, _, catalog, Some(ident), _, _) =>
+        (catalog.map(_.name()).toSeq ++ ident.asMultipartIdentifier).mkString(".")
+      case LogicalRelation(_, _, Some(catalogTable), _, _) =>
+        catalogTable.identifier.unquotedString
+      case r: NamedRelation =>
+        r.name
+      case _ =>
+        "unknown"
     }
   }
 }

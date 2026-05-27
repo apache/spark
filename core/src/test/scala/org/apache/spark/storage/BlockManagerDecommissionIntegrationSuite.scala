@@ -207,7 +207,7 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       override def onExecutorMetricsUpdate(
           executorMetricsUpdate: SparkListenerExecutorMetricsUpdate): Unit = {
         val executorId = executorMetricsUpdate.execId
-        if (executorId != SparkContext.DRIVER_IDENTIFIER) {
+        if (!SparkContext.isDriver(executorId)) {
           val validUpdate = executorMetricsUpdate
             .accumUpdates
             .flatMap(_._4)
@@ -418,8 +418,11 @@ class BlockManagerDecommissionIntegrationSuite extends SparkFunSuite with LocalS
       .map(_.asInstanceOf[ShuffleIndexBlockId].shuffleId)
       .get
 
+    eventually(timeout(1.minute), interval(10.milliseconds)) {
+      val newShuffleFiles = shuffleFiles.diff(existingShuffleFiles)
+      assert(newShuffleFiles.size >= shuffleBlockUpdates.size)
+    }
     val newShuffleFiles = shuffleFiles.diff(existingShuffleFiles)
-    assert(newShuffleFiles.size >= shuffleBlockUpdates.size)
 
     // Remove the shuffle data
     sc.shuffleDriverComponents.removeShuffle(shuffleId, true)

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import org.apache.hadoop.fs.Path
@@ -159,8 +160,11 @@ case class RowDataSourceScanExec(
 
   private def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
-  private def pushedSampleMetadataString(s: TableSampleInfo): String =
-    s"SAMPLE (${(s.upperBound - s.lowerBound) * 100}) ${s.withReplacement} SEED(${s.seed})"
+  private def pushedSampleMetadataString(s: TableSampleInfo): String = {
+    val pct = (s.upperBound - s.lowerBound) * 100
+    val method = s.sampleMethod.toString.toUpperCase(Locale.ROOT)
+    s"$method SAMPLE ($pct) ${s.withReplacement} SEED(${s.seed})"
+  }
 
   override val metadata: Map[String, String] = {
     val markedFilters = if (filters.nonEmpty) {

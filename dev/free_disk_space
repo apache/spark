@@ -44,6 +44,7 @@ sudo rm -rf /opt/hostedtoolcache/go
 sudo rm -rf /opt/hostedtoolcache/node
 du -sh /opt/*
 
+sudo apt-get update --fix-missing
 sudo apt-get remove --purge -y '^aspnet.*'
 sudo apt-get remove --purge -y '^dotnet-.*'
 sudo apt-get remove --purge -y '^llvm-.*'

@@ -25,12 +25,12 @@ import org.apache.spark.sql.catalyst.expressions.{
   In,
   Literal,
   NamedExpression,
-  OuterReference,
-  StringRPad
+  OuterReference
 }
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BINARY_COMPARISON, IN}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils.createStringRPad
 import org.apache.spark.sql.types.{CharType, Metadata, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -99,18 +99,18 @@ object ApplyCharTypePaddingHelper {
           .getOrElse(b)
 
       case i @ In(e @ AttrOrOuterRef(attr), list)
-          if i.resolved && attr.dataType == StringType && list.forall(_.foldable) =>
+          if i.resolved && attr.dataType.isInstanceOf[StringType] && list.forall(_.foldable) =>
         CharVarcharUtils
           .getRawType(attr.metadata)
           .flatMap {
-            case CharType(length) =>
+            case c: CharType =>
               val (nulls, literalChars) =
                 list.map(_.eval().asInstanceOf[UTF8String]).partition(_ == null)
               val literalCharLengths = literalChars.map(_.numChars())
-              val targetLen = (length +: literalCharLengths).max
+              val targetLen = (c.length +: literalCharLengths).max
               Some(
                 i.copy(
-                  value = addPadding(e, length, targetLen, alwaysPad = padCharCol),
+                  value = addPadding(e, c.length, targetLen, alwaysPad = padCharCol),
                   list = list.zip(literalCharLengths).map {
                       case (lit, charLength) =>
                         addPadding(lit, charLength, targetLen, alwaysPad = false)
@@ -162,25 +162,25 @@ object ApplyCharTypePaddingHelper {
       metadata: Metadata,
       padCharCol: Boolean,
       lit: Expression): Option[Seq[Expression]] = {
-    if (expr.dataType == StringType) {
+    if (expr.dataType.isInstanceOf[StringType]) {
       CharVarcharUtils.getRawType(metadata).flatMap {
-        case CharType(length) =>
+        case c: CharType =>
           val str = lit.eval().asInstanceOf[UTF8String]
           if (str == null) {
             None
           } else {
             val stringLitLen = str.numChars()
-            if (length < stringLitLen) {
-              Some(Seq(StringRPad(expr, Literal(stringLitLen)), lit))
-            } else if (length > stringLitLen) {
+            if (c.length < stringLitLen) {
+              Some(Seq(createStringRPad(expr, Literal(stringLitLen)), lit))
+            } else if (c.length > stringLitLen) {
               val paddedExpr = if (padCharCol) {
-                StringRPad(expr, Literal(length))
+                createStringRPad(expr, Literal(c.length))
               } else {
                 expr
               }
-              Some(Seq(paddedExpr, StringRPad(lit, Literal(length))))
+              Some(Seq(paddedExpr, createStringRPad(lit, Literal(c.length))))
             } else if (padCharCol) {
-              Some(Seq(StringRPad(expr, Literal(length)), lit))
+              Some(Seq(createStringRPad(expr, Literal(c.length)), lit))
             } else {
               None
             }
@@ -198,9 +198,9 @@ object ApplyCharTypePaddingHelper {
       targetLength: Int,
       alwaysPad: Boolean): Expression = {
     if (targetLength > charLength) {
-      StringRPad(expr, Literal(targetLength))
+      createStringRPad(expr, Literal(targetLength))
     } else if (alwaysPad) {
-      StringRPad(expr, Literal(charLength))
+      createStringRPad(expr, Literal(charLength))
     } else expr
   }
 }

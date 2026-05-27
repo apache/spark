@@ -29,8 +29,8 @@ from pyspark.errors.exceptions.base import AnalysisException
 from pyspark.errors.exceptions.tblib import Traceback
 from pyspark.sql.datasource import DataSource, DataSourceReader
 from pyspark.sql.session import SparkSession
-from pyspark.testing.sqlutils import (
-    ReusedSQLTestCase,
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
     have_pandas,
     have_pyarrow,
     pandas_requirement_message,
@@ -167,8 +167,9 @@ class BaseTracebackSqlTestsMixin:
 
     def test_udf(self):
         for jvm_stack_trace in [False, True]:
-            with self.subTest(jvm_stack_trace=jvm_stack_trace), self.sql_conf(
-                {"spark.sql.pyspark.jvmStacktrace.enabled": jvm_stack_trace}
+            with (
+                self.subTest(jvm_stack_trace=jvm_stack_trace),
+                self.sql_conf({"spark.sql.pyspark.jvmStacktrace.enabled": jvm_stack_trace}),
             ):
 
                 @sf.udf()
@@ -272,12 +273,6 @@ class TracebackSqlClassicTests(BaseTracebackSqlTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.errors.tests.test_traceback import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

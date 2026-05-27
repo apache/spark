@@ -24,6 +24,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.storage.TestBlockId
 import org.apache.spark.storage.memory.MemoryStore
+import org.apache.spark.util.Utils
 
 class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTester {
   private val dummyBlock = TestBlockId("--")
@@ -554,6 +555,7 @@ class UnifiedMemoryManagerSuite extends MemoryManagerSuite with PrivateMethodTes
   }
 
   test("unmanaged memory tracking with off-heap memory enabled") {
+    assume(!Utils.isMacOnAppleSilicon)
     val maxOnHeapMemory = 1000L
     val maxOffHeapMemory = 1500L
     val taskAttemptId = 0L

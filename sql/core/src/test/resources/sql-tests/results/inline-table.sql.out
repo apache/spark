@@ -287,3 +287,29 @@ select count(distinct ct) from values current_timestamp(), current_timestamp() a
 struct<count(DISTINCT ct):bigint>
 -- !query output
 1
+
+
+-- !query
+select a from (values (1 as id, current_timestamp() as ts), (2 as id, current_timestamp() as ts)) as t(a, b)
+-- !query schema
+struct<a:int>
+-- !query output
+1
+2
+
+
+-- !query
+select * from values (1 as id, 'a' as name), (2 as id, 'b' as name) as t(a, b)
+-- !query schema
+struct<a:int,b:string>
+-- !query output
+1	a
+2	b
+
+
+-- !query
+select * from values (1 as a, 2 as b)
+-- !query schema
+struct<col1:int,col2:int>
+-- !query output
+1	2

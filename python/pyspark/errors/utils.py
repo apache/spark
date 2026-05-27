@@ -95,6 +95,24 @@ class ErrorClassesReader:
     def __init__(self) -> None:
         self.error_info_map = ERROR_CLASSES_MAP
 
+    def get_sqlstate(self, errorClass: Optional[str]) -> Optional[str]:
+        """
+        Returns the SQL state for the given error class.
+        """
+        if errorClass is None:
+            return None
+
+        error_classes = errorClass.split(".")
+        try:
+            if len(error_classes) == 1:
+                return self.error_info_map[errorClass]["sqlState"]
+            else:
+                return self.error_info_map[error_classes[0]]["sub_class"][error_classes[1]][
+                    "sqlState"
+                ]
+        except KeyError:
+            return None
+
     def get_error_message(self, errorClass: str, messageParameters: Dict[str, str]) -> str:
         """
         Returns the completed error message by applying message parameters to the message template.
@@ -253,7 +271,7 @@ def _capture_call_site(depth: int) -> str:
         import IPython
 
         # ipykernel is required for IPython
-        import ipykernel  # type: ignore[import-not-found]
+        import ipykernel
 
         ipython = IPython.get_ipython()
         # Filtering out IPython related frames
@@ -329,15 +347,15 @@ def _with_origin(func: FuncT) -> FuncT:
 
 
 @overload
-def with_origin_to_class(cls_or_ignores: Type[T], ignores: Optional[List[str]] = None) -> Type[T]:
-    ...
+def with_origin_to_class(
+    cls_or_ignores: Type[T], ignores: Optional[List[str]] = None
+) -> Type[T]: ...
 
 
 @overload
 def with_origin_to_class(
     cls_or_ignores: Optional[List[str]] = None,
-) -> Callable[[Type[T]], Type[T]]:
-    ...
+) -> Callable[[Type[T]], Type[T]]: ...
 
 
 def with_origin_to_class(

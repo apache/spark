@@ -25,7 +25,7 @@ import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong}
 
 import scala.collection.{mutable, Map}
-import scala.jdk.CollectionConverters.ConcurrentMapHasAsScala
+import scala.jdk.CollectionConverters.{ConcurrentMapHasAsScala, ListHasAsScala}
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -40,6 +40,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.{LogEntry, Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.checkpointing.ChecksumCheckpointFileManager
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{NextIterator, Utils}
 
@@ -69,7 +70,7 @@ case object StoreTaskCompletionListener extends RocksDBOpType("store_task_comple
 class RocksDB(
     dfsRootDir: String,
     val conf: RocksDBConf,
-    localRootDir: File = Utils.createTempDir(),
+    val localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "",
     useColumnFamilies: Boolean = false,
@@ -127,23 +128,44 @@ class RocksDB(
   rocksDbOptions.setMaxOpenFiles(conf.maxOpenFiles)
   rocksDbOptions.setAllowFAllocate(conf.allowFAllocate)
   rocksDbOptions.setAvoidFlushDuringShutdown(true)
-  rocksDbOptions.setMergeOperator(new StringAppendOperator())
+  // Set merge operator based on version for backward compatibility
+  // Version 1: comma delimiter ",", Version 2: empty string ""
+  // NOTE: RocksDB does not document about the behavior of an empty string delimiter,
+  // only the PR description explains this - https://github.com/facebook/rocksdb/pull/8536
+  val mergeDelimiter = conf.mergeOperatorVersion match {
+    case 1 => ","
+    case 2 => ""
+    case v => throw new IllegalArgumentException(
+      s"Invalid merge operator version: $v. Supported versions are 1 and 2")
+  }
+  rocksDbOptions.setMergeOperator(new StringAppendOperator(mergeDelimiter))
+
+  // Store delimiter size for use in encode/decode operations
+  private[state] val delimiterSize = mergeDelimiter.length
 
   if (conf.boundedMemoryUsage) {
     rocksDbOptions.setWriteBufferManager(writeBufferManager)
   }
 
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
-  rocksDbOptions.setStatistics(new Statistics())
-  private val nativeStats = rocksDbOptions.statistics()
+  private val nativeStats = new Statistics()
+  rocksDbOptions.setStatistics(nativeStats)
 
   private val workingDir = createTempDir("workingDir")
 
-  // We need 2 threads per fm caller to avoid blocking
-  // (one for main file and another for checksum file).
-  // Since this fm is used by both query task and maintenance thread,
-  // then we need 2 * 2 = 4 threads.
-  protected val fileChecksumThreadPoolSize: Option[Int] = Some(4)
+  // To avoid blocking, we need 2 threads per fm caller (one for main file, one for checksum file).
+  // Since this fm is used by both query task and maintenance thread, the recommended default is
+  // 2 * 2 = 4 threads. A value of 0 disables the thread pool (sequential execution).
+  protected val fileChecksumThreadPoolSize: Option[Int] = {
+    val size = conf.fileChecksumThreadPoolSize
+    if (size < ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE) {
+      logWarning(s"fileChecksumThreadPoolSize for the state store file checksum thread pool " +
+        s"is set to $size, which is below the recommended default of " +
+        s"${ChecksumCheckpointFileManager.DEFAULT_THREAD_POOL_SIZE}. " +
+        "This may have performance impact.")
+    }
+    Some(size)
+  }
 
   protected def createFileManager(
       dfsRootDir: String,
@@ -180,7 +202,7 @@ class RocksDB(
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var changelogWriter: Option[StateStoreChangelogWriter] = None
-  private val enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
+  @volatile private var enableChangelogCheckpointing: Boolean = conf.enableChangelogCheckpointing
   @volatile protected var loadedVersion: Long = -1L   // -1 = nothing valid is loaded
 
   // Can be updated by whichever thread uploaded a snapshot, which could be either task,
@@ -230,6 +252,9 @@ class RocksDB(
 
   // Was snapshot auto repair performed when loading the current version
   @volatile private var performedSnapshotAutoRepair = false
+
+  // Was state loaded from DFS during the current load operation
+  @volatile private var loadedFromDfs = false
 
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
@@ -336,6 +361,14 @@ class RocksDB(
     colFamilyNameToInfoMap.asScala.values.toSeq.count(_.isInternal == isInternal)
   }
 
+  /**
+   * Returns all column family names currently registered in RocksDB.
+   * This includes column families loaded from checkpoint metadata.
+   */
+  def allColumnFamilyNames: scala.collection.immutable.Set[String] = {
+    colFamilyNameToInfoMap.asScala.keySet.toSet
+  }
+
   private val rocksDBFileMapping: RocksDBFileMapping = new RocksDBFileMapping()
 
   // We send snapshots that needs to be uploaded by the maintenance thread to this queue
@@ -435,78 +468,71 @@ class RocksDB(
   private def loadWithCheckpointId(
       version: Long,
       stateStoreCkptId: Option[String],
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      loadEmpty: Boolean = false): RocksDB = {
     // An array contains lineage information from [snapShotVersion, version]
     // (inclusive in both ends)
     var currVersionLineage: Array[LineageItem] = lineageManager.getLineageForCurrVersion()
     try {
-      if (loadedVersion != version || (loadedStateStoreCkptId.isEmpty ||
-          stateStoreCkptId.get != loadedStateStoreCkptId.get)) {
+      if (loadEmpty) {
+        // Handle empty store loading separately for clarity
+        require(stateStoreCkptId.isEmpty,
+          "stateStoreCkptId should be empty when loadEmpty is true")
+        closeDB(ignoreException = false)
+        loadEmptyStore(version)
+        lineageManager.clear()
+        // After loading empty store, set the key counts and metrics
+        numKeysOnLoadedVersion = numKeysOnWritingVersion
+        numInternalKeysOnLoadedVersion = numInternalKeysOnWritingVersion
+        fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
+      } else if (loadedVersion != version || loadedStateStoreCkptId.isEmpty ||
+        stateStoreCkptId.get != loadedStateStoreCkptId.get) {
+        // Handle normal checkpoint loading
         closeDB(ignoreException = false)
 
-        val (latestSnapshotVersion, latestSnapshotUniqueId) = {
-          // Special handling when version is 0.
-          // When loading the very first version (0), stateStoreCkptId does not need to be defined
-          // because there won't be 0.changelog / 0.zip file created in RocksDB under v2.
-          if (version == 0) {
-            assert(stateStoreCkptId.isEmpty,
-              "stateStoreCkptId should be empty when version is zero")
-            (0L, None)
-          // When there is a snapshot file, it is the ground truth, we can skip
-          // reconstructing the lineage from changelog file.
-          } else if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
+        if (version == 0) {
+          // Version 0 is the empty initial state — load directly without
+          // DFS listing or auto-repair overhead.
+          assert(stateStoreCkptId.isEmpty,
+            "stateStoreCkptId should be empty when version is zero")
+          currVersionLineage = Array.empty
+          val metadata = fileManager.loadCheckpointFromDfs(0,
+            workingDir, rocksDBFileMapping, None)
+          loadedVersion = 0
+          lastSnapshotVersion = 0
+          fileManager.setMaxSeenVersion(0)
+          openLocalRocksDB(metadata)
+          reportSnapshotUploadToCoordinator(0)
+        } else {
+          // Build initial lineage. If the exact snapshot file exists on DFS, use a
+          // sparse lineage (just the target version) as an optimization to skip reading
+          // the changelog header. If auto-repair is needed later,
+          // getEligibleSnapshotsForRepair() will enrich this via getFullLineage().
+          if (fileManager.existsSnapshotFile(version, stateStoreCkptId)) {
             currVersionLineage = Array(LineageItem(version, stateStoreCkptId.get))
-            (version, stateStoreCkptId)
           } else {
             currVersionLineage = getLineageFromChangelogFile(version, stateStoreCkptId) :+
               LineageItem(version, stateStoreCkptId.get)
             currVersionLineage = currVersionLineage.sortBy(_.version)
-
-            val latestSnapshotVersionsAndUniqueId =
-              fileManager.getLatestSnapshotVersionAndUniqueIdFromLineage(currVersionLineage)
-            latestSnapshotVersionsAndUniqueId match {
-              case Some(pair) => (pair._1, Option(pair._2))
-              case None if currVersionLineage.head.version == 1L =>
-                logDebug(log"Cannot find latest snapshot based on lineage but first version " +
-                  log"is 1, use 0 as default. Lineage: ${MDC(LogKeys.LINEAGE, lineageManager)}")
-                (0L, None)
-              case _ =>
-                throw QueryExecutionErrors.cannotFindBaseSnapshotCheckpoint(
-                  printLineageItems(currVersionLineage))
-            }
           }
-        }
+          // Delegate to AutoSnapshotLoader which handles both the happy path
+          // and auto-repair fallback to older snapshots. Sets loadedVersion to
+          // the actually loaded snapshot version as a side effect.
+          currVersionLineage =
+            loadSnapshotWithCheckpointId(version, stateStoreCkptId, currVersionLineage)
 
-        logInfo(log"Loaded latestSnapshotVersion: ${
-          MDC(LogKeys.SNAPSHOT_VERSION, latestSnapshotVersion)}, latestSnapshotUniqueId: ${
-          MDC(LogKeys.UUID, latestSnapshotUniqueId)}")
-
-        val metadata = fileManager.loadCheckpointFromDfs(latestSnapshotVersion,
-          workingDir, rocksDBFileMapping, latestSnapshotUniqueId)
-
-        loadedVersion = latestSnapshotVersion
-
-        // reset the last snapshot version to the latest available snapshot version
-        lastSnapshotVersion = latestSnapshotVersion
-        lineageManager.resetLineage(currVersionLineage)
-
-        // Initialize maxVersion upon successful load from DFS
-        fileManager.setMaxSeenVersion(version)
-
-        // Report this snapshot version to the coordinator
-        reportSnapshotUploadToCoordinator(latestSnapshotVersion)
-
-        openLocalRocksDB(metadata)
-
-        if (loadedVersion != version) {
-          val versionsAndUniqueIds = currVersionLineage.collect {
+          // Replay changelogs from the loaded snapshot version to the target version.
+          if (loadedVersion != version) {
+            val versionsAndUniqueIds = currVersionLineage.collect {
               case i if i.version > loadedVersion && i.version <= version =>
                 (i.version, Option(i.checkpointUniqueId))
             }
-          replayChangelog(versionsAndUniqueIds)
-          loadedVersion = version
-          lineageManager.resetLineage(currVersionLineage)
+            replayChangelog(versionsAndUniqueIds)
+            loadedVersion = version
+          }
         }
+        loadedFromDfs = version > 0
+        lineageManager.resetLineage(currVersionLineage)
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
         numKeysOnLoadedVersion = numKeysOnWritingVersion
@@ -522,9 +548,13 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-
-      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
-        log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")
+      if (loadEmpty) {
+        logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)} " +
+          log"with empty uniqueId")
+      } else {
+        logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)} " +
+          log"with uniqueId ${MDC(LogKeys.UUID, stateStoreCkptId)}")
+      }
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
@@ -535,39 +565,64 @@ class RocksDB(
         lineageManager.clear()
         throw t
     }
-    if (enableChangelogCheckpointing && !readOnly) {
+    // Checking conf.enableChangelogCheckpointing instead of enableChangelogCheckpointing.
+    // enableChangelogCheckpointing is set to false when loadEmpty is true, but we still want
+    // to abort previous used changelogWriter if there is any
+    if (conf.enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      // Initialize the changelog writer with lineage info
-      // The lineage stored in changelog files should normally start with
-      // the version of a snapshot, except for the first few versions.
-      // Because they are solely loaded from changelog file.
-      // (e.g. with default minDeltasForSnapshot, there is only 1_uuid1.changelog, no 1_uuid1.zip)
-      // It should end with exactly one version before the change log's version.
-      changelogWriter = Some(fileManager.getChangeLogWriter(
-        version + 1,
-        useColumnFamilies,
-        sessionStateStoreCkptId,
-        Some(currVersionLineage)))
+      if (loadEmpty) {
+        // We don't want to write changelog file when loadEmpty is true
+        changelogWriter = None
+      } else {
+        // Initialize the changelog writer with lineage info
+        // The lineage stored in changelog files should normally start with
+        // the version of a snapshot, except for the first few versions.
+        // Because they are solely loaded from changelog file.
+        // (e.g. with default minDeltasForSnapshot, there is only 1_uuid1.changelog, no 1_uuid1.zip)
+        // It should end with exactly one version before the change log's version.
+        changelogWriter = Some(fileManager.getChangeLogWriter(
+          version + 1,
+          useColumnFamilies,
+          sessionStateStoreCkptId,
+          Some(currVersionLineage)))
+      }
     }
     this
   }
 
+  private def loadEmptyStore(version: Long): Unit = {
+    // Use version 0 logic to create empty directory with no SST files
+    val metadata = fileManager.loadCheckpointFromDfs(0, workingDir, rocksDBFileMapping, None)
+    loadedVersion = version
+    fileManager.setMaxSeenVersion(version)
+    openLocalRocksDB(metadata)
+  }
+
   private def loadWithoutCheckpointId(
       version: Long,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      loadEmpty: Boolean = false): RocksDB = {
+
     try {
-      if (loadedVersion != version) {
+      // For loadEmpty, always proceed; otherwise, only if version changed
+      if (loadEmpty || loadedVersion != version) {
         closeDB(ignoreException = false)
 
-        // load the latest snapshot
-        loadSnapshotWithoutCheckpointId(version)
+        if (loadEmpty) {
+          loadEmptyStore(version)
+        } else {
+          // load the latest snapshot
+          loadSnapshotWithoutCheckpointId(version)
+          // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+          loadedFromDfs = version > 0
 
-        if (loadedVersion != version) {
-          val versionsAndUniqueIds: Array[(Long, Option[String])] =
-            (loadedVersion + 1 to version).map((_, None)).toArray
-          replayChangelog(versionsAndUniqueIds)
-          loadedVersion = version
+          if (loadedVersion != version) {
+            val versionsAndUniqueIds: Array[(Long, Option[String])] =
+              (loadedVersion + 1 to version).map((_, None)).toArray
+            replayChangelog(versionsAndUniqueIds)
+            loadedVersion = version
+          }
         }
         // After changelog replay the numKeysOnWritingVersion will be updated to
         // the correct number of keys in the loaded version.
@@ -578,28 +633,45 @@ class RocksDB(
       if (conf.resetStatsOnLoad) {
         nativeStats.reset
       }
-      logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      if (loadEmpty) {
+        logInfo(log"Loaded empty store at version ${MDC(LogKeys.VERSION_NUM, version)}")
+      } else {
+        logInfo(log"Loaded ${MDC(LogKeys.VERSION_NUM, version)}")
+      }
     } catch {
       case t: Throwable =>
         loadedVersion = -1  // invalidate loaded data
         throw t
     }
-    if (enableChangelogCheckpointing && !readOnly) {
+    // Checking conf.enableChangelogCheckpointing instead of enableChangelogCheckpointing.
+    // enableChangelogCheckpointing is set to false when loadEmpty is true, but we still want
+    // to abort previous used changelogWriter if there is any
+    if (conf.enableChangelogCheckpointing && !readOnly) {
       // Make sure we don't leak resource.
       changelogWriter.foreach(_.abort())
-      changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      if (loadEmpty) {
+        changelogWriter = None
+      } else {
+        changelogWriter = Some(fileManager.getChangeLogWriter(version + 1, useColumnFamilies))
+      }
     }
     this
   }
 
-  private def loadSnapshotWithoutCheckpointId(versionToLoad: Long): Long = {
-    // Don't allow auto snapshot repair if changelog checkpointing is not enabled
-    // since it relies on changelog to rebuild state.
-    val allowAutoSnapshotRepair = if (enableChangelogCheckpointing) {
+  /**
+   * Whether auto snapshot repair is allowed. Repair is only allowed when
+   * changelog checkpointing is enabled, since repair relies on replaying
+   * changelogs to rebuild state from an older snapshot.
+   */
+  private def allowAutoSnapshotRepair: Boolean = {
+    if (enableChangelogCheckpointing) {
       conf.stateStoreConf.autoSnapshotRepairEnabled
     } else {
       false
     }
+  }
+
+  private def loadSnapshotWithoutCheckpointId(versionToLoad: Long): Long = {
     val snapshotLoader = new AutoSnapshotLoader(
       allowAutoSnapshotRepair,
       conf.stateStoreConf.autoSnapshotRepairNumFailuresBeforeActivating,
@@ -607,7 +679,8 @@ class RocksDB(
       loggingId) {
       override protected def beforeLoad(): Unit = closeDB(ignoreException = false)
 
-      override protected def loadSnapshotFromCheckpoint(snapshotVersion: Long): Unit = {
+      override protected def loadSnapshotFromCheckpoint(
+          snapshotVersion: Long, uniqueId: Option[String]): Unit = {
         val remoteMetaData = fileManager.loadCheckpointFromDfs(snapshotVersion,
           workingDir, rocksDBFileMapping)
 
@@ -630,14 +703,115 @@ class RocksDB(
         loadedVersion = -1  // invalidate loaded data
       }
 
-      override protected def getEligibleSnapshots(version: Long): Seq[Long] = {
-        fileManager.getEligibleSnapshotsForVersion(version)
+      override protected def getEligibleSnapshots(
+          version: Long): Seq[(Long, Option[String])] = {
+        fileManager.getEligibleSnapshotsForVersion(version).map((_, None))
       }
     }
 
     val (version, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
     performedSnapshotAutoRepair = autoRepairCompleted
     version
+  }
+
+  /**
+   * V2-aware snapshot loading with auto-repair support.
+   * Uses lineage to discover eligible snapshots and falls back to older ones if corrupt.
+   * Loads only the snapshot; changelog replay to reach versionToLoad is the caller's
+   * responsibility.
+   *
+   * Sets [[performedSnapshotAutoRepair]] as a side effect if auto-repair was used,
+   * and sets [[loadedVersion]] to the actually loaded snapshot version.
+   *
+   * @param versionToLoad The target version to load
+   * @param stateStoreCkptId The checkpoint ID for the target version (for lineage enrichment)
+   * @param initialLineage The lineage for the target version (may be enriched by
+   *                       getAdditionalEligibleSnapshots during auto-repair)
+   * @return The lineage array to assign to currVersionLineage. During auto-repair,
+   *         this may contain more entries than the initial sparse lineage.
+   */
+  private def loadSnapshotWithCheckpointId(
+      versionToLoad: Long,
+      stateStoreCkptId: Option[String],
+      initialLineage: Array[LineageItem]): Array[LineageItem] = {
+    // Local var (intentionally named differently from the class field currVersionLineage)
+    // so that getAdditionalEligibleSnapshots can enrich the lineage and
+    // getEligibleSnapshots (re-called after enrichment) sees the updated lineage.
+    var workingLineage = initialLineage
+
+    val snapshotLoader = new AutoSnapshotLoader(
+      allowAutoSnapshotRepair,
+      conf.stateStoreConf.autoSnapshotRepairNumFailuresBeforeActivating,
+      conf.stateStoreConf.autoSnapshotRepairMaxChangeFileReplay,
+      loggingId) {
+      override protected def beforeLoad(): Unit = closeDB(ignoreException = false)
+
+      override protected def loadSnapshotFromCheckpoint(
+          snapshotVersion: Long, uniqueId: Option[String]): Unit = {
+        // Validate that the working lineage covers all versions needed to replay
+        // from this snapshot to versionToLoad. If not, throw so AutoSnapshotLoader
+        // treats this as a snapshot load failure and tries the next snapshot.
+        // This guards against falling back to a snapshot (e.g., version 0) when
+        // the lineage was not enriched (e.g., getFullLineage failed).
+        if (snapshotVersion != versionToLoad) {
+          val neededVersions = ((snapshotVersion + 1) to versionToLoad).toSet
+          val availableVersions = workingLineage.collect {
+            case i if i.version > snapshotVersion && i.version <= versionToLoad => i.version
+          }.toSet
+          if (availableVersions != neededVersions) {
+            throw new IllegalStateException(
+              s"Cannot replay changelogs from snapshot $snapshotVersion to $versionToLoad: " +
+              s"lineage is incomplete, missing versions " +
+              s"${(neededVersions diff availableVersions).toSeq.sorted.mkString(",")}")
+          }
+        }
+
+        val remoteMetaData = fileManager.loadCheckpointFromDfs(snapshotVersion,
+          workingDir, rocksDBFileMapping, uniqueId)
+
+        loadedVersion = snapshotVersion
+        fileManager.setMaxSeenVersion(versionToLoad)
+        openLocalRocksDB(remoteMetaData)
+        lastSnapshotVersion = snapshotVersion
+        reportSnapshotUploadToCoordinator(snapshotVersion)
+      }
+
+      override protected def onLoadSnapshotFromCheckpointFailure(): Unit = {
+        loadedVersion = -1
+      }
+
+      override protected def getEligibleSnapshots(
+          version: Long): Seq[(Long, Option[String])] = {
+        fileManager.getSnapshotVersionsAndUniqueIdsFromLineage(workingLineage)
+          .map { case (ver, id) => (ver, Option(id)) }
+      }
+
+      override protected def getAdditionalEligibleSnapshots(
+          version: Long): Seq[(Long, Option[String])] = {
+        // Build lineage back to (versionToLoad - maxChangeFileReplay) so that
+        // auto-repair can discover older snapshots in the lineage. We don't walk
+        // all the way to version 1 since snapshots beyond maxChangeFileReplay
+        // would be filtered out anyway.
+        if (stateStoreCkptId.isDefined) {
+          try {
+            val startVer = math.max(1L,
+              versionToLoad - conf.stateStoreConf.autoSnapshotRepairMaxChangeFileReplay)
+            workingLineage = getFullLineage(startVer, versionToLoad, stateStoreCkptId)
+          } catch {
+            case NonFatal(e) =>
+              logWarning(log"Failed to enrich lineage via getFullLineage during " +
+                log"auto-repair for version ${MDC(LogKeys.VERSION_NUM, versionToLoad)}. " +
+                log"Falling back to existing lineage; repair options may be limited.", e)
+          }
+        }
+        // Re-discover eligible snapshots from the (potentially enriched) lineage
+        getEligibleSnapshots(version)
+      }
+    }
+
+    val (_, autoRepairCompleted) = snapshotLoader.loadSnapshot(versionToLoad)
+    performedSnapshotAutoRepair = autoRepairCompleted
+    workingLineage
   }
 
   /**
@@ -703,21 +877,27 @@ class RocksDB(
   def load(
       version: Long,
       stateStoreCkptId: Option[String] = None,
-      readOnly: Boolean = false): RocksDB = {
+      readOnly: Boolean = false,
+      loadEmpty: Boolean = false): RocksDB = {
     val startTime = System.currentTimeMillis()
 
     assert(version >= 0)
     recordedMetrics = None
     performedSnapshotAutoRepair = false
+    loadedFromDfs = false
     // Reset the load metrics before loading
     loadMetrics.clear()
 
     logInfo(log"Loading ${MDC(LogKeys.VERSION_NUM, version)} with stateStoreCkptId: ${
       MDC(LogKeys.UUID, stateStoreCkptId.getOrElse(""))}")
-    if (stateStoreCkptId.isDefined || enableStateStoreCheckpointIds && version == 0) {
-      loadWithCheckpointId(version, stateStoreCkptId, readOnly)
+    // If loadEmpty is true, we will not generate a changelog but only a snapshot file to prevent
+    // mistakenly applying new changelog to older state version
+    enableChangelogCheckpointing = if (loadEmpty) false else conf.enableChangelogCheckpointing
+    if (stateStoreCkptId.isDefined ||
+      enableStateStoreCheckpointIds && (version == 0 || loadEmpty)) {
+      loadWithCheckpointId(version, stateStoreCkptId, readOnly, loadEmpty)
     } else {
-      loadWithoutCheckpointId(version, readOnly)
+      loadWithoutCheckpointId(version, readOnly, loadEmpty)
     }
 
     // Record the metrics after loading
@@ -765,6 +945,9 @@ class RocksDB(
         endVersion,
         snapshotVersionStateStoreCkptId,
         endVersionStateStoreCkptId)
+
+      // version 0 is the empty initial state; loadCheckpointFromDfs skips DFS for it
+      loadedFromDfs = endVersion > 0
 
       logInfo(
         log"Loaded snapshot at version ${MDC(LogKeys.VERSION_NUM, snapshotVersion)} and apply " +
@@ -904,6 +1087,12 @@ class RocksDB(
               verifyChangelogRecord(kvVerifier, key, Some(value))
               merge(key, value, includesPrefix = useColumnFamilies,
                 deriveCfName = useColumnFamilies, includesChecksum = conf.rowChecksumEnabled)
+
+            case RecordType.DELETE_RANGE_RECORD =>
+              // For deleteRange, 'key' is beginKey and 'value' is endKey
+              verifyChangelogRecord(kvVerifier, key, Some(value))
+              deleteRange(key, value, includesPrefix = useColumnFamilies,
+                includesChecksum = conf.rowChecksumEnabled)
           }
         }
       } finally {
@@ -977,9 +1166,46 @@ class RocksDB(
     val (finalKey, value) = getValue(key, cfName)
     if (conf.rowChecksumEnabled && value != null) {
       KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-        readVerifier, finalKey, value)
+        readVerifier, finalKey, value, delimiterSize)
     } else {
       value
+    }
+  }
+
+  /**
+   * Get the values for multiple keys in a single batch operation.
+   * Uses RocksDB's native multiGet for efficient batch lookups.
+   *
+   * @param keys   Array of keys to look up
+   * @param cfName The column family name
+   * @return Array of values corresponding to the keys (null for keys that don't exist)
+   */
+  def multiGet(
+      keys: Array[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[Array[Byte]] = {
+    updateMemoryUsageIfNeeded()
+    // Prepare keys
+    val finalKeys = if (useColumnFamilies) {
+      keys.map(encodeStateRowWithPrefix(_, cfName))
+    } else {
+      keys
+    }
+
+    val keysList = java.util.Arrays.asList(finalKeys: _*)
+
+    // Call RocksDB multiGetAsList
+    val valuesList = db.multiGetAsList(readOptions, keysList)
+
+    // Decode and verify checksums if enabled, then return iterator
+    if (conf.rowChecksumEnabled) {
+      valuesList.asScala.iterator.zipWithIndex.map {
+        case (value, idx) if value != null =>
+          KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+            readVerifier, finalKeys(idx), value, delimiterSize)
+        case _ => null
+      }
+    } else {
+      valuesList.asScala.iterator
     }
   }
 
@@ -1004,20 +1230,20 @@ class RocksDB(
   }
 
   /**
-   * Get the values for a given key if present, that were merged (via merge).
+   * Get multiple values for a given key that were stored via merge operation.
    * This returns the values as an iterator of index range, to allow inline access
    * of each value bytes without copying, for better performance.
    * Note: This method is currently only supported when row checksum is enabled.
    * */
-  def multiGet(
+  def getMergedValues(
       key: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): Iterator[ArrayIndexRange[Byte]] = {
-    assert(conf.rowChecksumEnabled, "multiGet is only allowed when row checksum is enabled")
+    assert(conf.rowChecksumEnabled, "getMergedValues is only allowed when row checksum is enabled")
     updateMemoryUsageIfNeeded()
 
     val (finalKey, value) = getValue(key, cfName)
     KeyValueChecksumEncoder.decodeAndVerifyMultiValueRowWithChecksum(
-      readVerifier, finalKey, value)
+      readVerifier, finalKey, value, delimiterSize)
   }
 
   /** Returns a tuple of the final key used to store the value in the db and the value. */
@@ -1133,12 +1359,12 @@ class RocksDB(
     } else {
       values
     }
-    // Delimit each value row bytes with a single byte delimiter, the last
+    // Delimit each value row bytes with delimiter, the last
     // value row won't have a delimiter at the end.
     val delimiterNum = valueWithChecksum.length - 1
     // The bytes in valueWithChecksum already include the bytes length prefix
     val totalSize = valueWithChecksum.map(_.length).sum +
-      delimiterNum // for each delimiter
+      delimiterNum * delimiterSize // for each delimiter
 
     val result = new Array[Byte](totalSize)
     var pos = Platform.BYTE_ARRAY_OFFSET
@@ -1148,12 +1374,14 @@ class RocksDB(
       Platform.copyMemory(rowBytes, Platform.BYTE_ARRAY_OFFSET, result, pos, rowBytes.length)
       pos += rowBytes.length
 
-      // Add the delimiter - we are using "," as the delimiter
-      if (idx < delimiterNum) {
-        result(pos - Platform.BYTE_ARRAY_OFFSET) = 44.toByte
+      // Add the delimiter if not the last value and delimiter is not empty
+      if (idx < delimiterNum && delimiterSize > 0) {
+        mergeDelimiter.getBytes.zipWithIndex.foreach { case (b, i) =>
+          result(pos - Platform.BYTE_ARRAY_OFFSET + i) = b
+        }
       }
       // Move the position for delimiter
-      pos += 1
+      pos += delimiterSize
     }
     result
   }
@@ -1319,6 +1547,56 @@ class RocksDB(
   }
 
   /**
+   * Delete all keys in the range [beginKey, endKey).
+   * Uses RocksDB's native deleteRange for efficient bulk deletion.
+   *
+   * @param beginKey       The start key of the range (inclusive)
+   * @param endKey         The end key of the range (exclusive)
+   * @param cfName         The column family name
+   * @param includesPrefix Whether the keys already include the column family prefix.
+   *                       Set to true during changelog replay to avoid double-encoding.
+   */
+  def deleteRange(
+      beginKey: Array[Byte],
+      endKey: Array[Byte],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME,
+      includesPrefix: Boolean = false,
+      includesChecksum: Boolean = false): Unit = {
+    updateMemoryUsageIfNeeded()
+
+    val originalEndKey = if (conf.rowChecksumEnabled && includesChecksum) {
+      KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+        readVerifier, beginKey, endKey, delimiterSize)
+    } else {
+      endKey
+    }
+
+    val beginKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(beginKey, cfName)
+    } else {
+      beginKey
+    }
+
+    val endKeyWithPrefix = if (useColumnFamilies && !includesPrefix) {
+      encodeStateRowWithPrefix(originalEndKey, cfName)
+    } else {
+      originalEndKey
+    }
+
+    db.deleteRange(writeOptions, beginKeyWithPrefix, endKeyWithPrefix)
+    changelogWriter.foreach { writer =>
+      val endKeyForChangelog = if (conf.rowChecksumEnabled) {
+        KeyValueChecksumEncoder.encodeValueRowWithChecksum(endKeyWithPrefix,
+          KeyValueChecksum.create(beginKeyWithPrefix, Some(endKeyWithPrefix)))
+      } else {
+        endKeyWithPrefix
+      }
+      writer.deleteRange(beginKeyWithPrefix, endKeyForChangelog)
+    }
+    // TODO: Add metrics update for deleteRange operations
+  }
+
+  /**
    * Get an iterator of all committed and uncommitted key-value pairs.
    */
   def iterator(): NextIterator[ByteArrayPair] = {
@@ -1344,7 +1622,7 @@ class RocksDB(
 
           val value = if (conf.rowChecksumEnabled) {
             KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, iter.key, iter.value)
+              readVerifier, iter.key, iter.value, delimiterSize)
           } else {
             iter.value
           }
@@ -1417,18 +1695,28 @@ class RocksDB(
       prefix: Array[Byte],
       cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
     updateMemoryUsageIfNeeded()
-    val iter = db.newIterator()
     val updatedPrefix = if (useColumnFamilies) {
       encodeStateRowWithPrefix(prefix, cfName)
     } else {
       prefix
     }
 
+    val upperBoundSlice = RocksDB.prefixUpperBound(updatedPrefix).map(new Slice(_))
+    val prefixScanReadOptions = new ReadOptions()
+    upperBoundSlice.foreach(prefixScanReadOptions.setIterateUpperBound)
+
+    val iter = db.newIterator(prefixScanReadOptions)
     iter.seek(updatedPrefix)
+
+    def closeResources(): Unit = {
+      iter.close()
+      prefixScanReadOptions.close()
+      upperBoundSlice.foreach(_.close())
+    }
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
     Option(TaskContext.get()).foreach { tc =>
-      tc.addTaskCompletionListener[Unit] { _ => iter.close() }
+      tc.addTaskCompletionListener[Unit] { _ => closeResources() }
     }
 
     new NextIterator[ByteArrayPair] {
@@ -1442,7 +1730,7 @@ class RocksDB(
 
           val value = if (conf.rowChecksumEnabled) {
             KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
-              readVerifier, iter.key, iter.value)
+              readVerifier, iter.key, iter.value, delimiterSize)
           } else {
             iter.value
           }
@@ -1452,12 +1740,99 @@ class RocksDB(
           byteArrayPair
         } else {
           finished = true
-          iter.close()
+          closeResources()
           null
         }
       }
 
-      override protected def close(): Unit = { iter.close() }
+      override protected def close(): Unit = closeResources()
+    }
+  }
+
+  /**
+   * Scan key-value pairs in the range [startKey, endKey).
+   *
+   * @param startKey None to seek to the beginning of the column family,
+   *                 or Some(key) to seek to the given start position (inclusive).
+   * @param endKey   None to scan to the end of the column family,
+   *                 or Some(key) as the exclusive upper bound for the scan (encoded key bytes).
+   * @param cfName   The column family name.
+   * @return An iterator of ByteArrayPairs in the given range.
+   */
+  def rangeScan(
+      startKey: Option[Array[Byte]],
+      endKey: Option[Array[Byte]],
+      cfName: String = StateStore.DEFAULT_COL_FAMILY_NAME): NextIterator[ByteArrayPair] = {
+    updateMemoryUsageIfNeeded()
+
+    val upperBoundBytes: Option[Array[Byte]] = endKey match {
+      case Some(key) =>
+        Some(if (useColumnFamilies) encodeStateRowWithPrefix(key, cfName) else key)
+      case None =>
+        if (useColumnFamilies) {
+          val cfPrefix = encodeStateRowWithPrefix(Array.emptyByteArray, cfName)
+          RocksDB.prefixUpperBound(cfPrefix)
+        } else {
+          None
+        }
+    }
+
+    val seekTarget = startKey match {
+      case Some(key) =>
+        if (useColumnFamilies) encodeStateRowWithPrefix(key, cfName) else key
+      case None =>
+        if (useColumnFamilies) encodeStateRowWithPrefix(Array.emptyByteArray, cfName)
+        else null
+    }
+
+    val upperBoundSlice = upperBoundBytes.map(new Slice(_))
+    val scanReadOptions = new ReadOptions()
+    upperBoundSlice.foreach(scanReadOptions.setIterateUpperBound)
+
+    val iter = db.newIterator(scanReadOptions)
+    if (seekTarget != null) {
+      iter.seek(seekTarget)
+    } else {
+      iter.seekToFirst()
+    }
+
+    def closeResources(): Unit = {
+      iter.close()
+      scanReadOptions.close()
+      upperBoundSlice.foreach(_.close())
+    }
+
+    Option(TaskContext.get()).foreach { tc =>
+      tc.addTaskCompletionListener[Unit] { _ => closeResources() }
+    }
+
+    new NextIterator[ByteArrayPair] {
+      override protected def getNext(): ByteArrayPair = {
+        if (iter.isValid) {
+          val key = if (useColumnFamilies) {
+            decodeStateRowWithPrefix(iter.key)._1
+          } else {
+            iter.key
+          }
+
+          val value = if (conf.rowChecksumEnabled) {
+            KeyValueChecksumEncoder.decodeAndVerifyValueRowWithChecksum(
+              readVerifier, iter.key, iter.value, delimiterSize)
+          } else {
+            iter.value
+          }
+
+          byteArrayPair.set(key, value)
+          iter.next()
+          byteArrayPair
+        } else {
+          finished = true
+          closeResources()
+          null
+        }
+      }
+
+      override protected def close(): Unit = closeResources()
     }
   }
 
@@ -1469,12 +1844,16 @@ class RocksDB(
    * - Create a RocksDB checkpoint in a new local dir
    * - Sync the checkpoint dir files to DFS
    */
-  def commit(): (Long, StateStoreCheckpointInfo) = {
+  def commit(forceSnapshot: Boolean = false): (Long, StateStoreCheckpointInfo) = {
     commitLatencyMs.clear()
     updateMemoryUsageIfNeeded()
     val newVersion = loadedVersion + 1
     try {
       logInfo(log"Flushing updates for ${MDC(LogKeys.VERSION_NUM, newVersion)}")
+
+      if (forceSnapshot) {
+        shouldForceSnapshot.set(true)
+      }
 
       var snapshot: Option[RocksDBSnapshot] = None
       if (shouldCreateSnapshot() || shouldForceSnapshot.get()) {
@@ -1646,17 +2025,23 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
-    numKeysOnWritingVersion = numKeysOnLoadedVersion
-    numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
-    loadedVersion = -1L
-    lastCommitBasedStateStoreCkptId = None
-    lastCommittedStateStoreCkptId = None
-    loadedStateStoreCkptId = None
-    sessionStateStoreCkptId = None
-    lineageManager.clear()
-    changelogWriter.foreach(_.abort())
-    // Make sure changelogWriter gets recreated next time.
-    changelogWriter = None
+    logInfo(
+      log"Rolling back uncommitted changes on version ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
+    try {
+      numKeysOnWritingVersion = numKeysOnLoadedVersion
+      numInternalKeysOnWritingVersion = numInternalKeysOnLoadedVersion
+      loadedVersion = -1L
+      lastCommitBasedStateStoreCkptId = None
+      lastCommittedStateStoreCkptId = None
+      loadedStateStoreCkptId = None
+      sessionStateStoreCkptId = None
+      lineageManager.clear()
+      changelogWriter.foreach(_.abort())
+    } finally {
+      // Make sure changelogWriter gets recreated next time even if the changelogWriter aborts with
+      // an exception.
+      changelogWriter = None
+    }
     logInfo(log"Rolled back to ${MDC(LogKeys.VERSION_NUM, loadedVersion)}")
   }
 
@@ -1675,7 +2060,20 @@ class RocksDB(
       }
 
       if (mostRecentSnapshot.isDefined) {
-        uploadSnapshot(mostRecentSnapshot.get)
+        // SPARK-55892: We are doing this because the time between when a snapshot was created,
+        // and the time when maintenance upload is happening could be very long, such that the
+        // reused files could have been deleted by maintenance on another executor due to
+        // the existing uploaded snapshots depending on it being deleted.
+        // This would also handle other cases where the fileMapping is referencing a file
+        // that is already deleted in DFS.
+        // This could lead to SST file missing, when the state store is being reloaded with
+        // this new snapshot.
+        val snapshotToUpload = if (conf.checkStaleReusedFilesInSnapshot) {
+          replaceStaleReusedFilesInSnapshot(mostRecentSnapshot.get)
+        } else {
+          mostRecentSnapshot.get
+        }
+        uploadSnapshot(snapshotToUpload)
       }
     }
     val cleanupTime = timeTakenMs {
@@ -1687,6 +2085,42 @@ class RocksDB(
     logInfo(log"Cleaned old data, time taken: ${MDC(LogKeys.TIME_UNITS, cleanupTime)} ms")
   }
 
+  /**
+   * This replaces stale reused files in the snapshot with new ones to be uploaded.
+   * Stale means they are potential candidates for deletion by another
+   * maintenance that could have happened on another executor before this snapshot is uploaded.
+   * Checking if the file exists in DFS is not sufficient, since that could lead to race
+   * with an ongoing maintenance on another executor.
+   *
+   * @param snapshot The snapshot we want to upload
+   * @return The snapshot with stale reused files replaced with new DFS files to be uploaded
+   */
+  private def replaceStaleReusedFilesInSnapshot(snapshot: RocksDBSnapshot): RocksDBSnapshot = {
+    val isReusingFiles = snapshot.fileMapping.exists(_._2.reusedFromVersion.isDefined)
+
+    if (isReusingFiles) {
+      val latestSnapshotVersionInDfs = fileManager.getLatestSnapshotVersion()
+      // Any other maintenance wouldn't delete files after this version
+      val maxVersionToDelete = Math.max(latestSnapshotVersionInDfs - conf.minVersionsToRetain, 0)
+
+      val newFileMapping = snapshot.fileMapping.map { case (localFileName, snapshotFile) =>
+        if (snapshotFile.reusedFromVersion.isDefined &&
+          snapshotFile.reusedFromVersion.get <= maxVersionToDelete) {
+          // Don't reuse the file, lets upload a new one
+          val newDfsFileName = fileManager.newDFSFileName(localFileName, snapshot.dfsFileSuffix)
+          val newDfsFile = RocksDBImmutableFile(
+            localFileName, newDfsFileName, snapshotFile.immutableFile.sizeBytes)
+          localFileName -> RocksDBSnapshotFile(newDfsFile, reusedFromVersion = None)
+        } else {
+          localFileName -> snapshotFile
+        }
+      }.toMap
+      snapshot.copy(fileMapping = newFileMapping)
+    } else {
+      snapshot
+    }
+  }
+
   /** Release all resources */
   def close(): Unit = {
     // Acquire DB instance lock and release at the end to allow for synchronized access
@@ -1696,6 +2130,7 @@ class RocksDB(
       readOptions.close()
       writeOptions.close()
       flushOptions.close()
+      nativeStats.close()
       rocksDbOptions.close()
       dbLogger.close()
 
@@ -1803,7 +2238,8 @@ class RocksDB(
       lastUploadedSnapshotVersion = lastUploadedSnapshotVersion.get(),
       zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
       nativeOpsMetrics = nativeOpsMetrics,
-      numSnapshotsAutoRepaired = if (performedSnapshotAutoRepair) 1 else 0)
+      numSnapshotsAutoRepaired = if (performedSnapshotAutoRepair) 1 else 0,
+      loadedFromDfs = if (this.loadedFromDfs) 1 else 0)
   }
 
   /**
@@ -1995,6 +2431,27 @@ class RocksDB(
 
 object RocksDB extends Logging {
 
+  /**
+   * Computes the exclusive upper bound for a prefix byte array by incrementing the prefix.
+   * For example, [0x01, 0x02, 0x03] -> Some([0x01, 0x02, 0x04]).
+   * Returns None if the prefix is all 0xFF bytes (no finite upper bound exists).
+   */
+  def prefixUpperBound(prefix: Array[Byte]): Option[Array[Byte]] = {
+    if (prefix.isEmpty) return None
+
+    var i = prefix.length - 1
+    while (i >= 0) {
+      val incremented = (prefix(i) & 0xFF) + 1
+      if (incremented <= 0xFF) {
+        val upperBound = java.util.Arrays.copyOf(prefix, i + 1)
+        upperBound(i) = incremented.toByte
+        return Some(upperBound)
+      }
+      i -= 1
+    }
+    None
+  }
+
   val mainMemorySources: Seq[String] = Seq(
     "rocksdb.estimate-table-readers-mem",
     "rocksdb.size-all-mem-tables",
@@ -2040,7 +2497,11 @@ case class RocksDBVersionSnapshotInfo(version: Long, dfsFilesUUID: String)
 
 // Encapsulates a RocksDB immutable file, and the information whether it has been previously
 // uploaded to DFS. Already uploaded files can be skipped during SST file upload.
-case class RocksDBSnapshotFile(immutableFile: RocksDBImmutableFile, isUploaded: Boolean)
+case class RocksDBSnapshotFile(
+    immutableFile: RocksDBImmutableFile,
+    reusedFromVersion: Option[Long]) {
+  def isUploaded: Boolean = reusedFromVersion.isDefined
+}
 
 // Encapsulates the mapping of local SST files to DFS files. This mapping prevents
 // re-uploading the same SST file multiple times to DFS, saving I/O and reducing snapshot
@@ -2091,7 +2552,7 @@ class RocksDBFileMapping {
       // We can't reuse the current local file since it was added in the same or newer version
       // as the version we want to load
       (fileVersion, _) => fileVersion >= versionToLoad
-    )
+    ).map(_._1)
   }
 
   /**
@@ -2106,12 +2567,12 @@ class RocksDBFileMapping {
    *       e.g. we load(v1) -> save(v2), the loaded SST files from version 1 can be reused
    *       in version 2 upload.
    *
-   * @return - Option with the DFS file or None
+   * @return - Option with the DFS file and version or None
    */
   private def getDfsFileForSave(
       fileManager: RocksDBFileManager,
       localFile: File,
-      versionToSave: Long): Option[RocksDBImmutableFile] = {
+      versionToSave: Long): Option[(RocksDBImmutableFile, Long)] = {
     getDfsFileWithIncompatibilityCheck(
       fileManager,
       localFile.getName,
@@ -2125,7 +2586,8 @@ class RocksDBFileMapping {
   private def getDfsFileWithIncompatibilityCheck(
       fileManager: RocksDBFileManager,
       localFileName: String,
-      isIncompatible: (Long, RocksDBImmutableFile) => Boolean): Option[RocksDBImmutableFile] = {
+      isIncompatible: (Long, RocksDBImmutableFile) => Boolean
+  ): Option[(RocksDBImmutableFile, Long)] = {
     localFileMappings.get(localFileName).map { case (dfsFileMappedVersion, dfsFile) =>
       val dfsFileSuffix = fileManager.dfsFileSuffix(dfsFile)
       val versionSnapshotInfo = RocksDBVersionSnapshotInfo(dfsFileMappedVersion, dfsFileSuffix)
@@ -2135,7 +2597,7 @@ class RocksDBFileMapping {
         remove(localFileName)
         None
       } else {
-        Some(dfsFile)
+        Some((dfsFile, dfsFileMappedVersion))
       }
     }.getOrElse(None)
   }
@@ -2189,14 +2651,17 @@ class RocksDBFileMapping {
     val dfsFilesSuffix = UUID.randomUUID().toString
     val snapshotFileMapping = localImmutableFiles.map { f =>
       val localFileName = f.getName
-      val existingDfsFile = getDfsFileForSave(fileManager, f, version)
-      val dfsFile = existingDfsFile.getOrElse {
-        val newDfsFileName = fileManager.newDFSFileName(localFileName, dfsFilesSuffix)
-        val newDfsFile = RocksDBImmutableFile(localFileName, newDfsFileName, sizeBytes = f.length())
-        mapToDfsFile(localFileName, newDfsFile, version)
-        newDfsFile
+      val existingDfsFileAndVersion = getDfsFileForSave(fileManager, f, version)
+      val (dfsFile, reusedFromVersion) = existingDfsFileAndVersion match {
+        case Some((file, version)) => (file, Some(version))
+        case None =>
+          val newDfsFileName = fileManager.newDFSFileName(localFileName, dfsFilesSuffix)
+          val newDfsFile =
+            RocksDBImmutableFile(localFileName, newDfsFileName, sizeBytes = f.length())
+          mapToDfsFile(localFileName, newDfsFile, version)
+          (newDfsFile, None)
       }
-      localFileName -> RocksDBSnapshotFile(dfsFile, existingDfsFile.isDefined)
+      localFileName -> RocksDBSnapshotFile(dfsFile, reusedFromVersion)
     }.toMap
 
     syncWithLocalState(localImmutableFiles)
@@ -2244,13 +2709,16 @@ case class RocksDBConf(
     memoryUpdateIntervalMs: Long,
     compressionCodec: String,
     verifyNonEmptyFilesInZip: Boolean,
+    checkStaleReusedFilesInSnapshot: Boolean,
     allowFAllocate: Boolean,
     compression: String,
     reportSnapshotUploadLag: Boolean,
     maxVersionsToDeletePerMaintenance: Int,
     fileChecksumEnabled: Boolean,
+    fileChecksumThreadPoolSize: Int,
     rowChecksumEnabled: Boolean,
     rowChecksumReadVerificationRatio: Long,
+    mergeOperatorVersion: Int,
     stateStoreConf: StateStoreConf)
 
 object RocksDBConf {
@@ -2358,6 +2826,23 @@ object RocksDBConf {
   private val VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF =
     SQLConfEntry(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF_KEY, "true")
 
+  // Config to determine whether we should check for stale reused files
+  // during maintenance snapshot upload.
+  val CHECK_STALE_REUSED_FILES_IN_SNAPSHOT_CONF_KEY = "checkStaleReusedFilesInSnapshot"
+  private val CHECK_STALE_REUSED_FILES_IN_SNAPSHOT_CONF =
+    SQLConfEntry(CHECK_STALE_REUSED_FILES_IN_SNAPSHOT_CONF_KEY, "true")
+
+  // Configuration to set the merge operator version for backward compatibility.
+  // Version 1 (default): Uses comma "," as delimiter for StringAppendOperator
+  // Version 2: Uses empty string "" as delimiter (no delimiter, direct concatenation)
+  //
+  // Note: this is also defined in `SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION`.
+  // These two places should be updated together.
+  val MERGE_OPERATOR_VERSION_CONF_KEY = "mergeOperatorVersion"
+  private val MERGE_OPERATOR_VERSION_CONF = SQLConfEntry(MERGE_OPERATOR_VERSION_CONF_KEY, "2")
+
+  val MERGE_OPERATOR_VALID_VERSIONS: Seq[Int] = Seq(1, 2)
+
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val sqlConfs = CaseInsensitiveMap[String](storeConf.sqlConfs)
     val extraConfs = CaseInsensitiveMap[String](storeConf.extraOptions)
@@ -2447,13 +2932,16 @@ object RocksDBConf {
       getPositiveLongConf(MEMORY_UPDATE_INTERVAL_MS_CONF),
       storeConf.compressionCodec,
       getBooleanConf(VERIFY_NON_EMPTY_FILES_IN_ZIP_CONF),
+      getBooleanConf(CHECK_STALE_REUSED_FILES_IN_SNAPSHOT_CONF),
       getBooleanConf(ALLOW_FALLOCATE_CONF),
       getStringConf(COMPRESSION_CONF),
       storeConf.reportSnapshotUploadLag,
       storeConf.maxVersionsToDeletePerMaintenance,
       storeConf.checkpointFileChecksumEnabled,
+      storeConf.fileChecksumThreadPoolSize,
       storeConf.rowChecksumEnabled,
       storeConf.rowChecksumReadVerificationRatio,
+      getPositiveIntConf(MERGE_OPERATOR_VERSION_CONF),
       storeConf)
   }
 
@@ -2477,7 +2965,8 @@ case class RocksDBMetrics(
     zipFileBytesUncompressed: Option[Long],
     nativeOpsMetrics: Map[String, Long],
     lastUploadedSnapshotVersion: Long,
-    numSnapshotsAutoRepaired: Long) {
+    numSnapshotsAutoRepaired: Long,
+    loadedFromDfs: Long) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 

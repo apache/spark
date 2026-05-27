@@ -441,4 +441,82 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("from_xml/to_xml with TIME type - all precisions") {
+    val testData = Seq(
+      (0, "14:30:45"),
+      (1, "14:30:45.1"),
+      (2, "14:30:45.12"),
+      (3, "14:30:45.123"),
+      (4, "14:30:45.1234"),
+      (5, "14:30:45.12345"),
+      (6, "14:30:45.123456")
+    )
+
+    testData.foreach { case (precision, timeStr) =>
+      val schema = StructType(StructField("time", TimeType(precision)) :: Nil)
+      val timeValue = SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString(timeStr))
+      val xmlInput = s"""<record><time>$timeStr</time></record>"""
+
+      // Test from_xml
+      checkEvaluation(
+        XmlToStructs(schema, Map("rowTag" -> "record"), Literal(xmlInput), UTC_OPT),
+        InternalRow(timeValue)
+      )
+
+      // Test roundtrip (to_xml -> from_xml)
+      val struct = Literal.create(InternalRow(timeValue), schema)
+      val xmlResult = StructsToXml(Map("rowTag" -> "record"), struct, UTC_OPT)
+      checkEvaluation(
+        XmlToStructs(schema, Map("rowTag" -> "record"), xmlResult, UTC_OPT),
+        InternalRow(timeValue)
+      )
+    }
+
+    // Test custom format: HH-mm-ss.SSSSSS
+    val customSchema = StructType(StructField("time", TimeType(6)) :: Nil)
+    val customTimeValue = SparkDateTimeUtils.stringToTimeAnsi(
+      UTF8String.fromString("14:30:45.123456"))
+    val customXmlInput = """<record><time>14-30-45.123456</time></record>"""
+
+    // Test parsing with custom format
+    checkEvaluation(
+      XmlToStructs(customSchema, Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"),
+        Literal(customXmlInput), UTC_OPT),
+      InternalRow(customTimeValue)
+    )
+
+    // Test roundtrip with custom format
+    val customStruct = Literal.create(InternalRow(customTimeValue), customSchema)
+    val customXmlResult = StructsToXml(
+      Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"), customStruct, UTC_OPT)
+    checkEvaluation(
+      XmlToStructs(customSchema, Map("rowTag" -> "record", "timeFormat" -> "HH-mm-ss.SSSSSS"),
+        customXmlResult, UTC_OPT),
+      InternalRow(customTimeValue)
+    )
+  }
+
+  test("TIME type with arrays") {
+    val schema = StructType(StructField("times", ArrayType(TimeType(3))) :: Nil)
+    val time1 = SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString("09:00:00"))
+    val time2 = SparkDateTimeUtils.stringToTimeAnsi(UTF8String.fromString("17:30:45.123"))
+    val times = new GenericArrayData(Array(time1, time2))
+
+    val xmlInput = """<record><times>09:00:00</times><times>17:30:45.123</times></record>"""
+
+    // Test parsing array
+    checkEvaluation(
+      XmlToStructs(schema, Map("rowTag" -> "record"), Literal(xmlInput), UTC_OPT),
+      InternalRow(times)
+    )
+
+    // Test roundtrip
+    val struct = Literal.create(InternalRow(times), schema)
+    val xmlResult = StructsToXml(Map("rowTag" -> "record"), struct, UTC_OPT)
+    checkEvaluation(
+      XmlToStructs(schema, Map("rowTag" -> "record"), xmlResult, UTC_OPT),
+      InternalRow(times)
+    )
+  }
+
 }

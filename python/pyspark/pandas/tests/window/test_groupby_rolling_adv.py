@@ -20,6 +20,9 @@ from pyspark.pandas.tests.window.test_groupby_rolling import GroupByRollingTesti
 
 
 class GroupByRollingAdvMixin(GroupByRollingTestingFuncMixin):
+    def test_groupby_rolling_median(self):
+        self._test_groupby_rolling_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_groupby_rolling_quantile(self):
         self._test_groupby_rolling_func(
             lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower")
@@ -48,13 +51,6 @@ class GroupByRollingAdvTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.window.test_groupby_rolling_adv import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

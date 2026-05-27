@@ -859,40 +859,49 @@ private[spark] object LiveEntityHelpers {
     }
 
     createMetrics(
-      updateMetricValue(m.executorDeserializeTime),
-      updateMetricValue(m.executorDeserializeCpuTime),
-      updateMetricValue(m.executorRunTime),
-      updateMetricValue(m.executorCpuTime),
-      updateMetricValue(m.resultSize),
-      updateMetricValue(m.jvmGcTime),
-      updateMetricValue(m.resultSerializationTime),
-      updateMetricValue(m.memoryBytesSpilled),
-      updateMetricValue(m.diskBytesSpilled),
-      updateMetricValue(m.peakExecutionMemory),
-      updateMetricValue(m.inputMetrics.bytesRead),
-      updateMetricValue(m.inputMetrics.recordsRead),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.corruptMergedBlockChunks),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.mergedFetchFallbackCount),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBlocksFetched),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedBlocksFetched),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedChunksFetched),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedChunksFetched),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBytesRead),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedBytesRead),
-      updateMetricValue(m.shuffleReadMetrics.remoteReqsDuration),
-      updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedReqsDuration),
-      updateMetricValue(m.outputMetrics.bytesWritten),
-      updateMetricValue(m.outputMetrics.recordsWritten),
-      updateMetricValue(m.shuffleReadMetrics.remoteBlocksFetched),
-      updateMetricValue(m.shuffleReadMetrics.localBlocksFetched),
-      updateMetricValue(m.shuffleReadMetrics.fetchWaitTime),
-      updateMetricValue(m.shuffleReadMetrics.remoteBytesRead),
-      updateMetricValue(m.shuffleReadMetrics.remoteBytesReadToDisk),
-      updateMetricValue(m.shuffleReadMetrics.localBytesRead),
-      updateMetricValue(m.shuffleReadMetrics.recordsRead),
-      updateMetricValue(m.shuffleWriteMetrics.bytesWritten),
-      updateMetricValue(m.shuffleWriteMetrics.writeTime),
-      updateMetricValue(m.shuffleWriteMetrics.recordsWritten))
+      executorDeserializeTime = updateMetricValue(m.executorDeserializeTime),
+      executorDeserializeCpuTime = updateMetricValue(m.executorDeserializeCpuTime),
+      executorRunTime = updateMetricValue(m.executorRunTime),
+      executorCpuTime = updateMetricValue(m.executorCpuTime),
+      resultSize = updateMetricValue(m.resultSize),
+      jvmGcTime = updateMetricValue(m.jvmGcTime),
+      resultSerializationTime = updateMetricValue(m.resultSerializationTime),
+      memoryBytesSpilled = updateMetricValue(m.memoryBytesSpilled),
+      diskBytesSpilled = updateMetricValue(m.diskBytesSpilled),
+      peakExecutionMemory = updateMetricValue(m.peakExecutionMemory),
+      inputBytesRead = updateMetricValue(m.inputMetrics.bytesRead),
+      inputRecordsRead = updateMetricValue(m.inputMetrics.recordsRead),
+      outputBytesWritten = updateMetricValue(m.outputMetrics.bytesWritten),
+      outputRecordsWritten = updateMetricValue(m.outputMetrics.recordsWritten),
+      shuffleRemoteBlocksFetched = updateMetricValue(m.shuffleReadMetrics.remoteBlocksFetched),
+      shuffleLocalBlocksFetched = updateMetricValue(m.shuffleReadMetrics.localBlocksFetched),
+      shuffleFetchWaitTime = updateMetricValue(m.shuffleReadMetrics.fetchWaitTime),
+      shuffleRemoteBytesRead = updateMetricValue(m.shuffleReadMetrics.remoteBytesRead),
+      shuffleRemoteBytesReadToDisk = updateMetricValue(m.shuffleReadMetrics.remoteBytesReadToDisk),
+      shuffleLocalBytesRead = updateMetricValue(m.shuffleReadMetrics.localBytesRead),
+      shuffleRecordsRead = updateMetricValue(m.shuffleReadMetrics.recordsRead),
+      shuffleCorruptMergedBlockChunks =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.corruptMergedBlockChunks),
+      shuffleMergedFetchFallbackCount =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.mergedFetchFallbackCount),
+      shuffleMergedRemoteBlocksFetched =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBlocksFetched),
+      shuffleMergedLocalBlocksFetched =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedBlocksFetched),
+      shuffleMergedRemoteChunksFetched =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedChunksFetched),
+      shuffleMergedLocalChunksFetched =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedChunksFetched),
+      shuffleMergedRemoteBytesRead =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedBytesRead),
+      shuffleMergedLocalBytesRead =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.localMergedBytesRead),
+      shuffleRemoteReqsDuration = updateMetricValue(m.shuffleReadMetrics.remoteReqsDuration),
+      shuffleMergedRemoteReqsDuration =
+        updateMetricValue(m.shuffleReadMetrics.shufflePushReadMetrics.remoteMergedReqsDuration),
+      shuffleBytesWritten = updateMetricValue(m.shuffleWriteMetrics.bytesWritten),
+      shuffleWriteTime = updateMetricValue(m.shuffleWriteMetrics.writeTime),
+      shuffleRecordsWritten = updateMetricValue(m.shuffleWriteMetrics.recordsWritten))
   }
 
   private def addMetrics(m1: v1.TaskMetrics, m2: v1.TaskMetrics, mult: Int): v1.TaskMetrics = {

@@ -314,7 +314,7 @@ class FMClassificationModel private[classification] (
     copyValues(new FMClassificationModel(uid, intercept, linear, factors), extra)
   }
 
-  override def estimatedSize: Long = {
+  private[spark] override def estimatedSize: Long = {
     var size = this.estimateMatadataSize
     if (this.linear != null) {
       size += this.linear.getSizeInBytes

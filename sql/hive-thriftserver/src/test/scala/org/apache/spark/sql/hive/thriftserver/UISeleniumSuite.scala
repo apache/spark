@@ -25,7 +25,6 @@ import scala.util.Random
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
@@ -38,7 +37,7 @@ import org.apache.spark.ui.SparkUICssErrorHandler
 @WebBrowserTest
 class UISeleniumSuite
   extends HiveThriftServer2TestBase
-  with WebBrowser with Matchers with BeforeAndAfterAll {
+  with WebBrowser with Matchers {
 
   implicit var webDriver: WebDriver = _
   var server: HiveThriftServer2 = _

@@ -19,6 +19,8 @@ package org.apache.spark.sql.connect
 
 import java.io.{File, FilenameFilter}
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession, SQLHelper}
@@ -97,12 +99,12 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
         import session.implicits._
         val df1 = Seq("Bob", "Alice", "Nico", "Bob", "Alice").toDF("name")
         df1.write.parquet(table1Dir.getPath)
-        spark.catalog.createTable(parquetTableName, table1Dir.getPath).collect()
+        spark.catalog.createTable(parquetTableName, table1Dir.getPath)
         withTable(orcTableName, jsonTableName) {
           withTempPath { table2Dir =>
             val df2 = Seq("Bob", "Alice", "Nico", "Bob", "Alice").zipWithIndex.toDF("name", "id")
             df2.write.orc(table2Dir.getPath)
-            spark.catalog.createTable(orcTableName, table2Dir.getPath, "orc").collect()
+            spark.catalog.createTable(orcTableName, table2Dir.getPath, "orc")
             val orcTable = spark.catalog.getTable(orcTableName)
             assert(!orcTable.isTemporary)
             assert(orcTable.name == orcTableName)
@@ -115,7 +117,6 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
           val schema = new StructType().add("id", LongType).add("a", DoubleType)
           spark.catalog
             .createTable(jsonTableName, "json", schema, Map.empty[String, String])
-            .collect()
           val jsonTable = spark.catalog.getTable("default", jsonTableName)
           assert(!jsonTable.isTemporary)
           assert(jsonTable.name == jsonTableName)
@@ -149,6 +150,19 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
     assert(spark.catalog.listTables().collect().isEmpty)
   }
 
+  test("createTable should be eager") {
+    val tableName = "eager_table"
+    withTable(tableName) {
+      withTempPath { dir =>
+        val session = spark
+        import session.implicits._
+        Seq((1, "a")).toDF("id", "value").write.parquet(dir.getPath)
+        spark.catalog.createTable(tableName, dir.getPath)
+        assert(spark.catalog.tableExists(tableName))
+      }
+    }
+  }
+
   test("Cache Table APIs") {
     val parquetTableName = "parquet_table"
     withTable(parquetTableName) {
@@ -157,7 +171,7 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
         import session.implicits._
         val df1 = Seq("Bob", "Alice", "Nico", "Bob", "Alice").toDF("name")
         df1.write.parquet(table1Dir.getPath)
-        spark.catalog.createTable(parquetTableName, table1Dir.getPath).collect()
+        spark.catalog.createTable(parquetTableName, table1Dir.getPath)
 
         // Test cache and uncacheTable
         spark.catalog.cacheTable(parquetTableName)
@@ -297,6 +311,179 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
         } finally {
           spark.catalog.clearCache()
         }
+      }
+    }
+  }
+
+  test("SPARK-52312: DESCRIBE TABLE result should not change after ALTER TABLE") {
+    val tableName = "test_describe_cache"
+    withTable(tableName) {
+      spark.sql(s"CREATE TABLE $tableName (c1 int, c2 string) USING parquet")
+
+      // Describe the table and cache the result
+      val describeDf = spark.sql(s"DESCRIBE TABLE $tableName")
+      describeDf.cache()
+
+      // Verify initial describe shows original columns
+      val originalColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(originalColumns.contains("c1"))
+      assert(originalColumns.contains("c2"))
+      assert(!originalColumns.contains("c3"))
+
+      // Alter the table to add a new column
+      spark.sql(s"ALTER TABLE $tableName ADD COLUMN c3 double")
+
+      // The describe result df should still show the original schema (before ALTER)
+      val cachedColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(cachedColumns.contains("c1"))
+      assert(cachedColumns.contains("c2"))
+      assert(
+        !cachedColumns.contains("c3"),
+        "DESCRIBE column df should not reflect the new column")
+
+      // A fresh DESCRIBE TABLE call should show the new schema (with c3)
+      // because Describe command is not cached
+      val freshDescribeDf = spark.sql(s"DESCRIBE TABLE $tableName")
+      val freshColumns = freshDescribeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(freshColumns.contains("c1"))
+      assert(freshColumns.contains("c2"))
+      assert(freshColumns.contains("c3"), "Fresh DESCRIBE should reflect the new column")
+    }
+  }
+
+  test("SPARK-52312: DESCRIBE TABLE cache should be a no-op") {
+    val tableName = "test_describe_cache_noop"
+    withTable(tableName) {
+      spark.sql(s"CREATE TABLE $tableName (c1 int, c2 string) USING parquet")
+
+      // Create describe DataFrame but don't cache yet
+      val describeDf = spark.sql(s"DESCRIBE TABLE $tableName")
+
+      // add column c3
+      spark.sql(s"ALTER TABLE $tableName ADD COLUMN c3 double")
+
+      // Now cache the describe
+      describeDf.cache()
+
+      // Verify describe shows schema at the initialization of describeDf
+      val cachedColumns = describeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(cachedColumns.contains("c1"))
+      assert(cachedColumns.contains("c2"))
+      assert(!cachedColumns.contains("c3"), "DESCRIBE should not see c3 added before cache")
+
+      // A fresh DESCRIBE TABLE call should show the latest schema (with c3)
+      val freshDescribeDf = spark.sql(s"DESCRIBE TABLE $tableName")
+      val freshColumns = freshDescribeDf.select("col_name").collect().map(_.getString(0)).toSet
+      assert(freshColumns.contains("c1"))
+      assert(freshColumns.contains("c2"))
+      assert(freshColumns.contains("c3"))
+    }
+  }
+
+  test("extended catalog API: dropTable") {
+    val tbl = "connect_catalog_ext_drop_t"
+    withTable(tbl) {
+      withTempPath { dir =>
+        val session = spark
+        import session.implicits._
+        Seq(1).toDF("id").write.parquet(dir.getPath)
+        spark.catalog.createTable(tbl, dir.getPath)
+        assert(spark.catalog.tableExists(tbl))
+        spark.catalog.dropTable(tbl)
+        assert(!spark.catalog.tableExists(tbl))
+      }
+    }
+  }
+
+  test("extended catalog API: dropView") {
+    val view = "connect_catalog_ext_drop_v"
+    withView(view) {
+      spark.sql(s"CREATE VIEW $view AS SELECT 1 AS x")
+      assert(spark.catalog.tableExists(view))
+      spark.catalog.dropView(view)
+      assert(!spark.catalog.tableExists(view))
+    }
+  }
+
+  test("extended catalog API: createDatabase and dropDatabase") {
+    val db = "connect_catalog_ext_db"
+    spark.catalog.dropDatabase(db, ifExists = true, cascade = true)
+    assert(!spark.catalog.databaseExists(db))
+    spark.catalog.createDatabase(db)
+    assert(spark.catalog.databaseExists(db))
+    spark.catalog.dropDatabase(db, ifExists = false, cascade = true)
+    assert(!spark.catalog.databaseExists(db))
+  }
+
+  test("extended catalog API: listPartitions") {
+    val t = "connect_catalog_ext_part_t"
+    withTable(t) {
+      withTempPath { dir =>
+        val loc = dir.toURI.toString.replace("'", "\\'")
+        spark.sql(
+          s"CREATE TABLE $t (id INT, p INT) USING parquet PARTITIONED BY (p) LOCATION '$loc'")
+        spark.sql(s"INSERT INTO $t PARTITION (p = 7) SELECT 1")
+        val parts = spark.catalog.listPartitions(t).collect().map(_.partition)
+        assert(parts.exists(_.contains("p=7")))
+      }
+    }
+  }
+
+  test("extended catalog API: listViews") {
+    val v = "connect_catalog_ext_list_v"
+    withView(v) {
+      spark.sql(s"CREATE VIEW $v AS SELECT 1 AS c")
+      val names = spark.catalog.listViews().collect().map(_.name)
+      assert(names.contains(v))
+    }
+  }
+
+  test("extended catalog API: getTableProperties") {
+    val t = "connect_catalog_ext_props_t"
+    withTable(t) {
+      spark
+        .sql(s"CREATE TABLE $t (id INT) USING parquet " +
+          "TBLPROPERTIES ('connect_catalog_ext_k' = 'connect_catalog_ext_v')")
+        .collect()
+      val props = spark.catalog.getTableProperties(t).asScala.toMap
+      assert(props.get("connect_catalog_ext_k").contains("connect_catalog_ext_v"))
+    }
+  }
+
+  test("extended catalog API: getCreateTableString") {
+    val t = "connect_catalog_ext_ddl_t"
+    withTable(t) {
+      withTempPath { dir =>
+        val session = spark
+        import session.implicits._
+        Seq(1).toDF("id").write.parquet(dir.getPath)
+        spark.catalog.createTable(t, dir.getPath)
+        val ddl = spark.catalog.getCreateTableString(t)
+        assert(ddl.nonEmpty && ddl.toLowerCase(java.util.Locale.ROOT).contains("create"))
+      }
+    }
+  }
+
+  test("extended catalog API: truncateTable") {
+    val t = "connect_catalog_ext_trunc_t"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id INT) USING parquet").collect()
+      spark.sql(s"INSERT INTO $t VALUES (1), (2)").collect()
+      assert(spark.table(t).count() == 2)
+      spark.catalog.truncateTable(t)
+      assert(spark.table(t).count() == 0)
+    }
+  }
+
+  test("extended catalog API: analyzeTable") {
+    val t = "connect_catalog_ext_analyze_t"
+    withTable(t) {
+      withTempPath { dir =>
+        val session = spark
+        import session.implicits._
+        Seq(1).toDF("id").write.parquet(dir.getPath)
+        spark.catalog.createTable(t, dir.getPath)
+        spark.catalog.analyzeTable(t, noScan = true)
       }
     }
   }

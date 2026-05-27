@@ -31,7 +31,7 @@ import org.apache.spark.tags.SlowSQLTest
  * End-to-end tests for approximate percentile aggregate function.
  */
 @SlowSQLTest
-class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession {
+class ApproximatePercentileQuerySuite extends SharedSparkSession {
   import testImplicits._
 
   private val table = "percentile_approx"
@@ -369,5 +369,17 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSparkSession 
         "sqlExpr" -> "\"percentile_approx(col, NULL, 100)\""),
       context = ExpectedContext(
         "", "", 8, 40, "percentile_approx(col, NULL, 100)"))
+  }
+
+  test("SPARK-54750: percentile_approx returns NULL for certain decimal values") {
+    // Regression test: ROUND(PERCENTILE_APPROX(2150/1000.0, 0.95), 3) should return 2.15
+    checkAnswer(
+      spark.sql("SELECT ROUND(PERCENTILE_APPROX(2150 / 1000.0, 0.95), 3) as p95"),
+      Row(2.15)
+    )
+    checkAnswer(
+      spark.sql("SELECT ROUND(PERCENTILE_APPROX(2151 / 1000.0, 0.95), 3) as p95"),
+      Row(2.151)
+    )
   }
 }

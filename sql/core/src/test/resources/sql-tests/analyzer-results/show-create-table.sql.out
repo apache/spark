@@ -282,6 +282,13 @@ CreateViewCommand `spark_catalog`.`default`.`view_SPARK_30302`, [(aaa,None), (bb
 
 
 -- !query
+DROP TABLE tbl
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
+
+
+-- !query
 SHOW CREATE TABLE view_SPARK_30302 AS SERDE
 -- !query analysis
 ShowCreateTableAsSerdeCommand `spark_catalog`.`default`.`view_spark_30302`, [createtab_stmt#x]
@@ -300,7 +307,42 @@ DropTableCommand `spark_catalog`.`default`.`view_SPARK_30302`, false, true, fals
 
 
 -- !query
+CREATE TABLE tbl (c1 STRING, c2 STRING COLLATE UTF8_BINARY, c3 STRING COLLATE UNICODE_CI)
+ DEFAULT COLLATION UTF8_LCASE
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`tbl`, false
+
+
+-- !query
+SHOW CREATE TABLE tbl
+-- !query analysis
+ShowCreateTable false, [createtab_stmt#x]
++- ResolvedTable V2SessionCatalog(spark_catalog), default.tbl, V1Table(default.tbl), [c1#x, c2#x, c3#x]
+
+
+-- !query
 DROP TABLE tbl
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.tbl
+
+
+-- !query
+CREATE VIEW view_SPARK_55372 DEFAULT COLLATION UTF8_LCASE
+AS SELECT 'a' AS c1, 'b' COLLATE UTF8_BINARY AS c2, 'c' COLLATE UNICODE_CI AS c3
+-- !query analysis
+CreateViewCommand `spark_catalog`.`default`.`view_SPARK_55372`, UTF8_LCASE, SELECT 'a' AS c1, 'b' COLLATE UTF8_BINARY AS c2, 'c' COLLATE UNICODE_CI AS c3, false, false, PersistedView, COMPENSATION, true
+   +- Project [a AS c1#x, collate(b, UTF8_BINARY) AS c2#x, collate(c, UNICODE_CI) AS c3#x]
+      +- OneRowRelation
+
+
+-- !query
+SHOW CREATE TABLE view_SPARK_55372
+-- !query analysis
+ShowCreateTableCommand `spark_catalog`.`default`.`view_spark_55372`, [createtab_stmt#x]
+
+
+-- !query
+DROP VIEW view_SPARK_55372
+-- !query analysis
+DropTableCommand `spark_catalog`.`default`.`view_SPARK_55372`, false, true, false

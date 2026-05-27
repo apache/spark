@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.{QueryExecution, StreamSourceAwareSparkPla
 import org.apache.spark.sql.execution.datasources.v2.{MicroBatchScanExec, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress}
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.streaming.StreamingQueryPlanTraverseHelper
-import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadata
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqMetadataBase
 import org.apache.spark.sql.execution.streaming.operators.stateful.{EventTimeWatermarkExec, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.streaming._
@@ -154,7 +154,7 @@ abstract class ProgressContext(
   import ProgressContext._
 
   // offset metadata for this batch
-  protected def offsetSeqMetadata: OffsetSeqMetadata
+  protected def offsetSeqMetadata: OffsetSeqMetadataBase
 
   // the most recent input data for each source.
   protected def newData: Map[SparkDataStream, LogicalPlan]
@@ -648,13 +648,9 @@ abstract class ProgressContext(
    * New execution stats will only retain the values as a snapshot of the query status.
    * (E.g. for stateful operators, numRowsTotal is a snapshot of the status, whereas
    * numRowsUpdated is bound to the batch.)
-   * TODO: We do not seem to clear up all values in StateOperatorProgress which are bound to the
-   * batch. Fix this.
    */
   private def resetExecStatsForNoExecution(originExecStats: ExecutionStats): ExecutionStats = {
-    val newStatefulOperators = originExecStats.stateOperators.map { so =>
-      so.copy(newNumRowsUpdated = 0, newNumRowsDroppedByWatermark = 0)
-    }
+    val newStatefulOperators = originExecStats.stateOperators.map(_.copyForNoExecution())
     val newEventTimeStats = if (originExecStats.eventTimeStats.contains("watermark")) {
       Map("watermark" -> progressReporter.formatTimestamp(offsetSeqMetadata.batchWatermarkMs))
     } else {

@@ -181,4 +181,12 @@ abstract class TableValuedFunction {
    * @since 4.0.0
    */
   def variant_explode_outer(input: Column): Dataset[Row]
+
+  /**
+   * Returns a `DataFrame` of logs collected from Python workers.
+   *
+   * @group table_funcs
+   * @since 4.1.0
+   */
+  def python_worker_logs(): Dataset[Row]
 }

@@ -21,10 +21,11 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.concurrent.{Future, Promise}
-import scala.concurrent.duration.{Duration, DurationInt}
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters.MapHasAsJava
 import scala.util.Try
 
+import org.apache.spark.SparkException
 import org.apache.spark.util.SparkThreadUtils
 
 /**
@@ -70,6 +71,9 @@ class Observation(val name: String) {
    * first action. Only the result of the first action is available. Subsequent actions do not
    * modify the result.
    *
+   * Note that if no metrics were recorded, an empty map is probably returned. It possibly happens
+   * when the operators used for observation are optimized away.
+   *
    * @return
    *   the observed metrics as a `Map[String, Any]`
    * @throws InterruptedException
@@ -78,13 +82,20 @@ class Observation(val name: String) {
   @throws[InterruptedException]
   def get: Map[String, Any] = {
     val row = getRow
-    row.getValuesMap(row.schema.map(_.name))
+    if (row == null || row.schema == null) {
+      Map.empty
+    } else {
+      row.getValuesMap(row.schema.map(_.name))
+    }
   }
 
   /**
    * (Java-specific) Get the observed metrics. This waits for the observed dataset to finish its
    * first action. Only the result of the first action is available. Subsequent actions do not
    * modify the result.
+   *
+   * Note that if no metrics were recorded, an empty map is probably returned. It possibly happens
+   * when the operators used for observation are optimized away.
    *
    * @return
    *   the observed metrics as a `java.util.Map[String, Object]`
@@ -93,18 +104,6 @@ class Observation(val name: String) {
    */
   @throws[InterruptedException]
   def getAsJava: java.util.Map[String, Any] = get.asJava
-
-  /**
-   * Get the observed metrics. This returns the metrics if they are available, otherwise an empty.
-   *
-   * @return
-   *   the observed metrics as a `Map[String, Any]`
-   */
-  @throws[InterruptedException]
-  private[sql] def getOrEmpty: Map[String, Any] = {
-    val row = getRowOrEmpty.getOrElse(Row.empty)
-    row.getValuesMap(row.schema.map(_.name))
-  }
 
   /**
    * Mark this Observation as registered.
@@ -121,18 +120,8 @@ class Observation(val name: String) {
    * @return
    *   `true` if all waiting threads were notified, `false` if otherwise.
    */
-  private[sql] def setMetricsAndNotify(metrics: Row): Boolean = {
-    promise.trySuccess(metrics)
-  }
-
-  /**
-   * Get the observed metrics as a Row.
-   *
-   * @return
-   *   the observed metrics as a `Row`, or None if the metrics are not available.
-   */
-  private[sql] def getRowOrEmpty: Option[Row] = {
-    Try(SparkThreadUtils.awaitResult(future, 100.millis)).toOption
+  private[sql] def setMetricsAndNotify(metrics: Try[Row]): Boolean = {
+    promise.tryComplete(metrics)
   }
 
   /**
@@ -142,7 +131,13 @@ class Observation(val name: String) {
    *   the observed metrics as a `Row`.
    */
   private[sql] def getRow: Row = {
-    SparkThreadUtils.awaitResult(future, Duration.Inf)
+    try {
+      SparkThreadUtils.awaitResult(future, Duration.Inf)
+    } catch {
+      case e: SparkException =>
+        // Throw the root cause since awaitResult wraps it in a SparkException.
+        throw e.getCause
+    }
   }
 }
 

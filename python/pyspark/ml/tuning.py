@@ -77,13 +77,13 @@ __all__ = [
 
 
 def _parallelFitTasks(
-    est: Estimator,
+    est: Estimator[Transformer],
     train: DataFrame,
     eva: Evaluator,
     validation: DataFrame,
     epm: Sequence["ParamMap"],
     collectSubModel: bool,
-) -> List[Callable[[], Tuple[int, float, Transformer]]]:
+) -> List[Callable[[], Tuple[int, float, Union[Transformer, None]]]]:
     """
     Creates a list of callables which can be called from different threads to fit and evaluate
     an estimator in parallel. Each callable returns an `(index, metric)` pair.
@@ -110,7 +110,7 @@ def _parallelFitTasks(
     """
     modelIter = est.fitMultiple(train, epm)
 
-    def singleTask() -> Tuple[int, float, Transformer]:
+    def singleTask() -> Tuple[int, float, Union[Transformer, None]]:
         index, model = next(modelIter)
         # TODO: duplicate evaluator to take extra params from input
         #  Note: Supporting tuning params in evaluator need update method
@@ -169,12 +169,10 @@ class ParamGridBuilder:
         return self
 
     @overload
-    def baseOn(self, __args: "ParamMap") -> "ParamGridBuilder":
-        ...
+    def baseOn(self, __args: "ParamMap") -> "ParamGridBuilder": ...
 
     @overload
-    def baseOn(self, *args: Tuple[Param, Any]) -> "ParamGridBuilder":
-        ...
+    def baseOn(self, *args: Tuple[Param, Any]) -> "ParamGridBuilder": ...
 
     @since("1.4.0")
     def baseOn(self, *args: Union["ParamMap", Tuple[Param, Any]]) -> "ParamGridBuilder":
@@ -521,7 +519,7 @@ _save_with_persist_submodels_no_submodels_found_err: str = (
 @inherit_doc
 class CrossValidatorReader(MLReader["CrossValidator"]):
     def __init__(self, cls: Type["CrossValidator"]):
-        super(CrossValidatorReader, self).__init__()
+        super().__init__()
         self.cls = cls
 
     def load(self, path: str) -> "CrossValidator":
@@ -540,7 +538,7 @@ class CrossValidatorReader(MLReader["CrossValidator"]):
 @inherit_doc
 class CrossValidatorWriter(MLWriter):
     def __init__(self, instance: "CrossValidator"):
-        super(CrossValidatorWriter, self).__init__()
+        super().__init__()
         self.instance = instance
 
     def saveImpl(self, path: str) -> None:
@@ -551,7 +549,7 @@ class CrossValidatorWriter(MLWriter):
 @inherit_doc
 class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
     def __init__(self, cls: Type["CrossValidatorModel"]):
-        super(CrossValidatorModelReader, self).__init__()
+        super().__init__()
         self.cls = cls
 
     def load(self, path: str) -> "CrossValidatorModel":
@@ -599,7 +597,7 @@ class CrossValidatorModelReader(MLReader["CrossValidatorModel"]):
 @inherit_doc
 class CrossValidatorModelWriter(MLWriter):
     def __init__(self, instance: "CrossValidatorModel"):
-        super(CrossValidatorModelWriter, self).__init__()
+        super().__init__()
         self.instance = instance
 
     def saveImpl(self, path: str) -> None:
@@ -656,7 +654,7 @@ class _CrossValidatorParams(_ValidatorParams):
     )
 
     def __init__(self, *args: Any):
-        super(_CrossValidatorParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(numFolds=3, foldCol="")
 
     @since("1.4.0")
@@ -747,7 +745,7 @@ class CrossValidator(
         __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
                  seed=None, parallelism=1, collectSubModels=False, foldCol="")
         """
-        super(CrossValidator, self).__init__()
+        super().__init__()
         self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
@@ -853,9 +851,10 @@ class CrossValidator(
             validation = datasets[i][1]
             train = datasets[i][0]
 
-            with _cache_spark_dataset(train) as train, _cache_spark_dataset(
-                validation
-            ) as validation:
+            with (
+                _cache_spark_dataset(train) as train,
+                _cache_spark_dataset(validation) as validation,
+            ):
                 tasks = map(
                     inheritable_thread_target(dataset.sparkSession),
                     _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam),
@@ -973,7 +972,7 @@ class CrossValidator(
         Used for ML persistence.
         """
 
-        estimator, epms, evaluator = super(CrossValidator, cls)._from_java_impl(java_stage)
+        estimator, epms, evaluator = super()._from_java_impl(java_stage)
         numFolds = java_stage.getNumFolds()
         seed = java_stage.getSeed()
         parallelism = java_stage.getParallelism()
@@ -1003,7 +1002,7 @@ class CrossValidator(
             Java object equivalent to this instance.
         """
 
-        estimator, epms, evaluator = super(CrossValidator, self)._to_java_impl()
+        estimator, epms, evaluator = super()._to_java_impl()
 
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.tuning.CrossValidator", self.uid)
         _java_obj.setEstimatorParamMaps(epms)
@@ -1042,7 +1041,7 @@ class CrossValidatorModel(
         subModels: Optional[List[List[Model]]] = None,
         stdMetrics: Optional[List[float]] = None,
     ):
-        super(CrossValidatorModel, self).__init__()
+        super().__init__()
         #: best model from cross validation
         self.bestModel = bestModel
         #: Average cross-validation metrics for each paramMap in
@@ -1119,7 +1118,7 @@ class CrossValidatorModel(
 
         bestModel: Model = JavaParams._from_java(java_stage.bestModel())
         avgMetrics = _java2py(sc, java_stage.avgMetrics())
-        estimator, epms, evaluator = super(CrossValidatorModel, cls)._from_java_impl(java_stage)
+        estimator, epms, evaluator = super()._from_java_impl(java_stage)
 
         py_stage = cls(bestModel=bestModel, avgMetrics=avgMetrics)
         params = {
@@ -1162,7 +1161,7 @@ class CrossValidatorModel(
             cast(JavaParams, self.bestModel)._to_java(),
             _py2java(sc, self.avgMetrics),
         )
-        estimator, epms, evaluator = super(CrossValidatorModel, self)._to_java_impl()
+        estimator, epms, evaluator = super()._to_java_impl()
 
         params = {
             "evaluator": evaluator,
@@ -1189,7 +1188,7 @@ class CrossValidatorModel(
 @inherit_doc
 class TrainValidationSplitReader(MLReader["TrainValidationSplit"]):
     def __init__(self, cls: Type["TrainValidationSplit"]):
-        super(TrainValidationSplitReader, self).__init__()
+        super().__init__()
         self.cls = cls
 
     def load(self, path: str) -> "TrainValidationSplit":
@@ -1208,7 +1207,7 @@ class TrainValidationSplitReader(MLReader["TrainValidationSplit"]):
 @inherit_doc
 class TrainValidationSplitWriter(MLWriter):
     def __init__(self, instance: "TrainValidationSplit"):
-        super(TrainValidationSplitWriter, self).__init__()
+        super().__init__()
         self.instance = instance
 
     def saveImpl(self, path: str) -> None:
@@ -1219,7 +1218,7 @@ class TrainValidationSplitWriter(MLWriter):
 @inherit_doc
 class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
     def __init__(self, cls: Type["TrainValidationSplitModel"]):
-        super(TrainValidationSplitModelReader, self).__init__()
+        super().__init__()
         self.cls = cls
 
     def load(self, path: str) -> "TrainValidationSplitModel":
@@ -1258,7 +1257,7 @@ class TrainValidationSplitModelReader(MLReader["TrainValidationSplitModel"]):
 @inherit_doc
 class TrainValidationSplitModelWriter(MLWriter):
     def __init__(self, instance: "TrainValidationSplitModel"):
-        super(TrainValidationSplitModelWriter, self).__init__()
+        super().__init__()
         self.instance = instance
 
     def saveImpl(self, path: str) -> None:
@@ -1304,7 +1303,7 @@ class _TrainValidationSplitParams(_ValidatorParams):
     )
 
     def __init__(self, *args: Any):
-        super(_TrainValidationSplitParams, self).__init__(*args)
+        super().__init__(*args)
         self._setDefault(trainRatio=0.75)
 
     @since("2.0.0")
@@ -1385,7 +1384,7 @@ class TrainValidationSplit(
         __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, \
                  trainRatio=0.75, parallelism=1, collectSubModels=False, seed=None)
         """
-        super(TrainValidationSplit, self).__init__()
+        super().__init__()
         self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
@@ -1552,7 +1551,7 @@ class TrainValidationSplit(
         Used for ML persistence.
         """
 
-        estimator, epms, evaluator = super(TrainValidationSplit, cls)._from_java_impl(java_stage)
+        estimator, epms, evaluator = super()._from_java_impl(java_stage)
         trainRatio = java_stage.getTrainRatio()
         seed = java_stage.getSeed()
         parallelism = java_stage.getParallelism()
@@ -1580,7 +1579,7 @@ class TrainValidationSplit(
             Java object equivalent to this instance.
         """
 
-        estimator, epms, evaluator = super(TrainValidationSplit, self)._to_java_impl()
+        estimator, epms, evaluator = super()._to_java_impl()
 
         _java_obj = JavaParams._new_java_obj(
             "org.apache.spark.ml.tuning.TrainValidationSplit", self.uid
@@ -1610,7 +1609,7 @@ class TrainValidationSplitModel(
         validationMetrics: Optional[List[float]] = None,
         subModels: Optional[List[Model]] = None,
     ):
-        super(TrainValidationSplitModel, self).__init__()
+        super().__init__()
         #: best model from train validation split
         self.bestModel = bestModel
         #: evaluated validation metrics
@@ -1681,9 +1680,7 @@ class TrainValidationSplitModel(
 
         bestModel: Model = JavaParams._from_java(java_stage.bestModel())
         validationMetrics = _java2py(sc, java_stage.validationMetrics())
-        estimator, epms, evaluator = super(TrainValidationSplitModel, cls)._from_java_impl(
-            java_stage
-        )
+        estimator, epms, evaluator = super()._from_java_impl(java_stage)
         # Create a new instance of this stage.
         py_stage = cls(bestModel=bestModel, validationMetrics=validationMetrics)
         params = {
@@ -1724,7 +1721,7 @@ class TrainValidationSplitModel(
             cast(JavaParams, self.bestModel)._to_java(),
             _py2java(sc, self.validationMetrics),
         )
-        estimator, epms, evaluator = super(TrainValidationSplitModel, self)._to_java_impl()
+        estimator, epms, evaluator = super()._to_java_impl()
 
         params = {
             "evaluator": evaluator,
@@ -1760,7 +1757,7 @@ if __name__ == "__main__":
     sc = spark.sparkContext
     globs["sc"] = sc
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    failure_count, test_count = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()
     if failure_count:
         sys.exit(-1)

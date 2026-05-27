@@ -97,4 +97,8 @@ class TableValuedFunction(sparkSession: SparkSession)
   /** @inheritdoc */
   override def variant_explode_outer(input: Column): Dataset[Row] =
     fn("variant_explode_outer", Seq(input))
+
+  /** @inheritdoc */
+  override def python_worker_logs(): Dataset[Row] =
+    fn("python_worker_logs", Seq.empty)
 }

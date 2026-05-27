@@ -365,6 +365,8 @@ class StreamingContextSuite
     assert(runningCount > 0)
     assert(runningCount == totalNumRecords)
     Thread.sleep(100)
+    sc.stop()
+    LocalStreamingContext.ensureNoActiveSparkContext()
   }
 
   test ("registering and de-registering of streamingSource") {

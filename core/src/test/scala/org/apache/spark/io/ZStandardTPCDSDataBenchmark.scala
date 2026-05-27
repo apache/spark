@@ -18,10 +18,9 @@
 package org.apache.spark.io
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectOutputStream, OutputStream}
-import java.nio.file.{Files, Paths}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
+import org.apache.spark.benchmark.Benchmark
 import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED, IO_COMPRESSION_ZSTD_LEVEL, IO_COMPRESSION_ZSTD_WORKERS}
 
 /**
@@ -34,28 +33,19 @@ import org.apache.spark.internal.config.{IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED,
  *      Results will be written to "benchmarks/ZStandardTPCDSDataBenchmark-results.txt".
  * }}}
  */
-object ZStandardTPCDSDataBenchmark extends BenchmarkBase {
-
-  val N = 4
-
-  // the size of TPCDS catalog_sales.dat (SF1) is about 283M
-  val data = Files.readAllBytes(Paths.get(sys.env("SPARK_TPCDS_DATA_TEXT"), "catalog_sales.dat"))
+object ZStandardTPCDSDataBenchmark extends TPCDSDataBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val name = "Benchmark ZStandardCompressionCodec"
-    runBenchmark(name) {
-      val benchmark1 = new Benchmark(name, N, output = output)
-      compressionBenchmark(benchmark1, N)
-      benchmark1.run()
-
-      val benchmark2 = new Benchmark(name, N, output = output)
-      decompressionBenchmark(benchmark2, N)
-      benchmark2.run()
+    prepareData()
+    runBenchmark("Benchmark ZStandardCompressionCodec") {
+      compressionBenchmark()
+      decompressionBenchmark()
       parallelCompressionBenchmark()
     }
   }
 
-  private def compressionBenchmark(benchmark: Benchmark, N: Int): Unit = {
+  private def compressionBenchmark(): Unit = {
+    val benchmark = new Benchmark("Compression", N, output = output)
     Seq(false, true).foreach { enablePool =>
       Seq(1, 2, 3).foreach { level =>
         val conf = new SparkConf(false)
@@ -72,9 +62,11 @@ object ZStandardTPCDSDataBenchmark extends BenchmarkBase {
         }
       }
     }
+    benchmark.run()
   }
 
-  private def decompressionBenchmark(benchmark: Benchmark, N: Int): Unit = {
+  private def decompressionBenchmark(): Unit = {
+    val benchmark = new Benchmark("Decompression", N, output = output)
     Seq(false, true).foreach { enablePool =>
       Seq(1, 2, 3).foreach { level =>
         val conf = new SparkConf(false)
@@ -97,6 +89,7 @@ object ZStandardTPCDSDataBenchmark extends BenchmarkBase {
         }
       }
     }
+    benchmark.run()
   }
 
   private def parallelCompressionBenchmark(): Unit = {

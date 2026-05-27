@@ -18,7 +18,6 @@
 from pyspark import pandas as ps
 from pyspark.errors import ParseException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import assertDataFrameEqual
 
 
@@ -106,18 +105,11 @@ class SQLTestsMixin:
         assertDataFrameEqual(ps.sql("SELECT {tbl.A}, {tbl.B} FROM {tbl}", tbl=psdf), psdf)
 
 
-class SQLTests(SQLTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class SQLTests(SQLTestsMixin, PandasOnSparkTestCase):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_sql import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

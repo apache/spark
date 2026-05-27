@@ -182,8 +182,8 @@ class SparkConnectServiceE2ESuite extends SparkConnectServerTest {
     }
     withClient(sessionId = sessionId, userId = userId) { client =>
       // shall not be able to create a new session with the same id and user.
-      val query = client.execute(buildPlan("SELECT 1"))
       val queryError = intercept[SparkException] {
+        val query = client.execute(buildPlan("SELECT 1"))
         while (query.hasNext) query.next()
       }
       assert(queryError.getMessage.contains("INVALID_HANDLE.SESSION_CLOSED"))

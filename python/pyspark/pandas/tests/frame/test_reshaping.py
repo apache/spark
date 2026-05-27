@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 import numpy as np
 import pandas as pd
@@ -23,7 +22,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Reshaping, sorting, transposing'
@@ -322,8 +320,9 @@ class FrameReshapingMixin:
 
         expected_result1, result1 = pdf.explode("A"), psdf.explode("A")
         expected_result2, result2 = pdf.explode("B"), psdf.explode("B")
-        expected_result3, result3 = pdf.explode("A", ignore_index=True), psdf.explode(
-            "A", ignore_index=True
+        expected_result3, result3 = (
+            pdf.explode("A", ignore_index=True),
+            psdf.explode("A", ignore_index=True),
         )
 
         self.assert_eq(result1, expected_result1, almost=True)
@@ -344,8 +343,9 @@ class FrameReshapingMixin:
 
         expected_result1, result1 = pdf.explode("A"), psdf.explode("A")
         expected_result2, result2 = pdf.explode("B"), psdf.explode("B")
-        expected_result3, result3 = pdf.explode("A", ignore_index=True), psdf.explode(
-            "A", ignore_index=True
+        expected_result3, result3 = (
+            pdf.explode("A", ignore_index=True),
+            psdf.explode("A", ignore_index=True),
         )
 
         self.assert_eq(result1, expected_result1, almost=True)
@@ -467,18 +467,11 @@ class FrameReshapingMixin:
 class FrameReshapingTests(
     FrameReshapingMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.frame.test_reshaping import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -219,7 +219,7 @@ Create a fake data source writer that processes each partition of data, counts t
 Implement a Streaming Reader
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This is a dummy streaming data reader that generate 2 rows in every microbatch. The streamReader instance has a integer offset that increase by 2 in every microbatch.
+This is a dummy streaming data reader that generates 2 rows in every microbatch. The streamReader instance has an integer offset that increases by 2 in every microbatch.
 
 .. code-block:: python
 
@@ -247,20 +247,23 @@ This is a dummy streaming data reader that generate 2 rows in every microbatch. 
 
         def partitions(self, start: dict, end: dict) -> list[InputPartition]:
             """
-            Plans the partitioning of the current microbatch defined by start and end offset,
-            it needs to return a sequence of :class:`InputPartition` object.
+            Plans the partitioning of the current microbatch defined by start
+            and end offset, it needs to return a sequence of
+            :class:`InputPartition` object.
             """
             return [RangePartition(start["offset"], end["offset"])]
 
         def commit(self, end: dict) -> None:
             """
-            This is invoked when the query has finished processing data before end offset, this can be used to clean up resource.
+            This is invoked when the query has finished processing data before end
+            offset, this can be used to clean up resource.
             """
             pass
 
         def read(self, partition) -> Iterator[Tuple]:
             """
-            Takes a partition as an input and read an iterator of tuples from the data source.
+            Takes a partition as an input and read an iterator of tuples from the
+            data source.
             """
             start, end = partition.start, partition.end
             for i in range(start, end):
@@ -288,7 +291,7 @@ One of simpleStreamReader() and streamReader() must be implemented for a readabl
 
         ...
 
-This is the same dummy streaming reader that generate 2 rows every batch implemented with SimpleDataSourceStreamReader interface.
+This is the same dummy streaming reader that generates 2 rows every batch implemented with SimpleDataSourceStreamReader interface.
 
 .. code-block:: python
 
@@ -305,7 +308,14 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
 
         def read(self, start: dict) -> Tuple[Iterator[Tuple], dict]:
             """
-            Takes start offset as an input, return an iterator of tuples and the start offset of next read.
+            Takes start offset as an input, return an iterator of tuples and
+            the end offset (start offset for the next read). The end offset must
+            advance past the start offset when returning data; otherwise Spark
+            raises a validation exception.
+            For example, returning 2 records from start_idx 0 means end should
+            be {"offset": 2} (i.e. start + 2).
+            When there is no data to read, you may return the same offset as end and
+            start, but you must provide an empty iterator.
             """
             start_idx = start["offset"]
             it = iter([(i,) for i in range(start_idx, start_idx + 2)])
@@ -313,7 +323,8 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
 
         def readBetweenOffsets(self, start: dict, end: dict) -> Iterator[Tuple]:
             """
-            Takes start and end offset as input and read an iterator of data deterministically.
+            Takes start and end offset as input and read an iterator of data
+            deterministically.
             This is called whe query replay batches during restart or after failure.
             """
             start_idx = start["offset"]
@@ -322,9 +333,60 @@ This is the same dummy streaming reader that generate 2 rows every batch impleme
 
         def commit(self, end: dict) -> None:
             """
-            This is invoked when the query has finished processing data before end offset, this can be used to clean up resource.
+            This is invoked when the query has finished processing data before end
+            offset, this can be used to clean up resource.
             """
             pass
+
+Admission Control for Streaming Readers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To limit the amount of data processed per micro-batch, implement
+``getDefaultReadLimit()`` and have ``latestOffset(start, limit)`` honor the
+engine-provided ``ReadLimit``:
+
+.. code-block:: python
+
+    from pyspark.sql.streaming.datasource import ReadAllAvailable, ReadLimit, ReadMaxRows
+
+    class MyStreamReader(DataSourceStreamReader):
+
+        def getDefaultReadLimit(self) -> ReadLimit:
+            """
+            Limit each micro-batch to at most 20 rows.
+
+            This value is just an example; in practice, configure the limit
+            based on source options (e.g., self.options.get("maxRowsPerBatch")).
+            """
+            return ReadMaxRows(20)
+
+        def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
+            """
+            Return the latest offset, respecting the provided limit.
+            """
+            current = start["offset"]
+
+            if isinstance(limit, ReadMaxRows):
+                end = min(current + limit.max_rows, self.max_available)
+            elif isinstance(limit, ReadAllAvailable):
+                end = self.max_available
+            else:
+                raise ValueError(f"Unexpected ReadLimit type: {type(limit)}")
+
+            return {"offset": end}
+
+When Spark uses the default ``ReadMaxRows(20)`` limit, each micro-batch
+reads at most 20 rows, depending on the available rows. If Spark passes
+``ReadAllAvailable``, the reader should return all remaining rows instead.
+
+This is useful for:
+
+- **Controlling data ingestion rate**: Prevent overwhelming downstream systems
+- **Memory management**: Limit batch sizes to avoid out-of-memory errors
+- **Backpressure handling**: Process data at a sustainable rate
+
+For a complete working example, see:
+``examples/src/main/python/sql/streaming/structured_blockchain_admission_control.py``
 
 Implement a Streaming Writer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -363,8 +425,10 @@ This is a streaming data writer that write the metadata information of each micr
 
        def commit(self, messages: List[Optional[SimpleCommitMessage]], batchId: int) -> None:
            """
-           Receives a sequence of :class:`SimpleCommitMessage` when all write tasks succeed and decides what to do with it.
-           In this FakeStreamWriter, we write the metadata of the microbatch(number of rows and partitions) into a json file inside commit().
+           Receives a sequence of :class:`SimpleCommitMessage` when all write tasks
+           succeed and decides what to do with it.
+           In this FakeStreamWriter, we write the metadata of the microbatch
+           (number of rows and partitions) into a json file inside commit().
            """
            status = dict(num_partitions=len(messages), rows=sum(m.count for m in messages))
            with open(os.path.join(self.path, f"{batchId}.json"), "a") as file:
@@ -372,7 +436,8 @@ This is a streaming data writer that write the metadata information of each micr
 
        def abort(self, messages: List[Optional[SimpleCommitMessage]], batchId: int) -> None:
            """
-           Receives a sequence of :class:`SimpleCommitMessage` from successful tasks when some tasks fail and decides what to do with it.
+           Receives a sequence of :class:`SimpleCommitMessage` from successful tasks
+           when some tasks fail and decides what to do with it.
            In this FakeStreamWriter, we write a failure message into a txt file inside abort().
            """
            with open(os.path.join(self.path, f"{batchId}.txt"), "w") as file:

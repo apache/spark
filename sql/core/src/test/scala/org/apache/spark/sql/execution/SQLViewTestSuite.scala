@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util
+
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
@@ -30,7 +32,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf._
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -39,7 +41,7 @@ import org.apache.spark.util.ArrayImplicits._
  * Currently, the test cases in this suite should have same behavior across all kind of views
  * TODO: Combine this with [[SQLViewSuite]]
  */
-abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
+abstract class SQLViewTestSuite extends QueryTest {
   import testImplicits._
 
   protected def viewTypeString: String
@@ -206,11 +208,9 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
           },
           condition = "RECURSIVE_VIEW",
           parameters = Map(
-            "viewIdent" -> tableIdentifier("v1").quotedString,
-            "newPath" -> (s"${tableIdentifier("v1").quotedString} " +
-              s"-> ${tableIdentifier("v2").quotedString} " +
-              s"-> ${tableIdentifier("v1").quotedString}"))
-        )
+            "viewIdent" -> ".*`v1`.*",
+            "newPath" -> ".*`v1`.*`v2`.*`v1`.*"),
+          matchPVals = true)
       }
     }
   }
@@ -376,6 +376,24 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
         // drop invalid view should be fine
         sql(s"DROP VIEW $viewName")
       }
+    }
+  }
+
+  test("SPARK-55019: view can be dropped using DROP TABLE") {
+    withView("v") {
+      // First, create a simple view.
+      val viewName = createView("v", "SELECT 1 AS a")
+      checkAnswer(sql(s"SELECT * FROM $viewName"), Row(1))
+      // Then, drop the view using DROP TABLE.
+      sql(s"DROP TABLE $viewName")
+      // Finally, verify that the view is dropped.
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"SELECT * FROM $viewName")
+        },
+        condition = "TABLE_OR_VIEW_NOT_FOUND",
+        parameters = Map("relationName" -> toSQLId(viewName.split("\\.").toSeq)),
+        ExpectedContext(s"$viewName", 14, 13 + viewName.length))
     }
   }
 
@@ -551,16 +569,25 @@ class GlobalTempViewTestSuite extends TempViewTestSuite with SharedSparkSession 
 }
 
 class OneTableCatalog extends InMemoryCatalog {
+  // store table in variable to preserve its ID between load requests
+  private val table = new InMemoryTable(
+    "t",
+    StructType.fromDDL("c1 INT"),
+    Array.empty,
+    Map.empty[String, String].asJava)
+
   override def loadTable(ident: Identifier): Table = {
     if (ident.namespace.isEmpty && ident.name == "t") {
-      new InMemoryTable(
-        "t",
-        StructType.fromDDL("c1 INT"),
-        Array.empty,
-        Map.empty[String, String].asJava)
+      table
     } else {
       super.loadTable(ident)
     }
+  }
+
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: util.Set[TableWritePrivilege]): Table = {
+    loadTable(ident)
   }
 }
 

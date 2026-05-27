@@ -45,14 +45,12 @@ import org.apache.spark.sql.execution.streaming.sinks.{FileStreamSink, FileStrea
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
-abstract class FileStreamSourceTest
-  extends StreamTest with SharedSparkSession with PrivateMethodTester {
+abstract class FileStreamSourceTest extends StreamTest with PrivateMethodTester {
 
   import testImplicits._
 
@@ -190,7 +188,7 @@ abstract class FileStreamSourceTest
   protected def getSourceFromFileStream(df: DataFrame): FileStreamSource = {
     val checkpointLocation = Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     df.queryExecution.analyzed
-      .collect { case StreamingRelation(dataSource, _, _) =>
+      .collect { case StreamingRelation(dataSource, _, _, _) =>
         // There is only one source in our tests so just set sourceId to 0
         dataSource.createSource(s"$checkpointLocation/sources/0").asInstanceOf[FileStreamSource]
       }.head
@@ -198,7 +196,7 @@ abstract class FileStreamSourceTest
 
   protected def getSourcesFromStreamingQuery(query: StreamExecution): Seq[FileStreamSource] = {
     query.logicalPlan.collect {
-      case StreamingExecutionRelation(source, _, _) if source.isInstanceOf[FileStreamSource] =>
+      case StreamingExecutionRelation(source, _, _, _) if source.isInstanceOf[FileStreamSource] =>
         source.asInstanceOf[FileStreamSource]
     }
   }
@@ -251,7 +249,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         reader.load()
       }
     df.queryExecution.analyzed
-      .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
+      .collect { case s @ StreamingRelation(dataSource, _, _, _) => s.schema }.head
   }
 
   override def beforeAll(): Unit = {

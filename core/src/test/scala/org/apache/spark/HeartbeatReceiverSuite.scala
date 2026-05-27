@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, spy, verify, when}
-import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
+import org.scalatest.PrivateMethodTester
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
@@ -44,7 +44,6 @@ import org.apache.spark.util.{ManualClock, ThreadUtils}
  */
 class HeartbeatReceiverSuite
   extends SparkFunSuite
-  with BeforeAndAfterEach
   with PrivateMethodTester
   with LocalSparkContext {
 
@@ -306,7 +305,7 @@ class HeartbeatReceiverSuite
     // We may receive undesired SparkListenerExecutorAdded from LocalSchedulerBackend,
     // so exclude it from the map. See SPARK-10800.
     heartbeatReceiver.invokePrivate(_executorLastSeen()).
-      filter { case (k, _) => k != SparkContext.DRIVER_IDENTIFIER }
+      filter { case (k, _) => !SparkContext.isDriver(k) }
   }
 }
 

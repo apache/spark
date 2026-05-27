@@ -263,6 +263,24 @@ class ContextTests(unittest.TestCase):
 
             sc.stop()
 
+    def test_executor_infos(self):
+        with SparkContext() as sc:
+            tracker = sc.statusTracker()
+            executorInfos = tracker.getExecutorInfos()
+            # In local mode there should be at least one executor (the driver)
+            self.assertGreaterEqual(len(executorInfos), 1)
+            for info in executorInfos:
+                self.assertIsNotNone(info.host)
+                self.assertGreaterEqual(info.port, 0)
+                self.assertGreaterEqual(info.cacheSize, 0)
+                self.assertGreaterEqual(info.numRunningTasks, 0)
+                self.assertGreaterEqual(info.usedOnHeapStorageMemory, 0)
+                self.assertGreaterEqual(info.usedOffHeapStorageMemory, 0)
+                self.assertGreaterEqual(info.totalOnHeapStorageMemory, 0)
+                self.assertGreaterEqual(info.totalOffHeapStorageMemory, 0)
+
+            sc.stop()
+
     def test_startTime(self):
         with SparkContext() as sc:
             self.assertGreater(sc.startTime, 0)
@@ -336,12 +354,6 @@ class ContextTestsWithResources(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_context import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

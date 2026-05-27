@@ -21,21 +21,32 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
+import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, DelegatingCatalogExtension, Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.types.StructType
 
 /**
  * A V2SessionCatalog implementation that can be extended to generate arbitrary `Table` definitions
  * for testing DDL as well as write operations (through df.write.saveAsTable, df.write.insertInto
- * and SQL).
+ * and SQL), also supports v2 function operations.
  */
 private[connector] trait TestV2SessionCatalogBase[T <: Table] extends DelegatingCatalogExtension {
 
   protected val tables: java.util.Map[Identifier, T] = new ConcurrentHashMap[Identifier, T]()
+  protected val functions: java.util.Map[Identifier, UnboundFunction] =
+    new ConcurrentHashMap[Identifier, UnboundFunction]()
 
   private val tableCreated: AtomicBoolean = new AtomicBoolean(false)
+  private val funcCreated: AtomicBoolean = new AtomicBoolean(false)
+
+  def checkUsage(): Unit = {
+    assert(tableCreated.get || funcCreated.get,
+      "Either tables or functions are not created, maybe didn't use the session catalog code path?")
+  }
 
   private def addTable(ident: Identifier, table: T): Unit = {
     tableCreated.set(true)
@@ -96,12 +107,53 @@ private[connector] trait TestV2SessionCatalogBase[T <: Table] extends Delegating
   }
 
   def clearTables(): Unit = {
-    assert(
-      tableCreated.get,
-      "Tables are not created, maybe didn't use the session catalog code path?")
     tables.keySet().asScala.foreach(super.dropTable)
     tables.clear()
     tableCreated.set(false)
+  }
+
+  override def listFunctions(namespace: Array[String]): Array[Identifier] = {
+    (Try(listFunctions0(namespace)), Try(super.listFunctions(namespace))) match {
+      case (Success(v2), Success(v1)) => v2 ++ v1
+      case (Success(v2), Failure(_)) => v2
+      case (Failure(_), Success(v1)) => v1
+      case (Failure(_), Failure(_)) =>
+        throw new NoSuchNamespaceException(namespace)
+    }
+  }
+
+  private def listFunctions0(namespace: Array[String]): Array[Identifier] = {
+    if (namespace.isEmpty || namespaceExists(namespace)) {
+      functions.keySet.asScala.filter(_.namespace.sameElements(namespace)).toArray
+    } else {
+      throw new NoSuchNamespaceException(namespace)
+    }
+  }
+
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    Option(functions.get(ident)) match {
+      case Some(func) => func
+      case _ =>
+        super.loadFunction(ident)
+    }
+  }
+
+  override def functionExists(ident: Identifier): Boolean = {
+    functions.containsKey(ident) || super.functionExists(ident)
+  }
+
+  def createFunction(ident: Identifier, fn: UnboundFunction): UnboundFunction = {
+    funcCreated.set(true)
+    functions.put(ident, fn)
+  }
+
+  def dropFunction(ident: Identifier): Unit = {
+    functions.remove(ident)
+  }
+
+  def clearFunctions(): Unit = {
+    functions.clear()
+    funcCreated.set(false)
   }
 }
 

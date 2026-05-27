@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalShortType}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns, STUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -43,7 +43,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -412,6 +412,12 @@ private[parquet] class ParquetRowConverter(
       case _: StringType =>
         new ParquetStringConverter(updater)
 
+      case geom: GeometryType =>
+        new ParquetGeometryConverter(geom.srid, updater)
+
+      case _: GeographyType =>
+        new ParquetGeographyConverter(updater)
+
       // As long as the parquet type is INT64 timestamp, whether logical annotation
       // `isAdjustedToUTC` is false or true, it will be read as Spark's TimestampLTZ type
       case TimestampType
@@ -609,6 +615,78 @@ private[parquet] class ParquetRowConverter(
       val offset = buffer.arrayOffset() + buffer.position()
       val numBytes = buffer.remaining()
       updater.set(UTF8String.fromBytes(buffer.array(), offset, numBytes))
+    }
+  }
+
+  /**
+   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   */
+  private final class ParquetGeometryConverter(srid: Int, updater: ParentContainerUpdater)
+      extends ParquetPrimitiveConverter(updater) {
+
+    private var expandedDictionary: Array[GeometryVal] = null
+
+    override def hasDictionarySupport: Boolean = true
+
+    override def setDictionary(dictionary: Dictionary): Unit = {
+      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
+        STUtils.stGeomFromWKB(dictionary.decodeToBinary(i).getBytesUnsafe, srid)
+      }
+    }
+
+    override def addValueFromDictionary(dictionaryId: Int): Unit = {
+      updater.set(expandedDictionary(dictionaryId))
+    }
+
+    override def addBinary(value: Binary): Unit = {
+      val buffer = value.toByteBuffer
+      val numBytes = buffer.remaining()
+
+      val geometry = if (buffer.hasArray) {
+        val array = buffer.array()
+        val offset = buffer.arrayOffset() + buffer.position()
+        STUtils.stGeomFromWKB(array.slice(offset, offset + numBytes), srid)
+      } else {
+        STUtils.stGeomFromWKB(value.getBytesUnsafe, srid)
+      }
+
+      updater.set(geometry)
+    }
+  }
+
+  /**
+   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   */
+  private final class ParquetGeographyConverter(updater: ParentContainerUpdater)
+      extends ParquetPrimitiveConverter(updater) {
+
+    private var expandedDictionary: Array[GeographyVal] = null
+
+    override def hasDictionarySupport: Boolean = true
+
+    override def setDictionary(dictionary: Dictionary): Unit = {
+      this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
+        STUtils.stGeogFromWKB(dictionary.decodeToBinary(i).getBytesUnsafe)
+      }
+    }
+
+    override def addValueFromDictionary(dictionaryId: Int): Unit = {
+      updater.set(expandedDictionary(dictionaryId))
+    }
+
+    override def addBinary(value: Binary): Unit = {
+      val buffer = value.toByteBuffer
+      val numBytes = buffer.remaining()
+
+      val geometry = if (buffer.hasArray) {
+        val array = buffer.array()
+        val offset = buffer.arrayOffset() + buffer.position()
+        STUtils.stGeogFromWKB(array.slice(offset, offset + numBytes))
+      } else {
+        STUtils.stGeogFromWKB(value.getBytesUnsafe)
+      }
+
+      updater.set(geometry)
     }
   }
 
@@ -876,7 +954,11 @@ private[parquet] class ParquetRowConverter(
     }
   }
 
-  /** Parquet converter for unshredded Variant */
+  /**
+   * Parquet converter for unshredded Variant. We use this converter when the
+   * `spark.sql.variant.allowReadingShredded` config is set to false. This option just exists to
+   * fall back to legacy logic which will eventually be removed.
+   */
   private final class ParquetUnshreddedVariantConverter(
      parquetType: GroupType,
      updater: ParentContainerUpdater)
@@ -890,29 +972,27 @@ private[parquet] class ParquetRowConverter(
         // We may allow more than two children in the future, so consider this unsupported.
         throw QueryCompilationErrors.invalidVariantWrongNumFieldsError()
       }
-      val valueAndMetadata = Seq("value", "metadata").map { colName =>
+      val Seq(value, metadata) = Seq("value", "metadata").map { colName =>
         val idx = (0 until parquetType.getFieldCount())
-            .find(parquetType.getFieldName(_) == colName)
-        if (idx.isEmpty) {
-          throw QueryCompilationErrors.invalidVariantMissingFieldError(colName)
-        }
-        val child = parquetType.getType(idx.get)
+          .find(parquetType.getFieldName(_) == colName)
+          .getOrElse(throw QueryCompilationErrors.invalidVariantMissingFieldError(colName))
+        val child = parquetType.getType(idx)
         if (!child.isPrimitive || child.getRepetition != Type.Repetition.REQUIRED ||
-            child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
+          child.asPrimitiveType().getPrimitiveTypeName != BINARY) {
           throw QueryCompilationErrors.invalidVariantNullableOrNotBinaryFieldError(colName)
         }
-        child
+        idx
       }
-      Array(
-        // Converter for value
-        newConverter(valueAndMetadata(0), BinaryType, new ParentContainerUpdater {
+      val result = new Array[Converter with HasParentContainerUpdater](2)
+      result(value) =
+        newConverter(parquetType.getType(value), BinaryType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentValue = value
-        }),
-
-        // Converter for metadata
-        newConverter(valueAndMetadata(1), BinaryType, new ParentContainerUpdater {
+        })
+      result(metadata) =
+        newConverter(parquetType.getType(metadata), BinaryType, new ParentContainerUpdater {
           override def set(value: Any): Unit = currentMetadata = value
-      }))
+        })
+      result
     }
 
     override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)

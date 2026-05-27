@@ -19,8 +19,8 @@ package org.apache.spark.sql.classic
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.annotation.Evolving
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.annotation.{Evolving, Experimental}
+import org.apache.spark.sql.catalyst.analysis.{ChangelogContextUtils, NamedStreamingRelation, RelationChanges, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.UnresolvedDataSource
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -68,6 +68,14 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   }
 
   /** @inheritdoc */
+  @Experimental
+  override def name(sourceName: String): this.type = {
+    validateSourceName(sourceName)
+    this.userProvidedSourceName = Option(sourceName)
+    this
+  }
+
+  /** @inheritdoc */
   def load(): DataFrame = loadInternal(None)
 
   private def loadInternal(path: Option[String]): DataFrame = {
@@ -78,7 +86,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
       isStreaming = true,
       path.toSeq
     )
-    Dataset.ofRows(sparkSession, unresolved)
+    val plan = NamedStreamingRelation.withUserProvidedName(unresolved, userProvidedSourceName)
+    Dataset.ofRows(sparkSession, plan)
   }
 
   /** @inheritdoc */
@@ -93,13 +102,28 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("table")
     val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    Dataset.ofRows(
-      sparkSession,
-      UnresolvedRelation(
-        identifier,
-        new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
-        isStreaming = true))
+    val unresolved = UnresolvedRelation(
+      identifier,
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava),
+      isStreaming = true)
+    val plan = NamedStreamingRelation.withUserProvidedName(unresolved, userProvidedSourceName)
+    Dataset.ofRows(sparkSession, plan)
+  }
+
+  /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
+    val options = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
+    val changelogContext = ChangelogContextUtils.fromOptions(
+      options, sparkSession.sessionState.conf.sessionLocalTimeZone)
+    val unresolved = UnresolvedRelation(identifier, options, isStreaming = true)
+    val changes = RelationChanges(unresolved, changelogContext)
+    val plan = NamedStreamingRelation.withUserProvidedName(changes, userProvidedSourceName)
+    Dataset.ofRows(sparkSession, plan)
   }
 
   override protected def assertNoSpecifiedSchema(operation: String): Unit = {
@@ -161,4 +185,6 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   private var userSpecifiedSchema: Option[StructType] = None
 
   private var extraOptions = CaseInsensitiveMap[String](Map.empty)
+
+  private var userProvidedSourceName: Option[String] = None
 }

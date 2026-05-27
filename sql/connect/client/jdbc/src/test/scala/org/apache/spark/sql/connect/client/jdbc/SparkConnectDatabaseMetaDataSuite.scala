@@ -34,6 +34,8 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
 
   // catalyst test jar is inaccessible here, but presents at the testing connect server classpath
   private val TEST_IN_MEMORY_CATALOG = "org.apache.spark.sql.connector.catalog.InMemoryCatalog"
+  private val TEST_BASIC_IN_MEMORY_CATALOG =
+    "org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog"
 
   private def registerCatalog(
       name: String, className: String)(implicit spark: SparkSession): Unit = {
@@ -207,7 +209,8 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
     withConnection { conn =>
       val metadata = conn.getMetaData
       // scalastyle:off line.size.limit
-      assert(metadata.getSQLKeywords === "ADD,AFTER,AGGREGATE,ALWAYS,ANALYZE,ANTI,ANY_VALUE,ARCHIVE,ASC,BINDING,BUCKET,BUCKETS,BYTE,CACHE,CASCADE,CATALOG,CATALOGS,CHANGE,CLEAR,CLUSTER,CLUSTERED,CODEGEN,COLLATION,COLLECTION,COLUMNS,COMMENT,COMPACT,COMPACTIONS,COMPENSATION,COMPUTE,CONCATENATE,CONTAINS,CONTINUE,COST,DATA,DATABASE,DATABASES,DATEADD,DATEDIFF,DATE_ADD,DATE_DIFF,DAYOFYEAR,DAYS,DBPROPERTIES,DEFINED,DEFINER,DELAY,DELIMITED,DESC,DFS,DIRECTORIES,DIRECTORY,DISTRIBUTE,DIV,DO,ELSEIF,ENFORCED,ESCAPED,EVOLUTION,EXCHANGE,EXCLUDE,EXIT,EXPLAIN,EXPORT,EXTEND,EXTENDED,FIELDS,FILEFORMAT,FIRST,FLOW,FOLLOWING,FORMAT,FORMATTED,FOUND,FUNCTIONS,GENERATED,GEOGRAPHY,GEOMETRY,HANDLER,HOURS,IDENTIFIER,IF,IGNORE,ILIKE,IMMEDIATE,INCLUDE,INCREMENT,INDEX,INDEXES,INPATH,INPUT,INPUTFORMAT,INVOKER,ITEMS,ITERATE,JSON,KEY,KEYS,LAST,LAZY,LEAVE,LEVEL,LIMIT,LINES,LIST,LOAD,LOCATION,LOCK,LOCKS,LOGICAL,LONG,LOOP,MACRO,MAP,MATCHED,MATERIALIZED,MICROSECOND,MICROSECONDS,MILLISECOND,MILLISECONDS,MINUS,MINUTES,MONTHS,MSCK,NAME,NAMESPACE,NAMESPACES,NANOSECOND,NANOSECONDS,NORELY,NULLS,OFFSET,OPTION,OPTIONS,OUTPUTFORMAT,OVERWRITE,PARTITIONED,PARTITIONS,PERCENT,PIVOT,PLACING,PRECEDING,PRINCIPALS,PROCEDURES,PROPERTIES,PURGE,QUARTER,QUERY,RECORDREADER,RECORDWRITER,RECOVER,RECURSION,REDUCE,REFRESH,RELY,RENAME,REPAIR,REPEAT,REPEATABLE,REPLACE,RESET,RESPECT,RESTRICT,ROLE,ROLES,SCHEMA,SCHEMAS,SECONDS,SECURITY,SEMI,SEPARATED,SERDE,SERDEPROPERTIES,SETS,SHORT,SHOW,SINGLE,SKEWED,SORT,SORTED,SOURCE,STATISTICS,STORED,STRATIFY,STREAM,STREAMING,STRING,STRUCT,SUBSTR,SYNC,SYSTEM_TIME,SYSTEM_VERSION,TABLES,TARGET,TBLPROPERTIES,TERMINATED,TIMEDIFF,TIMESTAMPADD,TIMESTAMPDIFF,TIMESTAMP_LTZ,TIMESTAMP_NTZ,TINYINT,TOUCH,TRANSACTION,TRANSACTIONS,TRANSFORM,TRUNCATE,TRY_CAST,TYPE,UNARCHIVE,UNBOUNDED,UNCACHE,UNLOCK,UNPIVOT,UNSET,UNTIL,USE,VAR,VARIABLE,VARIANT,VERSION,VIEW,VIEWS,VOID,WATERMARK,WEEK,WEEKS,WHILE,X,YEARS,ZONE")
+      // CURRENT_PATH and SYSTEM are excluded: getSQLKeywords drops SQL:2003 reserved words (see companion).
+      assert(metadata.getSQLKeywords === "ADD,AFTER,AGGREGATE,ALWAYS,ANALYZE,ANTI,ANY_VALUE,APPROX,ARCHIVE,ASC,BERNOULLI,BINDING,BUCKET,BUCKETS,BYTE,CACHE,CASCADE,CATALOG,CATALOGS,CHANGE,CHANGES,CLEAR,CLUSTER,CLUSTERED,CODEGEN,COLLATION,COLLATIONS,COLLECTION,COLUMNS,COMMENT,COMPACT,COMPACTIONS,COMPENSATION,COMPUTE,CONCATENATE,CONTAINS,CONTINUE,COST,CURRENT_DATABASE,CURRENT_SCHEMA,DATA,DATABASE,DATABASES,DATEADD,DATEDIFF,DATE_ADD,DATE_DIFF,DAYOFYEAR,DAYS,DBPROPERTIES,DEFAULT_PATH,DEFINED,DEFINER,DELAY,DELIMITED,DESC,DFS,DIRECTORIES,DIRECTORY,DISTANCE,DISTRIBUTE,DIV,DO,ELSEIF,ENFORCED,ESCAPED,EVOLUTION,EXACT,EXCHANGE,EXCLUDE,EXCLUSIVE,EXIT,EXPLAIN,EXPORT,EXTEND,EXTENDED,FIELDS,FILEFORMAT,FIRST,FLOW,FOLLOWING,FORMAT,FORMATTED,FOUND,FUNCTIONS,GENERATED,GEOGRAPHY,GEOMETRY,HANDLER,HOURS,IDENTIFIED,IDENTIFIER,IF,IGNORE,ILIKE,IMMEDIATE,INCLUDE,INCLUSIVE,INCREMENT,INDEX,INDEXES,INPATH,INPUT,INPUTFORMAT,INVOKER,ITEMS,ITERATE,JSON,KEY,KEYS,LAST,LAZY,LEAVE,LEVEL,LIMIT,LINES,LIST,LOAD,LOCATION,LOCK,LOCKS,LOGICAL,LONG,LOOP,MACRO,MAP,MATCHED,MATERIALIZED,MEASURE,METRICS,MICROSECOND,MICROSECONDS,MILLISECOND,MILLISECONDS,MINUS,MINUTES,MONTHS,MSCK,NAME,NAMESPACE,NAMESPACES,NANOSECOND,NANOSECONDS,NEAREST,NORELY,NULLS,OFFSET,OPTION,OPTIONS,OUTPUTFORMAT,OVERWRITE,PARTITIONED,PARTITIONS,PATH,PERCENT,PIVOT,PLACING,PRECEDING,PRINCIPALS,PROCEDURES,PROPERTIES,PURGE,QUALIFY,QUARTER,QUERY,RECORDREADER,RECORDWRITER,RECOVER,RECURSION,REDUCE,REFRESH,RELY,RENAME,REPAIR,REPEAT,REPEATABLE,REPLACE,RESET,RESPECT,RESTRICT,ROLE,ROLES,SCHEMA,SCHEMAS,SECONDS,SECURITY,SEMI,SEPARATED,SERDE,SERDEPROPERTIES,SETS,SHORT,SHOW,SIMILARITY,SINGLE,SKEWED,SORT,SORTED,SOURCE,STATISTICS,STORED,STRATIFY,STREAM,STREAMING,STRING,STRUCT,SUBSTR,SYNC,SYSTEM_PATH,SYSTEM_TIME,SYSTEM_VERSION,TABLES,TARGET,TBLPROPERTIES,TERMINATED,TIMEDIFF,TIMESTAMPADD,TIMESTAMPDIFF,TIMESTAMP_LTZ,TIMESTAMP_NTZ,TINYINT,TOUCH,TRANSACTION,TRANSACTIONS,TRANSFORM,TRUNCATE,TRY_CAST,TYPE,UNARCHIVE,UNBOUNDED,UNCACHE,UNLOCK,UNPIVOT,UNSET,UNTIL,USE,VAR,VARIABLE,VARIANT,VERSION,VIEW,VIEWS,VOID,WATERMARK,WEEK,WEEKS,WHILE,X,YEARS,ZONE")
       // scalastyle:on line.size.limit
     }
   }
@@ -254,6 +257,12 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
     withConnection { conn =>
       implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
 
+      // this catalog does not support namespace
+      registerCatalog("test_noop", TEST_BASIC_IN_MEMORY_CATALOG)
+      // Spark loads catalog plugins lazily, we must initialize it first,
+      // otherwise it won't be listed by SHOW CATALOGS
+      conn.setCatalog("test_noop")
+
       registerCatalog("test`cat", TEST_IN_MEMORY_CATALOG)
 
       spark.sql("CREATE DATABASE IF NOT EXISTS `test``cat`.t_db1")
@@ -290,6 +299,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
         }
 
         // list schemas in current catalog
+        conn.setCatalog("spark_catalog")
         assert(conn.getCatalog === "spark_catalog")
         val getSchemasInCurrentCatalog =
           List(null, "%").map { database => () => metadata.getSchemas("", database) }
@@ -404,6 +414,12 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
 
     withConnection { conn =>
       implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
+
+      // this catalog does not support namespace
+      registerCatalog("test_noop", TEST_BASIC_IN_MEMORY_CATALOG)
+      // Spark loads catalog plugins lazily, we must initialize it first,
+      // otherwise it won't be listed by SHOW CATALOGS
+      conn.setCatalog("test_noop")
 
       // this catalog does not support view
       registerCatalog("testcat", TEST_IN_MEMORY_CATALOG)
@@ -540,6 +556,245 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             } === Seq(("TABLE", "spark_catalog", "db_", "t_"))
           }
           getTableResults.foreach(verifyEmptyStringFields)
+        }
+
+        // skip testing escape ', % in schema pattern, because Spark SQL does not
+        // allow using those chars in schema table name.
+      }
+    }
+  }
+
+  test("SparkConnectDatabaseMetaData getColumns") {
+
+     case class GetColumnResult(
+       TABLE_CAT: String,
+       TABLE_SCHEM: String,
+       TABLE_NAME: String,
+       COLUMN_NAME: String,
+       DATA_TYPE: Int,
+       TYPE_NAME: String,
+       COLUMN_SIZE: Int,
+       BUFFER_LENGTH: Int,
+       DECIMAL_DIGITS: Int,
+       NUM_PREC_RADIX: Int,
+       NULLABLE: Int,
+       REMARKS: String,
+       COLUMN_DEF: String,
+       SQL_DATA_TYPE: Int,
+       SQL_DATETIME_SUB: Int,
+       CHAR_OCTET_LENGTH: Int,
+       ORDINAL_POSITION: Int,
+       IS_NULLABLE: String,
+       SCOPE_CATALOG: String,
+       SCOPE_SCHEMA: String,
+       SCOPE_TABLE: String,
+       SOURCE_DATA_TYPE: Short,
+       IS_AUTOINCREMENT: String,
+       IS_GENERATEDCOLUMN: String)
+
+    def verifyEmptyFields(result: GetColumnResult): Unit = {
+        assert(result.BUFFER_LENGTH === 0)
+        assert(result.SQL_DATA_TYPE === 0)
+        assert(result.SQL_DATETIME_SUB === 0)
+        assert(result.SCOPE_CATALOG === "")
+        assert(result.SCOPE_SCHEMA === "")
+        assert(result.SCOPE_TABLE === "")
+        assert(result.SOURCE_DATA_TYPE === 0.toShort)
+    }
+
+    def verifyGetColumns(
+        getColumns: () => ResultSet)(verify: Seq[GetColumnResult] => Unit): Unit = {
+      Using.resource(getColumns()) { rs =>
+        val getTableResults = new Iterator[GetColumnResult] {
+          def hasNext: Boolean = rs.next()
+
+          def next(): GetColumnResult = GetColumnResult(
+            TABLE_CAT = rs.getString("TABLE_CAT"),
+            TABLE_SCHEM = rs.getString("TABLE_SCHEM"),
+            TABLE_NAME = rs.getString("TABLE_NAME"),
+            COLUMN_NAME = rs.getString("COLUMN_NAME"),
+            DATA_TYPE = rs.getInt("DATA_TYPE"),
+            TYPE_NAME = rs.getString("TYPE_NAME"),
+            COLUMN_SIZE = rs.getInt("COLUMN_SIZE"),
+            BUFFER_LENGTH = rs.getInt("BUFFER_LENGTH"),
+            DECIMAL_DIGITS = rs.getInt("DECIMAL_DIGITS"),
+            NUM_PREC_RADIX = rs.getInt("NUM_PREC_RADIX"),
+            NULLABLE = rs.getInt("NULLABLE"),
+            REMARKS = rs.getString("REMARKS"),
+            COLUMN_DEF = rs.getString("COLUMN_DEF"),
+            SQL_DATA_TYPE = rs.getInt("SQL_DATA_TYPE"),
+            SQL_DATETIME_SUB = rs.getInt("SQL_DATETIME_SUB"),
+            CHAR_OCTET_LENGTH = rs.getInt("CHAR_OCTET_LENGTH"),
+            ORDINAL_POSITION = rs.getInt("ORDINAL_POSITION"),
+            IS_NULLABLE = rs.getString("IS_NULLABLE"),
+            SCOPE_CATALOG = rs.getString("SCOPE_CATALOG"),
+            SCOPE_SCHEMA = rs.getString("SCOPE_SCHEMA"),
+            SCOPE_TABLE = rs.getString("SCOPE_TABLE"),
+            SOURCE_DATA_TYPE = rs.getShort("SOURCE_DATA_TYPE"),
+            IS_AUTOINCREMENT = rs.getString("IS_AUTOINCREMENT"),
+            IS_GENERATEDCOLUMN = rs.getString("IS_GENERATEDCOLUMN"))
+        }.toSeq
+        verify(getTableResults)
+      }
+    }
+
+    withConnection { conn =>
+      implicit val spark: SparkSession = conn.asInstanceOf[SparkConnectConnection].spark
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS testcat.t_db1")
+      spark.sql("CREATE TABLE IF NOT EXISTS testcat.t_db1.t_t1 (id INT)")
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db1")
+      spark.sql(
+        """CREATE TABLE IF NOT EXISTS spark_catalog.db1.t1 (
+          |  id INT NOT NULL,
+          |  i_ INT,
+          |  location STRING COMMENT 'city name' DEFAULT 'unknown')
+          |""".stripMargin)
+      spark.sql(
+        """CREATE TABLE IF NOT EXISTS spark_catalog.db1.t2 (
+          |  col_null VOID,
+          |  col_boolean BOOLEAN,
+          |  col_byte BYTE,
+          |  col_short SHORT,
+          |  col_int INT,
+          |  col_long LONG,
+          |  col_float FLOAT,
+          |  col_double DOUBLE,
+          |  col_string STRING,
+          |  col_decimal DECIMAL(10, 5),
+          |  col_date DATE,
+          |  col_timestamp TIMESTAMP,
+          |  col_timestamp_ntz TIMESTAMP_NTZ,
+          |  col_binary BINARY,
+          |  col_time TIME)""".stripMargin)
+
+      spark.sql(
+        """CREATE VIEW IF NOT EXISTS spark_catalog.db1.t1_v AS
+          |SELECT id FROM spark_catalog.db1.t1
+          |""".stripMargin)
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db_")
+      spark.sql("CREATE TABLE IF NOT EXISTS spark_catalog.db_.t_ (id INT, i_ INT)")
+
+      spark.sql("CREATE DATABASE IF NOT EXISTS spark_catalog.db_2")
+      spark.sql("CREATE TABLE IF NOT EXISTS spark_catalog.db_2.t_2 (id INT)")
+
+      val metadata = conn.getMetaData
+
+      // no need to care about "testcat" because it is memory based and session isolated,
+      // also is inaccessible from another SparkSession
+      withDatabase("spark_catalog.db1", "spark_catalog.db_2", "spark_catalog.db_") {
+        // list columns of all tables in all catalogs and schemas
+        val getColumnsInAllTables = List(null, "%").flatMap { database =>
+          List(null, "%").flatMap { table =>
+            List(null, "%").map { column =>
+              () => metadata.getColumns(null, database, table, column)
+            }
+          }
+        }
+
+        getColumnsInAllTables.foreach { getColumns =>
+          verifyGetColumns(getColumns) { getColumnResults =>
+            // results are ordered by TABLE_CAT, TABLE_SCHEM, TABLE_NAME, ORDINAL_POSITION
+            assert {
+              getColumnResults.map { r =>
+                (r.TABLE_CAT, r.TABLE_SCHEM, r.TABLE_NAME, r.ORDINAL_POSITION, r.COLUMN_NAME)
+              } === Seq(
+                ("spark_catalog", "db1", "t1", 1, "id"),
+                ("spark_catalog", "db1", "t1", 2, "i_"),
+                ("spark_catalog", "db1", "t1", 3, "location"),
+                ("spark_catalog", "db1", "t1_v", 1, "id"),
+                ("spark_catalog", "db1", "t2", 1, "col_null"),
+                ("spark_catalog", "db1", "t2", 2, "col_boolean"),
+                ("spark_catalog", "db1", "t2", 3, "col_byte"),
+                ("spark_catalog", "db1", "t2", 4, "col_short"),
+                ("spark_catalog", "db1", "t2", 5, "col_int"),
+                ("spark_catalog", "db1", "t2", 6, "col_long"),
+                ("spark_catalog", "db1", "t2", 7, "col_float"),
+                ("spark_catalog", "db1", "t2", 8, "col_double"),
+                ("spark_catalog", "db1", "t2", 9, "col_string"),
+                ("spark_catalog", "db1", "t2", 10, "col_decimal"),
+                ("spark_catalog", "db1", "t2", 11, "col_date"),
+                ("spark_catalog", "db1", "t2", 12, "col_timestamp"),
+                ("spark_catalog", "db1", "t2", 13, "col_timestamp_ntz"),
+                ("spark_catalog", "db1", "t2", 14, "col_binary"),
+                ("spark_catalog", "db1", "t2", 15, "col_time"),
+                ("spark_catalog", "db_", "t_", 1, "id"),
+                ("spark_catalog", "db_", "t_", 2, "i_"),
+                ("spark_catalog", "db_2", "t_2", 1, "id"),
+                ("testcat", "t_db1", "t_t1", 1, "id"))
+            }
+
+            // TODO verify the remaining attributes
+            // DATA_TYPE = rs.getInt("DATA_TYPE"),
+            // TYPE_NAME = rs.getString("TYPE_NAME"),
+            // COLUMN_SIZE = rs.getInt("COLUMN_SIZE"),
+            // DECIMAL_DIGITS = rs.getInt("DECIMAL_DIGITS"),
+            // NUM_PREC_RADIX = rs.getInt("NUM_PREC_RADIX"),
+            // NULLABLE = rs.getInt("NULLABLE"),
+            // REMARKS = rs.getString("REMARKS"),
+            // COLUMN_DEF = rs.getString("COLUMN_DEF"),
+            // CHAR_OCTET_LENGTH = rs.getInt("CHAR_OCTET_LENGTH"),
+            // IS_NULLABLE = rs.getString("IS_NULLABLE"),
+            // IS_AUTOINCREMENT = rs.getString("IS_AUTOINCREMENT"),
+            // IS_GENERATEDCOLUMN = rs.getString("IS_GENERATEDCOLUMN")
+
+            getColumnResults.foreach(verifyEmptyFields)
+          }
+        }
+
+        // list columns of all tables in the current catalog and schema
+        conn.setCatalog("spark_catalog")
+        conn.setSchema("db1")
+        assert(conn.getCatalog === "spark_catalog")
+        assert(conn.getSchema === "db1")
+
+        verifyGetColumns(() => metadata.getColumns("", "", "%", "id")) { getColumnResults =>
+            // results are ordered by TABLE_CAT, TABLE_SCHEM, TABLE_NAME, ORDINAL_POSITION
+            assert {
+              getColumnResults.map { r =>
+                (r.TABLE_CAT, r.TABLE_SCHEM, r.TABLE_NAME, r.ORDINAL_POSITION, r.COLUMN_NAME)
+              } === Seq(
+                ("spark_catalog", "db1", "t1", 1, "id"),
+                ("spark_catalog", "db1", "t1_v", 1, "id"))
+            }
+
+          getColumnResults.foreach(verifyEmptyFields)
+        }
+
+        // list columns of tables with schema pattern, table mame pattern, and column name pattern
+        verifyGetColumns {
+          () => metadata.getColumns(null, "%db_", "%t_", "%d%")
+        } { getColumnResults =>
+          // results are ordered by TABLE_CAT, TABLE_SCHEM, TABLE_NAME, ORDINAL_POSITION
+          assert {
+            getColumnResults.map { r =>
+              (r.TABLE_CAT, r.TABLE_SCHEM, r.TABLE_NAME, r.ORDINAL_POSITION, r.COLUMN_NAME)
+            } === Seq(
+              ("spark_catalog", "db1", "t1", 1, "id"),
+              ("spark_catalog", "db1", "t2", 8, "col_double"),
+              ("spark_catalog", "db1", "t2", 10, "col_decimal"),
+              ("spark_catalog", "db1", "t2", 11, "col_date"),
+              ("spark_catalog", "db_", "t_", 1, "id"),
+              ("testcat", "t_db1", "t_t1", 1, "id"))
+          }
+
+          getColumnResults.foreach(verifyEmptyFields)
+        }
+
+        // escape _ in schema pattern and table mame pattern
+        verifyGetColumns {
+          () => metadata.getColumns(null, "db\\_", "t\\_", "i\\_")
+        } { getColumnResults =>
+          // results are ordered by TABLE_CAT, TABLE_SCHEM, TABLE_NAME, ORDINAL_POSITION
+          assert {
+            getColumnResults.map { r =>
+              (r.TABLE_CAT, r.TABLE_SCHEM, r.TABLE_NAME, r.ORDINAL_POSITION, r.COLUMN_NAME)
+            } === Seq(("spark_catalog", "db_", "t_", 2, "i_"))
+          }
+
+          getColumnResults.foreach(verifyEmptyFields)
         }
 
         // skip testing escape ', % in schema pattern, because Spark SQL does not

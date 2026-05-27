@@ -20,12 +20,12 @@ package org.apache.spark.sql
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.st._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 class STExpressionsSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with ExpressionEvalHelper {
 
   // Private common constants used across several tests.
@@ -41,6 +41,60 @@ class STExpressionsSuite
     assert(sql(query).schema.fields.head.dataType.sameType(expectedDataType))
   }
 
+  // Test data: WKB representations of POINT(1 2) and POINT(3 4).
+  private final val wkbString1 = "0101000000000000000000F03F0000000000000040"
+  private final val wkbString2 = "010100000000000000000008400000000000001040"
+
+  /** Geospatial type storage. */
+
+  test("Parquet tables - unsupported geospatial types") {
+    val tableName = "tst_tbl"
+    // Test both v1 and v2 data sources.
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) "parquet" else ""
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        Seq("GEOMETRY(ANY)", "GEOGRAPHY(ANY)").foreach { unsupportedType =>
+          withTable(tableName) {
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"CREATE TABLE $tableName (g $unsupportedType) USING PARQUET")
+              },
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = Map(
+                "columnName" -> "`g`",
+                "columnType" -> s""""$unsupportedType"""",
+                "format" -> "Parquet"))
+          }
+        }
+      }
+    }
+  }
+
+  test("Parquet write support for geometry and geography types") {
+    val tableName = "tst_tbl"
+    // Test both v1 and v2 data sources.
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) "parquet" else ""
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        withTable(tableName) {
+          sql(s"CREATE TABLE $tableName (geom GEOMETRY(0), geog GEOGRAPHY(4326)) USING PARQUET")
+
+          val geomNull = "ST_GeomFromWKB(NULL)"
+          val geomNotNull = s"ST_GeomFromWKB(X'$wkbString1')"
+          val geogNull = "ST_GeogFromWKB(NULL)"
+          val geogNotNull = s"ST_GeogFromWKB(X'$wkbString2')"
+
+          sql(s"INSERT INTO $tableName VALUES ($geomNull, $geogNull)")
+          sql(s"INSERT INTO $tableName VALUES ($geomNotNull, $geogNull)")
+          sql(s"INSERT INTO $tableName VALUES ($geomNull, $geogNotNull)")
+          sql(s"INSERT INTO $tableName VALUES ($geomNotNull, $geogNotNull)")
+
+          checkAnswer(sql(s"SELECT COUNT(*) FROM $tableName"), Seq(Row(4)))
+        }
+      }
+    }
+  }
+
   /** Geospatial type casting. */
 
   test("Cast GEOGRAPHY(srid) to GEOGRAPHY(ANY)") {
@@ -52,11 +106,11 @@ class STExpressionsSuite
     // Construct the input GEOGRAPHY expression.
     val geogExpr = ST_GeogFromWKB(wkbLiteral)
     assert(geogExpr.dataType.sameType(defaultGeographyType))
-    checkEvaluation(ST_AsBinary(geogExpr), wkb)
+    checkEvaluation(new ST_AsBinary(geogExpr), wkb)
     // Cast the GEOGRAPHY with fixed SRID to GEOGRAPHY with mixed SRID.
     val castExpr = Cast(geogExpr, mixedSridGeographyType)
     assert(castExpr.dataType.sameType(mixedSridGeographyType))
-    checkEvaluation(ST_AsBinary(castExpr), wkb)
+    checkEvaluation(new ST_AsBinary(castExpr), wkb)
 
     // Construct the input GEOGRAPHY SQL query, using WKB literal.
     val geogQueryLit: String = s"ST_GeogFromWKB(X'$wkbString')"
@@ -90,13 +144,13 @@ class STExpressionsSuite
     val wkbLiteral = Literal.create(wkb, BinaryType)
 
     // Construct the input GEOMETRY expression.
-    val geomExpr = ST_GeomFromWKB(wkbLiteral)
+    val geomExpr = new ST_GeomFromWKB(wkbLiteral)
     assert(geomExpr.dataType.sameType(defaultGeometryType))
-    checkEvaluation(ST_AsBinary(geomExpr), wkb)
+    checkEvaluation(new ST_AsBinary(geomExpr), wkb)
     // Cast the GEOMETRY with fixed SRID to GEOMETRY with mixed SRID.
     val castExpr = Cast(geomExpr, mixedSridGeometryType)
     assert(castExpr.dataType.sameType(mixedSridGeometryType))
-    checkEvaluation(ST_AsBinary(castExpr), wkb)
+    checkEvaluation(new ST_AsBinary(castExpr), wkb)
 
     // Construct the input GEOMETRY SQL query, using WKB literal.
     val geomQueryLit: String = s"ST_GeomFromWKB(X'$wkbString')"
@@ -421,16 +475,143 @@ class STExpressionsSuite
 
   test("ST_AsBinary") {
     // Test data: WKB representation of POINT(1 2).
-    val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
-    val wkbLiteral = Literal.create(wkb, BinaryType)
+    val wkbNdr = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
+    val wkbXdr = Hex.unhex("00000000013FF00000000000004000000000000000".getBytes())
+    val wkbLiteral = Literal.create(wkbNdr, BinaryType)
+    val endiannessNdr = Literal.create("NDR")
+    val endiannessXdr = Literal.create("XDR")
     // ST_GeogFromWKB and ST_AsBinary.
     val geographyExpression = ST_GeogFromWKB(wkbLiteral)
     assert(geographyExpression.dataType.sameType(defaultGeographyType))
-    checkEvaluation(ST_AsBinary(geographyExpression), wkb)
+    checkEvaluation(new ST_AsBinary(geographyExpression), wkbNdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, endiannessNdr), wkbNdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, Literal.create("nDr")), wkbNdr)
+    checkEvaluation(ST_AsBinary(geographyExpression, endiannessXdr), wkbXdr)
     // ST_GeomFromWKB and ST_AsBinary.
-    val geometryExpression = ST_GeomFromWKB(wkbLiteral)
+    val geometryExpression = new ST_GeomFromWKB(wkbLiteral)
     assert(geometryExpression.dataType.sameType(defaultGeometryType))
-    checkEvaluation(ST_AsBinary(geometryExpression), wkb)
+    checkEvaluation(new ST_AsBinary(geometryExpression), wkbNdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, endiannessNdr), wkbNdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, endiannessXdr), wkbXdr)
+    checkEvaluation(ST_AsBinary(geometryExpression, Literal.create("XdR")), wkbXdr)
+    // Test NULL handling.
+    checkEvaluation(new ST_AsBinary(Literal.create(null, defaultGeographyType)), null)
+    checkEvaluation(ST_AsBinary(Literal.create(null, defaultGeographyType), endiannessNdr), null)
+    checkEvaluation(new ST_AsBinary(Literal.create(null, defaultGeometryType)), null)
+    checkEvaluation(ST_AsBinary(Literal.create(null, defaultGeometryType), endiannessXdr), null)
+    checkEvaluation(ST_AsBinary(geographyExpression, Literal.create(null, StringType)), null)
+    checkEvaluation(ST_AsBinary(geometryExpression, Literal.create(null, StringType)), null)
+    // Test invalid endianness.
+    Seq(geographyExpression, geometryExpression).foreach { expr =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          ST_AsBinary(expr, Literal.create("ABC")).eval()
+        },
+        condition = "ST_INVALID_ENDIANNESS_VALUE",
+        parameters = Map("endianness" -> "ABC")
+      )
+    }
+  }
+
+  test("ST_GeogFromWKB - expressions") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
+    val wkbLiteral = Literal.create(wkb, BinaryType)
+    // ST_GeogFromWKB with default SRID.
+    val geographyExpression = ST_GeogFromWKB(wkbLiteral)
+    assert(geographyExpression.dataType.sameType(defaultGeographyType))
+    checkEvaluation(new ST_AsBinary(geographyExpression), wkb)
+    checkEvaluation(ST_Srid(geographyExpression), defaultGeographySrid)
+    // ST_GeogFromWKB with NULL input.
+    val nullLiteral = Literal.create(null, BinaryType)
+    val geographyExpressionNull = ST_GeogFromWKB(nullLiteral)
+    checkEvaluation(geographyExpressionNull, null)
+    // ST_GeogFromWKB with invalid WKB.
+    val invalidWkbLiteral = Literal.create(Array[Byte](111), BinaryType)
+    val geographyExpressionInvalidWkb = ST_GeogFromWKB(invalidWkbLiteral)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        geographyExpressionInvalidWkb.eval()
+      },
+      condition = "WKB_PARSE_ERROR",
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
+    )
+  }
+
+  test("ST_GeomFromWKB - expressions") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkb = Hex.unhex("0101000000000000000000F03F0000000000000040".getBytes())
+    val wkbLiteral = Literal.create(wkb, BinaryType)
+    val validSrid = 4326
+    val validSridLiteral = Literal.create(validSrid, IntegerType)
+    val invalidSrid = 9999
+    val invalidSridLiteral = Literal.create(invalidSrid, IntegerType)
+    // ST_GeomFromWKB with default SRID.
+    val geometryExpressionNoSrid = new ST_GeomFromWKB(wkbLiteral)
+    assert(geometryExpressionNoSrid.dataType.sameType(defaultGeometryType))
+    checkEvaluation(new ST_AsBinary(geometryExpressionNoSrid), wkb)
+    // ST_GeomFromWKB with valid SRID.
+    val geometryExpressionValidSrid = ST_GeomFromWKB(wkbLiteral, validSridLiteral)
+    assert(geometryExpressionValidSrid.dataType.sameType(GeometryType(validSrid)))
+    checkEvaluation(new ST_AsBinary(geometryExpressionValidSrid), wkb)
+    // ST_GeomFromWKB with invalid SRID.
+    val geometryExpressionInvalidSrid = ST_GeomFromWKB(wkbLiteral, invalidSridLiteral)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        geometryExpressionInvalidSrid.eval()
+      },
+      condition = "ST_INVALID_SRID_VALUE",
+      parameters = Map("srid" -> s"$invalidSrid")
+    )
+    // ST_GeomFromWKB with invalid WKB.
+    val invalidWkbLiteral = Literal.create(Array[Byte](111), BinaryType)
+    val geometryExpressionInvalidWkb = new ST_GeomFromWKB(invalidWkbLiteral)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        geometryExpressionInvalidWkb.eval()
+      },
+      condition = "WKB_PARSE_ERROR",
+      parameters = Map("parseError" -> "Unexpected end of WKB buffer", "pos" -> "0")
+    )
+  }
+
+  test("ST_GeomFromWKB - columns") {
+    // Test data: WKB representation of POINT(1 2).
+    val wkbString = "0101000000000000000000F03F0000000000000040"
+    val validSrid = 4326
+    val invalidSrid = 9999
+
+    withTable("tbl") {
+      // Construct the test table.
+      sql(s"CREATE TABLE tbl (wkb BINARY, srid INT)")
+      sql(s"INSERT INTO tbl VALUES (X'$wkbString', $validSrid)")
+
+      // ST_GeomFromWKB with default SRID.
+      val geomColNoSrid = "ST_GeomFromWKB(wkb)"
+      assertType(s"SELECT $geomColNoSrid FROM tbl", defaultGeometryType)
+      checkAnswer(
+        sql(s"SELECT hex(ST_AsBinary($geomColNoSrid)) FROM tbl WHERE srid = $validSrid"),
+        Row(wkbString)
+      )
+
+      // ST_GeomFromWKB with valid SRID.
+      val geomColValidSrid = "ST_GeomFromWKB(wkb, srid)"
+      assertType(s"SELECT $geomColValidSrid FROM tbl", GeometryType("ANY"))
+      checkAnswer(
+        sql(s"SELECT hex(ST_AsBinary($geomColValidSrid)) FROM tbl WHERE srid = $validSrid"),
+        Row(wkbString)
+      )
+
+      // ST_GeomFromWKB with invalid SRID.
+      val geomColInvalidSrid = "ST_GeomFromWKB(wkb, 9999)"
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          sql(s"SELECT $geomColInvalidSrid FROM tbl WHERE srid = $validSrid").collect()
+        },
+        condition = "ST_INVALID_SRID_VALUE",
+        parameters = Map("srid" -> s"$invalidSrid")
+      )
+    }
   }
 
   /** ST accessor expressions. */
@@ -452,7 +633,7 @@ class STExpressionsSuite
     checkEvaluation(stSridGeographyNull, null)
 
     // ST_Srid with GEOMETRY.
-    val geometryExpression = ST_GeomFromWKB(wkbLiteral)
+    val geometryExpression = new ST_GeomFromWKB(wkbLiteral)
     val stSridGeometry = ST_Srid(geometryExpression)
     assert(stSridGeometry.dataType.sameType(IntegerType))
     checkEvaluation(stSridGeometry, defaultGeometrySrid)
@@ -472,7 +653,7 @@ class STExpressionsSuite
     val wkbLiteral = Literal.create(wkb, BinaryType)
     val geographyLiteral = ST_GeogFromWKB(wkbLiteral)
     val nullGeographyLiteral = Literal.create(null, defaultGeographyType)
-    val geometryLiteral = ST_GeomFromWKB(wkbLiteral)
+    val geometryLiteral = new ST_GeomFromWKB(wkbLiteral)
     val nullGeometryLiteral = Literal.create(null, defaultGeometryType)
     val srid = 4326
     val sridLiteral = Literal.create(srid, IntegerType)
@@ -483,7 +664,7 @@ class STExpressionsSuite
     // ST_SetSrid on GEOGRAPHY expression.
     val geogLit = ST_SetSrid(geographyLiteral, sridLiteral)
     assert(geogLit.dataType.sameType(GeographyType(srid)))
-    checkEvaluation(ST_AsBinary(geogLit), wkb)
+    checkEvaluation(new ST_AsBinary(geogLit), wkb)
     val geogLitSrid = ST_Srid(geogLit)
     assert(geogLitSrid.dataType.sameType(IntegerType))
     checkEvaluation(geogLitSrid, srid)
@@ -507,7 +688,7 @@ class STExpressionsSuite
     // ST_SetSrid on GEOMETRY expression.
     val geomLit = ST_SetSrid(geometryLiteral, sridLiteral)
     assert(geomLit.dataType.sameType(GeometryType(srid)))
-    checkEvaluation(ST_AsBinary(geomLit), wkb)
+    checkEvaluation(new ST_AsBinary(geomLit), wkb)
     val geomLitSrid = ST_Srid(geomLit)
     assert(geomLitSrid.dataType.sameType(IntegerType))
     checkEvaluation(geomLitSrid, srid)
@@ -582,6 +763,73 @@ class STExpressionsSuite
       assertType(s"SELECT $geomLitSridLit FROM tbl", GeometryType(srid))
       assertType(s"SELECT ST_Srid($geomLitSridLit) FROM tbl", IntegerType)
       checkAnswer(sql(s"SELECT ST_Srid($geomLitSridLit) FROM tbl"), Row(srid))
+    }
+  }
+
+  /** Geospatial feature is disabled. */
+
+  test("verify that geospatial functions are disabled when the config is off") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      val dummyArgument = "NULL"
+      // Verify that SQL ST functions throw the expected exception.
+      Seq(
+        s"ST_AsBinary($dummyArgument)",
+        s"ST_GeogFromWKB($dummyArgument)",
+        s"ST_GeomFromWKB($dummyArgument)",
+        s"ST_Srid($dummyArgument)",
+        s"ST_SetSrid($dummyArgument, $dummyArgument)"
+      ).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SELECT $query").collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+        )
+      }
+    }
+  }
+
+  test("verify that geospatial type casting is disabled when the config is off") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      // Verify that type casting with geospatial types throws the expected exception.
+      Seq(
+        "SELECT NULL::GEOGRAPHY(4326)",
+        "SELECT NULL::GEOGRAPHY(ANY)",
+        "SELECT NULL::GEOMETRY(4326)",
+        "SELECT NULL::GEOMETRY(ANY)"
+      ).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(query).collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+      }
+    }
+  }
+
+  test("verify that geospatial type coercion is disabled when the config is off") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      // Verify that type coercion with geospatial types throws the expected exception.
+      val value = "NULL"
+      Seq(
+        ("GEOGRAPHY(4326)", "GEOGRAPHY(ANY)"),
+        ("GEOMETRY(4326)", "GEOMETRY(ANY)"),
+        ("GEOMETRY(ANY)", "GEOMETRY(0)"),
+        ("GEOMETRY(3857)", "GEOMETRY(4326)")
+      ).foreach { case (type1, type2) =>
+        val geo1 = s"CAST($value AS $type1)"
+        val geo2 = s"CAST($value AS $type2)"
+        Seq(
+          s"SELECT array($geo1, $geo2)",
+          s"SELECT nvl($geo1, $geo2)"
+        ).foreach { query =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(query).collect()
+            },
+            condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED")
+        }
+      }
     }
   }
 

@@ -213,6 +213,11 @@ class BarrierTaskContext private[spark] (
     this
   }
 
+  override def addTaskInterruptListener(listener: TaskInterruptListener): this.type = {
+    taskContext.addTaskInterruptListener(listener)
+    this
+  }
+
   override def stageId(): Int = taskContext.stageId()
 
   override def stageAttemptNumber(): Int = taskContext.stageAttemptNumber()
@@ -267,6 +272,10 @@ class BarrierTaskContext private[spark] (
 
   override private[spark] def markTaskCompleted(error: Option[Throwable]): Unit = {
     taskContext.markTaskCompleted(error)
+  }
+
+  override private[spark] def getTaskFailure: Option[Throwable] = {
+    taskContext.getTaskFailure
   }
 
   override private[spark] def fetchFailed: Option[FetchFailedException] = {

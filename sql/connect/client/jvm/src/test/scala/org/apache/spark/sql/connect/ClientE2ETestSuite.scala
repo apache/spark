@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect
 import java.io.{ByteArrayOutputStream, PrintStream}
 import java.nio.file.Files
 import java.time.{DateTimeException, LocalTime}
-import java.util.Properties
+import java.util.{Properties, TimeZone}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -31,7 +31,7 @@ import org.apache.commons.io.output.TeeOutputStream
 import org.scalactic.TolerantNumerics
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.SparkBuildInfo.{spark_version => SPARK_VERSION}
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.config.ConfigBuilder
@@ -41,8 +41,8 @@ import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.StringEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.connect.client.{RetryPolicy, SparkConnectClient, SparkResult}
-import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession, SQLHelper}
+import org.apache.spark.sql.connect.client.{PlanCompressionOptions, RetryPolicy, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.test.{ConnectFunSuite, IntegrationTestUtils, QueryTest, RemoteSparkSession}
 import org.apache.spark.sql.connect.test.SparkConnectServerUtils.{createSparkSession, port}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SqlApiConf
@@ -53,7 +53,6 @@ class ClientE2ETestSuite
     extends QueryTest
     with ConnectFunSuite
     with RemoteSparkSession
-    with SQLHelper
     with PrivateMethodTester {
 
   test("throw SparkException with null filename in stack trace elements") {
@@ -132,8 +131,8 @@ class ClientE2ETestSuite
       assert(ex.getCause.isInstanceOf[SparkException])
 
       val cause = ex.getCause.asInstanceOf[SparkException]
-      assert(cause.getCondition == null)
-      assert(cause.getMessageParameters.isEmpty)
+      assert(cause.getCondition == "CONNECT_CLIENT_UNEXPECTED_MISSING_SQL_STATE")
+      assert(cause.getMessageParameters.asScala == Map("message" -> "test".repeat(10000)))
       assert(cause.getMessage.contains("test".repeat(10000)))
     }
   }
@@ -461,7 +460,7 @@ class ClientE2ETestSuite
       assert(result.length == 10)
     } finally {
       // clean up
-      assertThrows[SparkException] {
+      assertThrows[AnalysisException] {
         spark.read.jdbc(url = s"$url;drop=true", table, new Properties()).collect()
       }
     }
@@ -772,6 +771,42 @@ class ClientE2ETestSuite
     assert(spark.range(10).count() === 10)
   }
 
+  test("Dataset zipWithIndex") {
+    val df = spark.range(5).repartition(3)
+    val result = df.zipWithIndex()
+    assert(result.columns === Array("id", "index"))
+    assert(result.schema.last.dataType === LongType)
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === (0L until 5L).toArray)
+  }
+
+  test("Dataset zipWithIndex with custom column name") {
+    val result = spark.range(3).zipWithIndex("row_num")
+    assert(result.columns === Array("id", "row_num"))
+    val indices = result.collect().map(_.getLong(1)).sorted
+    assert(indices === Array(0L, 1L, 2L))
+  }
+
+  test("Dataset zipWithIndex should throw AMBIGUOUS_REFERENCE when selecting duplicate column") {
+    val df = spark.range(3).withColumnRenamed("id", "index")
+    val result = df.zipWithIndex() // Creates df with two "index" columns
+    val ex = intercept[AnalysisException] {
+      result.select("index").collect()
+    }
+    assert(ex.getCondition == "AMBIGUOUS_REFERENCE")
+  }
+
+  test("Dataset zipWithIndex should throw COLUMN_ALREADY_EXISTS when writing duplicate columns") {
+    val df = spark.range(3).withColumnRenamed("id", "index")
+    val result = df.zipWithIndex() // Creates df with two "index" columns
+    withTempPath { path =>
+      val ex = intercept[AnalysisException] {
+        result.write.parquet(path.getAbsolutePath)
+      }
+      assert(ex.getCondition == "COLUMN_ALREADY_EXISTS")
+    }
+  }
+
   test("Dataset collect tuple") {
     val session = spark
     import session.implicits._
@@ -934,7 +969,7 @@ class ClientE2ETestSuite
       // df1("i") is not ambiguous, but it's not valid in the projected df.
       df1.select((df1("i") + 1).as("plus")).select(df1("i")).collect()
     }
-    assert(e1.getMessage.contains("UNRESOLVED_COLUMN.WITH_SUGGESTION"))
+    assert(e1.getMessage.contains("CANNOT_RESOLVE_DATAFRAME_COLUMN"))
 
     checkSameResult(
       Seq(Row(1, "a")),
@@ -1051,6 +1086,19 @@ class ClientE2ETestSuite
 
     assert(spark.conf.contains(entryWithDefault.key))
     assert(!spark.conf.contains("nope"))
+  }
+
+  test("RuntimeConfig.get multiple keys") {
+    assert(spark.conf.getConfigMap().isEmpty)
+    val result = spark.conf.getConfigMap(
+      "spark.sql.ansi.enabled",
+      "spark.sql.session.timeZone",
+      "spark.sql.binaryOutputStyle")
+    val expected = Map(
+      "spark.sql.ansi.enabled" -> spark.conf.get("spark.sql.ansi.enabled"),
+      "spark.sql.session.timeZone" -> TimeZone.getDefault.getID,
+      "spark.sql.binaryOutputStyle" -> "")
+    assert(result == expected)
   }
 
   test("SparkVersion") {
@@ -1616,6 +1664,25 @@ class ClientE2ETestSuite
       assert(metrics2 === Map("min(extra)" -> -1, "avg(extra)" -> 48, "max(extra)" -> 97))
     }
 
+  test("SPARK-55150: observation errors are propagated to client in connect mode") {
+    val observation = Observation("test_observation")
+    val observed_df = spark
+      .range(10)
+      .observe(
+        observation,
+        sum("id").as("sum_id"),
+        raise_error(lit("test error")).as("raise_error"))
+
+    val actual = observed_df.collect()
+    assert(actual.toSeq === (0 until 10).map(_.toLong))
+
+    val exception = intercept[SparkRuntimeException] {
+      observation.get
+    }
+
+    assert(exception.getMessage.contains("test error"))
+  }
+
   test("SPARK-48852: trim function on a string column returns correct results") {
     val session: SparkSession = spark
     import session.implicits._
@@ -2003,6 +2070,22 @@ class ClientE2ETestSuite
           }
           arrowBatchInterceptor.clear()
         }
+    }
+  }
+
+  test("Plan compression works correctly") {
+    val originalPlanCompressionOptions = spark.client.getPlanCompressionOptions
+    assert(originalPlanCompressionOptions.nonEmpty)
+    assert(originalPlanCompressionOptions.get.thresholdBytes > 0)
+    assert(originalPlanCompressionOptions.get.algorithm == "ZSTD")
+    try {
+      spark.client.setPlanCompressionOptions(Some(PlanCompressionOptions(1000, "ZSTD")))
+      // Execution should work
+      assert(spark.sql(s"select '${"Apache Spark" * 10000}' as value").collect().length == 1)
+      // Analysis should work
+      assert(spark.sql(s"select '${"Apache Spark" * 10000}' as value").columns.length == 1)
+    } finally {
+      spark.client.setPlanCompressionOptions(originalPlanCompressionOptions)
     }
   }
 }

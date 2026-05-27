@@ -14,13 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import pandas as pd
-import sys
 
 from pyspark import pandas as ps
-from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -36,16 +33,6 @@ class FeatherMixin:
     def psdf(self):
         return ps.from_pandas(self.pdf)
 
-    has_arrow_21_or_below = False
-    try:
-        import pyarrow as pa
-
-        if LooseVersion(pa.__version__) < LooseVersion("22.0.0"):
-            has_arrow_21_or_below = True
-    except ImportError:
-        pass
-
-    @unittest.skipIf(not has_arrow_21_or_below, "SPARK-54068")
     def test_to_feather(self):
         with self.temp_dir() as dirpath:
             path1 = f"{dirpath}/file1.feather"
@@ -69,12 +56,6 @@ class FeatherTests(
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.io.test_feather import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

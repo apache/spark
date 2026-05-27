@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
+class GeographyDataFrameSuite extends SharedSparkSession {
 
   val point1 = "010100000000000000000031400000000000001C40"
     .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
@@ -128,6 +129,16 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("createDataFrame and round-trip with Geography SRIDs") {
+    Seq(4267, 4269).foreach { srid =>
+      val geog = Geography.fromWKB(point1, srid)
+      val schema = StructType(Seq(StructField("g", GeographyType(srid), nullable = false)))
+      checkAnswer(
+        spark.createDataFrame(sparkContext.parallelize(Seq(Row(geog))), schema),
+        Seq(Row(geog)))
+    }
+  }
+
   test("createDataFrame APIs with Geography.fromWKB") {
     // 1. Test createDataFrame with RDD of Geography objects
     val geography1 = Geography.fromWKB(point1, 4326)
@@ -176,5 +187,36 @@ class GeographyDataFrameSuite extends QueryTest with SharedSparkSession {
     val df = spark.sql(s"SELECT ST_GeogFromWKB(X'$pointString')")
     val expectedGeog = Geography.fromWKB(pointBytes, 4326)
     checkAnswer(df, Seq(Row(expectedGeog)))
+  }
+
+  test("geospatial feature disabled") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      val geography = Geography.fromWKB(point1, 4326)
+      val schema = StructType(Seq(StructField("col1", GeographyType(4326))))
+      // RDD[Row] + schema.
+      val rdd = sparkContext.parallelize(Seq(Row(geography)))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(rdd, schema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+      // Java List[Row] + schema.
+      val javaList = java.util.Arrays.asList(Row(geography))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(javaList, schema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+      // Implicit encoder path.
+      import testImplicits._
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq(geography).toDF("g").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+    }
   }
 }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -39,7 +40,7 @@ class ArrowPythonUDTFRunner(
     protected override val schema: StructType,
     protected override val timeZoneId: String,
     protected override val largeVarTypes: Boolean,
-    protected override val workerConf: Map[String, String],
+    pythonRunnerConf: Map[String, String],
     override val pythonMetrics: Map[String, SQLMetric],
     jobArtifactUUID: Option[String],
     sessionUUID: Option[String])
@@ -48,22 +49,26 @@ class ArrowPythonUDTFRunner(
       jobArtifactUUID, pythonMetrics)
   with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
+  ArrowUtils.failDuplicatedFieldNames(schema)
 
-  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
-    // For arrow-optimized Python UDTFs (@udtf(useArrow=True)), we need to write
-    // the schema to the worker to support UDT (user-defined type).
-    // Currently, UDT is not supported in PyArrow native UDTFs (arrow_udf)
+  override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
+
+  override protected def evalConf: Map[String, String] = {
     if (evalType == PythonEvalType.SQL_ARROW_TABLE_UDF) {
-      PythonWorkerUtils.writeUTF(schema.json, dataOut)
-    }
-    // Write the table argument offsets for Arrow UDTFs.
-    else if (evalType == PythonEvalType.SQL_ARROW_UDTF) {
+      super.evalConf ++ Map(
+        "input_type" -> schema.json
+      )
+    } else {
       val tableArgOffsets = argMetas.collect {
         case ArgumentMetadata(offset, _, isTableArg) if isTableArg => offset
       }
-      dataOut.writeInt(tableArgOffsets.length)
-      tableArgOffsets.foreach(dataOut.writeInt(_))
+      super.evalConf ++ Map(
+        "table_arg_offsets" -> tableArgOffsets.mkString(",")
+      )
     }
+  }
+
+  override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     PythonUDTFRunner.writeUDTF(dataOut, udtf, argMetas)
   }
 
@@ -83,8 +88,8 @@ class ArrowPythonUDTFRunner(
   override val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
   override val tracebackDumpIntervalSeconds: Long =
     SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
-
-  override val errorOnDuplicatedFieldNames: Boolean = true
+  override val killWorkerOnFlushFailure: Boolean =
+    SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
 
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback

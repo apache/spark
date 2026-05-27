@@ -19,15 +19,12 @@ package org.apache.spark.sql.execution.command
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
+import org.apache.spark.sql.catalyst.analysis.ResolvedProcedure
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{Identifier, ProcedureCatalog}
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.procedures.{ProcedureParameter, SimpleProcedure, UnboundProcedure}
 import org.apache.spark.sql.types.StringType
 
 /**
@@ -45,21 +42,10 @@ case class DescribeProcedureCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
-      case ResolvedIdentifier(catalog, ident) =>
-        val procedure = load(catalog.asProcedureCatalog, ident)
+      case ResolvedProcedure(catalog, ident, procedure: UnboundProcedure) =>
         describeV2Procedure(procedure)
       case _ =>
         throw SparkException.internalError(s"Invalid procedure identifier: ${child.getClass}")
-    }
-  }
-
-  private def load(catalog: ProcedureCatalog, ident: Identifier): UnboundProcedure = {
-    try {
-      catalog.loadProcedure(ident)
-    } catch {
-      case e: Exception if !e.isInstanceOf[SparkThrowable] =>
-        val nameParts = catalog.name +: ident.asMultipartIdentifier
-        throw QueryCompilationErrors.failedToLoadRoutineError(nameParts, e)
     }
   }
 
@@ -68,9 +54,46 @@ case class DescribeProcedureCommand(
     append(buffer, "Procedure:", procedure.name())
     append(buffer, "Description:", procedure.description())
 
+    procedure match {
+      case p: SimpleProcedure =>
+        val params = p.parameters()
+        if (params != null && params.nonEmpty) {
+          val formattedParams = formatProcedureParameters(params)
+          append(buffer, "Parameters:", formattedParams.head)
+          formattedParams.tail.foreach(s => append(buffer, "", s))
+        } else {
+          append(buffer, "Parameters:", "()")
+        }
+      case _ =>
+        // Do not show parameters for non-simple procedures
+    }
+
     val keys = tabulate(buffer.map(_._1).toSeq)
     val values = buffer.map(_._2)
     keys.zip(values).map { case (key, value) => Row(s"$key $value") }
+  }
+
+  private def formatProcedureParameters(params: Array[ProcedureParameter]): Seq[String] = {
+    val paramsStrings = params.map { p =>
+      val mode = p.mode().toString
+      val name = p.name()
+      val dataType = p.dataType().sql
+      val comment = if (p.comment() != null) s" '${p.comment()}'" else ""
+      val defaultVal = if (p.defaultValue() != null) p.defaultValue().getSql else null
+      val default = if (defaultVal != null) s" DEFAULT $defaultVal" else ""
+      (mode, name, dataType, default, comment)
+    }
+
+    val modeLen = paramsStrings.map(_._1.length).max
+    val nameLen = paramsStrings.map(_._2.length).max
+    val dataTypeLen = paramsStrings.map(_._3.length).max
+
+    paramsStrings.map { case (mode, name, dataType, default, comment) =>
+      val paddedMode = mode.padTo(modeLen, " ").mkString
+      val paddedName = name.padTo(nameLen, " ").mkString
+      val paddedDataType = dataType.padTo(dataTypeLen, " ").mkString
+      s"$paddedMode $paddedName $paddedDataType$default$comment"
+    }.toSeq
   }
 
   private def append(buffer: ArrayBuffer[(String, String)], key: String, value: String): Unit = {

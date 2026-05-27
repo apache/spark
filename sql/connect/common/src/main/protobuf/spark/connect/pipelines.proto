@@ -22,6 +22,7 @@ package spark.connect;
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "spark/connect/common.proto";
+import "spark/connect/expressions.proto";
 import "spark/connect/relations.proto";
 import "spark/connect/types.proto";
 
@@ -40,6 +41,8 @@ message PipelineCommand {
     DefineSqlGraphElements define_sql_graph_elements = 6;
     GetQueryFunctionExecutionSignalStream get_query_function_execution_signal_stream = 7;
     DefineFlowQueryFunctionResult define_flow_query_function_result = 8;
+    ExecuteOutputFlows execute_output_flows = 9;
+
     // Reserved field for protocol extensions.
     // Used to support forward-compatibility by carrying additional command types
     // that are not yet defined in this version of the proto. During planning, the
@@ -142,6 +145,7 @@ message PipelineCommand {
 
     oneof details {
       WriteRelationFlowDetails relation_flow_details = 7;
+      AutoCdcFlowDetails auto_cdc_flow_details = 10;
       google.protobuf.Any extension = 999;
     }
 
@@ -150,6 +154,46 @@ message PipelineCommand {
       // An unresolved relation that defines the dataset's flow. Empty if the query function
       // that defines the flow cannot be analyzed at the time of flow definition.
       optional spark.connect.Relation relation = 1;
+    }
+
+    // Details for Auto CDC flows.
+    message AutoCdcFlowDetails {
+      // The name of the CDC source to stream from.
+      optional string source = 1;
+
+      // Column(s) that uniquely identify a row in source and target data.
+      repeated Expression keys = 2;
+
+      // Expression to order the source data.
+      optional Expression sequence_by = 3;
+
+      // Delete condition for the merged operation.
+      optional Expression apply_as_deletes = 6;
+
+      // Truncate condition for the merged operation.
+      optional Expression apply_as_truncates = 7;
+
+      // Columns included in the output table.
+      repeated Expression column_list = 8;
+
+      // Columns excluded from the output table.
+      repeated Expression except_column_list = 9;
+
+      // SCD Type for target table.
+      SCDType stored_as_scd_type = 10;
+
+      // Subset of columns to ignore null in updates.
+      repeated Expression ignore_null_updates_column_list = 14;
+
+      // Subset of columns excluded from ignoring null in updates.
+      repeated Expression ignore_null_updates_except_column_list = 15;
+
+    }
+
+    // SCD Type for Auto CDC target tables.
+    enum SCDType {
+      SCD_TYPE_UNSPECIFIED = 0;
+      SCD_TYPE_1 = 1;
     }
 
     // If true, define the flow as a one-time flow, such as for backfill.
@@ -163,6 +207,25 @@ message PipelineCommand {
       // Fully qualified flow name that uniquely identify a flow in the Dataflow graph.
       optional string flow_name = 1;
     }
+  }
+
+  // Request to execute all flows for a single output (dataset or sink) remotely.
+  message ExecuteOutputFlows {
+
+    // The output (table or materialized view or sink) definition.
+    optional DefineOutput define_output = 1;
+
+    // The flows to execute for this table.
+    repeated DefineFlow define_flows = 2;
+
+    // Whether to perform a full refresh instead of an incremental update.
+    optional bool full_refresh = 3;
+
+    // Storage location for pipeline checkpoints and metadata.
+    optional string storage = 4;
+
+    // Reserved field for protocol extensions.
+    repeated google.protobuf.Any extension = 999;
   }
 
   // Resolves all datasets and flows and start a pipeline update. Should be called after all
@@ -213,8 +276,13 @@ message PipelineCommand {
   // Request from the client to update the flow function evaluation result
   // for a previously un-analyzed flow.
   message DefineFlowQueryFunctionResult {
-    // The fully qualified name of the flow being updated.
-    optional string flow_name = 1;
+    // (Deprecated) The fully qualified name of the flow being updated.
+    //
+    // This field is deprecated since Spark 4.2+. Use flow_identifier field instead.
+    optional string flow_name = 1 [deprecated = true];
+
+    // The fully qualified identifier of the flow being updated.
+    optional ResolvedIdentifier flow_identifier = 4;
 
     // The ID of the graph this flow belongs to.
     optional string dataflow_graph_id = 2;
@@ -290,7 +358,13 @@ message SourceCodeLocation {
 // A signal from the server to the client to execute the query function for one or more flows, and
 // to register their results with the server.
 message PipelineQueryFunctionExecutionSignal {
-  repeated string flow_names = 1;
+  // (Deprecated) The name of flows that are ready to be re-evaluated.
+  //
+  // This field is deprecated since Spark 4.2+. Use flow_identifiers field instead.
+  repeated string flow_names = 1 [deprecated = true];
+
+  // The identifier of flows that are ready to be re-evaluated
+  repeated ResolvedIdentifier flow_identifiers = 2;
 }
 
 // Metadata providing context about the pipeline during Spark Connect query analysis.
@@ -299,6 +373,12 @@ message PipelineAnalysisContext {
   optional string dataflow_graph_id = 1;
   // The path of the top-level pipeline file determined at runtime during pipeline initialization.
   optional string definition_path = 2;
+  // (Deprecated) The name of the Flow involved in this analysis
+  //
+  // This field is deprecated since Spark 4.2+. Use flow_identifier field instead.
+  optional string flow_name = 3 [deprecated = true];
+  // The identifier of the Flow involved in this analysis
+  optional ResolvedIdentifier flow_identifier = 4;
 
   // Reserved field for protocol extensions.
   repeated google.protobuf.Any extension = 999;

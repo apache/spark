@@ -1162,8 +1162,10 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     val testIdent: IdentifierHelper = Identifier.of(Array("a", "b"), "c")
     checkError(
       exception = intercept[AnalysisException](testIdent.asTableIdentifier),
-      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map("identifier" -> "`a`.`b`.`c`")
+      condition = "REQUIRES_SINGLE_PART_NAMESPACE",
+      parameters = Map(
+        "sessionCatalog" -> "spark_catalog",
+        "identifier" -> "`a`.`b`.`c`")
     )
   }
 
@@ -1172,7 +1174,7 @@ class V2SessionCatalogNamespaceSuite extends V2SessionCatalogBaseSuite {
     checkError(
       exception = intercept[AnalysisException](testIdent.asFunctionIdentifier),
       condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      parameters = Map("identifier" -> "`a`.`b`.`c`")
+      parameters = Map("identifier" -> "`a`.`b`.`c`", "limit" -> "2")
     )
   }
 }

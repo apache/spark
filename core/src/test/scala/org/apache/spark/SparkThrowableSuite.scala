@@ -31,6 +31,7 @@ import com.fasterxml.jackson.core.util.{DefaultIndenter, DefaultPrettyPrinter}
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkThrowableHelper._
 import org.apache.spark.util.Utils
@@ -686,5 +687,176 @@ class SparkThrowableSuite extends SparkFunSuite {
     // Verify the message is formatted correctly.
     assert(result == "[TEST_CUSTOM_TEMPLATE] Custom error: " +
       "something occurred with somewhere SQLSTATE: 42S01")
+  }
+
+  test("Custom SQL state takes precedence over error class reader - SparkException") {
+    // Test with custom SQL state - should return the custom one
+    val exceptionWithCustomSqlState = new SparkException(
+      message = getMessage("CANNOT_PARSE_DECIMAL", Map.empty[String, String]),
+      cause = null,
+      errorClass = Some("CANNOT_PARSE_DECIMAL"),
+      messageParameters = Map.empty[String, String],
+      context = Array.empty,
+      sqlState = Some("CUSTOM"))
+
+    assert(exceptionWithCustomSqlState.getSqlState == "CUSTOM",
+      "Custom SQL state should take precedence")
+
+    // Test without custom SQL state - should fall back to error class reader
+    val exceptionWithoutCustomSqlState = new SparkException(
+      message = getMessage("CANNOT_PARSE_DECIMAL", Map.empty[String, String]),
+      cause = null,
+      errorClass = Some("CANNOT_PARSE_DECIMAL"),
+      messageParameters = Map.empty[String, String],
+      context = Array.empty,
+      sqlState = None)
+
+    assert(exceptionWithoutCustomSqlState.getSqlState == "22018",
+      "Should fall back to error class reader SQL state")
+  }
+
+  test("SparkArithmeticException uses error class reader for SQL state") {
+    // Test that SparkArithmeticException falls back to error class reader
+    val exception = new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> "CONFIG"),
+      context = Array.empty,
+      summary = "")
+
+    assert(exception.getSqlState == "22012",
+      "Should use error class reader SQL state")
+  }
+
+  test("SparkRuntimeException uses error class reader for SQL state") {
+    // Test that SparkRuntimeException falls back to error class reader
+    val exception = new SparkRuntimeException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" -> "test"))
+
+    assert(exception.getSqlState.startsWith("XX"),
+      "Should use error class reader SQL state")
+  }
+
+  test("SparkIllegalArgumentException uses error class reader for SQL state") {
+    // Test that SparkIllegalArgumentException falls back to error class reader
+    val exception = new SparkIllegalArgumentException(
+      errorClass = "UNSUPPORTED_SAVE_MODE.EXISTENT_PATH",
+      messageParameters = Map("saveMode" -> "TEST"))
+
+    assert(exception.getSqlState == "0A000",
+      "Should use error class reader SQL state")
+  }
+
+  test("Custom SQL state takes precedence - Multiple exception types") {
+    // SparkSQLException
+    val sqlException = new SparkSQLException(
+      errorClass = "CANNOT_PARSE_DECIMAL",
+      messageParameters = Map.empty[String, String],
+      sqlState = Some("CUST1"))
+    assert(sqlException.getSqlState == "CUST1")
+
+    // SparkSecurityException
+    val securityException = new SparkSecurityException(
+      errorClass = "CANNOT_PARSE_DECIMAL",
+      messageParameters = Map.empty[String, String],
+      sqlState = Some("CUST2"))
+    assert(securityException.getSqlState == "CUST2")
+
+    // SparkNumberFormatException
+    val numberFormatException = new SparkNumberFormatException(
+      errorClass = "CANNOT_PARSE_DECIMAL",
+      messageParameters = Map.empty[String, String],
+      context = Array.empty,
+      summary = "")
+    assert(numberFormatException.getSqlState == "22018",
+      "Should use error class reader SQL state when custom not provided")
+  }
+
+  test("Custom SQL state takes precedence - Java exception (SparkOutOfMemoryError)") {
+    import org.apache.spark.memory.SparkOutOfMemoryError
+
+    // Test without custom SQL state - should fall back to error class reader
+    val errorWithoutCustom = new SparkOutOfMemoryError(
+      "CANNOT_PARSE_DECIMAL",
+      Map.empty[String, String].asJava)
+
+    assert(errorWithoutCustom.getSqlState == "22018",
+      "Should use error class reader SQL state when custom not provided")
+
+    // Test with custom SQL state - should return the custom one
+    val errorWithCustom = new SparkOutOfMemoryError(
+      "CANNOT_PARSE_DECIMAL",
+      Map.empty[String, String].asJava,
+      "CUSTOM")
+
+    assert(errorWithCustom.getSqlState == "CUSTOM",
+      "Custom SQL state should take precedence over error class reader")
+
+    // Test with null custom SQL state - should fall back to error class reader
+    val errorWithNull = new SparkOutOfMemoryError(
+      "CANNOT_PARSE_DECIMAL",
+      Map.empty[String, String].asJava,
+      null)
+
+    assert(errorWithNull.getSqlState == "22018",
+      "Should fall back to error class reader SQL state when custom is null")
+  }
+
+  test("checkError reports all mismatches in a single failure message") {
+    class TestQueryContext extends QueryContext {
+      override val contextType = QueryContextType.SQL
+      override val objectName = "v1"
+      override val objectType = "VIEW"
+      override val startIndex = 2
+      override val stopIndex = 10
+      override val fragment = "1 / 0"
+      override val callSite = ""
+      override val summary = ""
+    }
+
+    val exception = new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> "CONFIG"),
+      context = Array(new TestQueryContext),
+      summary = "")
+
+    val error = intercept[TestFailedException] {
+      checkError(
+        exception = exception,
+        condition = "WRONG_CONDITION",
+        sqlState = Some("99999"),
+        parameters = Map("config" -> "WRONG_VALUE"),
+        queryContext = Array(ExpectedContext(
+          objectType = "TABLE",
+          objectName = "t1",
+          startIndex = 0,
+          stopIndex = 5,
+          fragment = "wrong fragment")))
+    }
+    val msg = error.getMessage
+    assert(msg.contains("=== Actual Exception State ==="), "Should contain actual state header")
+    assert(msg.contains("=== Mismatches ==="), "Should contain mismatches header")
+    assert(msg.contains("condition:"), "Should report condition mismatch")
+    assert(msg.contains("sqlState:"), "Should report sqlState mismatch")
+    assert(msg.contains("parameters:"), "Should report parameters mismatch")
+    assert(msg.contains("queryContext[0].objectType:"), "Should report objectType mismatch")
+    assert(msg.contains("queryContext[0].objectName:"), "Should report objectName mismatch")
+    assert(msg.contains("queryContext[0].startIndex:"), "Should report startIndex mismatch")
+    assert(msg.contains("queryContext[0].stopIndex:"), "Should report stopIndex mismatch")
+    assert(msg.contains("queryContext[0].fragment:"), "Should report fragment mismatch")
+  }
+
+  test("checkError succeeds when all fields match") {
+    val exception = new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> "CONFIG"),
+      context = Array.empty,
+      summary = "")
+
+    checkError(
+      exception = exception,
+      condition = "DIVIDE_BY_ZERO",
+      sqlState = Some("22012"),
+      parameters = Map("config" -> "CONFIG"))
   }
 }

@@ -50,7 +50,7 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(approx_top_k_accumulate(expr), 2) FROM VALUES 'a', 'b', 'c', 'c', 'c', 'c', 'd', 'd' tab(expr);
        [{"item":"c","count":4},{"item":"d","count":2}]
   """,
-  group = "misc_funcs",
+  group = "sketch_funcs",
   since = "4.1.0")
 // scalastyle:on line.size.limit
 case class ApproxTopKEstimate(state: Expression, k: Expression)

@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.v2.state.metadata.StateMetadat
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.python.streaming.{FlatMapGroupsInPandasWithStateExec, TransformWithStateInPySparkExec}
 import org.apache.spark.sql.execution.streaming.{StreamingErrors, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, OffsetSeqMetadata, OffsetSeqMetadataBase}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{SessionWindowStateStoreRestoreExec, SessionWindowStateStoreSaveExec, StatefulOperator, StatefulOperatorStateInfo, StateStoreRestoreExec, StateStoreSaveExec, StateStoreWriter, StreamingDeduplicateExec, StreamingDeduplicateWithinWatermarkExec, StreamingGlobalLimitExec, StreamingLocalLimitExec, UpdateEventTimeColumnExec}
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.FlatMapGroupsWithStateExec
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.{StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
@@ -66,11 +66,14 @@ class IncrementalExecution(
     logicalPlan: LogicalPlan,
     val outputMode: OutputMode,
     val checkpointLocation: String,
-    val queryId: UUID,
+    // For backward compatibility, streaming queries queryId is UUIDv4,
+    // see `StreamingQueryCheckpointMetadata.streamMetadata`.
+    // If not supplied, QueryExecution.queryId generates a new UUIDv7.
+    queryId: UUID,
     val runId: UUID,
     val currentBatchId: Long,
-    val prevOffsetSeqMetadata: Option[OffsetSeqMetadata],
-    val offsetSeqMetadata: OffsetSeqMetadata,
+    val prevOffsetSeqMetadata: Option[OffsetSeqMetadataBase],
+    val offsetSeqMetadata: OffsetSeqMetadataBase,
     val watermarkPropagator: WatermarkPropagator,
     val isFirstBatch: Boolean,
     val currentStateStoreCkptId:
@@ -80,8 +83,9 @@ class IncrementalExecution(
     mode: CommandExecutionMode.Value = CommandExecutionMode.ALL,
     val isTerminatingTrigger: Boolean = false)
   extends QueryExecution(sparkSession, logicalPlan, mode = mode,
-    shuffleCleanupMode =
-      QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)) with Logging {
+    shuffleCleanupModeOpt =
+      Some(QueryExecution.determineShuffleCleanupMode(sparkSession.sessionState.conf)),
+    queryId = queryId) with Logging {
 
   // Modified planner with stateful operations.
   override val planner: SparkPlanner = new SparkPlanner(
@@ -138,6 +142,9 @@ class IncrementalExecution(
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
   }
+
+  // Use `this` for explain so the already-open transaction and executedPlan are reused.
+  override protected def queryExecutionForExplain: QueryExecution = this
 
   private val allowMultipleStatefulOperators: Boolean =
     sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
@@ -380,6 +387,7 @@ class IncrementalExecution(
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          prevBatchTimestampMs = prevOffsetSeqMetadata.map(_.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           hasInitialState = hasInitialState
@@ -390,6 +398,7 @@ class IncrementalExecution(
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          prevBatchTimestampMs = prevOffsetSeqMetadata.map(_.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           hasInitialState = hasInitialState
@@ -407,7 +416,8 @@ class IncrementalExecution(
         j.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None
+          eventTimeWatermarkForEviction = None,
+          outputMode = Some(outputMode)
         )
 
       case l: StreamingGlobalLimitExec =>
@@ -524,13 +534,31 @@ class IncrementalExecution(
       case j: StreamingSymmetricHashJoinExec =>
         val iwLateEvents = inputWatermarkForLateEvents(j.stateInfo.get)
         val iwEviction = inputWatermarkForEviction(j.stateInfo.get)
+        // Use the late-events watermark as the scan lower bound only when we can prove that
+        // it equals the previous batch's eviction watermark for this operator. That holds
+        // when STATEFUL_OPERATOR_ALLOW_MULTIPLE is true.
+        //
+        // When STATEFUL_OPERATOR_ALLOW_MULTIPLE is false (legacy mode), lateEvents == eviction
+        // for the same batch, so using it would collapse the eviction range to (wm, wm] = empty
+        // and silently stop state eviction. Fall back to None (full scan) in that mode, as we
+        // don't expect the legacy mode to be used by many users.
+        //
+        // The prevOffsetSeqMetadata.isDefined check guards against the first batch, where
+        // watermark propagation yields Some(0) for late events even though no state has been
+        // evicted yet, which would incorrectly skip entries at timestamp 0.
+        val prevBatchLateEventsWm =
+          if (prevOffsetSeqMetadata.isDefined && allowMultipleStatefulOperators) {
+            iwLateEvents
+          } else {
+            None
+          }
         j.copy(
           eventTimeWatermarkForLateEvents = iwLateEvents,
           eventTimeWatermarkForEviction = iwEviction,
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              iwEviction, !allowMultipleStatefulOperators)
+              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators)
         )
     }
   }
@@ -649,7 +677,7 @@ class IncrementalExecution(
    * planned yet), which is required for asking the needs of another batch to each stateful
    * operator.
    */
-  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
+  def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadataBase): Boolean = {
     val tentativeBatchId = currentBatchId + 1
     watermarkPropagator.propagate(tentativeBatchId, executedPlan, newMetadata.batchWatermarkMs)
     StreamingQueryPlanTraverseHelper

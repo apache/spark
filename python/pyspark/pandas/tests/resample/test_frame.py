@@ -16,7 +16,6 @@
 #
 
 
-import unittest
 import datetime
 
 import numpy as np
@@ -77,19 +76,19 @@ class ResampleFrameMixin:
     @property
     def pdf4(self):
         np.random.seed(33)
-        index = pd.date_range(start="2020-12-12", end="2022-05-01", freq="1H")
+        index = pd.date_range(start="2020-12-12", end="2022-05-01", freq="1h")
         return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
     def pdf5(self):
         np.random.seed(44)
-        index = pd.date_range(start="2021-12-30 03:04:05", end="2022-01-02 06:07:08", freq="1T")
+        index = pd.date_range(start="2021-12-30 03:04:05", end="2022-01-02 06:07:08", freq="1min")
         return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
     def pdf6(self):
         np.random.seed(55)
-        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-02 06:07:08", freq="1S")
+        index = pd.date_range(start="2022-05-02 03:04:05", end="2022-05-02 06:07:08", freq="1s")
         return pd.DataFrame(np.random.rand(len(index), 2), index=index, columns=list("AB"))
 
     @property
@@ -128,14 +127,14 @@ class ResampleFrameMixin:
             )
 
     def test_dataframe_resample(self):
-        self._test_resample(self.pdf4, self.psdf4, ["11H", "21D"], "left", None, "mean")
-        self._test_resample(self.pdf5, self.psdf5, ["55MIN", "2H", "D"], "left", "left", "std")
-        self._test_resample(self.pdf6, self.psdf6, ["29S", "10MIN", "3H"], "left", "right", "var")
+        self._test_resample(self.pdf4, self.psdf4, ["11h", "21D"], "left", None, "mean")
+        self._test_resample(self.pdf5, self.psdf5, ["55min", "2h", "D"], "left", "left", "std")
+        self._test_resample(self.pdf6, self.psdf6, ["29s", "10min", "3h"], "left", "right", "var")
 
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            self._test_resample(self.pdf2, self.psdf2, ["3A", "11M", "D"], None, "left", "max")
+            self._test_resample(self.pdf2, self.psdf2, ["3YE", "11ME", "D"], None, "left", "max")
         with self.assertRaisesRegex(ValueError, "rule code YE-DEC is not supported"):
-            self._test_resample(self.pdf1, self.psdf1, ["3Y", "9M", "17D"], None, None, "min")
+            self._test_resample(self.pdf1, self.psdf1, ["3YE", "9ME", "17D"], None, None, "min")
 
 
 class ResampleFrameTests(ResampleFrameMixin, PandasOnSparkTestCase, TestUtils):
@@ -143,12 +142,6 @@ class ResampleFrameTests(ResampleFrameMixin, PandasOnSparkTestCase, TestUtils):
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.resample.test_frame import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

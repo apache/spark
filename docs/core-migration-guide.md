@@ -22,9 +22,17 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.1 to 4.2
+
+- Since Spark 4.2, Spark Master REST API uses Java 21 virtual threads by default when running on Java 21 or later. To restore the legacy behavior, you can set `spark.master.rest.virtualThread.enabled` to `false`.
+
+- Since Spark 4.2, Spark will allocate executor pods with a batch size of `20`. To restore the legacy behavior, you can set `spark.kubernetes.allocation.batch.size` to `10`.
+
+- Since Spark 4.2, Spark configures a `NetworkPolicy` by default so that executor pods only accept ingress traffic from the driver and peer executors within the same job. To disable this and restore the legacy behavior, set `spark.kubernetes.driver.pod.excludedFeatureSteps` to `org.apache.spark.deploy.k8s.features.NetworkPolicyFeatureStep`.
+
 ## Upgrading from Core 4.0 to 4.1
 
-- Since Spark 4.1, Spark Master deamon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
+- Since Spark 4.1, Spark Master daemon provides REST API by default. To restore the behavior before Spark 4.1, you can set `spark.master.rest.enabled` to `false`.
 - Since Spark 4.1, Spark will compress RDD checkpoints by default. To restore the behavior before Spark 4.1, you can set `spark.checkpoint.compress` to `false`.
 - Since Spark 4.1, Spark uses Apache Hadoop Magic Committer for all S3 buckets by default. To restore the behavior before Spark 4.0, you can set `spark.hadoop.fs.s3a.committer.magic.enabled=false`.
 - Since Spark 4.1, `java.lang.InternalError` encountered during file reading will no longer fail the task if the configuration `spark.sql.files.ignoreCorruptFiles` or the data source option `ignoreCorruptFiles` is set to `true`. 

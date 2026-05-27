@@ -20,7 +20,8 @@
 
 acquire_rat_jar () {
 
-  URL="${DEFAULT_ARTIFACT_REPOSITORY:-https://repo1.maven.org/maven2/}org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
+  DEFAULT_ARTIFACT_REPOSITORY=${DEFAULT_ARTIFACT_REPOSITORY:-https://maven-central.storage-download.googleapis.com/maven2/}
+  URL="${DEFAULT_ARTIFACT_REPOSITORY%/}/org/apache/rat/apache-rat/${RAT_VERSION}/apache-rat-${RAT_VERSION}.jar"
 
   JAR="$rat_jar"
 

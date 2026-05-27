@@ -44,7 +44,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`s`"
+    "relationName" : "`s`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -65,7 +66,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`r`"
+    "relationName" : "`r`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -124,7 +126,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`s2`"
+    "relationName" : "`s2`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -297,7 +300,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`non_existing_table`"
+    "relationName" : "`non_existing_table`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -500,7 +504,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`r2`"
+    "relationName" : "`r2`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -568,7 +573,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`q`"
+    "relationName" : "`q`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -776,7 +782,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`va`"
+    "relationName" : "`va`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -796,7 +803,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`cte`"
+    "relationName" : "`cte`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -856,7 +864,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "TABLE_OR_VIEW_NOT_FOUND",
   "sqlState" : "42P01",
   "messageParameters" : {
-    "relationName" : "`cte`"
+    "relationName" : "`cte`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1126,21 +1135,77 @@ Project [col1#x]
 
 
 -- !query
+WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
+     cte2 AS (SELECT id, COLNAME, colname FROM cte)
+SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte
+:     +- Project [1 AS id#x, test AS COLNAME#x]
+:        +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte2
+:     +- Project [id#x, COLNAME#x, colname#x]
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [id#x, COLNAME#x], false, false, 1
++- Project [id#x, COLNAME#x, colname#x, id#x, COLNAME#x, colname#x]
+   +- Join Inner, (id#x = id#x)
+      :- SubqueryAlias a
+      :  +- SubqueryAlias cte2
+      :     +- CTERelationRef xxxx, true, [id#x, COLNAME#x, colname#x], false, false, 1
+      +- SubqueryAlias b
+         +- SubqueryAlias cte2
+            +- CTERelationRef xxxx, true, [id#x, COLNAME#x, colname#x], false, false, 1
+
+
+-- !query
+WITH cte AS (SELECT 1 AS id, 'test' AS COLNAME),
+     cte2 AS (SELECT id, COLNAME, colname FROM cte),
+     cte3 AS (SELECT id, COLNAME, colname FROM cte2)
+SELECT * FROM cte2 a JOIN cte2 b ON (a.id = b.id)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte
+:     +- Project [1 AS id#x, test AS COLNAME#x]
+:        +- OneRowRelation
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte2
+:     +- Project [id#x, COLNAME#x, colname#x]
+:        +- SubqueryAlias cte
+:           +- CTERelationRef xxxx, true, [id#x, COLNAME#x], false, false, 1
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias cte3
+:     +- Project [id#x, COLNAME#x, colname#x]
+:        +- SubqueryAlias cte2
+:           +- CTERelationRef xxxx, true, [id#x, COLNAME#x, colname#x], false, false, 1
++- Project [id#x, COLNAME#x, colname#x, id#x, COLNAME#x, colname#x]
+   +- Join Inner, (id#x = id#x)
+      :- SubqueryAlias a
+      :  +- SubqueryAlias cte2
+      :     +- CTERelationRef xxxx, true, [id#x, COLNAME#x, colname#x], false, false, 1
+      +- SubqueryAlias b
+         +- SubqueryAlias cte2
+            +- CTERelationRef xxxx, true, [id#x, COLNAME#x, colname#x], false, false, 1
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
-DropTempViewCommand t
+DropTempViewCommand t, true
 
 
 -- !query
 DROP VIEW IF EXISTS t2
 -- !query analysis
-DropTempViewCommand t2
+DropTempViewCommand t2, true
 
 
 -- !query
 DROP VIEW IF EXISTS t3
 -- !query analysis
-DropTempViewCommand t3
+DropTempViewCommand t3, true
 
 
 -- !query

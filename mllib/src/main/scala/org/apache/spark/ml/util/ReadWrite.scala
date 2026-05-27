@@ -46,7 +46,8 @@ import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.linalg.{DenseMatrix, DenseVector, Matrix, SparseMatrix, SparseVector, Vector}
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.arrow.ArrowFileReadWrite
 import org.apache.spark.util.{Utils, VersionUtils}
 
 /**
@@ -1140,6 +1141,34 @@ private[spark] object ReadWriteUtils {
     } else {
       import spark.implicits._
       spark.read.parquet(path).as[T].collect()
+    }
+  }
+
+  def saveDataFrame(path: String, df: DataFrame): Unit = {
+    if (localSavingModeState.get()) {
+      df match {
+        case d: org.apache.spark.sql.classic.DataFrame =>
+          val filePath = Paths.get(path)
+          Files.createDirectories(filePath.getParent)
+          ArrowFileReadWrite.save(d, filePath)
+        case o => throw new UnsupportedOperationException(
+          s"Unsupported dataframe type: ${o.getClass.getName}")
+      }
+    } else {
+      df.write.parquet(path)
+    }
+  }
+
+  def loadDataFrame(path: String, spark: SparkSession): DataFrame = {
+    if (localSavingModeState.get()) {
+      spark match {
+        case s: org.apache.spark.sql.classic.SparkSession =>
+          ArrowFileReadWrite.load(s, Paths.get(path))
+        case o => throw new UnsupportedOperationException(
+          s"Unsupported session type: ${o.getClass.getName}")
+      }
+    } else {
+      spark.read.parquet(path)
     }
   }
 }

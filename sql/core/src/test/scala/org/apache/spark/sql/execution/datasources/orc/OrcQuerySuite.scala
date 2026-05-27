@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import java.time.LocalDateTime
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
@@ -633,6 +633,74 @@ abstract class OrcQueryTest extends OrcTest {
     }
   }
 
+  test("SPARK-55857: Enabling/disabling ignoreMissingFiles") {
+    def testIgnoreMissingFiles(options: Map[String, String]): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        spark.range(1).toDF("a").write.orc(path1.toString)
+        spark.range(1, 2).toDF("a").write.orc(path2.toString)
+        // Create DataFrame before deleting to capture file references in the query plan,
+        // then delete to simulate a race condition between listing and reading.
+        val df = spark.read.options(options).orc(path1.toString, path2.toString)
+        fs.listStatus(path1)
+          .filter(f => f.isFile && !f.getPath.getName.startsWith("_"))
+          .foreach(f => fs.delete(f.getPath, false))
+        checkAnswer(df, Seq(Row(1)))
+      }
+    }
+
+    def testIgnoreMissingFilesWithoutSchemaInfer(options: Map[String, String]): Unit = {
+      withTempDir { dir =>
+        val basePath = dir.getCanonicalPath
+        val fs = FileSystem.get(spark.sessionState.newHadoopConf())
+        val path1 = new Path(basePath, "first")
+        val path2 = new Path(basePath, "second")
+        spark.range(1).toDF("a").write.orc(path1.toString)
+        spark.range(1, 2).toDF("a").write.orc(path2.toString)
+        val df = spark.read.schema("a long").options(options)
+          .orc(path1.toString, path2.toString)
+        fs.listStatus(path1)
+          .filter(f => f.isFile && !f.getPath.getName.startsWith("_"))
+          .foreach(f => fs.delete(f.getPath, false))
+        checkAnswer(df, Seq(Row(1)))
+      }
+    }
+
+    // Test ignoreMissingFiles = true
+    Seq("SQLConf", "FormatOption").foreach { by =>
+      val (sqlConf, options) = by match {
+        case "SQLConf" => ("true", Map.empty[String, String])
+        // Explicitly set SQLConf to false but still should ignore missing files
+        case "FormatOption" => ("false", Map("ignoreMissingFiles" -> "true"))
+      }
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+        testIgnoreMissingFiles(options)
+        testIgnoreMissingFilesWithoutSchemaInfer(options)
+      }
+    }
+
+    // Test ignoreMissingFiles = false
+    Seq("SQLConf", "FormatOption").foreach { by =>
+      val (sqlConf, options) = by match {
+        case "SQLConf" => ("false", Map.empty[String, String])
+        // Explicitly set SQLConf to true but still should not ignore missing files
+        case "FormatOption" => ("true", Map("ignoreMissingFiles" -> "false"))
+      }
+      withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> sqlConf) {
+        checkErrorMatchPVals(
+          exception = intercept[SparkException] {
+            testIgnoreMissingFiles(options)
+          },
+          condition = "FAILED_READ_FILE.FILE_NOT_EXIST",
+          parameters = Map("path" -> ".*")
+        )
+      }
+    }
+  }
+
   test("SPARK-27160 Predicate pushdown correctness on DecimalType for ORC") {
     withTempPath { dir =>
       withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
@@ -897,6 +965,54 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           spark.sql("select * from t1").collect()
         }
       }
+    }
+  }
+
+  test("TIME type support for ORC format") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.sql("""
+        SELECT
+          id,
+          TIME'09:30:00' as morning,
+          TIME'14:45:30.123456' as afternoon,
+          TIME'23:59:59.999999' as end_of_day,
+          TIME'00:00:00' as midnight,
+          CASE WHEN id % 2 = 0 THEN TIME'12:30:00' ELSE NULL END as nullable_time
+        FROM VALUES (1), (2), (3) AS t(id)
+      """)
+
+      df.write.mode("overwrite").orc(path)
+      val result = spark.read.orc(path)
+
+      Seq("morning", "afternoon", "end_of_day", "midnight", "nullable_time").foreach { col =>
+        assert(result.schema(col).dataType == TimeType(6))
+      }
+      checkAnswer(result, df)
+    }
+  }
+
+  test("TIME type with different precisions in ORC") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.sql("""
+        SELECT
+          CAST(TIME'12:34:56' AS TIME(0)) as time_p0,
+          CAST(TIME'12:34:56.1' AS TIME(1)) as time_p1,
+          CAST(TIME'12:34:56.12' AS TIME(2)) as time_p2,
+          CAST(TIME'12:34:56.123' AS TIME(3)) as time_p3,
+          CAST(TIME'12:34:56.1234' AS TIME(4)) as time_p4,
+          CAST(TIME'12:34:56.12345' AS TIME(5)) as time_p5,
+          CAST(TIME'12:34:56.123456' AS TIME(6)) as time_p6
+      """)
+
+      df.write.mode("overwrite").orc(path)
+      val result = spark.read.orc(path)
+
+      (0 to 6).foreach { p =>
+        assert(result.schema(s"time_p$p").dataType == TimeType(p))
+      }
+      checkAnswer(result, df)
     }
   }
 }

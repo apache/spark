@@ -823,7 +823,9 @@ org.apache.spark.SparkException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "foo51()"
   } ]
 }
 
@@ -956,7 +958,9 @@ org.apache.spark.SparkRuntimeException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "foo9a('Nonsense')"
   } ]
 }
 
@@ -1111,7 +1115,7 @@ org.apache.spark.SparkArithmeticException
   "messageParameters" : {
     "alternative" : " Use 'try_add' to tolerate overflow and return NULL instead.",
     "config" : "\"spark.sql.ansi.enabled\"",
-    "message" : "integer overflow"
+    "message" : "overflow"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -1209,7 +1213,9 @@ org.apache.spark.SparkArithmeticException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "foo9f(999)"
   } ]
 }
 
@@ -1232,7 +1238,9 @@ org.apache.spark.SparkArithmeticException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "foo9f(999 + 1)"
   } ]
 }
 
@@ -1271,7 +1279,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "foo9g('hello', '7')"
   } ]
 }
 
@@ -1294,7 +1304,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "foo9g(123.23, 'q')"
   } ]
 }
 
@@ -1333,7 +1345,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "foo9h('hello', '7')"
   } ]
 }
 
@@ -1356,7 +1370,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "foo9h(123.23, 'q')"
   } ]
 }
 

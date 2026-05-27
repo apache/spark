@@ -77,7 +77,7 @@ class Pipeline(Estimator["PipelineModel"], MLReadable["Pipeline"], MLWritable):
         """
         __init__(self, \\*, stages=None)
         """
-        super(Pipeline, self).__init__()
+        super().__init__()
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -227,7 +227,7 @@ class PipelineWriter(MLWriter):
     """
 
     def __init__(self, instance: Pipeline):
-        super(PipelineWriter, self).__init__()
+        super().__init__()
         self.instance = instance
 
     def saveImpl(self, path: str) -> None:
@@ -243,7 +243,7 @@ class PipelineReader(MLReader[Pipeline]):
     """
 
     def __init__(self, cls: Type[Pipeline]):
-        super(PipelineReader, self).__init__()
+        super().__init__()
         self.cls = cls
 
     def load(self, path: str) -> Pipeline:
@@ -259,7 +259,7 @@ class PipelineModelWriter(MLWriter):
     """
 
     def __init__(self, instance: "PipelineModel"):
-        super(PipelineModelWriter, self).__init__()
+        super().__init__()
         self.instance = instance
 
     def saveImpl(self, path: str) -> None:
@@ -277,7 +277,7 @@ class PipelineModelReader(MLReader["PipelineModel"]):
     """
 
     def __init__(self, cls: Type["PipelineModel"]):
-        super(PipelineModelReader, self).__init__()
+        super().__init__()
         self.cls = cls
 
     def load(self, path: str) -> "PipelineModel":
@@ -295,7 +295,7 @@ class PipelineModel(Model, MLReadable["PipelineModel"], MLWritable):
     """
 
     def __init__(self, stages: List[Transformer]):
-        super(PipelineModel, self).__init__()
+        super().__init__()
         self.stages = stages
 
     def _transform(self, dataset: DataFrame) -> DataFrame:

@@ -29,11 +29,11 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
-trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
+trait CharVarcharTestSuite extends QueryTest {
 
   def format: String
 
@@ -46,16 +46,16 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
     val dataType = CatalystSqlParser.parseDataType(dt)
     checkColType(df.schema(1), dataType)
     dataType match {
-      case CharType(len) =>
+      case c: CharType =>
         // char value will be padded if (<= len) or trimmed if (> len)
         val fixLenStr = if (insertVal != null) {
-          insertVal.take(len).padTo(len, " ").mkString
+          insertVal.take(c.length).padTo(c.length, " ").mkString
         } else null
         checkAnswer(df, Row("1", fixLenStr))
-      case VarcharType(len) =>
+      case v: VarcharType =>
         // varchar value will be remained if (<= len) or trimmed if (> len)
         val varLenStrWithUpperBound = if (insertVal != null) {
-          insertVal.take(len)
+          insertVal.take(v.length)
         } else null
         checkAnswer(df, Row("1", varLenStrWithUpperBound))
     }
@@ -834,7 +834,7 @@ trait CharVarcharTestSuite extends QueryTest with SQLTestUtils {
 }
 
 // Some basic char/varchar tests which doesn't rely on table implementation.
-class BasicCharVarcharTestSuite extends QueryTest with SharedSparkSession {
+class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
 
   test("user-specified schema in cast") {

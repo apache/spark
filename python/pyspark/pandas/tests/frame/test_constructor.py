@@ -29,7 +29,6 @@ from pyspark.pandas.typedef.typehints import (
 from pyspark.pandas.utils import is_testing
 
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Constructor'
@@ -576,18 +575,11 @@ class FrameConstructorMixin:
 class FrameConstructorTests(
     FrameConstructorMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.frame.test_constructor import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

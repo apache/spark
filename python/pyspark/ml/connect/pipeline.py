@@ -28,7 +28,6 @@ from pyspark.ml.param import Param, Params
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
 
-
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 
@@ -133,9 +132,7 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
     >>> loaded_pipeline_model = PipelineModel.loadFromLocal("/tmp/pipeline")
     """
 
-    stages: Param[List[Params]] = Param(
-        Params._dummy(), "stages", "a list of pipeline stages"
-    )  # type: ignore[assignment]
+    stages: Param[List[Params]] = Param(Params._dummy(), "stages", "a list of pipeline stages")  # type: ignore[assignment]
 
     _input_kwargs: Dict[str, Any]
 
@@ -144,7 +141,7 @@ class Pipeline(Estimator["PipelineModel"], _PipelineReadWrite):
         """
         __init__(self, \\*, stages=None)
         """
-        super(Pipeline, self).__init__()
+        super().__init__()
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
@@ -248,7 +245,7 @@ class PipelineModel(Model, _PipelineReadWrite):
     """
 
     def __init__(self, stages: Optional[List[Params]] = None):
-        super(PipelineModel, self).__init__()
+        super().__init__()
         self.stages = stages  # type: ignore[assignment]
 
     def _transform(self, dataset: Union[DataFrame, pd.DataFrame]) -> Union[DataFrame, pd.DataFrame]:

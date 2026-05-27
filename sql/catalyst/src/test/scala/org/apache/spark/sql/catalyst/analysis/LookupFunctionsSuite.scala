@@ -25,10 +25,9 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, 
 import org.apache.spark.sql.catalyst.expressions.{Alias, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.connector.catalog.{CatalogManager, FunctionCatalog, Identifier}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, DefaultCatalogManager, FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class LookupFunctionsSuite extends PlanTest {
@@ -46,7 +45,7 @@ class LookupFunctionsSuite extends PlanTest {
           CatalogDatabase("db1", "", new URI("loc2"), Map.empty),
           ignoreIfExists = false)
         val catalog = new SessionCatalog(externalCatalog, new SimpleFunctionRegistry)
-        val catalogManager = new CatalogManager(new CustomV2SessionCatalog(catalog), catalog)
+        val catalogManager = new DefaultCatalogManager(new CustomV2SessionCatalog(catalog), catalog)
         catalogManager.setCurrentNamespace(Array("db1"))
         try {
           val analyzer = new Analyzer(catalogManager)
@@ -76,7 +75,7 @@ class LookupFunctionsSuite extends PlanTest {
   test("SPARK-23486: the getFunction for the Persistent function check") {
     val externalCatalog = new CustomInMemoryCatalog
     val catalog = new SessionCatalog(externalCatalog, FunctionRegistry.builtin.clone())
-    val catalogManager = new CatalogManager(new CustomV2SessionCatalog(catalog), catalog)
+    val catalogManager = new DefaultCatalogManager(new CustomV2SessionCatalog(catalog), catalog)
     val analyzer = {
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
@@ -101,7 +100,7 @@ class LookupFunctionsSuite extends PlanTest {
     val externalCatalog = new InMemoryCatalog
     val customerFunctionReg = new CustomerFunctionRegistry
     val catalog = new SessionCatalog(externalCatalog, customerFunctionReg)
-    val catalogManager = new CatalogManager(new CustomV2SessionCatalog(catalog), catalog)
+    val catalogManager = new DefaultCatalogManager(new CustomV2SessionCatalog(catalog), catalog)
     val analyzer = {
       catalog.createDatabase(
         CatalogDatabase("default", "", new URI("loc"), Map.empty),
@@ -152,7 +151,7 @@ class CustomV2SessionCatalog(v1Catalog: SessionCatalog) extends FunctionCatalog 
   }
 
   override def loadFunction(ident: Identifier): UnboundFunction = {
-    V1Function(v1Catalog.lookupPersistentFunction(ident.asFunctionIdentifier))
+    v1Catalog.loadPersistentScalarFunction(ident.asFunctionIdentifier)
   }
   override def functionExists(ident: Identifier): Boolean = {
     v1Catalog.isPersistentFunction(ident.asFunctionIdentifier)

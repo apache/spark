@@ -25,6 +25,8 @@ import org.apache.parquet.bytes.ByteBufferInputStream;
 import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.types.GeographyType;
+import org.apache.spark.sql.types.GeometryType;
 
 /**
  * An implementation of the Parquet DELTA_LENGTH_BYTE_ARRAY decoder that supports the vectorized
@@ -63,6 +65,39 @@ public class VectorizedDeltaLengthByteArrayReader extends VectorizedReaderBase i
         throw new ParquetDecodingException("Failed to read " + length + " bytes");
       }
       outputWriter.write(c, rowId + i, buffer, length);
+    }
+    currentRow += total;
+  }
+
+  @Override
+  public void readGeometry(int total, WritableColumnVector c, int rowId) {
+    assert(c.dataType() instanceof GeometryType);
+    int srid = ((GeometryType) c.dataType()).srid();
+    readGeoData(total, c, rowId, srid, WKBToGeometryConverter.INSTANCE);
+  }
+
+  @Override
+  public void readGeography(int total, WritableColumnVector c, int rowId) {
+    assert(c.dataType() instanceof GeographyType);
+    int srid = ((GeographyType) c.dataType()).srid();
+    readGeoData(total, c, rowId, srid, WKBToGeographyConverter.INSTANCE);
+  }
+
+  private void readGeoData(int total, WritableColumnVector c, int rowId, int srid,
+     WKBConverterStrategy converter) {
+    ByteBufferOutputWriter outputWriter = ByteBufferOutputWriter::writeArrayByteBuffer;
+    int length;
+    for (int i = 0; i < total; i++) {
+      length = lengthsVector.getInt(currentRow + i);
+      byte[] physicalValue;
+      try {
+        // Converts WKB into a physical representation of geometry/geography.
+        physicalValue = converter.convert(in.readNBytes(length), srid);
+      } catch (IOException e) {
+        throw new ParquetDecodingException("Failed to read " + length + " bytes");
+      }
+
+      outputWriter.write(c, rowId + i, ByteBuffer.wrap(physicalValue), physicalValue.length);
     }
     currentRow += total;
   }

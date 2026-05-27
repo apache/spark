@@ -51,6 +51,16 @@ public interface Table {
   String name();
 
   /**
+   * An ID of the table that can be used to reliably check if two table objects refer to the same
+   * metastore entity. If a table is dropped and recreated again with the same name, the new table
+   * ID must be different. This method must return null if connectors don't support the notion of
+   * table ID.
+   */
+  default String id() {
+    return null;
+  }
+
+  /**
    * Returns the schema of this table. If the table is not readable and doesn't have a schema, an
    * empty schema can be returned here.
    * <p>
@@ -94,8 +104,10 @@ public interface Table {
   default Constraint[] constraints() { return new Constraint[0]; }
 
   /**
-   * Returns the current table version if implementation supports versioning.
-   * If the table is not versioned, null can be returned here.
+   * Returns the version of this table if versioning is supported, null otherwise.
+   * <p>
+   * This method must not trigger a refresh of the table metadata. It should return
+   * the version that corresponds to the current state of this table instance.
    */
-  default String currentVersion() { return null; }
+  default String version() { return null; }
 }

@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StateStoreWriter, WatermarkSupport}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorPartitioning, StatefulOperatorStateInfo, StatefulOperatorsUtils, StateStoreWriter, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
@@ -95,7 +95,7 @@ trait FlatMapGroupsWithStateExecBase
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
-  override def shortName: String = "flatMapGroupsWithState"
+  override def shortName: String = StatefulOperatorsUtils.FLAT_MAP_GROUPS_WITH_STATE_EXEC_OP_NAME
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
     timeoutConf match {

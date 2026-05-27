@@ -19,8 +19,8 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class DiffFramesSetItemFrameMixin:
@@ -51,8 +51,15 @@ class DiffFramesSetItemFrameMixin:
 
         another_psdf = ps.DataFrame(pdf_orig)
 
-        psdf.loc[["viper", "sidewinder"], ["shield"]] = -another_psdf.max_speed
-        pdf.loc[["viper", "sidewinder"], ["shield"]] = -pdf.max_speed
+        if LooseVersion(pd.__version__) < "3.0.0":
+            shield_sel = ["shield"]
+        else:
+            # pandas 3 CoW can raise a shape-mismatch error for `loc[..., ["shield"]] = Series`
+            # when Series views are already referenced. Use scalar column selection instead.
+            shield_sel = "shield"
+
+        psdf.loc[["viper", "sidewinder"], shield_sel] = -another_psdf.max_speed
+        pdf.loc[["viper", "sidewinder"], shield_sel] = -pdf.max_speed
         self.assert_eq(psdf, pdf)
         self.assert_eq(psser1, pser1)
         self.assert_eq(psser2, pser2)
@@ -63,8 +70,8 @@ class DiffFramesSetItemFrameMixin:
         pser2 = pdf.shield
         psser1 = psdf.max_speed
         psser2 = psdf.shield
-        psdf.loc[another_psdf.max_speed < 5, ["shield"]] = -psdf.max_speed
-        pdf.loc[pdf.max_speed < 5, ["shield"]] = -pdf.max_speed
+        psdf.loc[another_psdf.max_speed < 5, shield_sel] = -psdf.max_speed
+        pdf.loc[pdf.max_speed < 5, shield_sel] = -pdf.max_speed
         self.assert_eq(psdf, pdf)
         self.assert_eq(psser1, pser1)
         self.assert_eq(psser2, pser2)
@@ -75,8 +82,8 @@ class DiffFramesSetItemFrameMixin:
         pser2 = pdf.shield
         psser1 = psdf.max_speed
         psser2 = psdf.shield
-        psdf.loc[another_psdf.max_speed < 5, ["shield"]] = -another_psdf.max_speed
-        pdf.loc[pdf.max_speed < 5, ["shield"]] = -pdf.max_speed
+        psdf.loc[another_psdf.max_speed < 5, shield_sel] = -another_psdf.max_speed
+        pdf.loc[pdf.max_speed < 5, shield_sel] = -pdf.max_speed
         self.assert_eq(psdf, pdf)
         self.assert_eq(psser1, pser1)
         self.assert_eq(psser2, pser2)
@@ -108,18 +115,11 @@ class DiffFramesSetItemFrameMixin:
             psdf.iloc[[0], 1] = 10 * another_psdf.max_speed
 
 
-class DiffFramesSetItemFrameTests(DiffFramesSetItemFrameMixin, PandasOnSparkTestCase, SQLTestUtils):
+class DiffFramesSetItemFrameTests(DiffFramesSetItemFrameMixin, PandasOnSparkTestCase):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.diff_frames_ops.test_setitem_frame import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

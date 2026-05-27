@@ -68,7 +68,6 @@ def _from_id(bid: int) -> "Broadcast[Any]":
 
 
 class Broadcast(Generic[T]):
-
     """
     A broadcast variable created with :meth:`SparkContext.broadcast`.
     Access its value through :attr:`value`.
@@ -91,16 +90,13 @@ class Broadcast(Generic[T]):
         sc: "SparkContext",
         value: T,
         pickle_registry: "BroadcastPickleRegistry",
-    ):
-        ...
+    ): ...
 
     @overload  # On worker without decryption server
-    def __init__(self: "Broadcast[Any]", *, path: str):
-        ...
+    def __init__(self: "Broadcast[Any]", *, path: str): ...
 
     @overload  # On worker with decryption server
-    def __init__(self: "Broadcast[Any]", *, sock_file: str):
-        ...
+    def __init__(self: "Broadcast[Any]", *, sock_file: str): ...
 
     def __init__(  # type: ignore[misc]
         self,
@@ -126,7 +122,7 @@ class Broadcast(Generic[T]):
                 # with encryption, we ask the jvm to do the encryption for us, we send it data
                 # over a socket
                 conn_info, auth_secret = self._python_broadcast.setupEncryptionServer()
-                (encryption_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
+                encryption_sock_file, _ = local_connect_and_auth(conn_info, auth_secret)
                 broadcast_out = ChunkedStream(encryption_sock_file, 8192)
             else:
                 # no encryption, we can just write pickled data directly to the file from python
@@ -271,7 +267,7 @@ class Broadcast(Generic[T]):
             # if its on the driver, since executor decryption is handled already
             if self._sc is not None and self._sc._encryption_enabled:
                 conn_info, auth_secret = self._python_broadcast.setupDecryptionServer()
-                (decrypted_sock_file, _) = local_connect_and_auth(conn_info, auth_secret)
+                decrypted_sock_file, _ = local_connect_and_auth(conn_info, auth_secret)
                 self._python_broadcast.waitTillBroadcastDataSent()
                 return self.load(decrypted_sock_file)
             else:
@@ -372,7 +368,7 @@ def _test() -> None:
     spark = SparkSession.builder.master("local[4]").appName("broadcast tests").getOrCreate()
     globs["spark"] = spark
 
-    (failure_count, test_count) = doctest.testmod(pyspark.core.broadcast, globs=globs)
+    failure_count, test_count = doctest.testmod(pyspark.core.broadcast, globs=globs)
     spark.stop()
     if failure_count:
         sys.exit(-1)

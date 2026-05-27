@@ -385,3 +385,8 @@ SELECT width_bucket(INTERVAL '0' YEAR, INTERVAL '0' YEAR, INTERVAL '10' YEAR, 10
 SELECT width_bucket(INTERVAL '-1' YEAR, INTERVAL -'1-2' YEAR TO MONTH, INTERVAL '1-2' YEAR TO MONTH, 10);
 SELECT width_bucket(INTERVAL '0' DAY, INTERVAL '0' DAY, INTERVAL '10' DAY, 10);
 SELECT width_bucket(INTERVAL '-59' MINUTE, INTERVAL -'1 01' DAY TO HOUR, INTERVAL '1 2:3:4.001' DAY TO SECOND, 10);
+
+-- interval overflow with large day values (SPARK-50072)
+-- This should throw INTERVAL_ARITHMETIC_OVERFLOW error
+SELECT interval 106751991 day 4 hour 0 minute 54.776 second;
+

@@ -24,7 +24,7 @@ import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SPARK_DOC_ROOT, SparkIllegalArgumentException, SparkNoSuchElementException}
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.MIT
 import org.apache.spark.sql.classic.{SparkSession, SQLContext}
@@ -34,7 +34,7 @@ import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, TestSQLContext}
 import org.apache.spark.util.Utils
 
-class SQLConfSuite extends QueryTest with SharedSparkSession {
+class SQLConfSuite extends SharedSparkSession {
 
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
@@ -558,5 +558,43 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
         "confName" -> SQLConf.LEGACY_TIME_PARSER_POLICY.key,
         "confValue" -> "invalid",
         "confOptions" -> LegacyBehaviorPolicy.values.mkString(", ")))
+  }
+
+  test("[SPARK-54063] STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG requires " +
+    "STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG") {
+    // Default values should work fine - both default to true
+    assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === true)
+
+    // This should work fine - both enabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === true)
+    }
+
+    // This should work fine - both disabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "false",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "false") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === false)
+    }
+
+    // This should work fine - report enabled, force disabled
+    withSQLConf(
+      SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "true",
+      SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "false") {
+      assert(spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag === false)
+    }
+
+    // This should throw - force enabled but report disabled
+    val e = intercept[IllegalArgumentException] {
+      withSQLConf(
+        SQLConf.STATE_STORE_COORDINATOR_REPORT_SNAPSHOT_UPLOAD_LAG.key -> "false",
+        SQLConf.STATE_STORE_FORCE_SNAPSHOT_UPLOAD_ON_LAG.key -> "true") {
+        spark.sessionState.conf.stateStoreForceSnapshotUploadOnLag
+      }
+    }
+    assert(e.getMessage.contains("forceSnapshotUploadOnLag"))
+    assert(e.getMessage.contains("coordinatorReportSnapshotUploadLag"))
   }
 }

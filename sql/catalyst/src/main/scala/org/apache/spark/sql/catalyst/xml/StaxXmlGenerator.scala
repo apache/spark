@@ -28,7 +28,7 @@ import org.apache.hadoop.shaded.com.ctc.wstx.api.WstxOutputProperties
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, DateTimeUtils, MapData, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.VariantUtil
@@ -63,6 +63,11 @@ class StaxXmlGenerator(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
+
+  private val timeFormatter = options.timeFormatInWrite match {
+    case TimeFormatter.defaultPattern => TimeFormatter.getFractionFormatter()
+    case customPattern => TimeFormatter(customPattern, isParsing = false)
+  }
 
   private val binaryFormatter = ToStringBase.getBinaryFormatter
 
@@ -191,6 +196,7 @@ class StaxXmlGenerator(
       gen.writeCharacters(timestampNTZFormatter.format(DateTimeUtils.microsToLocalDateTime(v)))
     case (DateType, v: Int) =>
       gen.writeCharacters(dateFormatter.format(v))
+    case (_: TimeType, v: Long) => gen.writeCharacters(timeFormatter.format(v))
     case (IntegerType, v: Int) => gen.writeCharacters(v.toString)
     case (ShortType, v: Short) => gen.writeCharacters(v.toString)
     case (FloatType, v: Float) => gen.writeCharacters(v.toString)

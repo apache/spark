@@ -16,7 +16,6 @@
 #
 
 import functools
-import platform
 import pydoc
 import shutil
 import tempfile
@@ -59,7 +58,7 @@ from pyspark.testing.utils import assertDataFrameEqual, timeout
 from pyspark.util import is_remote_only
 
 
-class BaseUDFTestsMixin(object):
+class BaseUDFTestsMixin:
     def test_udf_with_callable(self):
         data = self.spark.createDataFrame([(i, i**2) for i in range(10)], ["number", "squared"])
 
@@ -102,7 +101,7 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(row[0], 4)
 
     def test_udf2(self):
-        with self.tempView("test"):
+        with self.temp_view("test"):
             self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
             self.spark.createDataFrame([("test",)], ["a"]).createOrReplaceTempView("test")
             [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
@@ -323,7 +322,7 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(row[0], "bar")
 
     def test_udf_with_array_type(self):
-        with self.tempView("test"), self.temp_func("copylist", "maplen"):
+        with self.temp_view("test"), self.temp_func("copylist", "maplen"):
             self.spark.createDataFrame(
                 [
                     ([0, 1, 2], {"key": [0, 1, 2, 3, 4]}),
@@ -561,7 +560,7 @@ class BaseUDFTestsMixin(object):
                 df.select(add_four("id").alias("plus_four")).collect(),
             )
 
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_register_java_function(self):
         with self.temp_func("javaStringLength", "javaStringLength2", "javaStringLength3"):
             self.spark.udf.registerJavaFunction(
@@ -582,7 +581,7 @@ class BaseUDFTestsMixin(object):
             [value] = self.spark.sql("SELECT javaStringLength3('test')").first()
             self.assertEqual(value, 4)
 
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_register_java_udaf(self):
         with self.temp_func("javaUDAF"):
             self.spark.udf.registerJavaUDAF("javaUDAF", "test.org.apache.spark.sql.MyDoubleAvg")
@@ -600,8 +599,12 @@ class BaseUDFTestsMixin(object):
 
             self.check_error(
                 exception=pe.exception,
-                errorClass="NOT_CALLABLE",
-                messageParameters={"arg_name": "func", "arg_type": "str"},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "expected_type": "callable",
+                    "arg_name": "func",
+                    "arg_type": "str",
+                },
             )
 
     def test_non_existed_udf(self):
@@ -831,7 +834,7 @@ class BaseUDFTestsMixin(object):
         self.assertEqual(rows, [Row(_1=1, _2=2, a="const_str")])
 
     # SPARK-24721
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)
     def test_datasource_with_udf(self):
         from pyspark.sql.functions import lit, col
 
@@ -922,7 +925,7 @@ class BaseUDFTestsMixin(object):
     # SPARK-26293
     def test_udf_in_subquery(self):
         f = udf(lambda x: x, "long")
-        with self.tempView("v"):
+        with self.temp_view("v"):
             self.spark.range(1).filter(f("id") >= 0).createTempView("v")
             result = self.spark.sql(
                 "select i from values(0L) as data(i) where i in (select id from v)"
@@ -1229,9 +1232,6 @@ class BaseUDFTestsMixin(object):
         with self.assertRaisesRegex(PythonException, "StopIteration"):
             self.spark.range(10).select(test_udf(col("id"))).show()
 
-    @unittest.skipIf(
-        "pypy" in platform.python_implementation().lower(), "cannot run in environment pypy"
-    )
     def test_python_udf_segfault(self):
         with self.sql_conf({"spark.sql.execution.pyspark.udf.faulthandler.enabled": True}):
             with self.assertRaisesRegex(Exception, "Segmentation fault"):
@@ -1268,8 +1268,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_CALLABLE",
-            messageParameters={"arg_name": "func", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "callable", "arg_name": "func", "arg_type": "str"},
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1277,8 +1277,12 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_DATATYPE_OR_STR",
-            messageParameters={"arg_name": "returnType", "arg_type": "int"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "DataType or str",
+                "arg_name": "returnType",
+                "arg_type": "int",
+            },
         )
 
         with self.assertRaises(PySparkTypeError) as pe:
@@ -1286,8 +1290,8 @@ class BaseUDFTestsMixin(object):
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_INT",
-            messageParameters={"arg_name": "evalType", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={"expected_type": "int", "arg_name": "evalType", "arg_type": "str"},
         )
 
     def test_timeout_util_with_udf(self):
@@ -1433,12 +1437,12 @@ class BaseUDFTestsMixin(object):
             self.assertEqual(result_type, StringType("fr"))
 
     def test_udf_with_char_varchar_return_type(self):
-        (char_type, char_value) = ("char(10)", "a")
-        (varchar_type, varchar_value) = ("varchar(8)", "a")
-        (array_with_char_type, array_with_char_type_value) = ("array<char(5)>", ["a", "b"])
-        (array_with_varchar_type, array_with_varchar_value) = ("array<varchar(12)>", ["a", "b"])
-        (map_type, map_value) = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
-        (struct_type, struct_value) = (
+        char_type, char_value = ("char(10)", "a")
+        varchar_type, varchar_value = ("varchar(8)", "a")
+        array_with_char_type, array_with_char_type_value = ("array<char(5)>", ["a", "b"])
+        array_with_varchar_type, array_with_varchar_value = ("array<varchar(12)>", ["a", "b"])
+        map_type, map_value = (f"map<{char_type}, {varchar_type}>", {"a": "b"})
+        struct_type, struct_value = (
             f"struct<f1: {char_type}, f2: {varchar_type}>",
             {"f1": "a", "f2": "b"},
         )
@@ -1573,50 +1577,66 @@ class BaseUDFTestsMixin(object):
                 logger.exception("exception")
             return "x"
 
+        # The TVF is not available when the feature is disabled.
+        with self.assertRaises(AnalysisException) as pe:
+            self.spark.tvf.python_worker_logs().count()
+
+        self.check_error(
+            exception=pe.exception,
+            errorClass="FEATURE_NOT_ENABLED",
+            messageParameters={
+                "featureName": "Python Worker Logging",
+                "configKey": "spark.sql.pyspark.worker.logging.enabled",
+                "configValue": "true",
+            },
+        )
+
         # Logging is disabled by default
         assertDataFrameEqual(
             self.spark.range(1).select(my_udf().alias("result")), [Row(result="x")]
         )
-        self.assertEqual(self.spark.table("system.session.python_worker_logs").count(), 0)
 
         with self.sql_conf({"spark.sql.pyspark.worker.logging.enabled": "true"}):
+            # The logs were not collected when the feature was disabled.
+            self.assertEqual(self.spark.tvf.python_worker_logs().count(), 0)
+
             assertDataFrameEqual(
                 self.spark.range(1).select(my_udf().alias("result")), [Row(result="x")]
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="INFO",
-                    msg="print to stdout ❤",
-                    context={"func_name": my_udf.__name__},
-                    logger="stdout",
-                ),
-                Row(
-                    level="ERROR",
-                    msg="print to stderr 😀",
-                    context={"func_name": my_udf.__name__},
-                    logger="stderr",
-                ),
-                Row(
-                    level="WARNING",
-                    msg="custom context",
-                    context={"func_name": my_udf.__name__, "abc": "123"},
-                    logger="test",
-                ),
-                Row(
-                    level="ERROR",
-                    msg="exception",
-                    context={"func_name": my_udf.__name__},
-                    logger="test",
-                ),
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="INFO",
+                        msg="print to stdout ❤",
+                        context={"func_name": my_udf.__name__},
+                        logger="stdout",
+                    ),
+                    Row(
+                        level="ERROR",
+                        msg="print to stderr 😀",
+                        context={"func_name": my_udf.__name__},
+                        logger="stderr",
+                    ),
+                    Row(
+                        level="WARNING",
+                        msg="custom context",
+                        context={"func_name": my_udf.__name__, "abc": "123"},
+                        logger="test",
+                    ),
+                    Row(
+                        level="ERROR",
+                        msg="exception",
+                        context={"func_name": my_udf.__name__},
+                        logger="test",
+                    ),
+                ],
+            )
 
-        self.assertEqual(logs.where("exception is not null").select("exception").count(), 1)
+            self.assertEqual(logs.where("exception is not null").select("exception").count(), 1)
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_multiple_udfs_with_logging(self):
@@ -1638,25 +1658,25 @@ class BaseUDFTestsMixin(object):
                 [Row(result="x", result2="y")],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg="test1",
-                    context={"func_name": my_udf1.__name__},
-                    logger="test1",
-                ),
-                Row(
-                    level="WARNING",
-                    msg="test2",
-                    context={"func_name": my_udf2.__name__},
-                    logger="test2",
-                ),
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg="test1",
+                        context={"func_name": my_udf1.__name__},
+                        logger="test1",
+                    ),
+                    Row(
+                        level="WARNING",
+                        msg="test2",
+                        context={"func_name": my_udf2.__name__},
+                        logger="test2",
+                    ),
+                ],
+            )
 
     @unittest.skipIf(is_remote_only(), "Requires JVM access")
     def test_udf_with_pyspark_logger(self):
@@ -1672,20 +1692,20 @@ class BaseUDFTestsMixin(object):
                 [Row(result=str(i)) for i in range(2)],
             )
 
-        logs = self.spark.table("system.session.python_worker_logs")
+            logs = self.spark.tvf.python_worker_logs()
 
-        assertDataFrameEqual(
-            logs.select("level", "msg", "context", "logger"),
-            [
-                Row(
-                    level="WARNING",
-                    msg="PySparkLogger test",
-                    context={"func_name": my_udf.__name__, "x": str(i)},
-                    logger="PySparkLogger",
-                )
-                for i in range(2)
-            ],
-        )
+            assertDataFrameEqual(
+                logs.select("level", "msg", "context", "logger"),
+                [
+                    Row(
+                        level="WARNING",
+                        msg="PySparkLogger test",
+                        context={"func_name": my_udf.__name__, "x": str(i)},
+                        logger="PySparkLogger",
+                    )
+                    for i in range(2)
+                ],
+            )
 
 
 class UDFTests(BaseUDFTestsMixin, ReusedSQLTestCase):
@@ -1763,12 +1783,6 @@ class UDFInitializationTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_udf import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -18,6 +18,7 @@
 package org.apache.spark.memory;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.spark.errors.SparkCoreErrors;
 import org.apache.spark.unsafe.array.LongArray;
@@ -33,7 +34,7 @@ public abstract class MemoryConsumer {
   protected final TaskMemoryManager taskMemoryManager;
   private final long pageSize;
   private final MemoryMode mode;
-  protected long used;
+  protected final AtomicLong used = new AtomicLong(0L);
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize, MemoryMode mode) {
     this.taskMemoryManager = taskMemoryManager;
@@ -56,7 +57,7 @@ public abstract class MemoryConsumer {
    * Returns the size of used memory in bytes.
    */
   public long getUsed() {
-    return used;
+    return used.get();
   }
 
   /**
@@ -97,7 +98,7 @@ public abstract class MemoryConsumer {
     if (page == null || page.size() < required) {
       throwOom(page, required);
     }
-    used += required;
+    used.getAndAdd(required);
     return new LongArray(page);
   }
 
@@ -118,7 +119,7 @@ public abstract class MemoryConsumer {
     if (page == null || page.size() < required) {
       throwOom(page, required);
     }
-    used += page.size();
+    used.getAndAdd(page.size());
     return page;
   }
 
@@ -126,7 +127,7 @@ public abstract class MemoryConsumer {
    * Free a memory block.
    */
   protected void freePage(MemoryBlock page) {
-    used -= page.size();
+    used.getAndAdd(-page.size());
     taskMemoryManager.freePage(page, this);
   }
 
@@ -135,7 +136,7 @@ public abstract class MemoryConsumer {
    */
   public long acquireMemory(long size) {
     long granted = taskMemoryManager.acquireExecutionMemory(size, this);
-    used += granted;
+    used.getAndAdd(granted);
     return granted;
   }
 
@@ -144,7 +145,7 @@ public abstract class MemoryConsumer {
    */
   public void freeMemory(long size) {
     taskMemoryManager.releaseExecutionMemory(size, this);
-    used -= size;
+    used.getAndAdd(-size);
   }
 
   private void throwOom(final MemoryBlock page, final long required) {

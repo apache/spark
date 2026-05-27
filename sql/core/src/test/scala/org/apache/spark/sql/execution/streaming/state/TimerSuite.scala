@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.TransformWithStateVariableUtils
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.statefulprocessor.ImplicitGroupingKeyTracker
 import org.apache.spark.sql.execution.streaming.operators.stateful.transformwithstate.timers.TimerStateImpl
 import org.apache.spark.sql.streaming.TimeMode
@@ -168,6 +169,70 @@ class TimerSuite extends StateVariableSuiteBase {
     }
   }
 
+  // Guards against the UnsafeRow byte-order bug where a scan boundary row with a
+  // null grouping-key struct encodes larger than a real entry (null-bitmap bit = 1),
+  // making seek() silently skip boundary entries.
+  testWithTimeMode("SPARK-56400: getExpiredTimers with prevExpiryTimestampMs - " +
+    "boundary at prev+1 must be included") { timeMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+
+      ImplicitGroupingKeyTracker.setImplicitKey("test_key")
+      val timerState = new TimerStateImpl(store, timeMode, stringEncoder)
+
+      timerState.registerTimer(1001L)
+      timerState.registerTimer(1500L)
+      timerState.registerTimer(2000L)
+
+      assert(
+        timerState
+          .getExpiredTimers(expiryTimestampMs = 2000L, prevExpiryTimestampMs = Some(1000L))
+          .toSeq === Seq(("test_key", 1001L), ("test_key", 1500L), ("test_key", 2000L)),
+        "timer at exactly prevExpiryTimestampMs + 1 must be returned")
+
+      assert(
+        timerState
+          .getExpiredTimers(expiryTimestampMs = 2000L, prevExpiryTimestampMs = Some(1001L))
+          .toSeq === Seq(("test_key", 1500L), ("test_key", 2000L)),
+        "timer at prevExpiryTimestampMs must be excluded")
+
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+    }
+  }
+
+  // Same bug as above, but across multiple grouping keys of varying length so the
+  // remaining-key portion of the encoded scan boundary differs from stored entries.
+  testWithTimeMode("SPARK-56400: getExpiredTimers with prevExpiryTimestampMs - " +
+    "boundary at prev+1 with multiple grouping keys") { timeMode =>
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+
+      Seq("key_a", "key_bb", "key_ccc").foreach { k =>
+        ImplicitGroupingKeyTracker.setImplicitKey(k)
+        val ts = new TimerStateImpl(store, timeMode, stringEncoder)
+        ts.registerTimer(1001L)
+        ts.registerTimer(1500L)
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+      }
+
+      ImplicitGroupingKeyTracker.setImplicitKey("key_a")
+      val timerState = new TimerStateImpl(store, timeMode, stringEncoder)
+
+      val expired = timerState
+        .getExpiredTimers(expiryTimestampMs = 2000L, prevExpiryTimestampMs = Some(1000L))
+        .toSeq
+        .sortBy { case (k, t) => (t, k.asInstanceOf[String]) }
+
+      assert(
+        expired === Seq(
+          ("key_a", 1001L), ("key_bb", 1001L), ("key_ccc", 1001L),
+          ("key_a", 1500L), ("key_bb", 1500L), ("key_ccc", 1500L)),
+        "all timers at prev+1 must be returned regardless of grouping key encoding")
+
+      ImplicitGroupingKeyTracker.removeImplicitKey()
+    }
+  }
+
   testWithTimeMode("Timer state operations with non-primitive type") { timeMode =>
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)
@@ -185,6 +250,26 @@ class TimerSuite extends StateVariableSuiteBase {
       timerState.deleteTimer(20000L)
       assert(timerState.listTimers().toSet === Set(1000L))
     }
+  }
+
+  testWithTimeMode("Partition key extraction - TimerState") { timeMode =>
+    testPartitionKeyExtraction(
+      addStateFunc = { (_, _, store) =>
+        ImplicitGroupingKeyTracker.setImplicitKey("key1")
+        val timerState1 = new TimerStateImpl(store, timeMode, stringEncoder)
+        timerState1.registerTimer(1000L)
+        timerState1.registerTimer(2000L)
+
+        ImplicitGroupingKeyTracker.setImplicitKey("key2")
+        val timerState2 = new TimerStateImpl(store, timeMode, stringEncoder)
+        timerState2.registerTimer(1500L)
+      },
+      stateVariableInfo = TransformWithStateVariableUtils.getTimerState("testState"),
+      ttlEnabled = false,
+      expectedNumColFamilies = 2,
+      groupingKeyToExpectedCount = Map("key1" -> 2, "key2" -> 1),
+      timeMode = timeMode
+    )
   }
 }
 

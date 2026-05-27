@@ -20,7 +20,7 @@ import java.io.CharArrayWriter
 import java.time.ZoneOffset
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.xml.{StaxXmlGenerator, StaxXmlParser, XmlOptions}
 import org.apache.spark.sql.functions.{col, variant_get}
 import org.apache.spark.sql.internal.SQLConf
@@ -29,12 +29,12 @@ import org.apache.spark.sql.types.VariantType
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.unsafe.types.VariantVal
 
-class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData {
+class XmlVariantSuite extends SharedSparkSession with TestXmlData {
 
   protected val legacyParserEnabled: Boolean = false
 
   override protected def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.xml.legacyXMLParser.enabled", legacyParserEnabled.toString)
+    .set(SQLConf.LEGACY_XML_PARSER_ENABLED, legacyParserEnabled)
 
   private val baseOptions = Map("rowTag" -> "ROW", "valueTag" -> "_VALUE", "attributePrefix" -> "_")
 
@@ -80,6 +80,13 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       xml = "<ROW><amount>1e40</amount></ROW>",
       expectedJsonStr = """{"amount":"1e40"}"""
     )
+    // Extreme negative scale: parsed as String to avoid hanging on setScale(0).
+    // "1e-99999" parses to a BigDecimal with scale=99999, which is fine (positive scale).
+    // "1e99999" parses to a BigDecimal with scale=-99999, triggering the guard.
+    testParser(
+      xml = "<ROW><amount>1e99999</amount></ROW>",
+      expectedJsonStr = """{"amount":"1e99999"}"""
+    )
 
     // Date -> String
     testParser(
@@ -105,6 +112,68 @@ class XmlVariantSuite extends QueryTest with SharedSparkSession with TestXmlData
       xml = "<ROW><note>  hello world  </note></ROW>",
       expectedJsonStr = """{"note":"hello world"}"""
     )
+  }
+
+  test("Parser: skip type inference for variant leaves when inferSchema is disabled") {
+    val noInfer = Map("inferSchema" -> "false")
+
+    withSQLConf(SQLConf.XML_VARIANT_RESPECT_INFER_SCHEMA.key -> "true") {
+      // Boolean-looking values are kept as strings
+      testParser("<ROW><isActive>true</isActive></ROW>", """{"isActive":"true"}""", noInfer)
+      testParser("<ROW><isActive>false</isActive></ROW>", """{"isActive":"false"}""", noInfer)
+
+      // Integer-looking values are kept as strings
+      testParser("<ROW><id>2</id></ROW>", """{"id":"2"}""", noInfer)
+      testParser("<ROW><id>-2</id></ROW>", """{"id":"-2"}""", noInfer)
+
+      // Decimal-looking values are kept as strings (trailing zeros preserved)
+      testParser("<ROW><amount>5.0</amount></ROW>", """{"amount":"5.0"}""", noInfer)
+      testParser(
+        "<ROW><price>158,058,049.001</price></ROW>",
+        """{"price":"158,058,049.001"}""",
+        noInfer)
+
+      // Integers with leading zeros must not be normalized away (e.g., product codes
+      // like "0501" or "007" are used as lookup keys downstream).
+      testParser("<ROW><code>0501</code></ROW>", """{"code":"0501"}""", noInfer)
+      testParser("<ROW><id>007</id></ROW>", """{"id":"007"}""", noInfer)
+
+      // German-locale decimals use ',' as the decimal separator. With inference on,
+      // "37,77" would be read as "3777" (comma as thousands separator). With
+      // inferSchema=false, the raw text must be preserved.
+      testParser("<ROW><price>37,77</price></ROW>", """{"price":"37,77"}""", noInfer)
+
+      // Plain strings remain strings
+      testParser("<ROW><name>Sam</name></ROW>", """{"name":"Sam"}""", noInfer)
+
+      // Attribute values are also kept as strings
+      testParser("<ROW id=\"2\" name=\"Sam\"></ROW>", """{"_id":"2","_name":"Sam"}""", noInfer)
+
+      // Value tags at mixed-content elements are kept as strings
+      testParser(
+        "<ROW id=\"2\">93<amount>7</amount></ROW>",
+        """{"_VALUE":"93","_id":"2","amount":"7"}""",
+        noInfer)
+
+      // Null / nullValue handling is still honored (not type inference)
+      testParser("<ROW><name></name><id>2</id></ROW>", """{"id":"2","name":null}""", noInfer)
+      testParser(
+        "<ROW><name>Sam</name><amount>n/a</amount></ROW>",
+        """{"amount":null,"name":"Sam"}""",
+        noInfer ++ Map("nullValue" -> "n/a"))
+    }
+  }
+
+  test("Parser: respectInferSchema kill switch restores pre-SPARK-56554 behavior") {
+    // With the kill switch set to false, inferSchema=false has no effect on the Variant
+    // parser -- primitive leaves are still type-inferred. This lets users opt out of the
+    // SPARK-56554 fix if it breaks an existing workload.
+    val noInfer = Map("inferSchema" -> "false")
+    withSQLConf(SQLConf.XML_VARIANT_RESPECT_INFER_SCHEMA.key -> "false") {
+      testParser("<ROW><id>007</id></ROW>", """{"id":7}""", noInfer)
+      testParser("<ROW><price>37,77</price></ROW>", """{"price":3777}""", noInfer)
+      testParser("<ROW><isActive>true</isActive></ROW>", """{"isActive":true}""", noInfer)
+    }
   }
 
   test("Parser: parse XML attributes as variants") {

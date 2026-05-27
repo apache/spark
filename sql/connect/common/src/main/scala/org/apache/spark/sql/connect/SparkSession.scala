@@ -45,19 +45,19 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CONFIG, PATH}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql
-import org.apache.spark.sql.{Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
+import org.apache.spark.sql.{AnalysisException, Column, Encoder, ExperimentalMethods, Observation, Row, SparkSessionBuilder, SparkSessionCompanion, SparkSessionExtensions}
 import org.apache.spark.sql.catalyst.{JavaTypeInference, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{agnosticEncoderFor, BoxedLongEncoder, UnboundRowEncoder}
 import org.apache.spark.sql.connect.ColumnNodeToProtoConverter.toLiteral
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.connect.client.{ClassFinder, CloseableIterator, SparkConnectClient, SparkResult}
+import org.apache.spark.sql.connect.client.{ClassFinder, SparkConnectClient, SparkResult}
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
 import org.apache.spark.sql.internal.{SessionState, SharedState, SqlApiConf, SubqueryExpression}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.util.{CloseableIterator, ExecutionListenerManager}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -84,6 +84,8 @@ class SparkSession private[sql] (
     extends sql.SparkSession
     with Logging {
 
+  private val releaseLock = new Object
+  private var released = false
   private[this] val allocator = new RootAllocator()
   private[sql] lazy val cleaner = new SessionCleaner(this)
 
@@ -117,11 +119,24 @@ class SparkSession private[sql] (
   private def createDataset[T](encoder: AgnosticEncoder[T], data: Iterator[T]): Dataset[T] = {
     newDataset(encoder) { builder =>
       if (data.nonEmpty) {
-        val threshold = conf.get(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
-        val maxChunkSizeRows = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
-        val maxChunkSizeBytes = conf.get(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toInt
+        val confs = conf.getConfigMap(
+          SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY,
+          SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY,
+          SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY,
+          SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY,
+          SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES,
+          SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY,
+          "spark.sql.session.localRelationSizeLimit")
+
+        val threshold = confs(SqlApiConf.LOCAL_RELATION_CACHE_THRESHOLD_KEY).toInt
+        val maxChunkSizeRows = confs(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_ROWS_KEY).toInt
+        val maxChunkSizeBytes = confs(SqlApiConf.LOCAL_RELATION_CHUNK_SIZE_BYTES_KEY).toLong
         val maxBatchOfChunksSize =
-          conf.get(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
+          confs(SqlApiConf.LOCAL_RELATION_BATCH_OF_CHUNKS_SIZE_BYTES_KEY).toLong
+        val localRelationSizeLimit = confs("spark.sql.session.localRelationSizeLimit").toLong
+        val largeVarTypes =
+          confs(SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES).toLowerCase(Locale.ROOT).toBoolean
+        val timeZoneId = confs(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
 
         // Serialize with chunking support
         val it = ArrowSerializer.serialize(
@@ -149,6 +164,14 @@ class SparkSession private[sql] (
             val chunkSize = chunk.length
             totalChunks += 1
             totalSize += chunkSize
+
+            if (totalSize > localRelationSizeLimit) {
+              throw new AnalysisException(
+                errorClass = "LOCAL_RELATION_SIZE_LIMIT_EXCEEDED",
+                messageParameters = Map(
+                  "actualSize" -> totalSize.toString,
+                  "sizeLimit" -> localRelationSizeLimit.toString))
+            }
 
             // Check if adding this chunk would exceed batch size
             if (currentBatchSize + chunkSize > maxBatchOfChunksSize) {
@@ -537,8 +560,6 @@ class SparkSession private[sql] (
   }
 
   private[sql] def timeZoneId: String = conf.get(SqlApiConf.SESSION_LOCAL_TIMEZONE_KEY)
-  private[sql] def largeVarTypes: Boolean =
-    conf.get(SqlApiConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES).toLowerCase(Locale.ROOT).toBoolean
 
   private[sql] def execute[T](plan: proto.Plan, encoder: AgnosticEncoder[T]): SparkResult[T] = {
     val value = executeInternal(plan)
@@ -677,19 +698,26 @@ class SparkSession private[sql] (
    * @since 3.4.0
    */
   override def close(): Unit = {
-    if (releaseSessionOnClose) {
+    releaseLock.synchronized {
+      if (releaseSessionOnClose && !released && !client.channel.isShutdown) {
+        try {
+          client.releaseSession()
+          released = true
+        } catch {
+          case e: Exception => logWarning("session.stop: Failed to release session", e)
+        }
+      }
       try {
-        client.releaseSession()
+        client.shutdown()
       } catch {
-        case e: Exception => logWarning("session.stop: Failed to release session", e)
+        case e: Exception => logWarning("session.stop: Failed to shutdown the client", e)
+      }
+      try {
+        allocator.close()
+      } catch {
+        case e: Exception => logWarning("session.stop: Failed to close the allocator", e)
       }
     }
-    try {
-      client.shutdown()
-    } catch {
-      case e: Exception => logWarning("session.stop: Failed to shutdown the client", e)
-    }
-    allocator.close()
     SparkSession.onSessionClose(this)
     SparkSession.server.synchronized {
       if (SparkSession.server.isDefined) {
@@ -733,12 +761,13 @@ class SparkSession private[sql] (
   }
 
   private def processRegisteredObservedMetrics(metrics: java.util.List[ObservedMetrics]): Unit = {
-    metrics.asScala.map { metric =>
+    metrics.asScala.foreach { metric =>
       // Here we only process metrics that belong to a registered Observation object.
       // All metrics, whether registered or not, will be collected by `SparkResult`.
       val observationOrNull = observationRegistry.remove(metric.getPlanId)
       if (observationOrNull != null) {
-        observationOrNull.setMetricsAndNotify(SparkResult.transformObservedMetrics(metric))
+        val metricsResult = SparkResult.transformObservedMetrics(metric)
+        observationOrNull.setMetricsAndNotify(metricsResult)
       }
     }
   }

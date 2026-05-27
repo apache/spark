@@ -24,8 +24,8 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred.TextInputFormat
-import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
@@ -37,7 +37,7 @@ import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType,
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
-    extends HiveVersionSuite(version) with BeforeAndAfterAll with SQLHelper {
+    extends HiveVersionSuite(version) with SQLHelper {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -142,11 +142,14 @@ class HivePartitionFilteringSuite(version: String)
 
   test(s"getPartitionsByFilter should fail when $fallbackKey=false") {
     withSQLConf(fallbackKey -> "false") {
-      val e = intercept[RuntimeException](
-        clientWithoutDirectSql.getPartitionsByFilter(
-          clientWithoutDirectSql.getRawHiveTable("default", "test"),
-          Seq(attr("ds") === 20170101)))
-      assert(e.getMessage.contains("Caught Hive MetaException"))
+      checkError(
+        exception = intercept[SparkRuntimeException](
+          clientWithoutDirectSql.getPartitionsByFilter(
+            clientWithoutDirectSql.getRawHiveTable("default", "test"),
+            Seq(attr("ds") === 20170101))),
+        condition = "INTERNAL_ERROR_HIVE_METASTORE_PARTITION_FILTER",
+        parameters = Map("hiveMetastorePartitionPruningFallbackOnException" ->
+          SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key))
     }
   }
 

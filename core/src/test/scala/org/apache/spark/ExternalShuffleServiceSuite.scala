@@ -26,7 +26,6 @@ import scala.collection
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
@@ -46,7 +45,7 @@ import org.apache.spark.util.io.ChunkedByteBuffer
  * set up in `ExternalBlockHandler`, such as changing the format of shuffle files or how
  * we hash files into folders.
  */
-class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll with Eventually {
+class ExternalShuffleServiceSuite extends ShuffleSuite with Eventually {
   var server: TransportServer = _
   var transportContext: TransportContext = _
   var rpcHandler: ExternalBlockHandler = _
@@ -111,7 +110,7 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll wi
     val e = intercept[SparkException] {
       rdd.count()
     }
-    e.getMessage should include ("Fetch failure will not retry stage due to testing config")
+    e.getMessage should include ("will not retry due to testing config.")
   }
 
   test("SPARK-25888: using external shuffle service fetching disk persisted blocks") {

@@ -21,21 +21,24 @@ import java.util.Locale
 
 import scala.collection.mutable
 
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAMES, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
-import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, Cast, Expression, ExpressionSet, ExprId, IntegerLiteral, Literal, NamedExpression, PredicateHelper, ProjectionOverSchema, SortOrder, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, V1Scan}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation}
+import org.apache.spark.sql.internal.connector.VariantExtractionImpl
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -49,9 +52,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       pushDownFilters,
       pushDownJoin,
       pushDownAggregates,
+      pushDownVariants,
       pushDownLimitAndOffset,
       buildScanWithPushedAggregate,
       buildScanWithPushedJoin,
+      buildScanWithPushedVariants,
       pruneColumns)
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
@@ -76,8 +81,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `pushedFilters` will be pushed down and evaluated in the underlying data sources.
       // `postScanFilters` need to be evaluated after the scan.
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
+      val partitionPredicateFields = PushDownUtils.getPartitionPredicateSchema(sHolder.relation)
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
-        sHolder.builder, normalizedFiltersWithoutSubquery)
+        sHolder.builder, normalizedFiltersWithoutSubquery, partitionPredicateFields)
       val pushedFiltersStr = if (pushedFilters.isLeft) {
         pushedFilters.swap
           .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
@@ -89,6 +95,14 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+
+      // Compute the pushed filter expressions: the normalized filters that were fully pushed
+      // down (i.e., not in postScanFilters). These are stored on the scan relation for
+      // potential future use in constraint propagation.
+      val postScanFilterSet = ExpressionSet(postScanFiltersWithoutSubquery)
+      sHolder.pushedFilterExpressions = normalizedFiltersWithoutSubquery
+        .filterNot(postScanFilterSet.contains)
+        .filter(_.deterministic)
 
       logInfo(
         log"""
@@ -137,6 +151,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
         // Cross joins are not supported because they increase the amount of data.
         condition.isDefined &&
+        // Do not push down join if either side has a pushed sample with
+        // fraction < 1, because the merged scan builder would silently
+        // discard it and change the result. At fraction = 1 without
+        // replacement the sample is a no-op on the result set, so dropping
+        // it is safe. With replacement (Poisson sampling), even fraction 1
+        // can emit each row 0, 1, 2, ... times, so it is not a no-op.
+        // TODO(SPARK-56504): Extend SupportsPushDownJoin to accept pushed
+        //   samples so sources supporting both can handle the composition.
+        leftHolder.pushedSample.forall(s =>
+          !s.withReplacement && s.upperBound - s.lowerBound >= 1.0) &&
+        rightHolder.pushedSample.forall(s =>
+          !s.withReplacement && s.upperBound - s.lowerBound >= 1.0) &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       // Process left and right columns in original order
       val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
@@ -316,6 +342,139 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case agg: Aggregate => rewriteAggregate(agg)
+  }
+
+  def pushDownVariants(plan: LogicalPlan): LogicalPlan = plan.transformDown {
+    case p@PhysicalOperation(projectList, filters, sHolder @ ScanBuilderHolder(_, _,
+        builder: SupportsPushDownVariantExtractions))
+        if conf.getConf(org.apache.spark.sql.internal.SQLConf.PUSH_VARIANT_INTO_SCAN) =>
+      pushVariantExtractions(p, projectList, filters, sHolder, builder)
+  }
+
+  /**
+   * Converts an ordinal path to a field name path.
+   *
+   * @param structType The top-level struct type
+   * @param ordinals The ordinal path (e.g., [1, 1] for nested.field)
+   * @return The field name path (e.g., ["nested", "field"])
+   */
+  private def getColumnName(structType: StructType, ordinals: Seq[Int]): Seq[String] = {
+    ordinals match {
+      case Seq() =>
+        // Base case: no more ordinals
+        Seq.empty
+      case ordinal +: rest =>
+        // Get the field at this ordinal
+        val field = structType.fields(ordinal)
+        if (rest.isEmpty) {
+          // Last ordinal in the path
+          Seq(field.name)
+        } else {
+          // Recurse into nested struct
+          field.dataType match {
+            case nestedStruct: StructType =>
+              field.name +: getColumnName(nestedStruct, rest)
+            case _ =>
+              throw SparkException.internalError(
+                s"Expected StructType at field '${field.name}' but got ${field.dataType}")
+          }
+        }
+    }
+  }
+
+  private def pushVariantExtractions(
+      originalPlan: LogicalPlan,
+      projectList: Seq[NamedExpression],
+      filters: Seq[Expression],
+      sHolder: ScanBuilderHolder,
+      builder: SupportsPushDownVariantExtractions): LogicalPlan = {
+    val variants = new VariantInRelation
+
+    // Extract schema attributes from scan builder holder
+    val schemaAttributes = sHolder.output
+
+    // Construct schema for default value resolution
+    val structSchema = StructType(schemaAttributes.map(a =>
+      StructField(a.name, a.dataType, a.nullable, a.metadata)))
+
+    val defaultValues = org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.
+      existenceDefaultValues(structSchema)
+
+    // Add variant fields from the V2 scan schema
+    for ((a, defaultValue) <- schemaAttributes.zip(defaultValues)) {
+      variants.addVariantFields(a.exprId, a.dataType, defaultValue, Nil)
+    }
+    if (variants.mapping.isEmpty) return originalPlan
+
+    // Collect requested fields from project list and filters
+    projectList.foreach(variants.collectRequestedFields)
+    filters.foreach(variants.collectRequestedFields)
+
+    // If no variant columns remain after collection, return original plan
+    if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
+
+    // Build individual VariantExtraction for each field access
+    // Track which extraction corresponds to which (attr, field, ordinal)
+    val extractionInfo = schemaAttributes.flatMap { topAttr =>
+      val variantFields = variants.mapping.get(topAttr.exprId)
+      if (variantFields.isEmpty || variantFields.get.isEmpty) {
+        // No variant fields for this attribute
+        Seq.empty
+      } else {
+        variantFields.get.toSeq.flatMap { case (pathToVariant, fields) =>
+          val columnName = if (pathToVariant.isEmpty) {
+            Seq(topAttr.name)
+          } else {
+            Seq(topAttr.name) ++
+              getColumnName(topAttr.dataType.asInstanceOf[StructType], pathToVariant)
+          }
+          fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
+            val extraction = new VariantExtractionImpl(
+              columnName.toArray,
+              field.path.toMetadata,
+              field.targetType
+            )
+            (extraction, topAttr, field, ordinal)
+          }
+        }
+      }
+    }
+
+    // Call the API to push down variant extractions
+    if (extractionInfo.isEmpty) return originalPlan
+
+    val extractions: Array[VariantExtraction] = extractionInfo.map(_._1).toArray
+    val pushedResults = builder.pushVariantExtractions(extractions)
+
+    // Filter to only the accepted extractions
+    val acceptedExtractions = extractionInfo.zip(pushedResults).filter(_._2).map(_._1)
+    if (acceptedExtractions.isEmpty) return originalPlan
+
+    // Group accepted extractions by attribute to rebuild the struct schemas
+    val extractionsByAttr = acceptedExtractions.groupBy(_._2)
+    val pushedColumnNames = extractionsByAttr.keys.map(_.name).toSet
+
+    // Build new attribute mapping based on pushed variant extractions
+    val attributeMap = schemaAttributes.map { a =>
+      if (pushedColumnNames.contains(a.name) && variants.mapping.get(a.exprId).exists(_.nonEmpty)) {
+        val newType = variants.rewriteType(a.exprId, a.dataType, Nil)
+        val newAttr = AttributeReference(a.name, newType, a.nullable, a.metadata)(
+          qualifier = a.qualifier)
+        (a.exprId, newAttr)
+      } else {
+        (a.exprId, a.asInstanceOf[AttributeReference])
+      }
+    }.toMap
+
+    val newOutput = sHolder.output.map(a => attributeMap.getOrElse(a.exprId, a))
+
+    // Store the transformation info on the holder for later use
+    sHolder.pushedVariants = Some(variants)
+    sHolder.pushedVariantAttributeMap = attributeMap
+    sHolder.output = newOutput
+
+    // Return the original plan unchanged - transformation happens in buildScanWithPushedVariants
+    originalPlan
   }
 
   private def rewriteAggregate(agg: Aggregate): LogicalPlan = agg.child match {
@@ -560,6 +719,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       assert(realOutput.length == holder.output.length,
         "The data source returns unexpected number of columns")
       val wrappedScan = getWrappedScan(scan, holder)
+      // Note: holder.pushedFilterExpressions is not propagated here because the output schema
+      // changes to aggregate columns. When validConstraints is wired up, this needs revisiting.
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
       val projectList = realOutput.zip(holder.output).map { case (a1, a2) =>
         // The data source may return columns with arbitrary data types and it's safer to cast them
@@ -577,6 +738,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       assert(realOutput.length == holder.output.length,
         "The data source returns unexpected number of columns")
       val wrappedScan = getWrappedScan(scan, holder)
+      // Note: holder.pushedFilterExpressions is not propagated here because the output schema
+      // changes with pushed join. When validConstraints is wired up, this needs revisiting.
       val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
 
       // When join is pushed down, the real output is going to be, for example,
@@ -587,6 +750,50 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         Alias(a1, a2.name)(a2.exprId)
       }
       Project(projectList, scanRelation)
+  }
+
+  def buildScanWithPushedVariants(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case p@PhysicalOperation(projectList, filters, holder: ScanBuilderHolder)
+        if holder.pushedVariants.isDefined =>
+      val variants = holder.pushedVariants.get
+      val attributeMap = holder.pushedVariantAttributeMap
+
+      // Build the scan
+      val scan = holder.builder.build()
+      val realOutput = toAttributes(scan.readSchema())
+      val wrappedScan = getWrappedScan(scan, holder)
+      // Note: holder.pushedFilterExpressions is not propagated here because the output schema
+      // changes with variant extraction. When validConstraints is wired up, this needs revisiting.
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
+
+      // Create projection to map real output to expected output (with transformed types)
+      val outputProjection = realOutput.zip(holder.output).map { case (realAttr, expectedAttr) =>
+        Alias(realAttr, expectedAttr.name)(expectedAttr.exprId)
+      }
+
+      // Rewrite filter expressions using the variant transformation
+      val rewrittenFilters = if (filters.nonEmpty) {
+        val rewrittenFilterExprs = filters.map(variants.rewriteExpr(_, attributeMap))
+        Some(rewrittenFilterExprs.reduce(And))
+      } else {
+        None
+      }
+
+      // Rewrite project list expressions using the variant transformation
+      val rewrittenProjectList = projectList.map { e =>
+        val rewritten = variants.rewriteExpr(e, attributeMap)
+        rewritten match {
+          case n: NamedExpression => n
+          // When the variant column is directly selected, we replace the attribute
+          // reference with a struct access, which is not a NamedExpression. Wrap it with Alias.
+          case _ => Alias(rewritten, e.name)(e.exprId, e.qualifier)
+        }
+      }
+
+      // Build the plan: Project(outputProjection) -> [Filter?] -> scanRelation
+      val withProjection = Project(outputProjection, scanRelation)
+      val withFilter = rewrittenFilters.map(Filter(_, withProjection)).getOrElse(withProjection)
+      Project(rewrittenProjectList, withFilter)
   }
 
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
@@ -607,13 +814,25 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val wrappedScan = getWrappedScan(scan, sHolder)
 
-      val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
-
       val projectionOverSchema =
         ProjectionOverSchema(output.toStructType, AttributeSet(output))
       val projectionFunc = (expr: Expression) => expr transformDown {
         case projectionOverSchema(newExpr) => newExpr
       }
+
+      // Remap pushed filter attributes to the pruned output schema and drop filters
+      // whose references are no longer in the pruned output. Catch FIELD_NOT_FOUND
+      // because ProjectionOverSchema throws when a pushed filter references a nested
+      // struct field that was pruned from the schema.
+      val remappedPushedFilters = sHolder.pushedFilterExpressions.flatMap { filter =>
+        try Some(projectionFunc(filter))
+        catch {
+          case e: SparkIllegalArgumentException if e.getCondition == "FIELD_NOT_FOUND" =>
+            None
+        }
+      }.filter(_.references.subsetOf(AttributeSet(output)))
+      val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output,
+        pushedFilters = remappedPushedFilters)
 
       val finalFilters = normalizedFilters.map(projectionFunc)
       // bottom-most filters are put in the left of the list.
@@ -638,15 +857,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           sample.lowerBound,
           sample.upperBound,
           sample.withReplacement,
-          sample.seed)
+          // TODO(SPARK-56573): The * 1000 limits the seed to only 1000 distinct values.
+          //   Kept here for consistency with SampleExec.resolvedSeed; will be fixed
+          //   across all call sites in SPARK-56573.
+          sample.seed.getOrElse((math.random() * 1000).toLong),
+          sampleMethod = sample.sampleMethod)
         val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
         if (pushed) {
           sHolder.pushedSample = Some(tableSample)
           sample.child
+        } else if (sample.sampleMethod == SampleMethod.System) {
+          throw new AnalysisException(
+            errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM",
+            messageParameters = Map.empty)
         } else {
           sample
         }
-
+      case _ if sample.sampleMethod == SampleMethod.System =>
+        throw new AnalysisException(
+          errorClass = "UNSUPPORTED_FEATURE.TABLESAMPLE_SYSTEM_NO_SCAN",
+          messageParameters = Map.empty)
       case _ => sample
     }
   }
@@ -834,6 +1064,12 @@ case class ScanBuilderHolder(
   var joinedRelationsPushedDownOperators: Seq[PushedDownOperators] = Seq.empty[PushedDownOperators]
 
   var pushedJoinOutputMap: AttributeMap[Expression] = AttributeMap.empty[Expression]
+
+  var pushedVariantAttributeMap: Map[ExprId, AttributeReference] = Map.empty
+
+  var pushedVariants: Option[VariantInRelation] = None
+
+  var pushedFilterExpressions: Seq[Expression] = Seq.empty
 }
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones, along with

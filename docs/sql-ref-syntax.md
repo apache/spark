@@ -90,6 +90,20 @@ ability to generate logical and physical plan for a given query using
    * [star (*) Clause](sql-ref-syntax-qry-star.html)
  * [EXPLAIN](sql-ref-syntax-qry-explain.html)
 
+### SQL Scripting Statements
+
+You use SQL scripting to execute procedural logic in SQL.
+
+* [CASE](control-flow/case-stmt.html)
+* [compound statement](control-flow/compound-stmt.html)
+* [FOR](control-flow/for-stmt.html)
+* [IF](control-flow/if-stmt.html)
+* [ITERATE](control-flow/iterate-stmt.html)
+* [LEAVE](control-flow/leave-stmt.html)
+* [LOOP](control-flow/loop-stmt.html)
+* [REPEAT](control-flow/repeat-stmt.html)
+* [WHILE](control-flow/while-stmt.html)
+
 ### Auxiliary Statements
 
  * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
@@ -110,6 +124,7 @@ ability to generate logical and physical plan for a given query using
  * [RESET](sql-ref-syntax-aux-conf-mgmt-reset.html)
  * [SET](sql-ref-syntax-aux-conf-mgmt-set.html)
  * [SET VAR](sql-ref-syntax-aux-set-var.html)
+ * [SHOW COLLATIONS](sql-ref-syntax-aux-show-collations.html)
  * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
  * [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.html)
  * [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)

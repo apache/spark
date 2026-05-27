@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ClusterBySpec}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, QuotingUtils}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, quoteNameParts, QuotingUtils}
 import org.apache.spark.sql.connector.expressions.{BucketTransform, ClusterByTransform, FieldReference, IdentityTransform, LogicalExpressions, Transform}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types.StructType
@@ -166,10 +166,19 @@ private[sql] object CatalogV2Implicits {
     def asMultipartIdentifier: Seq[String] = (ident.namespace :+ ident.name).toImmutableArraySeq
 
     def asTableIdentifier: TableIdentifier = ident.namespace match {
-      case ns if ns.isEmpty => TableIdentifier(ident.name)
       case Array(dbName) => TableIdentifier(ident.name, Some(dbName))
-      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+      case _ =>
+        throw QueryCompilationErrors.requiresSinglePartNamespaceError(asMultipartIdentifier)
     }
+
+    // Build a v1 TableIdentifier for display / error-rendering purposes. Collapses a
+    // multi-part namespace to its last segment (v1 TableIdentifier has a single-string
+    // database field). Callers that need a lossless multi-part form should build a
+    // Seq[String] from toQualifiedNameParts instead.
+    def asLegacyTableIdentifier(catalogName: String): TableIdentifier = TableIdentifier(
+      table = ident.name(),
+      database = ident.namespace().lastOption,
+      catalog = Some(catalogName))
 
     /**
      * Tries to convert catalog identifier to the table identifier. Table identifier does not
@@ -192,9 +201,9 @@ private[sql] object CatalogV2Implicits {
     }
 
     def asFunctionIdentifier: FunctionIdentifier = ident.namespace() match {
-      case ns if ns.isEmpty => FunctionIdentifier(ident.name())
       case Array(dbName) => FunctionIdentifier(ident.name(), Some(dbName))
-      case _ => throw QueryCompilationErrors.identifierTooManyNamePartsError(original)
+      case _ =>
+        throw QueryCompilationErrors.requiresSinglePartNamespaceError(asMultipartIdentifier)
     }
 
     def toQualifiedNameParts(catalog: CatalogPlugin): Seq[String] = {
@@ -222,6 +231,8 @@ private[sql] object CatalogV2Implicits {
     }
 
     def quoted: String = parts.map(quoteIfNeeded).mkString(".")
+
+    def fullyQuoted: String = quoteNameParts(parts)
 
     def original: String = parts.mkString(".")
   }

@@ -211,6 +211,8 @@ private[deploy] class Worker(
 
   private var registerMasterFutures: Array[JFuture[_]] = null
   private var registrationRetryTimer: Option[JScheduledFuture[_]] = None
+  private var heartbeatTask: Option[JScheduledFuture[_]] = None
+  private var workDirCleanupTask: Option[JScheduledFuture[_]] = None
 
   // A thread pool for registering with masters. Because registering with a master is a blocking
   // action, this thread pool must be able to create "masterRpcAddresses.size" threads at the same
@@ -492,16 +494,25 @@ private[deploy] class Worker(
         logInfo(log"Successfully registered with master ${MDC(MASTER_URL, preferredMasterAddress)}")
         registered = true
         changeMaster(masterRef, masterWebUiUrl, masterAddress)
-        forwardMessageScheduler.scheduleAtFixedRate(
-          () => Utils.tryLogNonFatalError { self.send(SendHeartbeat) },
-          0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
-        if (CLEANUP_ENABLED) {
+
+        // Only schedule heartbeat task if not already scheduled. The existing task will
+        // continue running through reconnections, and the SendHeartbeat handler already
+        // checks the 'connected' flag before sending heartbeats to master.
+        if (heartbeatTask.isEmpty) {
+          heartbeatTask = Some(forwardMessageScheduler.scheduleAtFixedRate(
+            () => Utils.tryLogNonFatalError {
+              self.send(SendHeartbeat)
+            },
+            0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS))
+        }
+        // Only schedule work directory cleanup task if not already scheduled
+        if (CLEANUP_ENABLED && workDirCleanupTask.isEmpty) {
           logInfo(
             log"Worker cleanup enabled; old application directories will be deleted in: " +
             log"${MDC(PATH, workDir)}")
-          forwardMessageScheduler.scheduleAtFixedRate(
+          workDirCleanupTask = Some(forwardMessageScheduler.scheduleAtFixedRate(
             () => Utils.tryLogNonFatalError { self.send(WorkDirCleanup) },
-            CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
+            CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS))
         }
 
         val execs = executors.values.map { e =>
@@ -852,6 +863,10 @@ private[deploy] class Worker(
     cleanupThreadExecutor.shutdownNow()
     metricsSystem.report()
     cancelLastRegistrationRetry()
+    heartbeatTask.foreach(_.cancel(true))
+    heartbeatTask = None
+    workDirCleanupTask.foreach(_.cancel(true))
+    workDirCleanupTask = None
     forwardMessageScheduler.shutdownNow()
     registerMasterThreadPool.shutdownNow()
     executors.values.foreach(_.kill())

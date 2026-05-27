@@ -170,7 +170,7 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
 
   /** @inheritdoc */
   def xml(xmlDataset: sql.Dataset[String]): DataFrame =
-    parse(xmlDataset, ParseFormat.PARSE_FORMAT_UNSPECIFIED)
+    parse(xmlDataset, ParseFormat.PARSE_FORMAT_XML)
 
   /** @inheritdoc */
   override def parquet(path: String): DataFrame = super.parquet(path)
@@ -191,6 +191,17 @@ class DataFrameReader private[sql] (sparkSession: SparkSession) extends sql.Data
     assertNoSpecifiedSchema("table")
     sparkSession.newDataFrame { builder =>
       builder.getReadBuilder.getNamedTableBuilder
+        .setUnparsedIdentifier(tableName)
+        .putAllOptions(extraOptions.toMap.asJava)
+    }
+  }
+
+  /** @inheritdoc */
+  def changes(tableName: String): DataFrame = {
+    require(tableName != null, "The table name can't be null")
+    assertNoSpecifiedSchema("changes")
+    sparkSession.newDataFrame { builder =>
+      builder.getRelationChangesBuilder
         .setUnparsedIdentifier(tableName)
         .putAllOptions(extraOptions.toMap.asJava)
     }

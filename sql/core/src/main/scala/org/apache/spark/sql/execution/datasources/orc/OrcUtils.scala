@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.orc
 
+import java.io.FileNotFoundException
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.serde2.io.DateWritable
@@ -72,8 +74,8 @@ object OrcUtils extends Logging {
     paths
   }
 
-  def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean)
-      : Option[TypeDescription] = {
+  def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean,
+      ignoreMissingFiles: Boolean = false): Option[TypeDescription] = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
@@ -86,6 +88,10 @@ object OrcUtils extends Logging {
         Some(schema)
       }
     } catch {
+      case e: Exception if ignoreMissingFiles &&
+          ExceptionUtils.getThrowables(e).exists(_.isInstanceOf[FileNotFoundException]) =>
+        logWarning(log"Skipped missing file: ${MDC(PATH, file)}", e)
+        None
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {
           logWarning(log"Skipped the footer in the corrupted file: ${MDC(PATH, file)}", e)
@@ -159,9 +165,11 @@ object OrcUtils extends Logging {
    * This is visible for testing.
    */
   def readOrcSchemasInParallel(
-    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
+    files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean,
+    ignoreMissingFiles: Boolean): Seq[StructType] = {
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles).map(toCatalystSchema)
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+        .map(toCatalystSchema)
     }.flatten
   }
 
@@ -282,7 +290,7 @@ object OrcUtils extends Logging {
       s"array<${getOrcSchemaString(a.elementType)}>"
     case m: MapType =>
       s"map<${getOrcSchemaString(m.keyType)},${getOrcSchemaString(m.valueType)}>"
-    case _: DayTimeIntervalType | _: TimestampNTZType => LongType.catalogString
+    case _: DayTimeIntervalType | _: TimestampNTZType | _: TimeType => LongType.catalogString
     case _: YearMonthIntervalType => IntegerType.catalogString
     case _ => dt.catalogString
   }
@@ -301,6 +309,10 @@ object OrcUtils extends Logging {
         case n: TimestampNTZType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
           typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, n.typeName)
+          Some(typeDesc)
+        case tm: TimeType =>
+          val typeDesc = new TypeDescription(TypeDescription.Category.LONG)
+          typeDesc.setAttribute(CATALYST_TYPE_ATTRIBUTE_NAME, tm.typeName)
           Some(typeDesc)
         case t: TimestampType =>
           val typeDesc = new TypeDescription(TypeDescription.Category.TIMESTAMP)

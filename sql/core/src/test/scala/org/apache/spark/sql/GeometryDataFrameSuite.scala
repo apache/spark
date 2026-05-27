@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import scala.collection.immutable.Seq
 
 import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
+class GeometryDataFrameSuite extends SharedSparkSession {
 
   val point1 = "010100000000000000000031400000000000001C40"
     .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
@@ -129,6 +130,19 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("createDataFrame and round-trip with Geometry SRIDs") {
+    // Covers PROJ-sourced SRIDs, the Spark-specific SRID 0,
+    // and OGC-overridden SRIDs (4326, 4267, 4269).
+    // Includes newer PROJ registry SRIDs (e.g. after PROJ 9.8.x): ESRI:102964, ESRI:104030.
+    Seq(0, 3857, 2000, 4326, 4267, 4269, 102100, 102964, 104030).foreach { srid =>
+      val geom = Geometry.fromWKB(point1, srid)
+      val schema = StructType(Seq(StructField("g", GeometryType(srid), nullable = false)))
+      checkAnswer(
+        spark.createDataFrame(sparkContext.parallelize(Seq(Row(geom))), schema),
+        Seq(Row(geom)))
+    }
+  }
+
   test("createDataFrame APIs with Geometry.fromWKB") {
     // 1. Test createDataFrame with RDD of Geometry objects
     val geometry1 = Geometry.fromWKB(point1, 0)
@@ -177,5 +191,36 @@ class GeometryDataFrameSuite extends QueryTest with SharedSparkSession {
     val df = spark.sql(s"SELECT ST_GeomFromWKB(X'$pointString')")
     val expectedGeom = Geometry.fromWKB(pointBytes, 0)
     checkAnswer(df, Seq(Row(expectedGeom)))
+  }
+
+  test("geospatial feature disabled") {
+    withSQLConf(SQLConf.GEOSPATIAL_ENABLED.key -> "false") {
+      val geometry = Geometry.fromWKB(point1, 4326)
+      val schema = StructType(Seq(StructField("col1", GeometryType(4326))))
+      // RDD[Row] + schema.
+      val rdd = sparkContext.parallelize(Seq(Row(geometry)))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(rdd, schema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+      // Java List[Row] + schema.
+      val javaList = java.util.Arrays.asList(Row(geometry))
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.createDataFrame(javaList, schema).collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+      // Implicit encoder path.
+      import testImplicits._
+      checkError(
+        exception = intercept[AnalysisException] {
+          Seq(geometry).toDF("g").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED"
+      )
+    }
   }
 }

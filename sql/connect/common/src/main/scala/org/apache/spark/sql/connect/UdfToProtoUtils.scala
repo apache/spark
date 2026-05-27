@@ -58,8 +58,11 @@ private[sql] object UdfToProtoUtils {
       function: AnyRef,
       inputEncoders: Seq[AgnosticEncoder[_]],
       outputEncoder: AgnosticEncoder[_]): ByteString = {
-    ClosureCleaner.clean(function, cleanTransitively = true, mutable.Map.empty)
-    val bytes = SparkSerDeUtils.serialize(UdfPacket(function, inputEncoders, outputEncoder))
+    val cleanedFunction = ClosureCleaner
+      .clean(function, cleanTransitively = true, mutable.Map.empty)
+      .getOrElse(function)
+    val bytes =
+      SparkSerDeUtils.serialize(UdfPacket(cleanedFunction, inputEncoders, outputEncoder))
     checkDeserializable(bytes)
     ByteString.copyFrom(bytes)
   }

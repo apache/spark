@@ -48,6 +48,7 @@ object TreePattern extends Enumeration  {
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
+  val EXTERNAL_UDF: Value = Value
   val EXTRACT_VALUE: Value = Value
   val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
   val GENERATOR: Value = Value
@@ -70,6 +71,9 @@ object TreePattern extends Enumeration  {
   val MAP_FROM_ARRAYS: Value = Value
   val MAP_FROM_ENTRIES: Value = Value
   val MAP_OBJECTS: Value = Value
+  val MAX: Value = Value
+  val MEASURE: Value = Value
+  val MIN: Value = Value
   val MULTI_ALIAS: Value = Value
   val NEW_INSTANCE: Value = Value
   val NOT: Value = Value
@@ -104,12 +108,14 @@ object TreePattern extends Enumeration  {
   val UPPER_OR_LOWER: Value = Value
   val UP_CAST: Value = Value
   val VARIABLE_REFERENCE: Value = Value
+  val CURSOR_REFERENCE: Value = Value
   val DISTRIBUTED_SEQUENCE_ID: Value = Value
 
   // Unresolved expression patterns (Alphabetically ordered)
   val UNRESOLVED_ALIAS: Value = Value
   val UNRESOLVED_ATTRIBUTE: Value = Value
   val UNRESOLVED_COLLATION: Value = Value
+  val UNRESOLVED_CURSOR: Value = Value
   val UNRESOLVED_DESERIALIZER: Value = Value
   val UNRESOLVED_DF_STAR: Value = Value
   val UNRESOLVED_FUNCTION: Value = Value
@@ -149,7 +155,10 @@ object TreePattern extends Enumeration  {
   val LIMIT: Value = Value
   val LOCAL_RELATION: Value = Value
   val LOGICAL_QUERY_STAGE: Value = Value
+  val METRIC_VIEW_PLACEHOLDER: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
+  val NEAREST_BY_JOIN: Value = Value
+  val NO_GROUPING_AGGREGATE_REFERENCE: Value = Value
   val OFFSET: Value = Value
   val OUTER_JOIN: Value = Value
   val PARAMETERIZED_QUERY: Value = Value
@@ -158,9 +167,12 @@ object TreePattern extends Enumeration  {
   val PIVOT: Value = Value
   val PROJECT: Value = Value
   val PYTHON_DATA_SOURCE: Value = Value
+  val RELATION_CHANGES: Value = Value
   val RELATION_TIME_TRAVEL: Value = Value
   val REPARTITION_OPERATION: Value = Value
   val REBALANCE_PARTITIONS: Value = Value
+  val RESOLVED_METRIC_VIEW: Value = Value
+  val SEQUENTIAL_STREAMING_UNION: Value = Value
   val SERIALIZE_FROM_OBJECT: Value = Value
   val SORT: Value = Value
   val SQL_TABLE_FUNCTION: Value = Value
@@ -175,10 +187,12 @@ object TreePattern extends Enumeration  {
   val WITH_WINDOW_DEFINITION: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
+  val NAMED_STREAMING_RELATION: Value = Value
   val PLAN_WITH_UNRESOLVED_IDENTIFIER: Value = Value
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value
+  val UNRESOLVED_QUALIFY: Value = Value
   val UNRESOLVED_FUNC: Value = Value
   val UNRESOLVED_PROCEDURE: Value = Value
   val UNRESOLVED_RELATION: Value = Value

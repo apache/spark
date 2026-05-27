@@ -22,10 +22,10 @@ __all__ = [
 
 import atexit
 
-from pyspark.sql.connect.utils import check_dependencies
+import pyspark
+from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
 
-check_dependencies(__name__)
-
+import concurrent.futures
 import logging
 import threading
 import os
@@ -35,6 +35,8 @@ import urllib.parse
 import uuid
 import sys
 import time
+import traceback
+import weakref
 from typing import (
     Iterable,
     Iterator,
@@ -50,7 +52,6 @@ from typing import (
     cast,
     TYPE_CHECKING,
     Type,
-    Sequence,
 )
 
 import pandas as pd
@@ -62,9 +63,10 @@ import grpc
 from google.protobuf import text_format, any_pb2
 from google.rpc import error_details_pb2
 
-from pyspark.util import is_remote_only
-from pyspark.accumulators import SpecialAccumulatorIds
+from pyspark.util import is_remote_only, disable_gc
+from pyspark.accumulators import SpecialAccumulatorIds, pickleSer
 from pyspark.version import __version__
+from pyspark.traceback_utils import CallSite
 from pyspark.resource.information import ResourceInformation
 from pyspark.sql.metrics import MetricValue, PlanMetrics, ExecutionInfo, ObservedMetrics
 from pyspark.sql.connect.client.artifact import ArtifactManager
@@ -82,6 +84,7 @@ import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
 from pyspark.errors.exceptions.connect import (
     convert_exception,
+    convert_observation_errors,
     SparkConnectException,
     SparkConnectGrpcException,
 )
@@ -99,8 +102,9 @@ from pyspark.sql.connect.plan import (
 )
 from pyspark.sql.connect.observation import Observation
 from pyspark.sql.connect.utils import get_python_ver
-from pyspark.sql.pandas.types import _create_converter_to_pandas, from_arrow_schema
-from pyspark.sql.types import DataType, StructType, _has_type
+from pyspark.sql.pandas.types import from_arrow_schema
+from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
+from pyspark.sql.types import DataType, StructType
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
 from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
@@ -112,6 +116,9 @@ if TYPE_CHECKING:
     from pyspark.sql.connect._typing import DataTypeOrString
     from pyspark.sql.connect.session import SparkSession
     from pyspark.sql.datasource import DataSource
+
+
+PYSPARK_ROOT = os.path.dirname(pyspark.__file__)
 
 
 def _import_zstandard_if_available() -> Optional[Any]:
@@ -298,7 +305,8 @@ class ChannelBuilder:
         ua_len = len(urllib.parse.quote(user_agent))
         if ua_len > 2048:
             raise SparkConnectException(
-                f"'user_agent' parameter should not exceed 2048 characters, found {len} characters."
+                f"'user_agent' parameter should not exceed 2048 characters after URL "
+                f"escaping, found {ua_len} characters."
             )
         return " ".join(
             [
@@ -501,6 +509,20 @@ class PlanObservedMetrics(ObservedMetrics):
     def keys(self) -> List[str]:
         return self._keys
 
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable dictionary representation of this observed metrics.
+
+        Returns
+        -------
+        dict
+            A dictionary with keys 'name', 'keys', and 'pairs'.
+        """
+        return {
+            "name": self._name,
+            "keys": self._keys,
+            "pairs": self.pairs,
+        }
+
 
 class AnalyzeResult:
     def __init__(
@@ -604,6 +626,11 @@ class ConfigResult:
             pairs=[(pair.key, pair.value if pair.HasField("value") else None) for pair in pb.pairs],
             warnings=list(pb.warnings),
         )
+
+
+def _is_pyspark_source(filename: str) -> bool:
+    """Check if the given filename is from the pyspark package."""
+    return filename.startswith(PYSPARK_ROOT)
 
 
 class SparkConnectClient(object):
@@ -724,8 +751,16 @@ class SparkConnectClient(object):
         self._plan_compression_threshold: Optional[int] = None  # Will be fetched lazily
         self._plan_compression_algorithm: Optional[str] = None  # Will be fetched lazily
 
-        # cleanup ml cache if possible
-        atexit.register(self._cleanup_ml_cache)
+        self._release_futures: weakref.WeakSet[concurrent.futures.Future] = weakref.WeakSet()
+
+        self._release_session_on_exit = os.getenv(
+            "SPARK_CONNECT_RELEASE_SESSION_ON_EXIT", "false"
+        ).lower() in ("true", "1")
+        # cleanup if possible
+        atexit.register(self._on_exit)
+
+        self.global_user_context_extensions: List[Tuple[str, any_pb2.Any]] = []
+        self.global_user_context_extensions_lock = threading.Lock()
 
     @property
     def _stub(self) -> grpc_lib.SparkConnectServiceStub:
@@ -793,6 +828,50 @@ class SparkConnectClient(object):
         Return list of currently used policies
         """
         return list(self._retry_policies)
+
+    @classmethod
+    def _retrieve_stack_frames(cls) -> List[CallSite]:
+        """
+        Return a list of CallSites representing the relevant stack frames in the callstack.
+        """
+        frames = traceback.extract_stack()
+
+        filtered_stack_frames = []
+        for i, frame in enumerate(frames):
+            filename, lineno, func, _ = frame
+            if _is_pyspark_source(filename):
+                # Do not include PySpark internal frames as they are not user application code
+                break
+            if i + 1 < len(frames):
+                _, _, func, _ = frames[i + 1]
+            filtered_stack_frames.append(CallSite(function=func, file=filename, linenum=lineno))
+
+        return filtered_stack_frames
+
+    @classmethod
+    def _build_call_stack_trace(cls) -> Optional[any_pb2.Any]:
+        """
+        Build a call stack trace for the current Spark Connect action
+        Returns
+        -------
+        FetchErrorDetailsResponse.Error: An Error object containing list of stack frames
+        of the user code packed as Any protobuf
+        """
+        if os.getenv("SPARK_CONNECT_DEBUG_CLIENT_CALL_STACK", "false").lower() in ("true", "1"):
+            stack_frames = cls._retrieve_stack_frames()
+            call_stack = FetchErrorDetailsResponse.Error()
+            for call_site in stack_frames:
+                stack_trace_element = pb2.FetchErrorDetailsResponse.StackTraceElement()
+                stack_trace_element.declaring_class = ""  # unknown information
+                stack_trace_element.method_name = call_site.function
+                stack_trace_element.file_name = call_site.file
+                stack_trace_element.line_number = call_site.linenum
+                call_stack.stack_trace.append(stack_trace_element)
+            if len(call_stack.stack_trace) > 0:
+                call_stack_details = any_pb2.Any()
+                call_stack_details.Pack(call_stack)
+                return call_stack_details
+        return None
 
     def register_udf(
         self,
@@ -921,14 +1000,9 @@ class SparkConnectClient(object):
         logger.debug("Fetching the resources")
         cmd = pb2.Command()
         cmd.get_resources_command.SetInParent()
-        (_, properties, _) = self.execute_command(cmd)
+        _, properties, _ = self.execute_command(cmd)
         resources = properties["get_resources_command_result"]
         return resources
-
-    def _build_observed_metrics(
-        self, metrics: Sequence["pb2.ExecutePlanResponse.ObservedMetrics"]
-    ) -> Iterator[PlanObservedMetrics]:
-        return (PlanObservedMetrics(x.name, [v for v in x.values], list(x.keys)) for x in metrics)
 
     def to_table_as_iterator(
         self, plan: pb2.Plan, observations: Dict[str, Observation]
@@ -969,7 +1043,7 @@ class SparkConnectClient(object):
         return table, schema, ei
 
     def to_pandas(
-        self, plan: pb2.Plan, observations: Dict[str, Observation]
+        self, plan: pb2.Plan, observations: Dict[str, Observation], **kwargs: Any
     ) -> Tuple["pd.DataFrame", "ExecutionInfo"]:
         """
         Return given plan as a pandas DataFrame.
@@ -984,16 +1058,20 @@ class SparkConnectClient(object):
         # Get all related configs in a batch
         (
             timezone,
-            struct_in_pandas,
-            self_destruct,
+            structHandlingMode,
+            selfDestruct,
         ) = self.get_configs(
             "spark.sql.session.timeZone",
             "spark.sql.execution.pandas.structHandlingMode",
             "spark.sql.execution.arrow.pyspark.selfDestruct.enabled",
         )
 
+        # if pandasStructHandlingMode is explicitly set, override the runtime config
+        if "pandasStructHandlingMode" in kwargs:
+            structHandlingMode = str(kwargs["pandasStructHandlingMode"])
+
         table, schema, metrics, observed_metrics, _ = self._execute_and_fetch(
-            req, observations, self_destruct == "true"
+            req, observations, selfDestruct == "true"
         )
         assert table is not None
         ei = ExecutionInfo(metrics, observed_metrics)
@@ -1001,71 +1079,14 @@ class SparkConnectClient(object):
         schema = schema or from_arrow_schema(table.schema, prefer_timestamp_ntz=True)
         assert schema is not None and isinstance(schema, StructType)
 
-        # Rename columns to avoid duplicated column names during processing
-        temp_col_names = [f"col_{i}" for i in range(len(schema.names))]
-        table = table.rename_columns(temp_col_names)
-
-        # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
-        # values, but we should use datetime.date to match the behavior with when
-        # Arrow optimization is disabled.
-        pandas_options = {"coerce_temporal_nanoseconds": True}
-        if self_destruct == "true" and table.num_rows > 0:
-            # Configure PyArrow to use as little memory as possible:
-            # self_destruct - free columns as they are converted
-            # split_blocks - create a separate Pandas block for each column
-            # use_threads - convert one column at a time
-            pandas_options.update(
-                {
-                    "self_destruct": True,
-                    "split_blocks": True,
-                    "use_threads": False,
-                }
-            )
-
-        if len(schema.names) > 0:
-            error_on_duplicated_field_names: bool = False
-            if struct_in_pandas == "legacy" and any(
-                _has_type(f.dataType, StructType) for f in schema.fields
-            ):
-                error_on_duplicated_field_names = True
-                struct_in_pandas = "dict"
-
-            # SPARK-51112: If the table is empty, we avoid using pyarrow to_pandas to create the
-            # DataFrame, as it may fail with a segmentation fault.
-            if table.num_rows == 0:
-                # For empty tables, create empty Series with converters to preserve dtypes
-                pdf = pd.concat(
-                    [
-                        _create_converter_to_pandas(
-                            field.dataType,
-                            field.nullable,
-                            timezone=timezone,
-                            struct_in_pandas=struct_in_pandas,
-                            error_on_duplicated_field_names=error_on_duplicated_field_names,
-                        )(pd.Series([], name=temp_col_names[i], dtype="object"))
-                        for i, field in enumerate(schema.fields)
-                    ],
-                    axis="columns",
-                )
-            else:
-                pdf = pd.concat(
-                    [
-                        _create_converter_to_pandas(
-                            field.dataType,
-                            field.nullable,
-                            timezone=timezone,
-                            struct_in_pandas=struct_in_pandas,
-                            error_on_duplicated_field_names=error_on_duplicated_field_names,
-                        )(arrow_col.to_pandas(**pandas_options))
-                        for arrow_col, field in zip(table.columns, schema.fields)
-                    ],
-                    axis="columns",
-                )
-            # Restore original column names (including duplicates)
-            pdf.columns = schema.names
-        else:
-            # empty columns
-            pdf = table.to_pandas(**pandas_options)
+        pdf = _convert_arrow_table_to_pandas(
+            arrow_table=table,
+            schema=schema,
+            timezone=timezone,
+            struct_handling_mode=structHandlingMode,
+            date_as_object=False,
+            self_destruct=selfDestruct == "true",
+        )
 
         if len(metrics) > 0:
             pdf.attrs["metrics"] = metrics
@@ -1251,7 +1272,8 @@ class SparkConnectClient(object):
         """
         Close the channel.
         """
-        ExecutePlanResponseReattachableIterator.shutdown()
+        concurrent.futures.wait(self._release_futures, timeout=10)
+        ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()
         self._closed = True
 
@@ -1276,6 +1298,24 @@ class SparkConnectClient(object):
         If authentication is not using a bearer token, None will be returned.
         """
         return self._builder.token
+
+    def _update_request_with_user_context_extensions(
+        self,
+        req: Union[
+            pb2.AnalyzePlanRequest,
+            pb2.ConfigRequest,
+            pb2.ExecutePlanRequest,
+            pb2.FetchErrorDetailsRequest,
+            pb2.InterruptRequest,
+        ],
+    ) -> None:
+        with self.global_user_context_extensions_lock:
+            for _, extension in self.global_user_context_extensions:
+                req.user_context.extensions.append(extension)
+        if not hasattr(self.thread_local, "user_context_extensions"):
+            return
+        for _, extension in self.thread_local.user_context_extensions:
+            req.user_context.extensions.append(extension)
 
     def _execute_plan_request_with_metadata(
         self, operation_id: Optional[str] = None
@@ -1307,6 +1347,10 @@ class SparkConnectClient(object):
                     messageParameters={"arg_name": "operation_id", "origin": str(ve)},
                 )
             req.operation_id = operation_id
+        self._update_request_with_user_context_extensions(req)
+
+        if call_stack_trace := self.__class__._build_call_stack_trace():
+            req.user_context.extensions.append(call_stack_trace)
         return req
 
     def _analyze_plan_request_with_metadata(self) -> pb2.AnalyzePlanRequest:
@@ -1317,6 +1361,9 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
+        self._update_request_with_user_context_extensions(req)
+        if call_stack_trace := self.__class__._build_call_stack_trace():
+            req.user_context.extensions.append(call_stack_trace)
         return req
 
     def _analyze(self, method: str, **kwargs: Any) -> AnalyzeResult:
@@ -1440,11 +1487,13 @@ class SparkConnectClient(object):
                         handle_response(b)
                 finally:
                     generator.close()
+                    self._release_futures.update(generator.release_futures)
             else:
                 for attempt in self._retrying():
                     with attempt:
-                        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                            handle_response(b)
+                        with disable_gc():
+                            for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
+                                handle_response(b)
         except Exception as error:
             self._handle_error(error)
 
@@ -1500,25 +1549,32 @@ class SparkConnectClient(object):
                 yield from self._build_metrics(b.metrics)
             if b.observed_metrics:
                 logger.debug("Received observed metric batch.")
-                for observed_metrics in self._build_observed_metrics(b.observed_metrics):
-                    if observed_metrics.name == "__python_accumulator__":
-                        from pyspark.worker_util import pickleSer
-
-                        for metric in observed_metrics.metrics:
-                            (aid, update) = pickleSer.loads(LiteralExpression._to_value(metric))
-                            if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER:
-                                self._profiler_collector._update(update)
-                    elif observed_metrics.name in observations:
-                        observation_result = observations[observed_metrics.name]._result
-                        assert observation_result is not None
-                        observation_result.update(
-                            {
-                                key: LiteralExpression._to_value(metric)
-                                for key, metric in zip(
-                                    observed_metrics.keys, observed_metrics.metrics
-                                )
-                            }
-                        )
+                for x in b.observed_metrics:
+                    observed_metrics = PlanObservedMetrics(
+                        x.name, [v for v in x.values], list(x.keys)
+                    )
+                    if x.HasField("root_error_idx"):
+                        if x.name in observations:
+                            converted = convert_observation_errors(x.root_error_idx, list(x.errors))
+                            observations[x.name]._set_error(converted)
+                    else:
+                        if observed_metrics.name == "__python_accumulator__":
+                            for metric in observed_metrics.metrics:
+                                aid, update = pickleSer.loads(LiteralExpression._to_value(metric))
+                                if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER_V2:
+                                    self._profiler_collector._update(update)
+                        elif observed_metrics.name in observations:
+                            observation_result = observations[observed_metrics.name]._result
+                            assert observation_result is not None
+                            observation_result.update(
+                                {
+                                    key: LiteralExpression._to_value(metric)
+                                    for key, metric in zip(
+                                        observed_metrics.keys,
+                                        observed_metrics.metrics,
+                                    )
+                                }
+                            )
                     yield observed_metrics
             if b.HasField("schema"):
                 logger.debug("Received the schema.")
@@ -1641,11 +1697,21 @@ class SparkConnectClient(object):
                         yield from handle_response(b)
                 finally:
                     generator.close()
+                    self._release_futures.update(generator.release_futures)
             else:
                 for attempt in self._retrying():
                     with attempt:
-                        for b in self._stub.ExecutePlan(req, metadata=self._builder.metadata()):
-                            yield from handle_response(b)
+                        with disable_gc():
+                            it = iter(
+                                self._stub.ExecutePlan(req, metadata=self._builder.metadata())
+                            )
+                        while True:
+                            try:
+                                with disable_gc():
+                                    b = next(it)
+                                yield from handle_response(b)
+                            except StopIteration:
+                                break
         except KeyboardInterrupt as kb:
             logger.debug(f"Interrupt request received for operation={req.operation_id}")
             if progress is not None:
@@ -1731,6 +1797,9 @@ class SparkConnectClient(object):
         req.client_type = self._builder.userAgent
         if self._user_id:
             req.user_context.user_id = self._user_id
+        self._update_request_with_user_context_extensions(req)
+        if call_stack_trace := self.__class__._build_call_stack_trace():
+            req.user_context.extensions.append(call_stack_trace)
         return req
 
     def get_configs(self, *keys: str) -> Tuple[Optional[str], ...]:
@@ -1807,6 +1876,7 @@ class SparkConnectClient(object):
             )
         if self._user_id:
             req.user_context.user_id = self._user_id
+        self._update_request_with_user_context_extensions(req)
         return req
 
     def interrupt_all(self) -> Optional[List[str]]:
@@ -1861,6 +1931,58 @@ class SparkConnectClient(object):
         except Exception as error:
             self._handle_error(error)
 
+    def _get_operation_statuses(
+        self,
+        operation_ids: Optional[List[str]] = None,
+        operation_extensions: Optional[List[any_pb2.Any]] = None,
+        request_extensions: Optional[List[any_pb2.Any]] = None,
+    ) -> "pb2.GetStatusResponse":
+        """
+        Get status of operations in the session.
+
+        Parameters
+        ----------
+        operation_ids : list of str, optional
+            List of operation IDs to get status for.
+            If None or empty, returns status of all operations in the session.
+        operation_extensions : list of google.protobuf.any_pb2.Any, optional
+            Per-operation extension messages to include in the OperationStatusRequest to request
+            additional per-operation information.
+        request_extensions : list of google.protobuf.any_pb2.Any, optional
+            Request-level extension messages to include in the GetStatusRequest.
+
+        Returns
+        -------
+        pb2.GetStatusResponse
+            The full GetStatusResponse, including operation_statuses and any extensions.
+        """
+        req = pb2.GetStatusRequest()
+        req.session_id = self._session_id
+        req.client_type = self._builder.userAgent
+        if self._user_id:
+            req.user_context.user_id = self._user_id
+        if self._server_session_id:
+            req.client_observed_server_side_session_id = self._server_session_id
+
+        req.operation_status.SetInParent()
+
+        if operation_ids:
+            req.operation_status.operation_ids.extend(operation_ids)
+        if operation_extensions:
+            req.operation_status.extensions.extend(operation_extensions)
+        if request_extensions:
+            req.extensions.extend(request_extensions)
+
+        try:
+            for attempt in self._retrying():
+                with attempt:
+                    resp = self._stub.GetStatus(req, metadata=self._builder.metadata())
+                    self._verify_response_integrity(resp)
+                    return resp
+            raise SparkConnectException("Invalid state during retry exception handling.")
+        except Exception as error:
+            self._handle_error(error)
+
     def add_tag(self, tag: str) -> None:
         self._throw_if_invalid_tag(tag)
         if not hasattr(self.thread_local, "tags"):
@@ -1905,6 +2027,38 @@ class SparkConnectClient(object):
                 messageParameters={"arg_name": "Spark Connect tag", "arg_value": tag},
             )
 
+    def add_threadlocal_user_context_extension(self, extension: any_pb2.Any) -> str:
+        if not hasattr(self.thread_local, "user_context_extensions"):
+            self.thread_local.user_context_extensions = list()
+        extension_id = "threadlocal_" + str(uuid.uuid4())
+        self.thread_local.user_context_extensions.append((extension_id, extension))
+        return extension_id
+
+    def add_global_user_context_extension(self, extension: any_pb2.Any) -> str:
+        extension_id = "global_" + str(uuid.uuid4())
+        with self.global_user_context_extensions_lock:
+            self.global_user_context_extensions.append((extension_id, extension))
+        return extension_id
+
+    def remove_user_context_extension(self, extension_id: str) -> None:
+        if extension_id.find("threadlocal_") == 0:
+            if not hasattr(self.thread_local, "user_context_extensions"):
+                return
+            self.thread_local.user_context_extensions = list(
+                filter(lambda ex: ex[0] != extension_id, self.thread_local.user_context_extensions)
+            )
+        elif extension_id.find("global_") == 0:
+            with self.global_user_context_extensions_lock:
+                self.global_user_context_extensions = list(
+                    filter(lambda ex: ex[0] != extension_id, self.global_user_context_extensions)
+                )
+
+    def clear_user_context_extensions(self) -> None:
+        if hasattr(self.thread_local, "user_context_extensions"):
+            self.thread_local.user_context_extensions = list()
+        with self.global_user_context_extensions_lock:
+            self.global_user_context_extensions = list()
+
     def _handle_error(self, error: Exception) -> NoReturn:
         """
         Handle errors that occur during RPC calls.
@@ -1945,7 +2099,7 @@ class SparkConnectClient(object):
             req.client_observed_server_side_session_id = self._server_session_id
         if self._user_id:
             req.user_context.user_id = self._user_id
-
+        self._update_request_with_user_context_extensions(req)
         try:
             return self._stub.FetchErrorDetails(req, metadata=self._builder.metadata())
         except grpc.RpcError:
@@ -2068,6 +2222,7 @@ class SparkConnectClient(object):
             pb2.AnalyzePlanResponse,
             pb2.FetchErrorDetailsResponse,
             pb2.ReleaseSessionResponse,
+            pb2.GetStatusResponse,
         ],
     ) -> None:
         """
@@ -2102,7 +2257,7 @@ class SparkConnectClient(object):
         logger.debug("Creating the ResourceProfile")
         cmd = pb2.Command()
         cmd.create_resource_profile_command.profile.CopyFrom(profile)
-        (_, properties, _) = self.execute_command(cmd)
+        _, properties, _ = self.execute_command(cmd)
         profile_id = properties["create_resource_profile_command_result"]
         return profile_id
 
@@ -2115,7 +2270,7 @@ class SparkConnectClient(object):
                     [pb2.ObjectRef(id=cache_id) for cache_id in cache_ids]
                 )
                 command.ml_command.delete.evict_only = evict_only
-                (_, properties, _) = self.execute_command(command)
+                _, properties, _ = self.execute_command(command)
 
                 assert properties is not None
 
@@ -2126,6 +2281,18 @@ class SparkConnectClient(object):
             return []
         except Exception:
             return []
+
+    def _on_exit(self) -> None:
+        self._cleanup_ml_cache()
+        if self._release_session_on_exit and not self._closed:
+            try:
+                self.release_session()
+            except Exception:
+                pass
+            try:
+                self.close()
+            except Exception:
+                pass
 
     def _cleanup_ml_cache(self) -> None:
         try:
@@ -2138,7 +2305,7 @@ class SparkConnectClient(object):
     def _get_ml_cache_info(self) -> List[str]:
         command = pb2.Command()
         command.ml_command.get_cache_info.SetInParent()
-        (_, properties, _) = self.execute_command(command)
+        _, properties, _ = self.execute_command(command)
 
         assert properties is not None
 
@@ -2153,7 +2320,7 @@ class SparkConnectClient(object):
         command.ml_command.get_model_size.CopyFrom(
             pb2.MlCommand.GetModelSize(model_ref=pb2.ObjectRef(id=model_ref_id))
         )
-        (_, properties, _) = self.execute_command(command)
+        _, properties, _ = self.execute_command(command)
 
         assert properties is not None
 

@@ -21,7 +21,7 @@ name: "Build / RocksDB as UI Backend (master, Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:
-    - cron: '0 6 * * *'
+    - cron: '0 6 */2 * *'
   workflow_dispatch:
 
 jobs:
@@ -37,8 +37,8 @@ jobs:
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "python-311",
-          "PYTHON_TO_TEST": "python3.11",
+          "PYSPARK_IMAGE_TO_TEST": "python-312",
+          "PYTHON_TO_TEST": "python3.12",
           "LIVE_UI_LOCAL_STORE_DIR": "/tmp/kvStore",
         }
       jobs: >-

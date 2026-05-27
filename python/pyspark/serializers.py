@@ -68,7 +68,6 @@ pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
 
-
 __all__ = [
     "PickleSerializer",
     "CPickleSerializer",
@@ -135,7 +134,6 @@ class Serializer:
 
 
 class FramedSerializer(Serializer):
-
     """
     Serializer that writes objects as a stream of (length, data) pairs,
     where `length` is a 32-bit integer and data is `length` bytes.
@@ -187,7 +185,6 @@ class FramedSerializer(Serializer):
 
 
 class BatchedSerializer(Serializer):
-
     """
     Serializes a stream of objects in batches by calling its wrapped
     Serializer with streams of objects.
@@ -203,22 +200,10 @@ class BatchedSerializer(Serializer):
     def _batched(self, iterator):
         if self.batchSize == self.UNLIMITED_BATCH_SIZE:
             yield list(iterator)
-        elif hasattr(iterator, "__len__") and hasattr(iterator, "__getslice__"):
-            n = len(iterator)
-            for i in range(0, n, self.batchSize):
-                yield iterator[i : i + self.batchSize]
         else:
-            items = []
-            count = 0
-            for item in iterator:
-                items.append(item)
-                count += 1
-                if count == self.batchSize:
-                    yield items
-                    items = []
-                    count = 0
-            if items:
-                yield items
+            it = iter(iterator)
+            while batch := list(itertools.islice(it, self.batchSize)):
+                yield batch
 
     def dump_stream(self, iterator, stream):
         self.serializer.dump_stream(self._batched(iterator), stream)
@@ -234,7 +219,6 @@ class BatchedSerializer(Serializer):
 
 
 class FlattenedValuesSerializer(BatchedSerializer):
-
     """
     Serializes a stream of list of pairs, split the list of values
     which contain more than a certain number of objects to make them
@@ -289,7 +273,6 @@ class AutoBatchedSerializer(BatchedSerializer):
 
 
 class CartesianDeserializer(Serializer):
-
     """
     Deserializes the JavaRDD cartesian() of two PythonRDDs.
     Due to pyspark batching we cannot simply use the result of the Java RDD cartesian,
@@ -315,7 +298,6 @@ class CartesianDeserializer(Serializer):
 
 
 class PairDeserializer(Serializer):
-
     """
     Deserializes the JavaRDD zip() of two PythonRDDs.
     Due to pyspark batching we cannot simply use the result of the Java RDD zip,
@@ -411,9 +393,9 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
             return _hack_namedtuple(cls)
 
         # replace namedtuple with the new one
-        collections.namedtuple.__globals__[
-            "_old_namedtuple_kwdefaults"
-        ] = _old_namedtuple_kwdefaults
+        collections.namedtuple.__globals__["_old_namedtuple_kwdefaults"] = (
+            _old_namedtuple_kwdefaults
+        )
         collections.namedtuple.__globals__["_old_namedtuple"] = _old_namedtuple
         collections.namedtuple.__globals__["_hack_namedtuple"] = _hack_namedtuple
         collections.namedtuple.__code__ = namedtuple.__code__
@@ -435,7 +417,6 @@ if os.environ.get("PYSPARK_ENABLE_NAMEDTUPLE_PATCH") == "1":
 
 
 class PickleSerializer(FramedSerializer):
-
     """
     Serializes objects using Python's pickle serializer:
 
@@ -480,7 +461,6 @@ else:
 
 
 class MarshalSerializer(FramedSerializer):
-
     """
     Serializes objects using Python's Marshal serializer:
 
@@ -497,7 +477,6 @@ class MarshalSerializer(FramedSerializer):
 
 
 class AutoSerializer(FramedSerializer):
-
     """
     Choose marshal or pickle as serialization protocol automatically
     """
@@ -546,7 +525,6 @@ class CompressedSerializer(FramedSerializer):
 
 
 class UTF8Deserializer(Serializer):
-
     """
     Deserializes streams written by String.getBytes.
     """
@@ -615,7 +593,6 @@ def write_with_length(obj, stream):
 
 
 class ChunkedStream:
-
     """
     This is a file-like object takes a stream of data, of unknown length, and breaks it into fixed
     length frames.  The intended use case is serializing large data and sending it immediately over
@@ -677,6 +654,6 @@ class ChunkedStream:
 if __name__ == "__main__":
     import doctest
 
-    (failure_count, test_count) = doctest.testmod()
+    failure_count, test_count = doctest.testmod()
     if failure_count:
         sys.exit(-1)

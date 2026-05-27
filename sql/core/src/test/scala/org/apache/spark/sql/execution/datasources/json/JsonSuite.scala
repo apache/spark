@@ -59,8 +59,7 @@ class TestFileFilter extends PathFilter {
 }
 
 abstract class JsonSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with TestJsonData
   with CommonFileDataSourceSuite {
 
@@ -1252,7 +1251,7 @@ abstract class JsonSuite
         StructField("f4", ArrayType(StringType), nullable = true) ::
         StructField("f5", IntegerType, true) :: Nil)
 
-      val rowRDD1 = unparsedStrings.map { r =>
+      val rowRDD1 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v5 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -1275,7 +1274,7 @@ abstract class JsonSuite
           StructField("f12", BooleanType, false) :: Nil), false) ::
         StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
 
-      val rowRDD2 = unparsedStrings.map { r =>
+      val rowRDD2 = unparsedStrings.as[String].rdd.map { r =>
         val values = r.split(",").map(_.trim)
         val v4 = try values(3).toInt catch {
           case _: NumberFormatException => null
@@ -3776,8 +3775,44 @@ abstract class JsonSuite
     }
   }
 
+  test("TIME type roundtrip with JSON datasource - representative precisions and custom format") {
+    import java.time.LocalTime
+    withTempDir { dir =>
+      // Test representative precisions: 0, 3, 6
+      Seq(
+        (0, Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45), LocalTime.of(23, 59, 59))),
+        (3, Seq(LocalTime.of(14, 30, 45, 123000000), LocalTime.of(23, 59, 59, 999000000))),
+        (6, Seq(LocalTime.of(0, 0, 0), LocalTime.of(14, 30, 45, 123456000),
+          LocalTime.of(23, 59, 59, 999999000)))
+      ).foreach { case (precision, timeData) =>
+        val schema = new StructType().add("time", TimeType(precision))
+        val df = timeData.toDF("time").select($"time".cast(TimeType(precision)))
+        val outputPath = s"${dir.getCanonicalPath}/time_p$precision.json"
+
+        df.write.mode("overwrite").json(outputPath)
+        val readBack = spark.read.schema(schema).json(outputPath)
+
+        assert(readBack.schema === schema, s"Schema mismatch for precision $precision")
+        checkAnswer(readBack, df)
+      }
+
+      // Test custom format with precision 6
+      val schema = new StructType().add("time", TimeType(6))
+      val customTime = Seq(LocalTime.of(14, 30, 45, 123456000)).toDF("time")
+        .select($"time".cast(TimeType(6)))
+      val customPath = s"${dir.getCanonicalPath}/time_custom.json"
+
+      customTime.write.mode("overwrite")
+        .option("timeFormat", "HH-mm-ss.SSSSSS").json(customPath)
+      val readCustom = spark.read.schema(schema)
+        .option("timeFormat", "HH-mm-ss.SSSSSS").json(customPath)
+
+      checkAnswer(readCustom, customTime)
+    }
+  }
+
   test("SPARK-40667: validate JSON Options") {
-    assert(JSONOptions.getAllOptions.size == 30)
+    assert(JSONOptions.getAllOptions.size == 32)
     // Please add validation on any new Json options here
     assert(JSONOptions.isValidOption("samplingRatio"))
     assert(JSONOptions.isValidOption("primitivesAsString"))
@@ -3797,10 +3832,12 @@ abstract class JsonSuite
     assert(JSONOptions.isValidOption("dateFormat"))
     assert(JSONOptions.isValidOption("timestampFormat"))
     assert(JSONOptions.isValidOption("timestampNTZFormat"))
+    assert(JSONOptions.isValidOption("timeFormat"))
     assert(JSONOptions.isValidOption("enableDateTimeParsingFallback"))
     assert(JSONOptions.isValidOption("multiLine"))
     assert(JSONOptions.isValidOption("lineSep"))
     assert(JSONOptions.isValidOption("pretty"))
+    assert(JSONOptions.isValidOption("sortKeys"))
     assert(JSONOptions.isValidOption("inferTimestamp"))
     assert(JSONOptions.isValidOption("columnNameOfCorruptRecord"))
     assert(JSONOptions.isValidOption("timeZone"))
@@ -3813,6 +3850,21 @@ abstract class JsonSuite
     assert(JSONOptions.getAlternativeOption("encoding").contains("charset"))
     assert(JSONOptions.getAlternativeOption("charset").contains("encoding"))
     assert(JSONOptions.getAlternativeOption("dateFormat").isEmpty)
+  }
+
+  test("SPARK-54878: write JSON with sortKeys option via datasource") {
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      withTempPath { path =>
+        val basePath = path.getCanonicalPath
+        val df = spark.sql(
+          "SELECT named_struct('c', 3, 'a', 1, 'b', 2) as s")
+        df.write.option("sortKeys", "true").json(basePath)
+
+        val written = spark.read.option("wholetext", "true")
+          .text(basePath).map(_.getString(0)).collect().mkString
+        assert(written.contains(""""a":1,"b":2,"c":3"""))
+      }
+    }
   }
 
   test("SPARK-25159: json schema inference should only trigger one job") {

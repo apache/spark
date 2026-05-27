@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_INT96_METADATA_KEY, SPARK_TIMEZONE_METADATA_KEY, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, STUtils}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -275,6 +275,20 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(Binary.fromReusedByteArray(row.getBinary(ordinal)))
+
+      case _: GeometryType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          // Data is written to Parquet using the WKB format, as per spec:
+          // https://parquet.apache.org/docs/file-format/types/geospatial/.
+          val wkb = STUtils.stAsBinary(row.getGeometry(ordinal))
+          recordConsumer.addBinary(Binary.fromReusedByteArray(wkb))
+
+      case _: GeographyType =>
+        (row: SpecializedGetters, ordinal: Int) =>
+          // Data is written to Parquet using the WKB format, as per spec:
+          // https://parquet.apache.org/docs/file-format/types/geospatial/.
+          val wkb = STUtils.stAsBinary(row.getGeography(ordinal))
+          recordConsumer.addBinary(Binary.fromReusedByteArray(wkb))
 
       case DecimalType.Fixed(precision, scale) =>
         makeDecimalWriter(precision, scale)

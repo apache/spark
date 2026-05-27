@@ -18,13 +18,15 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import scala.jdk.CollectionConverters.MapHasAsJava
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.LogKeys.NAMESPACE
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.util.Utils
 
 /**
@@ -37,22 +39,27 @@ case class CreateNamespaceExec(
     private var properties: Map[String, String])
     extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
-
     val ns = namespace.toArray
-    if (!catalog.namespaceExists(ns)) {
-      try {
-        val ownership =
-          Map(PROP_OWNER -> Utils.getCurrentUserName())
-        catalog.createNamespace(ns, (properties ++ ownership).asJava)
-      } catch {
-        case _: NamespaceAlreadyExistsException if ifNotExists =>
-          logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} was created concurrently. " +
-            log"Ignoring.")
-      }
-    } else if (!ifNotExists) {
-      throw QueryCompilationErrors.namespaceAlreadyExistsError(ns)
+    try {
+      val ownership = Map(PROP_OWNER -> Utils.getCurrentUserName())
+      catalog.createNamespace(ns, (properties ++ ownership).asJava)
+    } catch {
+      case _: NamespaceAlreadyExistsException if ifNotExists =>
+        logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} was created concurrently. " +
+          log"Ignoring.")
+      case NonFatal(e) if ifNotExists =>
+        // Some catalogs validate the request (e.g. ACLs, properties) before checking existence,
+        // so creating a pre-existing namespace can surface errors unrelated to the "already
+        // exists" condition the caller intends to ignore under IF NOT EXISTS. If the namespace
+        // really does exist, treat the operation as a no-op; otherwise propagate the original
+        // error.
+        val exists = try catalog.namespaceExists(ns) catch { case NonFatal(_) => false }
+        if (exists) {
+          logWarning(log"Namespace ${MDC(NAMESPACE, namespace.quoted)} already exists; " +
+            log"swallowing underlying error under IF NOT EXISTS.", e)
+        } else {
+          throw e
+        }
     }
 
     Seq.empty

@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.util.Utils
 
 class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
   private val HOST = "test-host"
@@ -77,7 +78,6 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
   test("SPARK-38201: check uploadFileToHadoopCompatibleFS with different delSrc and overwrite") {
     withTempDir { srcDir =>
       withTempDir { destDir =>
-        val upload = PrivateMethod[Unit](Symbol("uploadFileToHadoopCompatibleFS"))
         val fileName = "test.txt"
         val srcFile = new File(srcDir, fileName)
         val src = new Path(srcFile.getAbsolutePath)
@@ -86,14 +86,14 @@ class KubernetesUtilsSuite extends SparkFunSuite with PrivateMethodTester {
 
         def checkUploadException(delSrc: Boolean, overwrite: Boolean): Unit = {
           val message = intercept[SparkException] {
-            KubernetesUtils.invokePrivate(upload(src, dest, fs, delSrc, overwrite))
+            Utils.uploadFileToHadoopCompatibleFS(src, dest, fs, delSrc, overwrite)
           }.getMessage
           assert(message.contains("Error uploading file"))
         }
 
         def appendFileAndUpload(content: String, delSrc: Boolean, overwrite: Boolean): Unit = {
           Files.writeString(srcFile.toPath, content, StandardCharsets.UTF_8, CREATE, WRITE, APPEND)
-          KubernetesUtils.invokePrivate(upload(src, dest, fs, delSrc, overwrite))
+          Utils.uploadFileToHadoopCompatibleFS(src, dest, fs, delSrc, overwrite)
         }
 
         // Write a new file, upload file with delSrc = false and overwrite = true.

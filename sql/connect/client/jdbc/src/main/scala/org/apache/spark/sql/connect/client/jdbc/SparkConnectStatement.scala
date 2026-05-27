@@ -35,14 +35,21 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   override def close(): Unit = synchronized {
     if (!closed) {
       if (operationId != null) {
-        conn.spark.interruptOperation(operationId)
+        try {
+          conn.spark.interruptOperation(operationId)
+        } catch {
+          case _: java.net.ConnectException =>
+            // Ignore ConnectExceptions during cleanup as the operation may have already completed
+            // or the server may be unavailable. The important part is marking this statement
+            // as closed to prevent further use.
+        }
         operationId = null
       }
       if (resultSet != null) {
         resultSet.close()
         resultSet = null
       }
-      closed = false
+      closed = true
     }
   }
 

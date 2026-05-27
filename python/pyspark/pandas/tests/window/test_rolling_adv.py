@@ -15,11 +15,14 @@
 # limitations under the License.
 #
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.window.test_rolling import RollingTestingFuncMixin
 
 
 class RollingAdvMixin(RollingTestingFuncMixin):
+    def test_rolling_median(self):
+        self._test_rolling_func("median", lambda x: x.quantile(0.5, "lower"))
+
     def test_rolling_quantile(self):
         self._test_rolling_func(lambda x: x.quantile(0.5), lambda x: x.quantile(0.5, "lower"))
 
@@ -28,6 +31,10 @@ class RollingAdvMixin(RollingTestingFuncMixin):
 
     def test_rolling_var(self):
         self._test_rolling_func("var")
+
+    def test_rolling_sem(self):
+        self._test_rolling_func("sem")
+        self._test_rolling_func(lambda x: x.sem(ddof=0), lambda x: x.sem(ddof=0))
 
     def test_rolling_skew(self):
         self._test_rolling_func("skew")
@@ -44,13 +51,6 @@ class RollingAdvTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.window.test_rolling_adv import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

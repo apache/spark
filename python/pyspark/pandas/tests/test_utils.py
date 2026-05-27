@@ -30,7 +30,6 @@ from pyspark.testing.pandasutils import (
     _assert_pandas_equal,
     _assert_pandas_almost_equal,
 )
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.errors import PySparkAssertionError
 
 some_global_variable = 0
@@ -181,7 +180,7 @@ class UtilsTestsMixin:
             },
         )
 
-    def test_series_error_assert_pandas_equal(self):
+    def test_series_error_assert_pandas_almost_equal_2(self):
         series1 = pd.Series([1, 2, 3])
         series2 = pd.Series([4, 5, 6])
 
@@ -248,18 +247,11 @@ class TestClassForLazyProp:
         return self.some_variable
 
 
-class UtilsTests(UtilsTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class UtilsTests(UtilsTestsMixin, PandasOnSparkTestCase):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_utils import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

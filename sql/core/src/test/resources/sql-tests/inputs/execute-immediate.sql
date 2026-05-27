@@ -289,3 +289,11 @@ EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP('key1', 'valu
 -- !query
 EXECUTE IMMEDIATE 'SELECT typeof(:p) as type, :p as val' USING MAP(1, 'one', 2, 'two') AS p;
 
+-- !query
+-- Test unbound parameter markers without USING clause
+-- named parameter without USING clause should fail
+EXECUTE IMMEDIATE 'SELECT :param';
+
+-- !query
+-- positional parameter without USING clause should fail
+EXECUTE IMMEDIATE 'SELECT ?';

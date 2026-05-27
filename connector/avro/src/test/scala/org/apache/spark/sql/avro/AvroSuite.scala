@@ -22,7 +22,7 @@ import java.net.URI
 import java.nio.file.{Files, Paths, StandardCopyOption}
 import java.sql.{Date, Timestamp}
 import java.time.{LocalDate, LocalDateTime}
-import java.util.UUID
+import java.util.{Collections => JCollections, UUID}
 
 import scala.jdk.CollectionConverters._
 
@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
 import org.apache.spark.sql.execution.{FormattedMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, FilePartition}
-import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileDataSourceV2, FileTable}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
@@ -55,8 +55,7 @@ import org.apache.spark.sql.v2.avro.AvroScan
 import org.apache.spark.util.Utils
 
 abstract class AvroSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with CommonFileDataSourceSuite
   with NestedDataSourceSuiteBase {
 
@@ -1421,6 +1420,61 @@ abstract class AvroSuite
             "name" -> expectedErrorName,
             "dataType" -> expectedErrorSchema))
     }
+  }
+
+  test("to_avro with reordered fields and nullable target succeeds") {
+    // Test that when Catalyst and Avro field orders differ, null values
+    // are correctly validated against the mapped Avro field's nullability
+    val avroSchema = """{
+      "type": "record",
+      "name": "ReorderedRecord",
+      "fields": [
+        {"name": "a", "type": ["null", "string"]},
+        {"name": "b", "type": "string"}
+      ]
+    }"""
+
+    // Catalyst has fields in order [b, a], Avro has [a, b]
+    // Pass null for 'a' which is nullable in Avro - should succeed
+    val df = Seq(("B", null.asInstanceOf[String])).toDF("b", "a")
+      .select(struct($"b", $"a").as("s"))
+    val result = df.select(avro.functions.to_avro($"s", avroSchema).as("avro"))
+
+    // Should succeed without throwing AVRO_CANNOT_WRITE_NULL_FIELD
+    val collected = result.collect()
+    assert(collected.length == 1)
+
+    // Verify data correctness by round-tripping through from_avro
+    val roundTrip = result.select(avro.functions.from_avro($"avro", avroSchema).as("s"))
+    // final field order should be [a, b] as per avro schema
+    checkAnswer(roundTrip, Row(Row(null, "B")))
+  }
+
+  test("to_avro with reordered fields fails with correct field name") {
+    // Test that when Catalyst and Avro field orders differ and we try to write
+    // null to a non-nullable field, the error message references the correct field name
+    val avroSchema = """{
+      "type": "record",
+      "name": "ReorderedRecord",
+      "fields": [
+        {"name": "a", "type": ["null", "string"]},
+        {"name": "b", "type": "string"}
+      ]
+    }"""
+
+    // Catalyst has fields in order [b, a], Avro has [a, b]
+    // Pass null for 'b' which is non-nullable in Avro - should fail with correct field name 'b'
+    val df = Seq((null.asInstanceOf[String], "A")).toDF("b", "a")
+      .select(struct($"b", $"a").as("s"))
+
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        df.select(avro.functions.to_avro($"s", avroSchema)).collect()
+      },
+      condition = "AVRO_CANNOT_WRITE_NULL_FIELD",
+      parameters = Map(
+        "name" -> "`b`",
+        "dataType" -> "\"string\""))
   }
 
   test("support user provided avro schema for writing nullable fixed type") {
@@ -3137,21 +3191,6 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-51590: unsupported the TIME data types in Avro") {
-    withTempDir { dir =>
-      val tempDir = new File(dir, "files").getCanonicalPath
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("select time'12:01:02' as t")
-            .write.format("avro").mode("overwrite").save(tempDir)
-        },
-        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> "`t`",
-          "columnType" -> s"\"${TimeType().sql}\"",
-          "format" -> "Avro"))
-    }
-  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -3349,6 +3388,133 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
           }
           checkAnswer(df, Row("a", 1, 2))
         }
+      }
+    }
+  }
+
+  test("TIME type read/write with Avro format") {
+    withTempPath { dir =>
+      // Test boundary values and NULL handling
+      val df = spark.sql("""
+        SELECT
+          TIME'00:00:00.123456' as midnight,
+          TIME'12:34:56.789012' as noon,
+          TIME'23:59:59.999999' as max_time,
+          CAST(NULL AS TIME) as null_time
+      """)
+
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      checkAnswer(readDf, df)
+
+      // Verify schema - all should be default TimeType(6)
+      readDf.schema.fields.foreach { field =>
+        assert(field.dataType == TimeType(), s"Field ${field.name} should be TimeType")
+      }
+
+      // Verify boundary values
+      val row = readDf.collect()(0)
+      assert(row.getAs[java.time.LocalTime]("midnight") ==
+        java.time.LocalTime.of(0, 0, 0, 123456000))
+      assert(row.getAs[java.time.LocalTime]("noon") ==
+        java.time.LocalTime.of(12, 34, 56, 789012000))
+      assert(row.getAs[java.time.LocalTime]("max_time") ==
+        java.time.LocalTime.of(23, 59, 59, 999999000))
+      assert(row.get(3) == null, "NULL time should be preserved")
+    }
+  }
+
+  test("TIME type in nested structures in Avro") {
+    withTempPath { dir =>
+      // Test TIME type in arrays and structs with different precisions
+      val df = spark.sql("""
+        SELECT
+          named_struct('start', CAST(TIME'09:00:00.123' AS TIME(3)),
+                       'end', CAST(TIME'17:30:45.654321' AS TIME(6))) as schedule,
+          array(TIME'08:15:30.111222', TIME'12:45:15.333444', TIME'16:20:50.555666') as checkpoints
+      """)
+
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      checkAnswer(readDf, df)
+    }
+  }
+
+  test("TIME type precision metadata is preserved in Avro") {
+    withTempPath { dir =>
+      // Test all TIME precisions (0-6) with multiple columns
+      val df = spark.sql("""
+        SELECT
+          id,
+          CAST(TIME '12:34:56' AS TIME(0)) as time_p0,
+          CAST(TIME '12:34:56.1' AS TIME(1)) as time_p1,
+          CAST(TIME '12:34:56.12' AS TIME(2)) as time_p2,
+          CAST(TIME '12:34:56.123' AS TIME(3)) as time_p3,
+          CAST(TIME '12:34:56.1234' AS TIME(4)) as time_p4,
+          CAST(TIME '12:34:56.12345' AS TIME(5)) as time_p5,
+          CAST(TIME '12:34:56.123456' AS TIME(6)) as time_p6,
+          description
+        FROM VALUES
+          (1, 'Morning'),
+          (2, 'Evening')
+        AS t(id, description)
+      """)
+
+      // Verify original schema has all precisions
+      (0 to 6).foreach { p =>
+        assert(df.schema(s"time_p$p").dataType == TimeType(p))
+      }
+
+      // Write to Avro and read back
+      df.write.format("avro").save(dir.toString)
+      val readDf = spark.read.format("avro").load(dir.toString)
+
+      // Verify ALL precisions are preserved after round-trip
+      (0 to 6).foreach { p =>
+        assert(readDf.schema(s"time_p$p").dataType == TimeType(p),
+          s"Precision $p should be preserved")
+      }
+
+      // Verify data integrity
+      checkAnswer(readDf, df)
+    }
+  }
+
+  test("SPARK-56457: Avro V2 formatName matches V1 FileFormat.toString") {
+    val v2Provider = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
+    assert(v2Provider.isDefined)
+    val dsV2 = v2Provider.get.asInstanceOf[FileDataSourceV2]
+    val v1Format = dsV2.fallbackFileFormat.getDeclaredConstructor().newInstance()
+    val emptyProps = JCollections.emptyMap[String, String]()
+    val v2Table = dsV2.getTable(
+      new StructType(), Array.empty, emptyProps).asInstanceOf[FileTable]
+    assert(v2Table.formatName == v1Format.toString,
+      s"V2 formatName '${v2Table.formatName}' != V1 toString '${v1Format.toString}'")
+  }
+
+  test("Geospatial types are not supported in Avro") {
+    withTempDir { dir =>
+      // Temporary directory for writing the test data.
+      val tempDir = new File(dir, "files").getCanonicalPath
+      // Test data: WKB representation of POINT(1 2).
+      val wkb = "0101000000000000000000F03F0000000000000040"
+      // Test GEOMETRY and GEOGRAPHY data types.
+      val geoTestCases = Seq(
+        (s"ST_GeomFromWKB(X'$wkb')", "\"GEOMETRY(0)\""),
+        (s"ST_GeogFromWKB(X'$wkb')", "\"GEOGRAPHY(4326)\"")
+      )
+      geoTestCases.foreach { case (expr, expectedType) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"select $expr as g").write.format("avro").mode("overwrite").save(tempDir)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`g`",
+            "columnType" -> expectedType,
+            "format" -> "Avro"))
       }
     }
   }

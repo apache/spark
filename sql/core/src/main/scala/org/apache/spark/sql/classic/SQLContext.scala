@@ -145,6 +145,12 @@ class SQLContext private[sql] (override val sparkSession: SparkSession)
    */
   def streams: StreamingQueryManager = sparkSession.streams
 
+  /**
+   * Returns a `StreamingCheckpointManager` that allows managing any streaming checkpoint.
+   */
+  private[spark] def streamingCheckpointManager: StreamingCheckpointManager =
+    sparkSession.streamingCheckpointManager
+
   /** @inheritdoc */
   override def sparkContext: SparkContext = super.sparkContext
 

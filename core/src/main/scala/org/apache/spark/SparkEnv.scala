@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.File
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.concurrent
 import scala.collection.mutable
@@ -46,8 +47,11 @@ import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.serializer.{JavaSerializer, Serializer, SerializerManager}
 import org.apache.spark.shuffle.ShuffleManager
 import org.apache.spark.storage._
+import org.apache.spark.udf.worker.UDFWorkerSpecification
+import org.apache.spark.udf.worker.core.{UDFDispatcherFactory, UDFDispatcherManager, WorkerDispatcher}
 import org.apache.spark.util.{RpcUtils, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SparkUDFWorkerLogger
 
 /**
  * :: DeveloperApi ::
@@ -75,7 +79,30 @@ class SparkEnv (
   // user jars to define custom ShuffleManagers.
   @volatile private var _shuffleManager: ShuffleManager = _
 
+  // Latch to signal when the ShuffleManager has been initialized.
+  // Used to allow callers to wait for initialization.
+  private val shuffleManagerInitLatch = new CountDownLatch(1)
+
   def shuffleManager: ShuffleManager = _shuffleManager
+
+  /**
+   * Wait for the ShuffleManager to be initialized within the specified timeout.
+   *
+   * @param timeoutMs Maximum time to wait in milliseconds
+   * @return true if the ShuffleManager was initialized within the timeout, false otherwise
+   */
+  private[spark] def waitForShuffleManagerInit(timeoutMs: Long): Boolean = {
+    shuffleManagerInitLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+  }
+
+  /**
+   * Check if the ShuffleManager has been initialized.
+   *
+   * @return true if the ShuffleManager is initialized, false otherwise
+   */
+  private[spark] def isShuffleManagerInitialized: Boolean = {
+    _shuffleManager != null
+  }
 
   // We initialize the MemoryManager later in SparkContext after DriverPlugin is loaded
   // to allow the plugin to overwrite executor memory configurations
@@ -96,6 +123,48 @@ class SparkEnv (
       pythonExec: String, workerModule: String, daemonModule: String, envVars: Map[String, String])
   private val pythonWorkers = mutable.HashMap[PythonWorkersKey, PythonWorkerFactory]()
 
+  /**
+   * :: Experimental ::
+   * Dispatcher factory to generate UDF worker dispatchers
+   * using the new UDF framework proposed in SPARK-55278.
+   * Initialized on first use via [[getExternalUDFDispatcher]].
+   */
+  @volatile private var udfDispatcherManager: Option[UDFDispatcherManager] = None
+
+  private def createUDFDispatcherManager(): UDFDispatcherManager = {
+    val factory = new UDFDispatcherFactory {
+      override def createDispatcher(
+          workerSpec: UDFWorkerSpecification,
+          logger: org.apache.spark.udf.worker.core.WorkerLogger
+      ): WorkerDispatcher = {
+        // TODO [SPARK-55278]: Wire in the correct dispatcher factory
+        throw new UnsupportedOperationException(
+          "No UDF dispatcher factory configured. " +
+            "Set up a concrete factory for SPARK-55278.")
+      }
+    }
+    new UDFDispatcherManager(factory, new SparkUDFWorkerLogger())
+  }
+
+  /**
+   * :: Experimental ::
+   * Returns the [[WorkerDispatcher]] for the given worker
+   * specification via the [[UDFDispatcherManager]].
+   */
+  private[spark] def getExternalUDFDispatcher(
+      workerSpec: UDFWorkerSpecification): WorkerDispatcher = {
+    val manager : UDFDispatcherManager = udfDispatcherManager.getOrElse {
+      synchronized {
+        // Get or Else synchronized to protect
+        // against concurrent creation requests.
+        udfDispatcherManager.getOrElse {
+          createUDFDispatcherManager()
+        }
+      }
+    }
+    manager.getDispatcher(workerSpec)
+  }
+
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata =
@@ -110,6 +179,7 @@ class SparkEnv (
     if (!isStopped) {
       isStopped = true
       pythonWorkers.values.foreach(_.stop())
+      udfDispatcherManager.foreach(_.close())
       mapOutputTracker.stop()
       if (shuffleManager != null) {
         shuffleManager.stop()
@@ -223,7 +293,12 @@ class SparkEnv (
   private[spark] def initializeShuffleManager(): Unit = {
     Preconditions.checkState(null == _shuffleManager,
       "Shuffle manager already initialized to %s", _shuffleManager)
-    _shuffleManager = ShuffleManager.create(conf, executorId == SparkContext.DRIVER_IDENTIFIER)
+    try {
+      _shuffleManager = ShuffleManager.create(conf, SparkContext.isDriver(executorId))
+    } finally {
+      // Signal that the ShuffleManager has been initialized
+      shuffleManagerInitLatch.countDown()
+    }
   }
 
   private[spark] def initializeMemoryManager(numUsableCores: Int): Unit = {
@@ -327,7 +402,7 @@ object SparkEnv extends Logging {
       listenerBus: LiveListenerBus = null,
       mockOutputCommitCoordinator: Option[OutputCommitCoordinator] = None): SparkEnv = {
 
-    val isDriver = executorId == SparkContext.DRIVER_IDENTIFIER
+    val isDriver = SparkContext.isDriver(executorId)
 
     // Listener bus is only used on the driver
     if (isDriver) {

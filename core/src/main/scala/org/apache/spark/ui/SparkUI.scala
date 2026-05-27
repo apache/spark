@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import java.util.Date
 
 import jakarta.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.ee10.servlet.ServletContextHandler
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
@@ -227,6 +227,16 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
   def appName: String = parent.appName
 
   def appSparkVersion: String = parent.appSparkVersion
+
+  def sparkUser: String = parent.getSparkUser
+
+  def appStartTime: Long = {
+    try {
+      parent.store.applicationInfo().attempts.head.startTime.getTime
+    } catch {
+      case _: Exception => System.currentTimeMillis()
+    }
+  }
 }
 
 private[spark] object SparkUI {

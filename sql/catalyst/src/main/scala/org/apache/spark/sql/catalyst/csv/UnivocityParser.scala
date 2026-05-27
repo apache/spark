@@ -113,6 +113,7 @@ class UnivocityParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timeFormatter = TimeFormatter(options.timeFormatInRead, isParsing = true)
 
   private val csvFilters = if (SQLConf.get.csvFilterPushDown) {
     new OrderedFilters(filters, requiredSchema)
@@ -260,6 +261,11 @@ class UnivocityParser(
     case _: TimestampNTZType => (d: String) =>
       nullSafeDatum(d, name, nullable, options) { datum =>
         timestampNTZFormatter.parseWithoutTimeZone(datum, false)
+      }
+
+    case _: TimeType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timeFormatter.parse(datum)
       }
 
     case _: StringType => (d: String) =>
@@ -490,17 +496,24 @@ class UnivocityParser(
       def parseDecimal(): DataType = {
         try {
           var d = decimalParser(s)
-          if (d.scale() < 0) {
-            d = d.setScale(0)
-          }
-          if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
-            d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
-            builder.appendDecimal(d)
-            // The actual decimal type doesn't matter. `appendDecimal` will use the smallest
-            // possible decimal type to store the value.
-            DecimalType.USER_DEFAULT
-          } else {
+          if (d.scale() < -VariantUtil.MAX_DECIMAL16_PRECISION) {
+            // Scale is so extremely negative that setScale(0) would require computing
+            // bigTenToThe(|scale|), which is prohibitively expensive. The resulting precision
+            // would also exceed MAX_DECIMAL16_PRECISION, so fall through to string.
             if (options.preferDate) parseDate() else parseTimestampNTZ()
+          } else {
+            if (d.scale() < 0) {
+              d = d.setScale(0)
+            }
+            if (d.scale() <= VariantUtil.MAX_DECIMAL16_PRECISION &&
+              d.precision() <= VariantUtil.MAX_DECIMAL16_PRECISION) {
+              builder.appendDecimal(d)
+              // The actual decimal type doesn't matter. `appendDecimal` will use the smallest
+              // possible decimal type to store the value.
+              DecimalType.USER_DEFAULT
+            } else {
+              if (options.preferDate) parseDate() else parseTimestampNTZ()
+            }
           }
         } catch {
           case NonFatal(_) =>

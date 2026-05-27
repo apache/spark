@@ -163,7 +163,7 @@ class TPCDSTables(spark: SparkSession, dsdgenDir: String, scaleFactor: Int)
         val columns = schema.fields.map { f =>
           val c = f.dataType match {
             // Needs right-padding for char types
-            case CharType(n) => rpad(Column(f.name), n, " ")
+            case c: CharType => rpad(Column(f.name), c.length, " ")
             // Don't need a cast for varchar types
             case _: VarcharType => col(f.name)
             case _ => col(f.name).cast(f.dataType)

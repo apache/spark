@@ -34,8 +34,8 @@ import org.apache.spark.sql.types.StructType
 class CSVOptions(
     @transient val parameters: CaseInsensitiveMap[String],
     val columnPruning: Boolean,
-    defaultTimeZoneId: String,
-    defaultColumnNameOfCorruptRecord: String)
+    private val defaultTimeZoneId: String,
+    private val defaultColumnNameOfCorruptRecord: String)
   extends FileSourceOptions(parameters) with Logging {
 
   import CSVOptions._
@@ -63,6 +63,24 @@ class CSVOptions(
         defaultColumnNameOfCorruptRecord)
   }
 
+  override def equals(obj: Any): Boolean = obj match {
+    case other: CSVOptions =>
+      (parameters == null && other.parameters == null ||
+      parameters != null && parameters == other.parameters) &&
+      columnPruning == other.columnPruning &&
+      defaultTimeZoneId == other.defaultTimeZoneId &&
+      defaultColumnNameOfCorruptRecord == other.defaultColumnNameOfCorruptRecord
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    var result = Option(parameters).map(_.hashCode()).getOrElse(0)
+    result = 31 * result + (if (columnPruning) 1 else 0)
+    result = 31 * result + defaultTimeZoneId.hashCode()
+    result = 31 * result + defaultColumnNameOfCorruptRecord.hashCode()
+    result
+  }
+
   private def getChar(paramName: String, default: Char): Char = {
     val paramValue = parameters.get(paramName)
     paramValue match {
@@ -70,7 +88,7 @@ class CSVOptions(
       case Some(null) => default
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
-      case _ => throw QueryExecutionErrors.paramExceedOneCharError(paramName)
+      case Some(value) => throw QueryExecutionErrors.paramExceedOneCharError(paramName, value)
     }
   }
 
@@ -126,7 +144,8 @@ class CSVOptions(
     case Some(null) => None
     case Some(value) if value.length == 0 => None
     case Some(value) if value.length == 1 => Some(value.charAt(0))
-    case _ => throw QueryExecutionErrors.paramExceedOneCharError(CHAR_TO_ESCAPE_QUOTE_ESCAPING)
+    case Some(value) => throw QueryExecutionErrors.paramExceedOneCharError(
+      CHAR_TO_ESCAPE_QUOTE_ESCAPING, value)
   }
   val comment = getChar(COMMENT, '\u0000')
 
@@ -204,6 +223,9 @@ class CSVOptions(
   val timestampNTZFormatInWrite: String = parameters.getOrElse(TIMESTAMP_NTZ_FORMAT,
     s"${DateFormatter.defaultPattern}'T'HH:mm:ss[.SSS]")
 
+  val timeFormatInRead: Option[String] = parameters.get(TIME_FORMAT)
+  val timeFormatInWrite: String = parameters.getOrElse(TIME_FORMAT, TimeFormatter.defaultPattern)
+
   // SPARK-39731: Enables the backward compatible parsing behavior.
   // Generally, this config should be set to false to avoid producing potentially incorrect results
   // which is the current default (see UnivocityParser).
@@ -262,11 +284,15 @@ class CSVOptions(
    * A string between two consecutive JSON records.
    */
   val lineSeparator: Option[String] = parameters.get(LINE_SEP).map { sep =>
-    require(sep != null, "'lineSep' cannot be a null value.")
-    require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
-    // Intentionally allow it up to 2 for Window's CRLF although multiple
-    // characters have an issue with quotes. This is intentionally undocumented.
-    require(sep.length <= 2, "'lineSep' can contain only 1 character.")
+    if (sep == null) {
+      throw QueryExecutionErrors.lineSepCannotBeNullError()
+    }
+    if (sep.isEmpty) {
+      throw QueryExecutionErrors.lineSepCannotBeEmptyError()
+    }
+    if (sep.length > 2) {
+      throw QueryExecutionErrors.lineSepTooLongError(sep.length)
+    }
     if (sep.length == 2) logWarning("It is not recommended to set 'lineSep' " +
       "with 2 characters due to the limitation of supporting multi-char 'lineSep' within quotes.")
     sep
@@ -390,6 +416,7 @@ object CSVOptions extends DataSourceOptions {
   val DATE_FORMAT = newOption("dateFormat")
   val TIMESTAMP_FORMAT = newOption("timestampFormat")
   val TIMESTAMP_NTZ_FORMAT = newOption("timestampNTZFormat")
+  val TIME_FORMAT = newOption("timeFormat")
   val ENABLE_DATETIME_PARSING_FALLBACK = newOption("enableDateTimeParsingFallback")
   val MULTI_LINE = newOption("multiLine")
   val SAMPLING_RATIO = newOption("samplingRatio")

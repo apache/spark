@@ -22,7 +22,7 @@ import io.fabric8.kubernetes.client.KubernetesClient
 import org.apache.spark.deploy.k8s.integrationtest.ProcessUtils
 import org.apache.spark.deploy.k8s.integrationtest.TestConstants._
 import org.apache.spark.deploy.k8s.integrationtest.backend.cloud.KubeConfigBackend
-import org.apache.spark.deploy.k8s.integrationtest.backend.docker.DockerForDesktopBackend
+import org.apache.spark.deploy.k8s.integrationtest.backend.docker.{DockerForDesktopBackend, RancherDesktopBackend}
 import org.apache.spark.deploy.k8s.integrationtest.backend.minikube.MinikubeTestBackend
 
 private[spark] trait IntegrationTestBackend {
@@ -44,6 +44,7 @@ private[spark] object IntegrationTestBackendFactory {
       case BACKEND_CLOUD =>
         new KubeConfigBackend(System.getProperty(CONFIG_KEY_KUBE_CONFIG_CONTEXT))
       case BACKEND_DOCKER_DESKTOP => DockerForDesktopBackend
+      case BACKEND_RANCHER_DESKTOP => RancherDesktopBackend
       case _ => throw new IllegalArgumentException("Invalid " +
         CONFIG_KEY_DEPLOY_MODE + ": " + deployMode)
     }

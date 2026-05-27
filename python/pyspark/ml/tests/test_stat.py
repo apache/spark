@@ -16,7 +16,6 @@
 #
 
 import numpy as np
-import unittest
 
 from pyspark.errors import PySparkException
 from pyspark.ml.linalg import Vectors, DenseVector
@@ -211,12 +210,6 @@ class StatTests(StatTestsMixin, ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_stat import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

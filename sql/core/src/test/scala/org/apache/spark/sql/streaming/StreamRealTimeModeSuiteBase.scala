@@ -32,6 +32,7 @@ import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.GlobalSingletonManualClock
 import org.apache.spark.sql.test.TestSparkSession
+import org.apache.spark.util.SystemClock
 
 /**
  * Base class for tests that require real-time mode.
@@ -43,6 +44,11 @@ trait StreamRealTimeModeSuiteBase extends StreamTest with Matchers {
     super.sparkConf
       .set(SQLConf.STREAMING_REAL_TIME_MODE_MIN_BATCH_DURATION,
         defaultTrigger.batchDurationMs)
+  }
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    LowLatencyClock.setClock(new SystemClock)
   }
 
   override protected def createSparkSession = new TestSparkSession(

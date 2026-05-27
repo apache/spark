@@ -28,6 +28,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.DefaultFileRegion;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.roaringbitmap.RoaringBitmap;
@@ -70,14 +71,25 @@ public class MergedBlockMetaSuccessSuite {
     when(context.alloc()).thenReturn(ByteBufAllocator.DEFAULT);
 
     MessageEncoder.INSTANCE.encode(context, expectedMeta, out);
-    Assertions.assertEquals(1, out.size());
-    MessageWithHeader msgWithHeader = (MessageWithHeader) out.remove(0);
+    // FileSegmentManagedBuffer.convertToNetty() returns a DefaultFileRegion,
+    // so MessageEncoder splits the output into header ByteBuf + FileRegion.
+    Assertions.assertEquals(2, out.size());
+    Assertions.assertInstanceOf(ByteBuf.class, out.get(0));
+    Assertions.assertInstanceOf(DefaultFileRegion.class, out.get(1));
+    ByteBuf headerBuf = (ByteBuf) out.remove(0);
+    DefaultFileRegion fileRegion = (DefaultFileRegion) out.remove(0);
 
-    ByteArrayWritableChannel writableChannel =
-      new ByteArrayWritableChannel((int) msgWithHeader.count());
-    while (msgWithHeader.transfered() < msgWithHeader.count()) {
-      msgWithHeader.transferTo(writableChannel, msgWithHeader.transfered());
+    int totalLen = headerBuf.readableBytes() + (int) fileRegion.count();
+    ByteArrayWritableChannel writableChannel = new ByteArrayWritableChannel(totalLen);
+    // Write header
+    writableChannel.write(headerBuf.nioBuffer());
+    // Write file region body
+    fileRegion.open();
+    while (fileRegion.transferred() < fileRegion.count()) {
+      fileRegion.transferTo(writableChannel, fileRegion.transferred());
     }
+    fileRegion.release();
+    headerBuf.release();
     ByteBuf messageBuf = Unpooled.wrappedBuffer(writableChannel.getData());
     messageBuf.readLong(); // frame length
     MessageDecoder.INSTANCE.decode(mock(ChannelHandlerContext.class), messageBuf, out);

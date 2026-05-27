@@ -25,8 +25,6 @@ import java.util.Locale
 
 import scala.util.control.NonFatal
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -47,7 +45,7 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  * See the documentation of public vals in this class for information on how test execution can be
  * configured using system properties.
  */
-abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
+abstract class HiveComparisonTest extends SparkFunSuite {
 
   override protected val enableAutoThreadAudit = false
 
@@ -173,7 +171,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
       case _: ExplainCommand => answer
-      case _: DescribeCommandBase | ShowColumnsCommand(_, _, _) =>
+      case _: DescribeCommandBase | _: ShowColumnsCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but
         // can introduce problems because of the way Hive formats these lines.
         // Then, remove empty lines. Do not sort the results.
@@ -377,6 +375,7 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
                 (!hiveQuery.logical.isInstanceOf[DescribeFunction]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeCommandBase]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeRelation]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeTablePartition]) &&
                 (!hiveQuery.logical.isInstanceOf[DescribeColumn]) &&
                 preparedHive != catalyst) {
 

@@ -19,24 +19,27 @@ package org.apache.spark.sql.internal
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveSessionCatalog, ResolveTranspose, TableFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveSetCatalogCommand, ResolveTranspose, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
+import org.apache.spark.sql.catalyst.normalizer.NormalizeCTEIds
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingQueryManager, UDFRegistration}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
+import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
 import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, ScalaUDAF}
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
-import org.apache.spark.sql.execution.command.CommandCheck
+import org.apache.spark.sql.execution.command.{CheckViewReferences, CommandCheck}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
+import org.apache.spark.sql.execution.externalUDF.{ClassicExternalUDFPlanner,
+  ExternalUDFPlanner, UnifiedExternalUDFPlanner}
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -81,25 +84,10 @@ abstract class BaseSessionStateBuilder(
   /**
    * SQL-specific key-value configurations.
    *
-   * These either get cloned from a pre-existing instance or newly created. The conf is merged
-   * with its [[SparkConf]] only when there is no parent session.
+   * Uses the SQLConf from the SparkSession, which is initialized before sessionState
+   * to avoid recursive access during sessionState initialization.
    */
-  protected lazy val conf: SQLConf = {
-    parentState.map { s =>
-      val cloned = s.conf.clone()
-      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
-        SQLConf.mergeSparkConf(cloned, session.sparkContext.conf)
-      }
-      cloned
-    }.getOrElse {
-      val conf = new SQLConf
-      SQLConf.mergeSparkConf(conf, session.sharedState.conf)
-      // the later added configs to spark conf shall be respected too
-      SQLConf.mergeNonStaticSQLConfigs(conf, session.sparkContext.conf.getAll.toMap)
-      SQLConf.mergeNonStaticSQLConfigs(conf, session.initialSessionOptions)
-      conf
-    }
-  }
+  protected def conf: SQLConf = session.sqlConf
 
   /**
    * Internal catalog managing functions registered by the user.
@@ -174,7 +162,13 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
-  protected lazy val catalogManager = new CatalogManager(v2SessionCatalog, catalog)
+  protected lazy val catalogManager = {
+    val cm = new DefaultCatalogManager(v2SessionCatalog, catalog)
+    parentState.foreach(ps => cm.copySessionPathFrom(ps.catalogManager))
+    cm
+  }
+
+  protected lazy val sharedRelationCache = session.sharedState.relationCache
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -197,7 +191,7 @@ abstract class BaseSessionStateBuilder(
    *
    * Note: this depends on the `conf` and `catalog` fields.
    */
-  protected def analyzer: Analyzer = new Analyzer(catalogManager) {
+  protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache, Some(conf)) {
     override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
       customHintResolutionRules
 
@@ -243,10 +237,12 @@ abstract class BaseSessionStateBuilder(
         ResolveWriteToStream +:
         new EvalSubqueriesForTimeTravel +:
         new ResolveTranspose(session) +:
+        ResolveMetricView(session) +:
         new InvokeProcedures(session) +:
         ResolveExecuteImmediate(session, this.catalogManager) +:
         ExtractSemiStructuredFields +:
         ResolveEventTimeWatermark +:
+        ResolveSetCatalogCommand +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -265,6 +261,7 @@ abstract class BaseSessionStateBuilder(
         HiveOnlyCheck +:
         TableCapabilityCheck +:
         CommandCheck +:
+        CheckViewReferences +:
         ViewSyncSchemaToMetaStore +:
         customCheckRules
   }
@@ -400,7 +397,21 @@ abstract class BaseSessionStateBuilder(
       extensions.buildQueryPostPlannerStrategyRules(session))
   }
 
+  /**
+   * Strategy for converting (Python) UDF calls into logical plan
+   * nodes. Uses the unified external UDF worker framework when
+   * the config is enabled, otherwise the classic Python runner.
+   */
+  protected def externalUDFPlanner: ExternalUDFPlanner = {
+    if (conf.getConf(SQLConf.UNIFIED_UDF_EXECUTION_ENABLED)) {
+      new UnifiedExternalUDFPlanner(session.sparkContext.conf)
+    } else {
+      new ClassicExternalUDFPlanner()
+    }
+  }
+
   protected def planNormalizationRules: Seq[Rule[LogicalPlan]] = {
+    NormalizeCTEIds +:
     extensions.buildPlanNormalizationRules(session)
   }
 
@@ -410,13 +421,20 @@ abstract class BaseSessionStateBuilder(
   protected def createQueryExecution:
     (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
       (plan, mode) => new QueryExecution(session, plan, mode = mode,
-        shuffleCleanupMode = QueryExecution.determineShuffleCleanupMode(session.sessionState.conf))
+        shuffleCleanupModeOpt =
+          Some(QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
 
   /**
    * Interface to start and stop streaming queries.
    */
   protected def streamingQueryManager: StreamingQueryManager =
     new StreamingQueryManager(session, conf)
+
+  /**
+   * Interface to manage streaming query checkpoints.
+   */
+  private[spark] def streamingCheckpointManager: StreamingCheckpointManager =
+    new StreamingCheckpointManager(session, conf)
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -465,6 +483,7 @@ abstract class BaseSessionStateBuilder(
       () => optimizer,
       planner,
       () => streamingQueryManager,
+      () => streamingCheckpointManager,
       listenerManager,
       () => resourceLoader,
       createQueryExecution,
@@ -472,36 +491,8 @@ abstract class BaseSessionStateBuilder(
       columnarRules,
       adaptiveRulesHolder,
       planNormalizationRules,
-      () => artifactManager)
-  }
-}
-
-/**
- * Helper class for using SessionStateBuilders during tests.
- */
-private[sql] trait WithTestConf { self: BaseSessionStateBuilder =>
-  def overrideConfs: Map[String, String]
-
-  override protected lazy val conf: SQLConf = {
-    val overrideConfigurations = overrideConfs
-    parentState.map { s =>
-      val cloned = s.conf.clone()
-      if (session.sparkContext.conf.get(StaticSQLConf.SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS)) {
-        SQLConf.mergeSparkConf(conf, session.sparkContext.conf)
-      }
-      cloned
-    }.getOrElse {
-      val conf = new SQLConf {
-        clear()
-        override def clear(): Unit = {
-          super.clear()
-          // Make sure we start with the default test configs even after clear
-          overrideConfigurations.foreach { case (key, value) => setConfString(key, value) }
-        }
-      }
-      SQLConf.mergeSparkConf(conf, session.sparkContext.conf)
-      conf
-    }
+      () => artifactManager,
+      externalUDFPlanner)
   }
 }
 

@@ -42,6 +42,9 @@ class MemoryStateStore extends StateStore() {
     throw StateStoreErrors.multipleColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
 
+  override def allColumnFamilyNames: Set[String] =
+    Set[String](StateStore.DEFAULT_COL_FAMILY_NAME)
+
   override def removeColFamilyIfExists(colFamilyName: String): Boolean = {
     throw StateStoreErrors.removingColumnFamiliesNotSupported("MemoryStateStoreProvider")
   }
@@ -88,6 +91,16 @@ class MemoryStateStore extends StateStore() {
 
   override def valuesIterator(key: UnsafeRow, colFamilyName: String): Iterator[UnsafeRow] = {
     throw new UnsupportedOperationException("Doesn't support multiple values per key")
+  }
+
+  override def prefixScanWithMultiValues(
+      prefixKey: UnsafeRow, colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    throw new UnsupportedOperationException("Doesn't support prefix scan with multiple values!")
+  }
+
+  override def iteratorWithMultiValues(
+      colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
+    throw new UnsupportedOperationException("Doesn't support iterator with multiple values!")
   }
 
   override def getStateStoreCheckpointInfo(): StateStoreCheckpointInfo = {

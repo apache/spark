@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.types;
 
+import org.apache.spark.annotation.Unstable;
+
 import java.io.Serializable;
 import java.util.Arrays;
 
 // This class represents the Geography data for clients.
+@Unstable
 public final class Geography implements Serializable {
   // The GEOGRAPHY type is implemented as WKB bytes + SRID integer stored in class itself.
   protected final byte[] value;

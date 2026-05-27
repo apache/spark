@@ -21,7 +21,6 @@ from pyspark.errors import AnalysisException
 from pyspark.sql import functions as F
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SparkIndexOpsMethodsTestsMixin:
@@ -63,20 +62,11 @@ class SparkIndexOpsMethodsTestsMixin:
             self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
 
-class SparkIndexOpsMethodsTests(
-    SparkIndexOpsMethodsTestsMixin, PandasOnSparkTestCase, SQLTestUtils
-):
+class SparkIndexOpsMethodsTests(SparkIndexOpsMethodsTestsMixin, PandasOnSparkTestCase):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_indexops_spark import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

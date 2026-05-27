@@ -14,13 +14,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 
 import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameTruncateMixin:
@@ -117,17 +115,11 @@ class FrameTruncateMixin:
             psdf.truncate("C", "B", axis=1)
 
 
-class FrameTruncateTests(FrameTruncateMixin, PandasOnSparkTestCase, SQLTestUtils):
+class FrameTruncateTests(FrameTruncateMixin, PandasOnSparkTestCase):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.frame.test_truncate import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

@@ -17,12 +17,31 @@
 
 package org.apache.spark.sql.catalyst.expressions.st
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.trees._
 import org.apache.spark.sql.catalyst.util.{Geography, Geometry, STUtils}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 
+/**
+ * ST expressions are behind a feature flag while the geospatial module is under development.
+ */
+
+sealed trait GeospatialInputTypes extends ImplicitCastInputTypes {
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (!SQLConf.get.geospatialEnabled) {
+      throw new AnalysisException(
+        errorClass = "UNSUPPORTED_FEATURE.GEOSPATIAL_DISABLED",
+        messageParameters = Map.empty
+      )
+    }
+    super.checkInputDataTypes()
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for geospatial operations.
@@ -33,55 +52,69 @@ import org.apache.spark.sql.types._
 private[sql] object ExpressionDefaults {
   val DEFAULT_GEOGRAPHY_SRID: Int = Geography.DEFAULT_SRID
   val DEFAULT_GEOMETRY_SRID: Int = Geometry.DEFAULT_SRID
+  val DEFAULT_WKB_ENDIANNESS: String = "NDR"
 }
 
 /** ST writer expressions. */
 
 /**
- * Returns the input GEOGRAPHY or GEOMETRY value in WKB format.
+ * Returns the input GEOGRAPHY or GEOMETRY value in WKB format using the specified endianness, if
+ * provided. If no endianness is provided, it defaults to little endian.
  * See https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary
  * for more details on the WKB format.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(geo) - Returns the geospatial value (value of type GEOGRAPHY or GEOMETRY) "
-    + "in WKB format.",
+  usage = "_FUNC_(geo[, endianness]) - Returns the geospatial value (value of type GEOGRAPHY or "
+    + "GEOMETRY) in WKB format using the specified endianness ('NDR' for little-endian, 'XDR' for "
+    + "big-endian), if provided. Defaults to little-endian encoding.",
   arguments = """
     Arguments:
       * geo - A geospatial value, either a GEOGRAPHY or a GEOMETRY.
+      * endianness - The optional endianness of the output WKB, 'NDR' for little-endian (default)
+                     or 'XDR' for big-endian.
   """,
   examples = """
     Examples:
       > SELECT hex(_FUNC_(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')));
        0101000000000000000000F03F0000000000000040
-      > SELECT hex(_FUNC_(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040')));
-       0101000000000000000000F03F0000000000000040
+      > SELECT hex(_FUNC_(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'), 'XDR'));
+       00000000013FF00000000000004000000000000000
   """,
   since = "4.1.0",
   group = "st_funcs"
 )
-case class ST_AsBinary(geo: Expression)
+case class ST_AsBinary(geo: Expression, endianness: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+    with GeospatialInputTypes
+    with BinaryLike[Expression] {
+
+  // If no endianness is given, default to little-endian encoding which is represented by "NDR".
+  def this(geo: Expression) = {
+    this(geo, Literal(ExpressionDefaults.DEFAULT_WKB_ENDIANNESS))
+  }
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
-    TypeCollection(GeographyType, GeometryType)
+    TypeCollection(GeographyType, GeometryType),
+    StringTypeWithCollation(supportsTrimCollation = true)
   )
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
     BinaryType,
     "stAsBinary",
-    Seq(geo),
+    Seq(geo, endianness),
     returnNullable = false
   )
 
   override def prettyName: String = "st_asbinary"
 
-  override def child: Expression = geo
+  override def left: Expression = geo
 
-  override protected def withNewChildInternal(newChild: Expression): ST_AsBinary =
-    copy(geo = newChild)
+  override def right: Expression = endianness
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): ST_AsBinary = copy(geo = newLeft, endianness = newRight)
 }
 
 /** ST reader expressions. */
@@ -109,7 +142,7 @@ case class ST_AsBinary(geo: Expression)
 )
 case class ST_GeogFromWKB(wkb: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
+    with GeospatialInputTypes
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
@@ -132,46 +165,62 @@ case class ST_GeogFromWKB(wkb: Expression)
 
 /**
  * Parses the WKB description of a geometry and returns the corresponding GEOMETRY value. The SRID
- * value of the returned GEOMETRY value is 0.
+ * value of the returned GEOMETRY value is the provided SRID. If not SRID value is provided, the
+ * SRID value of the returned GEOMETRY value is set to 0.
  * See https://en.wikipedia.org/wiki/Well-known_text_representation_of_geometry#Well-known_binary
  * for more details on the WKB format.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(wkb) - Parses the WKB description of a geometry and returns the corresponding "
-    + "GEOMETRY value.",
+  usage = "_FUNC_(wkb[, srid]) - Parses the WKB description of a geometry and returns the "
+    + "corresponding GEOMETRY value.",
   arguments = """
     Arguments:
       * wkb - A BINARY value in WKB format, representing a GEOMETRY value.
+      * srid - The optional SRID value of the geometry. Default is 0.
   """,
   examples = """
     Examples:
       > SELECT hex(st_asbinary(_FUNC_(X'0101000000000000000000F03F0000000000000040')));
        0101000000000000000000F03F0000000000000040
+      > SELECT st_srid(_FUNC_(X'0101000000000000000000F03F0000000000000040'));
+       0
+      > SELECT hex(st_asbinary(_FUNC_(X'0101000000000000000000F03F0000000000000040', 4326)));
+       0101000000000000000000F03F0000000000000040
+      > SELECT st_srid(_FUNC_(X'0101000000000000000000F03F0000000000000040', 4326));
+       4326
   """,
   since = "4.1.0",
   group = "st_funcs"
 )
-case class ST_GeomFromWKB(wkb: Expression)
+case class ST_GeomFromWKB(wkb: Expression, srid: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
-    with UnaryLike[Expression] {
+    with GeospatialInputTypes
+    with BinaryLike[Expression] {
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType)
+  // If no SRID value is provided, use the default SRID value for geometries.
+  def this(wkb: Expression) = {
+    this(wkb, Literal(ExpressionDefaults.DEFAULT_GEOMETRY_SRID))
+  }
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType)
 
   override lazy val replacement: Expression = StaticInvoke(
     classOf[STUtils],
-    GeometryType(ExpressionDefaults.DEFAULT_GEOMETRY_SRID),
+    STExpressionUtils.geometryTypeWithSrid(srid),
     "stGeomFromWKB",
-    Seq(wkb),
+    Seq(wkb, srid),
     returnNullable = false
   )
 
   override def prettyName: String = "st_geomfromwkb"
 
-  override def child: Expression = wkb
+  override def left: Expression = wkb
 
-  override protected def withNewChildInternal(newChild: Expression): ST_GeomFromWKB =
-    copy(wkb = newChild)
+  override def right: Expression = srid
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): ST_GeomFromWKB = copy(wkb = newLeft, srid = newRight)
 }
 
 /** ST accessor expressions. */
@@ -201,7 +250,7 @@ case class ST_GeomFromWKB(wkb: Expression)
 )
 case class ST_Srid(geo: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
+    with GeospatialInputTypes
     with UnaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
@@ -249,7 +298,7 @@ case class ST_Srid(geo: Expression)
 )
 case class ST_SetSrid(geo: Expression, srid: Expression)
     extends RuntimeReplaceable
-    with ImplicitCastInputTypes
+    with GeospatialInputTypes
     with BinaryLike[Expression] {
 
   override def inputTypes: Seq[AbstractDataType] =

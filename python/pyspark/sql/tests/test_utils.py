@@ -29,12 +29,20 @@ from pyspark.errors import (
     SparkUpgradeException,
     PySparkTypeError,
 )
-from pyspark.testing.utils import assertDataFrameEqual, assertSchemaEqual, _context_diff, have_numpy
+from pyspark.testing.utils import (
+    assertDataFrameEqual,
+    assertSchemaEqual,
+    _context_diff,
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+)
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.sql import Row
 import pyspark.sql.functions as F
 from pyspark.sql.functions import to_date, unix_timestamp, from_unixtime
 from pyspark.sql.types import (
+    DecimalType,
     StringType,
     ArrayType,
     LongType,
@@ -46,7 +54,6 @@ from pyspark.sql.types import (
     IntegerType,
     BooleanType,
 )
-from pyspark.testing.sqlutils import have_pandas, have_pyarrow
 
 
 class UtilsTestsMixin:
@@ -923,7 +930,7 @@ class UtilsTestsMixin:
         assertDataFrameEqual(df1, df2, checkRowOrder=True)
 
     @unittest.skipIf(not have_pandas or not have_pyarrow, "no pandas or pyarrow dependency")
-    def test_assert_equal_exact_pandas_on_spark_df(self):
+    def test_assert_equal_exact_pandas_on_spark_df_no_order(self):
         import pyspark.pandas as ps
 
         df1 = ps.DataFrame(data=[10, 20, 30], columns=["Numbers"])
@@ -1076,6 +1083,76 @@ class UtilsTestsMixin:
             errorClass="DIFFERENT_ROWS",
             messageParameters={"error_msg": error_msg},
         )
+
+    def test_different_row_count_middle_missing_no_cascading_diff(self):
+        # SPARK-54090: When checkRowOrder=False and expected is missing a row in
+        # the middle of the sorted order, only the truly missing/extra row should
+        # be reported -- not every row after the first mismatch.
+        actual = [Row(id="1"), Row(id="2"), Row(id="3"), Row(id="4"), Row(id="5")]
+        expected = [Row(id="1"), Row(id="2"), Row(id="4"), Row(id="5")]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected)
+
+        error_msg = pe.exception.getMessageParameters()["error_msg"]
+        # Only Row(id='3') is extra in actual: 1 / max(5, 4) = 20%
+        self.assertIn("20.00000 %", error_msg)
+
+    def test_different_row_count_multiple_missing(self):
+        # SPARK-54090: Multiple rows missing from expected should be counted
+        # individually, not cascade across every subsequent row.
+        actual = [Row(v=i) for i in range(1, 7)]
+        expected = [Row(v=i) for i in (1, 3, 5)]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected)
+
+        error_msg = pe.exception.getMessageParameters()["error_msg"]
+        # 3 extras (2, 4, 6) in actual; max(6, 3) = 6 -> 50%
+        self.assertIn("50.00000 %", error_msg)
+
+    def test_different_row_count_includeDiffRows(self):
+        # SPARK-54090: includeDiffRows should contain only truly differing rows.
+        actual = [Row(id="1"), Row(id="2"), Row(id="3"), Row(id="4"), Row(id="5")]
+        expected = [Row(id="1"), Row(id="2"), Row(id="4"), Row(id="5")]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected, includeDiffRows=True)
+
+        # Only one actual row (id='3') has no match in expected.
+        self.assertEqual(pe.exception.data, [(Row(id="3"), None)])
+
+    def test_different_row_count_mixed_extra_and_missing(self):
+        # SPARK-54090: both extras in actual and missing in actual must be
+        # reported without cascading.
+        actual = [Row(v="A"), Row(v="B"), Row(v="D"), Row(v="X")]
+        expected = [Row(v="A"), Row(v="B"), Row(v="C"), Row(v="D"), Row(v="E")]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected, includeDiffRows=True)
+
+        # X is extra in actual; C and E are missing from actual.  Merge-walk
+        # visits them in sorted order: C missing, E missing, X extra.
+        self.assertEqual(
+            pe.exception.data,
+            [(None, Row(v="C")), (None, Row(v="E")), (Row(v="X"), None)],
+        )
+        error_msg = pe.exception.getMessageParameters()["error_msg"]
+        # 3 total diffs / max(4, 5) = 60%
+        self.assertIn("60.00000 %", error_msg)
+
+    def test_different_row_count_extras_at_end(self):
+        # Extras only at end -- both zip_longest and merge-walk should agree.
+        actual = [Row(v=1), Row(v=2), Row(v=3), Row(v=4), Row(v=5)]
+        expected = [Row(v=1), Row(v=2), Row(v=3)]
+
+        with self.assertRaises(PySparkAssertionError) as pe:
+            assertDataFrameEqual(actual, expected, includeDiffRows=True)
+
+        self.assertEqual(pe.exception.data, [(Row(v=4), None), (Row(v=5), None)])
+        error_msg = pe.exception.getMessageParameters()["error_msg"]
+        # 2 extras / max(5, 3) = 40%
+        self.assertIn("40.00000 %", error_msg)
 
     def test_remove_non_word_characters_long(self):
         def remove_non_word_characters(col):
@@ -1264,6 +1341,13 @@ class UtilsTestsMixin:
 
         assertSchemaEqual(s1, s2)
 
+    def test_schema_ignore_nullable_map_unequal(self):
+        s1 = StructType([StructField("m", MapType(StringType(), IntegerType()), True)])
+        s2 = StructType([StructField("m", MapType(IntegerType(), StringType()), True)])
+
+        with self.assertRaises(PySparkAssertionError):
+            assertSchemaEqual(s1, s2, ignoreNullable=True)
+
     def test_schema_ignore_nullable_struct_equal(self):
         s1 = StructType(
             [StructField("names", StructType([StructField("age", IntegerType(), True)]), True)]
@@ -1364,8 +1448,12 @@ class UtilsTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_STRUCT",
-            messageParameters={"arg_name": "actual", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "struct type",
+                "arg_name": "actual",
+                "arg_type": "str",
+            },
         )
 
     def test_spark_sql(self):
@@ -1537,55 +1625,6 @@ class UtilsTestsMixin:
         )
 
     def test_list_row_unequal_schema(self):
-        df1 = self.spark.createDataFrame(
-            data=[
-                (1, 3000),
-                (2, 1000),
-                (3, 10),
-            ],
-            schema=["id", "amount"],
-        )
-
-        list_of_rows = [Row(id=1, amount=300), Row(id=2, amount=100), Row(id=3, amount=10)]
-
-        rows_str1 = ""
-        rows_str2 = ""
-
-        # count different rows
-        for r1, r2 in list(zip_longest(df1, list_of_rows)):
-            rows_str1 += str(r1) + "\n"
-            rows_str2 += str(r2) + "\n"
-
-        generated_diff = _context_diff(
-            actual=rows_str1.splitlines(), expected=rows_str2.splitlines(), n=3
-        )
-
-        error_msg = "Results do not match: "
-        percent_diff = (2 / 3) * 100
-        error_msg += "( %.5f %% )" % percent_diff
-        error_msg += "\n" + "\n".join(generated_diff)
-
-        with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, list_of_rows)
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="DIFFERENT_ROWS",
-            messageParameters={"error_msg": error_msg},
-        )
-
-        with self.assertRaises(PySparkAssertionError) as pe:
-            assertDataFrameEqual(df1, list_of_rows, checkRowOrder=True)
-
-        self.check_error(
-            exception=pe.exception,
-            errorClass="DIFFERENT_ROWS",
-            messageParameters={"error_msg": error_msg},
-        )
-
-    def test_list_row_unequal_schema(self):
-        from pyspark.sql import Row
-
         df1 = self.spark.createDataFrame(
             data=[
                 (1, 3000),
@@ -1805,8 +1844,6 @@ class UtilsTestsMixin:
     def test_assert_schema_equal_with_decimal_types(self):
         """Test assertSchemaEqual with decimal types of different precision and scale
         (SPARK-51062)."""
-        from pyspark.sql.types import StructType, StructField, DecimalType
-
         # Same precision and scale - should pass
         s1 = StructType(
             [
@@ -1835,18 +1872,11 @@ class UtilsTestsMixin:
             assertSchemaEqual(s1, s2)
 
 
-class UtilsTests(ReusedSQLTestCase, UtilsTestsMixin):
+class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):
     pass
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.sql.tests.test_utils import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

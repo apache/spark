@@ -35,8 +35,23 @@ class PythonScan(
 ) extends Scan with SupportsMetadata {
   override def toBatch: Batch = new PythonBatch(ds, shortName, outputSchema, options)
 
-  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-    new PythonMicroBatchStream(ds, shortName, outputSchema, options)
+  override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+    val runner = PythonMicroBatchStream.createPythonStreamingSourceRunner(
+      ds, shortName, outputSchema, options)
+    runner.init()
+
+    val supportedFeatures = runner.checkSupportedFeatures()
+
+    if (supportedFeatures.triggerAvailableNow) {
+      new PythonMicroBatchStreamWithTriggerAvailableNow(
+        ds, shortName, outputSchema, options, runner)
+    } else if (supportedFeatures.admissionControl) {
+      new PythonMicroBatchStreamWithAdmissionControl(
+        ds, shortName, outputSchema, options, runner)
+    } else {
+      new PythonMicroBatchStream(ds, shortName, outputSchema, options, runner)
+    }
+  }
 
   override def description: String = "(Python)"
 

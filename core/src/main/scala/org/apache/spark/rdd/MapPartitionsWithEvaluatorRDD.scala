@@ -23,7 +23,8 @@ import org.apache.spark.{Partition, PartitionEvaluatorFactory, TaskContext}
 
 private[spark] class MapPartitionsWithEvaluatorRDD[T : ClassTag, U : ClassTag](
     var prev: RDD[T],
-    evaluatorFactory: PartitionEvaluatorFactory[T, U])
+    evaluatorFactory: PartitionEvaluatorFactory[T, U],
+    val preservesPartitionSizes: Boolean = false)
   extends RDD[U](prev) {
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions

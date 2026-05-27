@@ -20,6 +20,7 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
@@ -340,8 +341,15 @@ class CategoricalTestsMixin:
 
         pdf, psdf = self.df_pair
 
-        def identity(df) -> ps.DataFrame[zip(psdf.columns, psdf.dtypes)]:
-            return df
+        if LooseVersion(pd.__version__) < "3.0.0":
+
+            def identity(df) -> ps.DataFrame[zip(psdf.columns, psdf.dtypes)]:
+                return df
+
+        else:
+
+            def identity(df) -> ps.DataFrame[zip(psdf.columns[1:], psdf.dtypes[1:])]:
+                return df
 
         self.assert_eq(
             psdf.groupby("a").apply(identity).sort_values(["b"]).reset_index(drop=True),
@@ -414,7 +422,7 @@ class CategoricalTestsMixin:
 
         pdf, psdf = self.df_pair
 
-        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F405
+        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F821
             return pdf.astype(str)
 
         self.assert_eq(
@@ -474,7 +482,7 @@ class CategoricalTestsMixin:
 
         pdf, psdf = self.df_pair
 
-        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F405
+        def to_str(pdf) -> 'ps.DataFrame["a":str, "b":str]':  # noqa: F821
             return pdf.astype(str)
 
         self.assert_eq(
@@ -670,13 +678,6 @@ class CategoricalTests(
 
 
 if __name__ == "__main__":
-    import unittest
-    from pyspark.pandas.tests.test_categorical import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

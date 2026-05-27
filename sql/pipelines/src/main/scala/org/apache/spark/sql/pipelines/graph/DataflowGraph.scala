@@ -30,9 +30,13 @@ import org.apache.spark.sql.types.StructType
  * It manages the relationships between logical flows, tables, sinks, and views, providing
  * operations for graph traversal, validation, and transformation.
  */
-case class DataflowGraph(flows: Seq[Flow], tables: Seq[Table], sinks: Seq[Sink], views: Seq[View])
-    extends GraphOperations
-    with GraphValidations {
+case class DataflowGraph(
+    flows: Seq[Flow],
+    tables: Seq[Table],
+    sinks: Seq[Sink],
+    views: Seq[View])
+  extends GraphOperations
+  with GraphValidations {
 
   /** Map of [[Output]]s by their identifiers */
   lazy val output: Map[TableIdentifier, Output] = mapUnique(sinks ++ tables, "output")(_.identifier)

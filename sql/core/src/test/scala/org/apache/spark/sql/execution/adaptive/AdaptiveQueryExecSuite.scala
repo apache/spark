@@ -27,11 +27,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, EqualTo, IsNull, Or}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Join, JoinHint, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.physical.CoalescedNullAwareHashPartitioning
 import org.apache.spark.sql.classic.Strategy
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
@@ -40,7 +42,7 @@ import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider
@@ -60,8 +62,7 @@ import org.apache.spark.util.Utils
 
 @SlowSQLTest
 class AdaptiveQueryExecSuite
-  extends QueryTest
-  with SharedSparkSession
+  extends SharedSparkSession
   with AdaptiveSparkPlanHelper
   with PrivateMethodTester {
 
@@ -1635,6 +1636,47 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("LogicalQueryStageStrategy keeps hashed broadcast modes separate") {
+    val left = LocalRelation(AttributeReference("l", IntegerType)())
+    val right = LocalRelation(AttributeReference("r", IntegerType)())
+
+    def broadcastStage(plan: LocalRelation, isNullAware: Boolean): LogicalQueryStage = {
+      val scan = LocalTableScanExec(plan.output, Nil, None)
+      val exchange = BroadcastExchangeExec(
+        HashedRelationBroadcastMode(plan.output, isNullAware), scan)
+      LogicalQueryStage(plan, BroadcastQueryStageExec(0, exchange, exchange))
+    }
+
+    val equiJoin = Join(
+      broadcastStage(left, isNullAware = false),
+      right,
+      Inner,
+      Some(EqualTo(left.output.head, right.output.head)),
+      JoinHint.NONE)
+    assert(LogicalQueryStageStrategy(equiJoin).head.isInstanceOf[BroadcastHashJoinExec])
+
+    val equiJoinWithNullAwareStage = equiJoin.copy(
+      left = broadcastStage(left, isNullAware = true))
+    assert(LogicalQueryStageStrategy(equiJoinWithNullAwareStage).isEmpty)
+
+    val naajCondition = Or(
+      EqualTo(left.output.head, right.output.head),
+      IsNull(EqualTo(left.output.head, right.output.head)))
+    val nullAwareAntiJoin = Join(
+      left,
+      broadcastStage(right, isNullAware = true),
+      LeftAnti,
+      Some(naajCondition),
+      JoinHint.NONE)
+    val naaj = LogicalQueryStageStrategy(nullAwareAntiJoin).head
+      .asInstanceOf[BroadcastHashJoinExec]
+    assert(naaj.isNullAwareAntiJoin)
+
+    val nullAwareAntiJoinWithRegularStage = nullAwareAntiJoin.copy(
+      right = broadcastStage(right, isNullAware = false))
+    assert(LogicalQueryStageStrategy(nullAwareAntiJoinWithRegularStage).isEmpty)
+  }
+
   test("SPARK-32717: AQEOptimizer should respect excludedRules configuration") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -2048,55 +2090,80 @@ class AdaptiveQueryExecSuite
           |ON CAST(value AS INT) = b
         """.stripMargin)
 
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
-        // Repartition with no partition num specified.
-        checkBHJ(df.repartition($"b"),
-          // The top shuffle from repartition is optimized out.
-          optimizeOutRepartition = true, probeSideLocalRead = false, probeSideCoalescedRead = true)
+      def checkRepartitionOptimization(
+          df: Dataset[Row],
+          useNullAwarePartitioning: Boolean): Unit = {
+        val optimizeDefaultRepartition = !useNullAwarePartitioning
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+          // Repartition with no partition num specified.
+          checkBHJ(df.repartition($"b"),
+            optimizeOutRepartition = optimizeDefaultRepartition,
+            probeSideLocalRead = useNullAwarePartitioning,
+            probeSideCoalescedRead = !useNullAwarePartitioning)
 
-        // Repartition with default partition num (5 in test env) specified.
-        checkBHJ(df.repartition(5, $"b"),
-          // The top shuffle from repartition is optimized out
-          // The final plan must have 5 partitions, no optimization can be made to the probe side.
-          optimizeOutRepartition = true, probeSideLocalRead = false, probeSideCoalescedRead = false)
+          // Repartition with default partition num (5 in test env) specified.
+          checkBHJ(df.repartition(5, $"b"),
+            optimizeOutRepartition = optimizeDefaultRepartition,
+            probeSideLocalRead = useNullAwarePartitioning,
+            probeSideCoalescedRead = false)
 
-        // Repartition with non-default partition num specified.
-        checkBHJ(df.repartition(4, $"b"),
-          // The top shuffle from repartition is not optimized out
-          optimizeOutRepartition = false, probeSideLocalRead = true, probeSideCoalescedRead = true)
+          // Repartition with non-default partition num specified.
+          checkBHJ(df.repartition(4, $"b"),
+            optimizeOutRepartition = false,
+            probeSideLocalRead = true,
+            probeSideCoalescedRead = true)
 
-        // Repartition by col and project away the partition cols
-        checkBHJ(df.repartition($"b").select($"key"),
-          // The top shuffle from repartition is not optimized out
-          optimizeOutRepartition = false, probeSideLocalRead = true, probeSideCoalescedRead = true)
+          // Repartition by col and project away the partition cols
+          checkBHJ(df.repartition($"b").select($"key"),
+            optimizeOutRepartition = false,
+            probeSideLocalRead = true,
+            probeSideCoalescedRead = true)
+        }
+
+        // Force skew join
+        withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+          SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "1",
+          SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "0",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
+          // Repartition with no partition num specified.
+          checkSMJ(df.repartition($"b"),
+            optimizeOutRepartition = optimizeDefaultRepartition,
+            optimizeSkewJoin = useNullAwarePartitioning,
+            coalescedRead = !useNullAwarePartitioning)
+
+          // Repartition with default partition num (5 in test env) specified.
+          checkSMJ(df.repartition(5, $"b"),
+            optimizeOutRepartition = optimizeDefaultRepartition,
+            optimizeSkewJoin = useNullAwarePartitioning,
+            coalescedRead = false)
+
+          // Repartition with non-default partition num specified.
+          checkSMJ(df.repartition(4, $"b"),
+            optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
+
+          // Repartition by col and project away the partition cols
+          checkSMJ(df.repartition($"b").select($"key"),
+            optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
+        }
       }
 
-      // Force skew join
-      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
-        SQLConf.SKEW_JOIN_ENABLED.key -> "true",
-        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "1",
-        SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "0",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
-        // Repartition with no partition num specified.
-        checkSMJ(df.repartition($"b"),
-          // The top shuffle from repartition is optimized out.
-          optimizeOutRepartition = true, optimizeSkewJoin = false, coalescedRead = true)
-
-        // Repartition with default partition num (5 in test env) specified.
-        checkSMJ(df.repartition(5, $"b"),
-          // The top shuffle from repartition is optimized out.
-          // The final plan must have 5 partitions, can't do coalesced read.
-          optimizeOutRepartition = true, optimizeSkewJoin = false, coalescedRead = false)
-
-        // Repartition with non-default partition num specified.
-        checkSMJ(df.repartition(4, $"b"),
-          // The top shuffle from repartition is not optimized out.
-          optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
-
-        // Repartition by col and project away the partition cols
-        checkSMJ(df.repartition($"b").select($"key"),
-          // The top shuffle from repartition is not optimized out.
-          optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
+      checkRepartitionOptimization(df, useNullAwarePartitioning = false)
+      withSQLConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+        // Null-aware join output partitioning is not equivalent to ordinary hash repartitioning.
+        val nullablePreservedSideDf = sql(
+          """
+            |SELECT * FROM (
+            |  SELECT * FROM testData WHERE key = 1
+            |)
+            |RIGHT OUTER JOIN (
+            |  SELECT a, b FROM testData2
+            |  UNION ALL
+            |  SELECT CAST(NULL AS INT) AS a, CAST(NULL AS INT) AS b
+            |)
+            |ON CAST(value AS INT) = b
+          """.stripMargin)
+        checkRepartitionOptimization(nullablePreservedSideDf, useNullAwarePartitioning = true)
       }
     }
   }
@@ -2563,6 +2630,39 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  test("AQE preserves coalesced null-aware partitioning for outer equi-join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "8",
+      SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1048576") {
+      val nullableLeft = Seq(
+        (Integer.valueOf(1), "left-1"),
+        (null.asInstanceOf[Integer], "left-null-1"),
+        (null.asInstanceOf[Integer], "left-null-2")).toDF("k", "lv")
+      val nullableRight = Seq(
+        (Integer.valueOf(1), "right-1"),
+        (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
+      val df = nullableLeft.join(
+        nullableRight, nullableLeft("k") === nullableRight("k"), "left_outer")
+
+      checkAnswer(df, Seq(
+        Row(1, "left-1", 1, "right-1"),
+        Row(null, "left-null-1", null, null),
+        Row(null, "left-null-2", null, null)))
+
+      val coalescedNullAwareReads = collect(df.queryExecution.executedPlan) {
+        case read: AQEShuffleReadExec
+            if read.hasCoalescedPartition &&
+              read.outputPartitioning.isInstanceOf[CoalescedNullAwareHashPartitioning] =>
+          read
+      }
+      assert(coalescedNullAwareReads.nonEmpty)
+    }
+  }
+
   test("SPARK-35794: Allow custom plugin for cost evaluator") {
     CostEvaluator.instantiate(
       classOf[SimpleShuffleSortCostEvaluator].getCanonicalName, spark.sparkContext.getConf)
@@ -2696,10 +2796,15 @@ class AdaptiveQueryExecSuite
   test("SPARK-48037: Fix SortShuffleWriter lacks shuffle write related metrics " +
     "resulting in potentially inaccurate data") {
     withTable("t3") {
+      // It would take many extra memory to keep track the checksums for large number of shuffle
+      // partitions, which is 16777216 in this case. Instead of keep increasing the test memory in
+      // CI jobs, disable order independent shuffle checksum to avoid OOM during test.
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
         SQLConf.SHUFFLE_PARTITIONS.key -> (SortShuffleManager
-          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString) {
+          .MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE + 1).toString,
+        SQLConf.SHUFFLE_ORDER_INDEPENDENT_CHECKSUM_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_CHECKSUM_MISMATCH_FULL_RETRY_ENABLED.key -> "false") {
         sql("CREATE TABLE t3 USING PARQUET AS SELECT id FROM range(2)")
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(
           """
@@ -3443,6 +3548,68 @@ class AdaptiveQueryExecSuite
 
             checkAnswer(sql(query), correctResults)
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-44065: Optimize BroadcastHashJoin skew") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000",
+      SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "600",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "600") {
+      withTempView("skewData", "smallData") {
+        spark
+          .range(0, 1000, 1, 10)
+          .selectExpr("if(id >= 5, 5, id) as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 5, 1, 10)
+          .selectExpr("id key2", "id as value2")
+          .createOrReplaceTempView("smallData")
+
+        Seq(true, false).foreach { localShuffleReader =>
+          withSQLConf(SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> localShuffleReader.toString) {
+            val sqlText =
+              s"""
+                 |select * from skewData1 a join smallData b on a.key1 = b.key2
+                 |""".stripMargin
+            val (_, plan) = runAdaptiveAndVerifyResult(sqlText)
+            val bhjs = findTopLevelBroadcastHashJoin(plan)
+            assert(bhjs.nonEmpty)
+
+            if (localShuffleReader) {
+              val localShuffleReaders = collect(plan) {
+                case c: AQEShuffleReadExec if c.isLocalRead => c
+              }
+              assert(localShuffleReaders.nonEmpty)
+            } else {
+              val skewedShuffleReaders = collect(plan) {
+                case c: AQEShuffleReadExec if c.hasSkewedPartition => c
+              }
+              assert(skewedShuffleReaders.nonEmpty)
+            }
+          }
+        }
+
+        withSQLConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true") {
+          val sqlText =
+            s"""
+               |select a.key1, count(*) from skewData1 a join smallData b
+               | on a.key1 = b.key2 group by a.key1
+               |""".stripMargin
+          val (_, plan) = runAdaptiveAndVerifyResult(sqlText)
+          val bhjs = findTopLevelBroadcastHashJoin(plan)
+          assert(bhjs.nonEmpty)
+
+          val skewedBroadcastHashJoins = collect(plan) {
+            case c: BroadcastHashJoinExec if c.isSkewJoin => c
+          }
+          assert(skewedBroadcastHashJoins.nonEmpty)
         }
       }
     }

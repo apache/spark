@@ -25,9 +25,9 @@ import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, StructType}
 
-class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
+class GeneratorFunctionSuite extends SharedSparkSession {
   import testImplicits._
 
   test("stack") {
@@ -577,6 +577,224 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
          |)
          |""".stripMargin)
     checkAnswer(df, Seq(Row(0, "a"), Row(0, "b")))
+  }
+
+  test("generator with alias in multiple projects") {
+    val df = sql("SELECT explode(array(5, 6, 7, 8, 9)) AS a")
+    val alias = ($"a" + 1).as("a")
+    checkAnswer(
+      df.select(alias).select(alias).select(alias),
+      Seq(Row(8), Row(9), Row(10), Row(11), Row(12))
+    )
+  }
+
+  test("generator in self-join with aliased columns") {
+    val df1 = sql("SELECT explode(array(1, 2, 3)) AS col")
+    val df2 = df1.select($"col".as("col2"))
+    checkAnswer(
+      df1.join(df2, df1("col") === df2("col2")),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 3))
+    )
+  }
+
+  test("generator in self-union") {
+    val df1 = sql("SELECT explode(array(1, 2, 3)) AS col")
+    checkAnswer(
+      df1.union(df1),
+      Seq(Row(1), Row(2), Row(3), Row(1), Row(2), Row(3))
+    )
+  }
+
+  test("explode with nested aliases using DataFrame API") {
+    checkAnswer(
+      spark.range(1).select(explode(array(lit(1), lit(2), lit(3))).as("first").as("second")),
+      Seq(Row(1), Row(2), Row(3))
+    )
+  }
+
+  test("posexplode with multi-alias using DataFrame API") {
+    checkAnswer(
+      spark.range(1).select(posexplode(array(lit(10), lit(20))).as(Seq("idx", "val"))),
+      Seq(Row(0, 10), Row(1, 20))
+    )
+  }
+
+  test("posexplode with chained aliases using DataFrame API should fail") {
+    val exception = intercept[AnalysisException] {
+      spark
+        .range(1)
+        .select(
+          posexplode(array(lit(1), lit(2), lit(3)))
+            .as("lolkek")
+            .as(Seq("pos", "val"))
+            .as(Seq("pos", "val", "kek"))
+            .as(Seq("pos2", "val2"))
+            .as("lolkek")
+        )
+        .collect()
+    }
+    assert(exception.getCondition == "UDTF_ALIAS_NUMBER_MISMATCH")
+  }
+
+  test("posexplode with chained aliases ending with valid multi-alias using DataFrame API") {
+    checkAnswer(
+      spark
+        .range(1)
+        .select(
+          posexplode(array(lit(1), lit(2), lit(3)))
+            .as("lolkek")
+            .as(Seq("pos", "val"))
+            .as(Seq("pos", "val", "kek"))
+            .as(Seq("pos2", "val2"))
+        ),
+      Seq(Row(0, 1), Row(1, 2), Row(2, 3))
+    )
+  }
+
+  test("explode with chained aliases and LCA reference using DataFrame API should fail") {
+    val exception = intercept[AnalysisException] {
+      spark
+        .range(1)
+        .select(
+          explode(array(lit(1), lit(2), lit(3)))
+            .as("first")
+            .as("second"),
+          $"first"
+        )
+        .collect()
+    }
+    assert(exception.getCondition == "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+  }
+
+  test("explode with chained aliases and final alias reference using DataFrame API") {
+    checkAnswer(
+      spark
+        .range(1)
+        .select(
+          explode(array(lit(1), lit(2), lit(3)))
+            .as("first")
+            .as("second"),
+          $"second"
+        ),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 3))
+    )
+  }
+
+  test("explode_outer with chained aliases using DataFrame API") {
+    checkAnswer(
+      spark
+        .range(1)
+        .select(
+          explode_outer(array(lit(1), lit(2), lit(3)))
+            .as("first")
+            .as("second")
+        ),
+      Seq(Row(1), Row(2), Row(3))
+    )
+  }
+
+  test("explode_outer with chained aliases and final alias reference using DataFrame API") {
+    checkAnswer(
+      spark
+        .range(1)
+        .select(
+          explode_outer(array(lit(1), lit(2), lit(3)))
+            .as("first")
+            .as("second"),
+          $"second"
+        ),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 3))
+    )
+  }
+
+  test("posexplode_outer with chained aliases using DataFrame API should fail") {
+    val exception = intercept[AnalysisException] {
+      spark
+        .range(1)
+        .select(
+          posexplode_outer(array(lit(1), lit(2), lit(3)))
+            .as("lolkek")
+            .as(Seq("pos", "val"))
+            .as(Seq("pos", "val", "kek"))
+            .as(Seq("pos2", "val2"))
+            .as("lolkek")
+        )
+        .collect()
+    }
+    assert(exception.getCondition == "UDTF_ALIAS_NUMBER_MISMATCH")
+  }
+
+  test("posexplode_outer with chained aliases ending with valid multi-alias using DataFrame API") {
+    checkAnswer(
+      spark
+        .range(1)
+        .select(
+          posexplode_outer(array(lit(1), lit(2), lit(3)))
+            .as("lolkek")
+            .as(Seq("pos", "val"))
+            .as(Seq("pos", "val", "kek"))
+            .as(Seq("pos2", "val2"))
+        ),
+      Seq(Row(0, 1), Row(1, 2), Row(2, 3))
+    )
+  }
+
+  test("posexplode_outer with multi-alias using DataFrame API") {
+    checkAnswer(
+      spark
+        .range(1)
+        .select(
+          posexplode_outer(array(lit(10), lit(20)))
+            .as(Seq("idx", "val"))
+        ),
+      Seq(Row(0, 10), Row(1, 20))
+    )
+  }
+
+  test("posexplode_outer with chained multi-alias and final reference using DataFrame API") {
+    checkAnswer(
+      spark
+        .range(1)
+        .select(
+          posexplode_outer(array(lit(10), lit(20)))
+            .as(Seq("pos1", "val1"))
+            .as(Seq("pos2", "val2")),
+          $"pos2",
+          $"val2"
+        ),
+      Seq(Row(0, 10, 0, 10), Row(1, 20, 1, 20))
+    )
+  }
+
+  test("SPARK-48091: explode with transform should preserve struct field aliases") {
+    val df = spark.createDataFrame(Seq((1, Array(1, 2, 3), Array(4, 5, 6))))
+      .toDF("id", "my_array", "my_array2")
+
+    // Without explode - aliases should work (baseline)
+    val good = df.select(
+      transform(col("my_array2"), x => struct(x.as("data"))).as("my_struct")
+    )
+    assert(good.schema("my_struct").dataType.asInstanceOf[ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames.toSeq === Seq("data"))
+
+    // With explode in same select - aliases should still be preserved
+    val result = df.select(
+      explode(col("my_array")).as("exploded"),
+      transform(col("my_array2"), x => struct(x.as("data"))).as("my_struct")
+    )
+    assert(result.schema("my_struct").dataType.asInstanceOf[ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames.toSeq === Seq("data"))
+
+    // Multiple aliases inside struct
+    val result2 = df.select(
+      explode(col("my_array")).as("exploded"),
+      transform(col("my_array2"),
+        x => struct(x.as("value"), col("id").as("key"))
+      ).as("my_struct")
+    )
+    val fields2 = result2.schema("my_struct").dataType.asInstanceOf[ArrayType]
+      .elementType.asInstanceOf[StructType].fieldNames.toSeq
+    assert(fields2 === Seq("value", "key"))
   }
 }
 

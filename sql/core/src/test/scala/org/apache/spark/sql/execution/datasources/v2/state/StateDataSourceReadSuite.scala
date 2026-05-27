@@ -36,6 +36,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, TimeMode, TransformWithStateSuiteUtils}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.Utils
 
 class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
   import testImplicits._
@@ -578,6 +579,10 @@ StateDataSourceReadSuite {
   test("snapshotStartBatchId on join state v3") {
     testSnapshotOnJoinStateV3()
   }
+
+  test("snapshotStartBatchId on join state v4") {
+    testSnapshotOnJoinStateV4()
+  }
 }
 
 class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceReadSuite {
@@ -676,6 +681,10 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSnapshotSuite extends StateDat
 
   test("snapshotStartBatchId on join state v3") {
     testSnapshotOnJoinStateV3()
+  }
+
+  test("snapshotStartBatchId on join state v4") {
+    testSnapshotOnJoinStateV4()
   }
 }
 
@@ -982,6 +991,10 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
     testStreamStreamJoin(3)
   }
 
+  test("stream-stream join, state ver 4") {
+    testStreamStreamJoin(4)
+  }
+
   private def testStreamStreamJoin(stateVersion: Int): Unit = {
     def assertInternalColumnIsNotExposed(df: DataFrame): Unit = {
       val valueSchema = SchemaUtil.getSchemaAsDataType(df.schema, "value")
@@ -992,8 +1005,8 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
       }
     }
 
-    // We should only test state version 3 with RocksDBStateStoreProvider
-    if (stateVersion == 3
+    // State version >= 3 requires RocksDBStateStoreProvider
+    if (stateVersion >= 3
       && SQLConf.get.stateStoreProviderClass != classOf[RocksDBStateStoreProvider].getName) {
       return
     }
@@ -1035,48 +1048,86 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
           Seq(Row(6, 6, 6L), Row(8, 8, 8L), Row(10, 10, 10L))
         )
 
-        val stateReaderForRightKeyToNumValues = spark.read
-          .format("statestore")
-          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-          .option(StateSourceOptions.STORE_NAME,
-            "right-keyToNumValues")
+        if (stateVersion <= 3) {
+          // v1-v3: test reading specific stores by name
+          val stateReaderForRightKeyToNumValues = spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STORE_NAME,
+              "right-keyToNumValues")
 
-        val stateReadDfForRightKeyToNumValues = stateReaderForRightKeyToNumValues.load()
-        val resultDf3 = stateReadDfForRightKeyToNumValues
-          .selectExpr("key.field0 AS key_0", "value.value")
-
-        checkAnswer(
-          resultDf3,
-          Seq(Row(6, 1L), Row(8, 1L), Row(10, 1L))
-        )
-
-        val stateReaderForRightKeyWithIndexToValue = spark.read
-          .format("statestore")
-          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
-          .option(StateSourceOptions.STORE_NAME,
-            "right-keyWithIndexToValue")
-
-        val stateReadDfForRightKeyWithIndexToValue = stateReaderForRightKeyWithIndexToValue.load()
-
-        if (stateVersion >= 2) {
-          val resultDf4 = stateReadDfForRightKeyWithIndexToValue
-            .selectExpr("key.field0 AS key_0", "key.index AS key_index",
-              "value.rightId AS rightId", "CAST(value.rightTime AS integer) AS rightTime",
-              "value.matched As matched")
+          val stateReadDfForRightKeyToNumValues = stateReaderForRightKeyToNumValues.load()
+          val resultDf3 = stateReadDfForRightKeyToNumValues
+            .selectExpr("key.field0 AS key_0", "value.value")
 
           checkAnswer(
-            resultDf4,
-            Seq(Row(6, 0, 6, 6L, true), Row(8, 0, 8, 8L, true), Row(10, 0, 10, 10L, true))
+            resultDf3,
+            Seq(Row(6, 1L), Row(8, 1L), Row(10, 1L))
           )
+
+          val stateReaderForRightKeyWithIndexToValue = spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STORE_NAME,
+              "right-keyWithIndexToValue")
+
+          val stateReadDfForRightKeyWithIndexToValue =
+            stateReaderForRightKeyWithIndexToValue.load()
+
+          if (stateVersion >= 2) {
+            val resultDf4 = stateReadDfForRightKeyWithIndexToValue
+              .selectExpr("key.field0 AS key_0", "key.index AS key_index",
+                "value.rightId AS rightId", "CAST(value.rightTime AS integer) AS rightTime",
+                "value.matched As matched")
+
+            checkAnswer(
+              resultDf4,
+              Seq(Row(6, 0, 6, 6L, true), Row(8, 0, 8, 8L, true), Row(10, 0, 10, 10L, true))
+            )
+          } else {
+            // stateVersion == 1
+            val resultDf4 = stateReadDfForRightKeyWithIndexToValue
+              .selectExpr("key.field0 AS key_0", "key.index AS key_index",
+                "value.rightId AS rightId", "CAST(value.rightTime AS integer) AS rightTime")
+
+            checkAnswer(
+              resultDf4,
+              Seq(Row(6, 0, 6, 6L), Row(8, 0, 8, 8L), Row(10, 0, 10, 10L))
+            )
+          }
         } else {
-          // stateVersion == 1
-          val resultDf4 = stateReadDfForRightKeyWithIndexToValue
-            .selectExpr("key.field0 AS key_0", "key.index AS key_index",
-              "value.rightId AS rightId", "CAST(value.rightTime AS integer) AS rightTime")
+          // v4: test reading specific stores by name
+          val stateReaderForRightKeyWithTsToValues = spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STORE_NAME,
+              "right-keyWithTsToValues")
+
+          val stateReadDfForRightKeyWithTsToValues =
+            stateReaderForRightKeyWithTsToValues.load()
+          val resultDf3 = stateReadDfForRightKeyWithTsToValues
+            .selectExpr("key.field0 AS key_0",
+              "value.rightId AS rightId", "CAST(value.rightTime AS integer) AS rightTime",
+              "value.matched AS matched")
+
+          checkAnswer(
+            resultDf3,
+            Seq(Row(6, 6, 6L, true), Row(8, 8, 8L, true), Row(10, 10, 10L, true))
+          )
+
+          val stateReaderForRightTsWithKey = spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STORE_NAME,
+              "right-tsWithKey")
+
+          val stateReadDfForRightTsWithKey = stateReaderForRightTsWithKey.load()
+          val resultDf4 = stateReadDfForRightTsWithKey
+            .selectExpr("key.field0 AS key_0")
 
           checkAnswer(
             resultDf4,
-            Seq(Row(6, 0, 6, 6L), Row(8, 0, 8, 8L), Row(10, 0, 10, 10L))
+            Seq(Row(6), Row(8), Row(10))
           )
         }
       }
@@ -1464,9 +1515,17 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
   }
 
   protected def testSnapshotOnJoinStateV3(): Unit = {
+    testSnapshotOnJoinStateWithVCF(3)
+  }
+
+  protected def testSnapshotOnJoinStateV4(): Unit = {
+    testSnapshotOnJoinStateWithVCF(4)
+  }
+
+  private def testSnapshotOnJoinStateWithVCF(stateFormatVersion: Int): Unit = {
     withTempDir { tmpDir =>
       withSQLConf(
-        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> "3",
+        SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key -> stateFormatVersion.toString,
         SQLConf.STREAMING_MAINTENANCE_INTERVAL.key -> "100"
       ) {
         val inputData = MemoryStream[(Int, Long)]
@@ -1485,19 +1544,288 @@ abstract class StateDataSourceReadSuite extends StateDataSourceTestBase with Ass
           StopStream
         )
 
-        val stateSnapshotDf = spark.read.format("statestore")
+        val stateSnapshotDfLeft = spark.read.format("statestore")
           .option("snapshotPartitionId", 2)
           .option("snapshotStartBatchId", 0)
           .option("joinSide", "left")
           .load(tmpDir.getCanonicalPath)
 
-        val stateDf = spark.read.format("statestore")
+        val stateDfLeft = spark.read.format("statestore")
           .option("joinSide", "left")
           .load(tmpDir.getCanonicalPath)
           .filter(col("partition_id") === 2)
 
-        checkAnswer(stateSnapshotDf, stateDf)
+        checkAnswer(stateSnapshotDfLeft, stateDfLeft)
+
+        val stateSnapshotDfRight = spark.read.format("statestore")
+          .option("snapshotPartitionId", 2)
+          .option("snapshotStartBatchId", 0)
+          .option("joinSide", "right")
+          .load(tmpDir.getCanonicalPath)
+
+        val stateDfRight = spark.read.format("statestore")
+          .option("joinSide", "right")
+          .load(tmpDir.getCanonicalPath)
+          .filter(col("partition_id") === 2)
+
+        checkAnswer(stateSnapshotDfRight, stateDfRight)
       }
     }
+  }
+}
+
+/**
+ * Test suite that verifies the state data source reader does not create empty state
+ * directories when reading state for all stateful operators.
+ */
+class StateDataSourceNoEmptyDirCreationSuite extends StateDataSourceTestBase {
+
+  /**
+   * Asserts that the cause chain of the given exception contains
+   * an instance of the expected type.
+   */
+  private def assertCauseChainContains(
+      e: Throwable,
+      expectedType: Class[_ <: Throwable]): Unit = {
+    var current: Throwable = e
+    while (current != null) {
+      if (expectedType.isInstance(current)) return
+      current = current.getCause
+    }
+    fail(
+      s"Expected ${expectedType.getSimpleName} in cause chain, " +
+        s"but got: ${e.getClass.getSimpleName}: ${e.getMessage}")
+  }
+
+  test("deleted offsets directory is not recreated on read") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val offsetsDir = new File(tempDir, "offsets")
+      assert(offsetsDir.exists(), "Offsets directory should exist after running the query")
+      Utils.deleteRecursively(offsetsDir)
+      assert(!offsetsDir.exists(), "Offsets directory should be deleted")
+
+      val e1 = intercept[Exception] {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+      assertCauseChainContains(e1,
+        classOf[StateDataSourceOffsetLogUnavailable])
+
+      assert(!offsetsDir.exists(),
+        "State data source reader should not recreate the deleted offsets directory")
+    }
+  }
+
+  test("deleted commits directory is not recreated on read") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val commitsDir = new File(tempDir, "commits")
+      assert(commitsDir.exists(), "Commits directory should exist after running the query")
+      Utils.deleteRecursively(commitsDir)
+      assert(!commitsDir.exists(), "Commits directory should be deleted")
+
+      val e2 = intercept[Exception] {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+      assertCauseChainContains(e2,
+        classOf[StataDataSourceCommittedBatchUnavailable])
+
+      assert(!commitsDir.exists(),
+        "State data source reader should not recreate the deleted commits directory")
+    }
+  }
+
+  test("deleted commits directory is not recreated on read (state-metadata source)") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val commitsDir = new File(tempDir, "commits")
+      assert(commitsDir.exists(), "Commits directory should exist after running the query")
+      Utils.deleteRecursively(commitsDir)
+      assert(!commitsDir.exists(), "Commits directory should be deleted")
+
+      spark.read.format("state-metadata").load(checkpointPath).collect()
+
+      assert(!commitsDir.exists(),
+        "State-metadata source reader should not recreate the deleted commits directory")
+    }
+  }
+
+  test("deleted offsets directory is not recreated on read (state-metadata source)") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val offsetsDir = new File(tempDir, "offsets")
+      assert(offsetsDir.exists(), "Offsets directory should exist after running the query")
+      Utils.deleteRecursively(offsetsDir)
+      assert(!offsetsDir.exists(), "Offsets directory should be deleted")
+
+      spark.read.format("state-metadata").load(checkpointPath).collect()
+
+      assert(!offsetsDir.exists(),
+        "State-metadata source reader should not recreate the deleted offsets directory")
+    }
+  }
+
+  test("deleted state directory is not recreated on read (state-metadata source)") {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+      runLargeDataStreamingAggregationQuery(checkpointPath)
+
+      val stateDir = new File(tempDir, "state")
+      assert(stateDir.exists(), "State directory should exist after running the query")
+      Utils.deleteRecursively(stateDir)
+      assert(!stateDir.exists(), "State directory should be deleted")
+
+      spark.read.format("state-metadata").load(checkpointPath).collect()
+
+      assert(!stateDir.exists(),
+        "State-metadata source reader should not recreate the deleted state directory")
+    }
+  }
+
+  /**
+   * Runs a stateful query to create the checkpoint structure, deletes the state directory,
+   * then attempts to read via the state data source and verifies that the state directory
+   * is not recreated.
+   *
+   * @param runQuery function that runs one batch of a stateful query given a checkpoint path
+   * @param readState function that attempts to read state given a checkpoint path
+   * @param expectedCause the exception type expected in the cause chain
+   */
+  private def assertStateDirectoryNotRecreatedOnRead(
+      runQuery: String => Unit,
+      readState: String => Unit,
+      expectedCause: Class[_ <: Throwable] =
+        classOf[StateDataSourceReadStateSchemaFailure]): Unit = {
+    withTempDir { tempDir =>
+      val checkpointPath = tempDir.getAbsolutePath
+
+      // Step 1: Run the stateful query to create the full checkpoint structure
+      runQuery(checkpointPath)
+
+      // Step 2: Delete the state directory
+      val stateDir = new File(tempDir, "state")
+      assert(stateDir.exists(), "State directory should exist after running the query")
+      Utils.deleteRecursively(stateDir)
+      assert(!stateDir.exists(), "State directory should be deleted")
+
+      // Step 3: Attempt to read state - expected to fail since state is deleted
+      val e = intercept[Exception] {
+        readState(checkpointPath)
+      }
+      assertCauseChainContains(e, expectedCause)
+
+      // Step 4: Verify the state directory was NOT recreated by the reader
+      assert(!stateDir.exists(),
+        "State data source reader should not recreate the deleted state directory")
+    }
+  }
+
+  test("streaming aggregation: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runLargeDataStreamingAggregationQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("drop duplicates: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runDropDuplicatesQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("flatMapGroupsWithState: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runFlatMapGroupsWithStateQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("stream-stream join: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runStreamStreamJoinQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .option(StateSourceOptions.JOIN_SIDE, "left")
+          .load()
+          .collect()
+      }
+    )
+  }
+
+  test("transformWithState: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runTransformWithStateQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+          .load()
+          .collect()
+      },
+      expectedCause = classOf[IllegalArgumentException]
+    )
+  }
+
+  test("session window aggregation: no empty state dir created on read") {
+    assertStateDirectoryNotRecreatedOnRead(
+      runQuery = checkpointPath => {
+        runSessionWindowAggregationQuery(checkpointPath)
+      },
+      readState = checkpointPath => {
+        spark.read
+          .format("statestore")
+          .option(StateSourceOptions.PATH, checkpointPath)
+          .load()
+          .collect()
+      }
+    )
   }
 }

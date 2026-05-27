@@ -35,7 +35,6 @@ from pyspark.util import is_remote_only
 from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
 
-
 if TYPE_CHECKING:
     from pyspark.ml._typing import ParamMap
 
@@ -129,9 +128,9 @@ class TypeConverters:
         """
         Convert a value to a list, if possible.
         """
-        if type(value) == list:
+        if isinstance(value, list):
             return value
-        elif type(value) in [np.ndarray, tuple, range, array.array]:
+        elif isinstance(value, (np.ndarray, tuple, range, array.array)):
             return list(value)
         elif isinstance(value, Vector):
             return list(value.toArray())
@@ -230,7 +229,7 @@ class TypeConverters:
         """
         if isinstance(value, str):
             return value
-        elif type(value) in [np.bytes_, np.str_]:
+        elif isinstance(value, (np.bytes_, np.str_)):
             return str(value)
         else:
             raise TypeError("Could not convert %s to string type" % type(value))
@@ -240,7 +239,7 @@ class TypeConverters:
         """
         Convert a value to a boolean, if possible.
         """
-        if type(value) == bool:
+        if isinstance(value, bool):
             return value
         else:
             raise TypeError("Boolean Param requires value of type bool. Found %s." % type(value))
@@ -255,7 +254,7 @@ class Params(Identifiable, metaclass=ABCMeta):
     """
 
     def __init__(self) -> None:
-        super(Params, self).__init__()
+        super().__init__()
         #: internal param map for user-supplied values param map
         self._paramMap: "ParamMap" = {}
 
@@ -365,12 +364,10 @@ class Params(Identifiable, metaclass=ABCMeta):
             raise TypeError("hasParam(): paramName must be a string")
 
     @overload
-    def getOrDefault(self, param: str) -> Any:
-        ...
+    def getOrDefault(self, param: str) -> Any: ...
 
     @overload
-    def getOrDefault(self, param: Param[T]) -> T:
-        ...
+    def getOrDefault(self, param: Param[T]) -> T: ...
 
     def getOrDefault(self, param: Union[str, Param[T]]) -> Union[Any, T]:
         """

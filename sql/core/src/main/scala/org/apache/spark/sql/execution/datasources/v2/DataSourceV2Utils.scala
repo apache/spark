@@ -115,7 +115,7 @@ private[sql] object DataSourceV2Utils extends Logging {
     val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
       optionsWithPath.originalMap
     val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
-    val (table, catalog, ident) = provider match {
+    val (table, catalog, ident, timeTravelSpec) = provider match {
       case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
         throw new IllegalArgumentException(
           s"$source does not support user specified schema. Please don't specify the schema.")
@@ -141,16 +141,17 @@ private[sql] object DataSourceV2Utils extends Logging {
         }
         val timeTravel = TimeTravelSpec.create(
           timeTravelTimestamp, timeTravelVersion, conf.sessionLocalTimeZone)
-        (CatalogV2Util.getTable(catalog, ident, timeTravel), Some(catalog), Some(ident))
+        val tbl = CatalogV2Util.getTable(catalog, ident, timeTravel)
+        (tbl, Some(catalog), Some(ident), timeTravel)
       case _ =>
         // TODO: Non-catalog paths for DSV2 are currently not well defined.
         val tbl = DataSourceV2Utils.getTableFromProvider(provider, dsOptions, userSpecifiedSchema)
-        (tbl, None, None)
+        (tbl, None, None, None)
     }
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
     table match {
       case _: SupportsRead if table.supports(BATCH_READ) =>
-        Option(DataSourceV2Relation.create(table, catalog, ident, dsOptions))
+        Option(DataSourceV2Relation.create(table, catalog, ident, dsOptions, timeTravelSpec))
       case _ => None
     }
   }

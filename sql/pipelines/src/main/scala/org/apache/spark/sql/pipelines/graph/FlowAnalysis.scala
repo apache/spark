@@ -39,35 +39,31 @@ object FlowAnalysis {
      * @return A FlowFunction that attempts to analyze the provided LogicalPlan.
      */
   def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction = {
-    new FlowFunction {
-      override def call(
-          allInputs: Set[TableIdentifier],
-          availableInputs: Seq[Input],
-          confs: Map[String, String],
-          queryContext: QueryContext,
-          queryOrigin: QueryOrigin
-      ): FlowFunctionResult = {
-        val ctx = FlowAnalysisContext(
-          allInputs = allInputs,
-          availableInputs = availableInputs,
-          queryContext = queryContext,
-          spark = SparkSession.active
-        )
-        val df = try {
-          confs.foreach { case (k, v) => ctx.setConf(k, v) }
-          Try(FlowAnalysis.analyze(ctx, plan))
-        } finally {
-          ctx.restoreOriginalConf()
-        }
-        FlowFunctionResult(
-          requestedInputs = ctx.requestedInputs.toSet,
-          batchInputs = ctx.batchInputs.toSet,
-          streamingInputs = ctx.streamingInputs.toSet,
-          usedExternalInputs = ctx.externalInputs.toSet,
-          dataFrame = df,
-          sqlConf = confs
-        )
+    (allInputs: Set[TableIdentifier],
+      availableInputs: Seq[Input],
+      confs: Map[String, String],
+      queryContext: QueryContext,
+      queryOrigin: QueryOrigin) => {
+      val ctx = FlowAnalysisContext(
+        allInputs = allInputs,
+        availableInputs = availableInputs,
+        queryContext = queryContext,
+        spark = SparkSession.active
+      )
+      val df = try {
+        confs.foreach { case (k, v) => ctx.setConf(k, v) }
+        Try(FlowAnalysis.analyze(ctx, plan))
+      } finally {
+        ctx.restoreOriginalConf()
       }
+      FlowFunctionResult(
+        requestedInputs = ctx.requestedInputs.toSet,
+        batchInputs = ctx.batchInputs.toSet,
+        streamingInputs = ctx.streamingInputs.toSet,
+        usedExternalInputs = ctx.externalInputs.toSet,
+        dataFrame = df,
+        sqlConf = confs
+      )
     }
   }
 
@@ -216,7 +212,7 @@ object FlowAnalysis {
 
     ctx.requestedInputs += datasetIdentifier
 
-    val i = if (!ctx.allInputs.contains(datasetIdentifier)) {
+    val input = if (!ctx.allInputs.contains(datasetIdentifier)) {
       // Dataset not defined in the dataflow graph
       throw GraphErrors.pipelineLocalDatasetNotDefinedError(datasetIdentifier.unquotedString)
     } else if (!ctx.availableInput.contains(datasetIdentifier)) {
@@ -228,7 +224,7 @@ object FlowAnalysis {
     }
 
     val inputDF = Try {
-      i.load(asStreaming = isStreamingRead)
+      input.load(asStreaming = isStreamingRead)
     } match {
       case Success(df) => df
       case Failure(ex: AnalysisException) => ex.errorClass match {
@@ -252,7 +248,7 @@ object FlowAnalysis {
         throw ex
     }
 
-    i match {
+    input match {
       // If the referenced input is a [[Flow]], because the query plans will be fused
       // together, we also need to fuse their confs.
       case f: Flow => f.sqlConf.foreach { case (k, v) => ctx.setConf(k, v) }
@@ -270,9 +266,9 @@ object FlowAnalysis {
     )
 
     if (isStreamingRead) {
-      ctx.streamingInputs += ResolvedInput(i, aliasIdentifier)
+      ctx.streamingInputs += ResolvedInput(input, aliasIdentifier)
     } else {
-      ctx.batchInputs += ResolvedInput(i, aliasIdentifier)
+      ctx.batchInputs += ResolvedInput(input, aliasIdentifier)
     }
     Dataset.ofRows(
       ctx.spark,

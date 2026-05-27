@@ -19,11 +19,13 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, JsonToStructs, PythonUDF, PythonUDTF}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistryBase, MultiInstanceRelation, UnresolvedAttribute, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.TableFunctionRegistry.TableFunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeSet, Expression, ExpressionDescription, ExpressionInfo, JsonToStructs, PythonUDF, PythonUDTF}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, TimeMode}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 import org.apache.spark.util.LogUtils
@@ -163,6 +165,7 @@ case class FlatMapGroupsInPandasWithState(
 
   override protected def withNewChildInternal(
     newChild: LogicalPlan): FlatMapGroupsInPandasWithState = copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -213,6 +216,7 @@ case class TransformWithStateInPySpark(
   override protected def withNewChildrenInternal(
       newLeft: LogicalPlan, newRight: LogicalPlan): TransformWithStateInPySpark =
     copy(child = newLeft, initialState = newRight)
+  override def isStateful: Boolean = child.isStreaming
 
   def leftAttributes: Seq[Attribute] = {
     assert(resolved, "This method is expected to be called after resolution.")
@@ -365,12 +369,14 @@ case class ArrowEvalPythonUDTF(
 
 /**
  * A logical plan that adds a new long column with the name `name` that
- * increases one by one. This is for 'distributed-sequence' default index
- * in pandas API on Spark.
+ * increases one by one.
+ * This is used in both 'distributed-sequence' index in pandas API on Spark
+ * and 'DataFrame.zipWithIndex'.
  */
 case class AttachDistributedSequence(
     sequenceAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    cache: Boolean = false) extends UnaryNode {
 
   override val producedAttributes: AttributeSet = AttributeSet(sequenceAttr)
 
@@ -386,8 +392,25 @@ case class AttachDistributedSequence(
   }
 }
 
+// scalastyle:off line.contains.tab line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns a table of logs collected from Python workers.
+  """,
+  examples = """
+    Examples:
+      > SET spark.sql.pyspark.worker.logging.enabled=true;
+        spark.sql.pyspark.worker.logging.enabled	true
+      > SELECT * FROM _FUNC_();
+
+  """,
+  since = "4.1.0",
+  group = "table_funcs")
+// scalastyle:on line.contains.tab line.size.limit
 case class PythonWorkerLogs(jsonAttr: Attribute)
   extends LeafNode with MultiInstanceRelation with SQLConfHelper {
+
+  def this() = this(DataTypeUtils.toAttribute(StructField("message", StringType)))
 
   override def output: Seq[Attribute] = Seq(jsonAttr)
 
@@ -403,23 +426,28 @@ case class PythonWorkerLogs(jsonAttr: Attribute)
   )
 }
 
-object PythonWorkerLogs {
-  val ViewName = "python_worker_logs"
+object PythonWorkerLogs extends SQLConfHelper {
+  val TableFunctionName = "python_worker_logs"
 
-  def apply(): LogicalPlan = {
-    PythonWorkerLogs(DataTypeUtils.toAttribute(StructField("message", StringType)))
-  }
-
-  def viewDefinition(): LogicalPlan = {
-    Project(
-      Seq(UnresolvedStar(Some(Seq("from_json")))),
-      Project(
-        Seq(Alias(
-          JsonToStructs(
-            schema = StructType.fromDDL(LogUtils.SPARK_LOG_SCHEMA),
-            options = Map.empty,
-            child = UnresolvedAttribute("message")),
-          "from_json")()),
-        PythonWorkerLogs()))
+  val functionBuilder: (String, (ExpressionInfo, TableFunctionBuilder)) = {
+    val (info, builder) = FunctionRegistryBase.build[PythonWorkerLogs](
+      TableFunctionName, None)
+    val funcBuilder = (expressions: Seq[Expression]) => {
+      if (conf.pythonWorkerLoggingEnabled) {
+        Project(
+          Seq(UnresolvedStar(Some(Seq("from_json")))),
+          Project(
+            Seq(Alias(
+              JsonToStructs(
+                schema = StructType.fromDDL(LogUtils.SPARK_LOG_SCHEMA),
+                options = Map.empty,
+                child = UnresolvedAttribute("message")),
+              "from_json")()),
+            builder(expressions)))
+      } else {
+        throw QueryCompilationErrors.pythonWorkerLoggingNotEnabledError()
+      }
+    }
+    TableFunctionName -> (info, funcBuilder)
   }
 }

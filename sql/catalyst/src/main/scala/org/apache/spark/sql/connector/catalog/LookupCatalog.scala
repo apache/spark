@@ -19,6 +19,9 @@ package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedIdentifier, UnresolvedRelation, V2TableReference}
+import org.apache.spark.sql.catalyst.plans.logical.TransactionalWrite
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
@@ -119,7 +122,17 @@ private[sql] trait LookupCatalog extends Logging {
         Some((catalogManager.v2SessionCatalog, nameParts.asIdentifier))
       } else {
         try {
-          Some((catalogManager.catalog(nameParts.head), nameParts.tail.asIdentifier))
+          val catalog = catalogManager.catalog(nameParts.head)
+          val ident = nameParts.tail.asIdentifier
+          if (CatalogV2Util.isSessionCatalog(catalog)) {
+            // Reject only when namespace is empty (e.g. spark_catalog.t with no database).
+            // Allow multi-part namespace for metadata tables (e.g. default.table.snapshots).
+            if (ident.namespace().isEmpty) {
+              throw QueryCompilationErrors.requiresSinglePartNamespaceError(
+                ident.namespace().toSeq :+ ident.name())
+            }
+          }
+          Some((catalog, ident))
         } catch {
           case _: CatalogNotFoundException =>
             Some((currentCatalog, nameParts.asIdentifier))
@@ -149,6 +162,24 @@ private[sql] trait LookupCatalog extends Logging {
              CatalogV2Util.isSessionCatalog(currentCatalog) =>
           namesToTableIdentifier(names)
         case _ => None
+      }
+    }
+  }
+
+  object TransactionalWrite {
+    def unapply(write: TransactionalWrite): Option[TransactionalCatalogPlugin] = {
+      EliminateSubqueryAliases(write.table) match {
+        case UnresolvedRelation(CatalogAndIdentifier(c: TransactionalCatalogPlugin, _), _, _) =>
+          Some(c)
+        case UnresolvedIdentifier(CatalogAndIdentifier(c: TransactionalCatalogPlugin, _), _) =>
+          Some(c)
+        case ref: V2TableReference =>
+          ref.catalog match {
+            case c: TransactionalCatalogPlugin => Some(c)
+            case _ => None
+          }
+        case _ =>
+          None
       }
     }
   }

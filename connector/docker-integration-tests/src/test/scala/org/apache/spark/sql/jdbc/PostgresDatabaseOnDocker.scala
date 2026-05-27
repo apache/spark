@@ -21,7 +21,7 @@ import org.apache.spark.internal.Logging
 
 class PostgresDatabaseOnDocker extends DatabaseOnDocker with Logging {
   lazy override val imageName: String =
-    sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:17.2-alpine")
+    sys.env.getOrElse("POSTGRES_DOCKER_IMAGE_NAME", "postgres:18.2-alpine")
   private val postgres_user = "postgres"
   private val postgres_password = "rootpass"
   override val env: Map[String, String] = Map(

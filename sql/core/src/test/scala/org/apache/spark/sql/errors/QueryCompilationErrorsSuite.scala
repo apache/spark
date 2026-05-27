@@ -41,9 +41,8 @@ case class ComplexClass(a: Long, b: StringLongClass)
 case class ArrayClass(arr: Seq[StringIntClass])
 
 class QueryCompilationErrorsSuite
-  extends QueryTest
-  with QueryErrorsBase
-  with SharedSparkSession {
+  extends SharedSparkSession
+  with QueryErrorsBase {
   import testImplicits._
 
   test("CANNOT_UP_CAST_DATATYPE: invalid upcast data type") {
@@ -712,15 +711,24 @@ class QueryCompilationErrorsSuite
     )
   }
 
-  test("IDENTIFIER_TOO_MANY_NAME_PARTS: " +
+  test("INVALID_TEMP_OBJ_QUALIFIER: " +
     "create temp view doesn't support identifiers consisting of more than 2 parts") {
+    val sqlText =
+      "CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column"
     checkError(
       exception = intercept[ParseException] {
-        sql("CREATE TEMPORARY VIEW db_name.schema_name.view_name AS SELECT '1' as test_column")
+        sql(sqlText)
       },
-      condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
-      sqlState = "42601",
-      parameters = Map("identifier" -> "`db_name`.`schema_name`.`view_name`")
+      condition = "INVALID_TEMP_OBJ_QUALIFIER",
+      sqlState = "42602",
+      parameters = Map(
+        "objectType" -> "VIEW",
+        "objectName" -> "`view_name`",
+        "qualifier" -> "`db_name`.`schema_name`"),
+      context = ExpectedContext(
+        fragment = sqlText,
+        start = 0,
+        stop = sqlText.length - 1)
     )
   }
 
@@ -741,7 +749,7 @@ class QueryCompilationErrorsSuite
         },
         condition = "IDENTIFIER_TOO_MANY_NAME_PARTS",
         sqlState = "42601",
-        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`")
+        parameters = Map("identifier" -> "`db_name`.`schema_name`.`new_table_name`", "limit" -> "2")
       )
     }
   }
@@ -866,39 +874,6 @@ class QueryCompilationErrorsSuite
       parameters = Map(
         "expression" -> "\"coalesce(1, a, a)\"",
         "inputTypes" -> "[\"INT\", \"STRING\", \"STRING\"]"))
-  }
-
-  test("SPARK-49666: the trim collation feature is off without collate builder call") {
-    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
-      Seq(
-        "CREATE TABLE t(col STRING COLLATE EN_RTRIM_CI) USING parquet",
-        "CREATE TABLE t(col STRING COLLATE UTF8_LCASE_RTRIM) USING parquet",
-        "SELECT 'aaa' COLLATE UNICODE_LTRIM_CI"
-      ).foreach { sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION"
-        )
-      }
-    }
-  }
-
-  test("SPARK-49666: the trim collation feature is off with collate builder call") {
-    withSQLConf(SQLConf.TRIM_COLLATION_ENABLED.key -> "false") {
-      Seq(
-        "SELECT collate('aaa', 'UNICODE_RTRIM')",
-        "SELECT collate('aaa', 'UTF8_BINARY_RTRIM')",
-        "SELECT collate('aaa', 'EN_AI_RTRIM')"
-      ).foreach { sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          condition = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
-          parameters = Map.empty,
-          context =
-            ExpectedContext(fragment = sqlText.substring(7), start = 7, stop = sqlText.length - 1)
-        )
-      }
-    }
   }
 
   test("SPARK-50779: the object level collations feature is unsupported when flag is disabled") {
@@ -1105,6 +1080,24 @@ class QueryCompilationErrorsSuite
       context =
         ExpectedContext(fragment = "aggregate(array(1,2,3), x -> x + 1, 0)", start = 7, stop = 44)
     )
+  }
+
+  test("UNABLE_TO_INFER_SCHEMA: empty data source at path") {
+    withTempDir { dir =>
+      // Create _spark_metadata with a valid empty log entry (version header only, no files)
+      val metadataDir = new java.io.File(dir, "_spark_metadata")
+      metadataDir.mkdir()
+      java.nio.file.Files.write(
+        new java.io.File(metadataDir, "0").toPath, "v1".getBytes)
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.format("json").load(dir.getCanonicalPath).collect()
+        },
+        condition = "UNABLE_TO_INFER_SCHEMA",
+        parameters = Map("format" -> "JSON")
+      )
+    }
   }
 }
 

@@ -23,6 +23,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{ERROR, NUM_RETRY, POLICY, RETRY_WAIT_TIME}
+import org.apache.spark.sql.util.{CloseableIterator, WrappedCloseableIterator}
 
 private[sql] class GrpcRetryHandler(
     private val policies: Seq[RetryPolicy],

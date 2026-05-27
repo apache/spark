@@ -23,6 +23,7 @@ import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.util.{CloseableIterator, WrappedCloseableIterator}
 
 // This is common logic to be shared between different stub instances to keep the server-side
 // session id and to validate responses as seen by the client.

@@ -185,7 +185,7 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
     if (level != Connection.TRANSACTION_NONE) {
       throw new SQLFeatureNotSupportedException(
         "Requested transaction isolation level " +
-          s"${stringfiyTransactionIsolationLevel(level)} is not supported")
+          s"${stringifyTransactionIsolationLevel(level)} is not supported")
     }
   }
 
@@ -207,7 +207,7 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
   override def setHoldability(holdability: Int): Unit = {
     if (holdability != ResultSet.HOLD_CURSORS_OVER_COMMIT) {
       throw new SQLFeatureNotSupportedException(
-        s"Holdability ${stringfiyHoldability(holdability)} is not supported")
+        s"Holdability ${stringifyHoldability(holdability)} is not supported")
     }
   }
 

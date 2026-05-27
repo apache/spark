@@ -28,6 +28,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.client.GrpcRetryHandler.RetryException
+import org.apache.spark.sql.util.WrappedCloseableIterator
 
 /**
  * Retryable iterator of ExecutePlanResponses to an ExecutePlan call.

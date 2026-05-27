@@ -25,7 +25,8 @@ import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.core.JsonParser
+import com.fasterxml.jackson.databind.{DeserializationContext, DeserializationFeature, JsonDeserializer, JsonNode, ObjectMapper}
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.module.scala.{ClassTagExtensions, DefaultScalaModule}
 import org.json4s._
@@ -55,7 +56,10 @@ class StateOperatorProgress private[spark] (
     val numRowsDroppedByWatermark: Long,
     val numShufflePartitions: Long,
     val numStateStoreInstances: Long,
-    val customMetrics: ju.Map[String, JLong] = new ju.HashMap())
+    val customMetrics: ju.Map[String, JLong] = new ju.HashMap(),
+    // Names of customMetrics entries treated as snapshots of state-store status;
+    // preserved by copyForNoExecution() and not surfaced in JSON output.
+    private[spark] val snapshotCustomMetricNames: Set[String] = Set.empty)
     extends Serializable {
 
   /** The compact JSON representation of this progress. */
@@ -66,20 +70,48 @@ class StateOperatorProgress private[spark] (
 
   private[sql] def copy(
       newNumRowsUpdated: Long,
-      newNumRowsDroppedByWatermark: Long): StateOperatorProgress =
+      newNumRowsDroppedByWatermark: Long,
+      newNumRowsRemoved: Long): StateOperatorProgress =
     new StateOperatorProgress(
       operatorName = operatorName,
       numRowsTotal = numRowsTotal,
       numRowsUpdated = newNumRowsUpdated,
       allUpdatesTimeMs = allUpdatesTimeMs,
-      numRowsRemoved = numRowsRemoved,
+      numRowsRemoved = newNumRowsRemoved,
       allRemovalsTimeMs = allRemovalsTimeMs,
       commitTimeMs = commitTimeMs,
       memoryUsedBytes = memoryUsedBytes,
       numRowsDroppedByWatermark = newNumRowsDroppedByWatermark,
       numShufflePartitions = numShufflePartitions,
       numStateStoreInstances = numStateStoreInstances,
-      customMetrics = customMetrics)
+      customMetrics = customMetrics,
+      snapshotCustomMetricNames = snapshotCustomMetricNames)
+
+  /**
+   * Returns a copy of this progress suitable for a no-data trigger event. Per-batch fields (row
+   * counts, time-Ms fields, and customMetrics entries not in `snapshotCustomMetricNames`) are
+   * zeroed; snapshot fields and snapshot customMetrics entries are preserved.
+   */
+  private[sql] def copyForNoExecution(): StateOperatorProgress = {
+    val newCustomMetrics = new ju.HashMap[String, JLong](customMetrics.size())
+    customMetrics.forEach { (k, v) =>
+      newCustomMetrics.put(k, if (snapshotCustomMetricNames.contains(k)) v else 0L)
+    }
+    new StateOperatorProgress(
+      operatorName = operatorName,
+      numRowsTotal = numRowsTotal,
+      numRowsUpdated = 0L,
+      allUpdatesTimeMs = 0L,
+      numRowsRemoved = 0L,
+      allRemovalsTimeMs = 0L,
+      commitTimeMs = 0L,
+      memoryUsedBytes = memoryUsedBytes,
+      numRowsDroppedByWatermark = 0L,
+      numShufflePartitions = numShufflePartitions,
+      numStateStoreInstances = numStateStoreInstances,
+      customMetrics = newCustomMetrics,
+      snapshotCustomMetricNames = snapshotCustomMetricNames)
+  }
 
   private[sql] def jsonValue: JValue = {
     ("operatorName" -> JString(operatorName)) ~
@@ -191,7 +223,19 @@ class StreamingQueryProgress private[spark] (
       ("stateOperators" -> JArray(stateOperators.map(_.jsonValue).toList)) ~
       ("sources" -> JArray(sources.map(_.jsonValue).toList)) ~
       ("sink" -> sink.jsonValue) ~
-      ("observedMetrics" -> safeMapToJValue[Row](observedMetrics, (_, row) => row.jsonValue))
+      ("observedMetrics" -> {
+        // TODO: SPARK-54391
+        // In Spark connect, the observedMetrics is serialized but is not deserialized properly when
+        // being sent back to the client and the schema is null. So calling row.jsonValue will throw
+        // an exception so we need to catch the exception and return JNothing.
+        // This is because the Row.jsonValue method is a one way method and there is no reverse
+        // method to convert the JSON back to a Row.
+        try {
+          safeMapToJValue[Row](observedMetrics, (_, row) => row.jsonValue)
+        } catch {
+          case NonFatal(e) => JNothing
+        }
+      })
   }
 }
 
@@ -208,6 +252,19 @@ private[spark] object StreamingQueryProgress {
 
   private[spark] def fromJson(json: String): StreamingQueryProgress =
     mapper.readValue[StreamingQueryProgress](json)
+}
+
+// SPARK-54390: Custom deserializer that converts JSON objects to strings for offset fields
+private class ObjectToStringDeserializer extends JsonDeserializer[String] {
+  override def deserialize(parser: JsonParser, context: DeserializationContext): String = {
+    val node: JsonNode = parser.readValueAsTree()
+    if (node.isTextual) {
+      node.asText()
+    } else {
+      // Convert JSON object/array to string representation
+      node.toString
+    }
+  }
 }
 
 /**
@@ -233,12 +290,19 @@ private[spark] object StreamingQueryProgress {
 @Evolving
 class SourceProgress protected[spark] (
     val description: String,
+    // SPARK-54390: Use a custom deserializer to convert the JSON object to a string.
+    @JsonDeserialize(using = classOf[ObjectToStringDeserializer])
     val startOffset: String,
+    @JsonDeserialize(using = classOf[ObjectToStringDeserializer])
     val endOffset: String,
+    @JsonDeserialize(using = classOf[ObjectToStringDeserializer])
     val latestOffset: String,
     val numInputRows: Long,
-    val inputRowsPerSecond: Double,
-    val processedRowsPerSecond: Double,
+    // The NaN is used in deserialization to indicate the value was not set.
+    // The NaN is then used to not output this field in the JSON.
+    // In Spark connect, we need to ensure that the default value is Double.NaN instead of 0.0.
+    val inputRowsPerSecond: Double = Double.NaN,
+    val processedRowsPerSecond: Double = Double.NaN,
     val metrics: ju.Map[String, String] = Map[String, String]().asJava)
     extends Serializable {
 

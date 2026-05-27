@@ -40,6 +40,12 @@ class StateStoreConf(
    */
   val stateStoreMaintenanceShutdownTimeout: Long = sqlConf.stateStoreMaintenanceShutdownTimeout
 
+  /**
+   * Timeout to wait for tasks to respond to cancellation after force shutdown is initiated
+   */
+  val stateStoreMaintenanceForceShutdownTimeout: Long =
+    sqlConf.stateStoreMaintenanceForceShutdownTimeout
+
   val stateStoreMaintenanceProcessingTimeout: Long = sqlConf.stateStoreMaintenanceProcessingTimeout
 
   /**
@@ -108,7 +114,11 @@ class StateStoreConf(
   val compressionCodec: String = sqlConf.stateStoreCompressionCodec
 
   /** Whether file checksum generation and verification is enabled. */
-  val checkpointFileChecksumEnabled: Boolean = sqlConf.checkpointFileChecksumEnabled
+  val checkpointFileChecksumEnabled: Boolean =
+    sqlConf.checkpointFileChecksumEnabled && sqlConf.stateStoreCheckpointFormatVersion >= 2
+
+  /** Number of threads for the file checksum thread pool (0 to disable). */
+  val fileChecksumThreadPoolSize: Int = sqlConf.stateStoreFileChecksumThreadPoolSize
 
   /** whether to validate state schema during query run. */
   val stateSchemaCheckEnabled = sqlConf.isStateSchemaCheckEnabled

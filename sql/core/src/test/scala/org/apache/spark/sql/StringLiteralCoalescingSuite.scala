@@ -28,7 +28,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * This feature works in all contexts where string literals are accepted,
  * not just in expressions.
  */
-class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
+class StringLiteralCoalescingSuite extends SharedSparkSession {
 
   // ========================================================================
   // Basic String Literal Coalescing Tests
@@ -866,5 +866,42 @@ class StringLiteralCoalescingSuite extends QueryTest with SharedSparkSession {
         Map("p1" -> "1", "p2" -> "2", "p3" -> "3", "p4" -> "4")),
       Row("1a2b3c4")
     )
+  }
+
+  test("parameter substitution with quote spacing - legacy consecutive string literals disabled") {
+    // With LEGACY_CONSECUTIVE_STRING_LITERALS enabled, '' would normally produce a single quote
+    // But with parameter substitution, 'literal':param should insert a space to prevent
+    // the closing quote and opening quote from being interpreted as an escape sequence
+    withSQLConf("spark.sql.legacy.consecutiveStringLiterals.enabled" -> "false") {
+      checkAnswer(
+        spark.sql("SELECT 'hello':p, 'hello''world'", Map("p" -> "world")),
+        // Space parameter separates literals, no singleton quote in middle
+        Row("helloworld", "hello'world")
+      )
+    }
+  }
+
+  test("parameter substitution with quote spacing - legacy consecutive string literals enabled") {
+    withSQLConf("spark.sql.legacy.consecutiveStringLiterals.enabled" -> "true") {
+      checkAnswer(
+        spark.sql("SELECT 'hello':p, 'hello''world'", Map("p" -> "world")),
+        // Space parameter separates literals, no singleton quote in middle
+        Row("helloworld", "helloworld")
+      )
+    }
+  }
+
+  // ========================================================================
+  // Legacy Mode Tests - JSON Path Expressions vs Parameter Substitution
+  // ========================================================================
+  test("JSON path expression - new mode with parameter substitution") {
+    // In new mode (constantsOnly=false), :name is a parameter marker when args provided
+    withSQLConf("spark.sql.legacy.parameterSubstitution.constantsOnly" -> "false") {
+      // The :name gets substituted with the parameter value
+      checkAnswer(
+        spark.sql("SELECT '{\"name\":\"joe\"}' :name", Map("name" -> "replaced")),
+        Row("{\"name\":\"joe\"}replaced")
+      )
+    }
   }
 }

@@ -62,8 +62,9 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     Seq(
       child,
       Literal(SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS), BooleanType),
-      Literal(failOnError, BooleanType)),
-    inputTypes :+ BooleanType :+ BooleanType,
+      Literal(failOnError, BooleanType),
+      Literal(SQLConf.get.getConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING), BooleanType)),
+    inputTypes :+ BooleanType :+ BooleanType :+ BooleanType,
     returnNullable = !failOnError)
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -349,7 +350,7 @@ case object VariantGet {
    */
   def checkDataType(dataType: DataType, allowStructsAndMaps: Boolean = true): Boolean =
     dataType match {
-    case CharType(_) | VarcharType(_) => false
+    case _: CharType | _: VarcharType => false
     case _: NumericType | BooleanType | _: StringType | BinaryType | _: DatetimeType |
         VariantType =>
       true
@@ -950,5 +951,37 @@ case class SchemaOfVariantAgg(
     copy(inputAggBufferOffset = newInputAggBufferOffset)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(v) - Returns true if the variant is valid, false if it is malformed, " +
+    "NULL if `v` is NULL.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('null'));
+       true
+      > SELECT _FUNC_(parse_json('[{"b":true,"a":0}]'));
+       true
+  """,
+  since = "4.2.0",
+  group = "variant_funcs"
+)
+case class IsValidVariant(child: Expression) extends UnaryExpression
+  with Predicate with ExpectsInputTypes with RuntimeReplaceable {
+
+  override lazy val replacement: Expression = StaticInvoke(
+    VariantExpressionEvalUtils.getClass,
+    BooleanType,
+    "isValidVariant",
+    Seq(child),
+    inputTypes,
+    returnNullable = false)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
+
+  override def prettyName: String = "is_valid_variant"
+
+  override protected def withNewChildInternal(newChild: Expression): IsValidVariant =
     copy(child = newChild)
 }

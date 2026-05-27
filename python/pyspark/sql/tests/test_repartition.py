@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import unittest
 
 from pyspark.sql.functions import spark_partition_id, col, lit, when
 from pyspark.sql.types import (
@@ -37,8 +36,12 @@ class DataFrameRepartitionTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_STR",
-            messageParameters={"arg_name": "numPartitions", "arg_type": "list"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column or str",
+                "arg_name": "numPartitions",
+                "arg_type": "list",
+            },
         )
 
     def test_repartition_by_range(self):
@@ -80,8 +83,12 @@ class DataFrameRepartitionTestsMixin:
 
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_COLUMN_OR_INT_OR_STR",
-            messageParameters={"arg_name": "numPartitions", "arg_type": "list"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "Column, int or str",
+                "arg_name": "numPartitions",
+                "arg_type": "list",
+            },
         )
 
     def test_repartition_by_id(self):
@@ -152,8 +159,12 @@ class DataFrameRepartitionTestsMixin:
             df.repartitionById("5", col("id").cast("int"))
         self.check_error(
             exception=pe.exception,
-            errorClass="NOT_INT",
-            messageParameters={"arg_name": "numPartitions", "arg_type": "str"},
+            errorClass="NOT_EXPECTED_TYPE",
+            messageParameters={
+                "expected_type": "int",
+                "arg_name": "numPartitions",
+                "arg_type": "str",
+            },
         )
 
         with self.assertRaises(PySparkValueError) as pe:
@@ -207,12 +218,6 @@ class DataFrameRepartitionTests(
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_repartition import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner  # type: ignore
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

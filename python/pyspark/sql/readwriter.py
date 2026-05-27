@@ -154,9 +154,10 @@ class DataFrameReader(OptionUtils):
             self._jreader = self._jreader.schema(schema)
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_STRUCT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "schema",
+                    "expected_type": "str or struct type",
                     "arg_type": type(schema).__name__,
                 },
             )
@@ -200,6 +201,8 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
+        if value is None:
+            return self
         self._jreader = self._jreader.option(key, to_str(value))
         return self
 
@@ -247,8 +250,9 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
-        for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jreader = self._jreader.option(k, to_str(v))
         return self
 
     def load(
@@ -310,8 +314,8 @@ class DataFrameReader(OptionUtils):
         if isinstance(path, str):
             return self._df(self._jreader.load(path))
         elif path is not None:
-            if type(path) != list:
-                path = [path]  # type: ignore[list-item]
+            if not isinstance(path, list):
+                path = [path]
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         else:
@@ -319,7 +323,7 @@ class DataFrameReader(OptionUtils):
 
     def json(
         self,
-        path: Union[str, List[str], "RDD[str]"],
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         primitivesAsString: Optional[Union[bool, str]] = None,
         prefersDecimal: Optional[Union[bool, str]] = None,
@@ -360,11 +364,15 @@ class DataFrameReader(OptionUtils):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str, list or :class:`RDD`
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string represents path to the JSON dataset, or a list of paths,
-            or RDD of Strings storing JSON objects.
+            or RDD of Strings storing JSON objects,
+            or a DataFrame with a single string column containing JSON strings.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema or
             a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -433,6 +441,20 @@ class DataFrameReader(OptionUtils):
         +----+---+
         | Bob| 30|
         +----+---+
+
+        Example 4: Parse JSON from a DataFrame with a single string column.
+
+        >>> json_df = spark.createDataFrame(
+        ...     [('{"name": "Alice", "age": 25}',), ('{"name": "Bob", "age": 30}',)],
+        ...     schema="value STRING",
+        ... )
+        >>> spark.read.json(json_df).sort("name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
         """
         self._set_opts(
             schema=schema,
@@ -463,12 +485,12 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 
@@ -485,11 +507,20 @@ class DataFrameReader(OptionUtils):
             assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.jsonFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_LIST_OF_RDD",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )
@@ -529,6 +560,32 @@ class DataFrameReader(OptionUtils):
         >>> _ = spark.sql("DROP TABLE tblA")
         """
         return self._df(self._jreader.table(tableName))
+
+    def changes(self, tableName: str) -> "DataFrame":
+        """Returns the row-level changes (Change Data Capture) from the specified table
+        as a :class:`DataFrame`. Currently this API is only supported for Data Source V2
+        tables whose catalog implements ``TableCatalog.loadChangelog()``.
+
+        Use :meth:`option` to specify the version/timestamp range and processing options.
+
+        .. versionadded:: 4.2.0
+
+        Parameters
+        ----------
+        tableName : str
+            string, name of the table.
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        Examples
+        --------
+        >>> spark.read.option("startingVersion", "10").option(
+        ...     "endingVersion", "20"
+        ... ).changes("my_table")  # doctest: +SKIP
+        """
+        return self._df(self._jreader.changes(tableName))
 
     def parquet(self, *paths: str, **options: "OptionalPrimitiveType") -> "DataFrame":
         """
@@ -714,7 +771,7 @@ class DataFrameReader(OptionUtils):
 
     def csv(
         self,
-        path: PathOrPaths,
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         sep: Optional[str] = None,
         encoding: Optional[str] = None,
@@ -760,11 +817,15 @@ class DataFrameReader(OptionUtils):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str or list
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string, or list of strings, for input path(s),
-            or RDD of Strings storing CSV rows.
+            or RDD of Strings storing CSV rows,
+            or a DataFrame with a single string column containing CSV rows.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -833,16 +894,16 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 
-            def func(iterator):
+            def func(iterator: Iterable) -> Iterable:
                 for x in iterator:
                     if not isinstance(x, str):
                         x = str(x)
@@ -851,7 +912,8 @@ class DataFrameReader(OptionUtils):
                     yield x
 
             keyed = path.mapPartitions(func)
-            keyed._bypass_serializer = True
+            keyed._bypass_serializer = True  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             # see SPARK-22112
             # There aren't any jvm api for creating a dataframe from rdd storing csv.
@@ -861,18 +923,27 @@ class DataFrameReader(OptionUtils):
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )
             return self._df(self._jreader.csv(jdataset))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.csvFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_LIST_OF_RDD",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )
 
     def xml(
         self,
-        path: Union[str, List[str], "RDD[str]"],
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -900,11 +971,15 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 4.0.0
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str, list or :class:`RDD`
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string, or list of strings, for input path(s),
-            or RDD of Strings storing XML rows.
+            or RDD of Strings storing XML rows,
+            or a DataFrame with a single string column containing XML strings.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -920,7 +995,7 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        Write a DataFrame into a XML file and read it back.
+        Example 1: Write a DataFrame into a XML file and read it back.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory(prefix="xml") as d:
@@ -936,6 +1011,21 @@ class DataFrameReader(OptionUtils):
         +---+------------+
         |100|Hyukjin Kwon|
         +---+------------+
+
+        Example 2: Parse XML from a DataFrame with a single string column.
+
+        >>> xml_df = spark.createDataFrame(
+        ...     [('<person><name>Alice</name><age>25</age></person>',),
+        ...      ('<person><name>Bob</name><age>30</age></person>',)],
+        ...     schema="value STRING",
+        ... )
+        >>> spark.read.option("rowTag", "person").xml(xml_df).sort("name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
         """
         self._set_opts(
             rowTag=rowTag,
@@ -960,12 +1050,12 @@ class DataFrameReader(OptionUtils):
         )
         if isinstance(path, str):
             path = [path]
-        if type(path) == list:
+        if isinstance(path, list):
             assert self._spark._sc._jvm is not None
             return self._df(self._jreader.xml(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
         if not is_remote_only():
-            from pyspark.core.rdd import RDD  # noqa: F401
+            from pyspark.core.rdd import RDD
 
         if not is_remote_only() and isinstance(path, RDD):
 
@@ -988,11 +1078,20 @@ class DataFrameReader(OptionUtils):
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )
             return self._df(self._jreader.xml(jdataset))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.xmlFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR_OR_LIST_OF_RDD",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )
@@ -1061,8 +1160,7 @@ class DataFrameReader(OptionUtils):
     @overload
     def jdbc(
         self, url: str, table: str, *, properties: Optional[Dict[str, str]] = None
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def jdbc(
@@ -1075,8 +1173,7 @@ class DataFrameReader(OptionUtils):
         numPartitions: int,
         *,
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     @overload
     def jdbc(
@@ -1086,8 +1183,7 @@ class DataFrameReader(OptionUtils):
         *,
         predicates: List[str],
         properties: Optional[Dict[str, str]] = None,
-    ) -> "DataFrame":
-        ...
+    ) -> "DataFrame": ...
 
     def jdbc(
         self,
@@ -1163,9 +1259,9 @@ class DataFrameReader(OptionUtils):
         if column is not None:
             assert lowerBound is not None, "lowerBound can not be None when ``column`` is specified"
             assert upperBound is not None, "upperBound can not be None when ``column`` is specified"
-            assert (
-                numPartitions is not None
-            ), "numPartitions can not be None when ``column`` is specified"
+            assert numPartitions is not None, (
+                "numPartitions can not be None when ``column`` is specified"
+            )
             return self._df(
                 self._jreader.jdbc(
                     url, table, column, int(lowerBound), int(upperBound), int(numPartitions), jprop
@@ -1340,6 +1436,8 @@ class DataFrameWriter(OptionUtils):
         +---+------------+
         """
 
+        if value is None:
+            return self
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
@@ -1390,17 +1488,16 @@ class DataFrameWriter(OptionUtils):
         |100|Hyukjin Kwon|
         +---+------------+
         """
-        for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jwrite = self._jwrite.option(k, to_str(v))
         return self
 
     @overload
-    def partitionBy(self, *cols: str) -> "DataFrameWriter":
-        ...
+    def partitionBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter":
-        ...
+    def partitionBy(self, *cols: List[str]) -> "DataFrameWriter": ...
 
     def partitionBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         """Partitions the output by the given columns on the file system.
@@ -1457,12 +1554,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter":
-        ...
+    def bucketBy(self, numBuckets: int, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter":
-        ...
+    def bucketBy(self, numBuckets: int, col: TupleOrListOfString) -> "DataFrameWriter": ...
 
     def bucketBy(
         self, numBuckets: int, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -1516,8 +1611,9 @@ class DataFrameWriter(OptionUtils):
 
         if not isinstance(numBuckets, int):
             raise PySparkTypeError(
-                errorClass="NOT_INT",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
+                    "expected_type": "int",
                     "arg_name": "numBuckets",
                     "arg_type": type(numBuckets).__name__,
                 },
@@ -1537,17 +1633,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )
@@ -1558,12 +1656,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter":
-        ...
+    def sortBy(self, col: str, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter":
-        ...
+    def sortBy(self, col: TupleOrListOfString) -> "DataFrameWriter": ...
 
     def sortBy(
         self, col: Union[str, TupleOrListOfString], *cols: Optional[str]
@@ -1621,17 +1717,19 @@ class DataFrameWriter(OptionUtils):
         for c in cols:
             if not isinstance(c, str):
                 raise PySparkTypeError(
-                    errorClass="NOT_LIST_OF_STR",
+                    errorClass="NOT_EXPECTED_TYPE",
                     messageParameters={
                         "arg_name": "cols",
+                        "expected_type": "list[str]",
                         "arg_type": type(c).__name__,
                     },
                 )
         if not isinstance(col, str):
             raise PySparkTypeError(
-                errorClass="NOT_LIST_OF_STR",
+                errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "col",
+                    "expected_type": "list[str]",
                     "arg_type": type(col).__name__,
                 },
             )
@@ -1642,12 +1740,10 @@ class DataFrameWriter(OptionUtils):
         return self
 
     @overload
-    def clusterBy(self, *cols: str) -> "DataFrameWriter":
-        ...
+    def clusterBy(self, *cols: str) -> "DataFrameWriter": ...
 
     @overload
-    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter":
-        ...
+    def clusterBy(self, *cols: List[str]) -> "DataFrameWriter": ...
 
     def clusterBy(self, *cols: Union[str, List[str]]) -> "DataFrameWriter":
         """Clusters the data by the given columns to optimize query performance.
@@ -2379,6 +2475,8 @@ class DataFrameWriterV2:
 
         .. versionadded: 3.1.0
         """
+        if value is None:
+            return self
         self._jwriter.option(key, to_str(value))
         return self
 
@@ -2388,7 +2486,7 @@ class DataFrameWriterV2:
 
         .. versionadded: 3.1.0
         """
-        options = {k: to_str(v) for k, v in options.items()}
+        options = {k: to_str(v) for k, v in options.items() if v is not None}
         self._jwriter.options(options)
         return self
 
@@ -2531,7 +2629,7 @@ def _test() -> None:
         spark = SparkSession(sc)
 
     globs["spark"] = spark
-    (failure_count, test_count) = doctest.testmod(
+    failure_count, test_count = doctest.testmod(
         pyspark.sql.readwriter,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF,

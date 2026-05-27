@@ -369,6 +369,9 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
   @transient
   private var pathStr: UTF8String = _
 
+  @transient
+  private lazy val outputBuffer = new ByteArrayOutputStream()
+
   def setJson(arg: UTF8String): Unit = {
     jsonStr = arg
   }
@@ -391,14 +394,14 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
         /* We know the bytes are UTF-8 encoded. Pass a Reader to avoid having Jackson
           detect character encoding which could fail for some malformed strings */
         Utils.tryWithResource(CreateJacksonParser.utf8String(jsonFactory, jsonStr)) { parser =>
-          val output = new ByteArrayOutputStream()
+          outputBuffer.reset()
           val matched = Utils.tryWithResource(
-            jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
+            jsonFactory.createGenerator(outputBuffer, JsonEncoding.UTF8)) { generator =>
             parser.nextToken()
             evaluatePath(parser, generator, RawStyle, parsed.get)
           }
           if (matched) {
-            UTF8String.fromBytes(output.toByteArray)
+            UTF8String.fromBytes(outputBuffer.toByteArray)
           } else {
             null
           }

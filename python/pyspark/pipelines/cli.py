@@ -21,6 +21,7 @@ Implementation of spark-pipelines CLI.
 Example usage:
     $ bin/spark-pipelines run --spec /path/to/pipeline.yaml
 """
+
 from contextlib import contextmanager
 import argparse
 import glob
@@ -49,7 +50,9 @@ from pyspark.pipelines.spark_connect_pipeline import (
     handle_pipeline_events,
 )
 
-PIPELINE_SPEC_FILE_NAMES = ["pipeline.yaml", "pipeline.yml"]
+from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
+
+PIPELINE_SPEC_FILE_NAMES = ["spark-pipeline.yaml", "spark-pipeline.yml"]
 
 
 @dataclass(frozen=True)
@@ -162,7 +165,7 @@ def unpack_pipeline_spec(spec_data: Mapping[str, Any]) -> PipelineSpec:
         "libraries",
     }
     REQUIRED_FIELDS = ["name", "storage"]
-    for key in spec_data.keys():
+    for key in spec_data:
         if key not in ALLOWED_FIELDS:
             raise PySparkException(
                 errorClass="PIPELINE_SPEC_UNEXPECTED_FIELD", messageParameters={"field_name": key}
@@ -216,13 +219,18 @@ def validate_str_dict(d: Mapping[str, str], field_name: str) -> Mapping[str, str
 
 
 def register_definitions(
-    spec_path: Path, registry: GraphElementRegistry, spec: PipelineSpec
+    spec_path: Path,
+    registry: GraphElementRegistry,
+    spec: PipelineSpec,
+    spark: SparkSession,
+    dataflow_graph_id: str,
 ) -> None:
     """Register the graph element definitions in the pipeline spec with the given registry.
-    - Looks for Python files matching the glob patterns in the spec and imports them.
-    - Looks for SQL files matching the blob patterns in the spec and registers thems.
+    - Import Python files matching the glob patterns in the spec.
+    - Register SQL files matching the glob patterns in the spec.
     """
-    path = spec_path.parent
+    path = spec_path.parent.resolve()
+
     with change_dir(path):
         with graph_element_registration_context(registry):
             log_with_curr_timestamp(f"Loading definitions. Root directory: '{path}'.")
@@ -242,16 +250,20 @@ def register_definitions(
                         module_spec = importlib.util.spec_from_file_location(file.stem, str(file))
                         assert module_spec is not None, f"Could not find module spec for {file}"
                         module = importlib.util.module_from_spec(module_spec)
-                        assert (
-                            module_spec.loader is not None
-                        ), f"Module spec has no loader for {file}"
-                        with block_session_mutations():
-                            module_spec.loader.exec_module(module)
+                        assert module_spec.loader is not None, (
+                            f"Module spec has no loader for {file}"
+                        )
+                        module.__dict__["spark"] = spark
+                        with add_pipeline_analysis_context(
+                            spark=spark, dataflow_graph_id=dataflow_graph_id, flow_name=None
+                        ):
+                            with block_session_mutations():
+                                module_spec.loader.exec_module(module)
                     elif file.suffix == ".sql":
                         log_with_curr_timestamp(f"Registering SQL file {file}...")
                         with file.open("r") as f:
                             sql = f.read()
-                        file_path_relative_to_spec = file.relative_to(spec_path.parent)
+                        file_path_relative_to_spec = file.relative_to(path)
                         registry.register_sql(sql, file_path_relative_to_spec)
                     else:
                         raise PySparkException(
@@ -324,7 +336,7 @@ def run(
 
     log_with_curr_timestamp("Registering graph elements...")
     registry = SparkConnectGraphElementRegistry(spark, dataflow_graph_id)
-    register_definitions(spec_path, registry, spec)
+    register_definitions(spec_path, registry, spec, spark, dataflow_graph_id)
 
     log_with_curr_timestamp("Starting run...")
     result_iter = start_run(
@@ -347,8 +359,9 @@ def parse_table_list(value: str) -> List[str]:
     return [table.strip() for table in value.split(",") if table.strip()]
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Pipeline CLI")
+def main() -> None:
+    """The entry point of spark-pipelines CLI."""
+    parser = argparse.ArgumentParser(description="Pipelines CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # "run" subcommand
@@ -366,7 +379,9 @@ if __name__ == "__main__":
         default=[],
     )
     run_parser.add_argument(
-        "--full-refresh-all", action="store_true", help="Perform a full graph reset and recompute."
+        "--full-refresh-all",
+        action="store_true",
+        help="Perform a full graph reset and recompute.",
     )
     run_parser.add_argument(
         "--refresh",
@@ -386,7 +401,7 @@ if __name__ == "__main__":
     # "init" subcommand
     init_parser = subparsers.add_parser(
         "init",
-        help="Generates a simple pipeline project, including a spec file and example definitions.",
+        help="Generate a sample pipeline project, with a spec file and example transformations.",
     )
     init_parser.add_argument(
         "--name",
@@ -415,7 +430,7 @@ if __name__ == "__main__":
                 full_refresh=args.full_refresh,
                 full_refresh_all=args.full_refresh_all,
                 refresh=args.refresh,
-                dry=args.command == "dry-run",
+                dry=False,
             )
         else:
             assert args.command == "dry-run"
@@ -428,3 +443,7 @@ if __name__ == "__main__":
             )
     elif args.command == "init":
         init(args.name)
+
+
+if __name__ == "__main__":
+    main()

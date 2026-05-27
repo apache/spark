@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 from datetime import datetime
 
 import pandas as pd
@@ -25,7 +24,6 @@ from pyspark.pandas.utils import (
     SPARK_CONF_ARROW_ENABLED,
     SPARK_CONF_PANDAS_STRUCT_MODE,
 )
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import is_ansi_mode_test
 
 
@@ -307,18 +305,11 @@ class ConversionMixin:
 class ConversionTests(
     ConversionMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 
 
 if __name__ == "__main__":
-    from pyspark.pandas.tests.indexes.test_conversion import *  # noqa: F401
+    from pyspark.testing import main
 
-    try:
-        import xmlrunner
-
-        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
-    except ImportError:
-        testRunner = None
-    unittest.main(testRunner=testRunner, verbosity=2)
+    main()

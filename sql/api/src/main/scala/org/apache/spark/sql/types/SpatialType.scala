@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.sql.types.AbstractDataType
+import org.apache.spark.annotation.Unstable
 
+@Unstable
 trait SpatialType extends AbstractDataType {
 
   /**

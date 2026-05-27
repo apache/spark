@@ -68,6 +68,14 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private val isDefaultNTZ = SQLConf.get.timestampType == TimestampNTZType
 
+  override def equals(obj: Any): Boolean = obj match {
+    case other: CSVInferSchema =>
+      options == other.options
+    case _ => false
+  }
+
+  override def hashCode(): Int = options.hashCode()
+
   /**
    * Similar to the JSON schema inference
    *     1. Infer type of each row

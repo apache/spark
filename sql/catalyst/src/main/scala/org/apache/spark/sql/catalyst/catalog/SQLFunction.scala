@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, ScalarSubquery}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, Project}
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, ExplicitUTF8BinaryStringType, StructType}
 
 /**
  * Represent a SQL function.
@@ -40,6 +40,7 @@ import org.apache.spark.sql.types.{DataType, StructType}
  * @param exprText function body as an expression
  * @param queryText function body as a query
  * @param comment function comment
+ * @param collation function default collation
  * @param deterministic whether the function is deterministic
  * @param containsSQL whether the function has data access routine to be CONTAINS SQL
  * @param isTableFunc whether the function is a table function
@@ -54,6 +55,7 @@ case class SQLFunction(
     exprText: Option[String],
     queryText: Option[String],
     comment: Option[String],
+    collation: Option[String],
     deterministic: Option[Boolean],
     containsSQL: Option[Boolean],
     isTableFunc: Boolean,
@@ -120,7 +122,10 @@ case class SQLFunction(
    * Convert the SQL function to a [[CatalogFunction]].
    */
   def toCatalogFunction: CatalogFunction = {
-    val props = sqlFunctionToProps ++ properties
+    // Persist function metadata (owner, createTime) alongside the SQL function
+    // body so the values survive a session restart and can be rendered by
+    // DESCRIBE FUNCTION EXTENDED.
+    val props = sqlFunctionToProps ++ functionMetadataToProps ++ properties
     CatalogFunction(
       identifier = name,
       className = SQL_FUNCTION_PREFIX,
@@ -152,16 +157,19 @@ case class SQLFunction(
    */
   private def sqlFunctionToProps: Map[String, String] = {
     val props = new mutable.HashMap[String, String]
-    val inputParamText = inputParam.map(_.fields.map(_.toDDL).mkString(", "))
+    val inputParamText = inputParam.map(ExplicitUTF8BinaryStringType.transform(_)
+      .asInstanceOf[StructType].fields.map(_.toDDL).mkString(", "))
     inputParamText.foreach(props.put(INPUT_PARAM, _))
     val returnTypeText = returnType match {
-      case Left(dataType) => dataType.sql
-      case Right(columns) => columns.toDDL
+      case Left(dataType) => ExplicitUTF8BinaryStringType.transform(dataType).sql
+      case Right(columns) =>
+        ExplicitUTF8BinaryStringType.transform(columns).asInstanceOf[StructType].toDDL
     }
     props.put(RETURN_TYPE, returnTypeText)
     exprText.foreach(props.put(EXPRESSION, _))
     queryText.foreach(props.put(QUERY, _))
     comment.foreach(props.put(COMMENT, _))
+    collation.foreach(props.put(COLLATION, _))
     deterministic.foreach(d => props.put(DETERMINISTIC, d.toString))
     containsSQL.foreach(x => props.put(CONTAINS_SQL, x.toString))
     props.put(IS_TABLE_FUNC, isTableFunc.toString)
@@ -174,9 +182,23 @@ case class SQLFunction(
     props.put(CREATE_TIME, createTimeMs.toString)
     props.toMap
   }
+
+  /** Frozen PATH string persisted when the function was created with SQL PATH enabled. */
+  def functionStoredResolutionPath: Option[String] =
+    properties.get(SQLFunction.FUNCTION_RESOLUTION_PATH)
 }
 
 object SQLFunction {
+
+  val SCALAR = "SCALAR"
+  val TABLE = "TABLE"
+
+  /**
+   * Persisted frozen PATH for SQL function bodies when created with [[SQLConf.PATH_ENABLED]].
+   * Serialized as a JSON array of path entries (same format as
+   * [[CatalogTable.VIEW_RESOLUTION_PATH]]).
+   */
+  val FUNCTION_RESOLUTION_PATH: String = "function.resolutionPath"
 
   private val SQL_FUNCTION_PREFIX = "sqlFunction."
 
@@ -185,6 +207,7 @@ object SQLFunction {
   private val EXPRESSION: String = SQL_FUNCTION_PREFIX + "expression"
   private val QUERY: String = SQL_FUNCTION_PREFIX + "query"
   private val COMMENT: String = SQL_FUNCTION_PREFIX + "comment"
+  private val COLLATION: String = SQL_FUNCTION_PREFIX + "collation"
   private val DETERMINISTIC: String = SQL_FUNCTION_PREFIX + "deterministic"
   private val CONTAINS_SQL: String = SQL_FUNCTION_PREFIX + "containsSQL"
   private val IS_TABLE_FUNC: String = SQL_FUNCTION_PREFIX + "isTableFunc"
@@ -210,19 +233,7 @@ object SQLFunction {
       }
       val blob = parts.sortBy(_._1).map(_._2).mkString
       val props = mapper.readValue(blob, classOf[Map[String, String]])
-      val isTableFunc = props(IS_TABLE_FUNC).toBoolean
-      val returnType = parseReturnTypeText(props(RETURN_TYPE), isTableFunc, parser)
-      SQLFunction(
-        name = function.identifier,
-        inputParam = props.get(INPUT_PARAM).map(parseRoutineParam(_, parser)),
-        returnType = returnType.get,
-        exprText = props.get(EXPRESSION),
-        queryText = props.get(QUERY),
-        comment = props.get(COMMENT),
-        deterministic = props.get(DETERMINISTIC).map(_.toBoolean),
-        containsSQL = props.get(CONTAINS_SQL).map(_.toBoolean),
-        isTableFunc = isTableFunc,
-        props.filterNot(_._1.startsWith(SQL_FUNCTION_PREFIX)))
+      fromProps(props, function.identifier, parser)
     } catch {
       case e: Exception =>
         throw new AnalysisException(
@@ -232,6 +243,56 @@ object SQLFunction {
             "className" -> s"${function.className}"), cause = Some(e)
         )
     }
+  }
+
+  /**
+   * Convert an [[ExpressionInfo]] into a SQL function.
+   */
+  def fromExpressionInfo(info: ExpressionInfo, parser: ParserInterface): SQLFunction = {
+    try {
+      val props = mapper.readValue(info.getUsage, classOf[Map[String, String]])
+      fromProps(props, FunctionIdentifier(info.getName, Option(info.getDb)), parser)
+    } catch {
+      case e: Exception =>
+        throw new AnalysisException(
+          errorClass = "CORRUPTED_CATALOG_FUNCTION",
+          messageParameters = Map(
+            "identifier" -> s"${info.getDb}.${info.getName}",
+            "className" -> s"${info.getClassName}"), cause = Some(e)
+        )
+    }
+  }
+
+  /**
+   * Build a [[SQLFunction]] from a deserialized property map and a function identifier.
+   * Shared by both [[fromCatalogFunction]] and [[fromExpressionInfo]] so all readers
+   * stay in sync as new properties are added.
+   *
+   * `OWNER` is optional and defaults to `None` when missing; `CREATE_TIME` falls back
+   * to the current wall-clock time so functions persisted before metadata was added
+   * to the catalog payload still load.
+   */
+  private def fromProps(
+      props: Map[String, String],
+      identifier: FunctionIdentifier,
+      parser: ParserInterface): SQLFunction = {
+    val isTableFunc = props(IS_TABLE_FUNC).toBoolean
+    val collation = props.get(COLLATION)
+    val returnType = parseReturnTypeText(props(RETURN_TYPE), isTableFunc, parser, collation)
+    SQLFunction(
+      name = identifier,
+      inputParam = props.get(INPUT_PARAM).map(parseRoutineParam(_, parser, collation)),
+      returnType = returnType.get,
+      exprText = props.get(EXPRESSION),
+      queryText = props.get(QUERY),
+      comment = props.get(COMMENT),
+      collation = collation,
+      deterministic = props.get(DETERMINISTIC).map(_.toBoolean),
+      containsSQL = props.get(CONTAINS_SQL).map(_.toBoolean),
+      isTableFunc = isTableFunc,
+      properties = props.filterNot(_._1.startsWith(SQL_FUNCTION_PREFIX)),
+      owner = props.get(OWNER),
+      createTimeMs = props.get(CREATE_TIME).map(_.toLong).getOrElse(System.currentTimeMillis))
   }
 
   def parseDefault(text: String, parser: ParserInterface): Expression = {
@@ -249,7 +310,8 @@ object SQLFunction {
   def parseReturnTypeText(
       text: String,
       isTableFunc: Boolean,
-      parser: ParserInterface): Option[Either[DataType, StructType]] = {
+      parser: ParserInterface,
+      collation: Option[String]): Option[Either[DataType, StructType]] = {
     if (!isTableFunc) {
       // This is a scalar user-defined function.
       if (text.isEmpty) {
@@ -257,7 +319,7 @@ object SQLFunction {
         Option.empty[Either[DataType, StructType]]
       } else {
         // The CREATE FUNCTION statement included a RETURNS clause with an explicit return type.
-        Some(Left(parseDataType(text, parser)))
+        Some(Left(parseDataType(text, parser, collation)))
       }
     } else {
       // This is a table function.
@@ -266,7 +328,7 @@ object SQLFunction {
         Option.empty[Either[DataType, StructType]]
       } else {
         // The CREATE FUNCTION statement included a RETURNS TABLE clause with an explicit schema.
-        Some(Right(parseTableSchema(text, parser)))
+        Some(Right(parseTableSchema(text, parser, collation)))
       }
     }
   }

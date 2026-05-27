@@ -44,6 +44,8 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
 
   protected val workerModule: String
 
+  protected def runnerConf: Map[String, String] = Map.empty
+
   protected def writeToPython(dataOut: DataOutputStream, pickler: Pickler): Unit
 
   protected def receiveFromPython(dataIn: DataInputStream): T
@@ -58,6 +60,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     val idleTimeoutSeconds: Long = SQLConf.get.pythonUDFWorkerIdleTimeoutSeconds
     val killOnIdleTimeout: Boolean = SQLConf.get.pythonUDFWorkerKillOnIdleTimeout
     val tracebackDumpIntervalSeconds: Long = SQLConf.get.pythonUDFWorkerTracebackDumpIntervalSeconds
+    val killWorkerOnFlushFailure: Boolean = SQLConf.get.pythonUDFDaemonKillWorkerOnFlushFailure
     val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
     val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
     val workerMemoryMb = SQLConf.get.pythonPlannerExecMemory
@@ -98,11 +101,15 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     if (tracebackDumpIntervalSeconds > 0L) {
       envVars.put("PYTHON_TRACEBACK_DUMP_INTERVAL_SECONDS", tracebackDumpIntervalSeconds.toString)
     }
+    if (useDaemon && killWorkerOnFlushFailure) {
+      envVars.put("PYTHON_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE", "1")
+    }
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
     sessionUUID.foreach { uuid =>
       envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }
+    envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     EvaluatePython.registerPicklers()
     val pickler = new Pickler(/* useMemo = */ true,
@@ -119,6 +126,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       PythonWorkerUtils.writePythonVersion(pythonVer, dataOut)
       PythonWorkerUtils.writeSparkFiles(jobArtifactUUID, pythonIncludes, dataOut)
       PythonWorkerUtils.writeBroadcasts(broadcastVars, worker, env, dataOut)
+      PythonWorkerUtils.writeConf(runnerConf, dataOut)
 
       writeToPython(dataOut, pickler)
 

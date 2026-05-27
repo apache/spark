@@ -27,12 +27,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AnalysisTest, Analyzer, AsOfVersion, EmptyFunctionRegistry, NoSuchTableException, RelationResolution, ResolvedFieldName, ResolvedFieldPosition, ResolvedIdentifier, ResolvedTable, ResolveSessionCatalog, TimeTravelSpec, UnresolvedAttribute, UnresolvedFieldPosition, UnresolvedInlineTable, UnresolvedPartitionSpec, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog, TempVariableManager}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumns, AlterColumnSpec, AnalysisOnlyCommand, AppendData, Assignment, CreateTable, CreateTableAsSelect, DefaultValueExpression, DeleteAction, DeleteFromTable, DescribeRelation, DescribeTablePartition, DropTable, InsertAction, InsertIntoStatement, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, OverwriteByExpression, OverwritePartitionsDynamic, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.FakeV2Provider
@@ -57,6 +57,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
   private val table: Table = {
     val t = mock(classOf[SupportsDelete])
+    when(t.name()).thenReturn("tab")
     when(t.columns()).thenReturn(
       Array(Column.create("i", IntegerType), Column.create("s", StringType)))
     when(t.partitioning()).thenReturn(Array.empty[Transform])
@@ -138,6 +139,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       .add("s", "string")
       .add("point", new StructType().add("x", "int").add("y", "int")))
     when(t.tableType).thenReturn(tableType)
+    // Mockito returns false for unstubbed Boolean methods, so analyzer code paths that
+    // dispatch through `CatalogTable.isViewLike` (e.g. `Analyzer.lookupTableOrView`'s v1
+    // session-catalog branch) would misclassify a mocked VIEW fixture as a table. Stub
+    // the method to compute from the just-stubbed `tableType` so any view-like type
+    // (VIEW today, METRIC_VIEW or future kinds) resolves correctly.
+    when(t.isViewLike).thenReturn(CatalogTable.isViewLike(tableType))
     when(t.provider).thenReturn(Some(provider))
     when(t.identifier).thenReturn(
       ident.asTableIdentifier.copy(catalog = Some(SESSION_CATALOG_NAME)))
@@ -145,6 +152,15 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(t.properties).thenReturn(Map.empty)
     when(t.comment).thenReturn(None)
     when(t.collation).thenReturn(None)
+    if (tableType == CatalogTableType.VIEW) {
+      // Stub the view-only fields that resolution reads through `V1ViewInfo.builderFrom`.
+      // Mockito returns `null` for unstubbed Object methods, which would NPE the moment
+      // builderFrom calls `.getOrElse` / `.asJava` / `.toArray` on a null Option/Seq/Map.
+      when(t.viewText).thenReturn(None)
+      when(t.viewCatalogAndNamespace).thenReturn(Seq.empty)
+      when(t.viewSQLConfigs).thenReturn(Map.empty)
+      when(t.viewQueryColumnNames).thenReturn(Seq.empty)
+    }
     V1Table(t)
   }
 
@@ -220,6 +236,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array.empty[String])
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath = SQLConf.get.resolutionSearchPath(Seq(testCat.name()))
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath)
     manager
   }
 
@@ -229,6 +255,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       invocation.getArguments()(0).asInstanceOf[String] match {
         case "testcat" =>
           testCat
+        case CatalogManager.SESSION_CATALOG_NAME =>
+          v2SessionCatalog
         case name => throw QueryExecutionErrors.catalogNotFoundError(name)
       }
     })
@@ -236,6 +264,17 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     when(manager.currentNamespace).thenReturn(Array("default"))
     when(manager.v1SessionCatalog).thenReturn(v1SessionCatalog)
     when(manager.tempVariableManager).thenReturn(tempVariableManager)
+    when(manager.sessionPathEntries).thenReturn(None)
+    val defaultPath2 = SQLConf.get.resolutionSearchPath(
+      (v2SessionCatalog.name() +: Array("default")).toSeq)
+    when(manager.sqlResolutionPathEntries(
+      any[String], any[Seq[String]], any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.sqlResolutionPathEntries(any[String], any[Seq[String]]))
+      .thenReturn(defaultPath2)
+    when(manager.resolutionPathEntriesForAnalysis(
+      any[Option[Seq[Seq[String]]]], any[Seq[String]]))
+      .thenReturn(defaultPath2)
     manager
   }
 
@@ -768,7 +807,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     parseResolveCompare(s"DROP VIEW $tempViewName",
       DropTempViewCommand(tempViewIdent))
     parseResolveCompare(s"DROP VIEW IF EXISTS $tempViewName",
-      DropTempViewCommand(tempViewIdent))
+      DropTempViewCommand(tempViewIdent, ifExists = true))
   }
 
   test("drop view in v2 catalog") {
@@ -777,8 +816,8 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     }
     checkError(
       e,
-      condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-      parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+      condition = "MISSING_CATALOG_ABILITY.VIEWS",
+      parameters = Map("plugin" -> "testcat"))
   }
 
   // ALTER VIEW view_name SET TBLPROPERTIES ('comment' = new_comment);
@@ -930,9 +969,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val parsed2 = parseAndResolve(sql2)
         if (useV1Command) {
           val expected1 = DescribeTableCommand(
+            parsed1.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map.empty, false, parsed1.output)
           val expected2 = DescribeTableCommand(
+            parsed2.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map.empty, true, parsed2.output)
 
@@ -940,13 +981,13 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           comparePlans(parsed2, expected2)
         } else {
           parsed1 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, isExtended, _) =>
               assert(!isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed1.treeString)
           }
 
           parsed2 match {
-            case DescribeRelation(_: ResolvedTable, _, isExtended, _) =>
+            case DescribeRelation(_: ResolvedTable, isExtended, _) =>
               assert(isExtended)
             case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
           }
@@ -956,15 +997,16 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val parsed3 = parseAndResolve(sql3)
         if (useV1Command) {
           val expected3 = DescribeTableCommand(
+            parsed3.asInstanceOf[DescribeTableCommand].child,
             TableIdentifier(tblName, Some("default"), Some(SESSION_CATALOG_NAME)),
             Map("a" -> "1"), false, parsed3.output)
           comparePlans(parsed3, expected3)
         } else {
           parsed3 match {
-            case DescribeRelation(_: ResolvedTable, partitionSpec, isExtended, _) =>
+            case DescribeTablePartition(_: ResolvedTable, partitionSpec, isExtended, _) =>
               assert(!isExtended)
-              assert(partitionSpec == Map("a" -> "1"))
-            case _ => fail("Expect DescribeTable, but got:\n" + parsed2.treeString)
+              assert(partitionSpec == UnresolvedPartitionSpec(Map("a" -> "1")))
+            case _ => fail("Expect DescribeTablePartition, but got:\n" + parsed3.treeString)
           }
         }
     }
@@ -1249,7 +1291,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         UnresolvedInlineTable(_, Seq(Seq(UnresolvedAttribute(Seq("DEFAULT"))))),
-        _, _, _) =>
+        _, _, _, _, _) =>
 
       case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
     }
@@ -1257,9 +1299,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       case InsertIntoStatement(
         _, _, _,
         Project(Seq(UnresolvedAttribute(Seq("DEFAULT"))), _),
-        _, _, _) =>
+        _, _, _, _, _) =>
 
-      case _ => fail("Expect UpdateTable, but got:\n" + parsed1.treeString)
+      case _ => fail("Expect UpdateTable, but got:\n" + parsed2.treeString)
     }
   }
 
@@ -1267,7 +1309,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val sql1 = "INSERT INTO testcat.defaultvalues VALUES (DEFAULT, DEFAULT)"
     parseAndResolve(sql1) match {
       // The top-most Project just adds aliases.
-      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _) =>
+      case AppendData(_: DataSourceV2Relation, Project(_, l: LocalRelation), _, _, _, _, _) =>
         assert(l.data.length == 1)
         val row = l.data.head
         assert(row.numFields == 2)
@@ -1305,23 +1347,93 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
     val overwriteSql = s"INSERT OVERWRITE $tblName(i, s) VALUES (3, 'a')"
     val overwriteParsed = parseAndResolve(overwriteSql)
     insertParsed match {
-      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _) =>
+      case AppendData(_: DataSourceV2Relation, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected AppendData, but got:\n" + insertParsed.treeString)
     }
     overwriteParsed match {
-      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _) =>
+      case OverwriteByExpression(_: DataSourceV2Relation, _, _, _, isByName, _, _, _) =>
         assert(isByName)
       case _ => fail("Expected OverwriteByExpression, but got:\n" + overwriteParsed.treeString)
     }
     withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
       val dynamicOverwriteParsed = parseAndResolve(overwriteSql)
       dynamicOverwriteParsed match {
-        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _) =>
+        case OverwritePartitionsDynamic(_: DataSourceV2Relation, _, _, isByName, _, _) =>
           assert(isByName)
         case _ =>
           fail("Expected OverwriteByExpression, but got:\n" + dynamicOverwriteParsed.treeString)
       }
+    }
+  }
+
+  test("INSERT INTO REPLACE ON is unsupported for V2 tables") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 " +
+            "SELECT * FROM v2Table")
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`tab`",
+        "operation" -> "INSERT INTO ... REPLACE ON/USING")
+    )
+  }
+
+  test("INSERT INTO REPLACE USING is unsupported for V2 tables") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE USING (i) " +
+            "SELECT * FROM v2Table")
+      },
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> "`tab`",
+        "operation" -> "INSERT INTO ... REPLACE ON/USING")
+    )
+  }
+
+  test("INSERT INTO REPLACE ON is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE ON t.i = 1 SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_ON_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO REPLACE USING is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_USING_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t REPLACE USING (i) SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_USING_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO BY NAME REPLACE ON is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_ON_BY_NAME_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t BY NAME REPLACE ON t.i = 1 SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_ON_BY_NAME_NOT_ENABLED")
+    }
+  }
+
+  test("INSERT INTO BY NAME REPLACE USING is blocked when feature flag is disabled") {
+    withSQLConf(SQLConf.INSERT_INTO_REPLACE_USING_BY_NAME_ENABLED.key -> "false") {
+      val ex = intercept[ParseException] {
+        parseAndResolve(
+          "INSERT INTO testcat.tab AS t BY NAME REPLACE USING (i) SELECT * FROM v2Table")
+      }
+      assert(ex.getCondition === "INSERT_REPLACE_USING_BY_NAME_NOT_ENABLED")
     }
   }
 
@@ -1585,10 +1697,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         case Project(_, AsDataSourceV2Relation(r)) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case AppendData(r: DataSourceV2Relation, _, _, _, _, _) =>
+        case AppendData(r: DataSourceV2Relation, _, _, _, _, _, _) =>
           assert(r.catalog.contains(catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
-        case DescribeRelation(r: ResolvedTable, _, _, _) =>
+        case DescribeRelation(r: ResolvedTable, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _, _) =>
@@ -1633,10 +1745,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       if (starInUpdate) {
         assert(updateAssigns.size == 2)
-        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
-        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
-        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(updateAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(updateAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(updateAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(updateAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
       } else {
         assert(updateAssigns.size == 1)
         assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ts))
@@ -1656,10 +1768,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
 
       if (starInInsert) {
         assert(insertAssigns.size == 2)
-        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ts))
-        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(ss))
-        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
+        assert(insertAssigns(0).value.asInstanceOf[AttributeReference].sameRef(si))
+        assert(insertAssigns(1).key.asInstanceOf[AttributeReference].sameRef(ts))
+        assert(insertAssigns(1).value.asInstanceOf[AttributeReference].sameRef(ss))
       } else {
         assert(insertAssigns.size == 2)
         assert(insertAssigns(0).key.asInstanceOf[AttributeReference].sameRef(ti))
@@ -1703,12 +1815,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
-                  updateAssigns)),
+                  updateAssigns, _)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
-                  notMatchedBySourceUpdateAssigns)),
+                  notMatchedBySourceUpdateAssigns, _)),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
@@ -1720,8 +1832,40 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
         }
 
+        // star with schema evolution
+        val sqlStarSchemaEvolution =
+          s"""
+             |MERGE WITH SCHEMA EVOLUTION INTO $target AS target
+             |USING $source AS source
+             |ON target.i = source.i
+             |WHEN MATCHED AND (target.s='delete') THEN DELETE
+             |WHEN MATCHED AND (target.s='update') THEN UPDATE SET *
+             |WHEN NOT MATCHED AND (source.s='insert') THEN INSERT *
+           """.stripMargin
+        parseAndResolve(sqlStarSchemaEvolution) match {
+          case MergeIntoTable(
+          SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
+          SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
+          mergeCondition,
+          Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
+          UpdateAction(Some(EqualTo(ul: AttributeReference,
+          StringLiteral("update"))), updateAssigns, _)),
+          Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
+          insertAssigns)),
+          Seq(),
+          withSchemaEvolution) =>
+            checkMergeConditionResolution(target, source, mergeCondition)
+            checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns,
+              starInUpdate = true)
+            checkNotMatchedClausesResolution(target, source, Some(il), insertAssigns,
+              starInInsert = true)
+            assert(withSchemaEvolution === true)
+
+          case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
+        }
+
         // star
-        val sql2 =
+        val sqlStarWithoutSchemaEvolution =
           s"""
              |MERGE INTO $target AS target
              |USING $source AS source
@@ -1730,14 +1874,14 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
              |WHEN MATCHED AND (target.s='update') THEN UPDATE SET *
              |WHEN NOT MATCHED AND (source.s='insert') THEN INSERT *
            """.stripMargin
-        parseAndResolve(sql2) match {
+        parseAndResolve(sqlStarWithoutSchemaEvolution) match {
           case MergeIntoTable(
               SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference,
-                  StringLiteral("update"))), updateAssigns)),
+                  StringLiteral("update"))), updateAssigns, _)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(),
@@ -1766,7 +1910,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
-              Seq(UpdateAction(None, updateAssigns)),
+              Seq(UpdateAction(None, updateAssigns, _)),
               Seq(InsertAction(None, insertAssigns)),
               Seq(),
               withSchemaEvolution) =>
@@ -1797,10 +1941,10 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               SubqueryAlias(AliasIdentifier("target", Seq()), AsDataSourceV2Relation(target)),
               SubqueryAlias(AliasIdentifier("source", Seq()), AsDataSourceV2Relation(source)),
               mergeCondition,
-              Seq(DeleteAction(Some(_)), UpdateAction(None, updateAssigns)),
+              Seq(DeleteAction(Some(_)), UpdateAction(None, updateAssigns, _)),
               Seq(InsertAction(None, insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(_: AttributeReference, StringLiteral("delete")))),
-                UpdateAction(None, notMatchedBySourceUpdateAssigns)),
+                UpdateAction(None, notMatchedBySourceUpdateAssigns, _)),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, None, None, updateAssigns)
@@ -1832,12 +1976,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
-                  updateAssigns)),
+                  updateAssigns, _)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
-                  notMatchedBySourceUpdateAssigns)),
+                  notMatchedBySourceUpdateAssigns, _)),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
@@ -1871,12 +2015,12 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               mergeCondition,
               Seq(DeleteAction(Some(EqualTo(dl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("update"))),
-                  updateAssigns)),
+                  updateAssigns, _)),
               Seq(InsertAction(Some(EqualTo(il: AttributeReference, StringLiteral("insert"))),
                   insertAssigns)),
               Seq(DeleteAction(Some(EqualTo(ndl: AttributeReference, StringLiteral("delete")))),
                 UpdateAction(Some(EqualTo(nul: AttributeReference, StringLiteral("update"))),
-                  notMatchedBySourceUpdateAssigns)),
+                  notMatchedBySourceUpdateAssigns, _)),
               withSchemaEvolution) =>
             checkMergeConditionResolution(target, source, mergeCondition)
             checkMatchedClausesResolution(target, source, Some(dl), Some(ul), updateAssigns)
@@ -1927,7 +2071,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
               case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
                 Seq(
                   Assignment(_: AttributeReference, Literal(null, StringType)),
-                  Assignment(_: AttributeReference, _: AttributeReference))) =>
+                  Assignment(_: AttributeReference, _: AttributeReference)), _) =>
               case other => fail("unexpected second matched action " + other)
             }
             assert(m.notMatchedActions.length == 1)
@@ -1947,7 +2091,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             }
             m.notMatchedBySourceActions(1) match {
               case UpdateAction(Some(EqualTo(_: AttributeReference, StringLiteral("update"))),
-                Seq(Assignment(_: AttributeReference, Literal(null, StringType)))) =>
+                Seq(Assignment(_: AttributeReference, Literal(null, StringType))), _) =>
               case other =>
                 fail("unexpected second not matched by source action " + other)
             }
@@ -1999,7 +2143,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         val second = m.matchedActions(1)
         second match {
           case UpdateAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType))),
-          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType))), _) =>
           case other => fail("unexpected second matched action " + other)
         }
         assert(m.notMatchedActions.length == 1)
@@ -2017,7 +2161,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         }
         m.notMatchedBySourceActions(1) match {
           case UpdateAction(Some(EqualTo(_: AttributeReference, Literal(31, IntegerType))),
-          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType)))) =>
+          Seq(Assignment(_: AttributeReference, Literal(42, IntegerType))), _) =>
           case other => fail("unexpected second not matched by source action " + other)
         }
         assert(m.withSchemaEvolution === false)
@@ -2158,11 +2302,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
             AsDataSourceV2Relation(target),
             AsDataSourceV2Relation(source),
             _,
-            Seq(DeleteAction(Some(_)), UpdateAction(None, firstUpdateAssigns)),
+            Seq(DeleteAction(Some(_)), UpdateAction(None, firstUpdateAssigns, _)),
             Seq(InsertAction(
               Some(EqualTo(il: AttributeReference, StringLiteral("a"))),
             insertAssigns)),
-            Seq(DeleteAction(Some(_)), UpdateAction(None, secondUpdateAssigns)),
+            Seq(DeleteAction(Some(_)), UpdateAction(None, secondUpdateAssigns, _)),
             withSchemaEvolution) =>
           val ti = target.output.find(_.name == "i").get
           val ts = target.output.find(_.name == "s").get
@@ -2282,7 +2426,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
           }
           notMatchedBySourceActions(1) match {
             case UpdateAction(Some(EqualTo(ul: AttributeReference, StringLiteral("a"))),
-                Seq(Assignment(us: AttributeReference, IntegerLiteral(1)))) =>
+                Seq(Assignment(us: AttributeReference, IntegerLiteral(1))), _) =>
               // UPDATE condition and assignment are resolved with target table only, so column `s`
               // and `i` are not ambiguous.
               val ts = target.output.find(_.name == "s").get
@@ -2336,24 +2480,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
          |USING testcat.tab2
          |ON 1 = 1
          |WHEN MATCHED THEN UPDATE SET *""".stripMargin
-    val parsed2 = parseAndResolve(sql2)
-    parsed2 match {
-      case MergeIntoTable(
-          AsDataSourceV2Relation(target),
-          AsDataSourceV2Relation(source),
-          EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
-          Seq(UpdateAction(None, updateAssigns)), // Matched actions
-          Seq(), // Not matched actions
-          Seq(), // Not matched by source actions
-          withSchemaEvolution) =>
-        val ti = target.output.find(_.name == "i").get
-        val si = source.output.find(_.name == "i").get
-        assert(updateAssigns.size == 1)
-        assert(updateAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(updateAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
-        assert(withSchemaEvolution === false)
-      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
-    }
+    checkError(
+      exception = intercept[AnalysisException](parseAndResolve(sql2)),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
+      context = ExpectedContext(fragment = sql2, start = 0, stop = 80))
 
     // INSERT * with incompatible schema between source and target tables.
     val sql3 =
@@ -2361,24 +2492,11 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         |USING testcat.tab2
         |ON 1 = 1
         |WHEN NOT MATCHED THEN INSERT *""".stripMargin
-    val parsed3 = parseAndResolve(sql3)
-    parsed3 match {
-      case MergeIntoTable(
-          AsDataSourceV2Relation(target),
-          AsDataSourceV2Relation(source),
-          EqualTo(IntegerLiteral(1), IntegerLiteral(1)),
-          Seq(), // Matched action
-          Seq(InsertAction(None, insertAssigns)), // Not matched actions
-          Seq(), // Not matched by source actions
-          withSchemaEvolution) =>
-        val ti = target.output.find(_.name == "i").get
-        val si = source.output.find(_.name == "i").get
-        assert(insertAssigns.size == 1)
-        assert(insertAssigns.head.key.asInstanceOf[AttributeReference].sameRef(ti))
-        assert(insertAssigns.head.value.asInstanceOf[AttributeReference].sameRef(si))
-        assert(withSchemaEvolution === false)
-      case other => fail("Expect MergeIntoTable, but got:\n" + other.treeString)
-    }
+    checkError(
+      exception = intercept[AnalysisException](parseAndResolve(sql3)),
+      condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+      parameters = Map("objectName" -> "`s`", "proposal" -> "`i`, `x`"),
+      context = ExpectedContext(fragment = sql3, start = 0, stop = 80))
 
     val sql4 =
       """
@@ -2395,7 +2513,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         assert(m.matchedActions.length == 1)
         m.matchedActions.head match {
           case UpdateAction(_, Seq(
-          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke))) =>
+          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke)), _) =>
             assert(s1.arguments.length == 2)
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
@@ -2421,7 +2539,7 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
         assert(m.notMatchedBySourceActions.length == 1)
         m.notMatchedBySourceActions.head match {
           case UpdateAction(_, Seq(
-          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke))) =>
+          Assignment(_, s1: StaticInvoke), Assignment(_, s2: StaticInvoke)), _) =>
             assert(s1.arguments.length == 2)
             assert(s1.functionName == "charTypeWriteSideCheck")
             assert(s2.arguments.length == 2)
@@ -2962,6 +3080,36 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       ExpectedContext(fragment = sql2, start = 0, stop = 61))
   }
 
+  test("CTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"CREATE TABLE ctas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Create Table As Select (CTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
+  }
+
+  test("RTAS statement with constraints") {
+    Seq(
+      "CONSTRAINT pk PRIMARY KEY (id)",
+      "CONSTRAINT uk UNIQUE (id)",
+      "CONSTRAINT ck CHECK (id > 0)"
+    ).foreach { constraintDef =>
+      val sql = s"REPLACE TABLE rtas1 ($constraintDef) AS SELECT 1 AS id"
+      assertUnsupported(
+        sql,
+        Map("message" ->
+          "Constraints may not be specified in a Replace Table As Select (RTAS) statement"),
+        ExpectedContext(fragment = sql, start = 0, stop = sql.length - 1))
+    }
+  }
+
   test("create table - basic") {
     val query = "CREATE TABLE my_table (id int, name string)"
     val (desc, allowExisting) = extractTableDesc(query)
@@ -3284,7 +3432,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       unresolvedRelation: UnresolvedRelation,
       timeTravelSpec: Option[TimeTravelSpec] = None,
       planId: Option[Long] = None): DataSourceV2Relation = {
-    val rule = new RelationResolution(catalogManagerWithDefault)
+    val rule = new RelationResolution(
+      catalogManagerWithDefault,
+      spark.sharedState.relationCache)
     rule.resolveRelation(unresolvedRelation, timeTravelSpec) match {
       case Some(p @ AsDataSourceV2Relation(relation)) =>
         assert(unresolvedRelation.getTagValue(LogicalPlan.PLAN_ID_TAG) == planId)

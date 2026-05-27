@@ -1343,21 +1343,26 @@ case class Shuffle(child: Expression, randomSeed: Option[Long] = None) extends U
 }
 
 /**
- * Returns a reversed string or an array with reverse order of elements.
+ * Returns a reversed string, a binary value with bytes in reverse order,
+ * or an array with reverse order of elements.
  */
 @ExpressionDescription(
-  usage = "_FUNC_(array) - Returns a reversed string or an array with reverse order of elements.",
+  usage = """_FUNC_(expr) - Returns a reversed string, a binary value with bytes in reverse order,
+    or an array with reverse order of elements.""",
   examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        LQS krapS
       > SELECT _FUNC_(array(2, 1, 4, 3));
        [3,4,1,2]
+      > SELECT hex(_FUNC_(x'CAFE'));
+       FECA
   """,
   group = "collection_funcs",
   since = "1.5.0",
   note = """
     Reverse logic for arrays is available since 2.4.0.
+    Reverse logic for binary is available since 4.2.0.
   """
 )
 case class Reverse(child: Expression)
@@ -1365,7 +1370,10 @@ case class Reverse(child: Expression)
   override def nullIntolerant: Boolean = true
   // Input types are utilized by type coercion in ImplicitTypeCasts.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringTypeWithCollation(supportsTrimCollation = true), ArrayType))
+    Seq(TypeCollection(
+      StringTypeWithCollation(supportsTrimCollation = true),
+      BinaryType,
+      ArrayType))
 
   override def dataType: DataType = child.dataType
 
@@ -1380,17 +1388,36 @@ case class Reverse(child: Expression)
         new GenericArrayData(arrayData.toObjectArray(elementType).reverse)
       }
     case _: StringType => _.asInstanceOf[UTF8String].reverse()
+    case BinaryType => input => input.asInstanceOf[Array[Byte]].reverse
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => dataType match {
       case _: StringType => stringCodeGen(ev, c)
+      case BinaryType => binaryCodeGen(ctx, ev, c)
       case _: ArrayType => arrayCodeGen(ctx, ev, c)
     })
   }
 
   private def stringCodeGen(ev: ExprCode, childName: String): String = {
     s"${ev.value} = ($childName).reverse();"
+  }
+
+  private def binaryCodeGen(
+      ctx: CodegenContext, ev: ExprCode, childName: String): String = {
+    val input = ctx.freshName("input")
+    val len = ctx.freshName("len")
+    val result = ctx.freshName("result")
+    val i = ctx.freshName("i")
+    s"""
+       |byte[] $input = (byte[]) $childName;
+       |int $len = $input.length;
+       |byte[] $result = new byte[$len];
+       |for (int $i = 0; $i < $len; $i++) {
+       |  $result[$i] = $input[$len - 1 - $i];
+       |}
+       |${ev.value} = $result;
+     """.stripMargin
   }
 
   private def arrayCodeGen(ctx: CodegenContext, ev: ExprCode, childName: String): String = {
@@ -2293,6 +2320,8 @@ case class ArrayJoin(
   override def dataType: DataType = array.dataType.asInstanceOf[ArrayType].elementType
 
   override def prettyName: String = "array_join"
+
+  override def expensive: Boolean = true
 }
 
 /**
@@ -2709,19 +2738,23 @@ case class ElementAt(
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
 
   @transient private lazy val doElementAt: (Any, Any) => Any = left.dataType match {
+    // ArrayType is split into ANSI (failOnError) and non-ANSI branches.
+    // Order matters: the guarded case must come first.
+    case _: ArrayType if failOnError =>
+      (value, ordinal) => {
+        val array = value.asInstanceOf[ArrayData]
+        val idx = ArrayExpressionUtils.resolveArrayIndex(
+          array.numElements(), ordinal.asInstanceOf[Int], getContextOrNull())
+        if (arrayElementNullable && array.isNullAt(idx)) null else array.get(idx, dataType)
+      }
     case _: ArrayType =>
       (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
-          if (failOnError) {
-            throw QueryExecutionErrors.invalidElementAtIndexError(
-              index, array.numElements(), getContextOrNull())
-          } else {
-            defaultValueOutOfBound match {
-              case Some(value) => value.eval()
-              case None => null
-            }
+          defaultValueOutOfBound match {
+            case Some(value) => value.eval()
+            case None => null
           }
         } else {
           val idx = if (index == 0) {
@@ -2744,6 +2777,31 @@ case class ElementAt(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     left.dataType match {
+      // ArrayType is split into ANSI (failOnError) and non-ANSI branches.
+      // Order matters: the guarded case must come first.
+      case _: ArrayType if failOnError =>
+        nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+          val index = ctx.freshName("elementAtIndex")
+          val errorContext = getContextOrNullCode(ctx)
+          val utils = classOf[ArrayExpressionUtils].getName
+          val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
+          val body = if (arrayElementNullable) {
+            s"""
+               |if ($eval1.isNullAt($index)) {
+               |  ${ev.isNull} = true;
+               |} else {
+               |  $assignment
+               |}
+             """.stripMargin
+          } else {
+            assignment
+          }
+          s"""
+             |int $index = $utils.resolveArrayIndex(
+             |  $eval1.numElements(), (int) $eval2, $errorContext);
+             |$body
+           """.stripMargin
+        })
       case _: ArrayType =>
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
@@ -2757,21 +2815,15 @@ case class ElementAt(
             ""
           }
           val errorContext = getContextOrNullCode(ctx)
-          val indexOutOfBoundBranch = if (failOnError) {
-            // scalastyle:off line.size.limit
-            s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
-            // scalastyle:on line.size.limit
-          } else {
-            defaultValueOutOfBound match {
-              case Some(value) =>
-                val defaultValueEval = value.genCode(ctx)
-                s"""
-                  ${defaultValueEval.code}
-                  ${ev.isNull} = ${defaultValueEval.isNull};
-                  ${ev.value} = ${defaultValueEval.value};
-                """.stripMargin
-              case None => s"${ev.isNull} = true;"
-            }
+          val indexOutOfBoundBranch = defaultValueOutOfBound match {
+            case Some(value) =>
+              val defaultValueEval = value.genCode(ctx)
+              s"""
+                ${defaultValueEval.code}
+                ${ev.isNull} = ${defaultValueEval.isNull};
+                ${ev.value} = ${defaultValueEval.value};
+              """.stripMargin
+            case None => s"${ev.isNull} = true;"
           }
 
           s"""
@@ -5097,31 +5149,33 @@ case class ArrayInsert(
 
       new GenericArrayData(newArray)
     } else {
-      var posInt = pos.asInstanceOf[Int]
-      if (posInt == 0) {
+      // Widen `pos` to Long to avoid overflow (e.g. `-Int.MinValue` wraps back to `Int.MinValue`).
+      var posLong: Long = pos.asInstanceOf[Int].toLong
+      if (posLong == 0L) {
         throw QueryExecutionErrors.invalidIndexOfZeroError(getContextOrNull())
       }
 
-      val newPosExtendsArrayLeft = (posInt < 0) && (-posInt > baseArr.numElements())
+      val newPosExtendsArrayLeft = (posLong < 0) && (-posLong > baseArr.numElements())
 
       if (newPosExtendsArrayLeft) {
-        val baseOffset = if (legacyNegativeIndex) 1 else 0
+        val baseOffset: Long = if (legacyNegativeIndex) 1L else 0L
         // special case- if the new position is negative but larger than the current array size
         // place the new item at start of array, place the current array contents at the end
         // and fill the newly created array elements inbetween with a null
 
-        val newArrayLength = -posInt + baseOffset
+        val newArrayLength: Long = -posLong + baseOffset
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
             prettyName, newArrayLength)
         }
 
-        val newArray = new Array[Any](newArrayLength)
+        val newArray = new Array[Any](newArrayLength.toInt)
 
         baseArr.foreach(elementType, (i, v) => {
           // current position, offset by new item + new null array elements
-          val elementPosition = i + baseOffset + math.abs(posInt + baseArr.numElements())
+          val elementPosition =
+            (i + baseOffset + math.abs(posLong + baseArr.numElements())).toInt
           newArray(elementPosition) = v
         })
 
@@ -5129,20 +5183,21 @@ case class ArrayInsert(
 
         new GenericArrayData(newArray)
       } else {
-        if (posInt < 0) {
-          posInt = posInt + baseArr.numElements() + (if (legacyNegativeIndex) 0 else 1)
-        } else if (posInt > 0) {
-          posInt = posInt - 1
+        if (posLong < 0) {
+          posLong = posLong + baseArr.numElements() + (if (legacyNegativeIndex) 0 else 1)
+        } else if (posLong > 0) {
+          posLong = posLong - 1
         }
 
-        val newArrayLength = math.max(baseArr.numElements() + 1, posInt + 1)
+        val newArrayLength: Long = math.max(baseArr.numElements() + 1L, posLong + 1L)
 
         if (newArrayLength > ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
           throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
             prettyName, newArrayLength)
         }
 
-        val newArray = new Array[Any](newArrayLength)
+        val newArray = new Array[Any](newArrayLength.toInt)
+        val posInt = posLong.toInt
 
         baseArr.foreach(elementType, (i, v) => {
           if (i >= posInt) {
@@ -5209,23 +5264,29 @@ case class ArrayInsert(
       } else {
         val pos = posExpr.value
         val baseOffset = if (legacyNegativeIndex) 1 else 0
+        // Widen `pos` arithmetic to long so that `Int.MIN_VALUE` doesn't silently overflow
+        // (e.g. `Math.abs(Int.MIN_VALUE)` returns `Int.MIN_VALUE`).
+        val posLong = ctx.freshName("posLong")
+        val resLengthLong = ctx.freshName("resLengthLong")
         s"""
+           |long $posLong = (long) $pos;
            |int $itemInsertionIndex = 0;
            |int $resLength = 0;
            |int $adjustedAllocIdx = 0;
            |boolean $insertedItemIsNull = ${itemExpr.isNull};
            |
-           |if ($pos == 0) {
+           |if ($posLong == 0L) {
            |  throw QueryExecutionErrors.invalidIndexOfZeroError($errorContext);
            |}
            |
-           |if ($pos < 0 && (java.lang.Math.abs($pos) > $arr.numElements())) {
+           |if ($posLong < 0L && (-$posLong > $arr.numElements())) {
            |
-           |  $resLength = java.lang.Math.abs($pos) + $baseOffset;
-           |  if ($resLength > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
+           |  long $resLengthLong = -$posLong + ${baseOffset}L;
+           |  if ($resLengthLong > ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}) {
            |    throw QueryExecutionErrors.arrayFunctionWithElementsExceedLimitError(
-           |      "$prettyName", $resLength);
+           |      "$prettyName", $resLengthLong);
            |  }
+           |  $resLength = (int) $resLengthLong;
            |
            |  $allocation
            |  for (int $i = 0; $i < $arr.numElements(); $i ++) {

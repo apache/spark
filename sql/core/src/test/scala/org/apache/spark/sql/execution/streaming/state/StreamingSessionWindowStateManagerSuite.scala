@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StreamingSessionWindowStateManager}
+import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOperatorsUtils, StatePartitionKeyExtractorFactory, StreamingSessionWindowStateManager}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
@@ -73,6 +73,11 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
       test(s"StreamingSessionWindowStateManager " +
         s"provider ${providerOpt._2} state version v${version} - CRUD operations") {
         testAllOperations(version)
+      }
+
+      test("Partition key extraction - StreamingSessionWindowStateManager - " +
+        s"provider ${providerOpt._2} state version v$version") {
+        testPartitionKeyExtraction(version)
       }
     }
   }
@@ -165,6 +170,41 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
 
       val afterRemovingRows = stateManager.iterator(store).map(_.copy()).toSet
       assert(existingRows.diff(afterRemovingRows) === expectedRemovedRows)
+    }
+  }
+
+  private def testPartitionKeyExtraction(stateFormatVersion: Int): Unit = {
+    withStateManager(stateFormatVersion) { case (stateManager, store) =>
+      // Test data
+      val testRow1 = createRow("a", 1, 100, 150, 1)
+      val testRow2 = createRow("a", 1, 200, 250, 2)
+      val testRow3 = createRow("b", 2, 100, 150, 3)
+      val expectedKeyRow1 = createKeyRow("a", 1)
+      val expectedKeyRow2 = createKeyRow("b", 2)
+
+      // Create extractor for session window operation
+      val extractor = StatePartitionKeyExtractorFactory.create(
+        StatefulOperatorsUtils.SESSION_WINDOW_STATE_STORE_SAVE_EXEC_OP_NAME,
+        stateManager.getStateKeySchema
+      )
+
+      // Verify partition key schema excludes sessionStartTime
+      assert(extractor.partitionKeySchema === keysWithoutSessionAttributes.toStructType,
+        "Partition key schema should exclude sessionStartTime")
+
+      // Update sessions and verify partition key extraction
+      stateManager.updateSessions(store, expectedKeyRow1, Seq(testRow1, testRow2))
+      stateManager.updateSessions(store, expectedKeyRow2, Seq(testRow3))
+
+      // Verify partition keys for stored state keys
+      val stateKeys = store.iterator().map(_.key).toList
+      assert(stateKeys.length === 3, "Should have 3 state keys stored")
+
+      val partitionKeys = stateKeys.map(extractor.partitionKey(_).copy())
+      assert(partitionKeys.count(_ === expectedKeyRow1) === 2,
+        "Should have 2 partition keys matching (a, 1)")
+      assert(partitionKeys.count(_ === expectedKeyRow2) === 1,
+        "Should have 1 partition key matching (b, 2)")
     }
   }
 

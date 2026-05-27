@@ -18,6 +18,7 @@
 """
 APIs to let users manipulate resource requirements.
 """
+
 from pyspark.resource.information import ResourceInformation
 from pyspark.resource.requests import (
     TaskResourceRequest,
