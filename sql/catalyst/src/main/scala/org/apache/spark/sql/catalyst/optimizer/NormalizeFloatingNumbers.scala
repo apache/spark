@@ -28,36 +28,30 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * We need to take care of special floating numbers (NaN and -0.0) in several places:
- *   1. When compare values, different NaNs should be treated as same, `-0.0` and `0.0` should be
- *      treated as same.
- *   2. In aggregate grouping keys, different NaNs should belong to the same group, `-0.0` and `0.0`
- *      should belong to the same group.
- *   3. In join keys, different NaNs should be treated as same, `-0.0` and `0.0` should be
- *      treated as same.
- *   4. In window partition keys, different NaNs should belong to the same partition, `-0.0`
- *      and `0.0` should belong to the same partition.
- *   5. In hash-based array set operations, different NaNs should be treated as same, `-0.0`
- *      and `0.0` should be treated as same.
+ * Certain pairs of floating point numbers require special handling:
+ *   1. 0.0 / -0.0
+ *   2. NaN / NaN
+ * That's because we want to treat each of these pairs of numbers as equal, even though they
+ * have different binary representations. (IEEE 754 allows multiple distinct bit patterns for
+ * NaN.)
  *
- * Case 1 is fine, as we handle NaN and `-0.0` well during comparison. For complex types, we
- * recursively compare the fields/elements, so it's also fine.
+ * This special handling is required in several places:
+ *   1. When comparing values
+ *   2. When grouping keys for aggregates
+ *   3. When joining keys
+ *   4. When partitioning keys for windows
+ *   5. When executing array set operations
  *
- * Case 2, 3 and 4 are problematic, as Spark SQL turns grouping/join/window partition keys into
- * binary `UnsafeRow` and compare the binary data directly. Different NaNs have different binary
- * representation, and the same thing happens for `-0.0` and `0.0`.
- *
- * Case 5 is problematic for a similar reason: hash-based array set operations compare elements by
- * their binary representation via hash sets.
+ * Case 1 is already handled in [[SQLOrderingUtil]] and [[CodeGenerator.genEqual]].
+ * Cases 2-5 are handled by this optimizer rule.
  *
  * This rule runs in two places:
- *    1. Early in `FinishAnalysis` (right after `ReplaceExpressions` and before `EvalInlineTables`)
- *    so that array set-like operations are wrapped before optimizer rules that pre-evaluate
- *    expressions (e.g. `ConstantFolding`, `ConvertToLocalRelation`, `EvalInlineTables`).
- *
- *    2. As a late batch at the end of the optimizer, because rules like subquery rewrite and
- *    join reorder can create new joins or join conditions after `FinishAnalysis` that still
- *    need their keys to be normalized.
+ *   1. Early in `FinishAnalysis` (right after `ReplaceExpressions` and before `EvalInlineTables`)
+ *      so that array set-like operations are wrapped before optimizer rules that pre-evaluate
+ *      expressions (e.g. `ConstantFolding`, `ConvertToLocalRelation`, `EvalInlineTables`).
+ *   2. As a late batch at the end of the optimizer, because rules like subquery rewrite and
+ *      join reorder can create new joins or join conditions after `FinishAnalysis` that still
+ *      need their keys to be normalized.
  *
  * Ideally we should do the normalization in the physical operators that compare the
  * binary `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine
