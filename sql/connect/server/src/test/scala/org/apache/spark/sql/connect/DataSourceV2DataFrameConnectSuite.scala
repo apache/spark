@@ -21,21 +21,23 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.connector.{DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests}
+import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests}
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, TableCatalog}
 
 /**
  * Connect-mode counterpart of [[org.apache.spark.sql.connector.DataSourceV2DataFrameSuite]].
  *
- * Runs DSv2 temp view tests ([[DSv2TempViewWithStoredPlanTests]]) and repeated table access tests
- * ([[DSv2RepeatedTableAccessTests]]) under Spark Connect. All test logic lives in the shared
+ * Runs DSv2 temp view tests ([[DSv2TempViewWithStoredPlanTests]]), repeated table access tests
+ * ([[DSv2RepeatedTableAccessTests]]), and CACHE TABLE read tests ([[DSv2CacheTableReadTests]])
+ * under Spark Connect. All test logic lives in the shared
  * traits; this class only provides the Connect-specific session, catalog access, and result
  * comparison.
  */
 class DataSourceV2DataFrameConnectSuite
     extends SparkConnectServerTest
     with DSv2TempViewWithStoredPlanTests
-    with DSv2RepeatedTableAccessTests {
+    with DSv2RepeatedTableAccessTests
+    with DSv2CacheTableReadTests {
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
