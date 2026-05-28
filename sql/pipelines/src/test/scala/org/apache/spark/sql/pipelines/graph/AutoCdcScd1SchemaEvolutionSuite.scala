@@ -31,11 +31,10 @@ import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistratio
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * Tests covering AutoCDC's interaction with schema evolution across pipeline runs. The
- * suite documents the supported additive cases (new top-level columns, new nested fields
- * in array-of-struct, broadening / narrowing column selection) and the cases that fail
- * loudly today (subtractive nested evolution, type-incompatible changes, case-only
- * renames).
+ * Tests covering AutoCDC's interaction with non-key schema evolution across pipeline runs. The
+ * suite documents the supported additive cases (new top-level columns, new nested fields in
+ * array-of-struct, broadening / narrowing column selection) and the cases that fail loudly
+ * today (subtractive nested evolution, type-incompatible changes, case-only renames).
  *
  * These behaviors are largely inherited from the lower layers (`SchemaMergingUtils` for
  * schema merge, the v2 writer's column-resolution layer for nested-field handling) rather
