@@ -23,7 +23,7 @@ import unittest
 
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
-from pyspark.sql.types import StructType, StructField, IntegerType, LongType
+from pyspark.sql.types import StructType, StructField, IntegerType, LongType, StringType
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_pandas, pandas_requirement_message
@@ -604,6 +604,219 @@ class ColumnTestsMixin:
 
         self.assertEqual(df4.columns, ["colA", "colB", "colC", "colC", "colD", "colE"])
         self.assertEqual(df4.count(), 1)
+
+    # --- Mixed-surface layered DataFrame programs ---------------------------
+    #
+    # These tests chain multiple DataFrame transformations - semi-joins
+    # (for SQL EXISTS/IN), window functions, cube aggregations, UDFs and
+    # struct field access - into 4-5 layer pipelines, then reference the
+    # final layered DataFrame's columns via ``layered[col]`` in both filter
+    # and select at the outermost surface. The goal is to catch regressions
+    # in plan-id propagation across analyzer rules that single-operator
+    # tests miss when rules interact.
+
+    def test_layered_semijoin_groupby_window(self):
+        # 4-layer DataFrame pipeline: filter -> semi-join -> groupBy/agg
+        # -> window functions. ``layered[col]`` references appear in both
+        # filter and select at the outermost surface.
+        from pyspark.sql.window import Window
+
+        events_data = [
+            (1, 1, "Books", 100.0, 2, True),
+            (2, 1, "Books", 50.0, 3, True),
+            (3, 2, "Electronics", 200.0, 1, True),
+            (4, 2, "Electronics", 300.0, 2, True),
+            (5, 3, "Home", 80.0, 4, True),
+            (6, 4, "Books", 60.0, 1, False),
+        ]
+        users_data = [(1, 25), (2, 30), (3, 22), (4, 18)]
+        events_cols = ["id", "user_id", "category", "amount", "quantity", "is_active"]
+        users_cols = ["id", "age"]
+
+        events = self.spark.createDataFrame(events_data, events_cols)
+        users = self.spark.createDataFrame(users_data, users_cols)
+        # Layer 1: filter + semi-join (DataFrame-API equivalent of
+        # WHERE is_active AND EXISTS (user with age > 20)).
+        active = events.where(events["is_active"]).join(
+            users.where(users["age"] > 20),
+            events["user_id"] == users["id"],
+            "left_semi",
+        )
+        # Layer 2: groupBy + agg, then post-agg filter (HAVING equivalent).
+        totals = (
+            active.groupBy("category")
+            .agg(
+                sf.sum(active["amount"] * active["quantity"] * sf.lit(0.1)).alias("total_amt"),
+                sf.sum(active["amount"]).alias("amount_sum"),
+            )
+            .where(sf.col("amount_sum") > 50)
+            .select("category", "total_amt")
+        )
+        # Layer 3: window functions on top of the aggregate.
+        running = Window.orderBy("total_amt").rowsBetween(-1, 1)
+        ranking = Window.orderBy(sf.col("total_amt").desc())
+        windowed = totals.select(
+            "category",
+            "total_amt",
+            sf.avg(sf.col("total_amt")).over(running).alias("running_avg"),
+            sf.rank().over(ranking).alias("rank_num"),
+        )
+        # Layer 4: outer filter.
+        layered = windowed.where(sf.col("rank_num") <= 5)
+
+        rows = (
+            layered.filter(layered["rank_num"] <= 3)
+            .select(
+                layered["category"],
+                layered["total_amt"],
+                layered["running_avg"],
+                layered["rank_num"],
+            )
+            .collect()
+        )
+        result = sorted((r.category, r.rank_num) for r in rows)
+        self.assertEqual(result, [("Books", 2), ("Electronics", 1), ("Home", 3)])
+
+    def test_layered_struct_semijoin_cube_ntile(self):
+        # 5-layer DataFrame pipeline: filter -> semi-join -> struct field
+        # access -> cube aggregation -> window NTILE. ``layered[col]``
+        # references appear in both filter and select at the outermost
+        # surface.
+        from pyspark.sql.window import Window
+
+        events_schema = StructType(
+            [
+                StructField("id", IntegerType()),
+                StructField("category", StringType()),
+                StructField("status", StringType()),
+                StructField("amount", IntegerType()),
+                StructField("quantity", IntegerType()),
+                StructField(
+                    "detail",
+                    StructType(
+                        [
+                            StructField("name", StringType()),
+                            StructField("nested", StructType([StructField("x", IntegerType())])),
+                        ]
+                    ),
+                ),
+            ]
+        )
+        events_data = [
+            (1, "Books", "A", 100, 5, ("alpha", (1,))),
+            (2, "Electronics", "B", 200, 3, ("beta", (2,))),
+            (3, "Books", "A", 50, 7, ("alpha", (1,))),
+            (4, "Electronics", "B", 300, 4, ("beta", (2,))),
+            (5, "Home", "C", 80, 2, ("gamma", (3,))),
+        ]
+        categories_data = [("Books", 1), ("Electronics", 2), ("Home", 3), ("Toys", 5)]
+        categories_cols = ["name", "priority"]
+
+        events = self.spark.createDataFrame(events_data, events_schema)
+        categories = self.spark.createDataFrame(categories_data, categories_cols)
+        # Layer 1: filter + semi-join (DataFrame-API equivalent of
+        # WHERE quantity > 1 AND category IN (SELECT ...)).
+        filtered = events.where(events["quantity"] > 1).join(
+            categories.where(categories["priority"] <= 3),
+            events["category"] == categories["name"],
+            "left_semi",
+        )
+        # Layer 2: project with struct field access.
+        base = filtered.select(
+            filtered["id"],
+            filtered["category"],
+            filtered["status"],
+            filtered["amount"],
+            filtered["detail"]["name"].alias("detail_name"),
+            filtered["detail"]["nested"]["x"].alias("nx"),
+        )
+        # Layer 3: cube aggregation (mixed grouping levels - similar
+        # surface area to SQL GROUPING SETS without an exact equivalent
+        # in the DataFrame API).
+        grouped = (
+            base.cube("category", "status", "detail_name")
+            .agg(sf.sum(sf.col("amount")).alias("total"), sf.count(sf.lit(1)).alias("cnt"))
+            .where(sf.col("category").isNotNull() & sf.col("status").isNotNull())
+        )
+        # Layer 4: NTILE window.
+        tiled = grouped.withColumn("tile", sf.ntile(2).over(Window.orderBy(sf.col("total").desc())))
+        # Layer 5: outer filter.
+        layered = tiled.where(sf.col("tile") <= 2)
+
+        rows = (
+            layered.filter(layered["tile"] >= 1)
+            .select(
+                layered["category"],
+                layered["status"],
+                layered["detail_name"],
+                layered["total"],
+                layered["cnt"],
+                layered["tile"],
+            )
+            .collect()
+        )
+        # Cube emits one (category, status, detail_name) group per distinct
+        # combination plus one (category, status, NULL) rollup per distinct
+        # (category, status) pair. The where filter keeps both.
+        self.assertEqual(len(rows), 6)
+        self.assertEqual({r.category for r in rows}, {"Books", "Electronics", "Home"})
+        self.assertEqual({r.total for r in rows}, {80, 150, 500})
+        self.assertEqual({r.tile for r in rows}, {1, 2})
+
+    def test_layered_window_window_udf(self):
+        # 4-layer DataFrame pipeline: filter -> running-total window ->
+        # per-partition max window -> UDF wrap. ``layered[col]`` references
+        # appear in both filter and select at the outermost surface.
+        from pyspark.sql.window import Window
+
+        data = [
+            (1, "A", 100),
+            (2, "A", 200),
+            (3, "B", 150),
+            (4, "B", 250),
+            (5, "C", 50),
+        ]
+        cols = ["id", "category", "amount"]
+
+        df = self.spark.createDataFrame(data, cols)
+        # Layer 1: filter (replaces WHERE EXISTS amount > 0).
+        filtered = df.where(df["amount"] > 0)
+        # Layer 2: running total window.
+        run_w = Window.partitionBy("category").orderBy("id")
+        with_run = filtered.withColumn("run_amt", sf.sum(sf.col("amount")).over(run_w))
+        # Layer 3: per-category max window (replaces correlated subquery
+        # for cat_max).
+        cat_w = Window.partitionBy("category")
+        with_max = with_run.withColumn("cat_max", sf.max(sf.col("amount")).over(cat_w))
+        # Layer 4: UDF.
+        double = sf.udf(lambda x: x * 2 if x is not None else None, IntegerType())
+        layered = with_max.withColumn("doubled_amt", double(sf.col("amount")))
+
+        rows = (
+            layered.filter(layered["amount"] > 0)
+            .select(
+                layered["id"],
+                layered["category"],
+                layered["amount"],
+                layered["run_amt"],
+                layered["cat_max"],
+                layered["doubled_amt"],
+            )
+            .collect()
+        )
+        result = sorted(
+            (r.id, r.category, r.amount, r.run_amt, r.cat_max, r.doubled_amt) for r in rows
+        )
+        self.assertEqual(
+            result,
+            [
+                (1, "A", 100, 100, 200, 200),
+                (2, "A", 200, 300, 200, 400),
+                (3, "B", 150, 150, 250, 300),
+                (4, "B", 250, 400, 250, 500),
+                (5, "C", 50, 50, 50, 100),
+            ],
+        )
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
