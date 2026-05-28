@@ -89,7 +89,10 @@ class AutoCdcScd1KeyDriftSuite
         "flowName" ->
           fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
         "auxTableName" -> auxTableNameFor("target"),
-        "expectedKeySchema" -> "region STRING NOT NULL,id INT NOT NULL",
+        // `region` is nullable here because Scala `String` is a reference type and the
+        // [[MemoryStream]] tuple encoder treats reference types as nullable. Only Scala
+        // primitives (`Int`, `Long`, ...) yield `NOT NULL` columns.
+        "expectedKeySchema" -> "region STRING,id INT NOT NULL",
         "recordedKeySchema" -> "id INT NOT NULL"
       )
     )
@@ -145,7 +148,9 @@ class AutoCdcScd1KeyDriftSuite
           fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
         "auxTableName" -> auxTableNameFor("target"),
         "expectedKeySchema" -> "id INT NOT NULL",
-        "recordedKeySchema" -> "region STRING NOT NULL,id INT NOT NULL"
+        // `region` is nullable here because Scala `String` is a reference type; see the
+        // analogous comment in the "adds a key column" test above.
+        "recordedKeySchema" -> "region STRING,id INT NOT NULL"
       )
     )
   }
@@ -201,65 +206,42 @@ class AutoCdcScd1KeyDriftSuite
         "flowName" ->
           fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
         "auxTableName" -> auxTableNameFor("target"),
-        "expectedKeySchema" -> "id INT NOT NULL,country STRING NOT NULL",
-        "recordedKeySchema" -> "id INT NOT NULL,region STRING NOT NULL"
+        // `country` and `region` are nullable here because Scala `String` is a reference type;
+        // see the analogous comment in the "adds a key column" test above.
+        "expectedKeySchema" -> "id INT NOT NULL,country STRING",
+        "recordedKeySchema" -> "id INT NOT NULL,region STRING"
       )
     )
   }
 
-  test("a pipeline execution that changes a key column's dataType in an existing AutoCDC flow " +
+  test("a pipeline whose recorded aux key dataType differs from the flow's source dataType " +
     "triggers KEY_SCHEMA_DRIFT") {
-    val session = spark
-    import session.implicits._
-
-    // Target carries `id BIGINT` so the second pipeline is otherwise schema-compatible: the
-    // only difference between the two flows is the source DF's dataType for `id`.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
-      s"(id BIGINT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+      s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
+    )
+    spark.sql(
+      s"""CREATE TABLE ${auxTableNameFor("target")} (id BIGINT NOT NULL, $cdcMetadataDdl) """ +
+      s"""TBLPROPERTIES ('${AutoCdcAuxiliaryTable.keyColumnNamesProperty}' = '["id"]')"""
     )
 
-    // Pipeline #1: source DF carries `id INT` (Scala primitive `Int`).
-    val stream1 = MemoryStream[(Int, Long)]
-    stream1.addData((1, 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v1",
-        target = "target",
-        query = dfFlowFunc(stream1.toDF().toDF("id", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    val session = spark
+    import session.implicits._
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 1L))
+    val ctx = buildPipeline("flow", stream.toDF().toDF("id", "version"), Seq("id"))
 
-    // Pipeline #2: source DF carries `id BIGINT` (Scala primitive `Long`). Same name and arity
-    // as the recorded key, but the dataType comparison must fail.
-    val stream2 = MemoryStream[(Long, Long)]
-    stream2.addData((1L, 2L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v2",
-        target = "target",
-        query = dfFlowFunc(stream2.toDF().toDF("id", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-
-    val ex = intercept[RuntimeException] { runPipeline(ctx2) }
+    val ex = intercept[RuntimeException] { runPipeline(ctx) }
     checkErrorInPipelineFailure(
       failure = ex,
       condition = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
       sqlState = Some("42000"),
       parameters = Map(
         "flowName" ->
-          fullyQualifiedIdentifier("flow_v2", Some(catalog), Some(namespace)).unquotedString,
+          fullyQualifiedIdentifier("flow", Some(catalog), Some(namespace)).unquotedString,
         "auxTableName" -> auxTableNameFor("target"),
-        "expectedKeySchema" -> "id BIGINT NOT NULL",
-        "recordedKeySchema" -> "id INT NOT NULL"
+        "expectedKeySchema" -> "id INT NOT NULL",
+        "recordedKeySchema" -> "id BIGINT NOT NULL"
       )
     )
   }
@@ -431,10 +413,17 @@ class AutoCdcScd1KeyDriftSuite
     val session = spark
     import session.implicits._
 
-    // Pairs with the case-sensitive test above: same `Id` vs `id` shape, same recorded key,
-    // but under the default resolver the two identifiers are equivalent so drift validation
-    // must accept pipeline #2. This pins the negative direction so a regression that
-    // accidentally hard-codes a case-sensitive resolver in the validator is caught.
+    // Pairs with the case-sensitive test above: same recorded key, but under the default
+    // resolver the two identifiers are equivalent so drift validation must accept pipeline
+    // #2. This pins the negative direction so a regression that accidentally hard-codes a
+    // case-sensitive resolver in the validator is caught.
+    //
+    // Note that only the *key declaration* (`Seq("Id")`) has different casing here -- the
+    // source DF column name still matches the target's `id` exactly. Differing the source DF
+    // column casing as well would not exercise drift: [[SchemaMergingUtils.mergeSchemas]] is
+    // case-sensitive on column names and would add `Id` as a new column to the target,
+    // producing AMBIGUOUS_REFERENCE during the streaming write rather than letting drift
+    // validation make the call.
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.target " +
       s"(id INT NOT NULL, version BIGINT NOT NULL, $cdcMetadataDdl)"
@@ -446,7 +435,7 @@ class AutoCdcScd1KeyDriftSuite
 
     val stream2 = MemoryStream[(Int, Long)]
     stream2.addData((1, 2L))
-    runPipeline(buildPipeline("flow_v2", stream2.toDF().toDF("Id", "version"), Seq("Id")))
+    runPipeline(buildPipeline("flow_v2", stream2.toDF().toDF("id", "version"), Seq("Id")))
   }
 
   test("a pipeline whose aux table is missing the keyColumnNames property fails with " +
