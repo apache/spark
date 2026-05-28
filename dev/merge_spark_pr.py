@@ -1281,8 +1281,7 @@ def main():
                 "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
                 "tickets and MUST not be resolved by a single PR. File "
                 "Sub-task(s) under %s and update the PR title to reference "
-                "the Sub-task(s) instead."
-                % (pr_num, ids_str, ids_str)
+                "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
             )
 
     print("\n=== Pull Request #%s ===" % pr_num)
