@@ -330,7 +330,7 @@ object AutoCdcAuxiliaryTable {
    * Reserved table property key set on the auxiliary table to record which SCD strategy it
    * serves.
    */
-  val scdTypePropertyKey: String = s"${PipelinesTableProperties.pipelinesPrefix}autocdc.scd_type"
+  val scdTypePropertyKey: String = s"${PipelinesTableProperties.pipelinesPrefix}autocdc.scdType"
 
   /**
    * Table property recording the auxiliary table's AutoCDC key column names as a JSON string
@@ -338,7 +338,7 @@ object AutoCdcAuxiliaryTable {
    * considered immutable; full-refresh is the only way to change it.
    */
   val keyColumnNamesProperty: String =
-    PipelinesTableProperties.pipelinesPrefix + "autoCdc.keyColumnNames"
+    s"${PipelinesTableProperties.pipelinesPrefix}autocdc.keyColumnNames"
 
   /** Serialize key column names to the JSON form stored at [[keyColumnNamesProperty]]. */
   def serializeKeyColumnNames(names: Seq[String]): String = {
