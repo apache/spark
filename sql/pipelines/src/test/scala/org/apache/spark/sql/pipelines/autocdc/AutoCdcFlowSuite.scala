@@ -21,14 +21,7 @@ import java.util.Locale
 
 import scala.util.Success
 
-import org.apache.spark.sql.{
-  functions => F,
-  AnalysisException,
-  Column,
-  QueryTest,
-  Row,
-  SQLContext
-}
+import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -193,7 +186,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   /** A stable 3-column source streaming dataframe used across most schema tests. */
   private def threeColumnSourceDf(): DataFrame = {
     val session = spark
-    implicit val sqlCtx: SQLContext = session.sqlContext
     import session.implicits._
     MemoryStream[(Int, String, Option[Long])].toDS().toDF("id", "name", "seq")
   }
@@ -379,7 +371,6 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   /** Builds an empty source df with `id` + `seq` + the supplied extra columns. */
   private def sourceDfWithExtraColumns(extraColumns: (String, DataType)*): DataFrame = {
     val session = spark
-    implicit val sqlCtx: SQLContext = session.sqlContext
     import session.implicits._
     val baseStream = MemoryStream[(Int, Option[Long])].toDS().toDF("id", "seq")
     extraColumns.foldLeft(baseStream) { case (acc, (name, dt)) =>
