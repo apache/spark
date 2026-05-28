@@ -954,6 +954,61 @@ abstract class DynamicPartitionPruningSuiteBase
     }
   }
 
+  test("Bug SPARK-57126, SPARK-57127 :Structurally similar plans with order of runtime filters " +
+    "changed, should be same") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withTable("fact", "dim") {
+        spark.range(100).select(
+            $"id",
+            ($"id" + 1).cast("int").as("one"),
+            ($"id" + 2).cast("byte").as("two"),
+            ($"id" + 3).cast("short").as("three"),
+            (($"id" * 20) % 100).as("mod"),
+            ($"id" % 10).cast("string").as("str"))
+          .write.partitionBy("one", "two", "three")
+          .format(tableFormat).mode("overwrite").saveAsTable("fact")
+
+        spark.range(10).select(
+            $"id",
+            ($"id" + 1).cast("int").as("one"),
+            ($"id" + 2).cast("byte").as("two"),
+            ($"id" + 3).cast("short").as("three"),
+            ($"id" * 10).as("prod"))
+          .write.format(tableFormat).mode("overwrite").saveAsTable("dim")
+
+        // broadcast multiple keys
+        val dfLong1 = sql(
+          """
+            |SELECT f.id, f.one, f.two, f.str FROM fact f
+            |JOIN dim d
+            |ON (f.one = d.one and f.two = d.two and f.three = d.three)
+            |WHERE d.prod > 80
+          """.stripMargin)
+
+        val dfLong2 = sql(
+          """
+            |SELECT f.id, f.one, f.two, f.str FROM fact f
+            |JOIN dim d
+            |ON (f.three = d.three and  f.two = d.two and f.one = d.one )
+            |WHERE d.prod > 80
+          """.stripMargin)
+        val bs1 = dfLong1.queryExecution.sparkPlan.collect {
+          case bs: BatchScanExec if bs.table.name() == "testcat.fact" => bs
+        }.head
+        val bs2 = dfLong2.queryExecution.sparkPlan.collect {
+          case bs: BatchScanExec if bs.table.name() == "testcat.fact" => bs
+        }.head
+        assert(bs1.sameResult(bs2))
+        // Enable this once the PR for SPARK-57127 gets in
+        /*
+        val totalPlan1 = dfLong1.queryExecution.sparkPlan
+        val totalPlan2 = dfLong2.queryExecution.sparkPlan
+        assert(totalPlan1.sameResult(totalPlan2))
+         */
+      }
+    }
+  }
+
   test("broadcast multiple keys in an UnsafeHashedRelation") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
       withTable("fact", "dim") {

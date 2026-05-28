@@ -53,7 +53,8 @@ case class PlanDynamicPruningFilters(sparkSession: SparkSession) extends Rule[Sp
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(DYNAMIC_PRUNING_SUBQUERY)) {
       case DynamicPruningSubquery(
-          value, buildPlan, buildKeys, broadcastKeyIndices, onlyInBroadcast, exprId, _) =>
+          value, pruningPlanOutput, buildPlan, buildKeys, broadcastKeyIndices, onlyInBroadcast,
+          exprId, _) =>
         val sparkPlan = QueryExecution.createSparkPlan(sparkSession.sessionState.planner, buildPlan)
         val name = s"dynamicpruning#${exprId.id}"
         // Using `sparkPlan` is a little hacky as it is based on the assumption that this rule is
