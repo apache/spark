@@ -184,6 +184,19 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     val intBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 0xFD.toByte, 0xFC.toByte, 0, 0, 0, 0)
     val floatBE = Array[Byte](0xFF.toByte, 0x7F.toByte, 0x7D.toByte, 0xFC.toByte, 0, 0, 0, 0)
 
+    // Corrupt field values
+    val boolCorruptLE = Array[Byte](2, 0, 0, 0, 0, 0, 0, 0)
+    val byteCorruptLE = Array[Byte](0xFF.toByte, 1, 0, 0, 0, 0, 0, 0)
+    val shortCorruptLE = Array[Byte](0xFE.toByte, 0xFF.toByte, 1, 0, 0, 0, 0, 0)
+    val intCorruptLE = Array[Byte](0xFC.toByte, 0xFD.toByte, 0xFE.toByte, 0xFF.toByte, 1, 0, 0, 0)
+    val floatCorruptLE = Array[Byte](0xFC.toByte, 0xFD.toByte, 0x7F.toByte, 0xFF.toByte, 1, 0, 0, 0)
+
+    val boolCorruptBE = Array[Byte](2, 0, 0, 0, 0, 0, 0, 0)
+    val byteCorruptBE = Array[Byte](0xFF.toByte, 1, 0, 0, 0, 0, 0, 0)
+    val shortCorruptBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 1, 0, 0, 0, 0, 0)
+    val intCorruptBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 0xFD.toByte, 0xFC.toByte, 1, 0, 0, 0)
+    val floatCorruptBE = Array[Byte](0xFF.toByte, 0x7F.toByte, 0x7D.toByte, 0xFC.toByte, 1, 0, 0, 0)
+
     val numFields = 5
     val fieldsStartIdx = UnsafeRow.calculateBitSetWidthInBytes(numFields)
     val sizeInBytes = fieldsStartIdx + (numFields * 8)
@@ -222,6 +235,18 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 3, 32) == 0)
     assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 4, 32) == 0)
 
+    overwrite(boolCorruptLE, 0, nativeOrder() == BIG_ENDIAN)
+    overwrite(byteCorruptLE, 1, nativeOrder() == BIG_ENDIAN)
+    overwrite(shortCorruptLE, 2, nativeOrder() == BIG_ENDIAN)
+    overwrite(intCorruptLE, 3, nativeOrder() == BIG_ENDIAN)
+    overwrite(floatCorruptLE, 4, nativeOrder() == BIG_ENDIAN)
+
+    assert(UnsafeRowUtils.PaddingProviderLE.getPaddingBoolean(row, 0) != 0)
+    assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 1, 8) != 0)
+    assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 2, 16) != 0)
+    assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 3, 32) != 0)
+    assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 4, 32) != 0)
+
     // Overwrite the row's data with raw big endian values
     // reversing the byte order if testing on little endian platforms.
     overwrite(boolBE, 0, nativeOrder() != BIG_ENDIAN)
@@ -235,5 +260,17 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 2, 16) == 0)
     assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 3, 32) == 0)
     assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 4, 32) == 0)
+
+    overwrite(boolCorruptBE, 0, nativeOrder() != BIG_ENDIAN)
+    overwrite(byteCorruptBE, 1, nativeOrder() != BIG_ENDIAN)
+    overwrite(shortCorruptBE, 2, nativeOrder() != BIG_ENDIAN)
+    overwrite(intCorruptBE, 3, nativeOrder() != BIG_ENDIAN)
+    overwrite(floatCorruptBE, 4, nativeOrder() != BIG_ENDIAN)
+
+    assert(UnsafeRowUtils.PaddingProviderBE.getPaddingBoolean(row, 0) != 0)
+    assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 1, 8) != 0)
+    assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 2, 16) != 0)
+    assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 3, 32) != 0)
+    assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 4, 32) != 0)
   }
 }
