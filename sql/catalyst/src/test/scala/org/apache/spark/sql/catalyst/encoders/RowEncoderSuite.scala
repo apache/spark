@@ -382,28 +382,36 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("SPARK-57033: encoding/decoding TimestampNTZNanosType to/from java.time.LocalDateTime") {
-    val localDateTime = java.time.LocalDateTime.parse("2019-02-26T16:56:00.123456789")
-    for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
-      val schema = new StructType().add("t", TimestampNTZNanosType(p))
-      val encoder = ExpressionEncoder(schema).resolveAndBind()
-      val row = toRow(encoder, Row(localDateTime))
-      val expected = DateTimeUtils.localDateTimeToTimestampNanos(localDateTime, p)
-      assert(row.getTimestampNTZNanos(0) === expected)
-      val readback = fromRow(encoder, row)
-      assert(readback.get(0) === DateTimeUtils.timestampNanosToLocalDateTime(expected))
+    val inputs = Seq(
+      java.time.LocalDateTime.parse("2019-02-26T16:56:00.123456789"),
+      java.time.LocalDateTime.parse("1969-12-31T23:59:59.123456789"))
+    for (localDateTime <- inputs) {
+      for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+        val schema = new StructType().add("t", TimestampNTZNanosType(p))
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(localDateTime))
+        val expected = DateTimeUtils.localDateTimeToTimestampNanos(localDateTime, p)
+        assert(row.getTimestampNTZNanos(0) === expected)
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === DateTimeUtils.timestampNanosToLocalDateTime(expected))
+      }
     }
   }
 
   test("SPARK-57033: encoding/decoding TimestampLTZNanosType to/from java.time.Instant") {
-    val instant = java.time.Instant.parse("2019-02-26T16:56:00.123456789Z")
-    for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
-      val schema = new StructType().add("t", TimestampLTZNanosType(p))
-      val encoder = ExpressionEncoder(schema).resolveAndBind()
-      val row = toRow(encoder, Row(instant))
-      val expected = DateTimeUtils.instantToTimestampNanos(instant, p)
-      assert(row.getTimestampLTZNanos(0) === expected)
-      val readback = fromRow(encoder, row)
-      assert(readback.get(0) === DateTimeUtils.timestampNanosToInstant(expected))
+    val inputs = Seq(
+      java.time.Instant.parse("2019-02-26T16:56:00.123456789Z"),
+      java.time.Instant.parse("1969-12-31T23:59:59.123456789Z"))
+    for (instant <- inputs) {
+      for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
+        val schema = new StructType().add("t", TimestampLTZNanosType(p))
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(instant))
+        val expected = DateTimeUtils.instantToTimestampNanos(instant, p)
+        assert(row.getTimestampLTZNanos(0) === expected)
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === DateTimeUtils.timestampNanosToInstant(expected))
+      }
     }
   }
 

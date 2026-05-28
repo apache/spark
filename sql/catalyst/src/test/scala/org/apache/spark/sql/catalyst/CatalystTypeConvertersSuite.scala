@@ -357,25 +357,31 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-57033: TimestampNTZNanosType converter truncates sub-micro to precision") {
     val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    val negativeEpochLdt = LocalDateTime.parse("1969-12-31T23:59:59.123456789")
     val cases = Map(7 -> 700, 8 -> 780, 9 -> 789)
-    cases.foreach { case (p, expectedNanosWithinMicro) =>
-      val dt = TimestampNTZNanosType(p)
-      val v = CatalystTypeConverters.createToCatalystConverter(dt)(ldt)
-        .asInstanceOf[TimestampNanosVal]
-      assert(v.nanosWithinMicro === expectedNanosWithinMicro,
-        s"precision=$p: expected $expectedNanosWithinMicro, got ${v.nanosWithinMicro}")
+    Seq(ldt, negativeEpochLdt).foreach { input =>
+      cases.foreach { case (p, expectedNanosWithinMicro) =>
+        val dt = TimestampNTZNanosType(p)
+        val v = CatalystTypeConverters.createToCatalystConverter(dt)(input)
+          .asInstanceOf[TimestampNanosVal]
+        assert(v.nanosWithinMicro === expectedNanosWithinMicro,
+          s"input=$input, precision=$p: expected $expectedNanosWithinMicro, got ${v.nanosWithinMicro}")
+      }
     }
   }
 
   test("SPARK-57033: TimestampLTZNanosType converter truncates sub-micro to precision") {
     val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val negativeEpochInstant = Instant.parse("1969-12-31T23:59:59.123456789Z")
     val cases = Map(7 -> 700, 8 -> 780, 9 -> 789)
-    cases.foreach { case (p, expectedNanosWithinMicro) =>
-      val dt = TimestampLTZNanosType(p)
-      val v = CatalystTypeConverters.createToCatalystConverter(dt)(instant)
-        .asInstanceOf[TimestampNanosVal]
-      assert(v.nanosWithinMicro === expectedNanosWithinMicro,
-        s"precision=$p: expected $expectedNanosWithinMicro, got ${v.nanosWithinMicro}")
+    Seq(instant, negativeEpochInstant).foreach { input =>
+      cases.foreach { case (p, expectedNanosWithinMicro) =>
+        val dt = TimestampLTZNanosType(p)
+        val v = CatalystTypeConverters.createToCatalystConverter(dt)(input)
+          .asInstanceOf[TimestampNanosVal]
+        assert(v.nanosWithinMicro === expectedNanosWithinMicro,
+          s"input=$input, precision=$p: expected $expectedNanosWithinMicro, got ${v.nanosWithinMicro}")
+      }
     }
   }
 
