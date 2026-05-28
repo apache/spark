@@ -182,7 +182,7 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     val byteBE = Array[Byte](0xFF.toByte, 0, 0, 0, 0, 0, 0, 0)
     val shortBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 0, 0, 0, 0, 0, 0)
     val intBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 0xFD.toByte, 0xFC.toByte, 0, 0, 0, 0)
-    val floatBE = Array[Byte](0xFF.toByte, 0x7F.toByte, 0x7D.toByte, 0xFC.toByte, 0, 0, 0, 0)
+    val floatBE = Array[Byte](0xFF.toByte, 0x7F.toByte, 0xFD.toByte, 0xFC.toByte, 0, 0, 0, 0)
 
     // Corrupt field values
     val boolCorruptLE = Array[Byte](2, 0, 0, 0, 0, 0, 0, 0)
@@ -195,7 +195,7 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     val byteCorruptBE = Array[Byte](0xFF.toByte, 1, 0, 0, 0, 0, 0, 0)
     val shortCorruptBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 1, 0, 0, 0, 0, 0)
     val intCorruptBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 0xFD.toByte, 0xFC.toByte, 1, 0, 0, 0)
-    val floatCorruptBE = Array[Byte](0xFF.toByte, 0x7F.toByte, 0x7D.toByte, 0xFC.toByte, 1, 0, 0, 0)
+    val floatCorruptBE = Array[Byte](0xFF.toByte, 0x7F.toByte, 0xFD.toByte, 0xFC.toByte, 1, 0, 0, 0)
 
     val numFields = 5
     val fieldsStartIdx = UnsafeRow.calculateBitSetWidthInBytes(numFields)
