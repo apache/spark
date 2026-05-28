@@ -31,19 +31,20 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.V2TableReference
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, Filter, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, Unassigned, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
+import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, PushDownUtils, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeModeAllowlist, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
 import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
@@ -64,7 +65,8 @@ class MicroBatchExecution(
     plan: WriteToStream)
   extends StreamExecution(
     sparkSession, plan.name, plan.resolvedCheckpointLocation, plan.inputQuery, plan.sink, trigger,
-    triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) with AsyncLogPurge {
+    triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) with AsyncLogPurge
+    with PredicateHelper{
 
   /**
    * Keeps track of the latest execution context
@@ -236,6 +238,65 @@ class MicroBatchExecution(
           StreamingExecutionRelation(
             source, output, dataSourceV1.catalogTable, sourceIdentifyingName)(sparkSession)
         })
+
+      case f @ Filter(condition,
+        s @ StreamingRelationV2(_, _, table,
+          options, output, catalog, identifier, _, _)) =>
+        val scanBuilder = table.asReadable.newScanBuilder(options)
+        val filters = splitConjunctivePredicates(condition)
+        val normalizedFilters =
+          DataSourceStrategy.normalizeExprs(filters, s.output)
+        val partitionPredicateFields = PushDownUtils.getPartitionPredicateSchema(table, s.output)
+        val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
+          normalizedFilters.partition(SubqueryExpression.hasSubquery)
+        val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
+          scanBuilder, normalizedFiltersWithoutSubquery, partitionPredicateFields)
+        var pushedPredicates: Seq[Predicate] = Seq.empty[Predicate]
+        val pushedFiltersStr = if (pushedFilters.isLeft) {
+          pushedFilters.swap
+            .getOrElse(throw new NoSuchElementException("The left node doesn't have pushedFilters"))
+            .mkString(", ")
+        } else {
+          pushedPredicates = pushedFilters
+            .getOrElse(throw new NoSuchElementException(
+              "The right node doesn't have pushedFilters"))
+          pushedPredicates.mkString(", ")
+        }
+
+        val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+
+        logInfo(
+          log"""
+               |Pushing operators to ${MDC(RELATION_NAME, s.table.name())}
+               |Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFiltersStr)}
+               |Post-Scan Filters: ${MDC(POST_SCAN_FILTERS, postScanFilters.mkString(","))}
+           """.stripMargin)
+
+        val filterCondition = postScanFilters.reduceLeftOption(And)
+        filterCondition.map(Filter(_, s)).getOrElse(s)
+
+        val scan = scanBuilder.build()
+        val metadataPath = s"$resolvedCheckpointRoot/sources/$nextSourceId"
+        nextSourceId.incrementAndGet()
+
+        val stream = scan.toMicroBatchStream(metadataPath)
+
+        val relation = StreamingDataSourceV2Relation(
+          table, output, catalog, identifier, options, metadataPath,
+          trigger match {
+            case RealTimeTrigger(duration) => Some(duration)
+            case _ => None
+          }
+        )
+
+        val scanRelation = StreamingDataSourceV2ScanRelation(relation, scan, output, stream)
+
+        // 5. wrap with post filters
+        if (filterCondition.nonEmpty) {
+          Filter(filterCondition.get, scanRelation)
+        } else {
+          scanRelation
+        }
 
       case s @ StreamingRelationV2(src, srcName, table: SupportsRead, options, output,
         catalog, identifier, v1, sourceIdentifyingName) =>
