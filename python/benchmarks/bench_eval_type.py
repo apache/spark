@@ -1795,41 +1795,36 @@ class _WindowAggArrowBenchMixin:
 
         return (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
 
-    def _build_scenarios():
-        """Build scenarios for SQL_WINDOW_AGG_ARROW_UDF.
+    _scenario_configs = {
+        "few_groups_sm": (50, 5_000, 5),
+        "few_groups_lg": (50, 50_000, 5),
+        "many_groups_sm": (2_000, 500, 5),
+        "many_groups_lg": (500, 10_000, 5),
+        "wide_cols": (200, 5_000, 20),
+    }
 
-        Returns a dict mapping scenario name to ``(groups, schema)``.
-        """
-        scenarios = {}
+    @staticmethod
+    def _build_scenario(name):
+        """Build a single scenario by name."""
+        np.random.seed(42)
+        num_groups, rows_per_group, n_cols = _WindowAggArrowBenchMixin._scenario_configs[name]
+        return MockDataFactory.make_grouped_batches(
+            num_groups=num_groups,
+            num_rows=rows_per_group,
+            num_cols=n_cols,
+            spark_type_pool=MockDataFactory.NUMERIC_TYPES,
+            batch_size=rows_per_group,
+        )
 
-        for name, (num_groups, rows_per_group, n_cols) in {
-            "few_groups_sm": (50, 5_000, 5),
-            "few_groups_lg": (50, 50_000, 5),
-            "many_groups_sm": (2_000, 500, 5),
-            "many_groups_lg": (500, 10_000, 5),
-            "wide_cols": (200, 5_000, 20),
-        }.items():
-            groups, schema = MockDataFactory.make_grouped_batches(
-                num_groups=num_groups,
-                num_rows=rows_per_group,
-                num_cols=n_cols,
-                spark_type_pool=MockDataFactory.NUMERIC_TYPES,
-                batch_size=rows_per_group,
-            )
-            scenarios[name] = (groups, schema)
-
-        return scenarios
-
-    _scenarios = _build_scenarios()
     _udfs = {
         "sum_udf": _window_agg_arrow_sum,
         "mean_multi_udf": _window_agg_arrow_mean_multi,
     }
-    params = [list(_scenarios), list(_udfs)]
+    params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
-        groups, _schema = self._scenarios[scenario]
+        groups, _schema = self._build_scenario(scenario)
         udf_func = self._udfs[udf_name]
 
         # sum_udf uses 1 arg, mean_multi_udf uses 2 args
