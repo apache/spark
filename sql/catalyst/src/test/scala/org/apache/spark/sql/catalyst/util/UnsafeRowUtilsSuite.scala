@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.math.{BigDecimal => JavaBigDecimal}
+import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection, UnsafeRow}
@@ -156,5 +157,83 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     assert(!UnsafeRowUtils.isBinaryStable(
       StructType(StructField("field",
         StructType(StructField("sub", nonBinaryStringType) :: Nil)) :: Nil)))
+  }
+
+  test("PaddingProvider handles endianness") {
+    // The following arrays contain the same 8 byte field values as represented
+    // in memory on little endian and big endian platforms. They are
+    // what would be seen in memory if the following values were set:
+    //
+    //   row.setBoolean(0, true)
+    //   row.setByte(1, 0xFF.toByte)
+    //   row.setShort(2, 0xFFFE.toShort)
+    //   row.setInt(3, 0xFFFEFDFC.toInt)
+    //   row.setFloat(4, java.lang.Float.intBitsToFloat(0xFF7FFDFC.toInt))
+    //
+    // Note that in either platform endianness, the values are placed in the first N bytes
+    // of the 8 byte field. The difference is in the order of the bytes in the field.
+    val boolLE = Array[Byte](1, 0, 0, 0, 0, 0, 0, 0)
+    val byteLE = Array[Byte](0xFF.toByte, 0, 0, 0, 0, 0, 0, 0)
+    val shortLE = Array[Byte](0xFE.toByte, 0xFF.toByte, 0, 0, 0, 0, 0, 0)
+    val intLE = Array[Byte](0xFC.toByte, 0xFD.toByte, 0xFE.toByte, 0xFF.toByte, 0, 0, 0, 0)
+    val floatLE = Array[Byte](0xFC.toByte, 0xFD.toByte, 0x7F.toByte, 0xFF.toByte, 0, 0, 0, 0)
+
+    val boolBE = Array[Byte](1, 0, 0, 0, 0, 0, 0, 0)
+    val byteBE = Array[Byte](0xFF.toByte, 0, 0, 0, 0, 0, 0, 0)
+    val shortBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 0, 0, 0, 0, 0, 0)
+    val intBE = Array[Byte](0xFF.toByte, 0xFE.toByte, 0xFD.toByte, 0xFC.toByte, 0, 0, 0, 0)
+    val floatBE = Array[Byte](0xFF.toByte, 0x7F.toByte, 0x7D.toByte, 0xFC.toByte, 0, 0, 0, 0)
+
+    val numFields = 5
+    val fieldsStartIdx = UnsafeRow.calculateBitSetWidthInBytes(numFields)
+    val sizeInBytes = fieldsStartIdx + (numFields * 8)
+    val data = new Array[Byte](sizeInBytes)
+    val row = new UnsafeRow(numFields)
+    row.pointTo(data, sizeInBytes)
+
+    // Set all bits of all fields to 1 to ensure we don't miss overwiting any fields later
+    row.setLong(0, 0xFFFFFFFFFFFFFFFFL)
+    row.setLong(1, 0xFFFFFFFFFFFFFFFFL)
+    row.setLong(2, 0xFFFFFFFFFFFFFFFFL)
+    row.setLong(3, 0xFFFFFFFFFFFFFFFFL)
+    row.setLong(4, 0xFFFFFFFFFFFFFFFFL)
+
+    // The PaddingProvider implementations get the full 8 bytes of the field using UnsafeRow.getLong(n)
+    // which is platform endianness dependent.
+    // When testing PaddingProviderBE on little endian platforms, the big endian byte arrays
+    // must be reversed so that UnsafeRow.getLong(n) returns the long value that would be seen
+    // on a big endian platform.
+    // The opposite is true when testing PaddingProviderLE on big endian platforms.
+    def overwrite(src: Array[Byte], fieldIdx: Int, reverse: Boolean) = {
+      Array.copy(if (reverse) src.reverse else src, 0, data, fieldsStartIdx + (fieldIdx * 8), 8)
+    }
+
+    // Overwrite the row's data with raw little endian values
+    // reversing the byte order if testing on big endian platforms.
+    overwrite(boolLE, 0, nativeOrder() == BIG_ENDIAN)
+    overwrite(byteLE, 1, nativeOrder() == BIG_ENDIAN)
+    overwrite(shortLE, 2, nativeOrder() == BIG_ENDIAN)
+    overwrite(intLE, 3, nativeOrder() == BIG_ENDIAN)
+    overwrite(floatLE, 4, nativeOrder() == BIG_ENDIAN)
+
+    assert(UnsafeRowUtils.PaddingProviderLE.getPaddingBoolean(row, 0) == 0)
+    assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 1, 8) == 0)
+    assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 2, 16) == 0)
+    assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 3, 32) == 0)
+    assert(UnsafeRowUtils.PaddingProviderLE.getPadding(row, 4, 32) == 0)
+
+    // Overwrite the row's data with raw big endian values
+    // reversing the byte order if testing on little endian platforms.
+    overwrite(boolBE, 0, nativeOrder() != BIG_ENDIAN)
+    overwrite(byteBE, 1, nativeOrder() != BIG_ENDIAN)
+    overwrite(shortBE, 2, nativeOrder() != BIG_ENDIAN)
+    overwrite(intBE, 3, nativeOrder() != BIG_ENDIAN)
+    overwrite(floatBE, 4, nativeOrder() != BIG_ENDIAN)
+
+    assert(UnsafeRowUtils.PaddingProviderBE.getPaddingBoolean(row, 0) == 0)
+    assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 1, 8) == 0)
+    assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 2, 16) == 0)
+    assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 3, 32) == 0)
+    assert(UnsafeRowUtils.PaddingProviderBE.getPadding(row, 4, 32) == 0)
   }
 }
