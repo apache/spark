@@ -74,7 +74,10 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val e = intercept[AnalysisException](
       // Here we missed .orderBy("key")!
       df.select(row_number().over(Window.partitionBy("value"))).collect())
-    assert(e.message.contains("requires window to be ordered"))
+    checkError(
+      exception = e,
+      condition = "WINDOW_FUNCTION_REQUIRES_ORDER_BY",
+      parameters = Map("funcName" -> "row_number()"))
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {

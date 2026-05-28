@@ -7494,6 +7494,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "WINDOW_FUNCTION_REQUIRES_ORDER_BY" : {
+    "message" : [
+      "Window function <funcName> requires window to be ordered, please add ORDER BY clause. For example SELECT <funcName>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
+    ],
+    "sqlState" : "42601"
+  },
   "WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE" : {
     "message" : [
       "Window function <funcName> requires an OVER clause."
@@ -7771,11 +7777,6 @@
   "_LEGACY_ERROR_TEMP_1036" : {
     "message" : [
       "Window Frame <wf> must match the required frame <required>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1037" : {
-    "message" : [
-      "Window function <wf> requires window to be ordered, please add ORDER BY clause. For example SELECT <wf>(value_expr) OVER (PARTITION BY window_partition ORDER BY window_ordering) from table."
     ]
   },
   "_LEGACY_ERROR_TEMP_1039" : {

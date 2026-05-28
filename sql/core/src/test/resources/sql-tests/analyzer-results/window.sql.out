@@ -616,9 +616,10 @@ SELECT val, cate, row_number() OVER(PARTITION BY cate) FROM testData ORDER BY ca
 -- !query analysis
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1037",
+  "errorClass" : "WINDOW_FUNCTION_REQUIRES_ORDER_BY",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "wf" : "row_number()"
+    "funcName" : "row_number()"
   }
 }
 
