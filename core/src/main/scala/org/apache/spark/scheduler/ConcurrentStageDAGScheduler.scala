@@ -200,8 +200,8 @@ class ConcurrentStageDAGScheduler(
     }
   }
 
-  // This is overridden to check if the task completion event should be delayed a parent stage
-  // till has running tasks. See comment for `dependentStageMap` for more details.
+  // This is overridden to check if the task completion event should be delayed because a
+  // parent stage still has running tasks. See comment for `dependentStageMap` for more details.
   override private[scheduler] def handleTaskCompletion(event: CompletionEvent): Unit = {
     val stageId = event.task.stageId
     val taskId = event.taskInfo.taskId
@@ -249,6 +249,13 @@ class ConcurrentStageDAGScheduler(
     // removed the entry, so this is a no-op. On failure / cancellation / abort the entry —
     // and any buffered completion events — would otherwise leak for the lifetime of the
     // scheduler.
+    //
+    // `willRetry=true` paths (e.g. FetchFailed) also reach this cleanup. That is safe under
+    // concurrent scheduling because stage retries are not supported here: TaskSchedulerImpl
+    // pins `maxFailures=1` for concurrent TaskSets, and any failure restarts the streaming
+    // query from its checkpoint rather than retrying tasks against an in-flight streaming
+    // shuffle. With no retry to preserve state for, it's correct to drop the entry along
+    // with any buffered events.
     dependentStageMap.remove(stage)
   }
 
