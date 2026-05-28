@@ -37,9 +37,9 @@ import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, PartitionOffset, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{RequiresDistributionAndOrdering, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.checkpointing.{CommitMetadata, OffsetSeq}
 import org.apache.spark.sql.execution.streaming.runtime.{AcceptsLatestSeenOffsetHandler, ACTIVE, ContinuousExecutionContext, IncrementalExecution, ProcessingTimeExecutor, RECONFIGURING, State, StreamExecution, StreamExecutionContext, TERMINATED, WatermarkPropagator}
