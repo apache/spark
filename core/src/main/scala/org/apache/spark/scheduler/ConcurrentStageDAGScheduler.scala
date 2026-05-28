@@ -139,7 +139,7 @@ class ConcurrentStageDAGScheduler(
         }
       }
 
-      // Slot check passed (or was disabled) — commit the visited stages.
+      // Slot check passed (or was disabled). Commit the visited stages.
       concurrentStages ++= visitedStages
     } else {
       super.onFinalStageCreated(finalStage, properties)
@@ -246,8 +246,8 @@ class ConcurrentStageDAGScheduler(
 
     // Drop this stage's own entry from the map. On the success path
     // `checkDependentStageTasks` (invoked when the stage's last parent finishes) has already
-    // removed the entry, so this is a no-op. On failure / cancellation / abort the entry —
-    // and any buffered completion events — would otherwise leak for the lifetime of the
+    // removed the entry, so this is a no-op. On failure / cancellation / abort the entry,
+    // and any buffered completion events, would otherwise leak for the lifetime of the
     // scheduler.
     //
     // `willRetry=true` paths (e.g. FetchFailed) also reach this cleanup. That is safe under

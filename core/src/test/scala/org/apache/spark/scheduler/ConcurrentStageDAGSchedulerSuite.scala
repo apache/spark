@@ -49,8 +49,8 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
   }
 
   /**
-   * Asserts that the concurrent scheduler's internal state — `concurrentStages` and
-   * `dependentStageMap` — is empty. Called from `assertDataStructuresEmpty` and at the end of
+   * Asserts that the concurrent scheduler's internal state - `concurrentStages` and
+   * `dependentStageMap` - is empty. Called from `assertDataStructuresEmpty` and at the end of
    * every test via `afterEach`, so every inherited test (and every locally-defined test) gets
    * free regression coverage against entries leaking into these maps.
    */
@@ -63,7 +63,7 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
           s"concurrentStages should be empty but contains: ${s.concurrentStages}")
         assert(s.dependentStageMap.isEmpty,
           s"dependentStageMap should be empty but contains: ${s.dependentStageMap}")
-      case _ => // Not a concurrent scheduler — nothing extra to assert.
+      case _ => // Not a concurrent scheduler - nothing extra to assert.
     }
   }
 
@@ -291,7 +291,7 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
     // This exercises the cleanup path in markStageAsFinished. When the dependent stage
     // (here, B) aborts before its parent (A) finishes, the cascade through
     // failJobAndIndependentStages only marks stages that are *independent* to the failing job
-    // as finished — shared stages are left alone. Without the explicit
+    // as finished - shared stages are left alone. Without the explicit
     // `dependentStageMap.remove(stage)` at the end of markStageAsFinished, B's entry would
     // leak in dependentStageMap until A eventually finished for the other job.
 
@@ -305,7 +305,7 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
     assert(scheduler.runningStages.exists(_.rdd.name == "rddA"),
       "rddA's stage should be running after job 1 submission")
 
-    // Job 2 (concurrent): rddB also depends on the same shuffleDepA → rddA's stage is shared.
+    // Job 2 (concurrent): rddB also depends on the same shuffleDepA to rddA's stage is shared.
     val rddB = new MyRDD(sc, 3, List(shuffleDepA)).setName("rddB")
     submit(rddB, Array(0), properties = testProperties)
 
@@ -316,7 +316,7 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
     assert(depStageMap.values.flatMap(_.parents.map(_.rdd.name)).toSet === Set("rddA"))
 
     // Fail rddB's taskset. abortStage's failJobAndIndependentStages only marks rddB
-    // finished — rddA is shared with job 1, so it is NOT cancelled.
+    // finished - rddA is shared with job 1, so it is NOT cancelled.
     val taskSetB = taskSets.find(_.tasks.head.stageId ==
       scheduler.runningStages.find(_.rdd.name == "rddB").get.id).get
     failed(taskSetB, "test failure: rddB aborted before parent rddA finished")
