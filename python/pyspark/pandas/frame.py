@@ -5036,10 +5036,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             context = contexts_bc.value.get(pid, [])
             if periods > 0:
                 pdf = to_pdf(context + rows)
-                diffed = pdf[data_column_names].diff(periods=periods).iloc[len(context) :]
             else:
                 pdf = to_pdf(rows + context)
-                diffed = pdf[data_column_names].diff(periods=periods).iloc[: len(rows)]
+            data_pdf = pdf[data_column_names].where(pd.notna(pdf[data_column_names]), np.nan)
+            if periods > 0:
+                diffed = data_pdf.diff(periods=periods).iloc[len(context) :]
+            else:
+                diffed = data_pdf.diff(periods=periods).iloc[: len(rows)]
             diffed = diffed.astype(object).where(pd.notna(diffed), None)
 
             current = to_pdf(rows)

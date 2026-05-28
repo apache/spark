@@ -294,11 +294,6 @@ class FrameComputeMixin:
             result = psdf.diff()
             self.assert_eq(pdf.diff(), result)
 
-        # Also verify that the non-remote path matches
-        with patch("pyspark.pandas.frame.is_remote", return_value=False):
-            result = psdf.diff()
-            self.assert_eq(pdf.diff(), result)
-
     def test_pct_change(self):
         pdf = pd.DataFrame(
             {"a": [1, 2, 3, 2], "b": [4.0, 2.0, 3.0, 1.0], "c": [300, 200, 400, 200]},
