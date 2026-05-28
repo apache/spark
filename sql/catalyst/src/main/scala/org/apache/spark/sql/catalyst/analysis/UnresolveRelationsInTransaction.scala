@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, TransactionalWr
 import org.apache.spark.sql.catalyst.plans.logical.AnalysisHelper.allowInvokingTransformsInAnalyzer
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, LookupCatalog}
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 /**
@@ -32,10 +31,6 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
  * This forces re-resolution of those relations against the transaction's catalog, which
  * intercepts [[TableCatalog#loadTable]] calls to track which tables are read as part of
  * the transaction.
- *
- * Note: if any resolved relation is loaded from a different catalog we throw an error.
- * We only support single catalog transactions. This allows us to track all tables that
- * participate in the transaction through a single point.
  */
 class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
@@ -60,12 +55,7 @@ class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
       plan: LogicalPlan,
       catalog: CatalogPlugin): LogicalPlan = {
     plan.transform {
-      case r: DataSourceV2Relation if r.identifier.isDefined =>
-        if (!isLoadedFromCatalog(r, catalog)) {
-          throw QueryCompilationErrors.transactionMultiCatalogNotSupportedError(
-            catalog.name(), r.catalog.get.name())
-        }
-
+      case r: DataSourceV2Relation if isLoadedFromCatalog(r, catalog) =>
         V2TableReference.createForTransaction(r)
     }
   }
@@ -73,6 +63,6 @@ class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
   private def isLoadedFromCatalog(
       relation: DataSourceV2Relation,
       catalog: CatalogPlugin): Boolean = {
-    relation.catalog.exists(_.name == catalog.name)
+    relation.catalog.exists(_.name == catalog.name) && relation.identifier.isDefined
   }
 }

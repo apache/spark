@@ -37,7 +37,6 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
 
   private val tablePath = "`/path/to/t`"
   private val tablePathWithFormat = "pathformat.`/path/to/t`"
-  private val tablePathWithFormat2 = "pathformat2.`/path/to/t`"
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -229,38 +228,4 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     checkAnswer(spark.table(tablePathWithFormat), Row(1, "a") :: Nil)
   }
 
-  test("path-based write with source from different catalog is rejected") {
-    createPathTable(tablePathWithFormat)
-    // cat is a different catalog from spark_catalog (the path-based catalog).
-    sql("CREATE TABLE cat.ns1.source (id INT, data STRING)")
-
-    val e = intercept[AnalysisException] {
-      sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM cat.ns1.source")
-    }
-    checkError(e, "TRANSACTION_MULTI_CATALOG_NOT_SUPPORTED",
-      parameters = Map("txnCatalog" -> "spark_catalog", "foreignCatalogs" -> "cat"))
-    assert(catalog.lastTransaction.currentState === Aborted)
-    assert(catalog.lastTransaction.isClosed)
-  }
-
-  test("path-based write with source from session-config-routed catalog is rejected") {
-    withSQLConf(
-        "spark.sql.catalog.txncat" -> classOf[InMemoryRowLevelOperationTableCatalog].getName,
-        "spark.datasource.pathformat2.catalog" -> "txncat") {
-      // pathformat2 routes to txncat; create the source there.
-      createPathTable(tablePathWithFormat2)
-      sql(s"INSERT INTO $tablePathWithFormat2 VALUES (1, 'a')")
-
-      // pathformat routes to the session catalog (default extractCatalog).
-      createPathTable(tablePathWithFormat)
-
-      val e = intercept[AnalysisException] {
-        sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM $tablePathWithFormat2")
-      }
-      checkError(e, "TRANSACTION_MULTI_CATALOG_NOT_SUPPORTED",
-        parameters = Map("txnCatalog" -> "spark_catalog", "foreignCatalogs" -> "txncat"))
-      assert(catalog.lastTransaction.currentState === Aborted)
-      assert(catalog.lastTransaction.isClosed)
-    }
-  }
 }

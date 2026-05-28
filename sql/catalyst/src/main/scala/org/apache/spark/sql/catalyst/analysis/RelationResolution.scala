@@ -24,7 +24,6 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{
   CatalogTable,
-  CatalogTableType,
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
@@ -296,11 +295,8 @@ class RelationResolution(
             // we don't share-cache views.
             val table: Option[Table] = tableOrView.filter {
               case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
-              case t: V1Table if t.catalogTable.tableType == CatalogTableType.VIEW => false
               case _ => true
             }
-            // Enforce single-catalog isolation for all table loads inside a transaction.
-            table.foreach(_ => catalogManager.validateCatalogForTableLoad(catalog))
 
             val sharedRelationCacheMatch = for {
               t <- table

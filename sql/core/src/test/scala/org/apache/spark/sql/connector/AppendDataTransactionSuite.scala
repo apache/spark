@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -472,27 +472,6 @@ class AppendDataTransactionSuite extends RowLevelOperationSuiteBase {
         Row(2, 200, "software", null), // unchanged (different partition)
         Row(11, 999, "hr", true),      // overwrote hr partition
         Row(12, 888, "hr", false)))
-  }
-
-  test("multi-catalog query in transaction is rejected") {
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |""".stripMargin)
-
-    withSQLConf("spark.sql.catalog.cat2" ->
-        classOf[InMemoryRowLevelOperationTableCatalog].getName) {
-      sql("CREATE TABLE cat2.ns1.source (pk INT NOT NULL, salary INT, dep STRING)")
-      sql("INSERT INTO cat2.ns1.source VALUES (10, 999, 'hr')")
-
-      val e = intercept[AnalysisException] {
-        sql(s"INSERT INTO $tableNameAsString SELECT * FROM cat2.ns1.source")
-      }
-
-      checkError(e, "TRANSACTION_MULTI_CATALOG_NOT_SUPPORTED",
-        parameters = Map("txnCatalog" -> "cat", "foreignCatalogs" -> "cat2"))
-      assert(catalog.lastTransaction.currentState === Aborted)
-      assert(catalog.lastTransaction.isClosed)
-    }
   }
 
   test("SQL INSERT WITH SCHEMA EVOLUTION analysis failure aborts transaction") {
