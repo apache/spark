@@ -126,7 +126,7 @@ jobs:
           mv pyspark.back python/pyspark
       - name: Upload test results to report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-spark-connect-python-only
           path: |
@@ -134,7 +134,7 @@ jobs:
             **/target/surefire-reports/*.xml
       - name: Upload Spark Connect server log file
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: unit-tests-log-spark-connect-python-only
           path: logs/*.out

@@ -16,24 +16,11 @@
 #
 
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.testing.sqlutils import with_sql_conf
 from pyspark.sql.tests.test_utils import UtilsTestsMixin
 
 
 class UtilsParityTests(UtilsTestsMixin, ReusedConnectTestCase):
     pass
-
-
-@with_sql_conf(
-    {
-        "spark.sql.test.with_sql_conf.key1": "v1",
-        "spark.sql.test.with_sql_conf.key2": "v2",
-    }
-)
-class WithSqlConfParityTests(ReusedConnectTestCase):
-    def test_confs_applied(self):
-        self.assertEqual(self.spark.conf.get("spark.sql.test.with_sql_conf.key1"), "v1")
-        self.assertEqual(self.spark.conf.get("spark.sql.test.with_sql_conf.key2"), "v2")
 
 
 if __name__ == "__main__":

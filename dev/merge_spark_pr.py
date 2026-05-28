@@ -1260,11 +1260,29 @@ def main():
 
     if asf_jira is not None:
         jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+        # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
+        # Collect every offender so the committer sees the full list in one shot rather than
+        # discovering them one-by-one across repeated merge attempts.
+        blocking_issue_types = {"Epic", "Umbrella"}
+        blockers = []
         for jira_id in jira_ids:
             try:
-                print_jira_issue_summary(asf_jira.issue(jira_id))
+                issue = asf_jira.issue(jira_id)
             except Exception:
                 print_error("Unable to fetch summary of %s" % jira_id)
+                continue
+            print_jira_issue_summary(issue)
+            issue_type = issue.fields.issuetype.name
+            if issue_type in blocking_issue_types:
+                blockers.append((jira_id, issue_type))
+        if blockers:
+            ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
+            fail(
+                "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
+                "tickets and MUST not be resolved by a single PR. File "
+                "Sub-task(s) under %s and update the PR title to reference "
+                "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
+            )
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))

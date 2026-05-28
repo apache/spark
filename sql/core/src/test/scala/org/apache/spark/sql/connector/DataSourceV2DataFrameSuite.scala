@@ -48,7 +48,8 @@ import org.apache.spark.unsafe.types.UTF8String
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
   with DSv2TempViewWithStoredPlanTests
-  with DSv2RepeatedTableAccessTests {
+  with DSv2RepeatedTableAccessTests
+  with DSv2CacheTableReadTests {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 

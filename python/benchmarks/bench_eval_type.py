@@ -261,11 +261,9 @@ class MockDataFactory:
 
     NAMED_TYPE_POOLS: dict[str, list[tuple[Callable, Any]]] = {
         "mixed": MIXED_TYPES,
-        "pure_ints": [
-            (lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)), IntegerType())
-        ],
-        "pure_floats": [(lambda r: pa.array(np.random.rand(r)), DoubleType())],
-        "pure_strings": [(lambda r: pa.array([f"s{j}" for j in range(r)]), StringType())],
+        "pure_ints": [TYPE_REGISTRY["int"]],
+        "pure_floats": [TYPE_REGISTRY["double"]],
+        "pure_strings": [TYPE_REGISTRY["string"]],
         "pure_ts": [
             (
                 lambda r: pa.array(
@@ -756,7 +754,7 @@ class _CogroupedMapArrowBenchMixin:
         "few_groups_lg": (50, 50_000, 1, 4),
         "many_groups_sm": (2_000, 500, 1, 4),
         "many_groups_lg": (500, 10_000, 1, 4),
-        "wide_values": (200, 5_000, 1, 20),
+        "wide_cols": (200, 5_000, 1, 20),
         "multi_key": (200, 5_000, 3, 5),
     }
 
@@ -850,7 +848,7 @@ class _CogroupedMapPandasBenchMixin:
         "few_groups_lg": (50, 10_000, 1, 4),
         "many_groups_sm": (500, 200, 1, 4),
         "many_groups_lg": (200, 2_000, 1, 4),
-        "wide_values": (100, 1_000, 1, 20),
+        "wide_cols": (100, 1_000, 1, 20),
         "multi_key": (100, 1_000, 3, 5),
     }
 
@@ -1150,7 +1148,7 @@ class _GroupedMapArrowBenchMixin:
         "few_groups_lg": (50, 50_000, 1, 4),
         "many_groups_sm": (2_000, 500, 1, 4),
         "many_groups_lg": (500, 10_000, 1, 4),
-        "wide_values": (200, 5_000, 1, 20),
+        "wide_cols": (200, 5_000, 1, 20),
         "multi_key": (200, 5_000, 3, 5),
     }
 
@@ -1457,7 +1455,10 @@ class _MapArrowIterBenchMixin:
         batches, schema = self._build_scenario(scenario)
         udf_func, ret_type, arg_offsets = self._udfs[udf_name]
         if ret_type is None:
-            ret_type = schema.fields[0].dataType.fields[0].dataType
+            # mapInArrow UDFs return an Iterator[pa.RecordBatch] with the same
+            # schema as the input row (the inner struct, since make_batches
+            # wraps the row schema in a single struct column for the wire).
+            ret_type = schema.fields[0].dataType
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
@@ -1795,41 +1796,36 @@ class _WindowAggArrowBenchMixin:
 
         return (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
 
-    def _build_scenarios():
-        """Build scenarios for SQL_WINDOW_AGG_ARROW_UDF.
+    _scenario_configs = {
+        "few_groups_sm": (50, 5_000, 5),
+        "few_groups_lg": (50, 50_000, 5),
+        "many_groups_sm": (2_000, 500, 5),
+        "many_groups_lg": (500, 10_000, 5),
+        "wide_cols": (200, 5_000, 20),
+    }
 
-        Returns a dict mapping scenario name to ``(groups, schema)``.
-        """
-        scenarios = {}
+    @staticmethod
+    def _build_scenario(name):
+        """Build a single scenario by name."""
+        np.random.seed(42)
+        num_groups, rows_per_group, n_cols = _WindowAggArrowBenchMixin._scenario_configs[name]
+        return MockDataFactory.make_grouped_batches(
+            num_groups=num_groups,
+            num_rows=rows_per_group,
+            num_cols=n_cols,
+            spark_type_pool=MockDataFactory.NUMERIC_TYPES,
+            batch_size=rows_per_group,
+        )
 
-        for name, (num_groups, rows_per_group, n_cols) in {
-            "few_groups_sm": (50, 5_000, 5),
-            "few_groups_lg": (50, 50_000, 5),
-            "many_groups_sm": (2_000, 500, 5),
-            "many_groups_lg": (500, 10_000, 5),
-            "wide_cols": (200, 5_000, 20),
-        }.items():
-            groups, schema = MockDataFactory.make_grouped_batches(
-                num_groups=num_groups,
-                num_rows=rows_per_group,
-                num_cols=n_cols,
-                spark_type_pool=MockDataFactory.NUMERIC_TYPES,
-                batch_size=rows_per_group,
-            )
-            scenarios[name] = (groups, schema)
-
-        return scenarios
-
-    _scenarios = _build_scenarios()
     _udfs = {
         "sum_udf": _window_agg_arrow_sum,
         "mean_multi_udf": _window_agg_arrow_mean_multi,
     }
-    params = [list(_scenarios), list(_udfs)]
+    params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
-        groups, _schema = self._scenarios[scenario]
+        groups, _schema = self._build_scenario(scenario)
         udf_func = self._udfs[udf_name]
 
         # sum_udf uses 1 arg, mean_multi_udf uses 2 args
