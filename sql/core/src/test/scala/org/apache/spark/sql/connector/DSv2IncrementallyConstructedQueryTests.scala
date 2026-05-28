@@ -28,10 +28,9 @@ import org.apache.spark.unsafe.types.UTF8String
  * times, then joined. The refresh phase in QueryExecution must align table versions across
  * all references.
  *
- * Classic and Connect modes produce different results in some scenarios because Connect
- * defers resolution until execution, so both sides of a join always see the latest table
- * state. Tests use `if (isConnect)` to assert the correct expected result for
- * each mode.
+ * Classic and Connect modes produce different results in some scenarios because in Connect
+ * mode, resolution is deferred until execution, so both sides of a join always see the
+ * latest table state.
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on
@@ -107,15 +106,19 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
           catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
 
         val df2 = session.table(testTable)
-        val joined = df1.join(df2, df1("id") === df2("id"))
+        val selfJoin = df1.join(df2, df1("id") === df2("id"))
 
         if (isConnect) {
-          // Connect re-resolves df1 with the new 3-column schema.
-          checkRows(joined,
+          // Connect re-resolves df1 with the new 3-column schema (id, salary, new_column).
+          assert(selfJoin.columns.length == 6,
+            s"Expected 6 columns (3 + 3) but got: ${selfJoin.columns.mkString(", ")}")
+          checkRows(selfJoin,
             Seq(Row(1, 100, null, 1, 100, null), Row(2, 200, -1, 2, 200, -1)))
         } else {
-          // Classic: df1 keeps its original 2-column schema.
-          checkRows(joined,
+          // Classic: df1 keeps its original 2-column schema (id, salary).
+          assert(selfJoin.columns.length == 5,
+            s"Expected 5 columns (2 + 3) but got: ${selfJoin.columns.mkString(", ")}")
+          checkRows(selfJoin,
             Seq(Row(1, 100, 1, 100, null), Row(2, 200, 2, 200, -1)))
         }
       }
@@ -135,15 +138,19 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         session.sql(s"INSERT INTO $testTable VALUES (2, 200, -1)").collect()
 
         val df2 = session.table(testTable)
-        val joined = df1.join(df2, df1("id") === df2("id"))
+        val selfJoin = df1.join(df2, df1("id") === df2("id"))
 
         if (isConnect) {
-          // Connect re-resolves df1 with the new 3-column schema.
-          checkRows(joined,
+          // Connect re-resolves df1 with the new 3-column schema (id, salary, new_column).
+          assert(selfJoin.columns.length == 6,
+            s"Expected 6 columns (3 + 3) but got: ${selfJoin.columns.mkString(", ")}")
+          checkRows(selfJoin,
             Seq(Row(1, 100, null, 1, 100, null), Row(2, 200, -1, 2, 200, -1)))
         } else {
-          // Classic: df1 keeps its original 2-column schema.
-          checkRows(joined,
+          // Classic: df1 keeps its original 2-column schema (id, salary).
+          assert(selfJoin.columns.length == 5,
+            s"Expected 5 columns (2 + 3) but got: ${selfJoin.columns.mkString(", ")}")
+          checkRows(selfJoin,
             Seq(Row(1, 100, 1, 100, null), Row(2, 200, 2, 200, -1)))
         }
       }

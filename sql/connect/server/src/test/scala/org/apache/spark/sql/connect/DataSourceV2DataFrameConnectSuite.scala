@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests, DSv2IncrementallyConstructedQueryTests}
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, TableCatalog}
 
 /**
  * Connect-mode counterpart of [[org.apache.spark.sql.connector.DataSourceV2DataFrameSuite]].
@@ -46,6 +46,9 @@ class DataSourceV2DataFrameConnectSuite
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.cachingcat", classOf[CachingInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.cachingcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullidcat",
+      classOf[NullTableIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
     .set("spark.sql.catalog.nullbothidscat",
       classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
