@@ -598,5 +598,4 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
-
 }
