@@ -49,6 +49,7 @@ from pyspark.sql.types import (
     DataType,
     StringType,
     StructType,
+    MapType,
     NumericType,
     _from_numpy_type,
 )
@@ -6480,7 +6481,7 @@ def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = No
     Use the ORDER BY clause of the window to order the observations by the associated timestamp
     in ascending order.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -15541,7 +15542,7 @@ def levenshtein(
         if set when the levenshtein distance of the two given strings
         less than or equal to a given threshold then return result distance, or -1
 
-        .. versionadded: 3.5.0
+        .. versionadded:: 3.5.0
 
     Returns
     -------
@@ -21044,7 +21045,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
 @_try_remote_functions
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, MapType, Column, str],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
@@ -21061,8 +21062,8 @@ def from_json(
     ----------
     col : :class:`~pyspark.sql.Column` or str
         a column or column name in JSON format
-    schema : :class:`DataType` or str
-        a StructType, ArrayType of StructType or Python string literal with a DDL-formatted string
+    schema : :class:`StructType`, :class:`ArrayType`, :class:`MapType`, or str
+        a StructType, ArrayType of StructType, MapType, or Python string literal with a DDL-formatted string
         to use when parsing the json column
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.

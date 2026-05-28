@@ -67,7 +67,7 @@ abstract class DistributionAndOrderingSuiteBase
   protected def resolveDistribution[T <: QueryPlan[T]](
       distribution: physical.Distribution,
       plan: QueryPlan[T]): physical.Distribution = distribution match {
-    case physical.ClusteredDistribution(clustering, numPartitions, _) =>
+    case physical.ClusteredDistribution(clustering, numPartitions, _, _) =>
       physical.ClusteredDistribution(clustering.map(resolveAttrs(_, plan)), numPartitions)
     case physical.OrderedDistribution(ordering) =>
       physical.OrderedDistribution(ordering.map(resolveAttrs(_, plan).asInstanceOf[SortOrder]))

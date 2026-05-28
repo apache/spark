@@ -21,7 +21,7 @@ import java.time.{ZoneId, ZoneOffset}
 import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
-import org.apache.spark.{QueryContext, SparkArithmeticException, SparkIllegalArgumentException}
+import org.apache.spark.{QueryContext, SparkArithmeticException, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -984,6 +984,14 @@ case class Cast(
           errorOrNull(t, from, ShortType)
         }
       })
+    case IntegerType if ansiEnabled =>
+      b => CastUtils.intToShortExact(b.asInstanceOf[Int])
+    case LongType if ansiEnabled =>
+      b => CastUtils.longToShortExact(b.asInstanceOf[Long])
+    case FloatType if ansiEnabled =>
+      b => CastUtils.floatToShortExact(b.asInstanceOf[Float])
+    case DoubleType if ansiEnabled =>
+      b => CastUtils.doubleToShortExact(b.asInstanceOf[Double])
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
@@ -1040,6 +1048,16 @@ case class Cast(
           errorOrNull(t, from, ByteType)
         }
       })
+    case ShortType if ansiEnabled =>
+      b => CastUtils.shortToByteExact(b.asInstanceOf[Short])
+    case IntegerType if ansiEnabled =>
+      b => CastUtils.intToByteExact(b.asInstanceOf[Int])
+    case LongType if ansiEnabled =>
+      b => CastUtils.longToByteExact(b.asInstanceOf[Long])
+    case FloatType if ansiEnabled =>
+      b => CastUtils.floatToByteExact(b.asInstanceOf[Float])
+    case DoubleType if ansiEnabled =>
+      b => CastUtils.doubleToByteExact(b.asInstanceOf[Double])
     case x: NumericType if ansiEnabled =>
       val exactNumeric = PhysicalNumericType.exactNumeric(x)
       b =>
@@ -1988,27 +2006,24 @@ case class Cast(
       from: DataType,
       to: DataType): CastFunction = {
     assert(ansiEnabled)
-    val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
-    val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
-    (c, evPrim, _) =>
-      code"""
-        if ($c == ($integralType) $c) {
-          $evPrim = ($integralType) $c;
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
-        }
-      """
-  }
-
-
-  private[this] def lowerAndUpperBound(integralType: String): (String, String) = {
-    val (min, max, typeIndicator) = integralType.toLowerCase(Locale.ROOT) match {
-      case "long" => (Long.MinValue, Long.MaxValue, "L")
-      case "int" => (Int.MinValue, Int.MaxValue, "")
-      case "short" => (Short.MinValue, Short.MaxValue, "")
-      case "byte" => (Byte.MinValue, Byte.MaxValue, "")
+    if (integralType == "int") {
+      // Integral -> Int: call the existing *ExactNumeric.toInt directly. It already does the
+      // bounds check and throws castingCauseOverflowError -- same as the inline body.
+      // Only LongType reaches this branch today (`castToIntCode` gates on `case LongType`).
+      val numericObj = (from match {
+        case LongType => LongExactNumeric
+        case _ => throw SparkException.internalError(
+          s"Unexpected source type $from for castIntegralTypeToIntegralTypeExactCode int branch")
+      }).getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) => code"$evPrim = $numericObj.toInt($c);"
+    } else {
+      // Byte / short narrowing: call the matching CastUtils helper. Existing *ExactNumeric
+      // objects don't expose cross-type narrowing to byte / short (their toByte / toShort are
+      // same-type identities), so a Java helper is the cleanest fit.
+      val castUtils = classOf[CastUtils].getName
+      val method = s"${integralPrefix(from)}To${integralType.capitalize}Exact"
+      (c, evPrim, _) => code"$evPrim = $castUtils.$method($c);"
     }
-    (min.toString + typeIndicator, max.toString + typeIndicator)
   }
 
   private[this] def castFractionToIntegralTypeCode(
@@ -2017,23 +2032,40 @@ case class Cast(
       from: DataType,
       to: DataType): CastFunction = {
     assert(ansiEnabled)
-    val (min, max) = lowerAndUpperBound(integralType)
-    val mathClass = classOf[Math].getName
-    val fromDt = ctx.addReferenceObj("from", from, from.getClass.getName)
-    val toDt = ctx.addReferenceObj("to", to, to.getClass.getName)
-    // When casting floating values to integral types, Spark uses the method `Numeric.toInt`
-    // Or `Numeric.toLong` directly. For positive floating values, it is equivalent to `Math.floor`;
-    // for negative floating values, it is equivalent to `Math.ceil`.
-    // So, we can use the condition `Math.floor(x) <= upperBound && Math.ceil(x) >= lowerBound`
-    // to check if the floating value x is in the range of an integral type after rounding.
-    (c, evPrim, _) =>
-      code"""
-        if ($mathClass.floor($c) <= $max && $mathClass.ceil($c) >= $min) {
-          $evPrim = ($integralType) $c;
-        } else {
-          throw QueryExecutionErrors.castingCauseOverflowError($c, $fromDt, $toDt);
-        }
-      """
+    if (integralType == "int" || integralType == "long") {
+      // Float/Double -> Int/Long: call FloatExactNumeric/DoubleExactNumeric.toInt/toLong
+      // directly. Each already does the floor/ceil bounds check and throws
+      // castingCauseOverflowError -- same as the inline body.
+      val numericObj = (from match {
+        case FloatType => FloatExactNumeric
+        case DoubleType => DoubleExactNumeric
+        case _ => throw SparkException.internalError(
+          s"Unexpected source type $from for castFractionToIntegralTypeCode")
+      }).getClass.getCanonicalName.stripSuffix("$")
+      val method = s"to${integralType.capitalize}"
+      (c, evPrim, _) => code"$evPrim = $numericObj.$method($c);"
+    } else {
+      // Float / double -> byte / short: same rationale as the integral byte / short branch
+      // above -- no equivalent *ExactNumeric API, so route through CastUtils.
+      val castUtils = classOf[CastUtils].getName
+      val method = s"${fractionalPrefix(from)}To${integralType.capitalize}Exact"
+      (c, evPrim, _) => code"$evPrim = $castUtils.$method($c);"
+    }
+  }
+
+  private[this] def integralPrefix(from: DataType): String = from match {
+    case ShortType => "short"
+    case IntegerType => "int"
+    case LongType => "long"
+    case _ => throw SparkException.internalError(
+      s"Unexpected source type $from for castIntegralTypeToIntegralTypeExactCode")
+  }
+
+  private[this] def fractionalPrefix(from: DataType): String = from match {
+    case FloatType => "float"
+    case DoubleType => "double"
+    case _ => throw SparkException.internalError(
+      s"Unexpected source type $from for castFractionToIntegralTypeCode")
   }
 
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {

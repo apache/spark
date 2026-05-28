@@ -2553,7 +2553,7 @@ object functions {
    *   according to the order defined by the window's ORDER BY clause.
    *
    * @group window_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def counter_diff(value: Column): Column = Column.fn("counter_diff", value)
 
@@ -2583,7 +2583,7 @@ object functions {
    *   according to the order defined by the window's ORDER BY clause.
    *
    * @group window_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def counter_diff(value: Column, startTime: Column): Column =
     Column.fn("counter_diff", value, startTime)

@@ -41,10 +41,8 @@ object NearestByJoin {
  * @param right The right (base) side of the join, against which each left row finds matches.
  * @param joinType  Must be `Inner` or `LeftOuter`. `Inner` drops left rows with no matches;
  *                  `LeftOuter` preserves them with `NULL` right-side columns.
- * @param approx  `true` for `APPROX` mode, `false` for `EXACT` mode. `APPROX` permits a
- *                nondeterministic `rankingExpression` and is the contract future indexed
- *                approximate-nearest-neighbor strategies key off; `EXACT` requires
- *                determinism (enforced by `CheckAnalysis`).
+ * @param approx  `true` for `APPROX` mode, `false` for `EXACT` mode. `APPROX` is the contract
+ *                future indexed approximate-nearest-neighbor strategies key off.
  * @param numResults  The K in top-K: the maximum number of right-side matches returned per
  *                    left row. Bounded above by `NearestByJoin.MaxNumResults`.
  * @param rankingExpression  Scalar expression evaluated per (left, right) pair. Must return
@@ -66,13 +64,9 @@ case class NearestByJoin(
   require(Seq(Inner, LeftOuter).contains(joinType),
     s"Unsupported nearest-by join type $joinType")
 
-  // `APPROX` mode permits a nondeterministic ranking expression (e.g. `rand()` for randomized
-  // tie-breaking). `EXACT` mode requires determinism, and that requirement is enforced
-  // separately by the `NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION` arm in
-  // `CheckAnalysis`. Returning `approx` from this override is what lets APPROX queries pass
-  // the generic `INVALID_NON_DETERMINISTIC_EXPRESSIONS` check that fires on operators not on
-  // the analyzer's whitelist.
-  override def allowNonDeterministicExpression: Boolean = approx
+  // Both APPROX and EXACT permit a nondeterministic ranking expression (e.g. `rand()` for
+  // randomized tie-breaking, or an external scoring UDF).
+  override def allowNonDeterministicExpression: Boolean = true
 
   // Both left- and right-side attributes are declared nullable to match the schema produced
   // by `RewriteNearestByJoin`. Right-side attributes are widened because the rewrite

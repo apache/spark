@@ -191,6 +191,101 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies both `column_list` and `except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
+  "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
+    ],
+    "sqlState" : "42703"
+  },
+  "AUTOCDC_EMPTY_KEYS" : {
+    "message" : [
+      "AutoCDC requires at least one key column to identify rows, but received an empty key set."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MICROBATCH_VALIDATION" : {
+    "message" : [
+      "AutoCDC flow on table <tableName> in batch <batchId> failed microbatch validation."
+    ],
+    "subClass" : {
+      "NON_ORDERABLE_SEQUENCE" : {
+        "message" : [
+          "The sequencing column has non-orderable type <dataType>. The sequencing column must be of a type that supports ordering."
+        ]
+      },
+      "NULL_KEY" : {
+        "message" : [
+          "The microbatch contains rows with null values in the following key column(s): <nullKeyCounts>. All rows must have non-null values for every key column."
+        ]
+      },
+      "NULL_SEQUENCE" : {
+        "message" : [
+          "The microbatch contains <nullCount> row(s) with a null sequencing value. All rows must have a non-null sequencing value."
+        ]
+      }
+    },
+    "sqlState" : "22000"
+  },
+  "AUTOCDC_MISSING_SEQUENCE_BY" : {
+    "message" : [
+      "AutoCDC flow is missing a required `sequence_by` expression. Specify a `sequence_by` column or expression that orders incoming change events."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MISSING_SOURCE" : {
+    "message" : [
+      "AutoCDC flow is missing a required `source` table name. Specify the name of the streaming source table the flow should read from."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET" : {
+    "message" : [
+      "Invalid AutoCDC destination <tableName> with multiple flows: <flows>. An AutoCDC target table must have exactly one flow writing to it."
+    ],
+    "sqlState" : "42000"
+  },
+  "AUTOCDC_NON_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a column identifier; got the non-attribute expression `<expression>`. AutoCDC keys, sequence_by, column_list, and except_column_list must reference unqualified column names."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
+    ],
+    "sqlState" : "42710"
+  },
+  "AUTOCDC_SCD2_NOT_SUPPORTED" : {
+    "message" : [
+      "AutoCDC flows do not currently support SCD Type 2 transformations."
+    ],
+    "sqlState" : "0A000"
+  },
+  "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE" : {
+    "message" : [
+      "Cannot start AutoCDC flow: the target table <tableName> (format: <format>) does not support row-level operations. AutoCDC requires a target backed by a connector that supports MERGE."
+    ],
+    "sqlState" : "0A000"
+  },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
       "Cannot write null value for field <name> defined as non-null Avro data type <dataType>.",
@@ -3663,6 +3758,11 @@
       "Flow <flowIdentifier> returns an invalid relation type."
     ],
     "subClass" : {
+      "AUTOCDC_RELATION_FOR_TEMPORARY_VIEW" : {
+        "message" : [
+          "AutoCDC flows must target a streaming table because their reconciliation semantics require a streaming-table sink, but the flow <flowIdentifier> attempts to write an AutoCDC relation to the temporary view <viewIdentifier>."
+        ]
+      },
       "BATCH_RELATION_FOR_STREAMING_TABLE" : {
         "message" : [
           "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
@@ -4123,6 +4223,29 @@
       }
     },
     "sqlState" : "42K0E"
+  },
+  "INVALID_LINE_SEPARATOR" : {
+    "message" : [
+      "Invalid line separator configuration."
+    ],
+    "subClass" : {
+      "EMPTY" : {
+        "message" : [
+          "The 'lineSep' option cannot be an empty string."
+        ]
+      },
+      "NULL" : {
+        "message" : [
+          "The 'lineSep' option cannot be a null value."
+        ]
+      },
+      "TOO_LONG" : {
+        "message" : [
+          "The 'lineSep' option can contain at most 2 characters, but got <length> characters."
+        ]
+      }
+    },
+    "sqlState" : "22023"
   },
   "INVALID_LOG_VERSION" : {
     "message" : [
@@ -4751,6 +4874,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIMESTAMP_PRECISION" : {
+    "message" : [
+      "The seconds precision <precision> of <type> is invalid. Expected an integer in [7, 9], or parameterless <type> for precision <= 6."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TIMEZONE" : {
     "message" : [
       "The timezone: <timeZone> is invalid. The timezone must be either a region-based zone ID or a zone offset. Region IDs must have the form 'area/city', such as 'America/Los_Angeles'. Zone offsets must be in the format '(+|-)HH', '(+|-)HH:mm’ or '(+|-)HH:mm:ss', e.g '-08' , '+01:00' or '-13:33:33', and must be in the range from -18:00 to +18:00. 'Z' and 'UTC' are accepted as synonyms for '+00:00'."
@@ -5358,11 +5487,6 @@
       "CROSS_JOIN_NOT_ENABLED" : {
         "message" : [
           "Nearest-by join is implemented as a bounded cross-product internally and is therefore rejected when `spark.sql.crossJoin.enabled = false`. Set `spark.sql.crossJoin.enabled = true` to permit it, or rewrite the query without nearest-by."
-        ]
-      },
-      "EXACT_WITH_NONDETERMINISTIC_EXPRESSION" : {
-        "message" : [
-          "EXACT nearest-by join is incompatible with the nondeterministic ranking expression <expression>. Use APPROX, or replace the expression with a deterministic one."
         ]
       },
       "NON_ORDERABLE_RANKING_EXPRESSION" : {
@@ -6940,6 +7064,11 @@
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
         ]
       },
+      "INVALID_SINK_NAME" : {
+        "message" : [
+          "Invalid streaming sink name: '<sinkName>'. Sink names must only contain ASCII letters ('a'-'z', 'A'-'Z'), digits ('0'-'9'), and underscores ('_')."
+        ]
+      },
       "INVALID_SOURCE_NAME" : {
         "message" : [
           "Invalid streaming source name '<sourceName>'. Source names must only contain ASCII letters (a-z, A-Z), digits (0-9), and underscores (_)."
@@ -6948,6 +7077,11 @@
       "SOURCE_NAMING_NOT_SUPPORTED" : {
         "message" : [
           "Streaming source naming is not supported. Source name '<name>' was provided but the feature is disabled. Please enable the feature by setting spark.sql.streaming.queryEvolution.enableSourceEvolution to true."
+        ]
+      },
+      "UNNAMED_STREAMING_SINKS_WITH_ENFORCEMENT" : {
+        "message" : [
+          "Streaming sink must be named when spark.sql.streaming.queryEvolution.enableSinkEvolution is enabled. Use the name() method on DataStreamWriter to assign a name to the streaming sink."
         ]
       },
       "UNNAMED_STREAMING_SOURCES_WITH_ENFORCEMENT" : {

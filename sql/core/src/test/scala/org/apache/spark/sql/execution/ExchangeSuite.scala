@@ -19,11 +19,11 @@ package org.apache.spark.sql.execution
 
 import scala.util.Random
 
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.sql.{Dataset, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, NullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, Exchange, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.internal.SQLConf
@@ -57,6 +57,39 @@ class ExchangeSuite extends SharedSparkSession {
       plan => ShuffleExchangeExec(SinglePartition, plan),
       input.map(Row.fromTuple)
     )
+  }
+
+  test("null-aware hash shuffle spreads identical NULL keys from one mapper") {
+    val input = Seq.fill(64)(Tuple1(null.asInstanceOf[Integer])).toDF("k").coalesce(1)
+    val plan = input.queryExecution.executedPlan
+    val exchange = ShuffleExchangeExec(NullAwareHashPartitioning(plan.output, 4), plan)
+    val partitionSizes = exchange.execute().collectPartitions().map(_.length)
+
+    assert(partitionSizes.sorted === Array(16, 16, 16, 16))
+  }
+
+  test("null-aware hash shuffle preserves retry determinism with local sorting") {
+    withSQLConf(SQLConf.SORT_BEFORE_REPARTITION.key -> "true") {
+      val input = spark.range(64).repartition(4).selectExpr("CAST(NULL AS INT) AS k")
+      val plan = input.queryExecution.executedPlan
+      val exchange = ShuffleExchangeExec(NullAwareHashPartitioning(plan.output, 4), plan)
+
+      assert(plan.execute().outputDeterministicLevel == DeterministicLevel.UNORDERED)
+      assert(exchange.shuffleDependency.rdd.outputDeterministicLevel !=
+        DeterministicLevel.INDETERMINATE)
+    }
+  }
+
+  test("null-aware hash shuffle marks unsorted repartitioning as order-sensitive") {
+    withSQLConf(SQLConf.SORT_BEFORE_REPARTITION.key -> "false") {
+      val input = spark.range(64).repartition(4).selectExpr("CAST(NULL AS INT) AS k")
+      val plan = input.queryExecution.executedPlan
+      val exchange = ShuffleExchangeExec(NullAwareHashPartitioning(plan.output, 4), plan)
+
+      assert(plan.execute().outputDeterministicLevel == DeterministicLevel.UNORDERED)
+      assert(exchange.shuffleDependency.rdd.outputDeterministicLevel ==
+        DeterministicLevel.INDETERMINATE)
+    }
   }
 
   test("BroadcastMode.canonicalized") {

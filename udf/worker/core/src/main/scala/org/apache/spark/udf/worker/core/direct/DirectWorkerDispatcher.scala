@@ -222,7 +222,8 @@ abstract class DirectWorkerDispatcher(
     if (!closed.compareAndSet(false, true)) {
       return
     }
-    // TODO: close workers in parallel -- today shutdown is serialised at
+    // TODO [SPARK-55278]: Cleanup sessions as well?
+    // TODO [SPARK-55278]: close workers in parallel -- today shutdown is serialised at
     //   N * gracefulTimeoutMs worst case.
     workers.values().iterator().asScala.foreach { w =>
       try {

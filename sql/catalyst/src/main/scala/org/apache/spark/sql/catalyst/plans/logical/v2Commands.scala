@@ -44,6 +44,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -106,6 +107,18 @@ trait V2WriteCommand
 
   override def child: LogicalPlan = query
 
+  // `table` is a non-child slot, so the default tree-pattern propagation in TreeNode/QueryPlan
+  // does not see patterns inside it. Add `table`'s bits so that `containsPattern(...)` pruning
+  // correctly reports patterns living in `table` (e.g. `PLAN_WITH_UNRESOLVED_IDENTIFIER`,
+  // `PARAMETER`). Only `OverwriteByExpression` is constructed at parse time with a placeholder
+  // in `table`, but applying this uniformly across all `V2WriteCommand`s keeps the invariant
+  // consistent for any future analyzer-built node that lands a placeholder in the same slot.
+  override protected def getDefaultTreePatternBits: BitSet = {
+    val bits = super.getDefaultTreePatternBits
+    bits.union(table.treePatternBits)
+    bits
+  }
+
   override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 
   def outputResolved: Boolean = {
@@ -139,6 +152,12 @@ trait V2WriteCommand
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
+}
+
+/** Trait for streaming write commands that participate in DSv2 transactions. */
+trait V2StreamingWriteCommand extends TransactionalWrite {
+  override def table: NamedRelation
+  def withNewTable(newTable: NamedRelation): V2StreamingWriteCommand
 }
 
 trait V2PartitionCommand extends UnaryCommand {
@@ -1072,7 +1091,6 @@ case class MergeIntoTable(
     with SupportsSubquery
     with TransactionalWrite {
 
-  // Implements WriteWithSchemaEvolution.table and TransactionalWrite.table.
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
@@ -1340,12 +1358,6 @@ case class Assignment(key: Expression, value: Expression) extends Expression
  */
 trait TransactionalWrite extends LogicalPlan {
   def table: LogicalPlan
-}
-
-/** Trait for streaming write commands that participate in DSv2 transactions. */
-trait StreamingV2WriteCommand extends TransactionalWrite {
-  override def table: NamedRelation
-  def withNewTable(newTable: NamedRelation): StreamingV2WriteCommand
 }
 
 /**
@@ -1955,7 +1967,7 @@ case class CacheTable(
  * The logical plan of the CACHE TABLE ... AS SELECT command.
  */
 case class CacheTableAsSelect(
-    tempViewName: String,
+    tempViewName: Expression,
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
@@ -1963,6 +1975,19 @@ case class CacheTableAsSelect(
     isAnalyzed: Boolean = false,
     referredTempFunctions: Seq[String] = Seq.empty)
   extends AnalysisOnlyCommand with CTEInChildren {
+
+  /**
+   * Returns the temp view name string. Must only be called after analysis, when `tempViewName`
+   * has been resolved to a non-null string `Literal`. `CheckAnalysis` enforces this invariant.
+   */
+  def tempViewNameString: String = tempViewName match {
+    case Literal(value, _: StringType) if value != null => value.toString
+    case other =>
+      throw SparkException.internalError(
+        "CacheTableAsSelect.tempViewName must be a non-null string literal after analysis, " +
+          s"but got: ${other.sql}")
+  }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)

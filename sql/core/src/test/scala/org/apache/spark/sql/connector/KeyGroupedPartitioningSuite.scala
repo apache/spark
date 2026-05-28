@@ -233,7 +233,7 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }.head
 
     resolveDistribution(distribution, relation) match {
-      case physical.ClusteredDistribution(clustering, _, _) =>
+      case physical.ClusteredDistribution(clustering, _, _, _) =>
         assert(relation.keyGroupedPartitioning.isDefined &&
           relation.keyGroupedPartitioning.get == clustering)
       case _ =>

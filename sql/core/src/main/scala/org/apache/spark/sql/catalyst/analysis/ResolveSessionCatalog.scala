@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1,
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.SparkStringUtils
 
@@ -576,6 +577,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         replace = replace,
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
+
+    // CREATE VIEW ... WITH METRICS on the session catalog -> V1 runnable command. Non-session
+    // v2 catalogs leave [[CreateMetricView]] in place for `DataSourceV2Strategy` to dispatch
+    // to `CreateV2MetricViewExec`.
+    case cm @ CreateMetricView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _)
+        if isSessionCatalog(catalog) =>
+      CreateMetricViewCommand(
+        cm.child,
+        cm.userSpecifiedColumns,
+        cm.comment,
+        cm.properties,
+        cm.originalText,
+        cm.allowExisting,
+        cm.replace)
 
     // ViewCatalog catalogs are handled by the v2 strategy (enumerates via listViews); we skip
     // the match here so the plan flows through unchanged. Only non-session, non-ViewCatalog

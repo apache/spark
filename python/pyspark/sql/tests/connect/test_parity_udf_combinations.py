@@ -18,13 +18,12 @@
 
 from pyspark.sql.tests.test_udf_combinations import UDFCombinationsTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.sqlutils import with_sql_conf
 
 
+@with_sql_conf({"spark.sql.execution.pythonUDF.arrow.enabled": "false"})
 class UDFCombinationsParityTests(UDFCombinationsTestsMixin, ReusedConnectTestCase):
-    @classmethod
-    def setUpClass(cls):
-        ReusedConnectTestCase.setUpClass()
-        cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
+    pass
 
 
 if __name__ == "__main__":

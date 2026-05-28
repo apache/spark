@@ -27,6 +27,9 @@ import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -42,6 +45,20 @@ case class BatchScanExec(
   ) extends DataSourceV2ScanExecBase {
 
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
+
+  override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
+    val name = "number of output rows"
+    val metric = table match {
+      // Use SLAM for the scan-output count when this scan reads on behalf of a row-level DELETE,
+      // so that the driver-side derivation `numDeletedRows = numScannedRows - numCopiedRows` in
+      // `ReplaceDataExec.getWriteSummary` stays correct under stage retries.
+      case rlot: RowLevelOperationTable if rlot.operation.command() == DELETE =>
+        SQLLastAttemptMetrics.createMetric(sparkContext, name)
+      case _ =>
+        SQLMetrics.createMetric(sparkContext, name)
+    }
+    Map("numOutputRows" -> metric)
+  }
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {

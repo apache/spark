@@ -17,6 +17,7 @@
 
 import os
 import sys
+import hmac
 import select
 import struct
 import socketserver
@@ -310,7 +311,7 @@ class UpdateRequestHandler(socketserver.StreamRequestHandler):
             received_token: Union[bytes, str] = self.rfile.read(len(auth_token))
             if isinstance(received_token, bytes):
                 received_token = received_token.decode("utf-8")
-            if received_token == auth_token:
+            if hmac.compare_digest(received_token, auth_token):
                 accum_updates()
                 # we've authenticated, we can break out of the first loop now
                 return True

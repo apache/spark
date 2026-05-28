@@ -20,11 +20,20 @@ package org.apache.spark.sql.pipelines.graph
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.pipelines.AnalysisWarning
+import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
+  CaseSensitivityLabels,
+  ChangeArgs,
+  ColumnSelection,
+  Scd1BatchProcessor,
+  ScdType
+}
 import org.apache.spark.sql.pipelines.util.InputReadOptions
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
  * Contains the catalog and database context information for query execution.
@@ -121,7 +130,21 @@ case class FlowFunctionResult(
 }
 
 /** A [[Flow]] whose output schema and dependencies aren't known. */
-case class UnresolvedFlow(
+sealed trait UnresolvedFlow extends Flow {
+  /** Returns a copy of this flow with the given SQL confs overriding the existing ones. */
+  def withSqlConf(newSqlConf: Map[String, String]): UnresolvedFlow
+}
+
+/**
+ * An [[UnresolvedFlow]] whose execution-type has not yet been determined.
+ *
+ * In some cases, we know the execution-type for an [[UnresolvedFlow]] even before flow analysis
+ * and resolution. For example an AutoCDCFlow is a special unresolved-but-typed flow; we know a
+ * flow will be an AutoCDC flow immediately on construction, because it has its own special
+ * registration API. Such flows are considered "typed flows", but there isn't any semantic reason
+ * yet to explicitly introduce a `TypedFlow` trait/class.
+ */
+case class UntypedFlow(
     identifier: TableIdentifier,
     destinationIdentifier: TableIdentifier,
     func: FlowFunction,
@@ -129,7 +152,34 @@ case class UnresolvedFlow(
     sqlConf: Map[String, String],
     override val once: Boolean,
     override val origin: QueryOrigin
-) extends Flow
+) extends UnresolvedFlow {
+  override def withSqlConf(newSqlConf: Map[String, String]): UntypedFlow =
+    copy(sqlConf = newSqlConf)
+}
+
+/**
+ * An unresolved but typed flow that applies a CDC event stream to a target table via MERGE.
+ *
+ * [[AutoCdcFlow]] is a typed flow because it is only supported for streaming, and not as a once
+ * flow. Therefore by definition it is a streaming-type flow.
+ *
+ * In the future once-support for [[AutoCdcFlow]] may be added.
+ */
+case class AutoCdcFlow(
+    identifier: TableIdentifier,
+    destinationIdentifier: TableIdentifier,
+    func: FlowFunction,
+    queryContext: QueryContext,
+    sqlConf: Map[String, String] = Map.empty,
+    comment: Option[String] = None,
+    override val origin: QueryOrigin,
+    changeArgs: ChangeArgs
+) extends UnresolvedFlow {
+  override val once: Boolean = false
+
+  override def withSqlConf(newSqlConf: Map[String, String]): AutoCdcFlow =
+    copy(sqlConf = newSqlConf)
+}
 
 /**
  * A [[Flow]] whose flow function has been invoked, meaning either:
@@ -193,4 +243,141 @@ class AppendOnceFlow(
 ) extends ResolvedFlow {
 
   override val once = true
+}
+
+/**
+ * A resolved flow that applies a CDC event stream to a target table via MERGE, in accordance to
+ * the configured [[flow.changeArgs]].
+ */
+class AutoCdcMergeFlow(
+    val flow: AutoCdcFlow,
+    val funcResult: FlowFunctionResult
+) extends ResolvedFlow {
+  requireReservedPrefixAbsentInSourceColumns()
+
+  def changeArgs: ChangeArgs = flow.changeArgs
+
+  /** The user-selected projection of [[df.schema]] (i.e. before the SCD metadata column). */
+  private val userSelectedSchema: StructType = {
+    val selectedSchema = ColumnSelection.applyToSchema(
+      schemaName = "changeDataFeed",
+      schema = df.schema,
+      columnSelection = changeArgs.columnSelection,
+      caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
+    )
+    // AutoCDC flows require all key columns to be present in the target table, to adhere to SCD
+    // semantics.
+    requireKeysPresentInSelectedSchema(selectedSchema)
+    selectedSchema
+  }
+
+  /** The DataType of the sequencing expression, derived once from the source change feed. */
+  private[graph] val sequencingType: DataType =
+    df.select(changeArgs.sequencing).schema.head.dataType
+
+  /**
+   * Returns the augmented output schema of this flow, which can differ from the schema of the
+   * source change-data-feed dataframe.
+   *
+   * The source dataframe's schema describes the incoming CDC events; the augmented schema here
+   * applies the user-specified [[ColumnSelection]] and appends the SCD-specific metadata
+   * columns that the AutoCDC MERGE engine projects onto the target table. Downstream
+   * dependencies in the pipeline see this augmented schema.
+   */
+  override val schema: StructType = changeArgs.storedAsScdType match {
+    case ScdType.Type1 =>
+      // SCD1 produces a target table with all the user-selected output columns and a projected
+      // CDC operational metadata column at the end.
+      StructType(
+        userSelectedSchema.fields :+ StructField(
+          Scd1BatchProcessor.cdcMetadataColName,
+          Scd1BatchProcessor.cdcMetadataColSchema(sequencingType),
+          nullable = false
+        )
+      )
+    case ScdType.Type2 =>
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
+        messageParameters = Map.empty
+      )
+  }
+
+  /**
+   * Returns an empty dataframe whose schema matches [[AutoCdcMergeFlow.schema]].
+   *
+   * Today, [[AutoCdcMergeFlow.load]] is not actually ever called during graph analysis or
+   * execution. An AutoCdcMergeFlow can only be an input to a streaming table (not an MV or
+   * persisted/temp view), and streaming tables take a [[VirtualTableInput]] as input, not
+   * the producing [[Flow]] directly. [[VirtualTableInput]] overrides its own [[load]] to do
+   * schema inference on its input flows, rather than a transitive [[Flow.load]].
+   *
+   * The [[AutoCdcMergeFlow.load]] implementation exists solely for API consistency.
+   */
+  override def load(readOptions: InputReadOptions): DataFrame = changeArgs.storedAsScdType match {
+    case ScdType.Type1 =>
+      val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
+      val emptyCdcMetadataCol: Column = Scd1BatchProcessor.constructCdcMetadataCol(
+        deleteSequence = F.lit(null),
+        upsertSequence = F.lit(null),
+        sequencingType = sequencingType
+      ).as(Scd1BatchProcessor.cdcMetadataColName)
+
+      df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
+    case ScdType.Type2 =>
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
+        messageParameters = Map.empty
+      )
+  }
+
+  /**
+   * Validate that the resolved source dataframe for the AutoCDC flow does not contain any column
+   * names that use the reserved Spark AutoCDC prefix.
+   */
+  private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
+    val resolver = spark.sessionState.conf.resolver
+    val reservedPrefix = AutoCdcReservedNames.prefix
+
+    def nameContainsReservedPrefix(name: String): Boolean = {
+      name.length >= reservedPrefix.length && resolver(
+        name.substring(0, reservedPrefix.length),
+        reservedPrefix
+      )
+    }
+
+    df.schema.fieldNames.find(nameContainsReservedPrefix).foreach { conflictingColumnName =>
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT",
+        messageParameters = Map(
+          "caseSensitivity" -> CaseSensitivityLabels.of(
+            spark.sessionState.conf.caseSensitiveAnalysis
+          ),
+          "columnName" -> conflictingColumnName,
+          "schemaName" -> "changeDataFeed",
+          "reservedColumnNamePrefix" -> reservedPrefix
+        )
+      )
+    }
+  }
+
+  /**
+   * Validate all keys specified in changeArgs are actually present in the user-selected schema.
+   */
+  private def requireKeysPresentInSelectedSchema(selectedSchema: StructType): Unit = {
+    val resolver = spark.sessionState.conf.resolver
+
+    changeArgs.keys
+      .find(key => !selectedSchema.fieldNames.exists(name => resolver(name, key.name)))
+      .foreach { missingKey =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA",
+          messageParameters = Map(
+            "caseSensitivity" -> CaseSensitivityLabels.of(
+              spark.sessionState.conf.caseSensitiveAnalysis
+            ),
+            "keyColumnName" -> missingKey.name
+          )
+        )
+      }
+  }
 }

@@ -29,6 +29,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -163,6 +164,16 @@ public final class MutableColumnarRow extends InternalRow {
   @Override
   public CalendarInterval getInterval(int ordinal) {
     return columns[ordinal].getInterval(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampNTZNanos(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampLTZNanos(rowId);
   }
 
   @Override

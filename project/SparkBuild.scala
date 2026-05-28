@@ -1220,7 +1220,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.2")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.3")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides ++= {
@@ -1921,7 +1921,7 @@ object TestSettings {
         "-Dio.netty.tryReflectionSetAccessible=true",
         "-Dio.netty.allocator.type=pooled",
         "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
-        "-Dio.netty.noUnsafe=false",
+        "--sun-misc-unsafe-memory-access=allow",
         "--enable-native-access=ALL-UNNAMED",
         "-XX:+EnableDynamicAgentLoading").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"

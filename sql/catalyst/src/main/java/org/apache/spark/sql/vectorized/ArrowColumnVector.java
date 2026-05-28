@@ -157,9 +157,7 @@ public class ArrowColumnVector extends ColumnVector {
     int srid = getChild(0).getInt(rowId);
     byte[] bytes = getChild(1).getBinary(rowId);
     gt.assertSridAllowedForType(srid);
-    // TODO(GEO-602): Geog still does not support different SRIDs, once it does,
-    // we need to update this.
-    return (bytes == null) ? null : STUtils.stGeogFromWKB(bytes);
+    return (bytes == null) ? null : STUtils.stGeogFromWKB(bytes, srid);
   }
 
   @Override
