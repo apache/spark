@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.IntegerType
  * between df1 and df2) live in [[DataSourceV2DataFrameSuite]] directly.
  *
  * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
- * are lazy and require an action to trigger execution. In classic mode `.collect()` on DDL
- * is a no-op (DDL executes eagerly), so this is harmless.
+ * are lazy and require an action to trigger execution. In classic mode `.collect()` on
+ * eager statements (DDL, INSERT) is a no-op, so this is harmless.
  */
 trait DSv2JoinRefreshTests extends DSv2ExternalMutationTestBase {
 

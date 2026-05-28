@@ -26,9 +26,9 @@ import org.apache.spark.sql.internal.connector.ColumnImpl
  * returns null) and column IDs ([[Column.id]] returns null). This simulates
  * connectors that support neither table nor column identity tracking.
  *
- * When both IDs are null, neither [[V2TableRefreshUtil.validateTableIdentity]]
- * nor [[V2TableUtil.validateColumnIds]] fires, so drop/recreate of a table
- * or drop/re-add of a column goes undetected.
+ * When both IDs are null, neither the table identity check in [[V2TableRefreshUtil]]
+ * nor [[V2TableUtil.validateColumnIds]] fires, so drop/recreate of a table or
+ * drop/re-add of a column goes undetected.
  */
 class NullTableIdAndNullColumnIdInMemoryTableCatalog extends InMemoryTableCatalog {
 
