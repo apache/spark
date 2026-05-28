@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics}
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
@@ -208,5 +206,5 @@ private class StubTable(
   override def id(): String = id
   override def columns(): Array[org.apache.spark.sql.connector.catalog.Column] =
     org.apache.spark.sql.connector.catalog.CatalogV2Util.structTypeToV2Columns(schema)
-  override def capabilities(): util.Set[TableCapability] = util.Collections.emptySet()
+  override def capabilities(): java.util.Set[TableCapability] = java.util.Collections.emptySet()
 }

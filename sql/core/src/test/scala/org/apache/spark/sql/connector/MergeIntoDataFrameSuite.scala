@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{sources, Column, Row}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.classic.MergeIntoWriter
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryBaseTable}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableInfo
 import org.apache.spark.sql.functions._
@@ -1353,6 +1353,140 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     assert(sourceFilterScanned,
       s"expected the source's salary<250 filter to appear as a scan event after cache bypass, " +
         s"got ${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 101, "hr"),
+        Row(2, 201, "software"),
+        Row(3, 300, "hr")))
+  }
+
+  test("cached source from outside the txn catalog is reused without consulting registerScans") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |""".stripMargin)
+
+    // Build the source from spark.range — no DataSourceV2Relation, no catalog reference at all.
+    // Inside the txn, validateCachedEntryForTransaction's txnTables set is empty for this cached
+    // entry, so the short-circuit accepts the cache without ever consulting registerScans.
+    val sourceDF = spark.range(2)
+      .select(
+        (col("id") + 1).cast(IntegerType).as("pk"),
+        lit(999).cast(IntegerType).as("salary"),
+        lit("hr").cast(StringType).as("dep"))
+      .as("source")
+    sourceDF.cache()
+    sourceDF.count()
+
+    val (txn, _) = executeTransaction {
+      sourceDF
+        .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+        .whenMatched()
+        .update(Map("salary" -> $"source.salary"))
+        .merge()
+    }
+
+    assert(txn.currentState == Committed)
+    assert(txn.registeredScans.isEmpty,
+      "registerScans should not be consulted when the cached subtree has no txn-catalog reads")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Seq(
+        Row(1, 999, "hr"),
+        Row(2, 999, "software")))
+  }
+
+  test("cached relation inside an IN-subquery is substituted via useCachedData recursion") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    // Create + populate a lookup table in the same txn catalog. We cache a DataFrame against
+    // this lookup, then drive a MERGE whose source filters by an IN-subquery against the
+    // cached lookup. The cache substitution can only happen via useCachedData's recursive
+    // descent into SubqueryExpression — transformDown alone would not find the cached subtree
+    // hidden inside the IN expression.
+    val lookupName = "cat.ns1.cache_lookup"
+    withTable(lookupName) {
+      sql(s"CREATE TABLE $lookupName (pk INT) USING foo")
+      sql(s"INSERT INTO $lookupName VALUES (1), (2)")
+
+      val lookupDF = spark.table(lookupName)
+      lookupDF.cache()
+      lookupDF.count()
+      lookupDF.createOrReplaceTempView("cache_lookup_view")
+
+      val sourceDF = spark.table(tableNameAsString)
+        .where("pk IN (SELECT pk FROM cache_lookup_view)")
+        .as("source")
+
+      val (txn, _) = executeTransaction {
+        sourceDF
+          .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+          .whenMatched()
+          .update(Map("salary" -> targetTableCol("salary").plus(1)))
+          .merge()
+      }
+
+      assert(txn.currentState == Committed)
+      // The lookup is the only cached entry in this plan, and it sits inside an IN-subquery —
+      // so the only way the registered scans can include it is via useCachedData's recursive
+      // descent into SubqueryExpression. Every registered scan must point at the lookup.
+      val lookupTable = catalog.loadTable(Identifier.of(Array("ns1"), "cache_lookup"))
+      assert(txn.registeredScans.flatten.collect {
+        case s: InMemoryBaseTable#InMemoryBatchScan => s.table
+      }.distinct == Seq(lookupTable))
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"),
+          Row(2, 201, "software"),
+          Row(3, 300, "hr")))
+    }
+  }
+
+  test("default Transaction.registerScans (returns false) causes cache bypass") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "dep": "hr" }
+        |""".stripMargin)
+
+    val sourceDF = spark.table(tableNameAsString).where("salary < 250").as("source")
+    sourceDF.cache()
+    sourceDF.count()
+
+    // Force the next transaction to use the default Transaction.registerScans behavior, which
+    // returns false unconditionally. Spark must then bypass the cached source entirely.
+    catalog.nextTxnUsesDefaultRegisterScans = true
+
+    val (txn, txnTables) = executeTransaction {
+      sourceDF
+        .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+        .whenMatched()
+        .update(Map("salary" -> targetTableCol("salary").plus(1)))
+        .merge()
+    }
+
+    assert(txn.currentState == Committed)
+    // The default-impl refusal is observable: registerScans was called but accepted nothing,
+    // so the buffer stays empty.
+    assert(txn.registeredScans.isEmpty,
+      "default registerScans should refuse the cache")
+
+    // Cache bypass means the source's filter is re-evaluated through the txn catalog, leaving
+    // a scan event on the target's TxnTable.
+    val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.flatten.exists {
+      case sources.LessThan("salary", 250) => true
+      case _ => false
+    }, "expected salary<250 to appear as a scan event after cache bypass")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),

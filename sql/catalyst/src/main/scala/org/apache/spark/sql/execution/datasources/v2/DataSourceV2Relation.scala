@@ -28,9 +28,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataC
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Column, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
+import org.apache.spark.sql.connector.catalog.constraints.Constraint
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -122,17 +123,10 @@ case class DataSourceV2Relation(
     copy(output = output.map(_.newInstance()))
   }
 
-  // Replace the `table` field with a stable identity placeholder when we have enough information
-  // to identify the table independently of the concrete `Table` object reference. This lets two
-  // relations that point at the same logical table compare equal even when one is wrapped (e.g.
-  // by a transaction-aware catalog) - the wrapper preserves `Table.id()` per the public contract.
-  // When the connector returns a non-null `Table.id()`, drop-and-recreate is still distinguished
-  // because a fresh id is required after recreate. When `Table.id()` is null (the default for
-  // connectors that don't support table IDs), we key only on (catalog, identifier) - permissive
-  // because the connector has given us no signal to detect drop+recreate, so the safest default
-  // mirrors the "if we can't prove they differ, treat them as compatible" policy used elsewhere
-  // (e.g. refresh-time schema validation). Falls back to the default canonical form when
-  // catalog or identifier is missing.
+  // Replace the `table` field with an identity placeholder. This allows two relations
+  // that point at the same logical table compare equal even when one is wrapped (e.g.
+  // by a transaction-aware catalog). Note, when `Table.id()` is null we key only on catalog
+  // and identifier, thus, drop-and-recreate is not distinguished.
   override def doCanonicalize(): LogicalPlan = {
     val base = super.doCanonicalize().asInstanceOf[DataSourceV2Relation]
     val catalogName = base.catalog.map(_.name())
@@ -343,7 +337,7 @@ object ExtractV2ScanInfo {
 
 object DataSourceV2Relation {
 
-  // Sentinel substituted into a canonicalized `DataSourceV2Relation.table` field so that two
+  // Substituted into a canonicalized `DataSourceV2Relation.table` field so that two
   // relations targeting the same metastore entity compare equal regardless of which concrete
   // `Table` instance backs each side. Should only appear in canonicalized plans.
   private[v2] case class CanonicalTableKey(
@@ -352,7 +346,14 @@ object DataSourceV2Relation {
       idOpt: Option[String]) extends Table {
     override def id(): String = idOpt.orNull
     override def name(): String = s"$catalogName.$identifier"
-    override def capabilities(): java.util.Set[TableCapability] =
+    override def capabilities(): java.util.Set[TableCapability] = throwExecutionAccess()
+    override def columns(): Array[Column] = throwExecutionAccess()
+    override def partitioning(): Array[Transform] = throwExecutionAccess()
+    override def properties(): java.util.Map[String, String] = throwExecutionAccess()
+    override def constraints(): Array[Constraint] = throwExecutionAccess()
+    override def version(): String = throwExecutionAccess()
+
+    private def throwExecutionAccess(): Nothing =
       throw SparkException.internalError(
         "CanonicalTableKey is canonicalization-only and must not appear in execution plans")
   }

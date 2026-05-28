@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -35,11 +36,12 @@ import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
@@ -481,8 +483,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   private def lookupCachedDataInternal(
       plan: LogicalPlan,
-      cacheFilter: CachedData => Boolean = _ => true): Option[CachedData] = {
-    val result = cachedData.find(cd => plan.sameResult(cd.plan) && cacheFilter(cd))
+      transactionOpt: Option[Transaction] = None): Option[CachedData] = {
+    val result = cachedData.find { cd =>
+      plan.sameResult(cd.plan) &&
+        transactionOpt.forall(txn => validateCachedEntryForTransaction(cd, txn))
+    }
     if (result.isDefined) {
       CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
         log"\n${MDC(QUERY_PLAN, plan)} matched with cache entry:" +
@@ -491,22 +496,34 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     result
   }
 
+  // Decides whether the cached entry can be substituted into a plan being executed inside
+  // the given transaction. It identifies the scans and attempts to register them in the connector.
+  // The connector returns true if reusing the cached snapshot is consistent with its isolation
+  // contract. Note, the scans might belong to different catalogs. The connector can decide which
+  // one to register and which ones to ignore.
+  private def validateCachedEntryForTransaction(cd: CachedData, txn: Transaction): Boolean = {
+    val scans = collectWithSubqueries(cd.cachedRepresentation.cacheBuilder.cachedPlan) {
+      case b: BatchScanExec => b.scan
+    }
+    scans.isEmpty || txn.registerScans(scans.asJava)
+  }
+
   /**
    * Replaces segments of the given logical plan with cached versions where possible. The input
    * plan must be normalized.
    *
-   * @param plan        the plan to rewrite.
-   * @param cacheFilter invoked once per cache hit. If it returns false, the cache entry is
-   *                    skipped and the original subtree is preserved. Defaults to always accept.
+   * @param plan           the plan to rewrite.
+   * @param transactionOpt if defined, each candidate cache hit is validated against the
+   *                       transaction's isolation contract (via `Transaction.registerScans`).
    */
   private[sql] def useCachedData(
       plan: LogicalPlan,
-      cacheFilter: CachedData => Boolean = _ => true): LogicalPlan = {
+      transactionOpt: Option[Transaction] = None): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment, cacheFilter).map { cached =>
+        lookupCachedDataInternal(currentFragment, transactionOpt).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -519,7 +536,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, cacheFilter))
+      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, transactionOpt))
     }
 
     if (result.fastEquals(plan)) {

@@ -22,7 +22,6 @@ import java.util.UUID
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import javax.annotation.concurrent.GuardedBy
 
-import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
@@ -46,7 +45,7 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.SQLExecution.EXECUTION_ROOT_ID_KEY
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, TransactionalExec, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.v2.{TransactionalExec, V2TableRefreshUtil}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
 import org.apache.spark.sql.execution.exchange.EnsureRequirements
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
@@ -296,10 +295,7 @@ class QueryExecution(
       // analyzing, optimizing and planning.
       sparkSession.sharedState.cacheManager.useCachedData(
         normalized.clone(),
-        cacheFilter = transactionOpt match {
-          case Some(txn) => cd => QueryExecution.validateCachedEntryForTransaction(cd, txn)
-          case None => _ => true
-        })
+        transactionOpt)
     }
   }
 
@@ -729,28 +725,6 @@ object QueryExecution {
   private val _nextExecutionId = new AtomicLong(0)
 
   private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
-
-  // Decides whether the cached entry `cd` can be substituted into a plan being executed inside
-  // the given transaction. Walks the logical plan that was cached to identify scans that read
-  // tables in the transaction's catalog, pairs them with their materialized `Scan` objects in
-  // the cached SparkPlan, and asks the connector to register them. The connector returns true
-  // if reusing the cached snapshot is consistent with its isolation contract.
-  private def validateCachedEntryForTransaction(cd: CachedData, txn: Transaction): Boolean = {
-    val txnCatalogName = txn.catalog().name()
-    val txnTables = cd.plan.collect {
-      case r: DataSourceV2Relation if r.catalog.exists(_.name() == txnCatalogName) => r.table
-    }.toSet
-
-    if (txnTables.isEmpty) return true
-
-    val scans = cd.cachedRepresentation.cacheBuilder.cachedPlan.collect {
-      case b: BatchScanExec if txnTables.contains(b.table) => b.scan
-    }
-    // An empty scan list means the optimizer eliminated every actual read of the txn-catalog
-    // tables referenced in the logical plan, so the cached data doesn't depend on those tables'
-    // state - safe to reuse the cache without consulting the connector.
-    scans.isEmpty || txn.registerScans(scans.asJava)
-  }
 
   private[execution] def create(
       sparkSession: SparkSession,

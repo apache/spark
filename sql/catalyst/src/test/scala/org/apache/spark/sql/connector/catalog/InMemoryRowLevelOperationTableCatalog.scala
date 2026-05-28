@@ -35,11 +35,18 @@ class InMemoryRowLevelOperationTableCatalog
   // All transactions in order (committed and aborted), allowing per-statement
   // validation in SQL scripting tests.
   val observedTransactions: ArrayBuffer[Txn] = new ArrayBuffer[Txn]()
+  // Test-only knob. When true, the next transaction created by `beginTransaction` will defer
+  // to the default `Transaction.registerScans` behavior (always returns false). The flag is
+  // reset to false after being consumed.
+  var nextTxnUsesDefaultRegisterScans: Boolean = false
 
   override def beginTransaction(info: TransactionInfo): Transaction = {
     assert(transaction == null || transaction.currentState != Active)
-    this.transaction = new Txn(new TxnTableCatalog(this))
-    transaction
+    val txn = new Txn(new TxnTableCatalog(this))
+    txn.useDefaultRegisterScans = nextTxnUsesDefaultRegisterScans
+    nextTxnUsesDefaultRegisterScans = false
+    this.transaction = txn
+    txn
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {

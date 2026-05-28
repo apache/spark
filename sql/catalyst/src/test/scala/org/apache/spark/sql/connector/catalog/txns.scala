@@ -44,35 +44,41 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
   // to confirm cache substitution went through the txn path.
   val registeredScans: ArrayBuffer[Seq[Scan]] = ArrayBuffer.empty
 
+  // Test-only switch. When true, `registerScans` mimics the default Transaction interface
+  // behavior (always returns false) instead of running the version-equality check. Used to
+  // verify Spark's cache-bypass behavior when a connector hasn't implemented `registerScans`.
+  var useDefaultRegisterScans: Boolean = false
+
   def currentState: TransactionState = state
 
   def isClosed: Boolean = closed
 
-  // Snapshot-isolation-style check: accept the batch iff every cached scan was built against the
-  // table at exactly the version the table is at now. Any intervening write bumps the version
-  // and forces a refusal — the cached snapshot would no longer be consistent with the txn's view.
-  // A real connector might be more permissive (e.g. Serializable connectors can accept older
-  // snapshots and record them in the read set for commit-time conflict detection), but the
-  // strict-equality rule is sufficient for testing the API plumbing.
+  // Accept the batch if relevant scans were built against the table at exactly the
+  // version the table is at now. A real connector could be more permissive. For example, it
+  // could accept older snapshots and record them in the read set for commit-time conflict
+  // detection.
   //
-  // On acceptance, we record a scan event on each scan's TxnTable (looked up by delegate
-  // identity), mirroring what `InMemoryScanBuilder.build` does for fresh scans. This keeps
-  // `scanEvents` a uniform record of all reads in the transaction — cached or fresh.
-  override def registerScans(scans: java.util.List[Scan]): Boolean = {
-    val asScala = scans.asScala.toSeq
-    val accepted = asScala.forall {
-      case s: InMemoryBaseTable#InMemoryBatchScan =>
-        s.builtAtTableVersion == s.currentTableVersion
-      case _ => false
+  // The scan list may include foreign scans that originated in other catalogs. We
+  // identify our own scans by structural type AND by table identity an InMemoryBatchScan
+  // whose underlying table is one this catalog instance is tracking. Foreign scans are
+  // non-transactional from our perspective and are ignored.
+  override def registerScans(javaScans: java.util.List[Scan]): Boolean = {
+    if (useDefaultRegisterScans) return false
+
+    val scans = javaScans.asScala.toSeq
+    val myScans = scans.collect {
+      case s: InMemoryBaseTable#InMemoryBatchScan
+        if catalog.txnTables.values.exists(_.delegate eq s.table) => s
+    }
+    val accepted = myScans.forall { s =>
+      s.builtAtTableVersion == s.currentTableVersion
     }
     if (accepted) {
-      registeredScans += asScala
-      asScala.foreach {
-        case s: InMemoryBaseTable#InMemoryBatchScan =>
-          catalog.txnTables.values
-            .find(_.delegate eq s.table)
-            .foreach(_.scanEvents += s.pushedFilters)
-        case _ =>
+      registeredScans += scans
+      myScans.foreach { s =>
+        catalog.txnTables.values
+          .find(_.delegate eq s.table)
+          .foreach(_.scanEvents += s.pushedFilters)
       }
     }
     accepted

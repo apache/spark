@@ -69,27 +69,23 @@ public interface Transaction extends Closeable {
   void abort();
 
   /**
-   * Attempts to register a set of already-materialized scans against this transaction's read set.
+   * Attempts to register a list of materialized scans against this transaction's read set.
    * <p>
-   * Spark calls this when a cached subtree of the current plan contains scans against tables in
-   * this transaction's catalog and Spark would like to reuse the cached result instead of
-   * recomputing. The connector decides whether the cached snapshots are compatible with the
-   * transaction's isolation contract (e.g. snapshot isolation may require all reads to be
-   * pinned to the same version).
+   * Spark calls this when considering reuse of a cached subtree during the transaction. The
+   * list contains every materialized scan in the candidate cached subtree. That may include
+   * scans that belong to catalogs other than this transaction's catalog. The connector can
+   * decide which scans to register or ignore.
    * <p>
-   * Each {@link Scan} was produced by this connector, so the connector can downcast to recover
-   * any internal state it needs (table identity, snapshot/version, pushed filters).
+   * The connector decides whether reusing the cached snapshots is compatible with the
+   * transaction's isolation contract. It must either accept the cache entry (returning
+   * {@code true} after adding any of its own scans to the read set) or refuse it (returning
+   * {@code false} without modifying the read set).
    * <p>
-   * The call is atomic: an implementation must either accept all of the supplied scans (return
-   * {@code true}) and add them to the read set, or accept none of them (return {@code false})
-   * and leave the read set unchanged.
-   * <p>
-   * The default implementation returns {@code false}, causing Spark to skip cache substitution
-   * for the corresponding cache entry.
+   * This method may be called multiple times during a single query with overlapping scan
+   * lists. Registering a scan that is already in the read set must be a no-op.
    *
-   * @param scans non-empty list of cached scans against tables in this transaction's catalog.
-   * @return true if all scans were accepted and the cache entry is safe to reuse;
-   *         false otherwise.
+   * @param scans Every materialized scan in the candidate cached subtree.
+   * @return true if the connector accepts reuse of the cache entry; false otherwise.
    */
   default boolean registerScans(List<Scan> scans) {
     return false;
