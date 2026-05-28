@@ -376,6 +376,32 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-56132: streaming read of metadata columns from V2 source") {
+    withTable(tbl) {
+      prepareTable()
+      withTempDir { checkpointDir =>
+        // "index" is a metadata column (not in the table schema); "id" and "data" are data columns.
+        val df = spark.readStream.table(tbl).select("id", "data", "index")
+        val q = df.writeStream
+          .format("memory")
+          .queryName("result_56132")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start()
+        try {
+          q.processAllAvailable()
+          val result = spark.table("result_56132")
+          // Verify data columns arrive correctly and index (metadata) is non-null.
+          checkAnswer(result.select("id", "data").orderBy("id"),
+            Seq(Row(1, "a"), Row(2, "b"), Row(3, "c")))
+          assert(result.select("index").collect().forall(!_.isNullAt(0)),
+            "index metadata column should be non-null in streaming output")
+        } finally {
+          q.stop()
+        }
+      }
+    }
+  }
+
   test("SPARK-43123: Metadata column related field metadata should not be leaked to catalogs") {
     withTable(tbl, "testcat.target") {
       prepareTable()
