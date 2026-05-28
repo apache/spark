@@ -365,7 +365,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         val v = CatalystTypeConverters.createToCatalystConverter(dt)(input)
           .asInstanceOf[TimestampNanosVal]
         assert(v.nanosWithinMicro === expectedNanosWithinMicro,
-          s"input=$input, precision=$p: expected $expectedNanosWithinMicro, got ${v.nanosWithinMicro}")
+          s"input=$input, precision=$p: expected $expectedNanosWithinMicro, " +
+            s"got ${v.nanosWithinMicro}")
       }
     }
   }
@@ -380,7 +381,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         val v = CatalystTypeConverters.createToCatalystConverter(dt)(input)
           .asInstanceOf[TimestampNanosVal]
         assert(v.nanosWithinMicro === expectedNanosWithinMicro,
-          s"input=$input, precision=$p: expected $expectedNanosWithinMicro, got ${v.nanosWithinMicro}")
+          s"input=$input, precision=$p: expected $expectedNanosWithinMicro, " +
+            s"got ${v.nanosWithinMicro}")
       }
     }
   }
