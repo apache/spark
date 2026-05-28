@@ -21,28 +21,34 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests}
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2JoinRefreshTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, TableCatalog}
 
 /**
  * Connect-mode counterpart of [[org.apache.spark.sql.connector.DataSourceV2DataFrameSuite]].
  *
  * Runs DSv2 temp view tests ([[DSv2TempViewWithStoredPlanTests]]), repeated table access tests
- * ([[DSv2RepeatedTableAccessTests]]), and CACHE TABLE read tests ([[DSv2CacheTableReadTests]])
- * under Spark Connect. All test logic lives in the shared traits; this class only provides the
+ * ([[DSv2RepeatedTableAccessTests]]), CACHE TABLE read tests ([[DSv2CacheTableReadTests]]),
+ * and join refresh tests ([[DSv2JoinRefreshTests]]) under Spark Connect. All test logic lives
+ * in the shared traits; this class only provides the
  * Connect-specific session, catalog access, and result comparison.
  */
 class DataSourceV2DataFrameConnectSuite
     extends SparkConnectServerTest
     with DSv2TempViewWithStoredPlanTests
     with DSv2RepeatedTableAccessTests
-    with DSv2CacheTableReadTests {
+    with DSv2CacheTableReadTests
+    with DSv2JoinRefreshTests {
 
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.cachingcat", classOf[CachingInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.cachingcat.copyOnLoad", "true")
+    .set(
+      "spark.sql.catalog.nullbothidscat",
+      classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
 
   override protected def testPrefix: String = "[connect] "
 
