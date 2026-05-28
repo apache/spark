@@ -413,7 +413,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -444,7 +444,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: |
@@ -459,13 +459,13 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/*.log"
     - name: Upload yarn app log files
       if: ${{ !success() && contains(matrix.modules, 'yarn') }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: yarn-app-log-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test/data/"
@@ -634,7 +634,7 @@ jobs:
           | tar --null -czf compile-artifact.tar.gz -T -
         ls -lh compile-artifact.tar.gz
     - name: Upload compile artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
         path: compile-artifact.tar.gz
@@ -767,7 +767,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -819,7 +819,7 @@ jobs:
     - name: Upload test results to report
       env: ${{ fromJSON(inputs.envs) }}
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: |
@@ -835,7 +835,7 @@ jobs:
     - name: Upload unit tests log files
       env: ${{ fromJSON(inputs.envs) }}
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: "**/target/unit-tests.log"
@@ -904,7 +904,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -928,7 +928,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1393,7 +1393,7 @@ jobs:
       run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
       if: github.repository != 'apache/spark'
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: site
         path: site.tar.bz2
@@ -1491,7 +1491,7 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1506,7 +1506,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -1585,7 +1585,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1600,7 +1600,7 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
@@ -1701,7 +1701,7 @@ jobs:
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"
