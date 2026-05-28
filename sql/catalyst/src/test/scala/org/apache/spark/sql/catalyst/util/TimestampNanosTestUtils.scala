@@ -78,10 +78,15 @@ object TimestampNanosTestUtils {
   }
 
   /**
-   * Builds a [[TimestampNanosVal]] from raw components. Delegates to
-   * [[TimestampNanosVal.fromParts]] which enforces `nanosWithinMicro in [0, 999]`.
+   * Builds a [[TimestampNanosVal]] from raw components. Range-checks the `Int` argument before
+   * narrowing to `Short` so out-of-range callers see their actual input value in the error
+   * message (rather than the silently-wrapped narrowed result).
    */
   def nanosVal(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal = {
+    require(
+      nanosWithinMicro >= 0 && nanosWithinMicro <= TimestampNanosVal.MAX_NANOS_WITHIN_MICRO,
+      s"nanosWithinMicro must be in [0, ${TimestampNanosVal.MAX_NANOS_WITHIN_MICRO}], " +
+        s"got: $nanosWithinMicro")
     TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
   }
 
@@ -144,18 +149,18 @@ object TimestampNanosTestUtils {
     "9999-12-31 23:59:59.999999001",
     "9999-12-31 23:59:59.999999999")
 
-  /** Parses an entry from [[specialNanosTs]] into a [[LocalDateTime]] (NTZ external rep). */
-  def parseSpecialNanosNTZ(s: String): LocalDateTime = LocalDateTime.parse(s.replace(' ', 'T'))
-
   /**
-   * Parses an entry from [[specialNanosTs]] into an [[Instant]] (LTZ external rep).
-   *
-   * Defaults to [[ZoneId.systemDefault]] (not UTC) to mirror the LTZ special-value corpus in
-   * [[org.apache.spark.sql.RandomDataGenerator]]'s `TimestampType` case.
+   * Parses an entry from [[specialNanosTs]] into an [[Instant]] (LTZ external rep). The zone
+   * is required; callers should pass [[ZoneId.systemDefault]] when mirroring the LTZ
+   * special-value corpus in [[org.apache.spark.sql.RandomDataGenerator]]'s `TimestampType`
+   * case.
    */
-  def parseSpecialNanosLTZ(s: String, zoneId: ZoneId = ZoneId.systemDefault()): Instant = {
+  def parseSpecialNanosLTZ(s: String, zoneId: ZoneId): Instant = {
     parseSpecialNanosNTZ(s).atZone(zoneId).toInstant
   }
+
+  /** Parses an entry from [[specialNanosTs]] into a [[LocalDateTime]] (NTZ external rep). */
+  def parseSpecialNanosNTZ(s: String): LocalDateTime = LocalDateTime.parse(s.replace(' ', 'T'))
 
   /**
    * Runs `body` once for each valid nanosecond timestamp precision (currently 7, 8, 9).
@@ -165,5 +170,24 @@ object TimestampNanosTestUtils {
    */
   def foreachNanosPrecision(body: Int => Unit): Unit = {
     TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION foreach body
+  }
+
+  /**
+   * Returns a function that truncates a nano-of-second value (`0..999_999_999`, as produced by
+   * [[LocalDateTime.getNano]] / [[Instant.getNano]]) to the given fractional-second precision.
+   *
+   * For `precision = 9` the result is the identity. Each precision below the max zeroes one
+   * more low-order decimal digit so the surviving value has exactly `precision` significant
+   * fractional digits and is valid for `TIMESTAMP(precision)`:
+   *   - `precision = 8` zeroes the last digit (e.g. `123_456_789` -> `123_456_780`).
+   *   - `precision = 7` zeroes the last two digits (e.g. `123_456_789` -> `123_456_700`).
+   */
+  def nanoOfSecTruncator(precision: Int): Int => Int = {
+    val excessDigits = TimestampNTZNanosType.NANOS_PRECISION - precision
+    if (excessDigits <= 0) identity
+    else {
+      val factor = math.pow(10.0, excessDigits.toDouble).toInt
+      n => (n / factor) * factor
+    }
   }
 }
