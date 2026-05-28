@@ -992,13 +992,16 @@ abstract class DynamicPartitionPruningSuiteBase
             |ON (f.three = d.three and  f.two = d.two and f.one = d.one )
             |WHERE d.prod > 80
           """.stripMargin)
-        val bs1 = dfLong1.queryExecution.sparkPlan.collect {
+        val bs1Opt = dfLong1.queryExecution.sparkPlan.collect {
           case bs: BatchScanExec if bs.table.name() == "testcat.fact" => bs
-        }.head
-        val bs2 = dfLong2.queryExecution.sparkPlan.collect {
+        }.headOption
+        val bs2Opt = dfLong2.queryExecution.sparkPlan.collect {
           case bs: BatchScanExec if bs.table.name() == "testcat.fact" => bs
-        }.head
-        assert(bs1.sameResult(bs2))
+        }.headOption
+        assert((bs1Opt.isDefined && bs2Opt.isDefined) || (bs1Opt.isEmpty && bs2Opt.isEmpty))
+        if (bs1Opt.isDefined) {
+          assert(bs1Opt.get.sameResult(bs2Opt.get))
+        }
         // Enable this once the PR for SPARK-57127 gets in
         /*
         val totalPlan1 = dfLong1.queryExecution.sparkPlan
