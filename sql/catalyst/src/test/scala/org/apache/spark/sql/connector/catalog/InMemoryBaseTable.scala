@@ -557,14 +557,11 @@ abstract class InMemoryBaseTable(
     }
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColNames = new mutable.ArrayBuffer[String]()
-      val nonMetadataFields = readSchema.filter {
-        case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name; false
-        case _ => true
+      readSchema.foreach {
+        case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name
+        case _ =>
       }
-      new InMemoryMicroBatchReaderFactory(
-        nonMetadataFields.map(f => tableSchema.fieldIndex(f.name)).toArray,
-        tableSchema.fields,
-        metadataColNames.toArray)
+      new InMemoryMicroBatchReaderFactory(metadataColNames.toArray)
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
@@ -958,8 +955,6 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
 }
 
 private class InMemoryMicroBatchReaderFactory(
-    fieldIndices: Array[Int],
-    tableFields: Array[StructField],
     metaNames: Array[String]) extends PartitionReaderFactory with Serializable {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
@@ -968,16 +963,14 @@ private class InMemoryMicroBatchReaderFactory(
       override def next(): Boolean = { idx += 1; idx < rows.size }
       override def get(): InternalRow = {
         val rawRow = rows(idx)
-        val dataRow = new GenericInternalRow(
-          fieldIndices.map(i => rawRow.get(i, tableFields(i).dataType)))
-        if (metaNames.isEmpty) dataRow
+        if (metaNames.isEmpty) rawRow
         else {
           val metaRow = new GenericInternalRow(metaNames.map {
             case "index" => idx.asInstanceOf[Any]
             case "_partition" => UTF8String.fromString("").asInstanceOf[Any]
             case _ => null
           })
-          new JoinedRow(dataRow, metaRow)
+          new JoinedRow(rawRow, metaRow)
         }
       }
       override def close(): Unit = {}
