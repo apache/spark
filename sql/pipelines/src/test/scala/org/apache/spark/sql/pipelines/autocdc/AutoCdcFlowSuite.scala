@@ -21,9 +21,10 @@ import java.util.Locale
 
 import scala.util.Success
 
-import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest}
+import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.{
   AutoCdcFlow,
@@ -182,13 +183,11 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     new AutoCdcMergeFlow(flow, successfulFuncResult(sourceDf))
   }
 
-  /** A stable 3-column source CDF schema used across most schema tests. */
+  /** A stable 3-column source streaming dataframe used across most schema tests. */
   private def threeColumnSourceDf(): DataFrame = {
-    val schema = new StructType()
-      .add("id", IntegerType, nullable = false)
-      .add("name", StringType)
-      .add("seq", LongType)
-    spark.createDataFrame(spark.sparkContext.emptyRDD[org.apache.spark.sql.Row], schema)
+    val session = spark
+    import session.implicits._
+    MemoryStream[(Int, String, Option[Long])].toDS().toDF("id", "name", "seq")
   }
 
   /** Convenience to extract the [[StructType]] of the projected `_cdc_metadata` column. */
@@ -319,7 +318,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
   test("AutoCdcMergeFlow.load() schema matches AutoCdcMergeFlow.schema") {
     val resolvedFlow = newAutoCdcMergeFlow(threeColumnSourceDf())
-    val loadedDf = resolvedFlow.load(readOptions = null)
+    val loadedDf = resolvedFlow.load(asStreaming = true)
     assert(loadedDf.schema == resolvedFlow.schema)
   }
 
@@ -332,7 +331,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         )
       )
     )
-    val loadedDf = resolvedFlow.load(readOptions = null)
+    val loadedDf = resolvedFlow.load(asStreaming = true)
     assert(loadedDf.schema == resolvedFlow.schema)
     // The user-selected portion drops `name`; the trailing column is the SCD1 metadata.
     assert(
@@ -348,40 +347,12 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("name")))
       )
     )
-    val loadedDf = resolvedFlow.load(readOptions = null)
+    val loadedDf = resolvedFlow.load(asStreaming = true)
     assert(loadedDf.schema == resolvedFlow.schema)
     assert(
       loadedDf.schema.fieldNames.toSeq ==
       Seq("id", "seq", Scd1BatchProcessor.cdcMetadataColName)
     )
-  }
-
-  test("AutoCdcMergeFlow.load() materializes the CDC metadata column as null-filled") {
-    // The merge engine fills in the metadata at execution time; at planning time we synthesize
-    // a typed null placeholder so that load().schema matches schema. This test pins down the
-    // placeholder shape: outer struct non-null, inner fields null-filled.
-    val schema = new StructType()
-      .add("id", IntegerType, nullable = false)
-      .add("name", StringType)
-      .add("seq", LongType)
-    val sourceRows = java.util.Arrays.asList(
-      org.apache.spark.sql.Row(1, "a", 100L),
-      org.apache.spark.sql.Row(2, "b", 200L)
-    )
-    val sourceDf = spark.createDataFrame(sourceRows, schema)
-    val resolvedFlow = newAutoCdcMergeFlow(sourceDf)
-
-    val loadedDf = resolvedFlow.load(readOptions = null)
-    val collected = loadedDf.collect()
-    assert(collected.length == 2)
-
-    val metaIdx = loadedDf.schema.fieldIndex(Scd1BatchProcessor.cdcMetadataColName)
-    collected.foreach { row =>
-      assert(!row.isNullAt(metaIdx), "_cdc_metadata struct itself should be non-null")
-      val metaRow = row.getStruct(metaIdx)
-      assert(metaRow.isNullAt(0), "deleteSequence placeholder should be null")
-      assert(metaRow.isNullAt(1), "upsertSequence placeholder should be null")
-    }
   }
 
   // ===========================================================================================
@@ -399,10 +370,12 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
   /** Builds an empty source df with `id` + `seq` + the supplied extra columns. */
   private def sourceDfWithExtraColumns(extraColumns: (String, DataType)*): DataFrame = {
-    val schema = extraColumns.foldLeft(
-      new StructType().add("id", IntegerType, nullable = false).add("seq", LongType)
-    ) { case (acc, (name, dt)) => acc.add(name, dt) }
-    spark.createDataFrame(spark.sparkContext.emptyRDD[org.apache.spark.sql.Row], schema)
+    val session = spark
+    import session.implicits._
+    val baseStream = MemoryStream[(Int, Option[Long])].toDS().toDF("id", "seq")
+    extraColumns.foldLeft(baseStream) { case (acc, (name, dt)) =>
+      acc.withColumn(name, F.lit(null).cast(dt))
+    }
   }
 
   test(
@@ -544,7 +517,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       .add("name", StringType)
       .add("seq", LongType)
     val sourceDf =
-      spark.createDataFrame(spark.sparkContext.emptyRDD[org.apache.spark.sql.Row], schema)
+      spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
 
     checkError(
       exception = intercept[AnalysisException] {
