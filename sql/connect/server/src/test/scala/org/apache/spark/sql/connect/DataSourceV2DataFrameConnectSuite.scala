@@ -30,9 +30,8 @@ import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMe
  * Runs DSv2 temp view tests ([[DSv2TempViewWithStoredPlanTests]]), repeated table access tests
  * ([[DSv2RepeatedTableAccessTests]]), incrementally constructed query tests
  * ([[DSv2IncrementallyConstructedQueryTests]]), and CACHE TABLE read tests
- * ([[DSv2CacheTableReadTests]]) under Spark Connect. All test logic lives in the shared
- * traits; this class only provides the
- * Connect-specific session, catalog access, and result comparison.
+ * ([[DSv2CacheTableReadTests]]) under Spark Connect. All test logic lives in the shared traits;
+ * this class only provides the Connect-specific session, catalog access, and result comparison.
  */
 class DataSourceV2DataFrameConnectSuite
     extends SparkConnectServerTest
@@ -46,10 +45,10 @@ class DataSourceV2DataFrameConnectSuite
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.cachingcat", classOf[CachingInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.cachingcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.nullidcat",
-      classOf[NullTableIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullidcat", classOf[NullTableIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.nullbothidscat",
+    .set(
+      "spark.sql.catalog.nullbothidscat",
       classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
 
