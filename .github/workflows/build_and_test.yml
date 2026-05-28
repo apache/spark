@@ -1050,6 +1050,8 @@ jobs:
         key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docs-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
@@ -1249,6 +1251,8 @@ jobs:
         key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docs-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
@@ -1444,6 +1448,8 @@ jobs:
         key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           tpcds-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1562,6 +1568,8 @@ jobs:
         key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docker-integration-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1648,6 +1656,8 @@ jobs:
           key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
             k8s-integration-coursier-
+            precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+            precompile-coursier-
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then
