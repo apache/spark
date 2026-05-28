@@ -66,7 +66,7 @@ from pyspark.sql.connect.profiler import ProfilerCollector
 from pyspark.sql.connect.readwriter import DataFrameReader
 from pyspark.sql.connect.streaming.readwriter import DataStreamReader
 from pyspark.sql.connect.streaming.query import StreamingQueryManager
-from pyspark.sql.pandas.conversion import create_arrow_batch_from_pandas
+from pyspark.sql.pandas.conversion import create_arrow_table_from_pandas
 from pyspark.sql.pandas.types import (
     to_arrow_schema,
     _deduplicate_field_names,
@@ -628,15 +628,11 @@ class SparkSession:
             if len(data.columns) == 0:
                 _table = pa.Table.from_batches([pa.RecordBatch.from_pandas(data)])
             else:
-                _table = pa.Table.from_batches(
-                    [
-                        create_arrow_batch_from_pandas(
-                            [(c, st) for (_, c), st in zip(data.items(), spark_types)],
-                            timezone=cast(str, timezone),
-                            safecheck=safecheck == "true",
-                            prefers_large_types=prefers_large_types,
-                        )
-                    ]
+                _table = create_arrow_table_from_pandas(
+                    [(c, st) for (_, c), st in zip(data.items(), spark_types)],
+                    timezone=cast(str, timezone),
+                    safecheck=safecheck == "true",
+                    prefers_large_types=prefers_large_types,
                 )
 
             if isinstance(schema, StructType):
