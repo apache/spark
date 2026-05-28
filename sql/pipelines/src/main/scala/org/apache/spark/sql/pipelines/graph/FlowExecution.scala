@@ -371,7 +371,7 @@ object AutoCdcAuxiliaryTable {
 
 /**
  * Base trait for AutoCDC merge-based write flows.
- * 
+ *
  * Today, this trait and its children manage auxiliary table creation and validation across
  * pipeline executions. Eventually we should evolve DatasetManager to be aware of the concept of
  * auxiliary tables, and streamline creation/validation there.
