@@ -300,7 +300,7 @@ object CatalystTypeConverters {
         }
         new GenericInternalRow(ar)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -359,7 +359,7 @@ object CatalystTypeConverters {
       case chr: Char => UTF8String.fromString(chr.toString)
       case ac: Array[Char] => UTF8String.fromString(String.valueOf(ac))
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -385,7 +385,7 @@ object CatalystTypeConverters {
       case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeomFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -410,7 +410,7 @@ object CatalystTypeConverters {
       case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeogFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -434,7 +434,7 @@ object CatalystTypeConverters {
       case d: Date => DateTimeUtils.fromJavaDate(d)
       case l: LocalDate => DateTimeUtils.localDateToDays(l)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -474,7 +474,7 @@ object CatalystTypeConverters {
       case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
       case i: Instant => DateTimeUtils.instantToMicros(i)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -502,7 +502,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -522,7 +522,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -546,7 +546,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
       case i: Instant => DateTimeUtils.instantToTimestampNanos(i)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -573,7 +573,7 @@ object CatalystTypeConverters {
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
         case other => throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          errorClass = "INVALID_EXTERNAL_VALUE",
           messageParameters = scala.collection.immutable.Map(
             "other" -> other.toString,
             "otherClass" -> other.getClass.getCanonicalName,

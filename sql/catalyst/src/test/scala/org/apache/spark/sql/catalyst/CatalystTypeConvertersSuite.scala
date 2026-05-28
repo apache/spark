@@ -109,7 +109,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(structType)("test")
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -149,7 +149,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(decimalType)("test")
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -169,7 +169,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(StringType)(0.1)
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "0.1",
         "otherClass" -> "java.lang.Double",
@@ -684,7 +684,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(gt)("test")
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -697,7 +697,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(gt)("test")
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
