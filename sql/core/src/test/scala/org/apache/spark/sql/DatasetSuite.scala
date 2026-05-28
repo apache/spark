@@ -2649,6 +2649,32 @@ class DatasetSuite extends SharedSparkSession
     checkAnswer(df, rows)
   }
 
+  test("SPARK-57033: Dataset[Row] roundtrip truncates sub-micro to declared precision") {
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val negativeEpochLdt = LocalDateTime.parse("1969-12-31T23:59:59.123456789")
+    val negativeEpochInstant = Instant.parse("1969-12-31T23:59:59.123456789Z")
+    // At p=7 the last two sub-micro digits are dropped (789 -> 700);
+    // at p=8 only the last one is dropped (789 -> 780).
+    val expectedSubMicro = Map(7 -> 700, 8 -> 780)
+
+    for (p <- 7 to 8) {
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p), nullable = true)
+        .add("ltz", TimestampLTZNanosType(p), nullable = true)
+      val rows = Seq(
+        Row(ldt, instant),
+        Row(negativeEpochLdt, negativeEpochInstant))
+      val df = spark.createDataFrame(rows.asJava, schema)
+      assert(df.schema === schema)
+      val drop = 789 - expectedSubMicro(p)
+      val expected = Seq(
+        Row(ldt.minusNanos(drop), instant.minusNanos(drop)),
+        Row(negativeEpochLdt.minusNanos(drop), negativeEpochInstant.minusNanos(drop)))
+      checkAnswer(df, expected)
+    }
+  }
+
   test("SPARK-34605: implicit encoder for java.time.Duration") {
     val duration = java.time.Duration.ofMinutes(10)
     assert(spark.range(1).map { _ => duration }.head() === duration)
