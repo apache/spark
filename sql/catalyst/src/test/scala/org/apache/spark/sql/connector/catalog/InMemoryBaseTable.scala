@@ -103,8 +103,9 @@ abstract class InMemoryBaseTable(
    * Decorating catalogs (e.g. [[NullColumnIdInMemoryTableCatalog]],
    * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create new table objects whose
    * version counter starts at 0. Without this call the monotonic-version assumption
-   * that downstream consumers rely on (e.g. validated-version propagation, join-refresh
-   * tests in [[DSv2IncrementallyConstructedQueryTests]]) is broken because the counter
+   * that downstream consumers rely on (e.g. [[InMemoryTable]].copy,
+   * validated-version propagation, and the join-refresh tests in
+   * [[DSv2IncrementallyConstructedQueryTests]]) is broken because the counter
    * resets on every wrap.
    */
   def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
