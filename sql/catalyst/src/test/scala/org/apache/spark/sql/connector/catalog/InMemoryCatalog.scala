@@ -27,6 +27,14 @@ import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure
 
 class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog with ProcedureCatalog {
+  override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
+    if (cascade) {
+      // SPARK-55982: Remove functions in this namespace before dropping
+      listFunctions(namespace).foreach(ident => functions.remove(ident))
+    }
+    super.dropNamespace(namespace, cascade)
+  }
+
   protected val functions: util.Map[Identifier, UnboundFunction] =
     new ConcurrentHashMap[Identifier, UnboundFunction]()
 
