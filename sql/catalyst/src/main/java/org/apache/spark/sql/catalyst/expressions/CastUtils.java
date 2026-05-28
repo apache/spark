@@ -18,12 +18,10 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.QueryContext;
-import org.apache.spark.sql.catalyst.util.StringUtils;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Decimal;
-import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Static helpers used by {@code Cast.doGenCode} (and corresponding eval paths)
@@ -113,13 +111,5 @@ public final class CastUtils {
 
   public static Decimal changePrecisionOrNull(Decimal d, int precision, int scale) {
     return d.changePrecision(precision, scale) ? d : null;
-  }
-
-  // ----- string -> boolean (ANSI: throw on invalid syntax) -----
-
-  public static boolean stringToBooleanExact(UTF8String s, QueryContext context) {
-    if (StringUtils.isTrueString(s)) return true;
-    if (StringUtils.isFalseString(s)) return false;
-    throw QueryExecutionErrors.invalidInputSyntaxForBooleanError(s, context);
   }
 }

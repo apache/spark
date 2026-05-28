@@ -696,7 +696,7 @@ case class Cast(
   // UDFToBoolean
   private[this] def castToBoolean(from: DataType): Any => Any = from match {
     case _: StringType if ansiEnabled =>
-      buildCast[UTF8String](_, s => CastUtils.stringToBooleanExact(s, getContextOrNull()))
+      buildCast[UTF8String](_, s => UTF8StringUtils.toBooleanExact(s, getContextOrNull()))
     case _: StringType =>
       buildCast[UTF8String](_, s => {
         if (StringUtils.isTrueString(s)) {
@@ -1880,9 +1880,9 @@ case class Cast(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case _: StringType if ansiEnabled =>
-      val castUtils = classOf[CastUtils].getName
+      val stringUtils = UTF8StringUtils.getClass.getCanonicalName.stripSuffix("$")
       val errorContext = getContextOrNullCode(ctx)
-      (c, evPrim, _) => code"$evPrim = $castUtils.stringToBooleanExact($c, $errorContext);"
+      (c, evPrim, _) => code"$evPrim = $stringUtils.toBooleanExact($c, $errorContext);"
     case _: StringType =>
       val stringUtils = inline"${StringUtils.getClass.getName.stripSuffix("$")}"
       (c, evPrim, evNull) =>
