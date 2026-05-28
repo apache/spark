@@ -15542,7 +15542,7 @@ def levenshtein(
         if set when the levenshtein distance of the two given strings
         less than or equal to a given threshold then return result distance, or -1
 
-        .. versionadded: 3.5.0
+        .. versionadded:: 3.5.0
 
     Returns
     -------

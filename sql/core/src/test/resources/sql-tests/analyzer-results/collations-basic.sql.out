@@ -1185,3 +1185,1148 @@ drop table t4
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t4
+
+
+-- !query
+select 'aaa' collate utf8_binary
+-- !query analysis
+Project [collate(aaa, utf8_binary) AS collate(aaa, utf8_binary)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_lcase
+-- !query analysis
+Project [collate(aaa, utf8_lcase) AS collate(aaa, utf8_lcase)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode
+-- !query analysis
+Project [collate(aaa, unicode) AS collate(aaa, unicode)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_ci
+-- !query analysis
+Project [collate(aaa, unicode_ci) AS collate(aaa, unicode_ci)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate uTf8_BiNaRy
+-- !query analysis
+Project [collate(aaa, uTf8_BiNaRy) AS collate(aaa, uTf8_BiNaRy)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate uNicOde
+-- !query analysis
+Project [collate(aaa, uNicOde) AS collate(aaa, uNicOde)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate UNICODE_ci
+-- !query analysis
+Project [collate(aaa, UNICODE_ci) AS collate(aaa, UNICODE_ci)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate UtF8_lCaSE_rtRIM
+-- !query analysis
+Project [collate(aaa, UtF8_lCaSE_rtRIM) AS collate(aaa, UtF8_lCaSE_rtRIM)#x]
++- OneRowRelation
+
+
+-- !query
+select collation('aaa' collate utf8_binary)
+-- !query analysis
+Project [collation(collate(aaa, utf8_binary)) AS collation(collate(aaa, utf8_binary))#x]
++- OneRowRelation
+
+
+-- !query
+select collation('aaa' collate utf8_lcase)
+-- !query analysis
+Project [collation(collate(aaa, utf8_lcase)) AS collation(collate(aaa, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select collation('aaa' collate unicode)
+-- !query analysis
+Project [collation(collate(aaa, unicode)) AS collation(collate(aaa, unicode))#x]
++- OneRowRelation
+
+
+-- !query
+select collation('aaa' collate unicode_ci)
+-- !query analysis
+Project [collation(collate(aaa, unicode_ci)) AS collation(collate(aaa, unicode_ci))#x]
++- OneRowRelation
+
+
+-- !query
+select collation('aaa' collate unicode_ci_rtrim)
+-- !query analysis
+Project [collation(collate(aaa, unicode_ci_rtrim)) AS collation(collate(aaa, unicode_ci_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select collation('aaa' collate utf8_lcase_rtrim)
+-- !query analysis
+Project [collation(collate(aaa, utf8_lcase_rtrim)) AS collation(collate(aaa, utf8_lcase_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select collation('aaa' collate utf8_binary_rtrim)
+-- !query analysis
+Project [collation(collate(aaa, utf8_binary_rtrim)) AS collation(collate(aaa, utf8_binary_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select collation('aaa')
+-- !query analysis
+Project [collation(aaa) AS collation(aaa)#x]
++- OneRowRelation
+
+
+-- !query
+select collate('aaa', 'utf8_binary')
+-- !query analysis
+Project [collate(aaa, utf8_binary) AS collate(aaa, utf8_binary)#x]
++- OneRowRelation
+
+
+-- !query
+select collate('aaa', 'utf8_lcase')
+-- !query analysis
+Project [collate(aaa, utf8_lcase) AS collate(aaa, utf8_lcase)#x]
++- OneRowRelation
+
+
+-- !query
+select collate('aaa', 'utf8_binary_rtrim')
+-- !query analysis
+Project [collate(aaa, utf8_binary_rtrim) AS collate(aaa, utf8_binary_rtrim)#x]
++- OneRowRelation
+
+
+-- !query
+select collate('aaa', 'utf8_lcase_rtrim')
+-- !query analysis
+Project [collate(aaa, utf8_lcase_rtrim) AS collate(aaa, utf8_lcase_rtrim)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_binary = 'AAA' collate utf8_binary
+-- !query analysis
+Project [(collate(aaa, utf8_binary) = collate(AAA, utf8_binary)) AS (collate(aaa, utf8_binary) = collate(AAA, utf8_binary))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_binary = 'aaa' collate utf8_binary
+-- !query analysis
+Project [(collate(aaa, utf8_binary) = collate(aaa, utf8_binary)) AS (collate(aaa, utf8_binary) = collate(aaa, utf8_binary))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_binary_rtrim = 'AAA' collate utf8_binary_rtrim
+-- !query analysis
+Project [(collate(aaa, utf8_binary_rtrim) = collate(AAA, utf8_binary_rtrim)) AS (collate(aaa, utf8_binary_rtrim) = collate(AAA, utf8_binary_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_binary_rtrim = 'aaa  ' collate utf8_binary_rtrim
+-- !query analysis
+Project [(collate(aaa, utf8_binary_rtrim) = collate(aaa  , utf8_binary_rtrim)) AS (collate(aaa, utf8_binary_rtrim) = collate(aaa  , utf8_binary_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_lcase = 'aaa' collate utf8_lcase
+-- !query analysis
+Project [(collate(aaa, utf8_lcase) = collate(aaa, utf8_lcase)) AS (collate(aaa, utf8_lcase) = collate(aaa, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_lcase = 'AAA' collate utf8_lcase
+-- !query analysis
+Project [(collate(aaa, utf8_lcase) = collate(AAA, utf8_lcase)) AS (collate(aaa, utf8_lcase) = collate(AAA, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_lcase = 'bbb' collate utf8_lcase
+-- !query analysis
+Project [(collate(aaa, utf8_lcase) = collate(bbb, utf8_lcase)) AS (collate(aaa, utf8_lcase) = collate(bbb, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_lcase_rtrim = 'AAA  ' collate utf8_lcase_rtrim
+-- !query analysis
+Project [(collate(aaa, utf8_lcase_rtrim) = collate(AAA  , utf8_lcase_rtrim)) AS (collate(aaa, utf8_lcase_rtrim) = collate(AAA  , utf8_lcase_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_lcase_rtrim = 'bbb' collate utf8_lcase_rtrim
+-- !query analysis
+Project [(collate(aaa, utf8_lcase_rtrim) = collate(bbb, utf8_lcase_rtrim)) AS (collate(aaa, utf8_lcase_rtrim) = collate(bbb, utf8_lcase_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode = 'aaa' collate unicode
+-- !query analysis
+Project [(collate(aaa, unicode) = collate(aaa, unicode)) AS (collate(aaa, unicode) = collate(aaa, unicode))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode = 'AAA' collate unicode
+-- !query analysis
+Project [(collate(aaa, unicode) = collate(AAA, unicode)) AS (collate(aaa, unicode) = collate(AAA, unicode))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa  ' collate unicode_rtrim = 'aaa ' collate unicode_rtrim
+-- !query analysis
+Project [(collate(aaa  , unicode_rtrim) = collate(aaa , unicode_rtrim)) AS (collate(aaa  , unicode_rtrim) = collate(aaa , unicode_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_rtrim = 'AAA' collate unicode_rtrim
+-- !query analysis
+Project [(collate(aaa, unicode_rtrim) = collate(AAA, unicode_rtrim)) AS (collate(aaa, unicode_rtrim) = collate(AAA, unicode_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_CI = 'aaa' collate unicode_CI
+-- !query analysis
+Project [(collate(aaa, unicode_CI) = collate(aaa, unicode_CI)) AS (collate(aaa, unicode_CI) = collate(aaa, unicode_CI))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_CI = 'AAA' collate unicode_CI
+-- !query analysis
+Project [(collate(aaa, unicode_CI) = collate(AAA, unicode_CI)) AS (collate(aaa, unicode_CI) = collate(AAA, unicode_CI))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_CI = 'bbb' collate unicode_CI
+-- !query analysis
+Project [(collate(aaa, unicode_CI) = collate(bbb, unicode_CI)) AS (collate(aaa, unicode_CI) = collate(bbb, unicode_CI))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_CI_rtrim = 'aaa' collate unicode_CI_rtrim
+-- !query analysis
+Project [(collate(aaa, unicode_CI_rtrim) = collate(aaa, unicode_CI_rtrim)) AS (collate(aaa, unicode_CI_rtrim) = collate(aaa, unicode_CI_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa ' collate unicode_CI_rtrim = 'AAA  ' collate unicode_CI_rtrim
+-- !query analysis
+Project [(collate(aaa , unicode_CI_rtrim) = collate(AAA  , unicode_CI_rtrim)) AS (collate(aaa , unicode_CI_rtrim) = collate(AAA  , unicode_CI_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_CI_rtrim = 'bbb' collate unicode_CI_rtrim
+-- !query analysis
+Project [(collate(aaa, unicode_CI_rtrim) = collate(bbb, unicode_CI_rtrim)) AS (collate(aaa, unicode_CI_rtrim) = collate(bbb, unicode_CI_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select collate('aaa', 'utf8_binary') = collate('AAA', 'utf8_binary')
+-- !query analysis
+Project [(collate(aaa, utf8_binary) = collate(AAA, utf8_binary)) AS (collate(aaa, utf8_binary) = collate(AAA, utf8_binary))#x]
++- OneRowRelation
+
+
+-- !query
+select collate('aaa', 'utf8_lcase') = collate('AAA', 'utf8_lcase')
+-- !query analysis
+Project [(collate(aaa, utf8_lcase) = collate(AAA, utf8_lcase)) AS (collate(aaa, utf8_lcase) = collate(AAA, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select collate('aaa', 'unicode_CI') = collate('bbb', 'unicode_CI')
+-- !query analysis
+Project [(collate(aaa, unicode_CI) = collate(bbb, unicode_CI)) AS (collate(aaa, unicode_CI) = collate(bbb, unicode_CI))#x]
++- OneRowRelation
+
+
+-- !query
+select 'AAA' collate utf8_binary < 'aaa' collate utf8_binary
+-- !query analysis
+Project [(collate(AAA, utf8_binary) < collate(aaa, utf8_binary)) AS (collate(AAA, utf8_binary) < collate(aaa, utf8_binary))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_binary < 'aaa' collate utf8_binary
+-- !query analysis
+Project [(collate(aaa, utf8_binary) < collate(aaa, utf8_binary)) AS (collate(aaa, utf8_binary) < collate(aaa, utf8_binary))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_binary < 'BBB' collate utf8_binary
+-- !query analysis
+Project [(collate(aaa, utf8_binary) < collate(BBB, utf8_binary)) AS (collate(aaa, utf8_binary) < collate(BBB, utf8_binary))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa ' collate utf8_binary_rtrim < 'aaa  ' collate utf8_binary_rtrim
+-- !query analysis
+Project [(collate(aaa , utf8_binary_rtrim) < collate(aaa  , utf8_binary_rtrim)) AS (collate(aaa , utf8_binary_rtrim) < collate(aaa  , utf8_binary_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_lcase < 'aaa' collate utf8_lcase
+-- !query analysis
+Project [(collate(aaa, utf8_lcase) < collate(aaa, utf8_lcase)) AS (collate(aaa, utf8_lcase) < collate(aaa, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select 'AAA' collate utf8_lcase < 'aaa' collate utf8_lcase
+-- !query analysis
+Project [(collate(AAA, utf8_lcase) < collate(aaa, utf8_lcase)) AS (collate(AAA, utf8_lcase) < collate(aaa, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate utf8_lcase < 'bbb' collate utf8_lcase
+-- !query analysis
+Project [(collate(aaa, utf8_lcase) < collate(bbb, utf8_lcase)) AS (collate(aaa, utf8_lcase) < collate(bbb, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select 'AAA  ' collate utf8_lcase_rtrim < 'aaa' collate utf8_lcase_rtrim
+-- !query analysis
+Project [(collate(AAA  , utf8_lcase_rtrim) < collate(aaa, utf8_lcase_rtrim)) AS (collate(AAA  , utf8_lcase_rtrim) < collate(aaa, utf8_lcase_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode < 'aaa' collate unicode
+-- !query analysis
+Project [(collate(aaa, unicode) < collate(aaa, unicode)) AS (collate(aaa, unicode) < collate(aaa, unicode))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode < 'AAA' collate unicode
+-- !query analysis
+Project [(collate(aaa, unicode) < collate(AAA, unicode)) AS (collate(aaa, unicode) < collate(AAA, unicode))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode < 'BBB' collate unicode
+-- !query analysis
+Project [(collate(aaa, unicode) < collate(BBB, unicode)) AS (collate(aaa, unicode) < collate(BBB, unicode))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa ' collate unicode_rtrim < 'aaa' collate unicode_rtrim
+-- !query analysis
+Project [(collate(aaa , unicode_rtrim) < collate(aaa, unicode_rtrim)) AS (collate(aaa , unicode_rtrim) < collate(aaa, unicode_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_CI < 'aaa' collate unicode_CI
+-- !query analysis
+Project [(collate(aaa, unicode_CI) < collate(aaa, unicode_CI)) AS (collate(aaa, unicode_CI) < collate(aaa, unicode_CI))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_CI < 'AAA' collate unicode_CI
+-- !query analysis
+Project [(collate(aaa, unicode_CI) < collate(AAA, unicode_CI)) AS (collate(aaa, unicode_CI) < collate(AAA, unicode_CI))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate unicode_CI < 'bbb' collate unicode_CI
+-- !query analysis
+Project [(collate(aaa, unicode_CI) < collate(bbb, unicode_CI)) AS (collate(aaa, unicode_CI) < collate(bbb, unicode_CI))#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa ' collate unicode_CI_rtrim < 'aaa' collate unicode_CI_rtrim
+-- !query analysis
+Project [(collate(aaa , unicode_CI_rtrim) < collate(aaa, unicode_CI_rtrim)) AS (collate(aaa , unicode_CI_rtrim) < collate(aaa, unicode_CI_rtrim))#x]
++- OneRowRelation
+
+
+-- !query
+select collate('AAA', 'utf8_binary') < collate('aaa', 'utf8_binary')
+-- !query analysis
+Project [(collate(AAA, utf8_binary) < collate(aaa, utf8_binary)) AS (collate(AAA, utf8_binary) < collate(aaa, utf8_binary))#x]
++- OneRowRelation
+
+
+-- !query
+select collate('aaa', 'utf8_lcase') < collate('bbb', 'utf8_lcase')
+-- !query analysis
+Project [(collate(aaa, utf8_lcase) < collate(bbb, utf8_lcase)) AS (collate(aaa, utf8_lcase) < collate(bbb, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('AAA'), ('aaa')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, utf8_binary) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('aaa'), ('aaa')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, utf8_binary) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('aaa'), ('bbb')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, utf8_binary) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_binary_rtrim') as c from values ('aaa'), ('aaa ')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, utf8_binary_rtrim) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('aaa'), ('aaa')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, utf8_lcase) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('AAA'), ('aaa')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, utf8_lcase) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('aaa'), ('bbb')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, utf8_lcase) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_lcase_rtrim') as c from values ('aaa'), ('AAA  ')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, utf8_lcase_rtrim) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode') as c from values ('AAA'), ('aaa')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, unicode) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode') as c from values ('aaa'), ('aaa')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, unicode) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode') as c from values ('aaa'), ('bbb')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, unicode) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_rtrim') as c from values ('aaa'), ('aaa ')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, unicode_rtrim) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('aaa'), ('aaa')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, unicode_CI) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('AAA'), ('aaa')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, unicode_CI) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('aaa'), ('bbb')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, unicode_CI) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_CI_rtrim') as c from values ('aaa'), ('AAA ')) t group by c order by c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [count(1) AS count(1)#xL, c#x]
+   +- SubqueryAlias t
+      +- Project [collate(col1#x, unicode_CI_rtrim) AS c#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT collation(cast('a' as string collate utf8_lcase))
+-- !query analysis
+Project [collation(cast(a as string collate UTF8_LCASE)) AS collation(CAST(a AS STRING COLLATE UTF8_LCASE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT collation('a' :: string collate utf8_lcase)
+-- !query analysis
+Project [collation(cast(a as string collate UTF8_LCASE)) AS collation(CAST(a AS STRING COLLATE UTF8_LCASE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT cast(1 as string)
+-- !query analysis
+Project [cast(1 as string) AS CAST(1 AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT cast('A' as string)
+-- !query analysis
+Project [cast(A as string) AS CAST(A AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select reverse('abc' collate utf8_lcase)
+-- !query analysis
+Project [reverse(collate(abc, utf8_lcase)) AS reverse(collate(abc, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select reverse(array('a' collate utf8_lcase, 'b' collate utf8_lcase))
+-- !query analysis
+Project [reverse(array(collate(a, utf8_lcase), collate(b, utf8_lcase))) AS reverse(array(collate(a, utf8_lcase), collate(b, utf8_lcase)))#x]
++- OneRowRelation
+
+
+-- !query
+select array_join(array('a' collate utf8_lcase, 'b' collate utf8_lcase), ', ' collate utf8_lcase)
+-- !query analysis
+Project [array_join(array(collate(a, utf8_lcase), collate(b, utf8_lcase)), collate(, , utf8_lcase), None) AS array_join(array(collate(a, utf8_lcase), collate(b, utf8_lcase)), collate(, , utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select array_join(array('a' collate utf8_lcase, 'b' collate utf8_lcase, null), ', ' collate utf8_lcase, 'c' collate utf8_lcase)
+-- !query analysis
+Project [array_join(array(collate(a, utf8_lcase), collate(b, utf8_lcase), cast(null as string collate UTF8_LCASE)), collate(, , utf8_lcase), Some(collate(c, utf8_lcase))) AS array_join(array(collate(a, utf8_lcase), collate(b, utf8_lcase), NULL), collate(, , utf8_lcase), collate(c, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select concat('a' collate utf8_lcase, 'b' collate utf8_lcase)
+-- !query analysis
+Project [concat(collate(a, utf8_lcase), collate(b, utf8_lcase)) AS concat(collate(a, utf8_lcase), collate(b, utf8_lcase))#x]
++- OneRowRelation
+
+
+-- !query
+select concat(array('a' collate utf8_lcase, 'b' collate utf8_lcase))
+-- !query analysis
+Project [concat(array(collate(a, utf8_lcase), collate(b, utf8_lcase))) AS concat(array(collate(a, utf8_lcase), collate(b, utf8_lcase)))#x]
++- OneRowRelation
+
+
+-- !query
+select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)['A' collate utf8_lcase]
+-- !query analysis
+Project [map(collate(a, utf8_lcase), 1, collate(b, utf8_lcase), 2)[collate(A, utf8_lcase)] AS map(collate(a, utf8_lcase), 1, collate(b, utf8_lcase), 2)[collate(A, utf8_lcase)]#x]
++- OneRowRelation
+
+
+-- !query
+select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)['A']
+-- !query analysis
+Project [map(collate(a, utf8_lcase), 1, collate(b, utf8_lcase), 2)[cast(A as string collate UTF8_LCASE)] AS map(collate(a, utf8_lcase), 1, collate(b, utf8_lcase), 2)[A]#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'c' = 'ć' COLLATE SR_Latn_AI
+-- !query analysis
+Project [(c = collate(ć, SR_Latn_AI)) AS ('c' collate sr_Latn_AI = collate(ć, SR_Latn_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'c' = 'ć' COLLATE SR_AI
+-- !query analysis
+Project [(c = collate(ć, SR_AI)) AS ('c' collate sr_AI = collate(ć, SR_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'ć' = 'č' COLLATE SR_Latn_AI
+-- !query analysis
+Project [(ć = collate(č, SR_Latn_AI)) AS ('ć' collate sr_Latn_AI = collate(č, SR_Latn_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'ć' = 'č' COLLATE SR_AI
+-- !query analysis
+Project [(ć = collate(č, SR_AI)) AS ('ć' collate sr_AI = collate(č, SR_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'C' = 'Ć' COLLATE SR_Latn_AI
+-- !query analysis
+Project [(C = collate(Ć, SR_Latn_AI)) AS ('C' collate sr_Latn_AI = collate(Ć, SR_Latn_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'C' = 'Ć' COLLATE SR_AI
+-- !query analysis
+Project [(C = collate(Ć, SR_AI)) AS ('C' collate sr_AI = collate(Ć, SR_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 's' = 'š' COLLATE SR_Latn_AI
+-- !query analysis
+Project [(s = collate(š, SR_Latn_AI)) AS ('s' collate sr_Latn_AI = collate(š, SR_Latn_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 's' = 'š' COLLATE SR_AI
+-- !query analysis
+Project [(s = collate(š, SR_AI)) AS ('s' collate sr_AI = collate(š, SR_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'z' = 'ž' COLLATE SR_Latn_AI
+-- !query analysis
+Project [(z = collate(ž, SR_Latn_AI)) AS ('z' collate sr_Latn_AI = collate(ž, SR_Latn_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'z' = 'ž' COLLATE SR_AI
+-- !query analysis
+Project [(z = collate(ž, SR_AI)) AS ('z' collate sr_AI = collate(ž, SR_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT collation('a' collate system.builtin.UTF8_BINARY)
+-- !query analysis
+Project [collation(collate(a, UTF8_BINARY)) AS collation(collate(a, UTF8_BINARY))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT collation('a' collate system.builtin.UTF8_LCASE)
+-- !query analysis
+Project [collation(collate(a, UTF8_LCASE)) AS collation(collate(a, UTF8_LCASE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT collation('a' collate system.builtin.UNICODE)
+-- !query analysis
+Project [collation(collate(a, UNICODE)) AS collation(collate(a, UNICODE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT collation('a' collate system.builtin.UNICODE_CI_AI)
+-- !query analysis
+Project [collation(collate(a, UNICODE_CI_AI)) AS collation(collate(a, UNICODE_CI_AI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT 'a' collate sYstEm.bUiltIn.utf8_lCAse = 'A'
+-- !query analysis
+Project [(collate(a, utf8_lCAse) = A) AS (collate(a, utf8_lCAse) = 'A' collate UTF8_LCASE)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT contains('a' collate system.builtin.UTF8_LCASE, 'A' collate UTF8_LCASE)
+-- !query analysis
+Project [Contains(collate(a, UTF8_LCASE), collate(A, UTF8_LCASE)) AS contains(collate(a, UTF8_LCASE), collate(A, UTF8_LCASE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT startswith('a' collate system.builtin.UNICODE_CI, 'A' collate UNICODE_CI)
+-- !query analysis
+Project [StartsWith(collate(a, UNICODE_CI), collate(A, UNICODE_CI)) AS startswith(collate(a, UNICODE_CI), collate(A, UNICODE_CI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT endswith('abc' collate system.builtin.UNICODE_CI, 'C' collate UNICODE_CI)
+-- !query analysis
+Project [EndsWith(collate(abc, UNICODE_CI), collate(C, UNICODE_CI)) AS endswith(collate(abc, UNICODE_CI), collate(C, UNICODE_CI))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT array_append(array('a', 'b'), 'c' COLLATE UNICODE)
+-- !query analysis
+Project [array_append(cast(array(a, b) as array<string collate UNICODE>), collate(c, UNICODE)) AS array_append(array(a, b), collate(c, UNICODE))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(array('a' COLLATE UNICODE, 'b')[1])
+-- !query analysis
+Project [typeof(array(collate(a, UNICODE), b)[1]) AS typeof(array(collate(a, UNICODE), 'b' collate UNICODE)[1])#x]
++- OneRowRelation
+
+
+-- !query
+select map('a' COLLATE UTF8_LCASE, 'b', 'c', 'c')
+-- !query analysis
+Project [map(collate(a, UTF8_LCASE), b, c, c) AS map(collate(a, UTF8_LCASE), b, 'c' collate UTF8_LCASE, c)#x]
++- OneRowRelation
+
+
+-- !query
+select 'aaa' collate UTF8_BS
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "COLLATION_INVALID_NAME",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "collationName" : "UTF8_BS",
+    "proposals" : "UTF8_LCASE"
+  }
+}
+
+
+-- !query
+select collate('aaa', 'a', 'b')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2",
+    "functionName" : "`collate`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "collate('aaa', 'a', 'b')"
+  } ]
+}
+
+
+-- !query
+select collate('aaa')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2",
+    "functionName" : "`collate`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "collate('aaa')"
+  } ]
+}
+
+
+-- !query
+select collate()
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2",
+    "functionName" : "`collate`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "collate()"
+  } ]
+}
+
+
+-- !query
+select collate('abc', 123)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`collate`",
+    "inputSql" : "\"123\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "collate('abc', 123)"
+  } ]
+}
+
+
+-- !query
+select collate('abc', cast(null as string))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "`collation`",
+    "sqlExpr" : "\"CAST(NULL AS STRING)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "collate('abc', cast(null as string))"
+  } ]
+}
+
+
+-- !query
+select collate(1, 'UTF8_BINARY')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"collate(1, UTF8_BINARY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "collate(1, 'UTF8_BINARY')"
+  } ]
+}
+
+
+-- !query
+SELECT contains(collate('abc', 'UNICODE_CI'), collate('b', 'UNICODE'))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE_CI\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+SELECT startsWith(collate('abc', 'UNICODE_CI'), collate('a', 'UNICODE'))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE_CI\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+SELECT endsWith(collate('abc', 'UNICODE_CI'), collate('c', 'UNICODE'))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE_CI\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+SELECT COLLATE('a', 'UTF8_BINARY') = COLLATE('a', 'UNICODE')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE\", \"STRING COLLATE UNICODE_CI\""
+  }
+}
+
+
+-- !query
+SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI_RTRIM)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE\", \"STRING COLLATE UNICODE_CI_RTRIM\""
+  }
+}
+
+
+-- !query
+SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE\", \"STRING COLLATE UNICODE_CI\""
+  }
+}
+
+
+-- !query
+SELECT 'a' COLLATE system.builtin2.UTF8_BINARY
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "COLLATION_INVALID_NAME",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "collationName" : "UTF8_BINARY",
+    "proposals" : "UTF8_BINARY"
+  }
+}
+
+
+-- !query
+SELECT 'a' COLLATE system.UTF8_BINARY
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "COLLATION_INVALID_NAME",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "collationName" : "UTF8_BINARY",
+    "proposals" : "UTF8_BINARY"
+  }
+}
+
+
+-- !query
+SELECT 'a' COLLATE builtin.UTF8_LCASE
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "COLLATION_INVALID_NAME",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "collationName" : "UTF8_LCASE",
+    "proposals" : "UTF8_LCASE"
+  }
+}
+
+
+-- !query
+SELECT * FROM VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "colName" : "`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 77,
+    "fragment" : "VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"
+  } ]
+}
+
+
+-- !query
+select map('a' COLLATE UTF8_LCASE, 'b', 'c' COLLATE UNICODE, 'c')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+select map('a' COLLATE UTF8_LCASE, 'b', 'c')
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2n (n > 0)",
+    "functionName" : "`map`"
+  }
+}

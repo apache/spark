@@ -2464,7 +2464,7 @@ class DataFrameWriterV2:
         Specifies a provider for the underlying output data source.
         Spark's default catalog supports "parquet", "json", etc.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.using(provider)
         return self
@@ -2473,7 +2473,7 @@ class DataFrameWriterV2:
         """
         Add a write option.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         if value is None:
             return self
@@ -2484,7 +2484,7 @@ class DataFrameWriterV2:
         """
         Add write options.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         options = {k: to_str(v) for k, v in options.items() if v is not None}
         self._jwriter.options(options)
@@ -2494,7 +2494,7 @@ class DataFrameWriterV2:
         """
         Add table property.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.tableProperty(property, value)
         return self
@@ -2525,7 +2525,7 @@ class DataFrameWriterV2:
         * :py:func:`pyspark.sql.functions.hours`
         * :py:func:`pyspark.sql.functions.bucket`
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         from pyspark.sql.classic.column import _to_seq, _to_java_column
 
@@ -2550,7 +2550,7 @@ class DataFrameWriterV2:
         The new table's schema, partition layout, properties, and other configuration will be
         based on the configuration set on this writer.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.create()
 
@@ -2561,7 +2561,7 @@ class DataFrameWriterV2:
         The existing table's schema, partition layout, properties, and other configuration will be
         replaced with the contents of the data frame and the configuration set on this writer.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.replace()
 
@@ -2574,7 +2574,7 @@ class DataFrameWriterV2:
         and the configuration set on this writer.
         If the table exists, its configuration and data will be replaced.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.createOrReplace()
 
@@ -2582,7 +2582,7 @@ class DataFrameWriterV2:
         """
         Append the contents of the data frame to the output table.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.append()
 
@@ -2591,7 +2591,7 @@ class DataFrameWriterV2:
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         from pyspark.sql.classic.column import _to_java_column
 
@@ -2606,7 +2606,7 @@ class DataFrameWriterV2:
         This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
         partitions dynamically depending on the contents of the data frame.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.overwritePartitions()
 
