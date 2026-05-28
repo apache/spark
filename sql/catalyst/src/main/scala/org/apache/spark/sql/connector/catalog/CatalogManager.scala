@@ -71,6 +71,13 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
     }
   }
 
+  /**
+   * Returns the catalog name that owns path-based tables for the given data source format name,
+   * or None if the format is unknown or does not implement SupportsCatalogOptions.
+   * Overridden in sql/core via [[BaseSessionStateBuilder]] to use the real DataSource API.
+   */
+  def catalogForDataSource(formatName: String): Option[String] = None
+
   // ---- Transactions ----
   def transaction: Option[Transaction] = None
 

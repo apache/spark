@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.internal
 
+import scala.jdk.CollectionConverters._
+import scala.util.control.NonFatal
+
 import org.apache.spark.annotation.Unstable
 import org.apache.spark.sql.{DataSourceRegistration, ExperimentalMethods, SparkSessionExtensions, UDTFRegistration}
 import org.apache.spark.sql.artifact.ArtifactManager
@@ -29,7 +32,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
-import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
+import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, SupportsCatalogOptions}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
@@ -37,12 +40,12 @@ import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, Scal
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.{CheckViewReferences, CommandCheck}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.externalUDF.{ClassicExternalUDFPlanner,
   ExternalUDFPlanner, UnifiedExternalUDFPlanner}
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
-import org.apache.spark.sql.util.ExecutionListenerManager
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, ExecutionListenerManager}
 
 /**
  * Builder class that coordinates construction of a new [[SessionState]].
@@ -163,7 +166,19 @@ abstract class BaseSessionStateBuilder(
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
   protected lazy val catalogManager = {
-    val cm = new DefaultCatalogManager(v2SessionCatalog, catalog)
+    val cm = new DefaultCatalogManager(v2SessionCatalog, catalog) {
+      override def catalogForDataSource(formatName: String): Option[String] =
+        try {
+          DataSource.lookupDataSourceV2(formatName, this.conf).flatMap {
+            case sco: SupportsCatalogOptions =>
+              val options = DataSourceV2Utils.extractSessionConfigs(sco, this.conf)
+              Option(sco.extractCatalog(new CaseInsensitiveStringMap(options.asJava)))
+            case _ => None
+          }
+        } catch {
+          case NonFatal(_) => None
+        }
+    }
     parentState.foreach(ps => cm.copySessionPathFrom(ps.catalogManager))
     cm
   }

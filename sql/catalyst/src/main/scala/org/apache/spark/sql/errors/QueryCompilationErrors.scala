@@ -1636,6 +1636,16 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "identifier" -> toSQLId(identifier)))
   }
 
+  def transactionMultiCatalogNotSupportedError(
+      txnCatalog: String,
+      foreignCatalog: String): Throwable = {
+    new AnalysisException(
+      errorClass = "TRANSACTION_MULTI_CATALOG_NOT_SUPPORTED",
+      messageParameters = Map(
+        "txnCatalog" -> txnCatalog,
+        "foreignCatalogs" -> foreignCatalog))
+  }
+
   def namespaceAlreadyExistsError(namespace: Array[String]): Throwable = {
     new NamespaceAlreadyExistsException(namespace)
   }

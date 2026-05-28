@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManage
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.SessionFunctionKind
 import org.apache.spark.sql.connector.catalog.CatalogManager.SessionPathEntry
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
+import org.apache.spark.sql.errors.QueryCompilationErrors
 
 /**
  * A [[CatalogManager]] decorator that redirects catalog lookups to the transaction's catalog
@@ -52,6 +53,25 @@ private[sql] class TransactionAwareCatalogManager(
 
   override def withTransaction(newTxn: Transaction): CatalogManager =
     throw SparkException.internalError("Cannot nest transactions: a transaction is already active.")
+
+  override def catalog(name: String): CatalogPlugin = {
+    val resolved = delegate.catalog(name)
+    if (txn.catalog.name() == resolved.name()) txn.catalog else resolved
+  }
+
+  /**
+   * Validates that a table loaded during relation resolution belongs to the transaction catalog.
+   * All table loads during a transaction must come from the same catalog to ensure isolation.
+   */
+  override def validateCatalogForTableLoad(catalog: CatalogPlugin): Unit = {
+    if (catalog.name() != txn.catalog.name()) {
+      throw QueryCompilationErrors.transactionMultiCatalogNotSupportedError(
+        txn.catalog.name(), catalog.name())
+    }
+  }
+
+  override def catalogForDataSource(formatName: String): Option[String] =
+    delegate.catalogForDataSource(formatName)
 
   override def currentCatalog: CatalogPlugin = {
     val c = delegate.currentCatalog

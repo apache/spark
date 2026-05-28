@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{sources, Column, Row}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.classic.MergeIntoWriter
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableInfo
 import org.apache.spark.sql.functions._
@@ -1181,6 +1181,36 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
           Row(2, 200, "software"), // unchanged
           Row(3, 301, "support"), // insert
           Row(4, 401, "finance"))) // insert
+    }
+  }
+
+  test("merge with pre-analyzed source from a different catalog is rejected") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin)
+
+    withSQLConf("spark.sql.catalog.cat2" ->
+        classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      sql("CREATE TABLE cat2.ns1.source (pk INT NOT NULL, salary INT, dep STRING)")
+      sql("INSERT INTO cat2.ns1.source VALUES (10, 999, 'hr')")
+
+      val sourceDF = spark.table("cat2.ns1.source").as("source")
+      sourceDF.queryExecution.assertAnalyzed()
+
+      val e = intercept[AnalysisException] {
+        sourceDF
+          .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+          .whenMatched()
+          .updateAll()
+          .whenNotMatched()
+          .insertAll()
+          .merge()
+      }
+
+      checkError(e, "TRANSACTION_MULTI_CATALOG_NOT_SUPPORTED",
+        parameters = Map("txnCatalog" -> "cat", "foreignCatalogs" -> "cat2"))
+      assert(catalog.lastTransaction.currentState === Aborted)
+      assert(catalog.lastTransaction.isClosed)
     }
   }
 

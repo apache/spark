@@ -107,15 +107,6 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       val txnCat = spark.sessionState.catalogManager.catalog("txncat")
         .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
 
-      // Non-transactional catalog configured.
-      withSQLConf("spark.datasource.pathformat2.catalog" -> "nontxncat") {
-        createPathTable("pathformat2.`/path/to/t1`")
-        sql("INSERT INTO pathformat2.`/path/to/t1` VALUES (1, 'a')")
-        // The transaction was not routed to any of the transactional catalogs.
-        assert(catalog.lastTransaction == null)
-        assert(txnCat.lastTransaction == null)
-      }
-
       // Transactional catalog configured: pathBased resolves txncat as a
       // TransactionalCatalogPlugin and opens the transaction there instead.
       withSQLConf("spark.datasource.pathformat2.catalog" -> "txncat") {
@@ -123,6 +114,17 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
         sql("INSERT INTO pathformat2.`/path/to/t2` VALUES (1, 'a')")
         assert(txnCat.lastTransaction.currentState === Committed)
         assert(txnCat.lastTransaction.isClosed)
+      }
+
+      txnCat.lastTransaction = null  // reset to distinguish from block 1
+
+      // Non-transactional catalog configured.
+      withSQLConf("spark.datasource.pathformat2.catalog" -> "nontxncat") {
+        createPathTable("pathformat2.`/path/to/t1`")
+        sql("INSERT INTO pathformat2.`/path/to/t1` VALUES (1, 'a')")
+        // The transaction was not routed to any of the transactional catalogs.
+        assert(catalog.lastTransaction == null)
+        assert(txnCat.lastTransaction == null)
       }
     }
   }
@@ -204,6 +206,34 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     val txn = catalog.lastTransaction
     assert(txn.currentState === Aborted)
     assert(txn.isClosed)
+  }
+
+  test("path-based write with same-catalog source succeeds") {
+    createPathTable(tablePathWithFormat)
+    // ns1.source is resolved via the current catalog (spark_catalog), same as the write target.
+    sql("CREATE TABLE ns1.source (id INT, data STRING)")
+    sql("INSERT INTO ns1.source VALUES (1, 'a')")
+
+    val (txn, _) = executeTransaction {
+      sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM ns1.source")
+    }
+    assert(txn.currentState === Committed)
+    assert(txn.isClosed)
+    checkAnswer(spark.table(tablePathWithFormat), Row(1, "a") :: Nil)
+  }
+
+  test("path-based write with source from different catalog is rejected") {
+    createPathTable(tablePathWithFormat)
+    // cat is a different catalog from spark_catalog (the path-based catalog).
+    sql("CREATE TABLE cat.ns1.source (id INT, data STRING)")
+
+    val e = intercept[AnalysisException] {
+      sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM cat.ns1.source")
+    }
+    checkError(e, "TRANSACTION_MULTI_CATALOG_NOT_SUPPORTED",
+      parameters = Map("txnCatalog" -> "spark_catalog", "foreignCatalogs" -> "cat"))
+    assert(catalog.lastTransaction.currentState === Aborted)
+    assert(catalog.lastTransaction.isClosed)
   }
 }
 
