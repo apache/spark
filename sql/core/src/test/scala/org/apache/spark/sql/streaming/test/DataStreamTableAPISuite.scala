@@ -565,7 +565,8 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
   }
 
-  test("SPARK-56132: pruneColumns called on SupportsPushDownRequiredColumns V2 streaming scan builder") {
+  test("SPARK-56132: pruneColumns called on SupportsPushDownRequiredColumns " +
+      "V2 streaming scan builder") {
     val tblName = "teststream.table_name"
     withTable(tblName) {
       spark.sql(s"CREATE TABLE $tblName (data int) USING foo")
