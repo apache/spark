@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter._
-import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 import org.apache.spark.sql.execution.datasources.v2.V2PredicateSuite.ref
 import org.apache.spark.sql.internal.connector.PredicateUtils
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.{AlwaysFalse => V1AlwaysFalse, AlwaysTrue => V1AlwaysTrue, And => V1And, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not => V1Not, Or => V1Or, StringContains, StringEndsWith, StringStartsWith}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -360,10 +360,10 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
   }
 
-  test("SPARK-53454: AlwaysTrue/AlwaysFalse should compile to valid SQL") {
-    val builder = new V2ExpressionSQLBuilder()
-    assert(builder.build(new AlwaysTrue) === "1 = 1")
-    assert(builder.build(new AlwaysFalse) === "1 = 0")
+  test("SPARK-53454: AlwaysTrue/AlwaysFalse should compile to portable SQL for JDBC") {
+    val dialect = JdbcDialects.get("jdbc:h2:mem:")
+    assert(dialect.compileExpression(new AlwaysTrue).get === "1 = 1")
+    assert(dialect.compileExpression(new AlwaysFalse).get === "1 = 0")
   }
 }
 
