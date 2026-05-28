@@ -3,255 +3,297 @@ WritableColumnVector bulk fill
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBooleans (boolean) count=1:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        410.6           2.4       1.0X
-OffHeap                                               0              0           0        276.2           3.6       0.7X
+OnHeap                                                0              0           0        527.0           1.9       1.0X
+OffHeap                                               0              0           0        369.0           2.7       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBooleans (boolean) count=8:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       1434.7           0.7       1.0X
-OffHeap                                               0              0           0       1616.1           0.6       1.1X
+OnHeap                                                0              0           0       1961.7           0.5       1.0X
+OffHeap                                               0              0           0       1343.2           0.7       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBooleans (boolean) count=64:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2803.9           0.4       1.0X
-OffHeap                                               0              0           0       2842.8           0.4       1.0X
+OnHeap                                                0              0           0       3330.3           0.3       1.0X
+OffHeap                                               0              0           0       3328.6           0.3       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBooleans (boolean) count=512:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       3041.4           0.3       1.0X
-OffHeap                                               0              0           0      20236.5           0.0       6.7X
+OnHeap                                                0              0           0       1801.4           0.6       1.0X
+OffHeap                                               0              0           0      26642.0           0.0      14.8X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBooleans (boolean) count=4096:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                1              1           0       3133.4           0.3       1.0X
-OffHeap                                               0              0           0      40173.8           0.0      12.8X
+OnHeap                                                2              2           0       1815.9           0.6       1.0X
+OffHeap                                               0              0           0      51468.9           0.0      28.3X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBooleans (boolean) count=65536:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                               21             21           0       3145.6           0.3       1.0X
-OffHeap                                               1              1           0      50338.2           0.0      16.0X
+OnHeap                                               19             19           0       3592.2           0.3       1.0X
+OffHeap                                               1              1           0      57532.7           0.0      16.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBytes (byte) count=1:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        168.7           5.9       1.0X
-OffHeap                                               0              0           0        189.3           5.3       1.1X
+OnHeap                                                0              0           0        234.0           4.3       1.0X
+OffHeap                                               0              0           0        245.2           4.1       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBytes (byte) count=8:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       1080.2           0.9       1.0X
-OffHeap                                               0              0           0        864.4           1.2       0.8X
+OnHeap                                                0              0           0       1473.9           0.7       1.0X
+OffHeap                                               0              0           0       1341.0           0.7       0.9X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBytes (byte) count=64:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2593.8           0.4       1.0X
-OffHeap                                               0              0           0       1421.8           0.7       0.5X
+OnHeap                                                0              0           0       3110.2           0.3       1.0X
+OffHeap                                               0              0           0       3029.6           0.3       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBytes (byte) count=512:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2997.7           0.3       1.0X
-OffHeap                                               0              0           0      18259.6           0.1       6.1X
+OnHeap                                                0              0           0       3438.4           0.3       1.0X
+OffHeap                                               0              0           0      24508.6           0.0       7.1X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBytes (byte) count=4096:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                3              3           0       1591.4           0.6       1.0X
-OffHeap                                               0              0           0      40100.4           0.0      25.2X
+OnHeap                                                1              1           0       3564.1           0.3       1.0X
+OffHeap                                               0              0           0      49898.3           0.0      14.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putBytes (byte) count=65536:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                               42             42           0       1593.2           0.6       1.0X
-OffHeap                                               1              1           0      50028.8           0.0      31.4X
+OnHeap                                               19             19           0       3595.3           0.3       1.0X
+OffHeap                                               1              1           0      57106.2           0.0      15.9X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putShorts (short) count=1:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        147.1           6.8       1.0X
-OffHeap                                               0              0           0        129.6           7.7       0.9X
+OnHeap                                                0              0           0        175.4           5.7       1.0X
+OffHeap                                               0              0           0        160.3           6.2       0.9X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putShorts (short) count=8:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        857.1           1.2       1.0X
-OffHeap                                               0              0           0        836.1           1.2       1.0X
+OnHeap                                                0              0           0       1048.8           1.0       1.0X
+OffHeap                                               0              0           0       1052.8           0.9       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putShorts (short) count=64:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2413.0           0.4       1.0X
-OffHeap                                               0              0           0       2331.2           0.4       1.0X
+OnHeap                                                0              0           0       2848.9           0.4       1.0X
+OffHeap                                               0              0           0       2749.5           0.4       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putShorts (short) count=512:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2973.5           0.3       1.0X
-OffHeap                                               0              0           0       2957.7           0.3       1.0X
+OnHeap                                                0              0           0       3401.6           0.3       1.0X
+OffHeap                                               0              0           0       3358.3           0.3       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putShorts (short) count=4096:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                1              1           0       3107.5           0.3       1.0X
-OffHeap                                               1              1           0       3105.3           0.3       1.0X
+OnHeap                                                1              1           0       3568.4           0.3       1.0X
+OffHeap                                               1              1           0       3551.8           0.3       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putShorts (short) count=65536:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                               21             22           1       3154.3           0.3       1.0X
-OffHeap                                              21             21           0       3145.2           0.3       1.0X
+OnHeap                                               19             19           0       3600.0           0.3       1.0X
+OffHeap                                              19             19           0       3589.7           0.3       1.0X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putInts (int) count=1:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        153.9           6.5       1.0X
-OffHeap                                               0              0           0         92.7          10.8       0.6X
+OnHeap                                                0              0           0        170.7           5.9       1.0X
+OffHeap                                               0              0           0        123.2           8.1       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putInts (int) count=8:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        893.7           1.1       1.0X
-OffHeap                                               0              0           0        618.1           1.6       0.7X
+OnHeap                                                0              0           0       1052.7           0.9       1.0X
+OffHeap                                               0              0           0        778.3           1.3       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putInts (int) count=64:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2413.0           0.4       1.0X
-OffHeap                                               0              0           0       2695.3           0.4       1.1X
+OnHeap                                                0              0           0       2848.9           0.4       1.0X
+OffHeap                                               0              0           0       2100.7           0.5       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putInts (int) count=512:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2940.0           0.3       1.0X
-OffHeap                                               0              0           0       5336.1           0.2       1.8X
+OnHeap                                                0              0           0       3359.2           0.3       1.0X
+OffHeap                                               0              0           0       2285.5           0.4       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putInts (int) count=4096:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                1              1           0       3097.0           0.3       1.0X
-OffHeap                                               1              1           0       6240.5           0.2       2.0X
+OnHeap                                                1              1           0       3556.8           0.3       1.0X
+OffHeap                                               2              2           0       2251.7           0.4       0.6X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putInts (int) count=65536:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                               21             21           0       3144.7           0.3       1.0X
-OffHeap                                              11             11           1       6387.9           0.2       2.0X
+OnHeap                                               19             19           0       3594.3           0.3       1.0X
+OffHeap                                              31             31           0       2199.8           0.5       0.6X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putLongs (long) count=1:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        145.6           6.9       1.0X
-OffHeap                                               0              0           0         95.4          10.5       0.7X
+OnHeap                                                0              0           0        171.3           5.8       1.0X
+OffHeap                                               0              0           0        108.8           9.2       0.6X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putLongs (long) count=8:                  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        863.5           1.2       1.0X
-OffHeap                                               0              0           0        632.9           1.6       0.7X
+OnHeap                                                0              0           0       1052.8           0.9       1.0X
+OffHeap                                               0              0           0        778.3           1.3       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putLongs (long) count=64:                 Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2413.0           0.4       1.0X
-OffHeap                                               0              0           0       2075.4           0.5       0.9X
+OnHeap                                                0              0           0       2848.9           0.4       1.0X
+OffHeap                                               0              0           0       2100.8           0.5       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putLongs (long) count=512:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2939.0           0.3       1.0X
-OffHeap                                               0              0           0       2923.1           0.3       1.0X
+OnHeap                                                0              0           0       3347.2           0.3       1.0X
+OffHeap                                               0              0           0       2257.4           0.4       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putLongs (long) count=4096:               Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                1              1           0       3066.8           0.3       1.0X
-OffHeap                                               1              1           0       3063.4           0.3       1.0X
+OnHeap                                                1              1           0       3525.4           0.3       1.0X
+OffHeap                                               2              2           0       2208.7           0.5       0.6X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putLongs (long) count=65536:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                               21             22           0       3125.9           0.3       1.0X
-OffHeap                                              22             22           0       3116.3           0.3       1.0X
+OnHeap                                               19             19           0       3592.5           0.3       1.0X
+OffHeap                                              31             31           0       2198.2           0.5       0.6X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putNulls ((no value)) count=1:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        128.6           7.8       1.0X
-OffHeap                                               0              0           0         92.7          10.8       0.7X
+OnHeap                                                0              0           0        152.6           6.6       1.0X
+OffHeap                                               0              0           0        112.0           8.9       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putNulls ((no value)) count=8:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0        762.8           1.3       1.0X
-OffHeap                                               0              0           0        518.8           1.9       0.7X
+OnHeap                                                0              0           0        951.2           1.1       1.0X
+OffHeap                                               0              0           0        671.6           1.5       0.7X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putNulls ((no value)) count=64:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2305.8           0.4       1.0X
-OffHeap                                               0              0           0       1258.2           0.8       0.5X
+OnHeap                                                0              0           0       2781.1           0.4       1.0X
+OffHeap                                               0              0           0       1487.2           0.7       0.5X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putNulls ((no value)) count=512:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                0              0           0       2928.8           0.3       1.0X
-OffHeap                                               0              0           0       1543.5           0.6       0.5X
+OnHeap                                                0              0           0       3354.9           0.3       1.0X
+OffHeap                                               0              0           0      19822.6           0.1       5.9X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putNulls ((no value)) count=4096:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                                1              1           0       3106.4           0.3       1.0X
-OffHeap                                               3              3           0       1587.6           0.6       0.5X
+OnHeap                                                1              1           0       3566.6           0.3       1.0X
+OffHeap                                               0              0           0      47694.0           0.0      13.4X
 
 OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 putNulls ((no value)) count=65536:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-OnHeap                                               21             21           0       3150.1           0.3       1.0X
-OffHeap                                              42             42           0       1593.1           0.6       0.5X
+OnHeap                                               19             19           0       3601.3           0.3       1.0X
+OffHeap                                               1              1           0      56536.2           0.0      15.7X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+putNotNulls ((no value)) count=1:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeap                                                0              0           0        157.6           6.3       1.0X
+OffHeap                                               0              0           0        108.7           9.2       0.7X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+putNotNulls ((no value)) count=8:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeap                                                0              0           0        923.3           1.1       1.0X
+OffHeap                                               0              0           0        758.1           1.3       0.8X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+putNotNulls ((no value)) count=64:        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeap                                                0              0           0       1619.4           0.6       1.0X
+OffHeap                                               0              0           0       2412.1           0.4       1.5X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+putNotNulls ((no value)) count=512:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeap                                                0              0           0       1766.1           0.6       1.0X
+OffHeap                                               0              0           0       3322.9           0.3       1.9X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+putNotNulls ((no value)) count=4096:      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeap                                                2              2           0       1812.1           0.6       1.0X
+OffHeap                                               1              1           0       3545.6           0.3       2.0X
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1013-azure
+AMD EPYC 9V74 80-Core Processor
+putNotNulls ((no value)) count=65536:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+OnHeap                                               37             37           0       1818.7           0.5       1.0X
+OffHeap                                              19             19           0       3587.4           0.3       2.0X
 
 
