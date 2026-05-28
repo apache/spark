@@ -20,6 +20,8 @@ package org.apache.spark.unsafe.types;
 import org.apache.spark.SparkIllegalArgumentException;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 public class TimestampNanosSuite {
@@ -74,5 +76,90 @@ public class TimestampNanosSuite {
     assertEquals(999, TimestampNanosVal.MAX_NANOS_WITHIN_MICRO);
     assertEquals(0L, TimestampNanosVal.ZERO.epochMicros);
     assertEquals((short) 0, TimestampNanosVal.ZERO.nanosWithinMicro);
+  }
+
+  @Test
+  public void compareToOrdersByEpochMicrosThenNanos() {
+    TimestampNanosVal a = TimestampNanosVal.fromParts(1000L, (short) 100);
+    TimestampNanosVal b = TimestampNanosVal.fromParts(1001L, (short) 0);
+    TimestampNanosVal c = TimestampNanosVal.fromParts(1000L, (short) 101);
+    TimestampNanosVal d = TimestampNanosVal.fromParts(1000L, (short) 100);
+
+    assertTrue(a.compareTo(b) < 0);
+    assertTrue(b.compareTo(a) > 0);
+    assertTrue(a.compareTo(c) < 0);
+    assertTrue(c.compareTo(a) > 0);
+    assertEquals(0, a.compareTo(d));
+  }
+
+  @Test
+  public void compareToIsConsistentWithEquals() {
+    // The Comparable contract requires a.compareTo(b) == 0 iff a.equals(b). Without this,
+    // TreeSet/TreeMap-backed Catalyst ops would silently dedup or lose values.
+    TimestampNanosVal a = TimestampNanosVal.fromParts(-42L, (short) 7);
+    TimestampNanosVal b = TimestampNanosVal.fromParts(-42L, (short) 7);
+    assertEquals(a, b);
+    assertEquals(0, a.compareTo(b));
+    assertEquals(0, b.compareTo(a));
+  }
+
+  @Test
+  public void compareToHandlesLongBoundaries() {
+    // Plain (a.epochMicros - b.epochMicros) would overflow here; Long.compare must protect us.
+    TimestampNanosVal min = TimestampNanosVal.fromParts(Long.MIN_VALUE, (short) 0);
+    TimestampNanosVal minPlusNanos = TimestampNanosVal.fromParts(Long.MIN_VALUE, (short) 999);
+    TimestampNanosVal max = TimestampNanosVal.fromParts(Long.MAX_VALUE, (short) 0);
+    TimestampNanosVal maxMinusNanos = TimestampNanosVal.fromParts(Long.MAX_VALUE - 1, (short) 999);
+
+    assertTrue(min.compareTo(max) < 0);
+    assertTrue(max.compareTo(min) > 0);
+    // Within the same epochMicros, the nanos tie-breaker decides.
+    assertTrue(min.compareTo(minPlusNanos) < 0);
+    // epochMicros wins even when the smaller epochMicros has larger nanos.
+    assertTrue(maxMinusNanos.compareTo(max) < 0);
+  }
+
+  @Test
+  public void compareToHandlesNegativeEpoch() {
+    // Pre-epoch instants are valid (the SPIP keeps the 0001-9999 calendar range). Verify
+    // a negative epochMicros sorts before a positive one regardless of the nanos field.
+    TimestampNanosVal preEpoch = TimestampNanosVal.fromParts(-1L, (short) 999);
+    TimestampNanosVal postEpoch = TimestampNanosVal.fromParts(0L, (short) 0);
+    assertTrue(preEpoch.compareTo(postEpoch) < 0);
+    assertTrue(postEpoch.compareTo(preEpoch) > 0);
+  }
+
+  @Test
+  public void compareToIsAntisymmetricAndTransitive() {
+    TimestampNanosVal a = TimestampNanosVal.fromParts(10L, (short) 1);
+    TimestampNanosVal b = TimestampNanosVal.fromParts(10L, (short) 2);
+    TimestampNanosVal c = TimestampNanosVal.fromParts(11L, (short) 0);
+
+    // antisymmetry: sign(a.compareTo(b)) == -sign(b.compareTo(a))
+    assertEquals(Integer.signum(a.compareTo(b)), -Integer.signum(b.compareTo(a)));
+    assertEquals(Integer.signum(b.compareTo(c)), -Integer.signum(c.compareTo(b)));
+    // transitivity: a < b and b < c implies a < c
+    assertTrue(a.compareTo(b) < 0);
+    assertTrue(b.compareTo(c) < 0);
+    assertTrue(a.compareTo(c) < 0);
+  }
+
+  @Test
+  public void arraysSortUsesComparable() {
+    TimestampNanosVal[] xs = new TimestampNanosVal[] {
+      TimestampNanosVal.fromParts(5L, (short) 0),
+      TimestampNanosVal.fromParts(-1L, (short) 999),
+      TimestampNanosVal.fromParts(0L, (short) 0),
+      TimestampNanosVal.fromParts(5L, (short) 999),
+      TimestampNanosVal.fromParts(5L, (short) 1)
+    };
+    Arrays.sort(xs);
+    assertArrayEquals(new TimestampNanosVal[] {
+      TimestampNanosVal.fromParts(-1L, (short) 999),
+      TimestampNanosVal.fromParts(0L, (short) 0),
+      TimestampNanosVal.fromParts(5L, (short) 0),
+      TimestampNanosVal.fromParts(5L, (short) 1),
+      TimestampNanosVal.fromParts(5L, (short) 999)
+    }, xs);
   }
 }
