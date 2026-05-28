@@ -3453,6 +3453,7 @@ object SQLConf {
         "builder so they appear in readSchema(). Disable if a connector's pruneColumns " +
         "implementation is not compatible with being called in the streaming path.")
       .booleanConf
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .createWithDefault(true)
 
   val STREAMING_TRIGGER_AVAILABLE_NOW_WRAPPER_ENABLED =

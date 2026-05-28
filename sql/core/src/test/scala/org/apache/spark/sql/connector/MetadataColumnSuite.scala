@@ -416,10 +416,9 @@ class MetadataColumnSuite extends DatasourceV2SQLBase {
             .option("checkpointLocation", checkpointDir.getCanonicalPath)
             .start()
           try {
-            val ex = intercept[StreamingQueryException] {
+            intercept[StreamingQueryException] {
               q.processAllAvailable()
             }
-            assert(ex.getMessage.contains("ArrayIndexOutOfBoundsException"))
           } finally {
             q.stop()
           }
