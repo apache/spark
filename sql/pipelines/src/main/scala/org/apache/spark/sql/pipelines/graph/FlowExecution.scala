@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsRowLevelOperations, TableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsRowLevelOperations, Table => CatalogTable, TableCatalog, TableInfo}
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   ChangeArgs,
@@ -507,7 +507,7 @@ trait AutoCdcMergeWriteBase {
    * session resolver), same per-name `dataType`s.
    */
   private def validateNoAutoCdcKeyDrift(
-      existingAuxTable: org.apache.spark.sql.connector.catalog.Table,
+      existingAuxTable: CatalogTable,
       auxIdent: TableIdentifier): Unit = {
     val resolver = spark.sessionState.conf.resolver
     val existingAuxSchema = CatalogV2Util.v2ColumnsToStructType(existingAuxTable.columns())
@@ -577,9 +577,9 @@ trait AutoCdcMergeWriteBase {
    * and parse it into the ordered list of recorded AutoCDC key column names.
    */
   private def parseRecordedKeyColumnNames(
-      existingAuxTable: org.apache.spark.sql.connector.catalog.Table,
+      existingAuxTable: CatalogTable,
       auxIdent: TableIdentifier): Seq[String] = {
-    val rawValue = Option(
+    val rawKeyColumnNamesStr = Option(
       existingAuxTable.properties().get(AutoCdcAuxiliaryTable.keyColumnNamesProperty)
     ).getOrElse {
       throw new AnalysisException(
@@ -591,14 +591,14 @@ trait AutoCdcMergeWriteBase {
         )
       )
     }
-    AutoCdcAuxiliaryTable.parseKeyColumnNames(rawValue).getOrElse {
+    AutoCdcAuxiliaryTable.parseKeyColumnNames(rawKeyColumnNamesStr).getOrElse {
       throw new AnalysisException(
         errorClass = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MALFORMED",
         messageParameters = Map(
           "flowName" -> identifier.unquotedString,
           "auxTableName" -> auxIdent.unquotedString,
           "propertyName" -> AutoCdcAuxiliaryTable.keyColumnNamesProperty,
-          "rawValue" -> rawValue
+          "rawValue" -> rawKeyColumnNamesStr
         )
       )
     }
