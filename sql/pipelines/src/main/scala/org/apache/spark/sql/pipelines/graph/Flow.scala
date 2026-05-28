@@ -265,6 +265,8 @@ class AutoCdcMergeFlow(
       columnSelection = changeArgs.columnSelection,
       caseSensitive = spark.sessionState.conf.caseSensitiveAnalysis
     )
+    // AutoCDC flows require all key columns to be present in the target table, to adhere to SCD
+    // semantics.
     requireKeysPresentInSelectedSchema(selectedSchema)
     selectedSchema
   }
