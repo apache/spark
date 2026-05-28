@@ -1457,7 +1457,10 @@ class _MapArrowIterBenchMixin:
         batches, schema = self._build_scenario(scenario)
         udf_func, ret_type, arg_offsets = self._udfs[udf_name]
         if ret_type is None:
-            ret_type = schema.fields[0].dataType.fields[0].dataType
+            # mapInArrow UDFs return an Iterator[pa.RecordBatch] with the same
+            # schema as the input row (the inner struct, since make_batches
+            # wraps the row schema in a single struct column for the wire).
+            ret_type = schema.fields[0].dataType
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
