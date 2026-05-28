@@ -89,13 +89,16 @@ jobs:
                           details_url: run.data.details_url
                         })
                       } else {
-                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ')')
+                        // PATCH /check-runs accepts only queued | in_progress | completed,
+                        // but workflow_run may also report requested / waiting / pending.
+                        const status = run.data.status == 'in_progress' ? 'in_progress' : 'queued'
+                        console.log('    Run ' + cr.id + ': set status (' + run.data.status + ' -> ' + status + ')')
                         const response = await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', {
                           owner: context.repo.owner,
                           repo: context.repo.repo,
                           check_run_id: cr.id,
                           output: cr.output,
-                          status: run.data.status,
+                          status: status,
                           details_url: run.data.details_url
                         })
                       }
