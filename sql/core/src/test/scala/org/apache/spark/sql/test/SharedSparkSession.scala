@@ -20,7 +20,7 @@ package org.apache.spark.sql.test
 import scala.concurrent.duration._
 
 import org.apache.spark.sql
-import org.apache.spark.sql.{classic, QueryTest, QueryTestBase, SparkSession, SparkSessionProvider, SQLContext}
+import org.apache.spark.sql.{classic, QueryTest, QueryTestBase}
 
 @deprecated("Use SparkSessionBinder and QueryTest instead")
 trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
@@ -57,9 +57,7 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
 @deprecated("Use SparkSessionBinder and QueryTest instead")
-trait SharedSparkSessionBase
-  extends QueryTestBase
-  with sql.SparkSessionBinder {
+trait SharedSparkSessionBase extends sql.SparkSessionBinder with QueryTestBase {
 
   protected override def spark: classic.SparkSession =
     super.spark.asInstanceOf[classic.SparkSession]
