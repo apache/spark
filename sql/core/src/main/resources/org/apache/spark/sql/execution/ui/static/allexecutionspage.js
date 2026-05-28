@@ -51,39 +51,19 @@ $(document).ready(function () {
       summaryBar.innerHTML =
         '<h4 class="title-table">Summary</h4>' +
         '<table id="sql-summary-table" class="table table-striped compact ' +
-        'cell-border" style="width:100%"><thead><tr>' +
+        'cell-border dataTable" style="width:100%"><thead><tr>' +
         '<th>Total Queries</th>' +
         '<th>Average Duration</th>' +
         '<th>Running Queries</th>' +
         '<th>Failed Queries</th>' +
         '<th>Failure Rate</th>' +
-        '</tr></thead><tbody></tbody></table>';
-
-      $("#sql-summary-table").DataTable({
-        data: [{
-          totalQueries: summary.totalQueries || 0,
-          averageDuration: summary.averageDuration || 0,
-          runningQueries: summary.runningQueries || 0,
-          failedQueries: summary.failedQueries || 0,
-          failureRate: failureRate
-        }],
-        columns: [
-          {data: "totalQueries"},
-          {data: "averageDuration", render: formatDurationSql},
-          {data: "runningQueries"},
-          {data: "failedQueries"},
-          {
-            data: "failureRate",
-            render: function (data) {
-              return data.toFixed(1) + "%";
-            }
-          }
-        ],
-        paging: false,
-        searching: false,
-        info: false,
-        ordering: false
-      });
+        '</tr></thead><tbody><tr>' +
+        '<td>' + (summary.totalQueries || 0) + '</td>' +
+        '<td>' + formatDurationSql(summary.averageDuration || 0) + '</td>' +
+        '<td>' + (summary.runningQueries || 0) + '</td>' +
+        '<td>' + (summary.failedQueries || 0) + '</td>' +
+        '<td>' + failureRate.toFixed(1) + '%</td>' +
+        '</tr></tbody></table>';
     }
 
     var columns = getSqlTableColumns({ detail: false });

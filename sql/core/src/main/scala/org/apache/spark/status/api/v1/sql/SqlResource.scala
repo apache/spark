@@ -111,7 +111,6 @@ private[v1] class SqlResource extends BaseAppResource {
       // materialization, so there is no separate "KVStore-pagination" path being
       // disabled here.
       val allExecs = sqlStore.executionsList()
-      val summary = SqlResource.executionSummary(allExecs)
 
       val filteredExecs = if (needsFilter) {
         allExecs.filter { exec =>
@@ -135,6 +134,7 @@ private[v1] class SqlResource extends BaseAppResource {
       } else {
         (filteredExecs, Map.empty[Long, Seq[SQLExecutionUIData]])
       }
+      val summary = SqlResource.executionSummary(rootRows)
 
       // Sort
       val sortCol = Option(uriParams.getFirst("order[0][column]"))
@@ -321,8 +321,9 @@ private[v1] object SqlResource {
     val totalQueries = execs.size
     val runningQueries = execs.count(_.executionStatus == "RUNNING")
     val failedQueries = execs.count(_.executionStatus == "FAILED")
+    val now = System.currentTimeMillis()
     val totalDuration = execs.foldLeft(0L) { case (sum, exec) =>
-      sum + (exec.completionTime.getOrElse(new Date()).getTime - exec.submissionTime)
+      sum + (exec.completionTime.map(_.getTime).getOrElse(now) - exec.submissionTime)
     }
     val averageDuration = if (totalQueries > 0) totalDuration / totalQueries else 0L
     val failureRate = if (totalQueries > 0) {
