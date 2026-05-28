@@ -573,7 +573,9 @@ jobs:
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
-        fromJson(needs.precondition.outputs.required).sparkr == 'true')
+        fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
+        fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
+        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -624,7 +626,7 @@ jobs:
       run: |
         ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
           -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Phive-thriftserver \
-          -Pdocker-integration-tests -Pvolcano \
+          -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano \
           Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
     - name: Package compile output
       run: |
@@ -1510,8 +1512,8 @@ jobs:
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1559,9 +1561,27 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v6
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        fi
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
@@ -1586,8 +1606,8 @@ jobs:
         path: "**/target/unit-tests.log"
 
   k8s-integration-tests:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1632,6 +1652,20 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
+      - name: Download precompiled artifact
+        id: download-precompiled
+        if: needs.precompile.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v6
+        with:
+          name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+      - name: Extract precompiled artifact
+        id: extract-precompiled
+        if: steps.download-precompiled.outcome == 'success'
+        continue-on-error: true
+        run: |
+          tar -xzf compile-artifact.tar.gz
+          rm compile-artifact.tar.gz
       - name: Install R
         run: |
           sudo apt update
