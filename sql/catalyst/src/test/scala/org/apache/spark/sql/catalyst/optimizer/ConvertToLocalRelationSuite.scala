@@ -161,10 +161,10 @@ class ConvertToLocalRelationSuite extends PlanTest {
     val optimized = Optimize.execute(plan)
     // Strong assertion #1: fold actually happened - no Join survives
     assert(optimized.collectFirst { case _: Join => () }.isEmpty,
-      s"Expected Join to be folded away, got: ")
+      "Expected Join to be folded away")
     // Strong assertion #2: output schema width = tbl + singleRow columns (4 cols total)
     assert(optimized.output.length == 4,
-      s"Expected 4-column output after fold, got: ")
+      "Expected 4-column output after fold")
     // Strong assertion #3: singleRow exprIds preserved through fold
     val outIds = optimized.output.map(_.exprId).toSet
     assert(outIds.contains(singleRow.output(0).exprId),

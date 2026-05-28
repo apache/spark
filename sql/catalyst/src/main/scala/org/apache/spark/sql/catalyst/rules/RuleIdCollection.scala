@@ -130,7 +130,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
       "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation" ::
-      "org.apache.spark.sql.catalyst.optimizer.FoldInnerJoinWithOneRowRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.DecimalAggregates" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateAggregateFilter" ::
@@ -140,6 +139,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.EliminateSerialization" ::
       "org.apache.spark.sql.catalyst.optimizer.EliminateWindowPartitions" ::
       "org.apache.spark.sql.catalyst.optimizer.EvalInlineTables" ::
+      "org.apache.spark.sql.catalyst.optimizer.FoldInnerJoinWithOneRowRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.GenerateOptimization" ::
       "org.apache.spark.sql.catalyst.optimizer.InferWindowGroupLimit" ::
       "org.apache.spark.sql.catalyst.optimizer.LikeSimplification" ::
