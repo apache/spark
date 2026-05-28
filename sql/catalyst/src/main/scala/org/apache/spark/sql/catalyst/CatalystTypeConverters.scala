@@ -88,8 +88,8 @@ object CatalystTypeConverters {
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
-      case _: TimestampNTZNanosType => TimestampNTZNanosConverter
-      case _: TimestampLTZNanosType => TimestampLTZNanosConverter
+      case t: TimestampNTZNanosType => new TimestampNTZNanosConverter(t)
+      case t: TimestampLTZNanosType => new TimestampLTZNanosConverter(t)
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -517,7 +517,7 @@ object CatalystTypeConverters {
       DateTimeUtils.microsToLocalDateTime(row.getLong(column))
   }
 
-  private object TimestampNTZNanosConverter
+  private class TimestampNTZNanosConverter(dataType: TimestampNTZNanosType)
     extends CatalystTypeConverter[Any, LocalDateTime, TimestampNanosVal] {
     override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l)
@@ -526,7 +526,7 @@ object CatalystTypeConverters {
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> TimestampNTZNanosType().sql))
+          "dataType" -> dataType.sql))
     }
 
     override def toScala(catalystValue: TimestampNanosVal): LocalDateTime =
@@ -541,7 +541,7 @@ object CatalystTypeConverters {
   // the mapping does not consult `spark.sql.datetime.java8API.enabled`: the nanos LTZ type is
   // post-Java-8 and the legacy `java.sql.Timestamp` external type is intentionally out of scope
   // here. See SPARK-57033.
-  private object TimestampLTZNanosConverter
+  private class TimestampLTZNanosConverter(dataType: TimestampLTZNanosType)
     extends CatalystTypeConverter[Any, Instant, TimestampNanosVal] {
     override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
       case i: Instant => DateTimeUtils.instantToTimestampNanos(i)
@@ -550,7 +550,7 @@ object CatalystTypeConverters {
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> TimestampLTZNanosType().sql))
+          "dataType" -> dataType.sql))
     }
 
     override def toScala(catalystValue: TimestampNanosVal): Instant =
