@@ -22,10 +22,10 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, LocalRelation, Project}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.BuiltInFunctionCatalog
-import org.apache.spark.sql.connector.catalog.{DefaultCatalogManager, Identifier, TableCatalog, TableCatalogCapability}
+import org.apache.spark.sql.connector.catalog.{Column => V2Column, DefaultCatalogManager, GenerationExpression, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -71,6 +71,32 @@ object GeneratedColumn {
   }
 
   /**
+   * Parse and analyze `expressionStr`, verify it is a valid generation expression, and convert it
+   * to a connector [[GenerationExpression]] with an optional DSV2 [[Expression]] when the analyzed
+   * Catalyst expression can be translated via [[V2ExpressionBuilder]].
+   *
+   * Verification rules:
+   * - The expression cannot reference itself
+   * - The expression cannot reference other generated columns
+   * - No user-defined expressions
+   * - The expression must be deterministic
+   * - The expression data type can be safely up-cast to the destination column data type
+   * - No subquery expressions
+   *
+   * Throws an [[AnalysisException]] if the expression cannot be converted or is invalid.
+   */
+  def toGenerationExpression(
+      expressionStr: String,
+      fieldName: String,
+      dataType: DataType,
+      schema: StructType,
+      statementType: String): GenerationExpression = {
+    val analyzed = analyzeExpression(expressionStr, fieldName, dataType, schema, statementType)
+    val connectorExpr = new V2ExpressionBuilder(analyzed).build().orNull
+    new GenerationExpression(expressionStr, connectorExpr)
+  }
+
+  /**
    * Parse and analyze `expressionStr` and perform verification. This means:
    * - The expression cannot reference itself
    * - The expression cannot reference other generated columns
@@ -82,12 +108,12 @@ object GeneratedColumn {
    * Throws an [[AnalysisException]] if the expression cannot be converted or is an invalid
    * generation expression according to the above rules.
    */
-  private def analyzeAndVerifyExpression(
+  private def analyzeExpression(
       expressionStr: String,
       fieldName: String,
       dataType: DataType,
       schema: StructType,
-      statementType: String): Unit = {
+      statementType: String): Expression = {
     def unsupportedExpressionError(reason: String): AnalysisException = {
       new AnalysisException(
         errorClass = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
@@ -167,37 +193,27 @@ object GeneratedColumn {
       throw unsupportedExpressionError(
         "generation expression cannot contain non utf8 binary collated string type")
     }
+    analyzed
   }
 
   /**
-   * For any generated columns in `schema`, parse, analyze and verify the generation expression.
+   * If `schema` contains generated columns, verify the catalog supports them, then build the V2
+   * columns from `columns`. Per-column generation expressions are parsed, analyzed, and verified
+   * via [[toGenerationExpression]] inside [[ColumnDefinition.toV2Column]].
    */
-  private def verifyGeneratedColumns(schema: StructType, statementType: String): Unit = {
-    schema.foreach { field =>
-      getGenerationExpression(field).foreach { expressionStr =>
-        analyzeAndVerifyExpression(expressionStr, field.name, field.dataType, schema, statementType)
-      }
-    }
-  }
-
-  /**
-   * If `schema` contains any generated columns:
-   * 1) Check whether the table catalog supports generated columns. Otherwise throw an error.
-   * 2) Parse, analyze and verify the generation expressions for any generated columns.
-   */
-  def validateGeneratedColumns(
+  def validateAndBuildV2Columns(
+      columns: Seq[ColumnDefinition],
       schema: StructType,
       catalog: TableCatalog,
       ident: Identifier,
-      statementType: String): Unit = {
-    if (hasGeneratedColumns(schema)) {
-      if (!catalog.capabilities().contains(
-        TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
-        throw QueryCompilationErrors.unsupportedTableOperationError(
-          catalog, ident, "generated columns")
-      }
-      GeneratedColumn.verifyGeneratedColumns(schema, statementType)
+      statementType: String): Array[V2Column] = {
+    if (hasGeneratedColumns(schema) &&
+        !catalog.capabilities().contains(
+          TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS)) {
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        catalog, ident, "generated columns")
     }
+    columns.map(_.toV2Column(statementType, schema)).toArray
   }
 }
 

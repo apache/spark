@@ -704,10 +704,10 @@ private[sql] object CatalogV2Util {
    * createTable and related APIs.
    */
   def structTypeToV2Columns(schema: StructType): Array[Column] = {
-    schema.fields.map(structFieldToV2Column)
+    schema.fields.map(f => structFieldToV2Column(f, schema))
   }
 
-  private def structFieldToV2Column(f: StructField): Column = {
+  private def structFieldToV2Column(f: StructField, schema: StructType): Column = {
     def metadataAsJson(metadata: Metadata): String = {
       if (metadata == Metadata.empty) {
         null
@@ -748,8 +748,14 @@ private[sql] object CatalogV2Util {
     } else if (isGeneratedColumn) {
       val cleanedMetadata = metadataWithKeysRemoved(
         Seq("comment", GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY))
+      val generationExpression = GeneratedColumn.toGenerationExpression(
+        GeneratedColumn.getGenerationExpression(f).get,
+        f.name,
+        f.dataType,
+        schema,
+        statementType = "Column analysis")
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
-        GeneratedColumn.getGenerationExpression(f).get, metadataAsJson(cleanedMetadata))
+        generationExpression, metadataAsJson(cleanedMetadata))
     } else if (isIdentityColumn) {
       val cleanedMetadata = metadataWithKeysRemoved(
         Seq("comment",

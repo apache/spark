@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions;
 
+import java.util.Objects;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 
@@ -58,4 +60,17 @@ public class Extract extends ExpressionWithToString {
 
   @Override
   public Expression[] children() { return new Expression[]{ source() }; }
+
+  @Override
+  public boolean equals(Object other) {
+    if (this == other) return true;
+    if (other == null || getClass() != other.getClass()) return false;
+    Extract that = (Extract) other;
+    return Objects.equals(field, that.field) && Objects.equals(source, that.source);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(field, source);
+  }
 }

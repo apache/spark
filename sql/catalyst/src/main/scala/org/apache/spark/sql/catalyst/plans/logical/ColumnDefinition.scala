@@ -30,7 +30,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdenti
 import org.apache.spark.sql.connector.expressions.LiteralValue
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.ColumnImpl
-import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder, StructField}
+import org.apache.spark.sql.types.{DataType, Metadata, MetadataBuilder, StructField, StructType}
 
 /**
  * User-specified column definition for CREATE/REPLACE TABLE commands. This is an expression so that
@@ -60,14 +60,17 @@ case class ColumnDefinition(
     copy(defaultValue = newChildren.headOption.map(_.asInstanceOf[DefaultValueExpression]))
   }
 
-  def toV2Column(statement: String): V2Column = {
+  def toV2Column(statement: String, tableSchema: StructType): V2Column = {
+    val columnGenerationExpression = generationExpression.map { sql =>
+      GeneratedColumn.toGenerationExpression(sql, name, dataType, tableSchema, statement)
+    }.orNull
     ColumnImpl(
       name,
       dataType,
       nullable,
       comment.orNull,
       defaultValue.map(_.toV2(statement, name)).orNull,
-      generationExpression.orNull,
+      columnGenerationExpression,
       identityColumnSpec.orNull,
       if (metadata == Metadata.empty) null else metadata.json)
   }

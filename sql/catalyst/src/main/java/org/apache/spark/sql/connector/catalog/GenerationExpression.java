@@ -21,33 +21,35 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
- * A class that represents default values.
+ * A class that represents generation expressions for computed/generated columns.
  * <p>
- * Connectors can define default values using either a SQL string (Spark SQL dialect) or an
- * {@link Expression expression} if the default value can be expressed as a supported connector
- * expression. If both the SQL string and the expression are provided, Spark first attempts to
- * convert the given expression to its internal representation. If the expression cannot be
- * converted, and a SQL string is provided, Spark will fall back to parsing the SQL string.
+ * Connectors can define generation expressions using either a SQL string (Spark SQL dialect) or an
+ * {@link Expression expression} if the generation expression can be expressed as a supported
+ * connector expression. If both the SQL string and the expression are provided, Spark first
+ * attempts to convert the given expression to its internal representation. If the expression
+ * cannot be converted, and a SQL string is provided, Spark will fall back to parsing the SQL
+ * string.
  *
  * @since 4.1.0
  */
 @Evolving
-public class DefaultValue extends SqlOrExpression {
+public class GenerationExpression extends SqlOrExpression {
 
-  public DefaultValue(String sql) {
+  public GenerationExpression(String sql) {
     this(sql, null /* no expression */);
   }
 
-  public DefaultValue(Expression expr) {
+  public GenerationExpression(Expression expr) {
     this(null /* no sql */, expr);
   }
 
-  public DefaultValue(String sql, Expression expr) {
+  public GenerationExpression(String sql, Expression expr) {
     super(sql, expr);
   }
 
   @Override
   public String toString() {
-    return String.format("DefaultValue{sql=%s, expression=%s}", getSql(), getExpression());
+    return String.format(
+        "GenerationExpression{sql=%s, expression=%s}", getSql(), getExpression());
   }
 }

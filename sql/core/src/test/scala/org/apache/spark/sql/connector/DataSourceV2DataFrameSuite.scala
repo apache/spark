@@ -28,13 +28,13 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkS
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, GenerationExpression, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, Extract, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
@@ -593,6 +593,87 @@ class DataSourceV2DataFrameSuite
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
         Seq(Row(1, 100, "unknown", false)))
+    }
+  }
+
+  test("create/replace table with generated column DSV2 expressions") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  eventDate DATE,
+             |  eventYear INT GENERATED ALWAYS AS (year(eventDate))
+             |) USING foo
+             |""".stripMargin)
+      }
+
+      val eventYear = createExec.columns.find(_.name() == "eventYear").get
+      assert(compareGenerationExpression(
+        eventYear.columnGenerationExpression(),
+        new GenerationExpression(
+          "year(eventDate)",
+          new Extract("YEAR", FieldReference("eventDate")))))
+
+      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+        sql(
+          s"""
+             |REPLACE TABLE $tableName (
+             |  eventDate DATE,
+             |  eventMonth INT GENERATED ALWAYS AS (month(eventDate))
+             |) USING foo
+             |""".stripMargin)
+      }
+
+      val eventMonth = replaceExec.columns.find(_.name() == "eventMonth").get
+      assert(compareGenerationExpression(
+        eventMonth.columnGenerationExpression(),
+        new GenerationExpression(
+          "month(eventDate)",
+          new Extract("MONTH", FieldReference("eventDate")))))
+    }
+  }
+
+  test("create table with foldable generated column DSV2 expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  id INT,
+             |  genValue INT GENERATED ALWAYS AS ((100 + 23))
+             |) USING foo
+             |""".stripMargin)
+      }
+
+      val genValue = createExec.columns.find(_.name() == "genValue").get
+      assert(compareGenerationExpression(
+        genValue.columnGenerationExpression(),
+        new GenerationExpression(
+          "(100 + 23)",
+          LiteralValue(123, IntegerType))))
+    }
+  }
+
+  test("create table with generated column without translatable DSV2 expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""
+             |CREATE TABLE $tableName (
+             |  id INT,
+             |  cat STRING GENERATED ALWAYS AS (current_catalog())
+             |) USING foo
+             |""".stripMargin)
+      }
+
+      val cat = createExec.columns.find(_.name() == "cat").get
+      assert(compareGenerationExpression(
+        cat.columnGenerationExpression(),
+        new GenerationExpression("current_catalog()", null /* No V2 Expression */)))
     }
   }
 
@@ -1216,6 +1297,16 @@ class DataSourceV2DataFrameSuite
       case _ => left.getSql == right.getSql &&
         left.getExpression == right.getExpression &&
         (!compareValue || left.getValue == right.getValue)
+    }
+  }
+
+  private def compareGenerationExpression(
+      left: GenerationExpression,
+      right: GenerationExpression): Boolean = {
+    (left, right) match {
+      case (null, null) => true
+      case (null, _) | (_, null) => false
+      case _ => left.getSql == right.getSql && left.getExpression == right.getExpression
     }
   }
 

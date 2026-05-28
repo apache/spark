@@ -706,7 +706,7 @@ class V2TableUtilSuite extends SparkFunSuite {
       nullable = nullable,
       comment = null,
       defaultValue = null,
-      generationExpression = null,
+      columnGenerationExpression = null,
       identityColumnSpec = null,
       metadataInJSON = null,
       id = id)

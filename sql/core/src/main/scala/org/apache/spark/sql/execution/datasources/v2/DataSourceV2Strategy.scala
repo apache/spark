@@ -241,14 +241,13 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ResolveTableConstraints.validateCatalogForTableConstraint(
         tableSpec.constraints, tableCatalog, ident)
       val statementType = "CREATE TABLE"
-      GeneratedColumn.validateGeneratedColumns(
-        c.tableSchema, tableCatalog, ident, statementType)
       IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
 
       CreateTableExec(
-        catalog.asTableCatalog,
+        tableCatalog,
         ident,
-        columns.map(_.toV2Column(statementType)).toArray,
+        GeneratedColumn.validateAndBuildV2Columns(
+          columns, c.tableSchema, tableCatalog, ident, statementType),
         partitioning,
         qualifyLocInTableSpec(tableSpec),
         ifNotExists) :: Nil
@@ -299,11 +298,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       ResolveTableConstraints.validateCatalogForTableConstraint(
         tableSpec.constraints, tableCatalog, ident)
       val statementType = "REPLACE TABLE"
-      GeneratedColumn.validateGeneratedColumns(
-        c.tableSchema, tableCatalog, ident, statementType)
       IdentityColumn.validateIdentityColumn(c.tableSchema, tableCatalog, ident)
 
-      val v2Columns = columns.map(_.toV2Column(statementType)).toArray
+      val v2Columns = GeneratedColumn.validateAndBuildV2Columns(
+        columns, c.tableSchema, tableCatalog, ident, statementType)
       catalog match {
         case staging: StagingTableCatalog =>
           AtomicReplaceTableExec(staging, ident, v2Columns, parts,

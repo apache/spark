@@ -59,7 +59,7 @@ public interface Column {
         nullable,
         comment,
         /* defaultValue = */ null,
-        /* generationExpression = */ null,
+        /* columnGenerationExpression = */ null,
         /* identityColumnSpec = */ null,
         metadataInJSON,
         /* id = */ null);
@@ -78,18 +78,52 @@ public interface Column {
         nullable,
         comment,
         defaultValue,
-        /* generationExpression = */ null,
+        /* columnGenerationExpression = */ null,
         /* identityColumnSpec = */ null,
         metadataInJSON,
         /* id = */ null);
   }
 
+  /**
+   * Creates a column with a generation expression in SQL string form.
+   *
+   * @since 4.1.0
+   * @deprecated Use
+   *   {@link #create(String, DataType, boolean, String, GenerationExpression, String)} instead.
+   */
+  @Deprecated
   static Column create(
       String name,
       DataType dataType,
       boolean nullable,
       String comment,
       String generationExpression,
+      String metadataInJSON) {
+    GenerationExpression genExpr = generationExpression != null
+        ? new GenerationExpression(generationExpression) : null;
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        /* defaultValue = */ null,
+        genExpr,
+        /* identityColumnSpec = */ null,
+        metadataInJSON,
+        /* id = */ null);
+  }
+
+  /**
+   * Creates a column with a generation expression object.
+   *
+   * @since 4.1.0
+   */
+  static Column create(
+      String name,
+      DataType dataType,
+      boolean nullable,
+      String comment,
+      GenerationExpression generationExpression,
       String metadataInJSON) {
     return new ColumnImpl(
         name,
@@ -116,7 +150,7 @@ public interface Column {
         nullable,
         comment,
         /* defaultValue = */ null,
-        /* generationExpression = */ null,
+        /* columnGenerationExpression = */ null,
         identityColumnSpec,
         metadataInJSON,
         /* id = */ null);
@@ -156,7 +190,25 @@ public interface Column {
    * expression compatibility and reject writes as necessary.
    */
   @Nullable
-  String generationExpression();
+  default String generationExpression() {
+    return columnGenerationExpression() != null ? columnGenerationExpression().getSql() : null;
+  }
+
+  /**
+   * Returns the generation expression of this table column as an {@link GenerationExpression}.
+   * <p>
+   * The default implementation wraps {@link #generationExpression()} for backward compatibility
+   * with custom {@link Column} implementations that only override the string form. New code
+   * should override this method (or use {@link Column#create} with a {@link GenerationExpression})
+   * to also supply a connector {@link org.apache.spark.sql.connector.expressions.Expression}.
+   *
+   * @since 4.1.0
+   */
+  @Nullable
+  default GenerationExpression columnGenerationExpression() {
+    String sql = generationExpression();
+    return sql != null ? new GenerationExpression(sql) : null;
+  }
 
   /**
    * Returns the identity column specification of this table column. Null means no identity column.
