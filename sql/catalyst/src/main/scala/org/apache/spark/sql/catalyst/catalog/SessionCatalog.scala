@@ -128,9 +128,9 @@ class SessionCatalog(
    * applied).
    *
    * When unset (e.g. standalone [[SessionCatalog]] in tests), kinds derive from
-   * [[SQLConf.defaultPathOrder]] with no catalog entries -- equivalent to the system slots of
-   * the spark-built-in default path. This includes both `system.builtin` and `system.session`
-   * so unqualified temp functions are still resolvable in test setups.
+   * [[SQLConf.defaultPathOrder]] with no catalog entries -- equivalent to the system-namespace
+   * entries of the spark-built-in default path. This includes both `system.builtin` and
+   * `system.session` so unqualified temp functions are still resolvable in test setups.
    */
   @volatile private var catalogManagerForSessionFunctionKinds: Option[CatalogManager] = None
 

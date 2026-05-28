@@ -290,11 +290,12 @@ class SetPathSuite extends SharedSparkSession {
     "and the current schema") {
     // SPARK-57109: pin the spark-built-in default ordering used when `spark.sql.defaultPath`
     // is empty, so a future change to SYSTEM_PATH cannot silently drift the DEFAULT_PATH
-    // contract.
+    // contract. The default `sessionFunctionResolutionOrder` is "second" (builtin first, then
+    // session, then catalog entries); ordering tests for the other modes live below.
     withPathEnabled {
       sql("SET PATH = DEFAULT_PATH")
       val entries = pathEntries(currentPath())
-      assert(entries.toSet === Set("system.builtin", "system.session", "spark_catalog.default"),
+      assert(entries === Seq("system.builtin", "system.session", "spark_catalog.default"),
         s"DEFAULT_PATH should expand to system.builtin, system.session, and the current " +
           s"schema; got: $entries")
     }
@@ -310,6 +311,22 @@ class SetPathSuite extends SharedSparkSession {
       assert(entries === Seq("system.builtin", "spark_catalog.default"),
         s"SYSTEM_PATH, CURRENT_SCHEMA should expand to [system.builtin, " +
           s"current schema]; got: $entries")
+    }
+  }
+
+  test("PATH enabled: SET PATH = SYSTEM_PATH, system.session is the documented migration form") {
+    // SPARK-57109: callers who relied on the old SYSTEM_PATH expansion (system.builtin +
+    // system.session) can name system.session explicitly. Pre-PR this would have raised
+    // DUPLICATE_SQL_PATH_ENTRY because SYSTEM_PATH already carried system.session; post-PR it
+    // is legal and expands to [system.builtin, system.session]. Pinning this here locks in
+    // the migration contract and guards against a future re-expansion of SYSTEM_PATH that
+    // would silently turn this back into a duplicate.
+    withPathEnabled {
+      sql("SET PATH = SYSTEM_PATH, system.session")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("system.builtin", "system.session"),
+        s"SYSTEM_PATH, system.session should expand to [system.builtin, system.session]; " +
+          s"got: $entries")
     }
   }
 
