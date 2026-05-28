@@ -99,6 +99,8 @@ object RowEncoder extends DataTypeErrorsBase {
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)
       case TimestampNTZType => LocalDateTimeEncoder
+      // Nano timestamp types intentionally do not honor `lenient`: legacy `java.sql.Timestamp` /
+      // `java.sql.Date` external types are out of scope for nanosecond precision (SPARK-57033).
       case t: TimestampNTZNanosType => LocalDateTimeNanosEncoder(t.precision)
       case t: TimestampLTZNanosType => InstantNanosEncoder(t.precision)
       case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)

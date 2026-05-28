@@ -701,6 +701,9 @@ object CatalystTypeConverters {
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: LocalTime => TimeConverter.toCatalyst(t)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
+    // SPARK-57033: schema-less convertToCatalyst keeps bare `Instant` / `LocalDateTime` on the
+    // microsecond converters. The nanosecond path is schema-driven only - users opt in via an
+    // explicit `TimestampLTZNanosType` / `TimestampNTZNanosType` column in the schema.
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
     case d: BigDecimal =>

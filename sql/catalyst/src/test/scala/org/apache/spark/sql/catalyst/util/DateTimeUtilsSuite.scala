@@ -1955,4 +1955,46 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         negativeExpectedMicros)
     }
   }
+
+  test("SPARK-57033: random roundtrip across precisions floors to the precision step") {
+    val rnd = new scala.util.Random(0)
+    val min = Instant.parse("0001-01-01T00:00:00Z").getEpochSecond
+    val max = Instant.parse("9999-12-31T23:59:59.999999999Z").getEpochSecond
+    // For each random instant, verify both helpers floor the original nanosecond value
+    // (toward `-inf`) to the precision step `10^(9 - p)` ns. The whole-instant nanosecond
+    // count overflows `Long` for far-future dates, so we check the floor on the components
+    // instead: `epochMicros` is invariant across precisions (matches `instantToMicros`) and
+    // the sub-micro nanosecond residual is floored to the precision step.
+    for (_ <- 0 until 10) {
+      val secs = min + math.abs(rnd.nextLong()) % (max - min + 1)
+      val nano = rnd.nextInt(1_000_000_000)
+      val instant = Instant.ofEpochSecond(secs, nano.toLong)
+      val ldt = LocalDateTime.ofInstant(instant, ZoneOffset.UTC)
+      val expectedMicros = instantToMicros(instant)
+      val rawSubMicro = (nano % 1000).toShort
+      for (p <- 7 to 9) {
+        val step = math.pow(10, 9 - p).toLong.toShort
+        val expectedSubMicro = ((rawSubMicro / step) * step).toShort
+
+        val ltz = instantToTimestampNanos(instant, p)
+        assert(ltz.epochMicros === expectedMicros,
+          s"LTZ p=$p instant=$instant epochMicros=${ltz.epochMicros}")
+        assert(ltz.nanosWithinMicro === expectedSubMicro,
+          s"LTZ p=$p instant=$instant nanosWithinMicro=${ltz.nanosWithinMicro}")
+        // Roundtrip preserves the truncated value.
+        val ltzBack = timestampNanosToInstant(ltz)
+        assert(instantToMicros(ltzBack) === expectedMicros)
+        assert(ltzBack.getNano % 1000 === expectedSubMicro)
+
+        val ntz = localDateTimeToTimestampNanos(ldt, p)
+        assert(ntz.epochMicros === expectedMicros,
+          s"NTZ p=$p ldt=$ldt epochMicros=${ntz.epochMicros}")
+        assert(ntz.nanosWithinMicro === expectedSubMicro,
+          s"NTZ p=$p ldt=$ldt nanosWithinMicro=${ntz.nanosWithinMicro}")
+        val ntzBack = timestampNanosToLocalDateTime(ntz)
+        assert(DateTimeUtils.localDateTimeToMicros(ntzBack) === expectedMicros)
+        assert(ntzBack.getNano % 1000 === expectedSubMicro)
+      }
+    }
+  }
 }
