@@ -295,7 +295,6 @@ class RelationResolution(
             // we don't share-cache views.
             val table: Option[Table] = tableOrView.filter {
               case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
-              case t: V1Table if t.catalogTable.tableType == CatalogTableType.VIEW => false
               case _ => true
             }
             // Enforce single-catalog isolation for all table loads inside a transaction.

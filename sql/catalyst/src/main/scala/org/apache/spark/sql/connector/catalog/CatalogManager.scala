@@ -35,6 +35,18 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
+ * Maps a path-based data source format name (e.g. `parquet`, `delta`) to the catalog that owns
+ * its tables, when the format implements [[SupportsCatalogOptions]].
+ */
+private[sql] trait DataSourceCatalogResolver {
+  def catalogFor(formatName: String): Option[String]
+}
+
+private[sql] object DataSourceCatalogResolver {
+  val NoOp: DataSourceCatalogResolver = (_: String) => None
+}
+
+/**
  * A thread-safe contract for managing [[CatalogPlugin]]s. Implementations resolve catalogs by
  * name and maintain the current catalog and namespace for a session.
  *
@@ -73,9 +85,8 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   }
 
   /**
-   * Returns the catalog name that owns path-based tables for the given data source format name,
-   * or None if the format is unknown or does not implement [[SupportsCatalogOptions]]. Delegates
-   * to [[dataSourceCatalogResolver]], which is supplied by sql/core's session-state builder.
+   * Returns the catalog name that owns path-based tables for the given data source format name.
+   * Returns None if the format is unknown or does not implement [[SupportsCatalogOptions]].
    */
   def catalogForDataSource(formatName: String): Option[String] =
     dataSourceCatalogResolver.catalogFor(formatName)

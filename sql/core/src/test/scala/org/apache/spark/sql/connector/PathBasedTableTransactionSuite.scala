@@ -22,6 +22,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.connector.catalog.{Aborted, Committed, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SessionConfigSupport, SharedTablesInMemoryRowLevelOperationTableCatalog, SupportsCatalogOptions}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.sources
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -38,6 +39,7 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
 
   private val tablePath = "`/path/to/t`"
   private val tablePathWithFormat = "pathformat.`/path/to/t`"
+  private val tablePathWithFormat2 = "pathformat2.`/path/to/t`"
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -212,13 +214,20 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     createPathTable(tablePathWithFormat)
     // ns1.source is resolved via the current catalog (spark_catalog), same as the write target.
     sql("CREATE TABLE ns1.source (id INT, data STRING)")
-    sql("INSERT INTO ns1.source VALUES (1, 'a')")
+    sql("INSERT INTO ns1.source VALUES (1, 'a'), (2, 'b')")
 
-    val (txn, _) = executeTransaction {
-      sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM ns1.source")
+    val (txn, txnTables) = executeTransaction {
+      sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM ns1.source WHERE id = 1")
     }
     assert(txn.currentState === Committed)
     assert(txn.isClosed)
+    // Source scan with predicate was tracked via the transaction catalog.
+    val sourceTxnTable = txnTables("spark_catalog.ns1.source")
+    assert(sourceTxnTable.scanEvents.size === 1)
+    assert(sourceTxnTable.scanEvents.flatten.exists {
+      case sources.EqualTo("id", 1) => true
+      case _ => false
+    })
     checkAnswer(spark.table(tablePathWithFormat), Row(1, "a") :: Nil)
   }
 
@@ -234,6 +243,27 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       parameters = Map("txnCatalog" -> "spark_catalog", "foreignCatalogs" -> "cat"))
     assert(catalog.lastTransaction.currentState === Aborted)
     assert(catalog.lastTransaction.isClosed)
+  }
+
+  test("path-based write with source from session-config-routed catalog is rejected") {
+    withSQLConf(
+        "spark.sql.catalog.txncat" -> classOf[InMemoryRowLevelOperationTableCatalog].getName,
+        "spark.datasource.pathformat2.catalog" -> "txncat") {
+      // pathformat2 routes to txncat; create the source there.
+      createPathTable(tablePathWithFormat2)
+      sql(s"INSERT INTO $tablePathWithFormat2 VALUES (1, 'a')")
+
+      // pathformat falls back to the session catalog (extractCatalog returns null).
+      createPathTable(tablePathWithFormat)
+
+      val e = intercept[AnalysisException] {
+        sql(s"INSERT INTO $tablePathWithFormat SELECT * FROM $tablePathWithFormat2")
+      }
+      checkError(e, "TRANSACTION_MULTI_CATALOG_NOT_SUPPORTED",
+        parameters = Map("txnCatalog" -> "spark_catalog", "foreignCatalogs" -> "txncat"))
+      assert(catalog.lastTransaction.currentState === Aborted)
+      assert(catalog.lastTransaction.isClosed)
+    }
   }
 }
 
