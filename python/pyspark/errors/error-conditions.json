@@ -785,6 +785,12 @@
       "Column <col_name> must be one of <valid_types> for plotting, got <col_type>."
     ]
   },
+  "PROTOBUF_DESCRIPTOR_FILE_NOT_FOUND": {
+    "message": [
+      "Error reading Protobuf descriptor file at path: <filePath>."
+    ],
+    "sqlState": "42K0G"
+  },
   "PROTOCOL_ERROR": {
     "message": [
       "<failure>. This usually indicates that the message does not conform to the protocol."

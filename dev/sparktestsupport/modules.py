@@ -579,6 +579,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_dataframe_query_context",
         "pyspark.sql.tests.test_listener",
         "pyspark.sql.tests.test_observation",
+        "pyspark.sql.tests.test_protobuf",
         "pyspark.sql.tests.test_repartition",
         "pyspark.sql.tests.test_stat",
         "pyspark.sql.tests.test_datasources",
