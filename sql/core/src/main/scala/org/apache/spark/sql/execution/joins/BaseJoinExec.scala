@@ -30,13 +30,20 @@ trait BaseJoinExec extends BinaryExecNode {
   def leftKeys: Seq[Expression]
   def rightKeys: Seq[Expression]
 
+  protected def doCanonicalizePart2(
+      part1Canonicalized: BaseJoinExec,
+      leftCanonicalizedKeys: Seq[Expression],
+      rightCanonicalizedKeys: Seq[Expression]): BaseJoinExec = {
+    part1Canonicalized
+  }
+
   override def doCanonicalize(): BaseJoinExec = {
-    val baseCanonicalized = super.doCanonicalize().asInstanceOf[BroadcastHashJoinExec]
+    val baseCanonicalized = super.doCanonicalize().asInstanceOf[BaseJoinExec]
     val (newLeft, newRight) = baseCanonicalized.leftKeys.zip(baseCanonicalized.rightKeys)
       .sortBy {
         case (l, _) => l.hashCode()
       }.unzip
-    baseCanonicalized.copy(leftKeys = newLeft, rightKeys = newRight)
+    doCanonicalizePart2(baseCanonicalized, newLeft, newRight)
   }
 
   override def simpleStringWithNodeId(): String = {

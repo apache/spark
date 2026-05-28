@@ -45,6 +45,14 @@ case class SortMergeJoinExec(
     right: SparkPlan,
     isSkewJoin: Boolean = false) extends ShuffledJoin {
 
+  override protected def doCanonicalizePart2(
+      part1Canonicalized: BaseJoinExec,
+      leftCanonicalizedKeys: Seq[Expression],
+      rightCanonicalizedKeys: Seq[Expression]): BaseJoinExec = {
+    part1Canonicalized.asInstanceOf[SortMergeJoinExec].copy(
+      leftKeys = leftCanonicalizedKeys, rightKeys = rightCanonicalizedKeys)
+  }
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"))
