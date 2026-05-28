@@ -551,7 +551,9 @@ trait AutoCdcMergeWriteBase {
       // Arity drift (added or dropped keys).
       recordedKeyFields.length != expectedKeyFields.length ||
       // Name or dataType drift: every expected key must have a same-name (resolver-aware)
-      // recorded counterpart with an equivalent dataType.
+      // recorded counterpart with an equivalent dataType. Columns changing nullability and
+      // metadata in the schema are intentionally tolerated, although null key values during
+      // microbatch execution will be invalidated regardless.
       expectedKeyFields.exists { expected =>
         recordedKeyFields.find(rf => resolver(rf.name, expected.name)) match {
           case None => true
