@@ -1285,7 +1285,7 @@ private[spark] class DAGScheduler(
   // stage the one with the highest priority (highest-priority pool, earliest created).
   // That should take care of at least part of the priority inversion problem with
   // cross-job dependencies.
-  private def activeJobForStage(stage: Stage): Option[Int] = {
+  protected def activeJobForStage(stage: Stage): Option[Int] = {
     val jobsThatUseStage: Array[Int] = stage.jobIds.toArray.sorted
     jobsThatUseStage.find(jobIdToActiveJob.contains)
   }
@@ -1582,27 +1582,6 @@ private[spark] class DAGScheduler(
   }
 
   /**
-   * An experimental API to submit child stages even while the parents are running. This is only
-   * used in [[ConcurrentStageDAGScheduler]]. It defined here since it depends two private APIs in
-   * this class (namely submitMissingTasks() and activeJobForStage()).
-   */
-  protected def submitConcurrentStage(stage: Stage): Unit = {
-    assert(waitingStages.contains(stage))
-    activeJobForStage(stage) match {
-      case Some(job) =>
-        waitingStages -= stage
-        submitMissingTasks(stage, job)
-      case None => // Not expected.
-        new IllegalStateException(s"No active job for stage $stage")
-    }
-  }
-
-  protected def postSchedulerEvent(event: DAGSchedulerEvent): Unit = {
-    // Currently only used in [[ConcurrentStageDAGScheduler]].
-    eventProcessLoop.post(event)
-  }
-
-  /**
    * `PythonRunner` needs to know what the pyspark memory and cores settings are for the profile
    * being run. Pass them in the local properties of the task if it's set for the stage profile.
    */
@@ -1665,7 +1644,7 @@ private[spark] class DAGScheduler(
   }
 
   /** Called when stage's parents are available and we can now do its task. */
-  private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
+  protected def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
 
     // For statically indeterminate stages being retried, we trigger rollback BEFORE task

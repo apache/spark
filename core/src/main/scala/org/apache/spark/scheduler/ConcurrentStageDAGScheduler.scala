@@ -60,7 +60,7 @@ class ConcurrentStageDAGScheduler(
 
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
-  // This contains all the concurrent states that are yet to be scheduled across all the jobs.
+  // This contains all the concurrent stages that are yet to be scheduled across all the jobs.
   private[spark] val concurrentStages = new mutable.HashSet[Stage]
 
   private[scheduler] case class DependentStageInfo(
@@ -91,8 +91,11 @@ class ConcurrentStageDAGScheduler(
     val queryBatchId = getStreamingBatchIdFromProperties(properties)
 
     if (queryBatchId.nonEmpty && isConcurrentStagesEnabled(properties)) {
-      if (properties.getProperty(SPECULATION_ENABLED.key) == "true") {
-        // Speculation is not supported with concurrent stages.
+      // Speculation is not supported with concurrent stages. Check both the per-job local
+      // property (for jobs that override the cluster default via setLocalProperty) and the
+      // SparkConf (the documented way to enable speculation cluster-wide).
+      if (properties.getProperty(SPECULATION_ENABLED.key) == "true" ||
+          sc.conf.get(SPECULATION_ENABLED)) {
         throw new SparkException(
           "Speculative execution is not supported with concurrent stages " +
           s"(streaming query: $queryBatchId). Please disable ${SPECULATION_ENABLED.key} config."
@@ -102,14 +105,17 @@ class ConcurrentStageDAGScheduler(
       logInfo(log"Concurrent stages is enabled for [query ${MDC(LogKeys.STREAMING_QUERY_ID,
         queryBatchId.get.queryId)} batch ${MDC(LogKeys.BATCH_ID, queryBatchId.get.batchId)}]")
 
-      // Mark current stage and all its ancestors as concurrent
+      // Mark current stage and all its ancestors as concurrent.
+      // Collect into a local set first so a slot-check failure below does not leak partial
+      // state into concurrentStages.
+      val visitedStages = new mutable.HashSet[Stage]
       var totalCoresNeeded = 0
       def visit(stage: Stage): Unit = {
-        if (!concurrentStages.contains(stage)) {
+        if (!visitedStages.contains(stage)) {
           logInfo(log"Marking stage '${MDC(LogKeys.STAGE, stage)}' concurrent for [query ${MDC(
             LogKeys.STREAMING_QUERY_ID, queryBatchId.get.queryId)} batch ${MDC(
             LogKeys.BATCH_ID, queryBatchId.get.batchId)}]")
-          concurrentStages += stage
+          visitedStages += stage
           totalCoresNeeded += totalNumCoreForStage(stage)
           stage.parents.foreach(visit)
         }
@@ -132,6 +138,9 @@ class ConcurrentStageDAGScheduler(
             logWarning(log"${MDC(LogKeys.ERROR, e)}. Skipping slot check for RTM.")
         }
       }
+
+      // Slot check passed (or was disabled) — commit the visited stages.
+      concurrentStages ++= visitedStages
     } else {
       super.onFinalStageCreated(finalStage, properties)
     }
@@ -173,6 +182,21 @@ class ConcurrentStageDAGScheduler(
       }
       removeFromConcurrentStages(stage)
       submitConcurrentStage(stage)
+    }
+  }
+
+  /**
+   * Submits a child stage even while its parents are still running. Distinct from
+   * `submitStage` in that it bypasses the missing-parent check.
+   */
+  private def submitConcurrentStage(stage: Stage): Unit = {
+    assert(waitingStages.contains(stage))
+    activeJobForStage(stage) match {
+      case Some(job) =>
+        waitingStages -= stage
+        submitMissingTasks(stage, job)
+      case None => // Not expected.
+        throw new IllegalStateException(s"No active job for stage $stage")
     }
   }
 
@@ -219,6 +243,13 @@ class ConcurrentStageDAGScheduler(
       dependentStageMap(dependent).parents -= stage
       checkDependentStageTasks(dependent)
     }
+
+    // Drop this stage's own entry from the map. On the success path
+    // `checkDependentStageTasks` (invoked when the stage's last parent finishes) has already
+    // removed the entry, so this is a no-op. On failure / cancellation / abort the entry —
+    // and any buffered completion events — would otherwise leak for the lifetime of the
+    // scheduler.
+    dependentStageMap.remove(stage)
   }
 
   // Checks if the dependent stage's parents are all done. If all the parents are done,
@@ -237,7 +268,7 @@ class ConcurrentStageDAGScheduler(
       delayedEvents.foreach { event =>
         logInfo(log"Posting delayed task ${MDC(LogKeys.TASK_ID, event.taskInfo.taskId)} " +
           log"completion event for stage ${MDC(LogKeys.STAGE, stage)}")
-        postSchedulerEvent(event)
+        eventProcessLoop.post(event)
       }
     }
   }
@@ -253,19 +284,20 @@ object ConcurrentStageDAGScheduler {
   }
 
   /**
-   * Extracts the [[StreamingBatchId]] from the given properties if all three of the streaming
-   * query id, run id and batch id are present.
+   * Extracts the [[StreamingBatchId]] from the given properties if both the streaming
+   * query id and batch id are present.
    */
   def getStreamingBatchIdFromProperties(properties: Properties): Option[StreamingBatchId] = {
     if (properties == null) {
       return None
     }
 
-    val queryId = Option(properties.getProperty("sql.streaming.queryId"))
-    val runId = Option(properties.getProperty("sql.streaming.runId"))
-    val batchId = Option(properties.getProperty("streaming.sql.batchId"))
-    if (queryId.nonEmpty && runId.nonEmpty && batchId.nonEmpty) {
-      Some(StreamingBatchId(queryId.get, runId.get, batchId.get.toLong))
+    val queryId = Option(properties.getProperty(
+      StructuredStreamingIdAwareSchedulerLogging.QUERY_ID_KEY))
+    val batchId = Option(properties.getProperty(
+      StructuredStreamingIdAwareSchedulerLogging.BATCH_ID_KEY))
+    if (queryId.nonEmpty && batchId.nonEmpty) {
+      Some(StreamingBatchId(queryId.get, batchId.get.toLong))
     } else {
       None
     }
@@ -276,7 +308,6 @@ object ConcurrentStageDAGScheduler {
  * Case class to identify a batch in a streaming query.
  *
  * @param queryId - Streaming query id
- * @param runId - Streaming query run id
  * @param batchId - Batch id for a micro batch in a streaming query
  */
-case class StreamingBatchId(queryId: String, runId: String, batchId: Long)
+case class StreamingBatchId(queryId: String, batchId: Long)

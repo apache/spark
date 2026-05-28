@@ -1077,7 +1077,7 @@ private[spark] class TaskSetManager(
       accumUpdates, metricPeaks)
 
     val countTowardsTaskFailures = reason.countTowardsTaskFailures ||
-      // if the query is running in real time mode, any failures should contribute the task failures
+      // if the query is running in real time mode, any failures should count toward the task failures
       // so that the query can restart.
       ConcurrentStageDAGScheduler.isConcurrentStagesEnabled(taskSet.properties)
 

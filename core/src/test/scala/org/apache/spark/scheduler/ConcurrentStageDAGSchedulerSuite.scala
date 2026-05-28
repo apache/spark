@@ -48,6 +48,33 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
     new TestConcurrentStageDAGScheduler(sc)
   }
 
+  /**
+   * Asserts that the concurrent scheduler's internal state — `concurrentStages` and
+   * `dependentStageMap` — is empty. Called from `assertDataStructuresEmpty` and at the end of
+   * every test via `afterEach`, so every inherited test (and every locally-defined test) gets
+   * free regression coverage against entries leaking into these maps.
+   */
+  override protected def extraEmptyChecks(): Unit = {
+    // Inherited tests sometimes replace `scheduler` with a plain MyDAGScheduler (bypassing
+    // createInitialScheduler), so pattern-match rather than cast.
+    scheduler match {
+      case s: TestConcurrentStageDAGScheduler =>
+        assert(s.concurrentStages.isEmpty,
+          s"concurrentStages should be empty but contains: ${s.concurrentStages}")
+        assert(s.dependentStageMap.isEmpty,
+          s"dependentStageMap should be empty but contains: ${s.dependentStageMap}")
+      case _ => // Not a concurrent scheduler — nothing extra to assert.
+    }
+  }
+
+  override def afterEach(): Unit = {
+    try {
+      extraEmptyChecks()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   // Catch the job failure exception with a listener.
   private class TestJobListener extends JobListener {
     private var failureException: Option[Exception] = None
@@ -69,7 +96,6 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
   private val testProperties: Properties = {
     val properties = new Properties()
     properties.setProperty("sql.streaming.queryId", "test_query_id")
-    properties.setProperty("sql.streaming.runId", "test_run_id")
     properties.setProperty("streaming.sql.batchId", "5")
     properties.setProperty(ConcurrentStageDAGScheduler.CONCURRENT_STAGES_ENABLED_PROPERTY, "true")
     new Properties(properties) {
@@ -224,7 +250,7 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
     // Now complete stage D. This is similar to completing C. The tasks are enqueued.
     assert(depStageMap(sD).delayedTaskCompletionEvents.size === 0)
     completeShuffleMapStageSuccessfully(sD.id, 0, 5) // Complete stage D
-    assert(depStageMap(sD).delayedTaskCompletionEvents.size === 4) // 4 tasks in stage C.
+    assert(depStageMap(sD).delayedTaskCompletionEvents.size === 4) // 4 tasks in stage D.
 
     // Complete stage E. This is a root node and should complete normally.
     assert(depStageMap(sF).parents.contains(sE)) // E is one of the stages that F waits for.
@@ -260,9 +286,127 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
     assertDataStructuresEmpty()
   }
 
-  test("Should fail if speculative execution is enabled") {
-    // Try to a run job with two stages with speculative execution. It should fail the job with
-    // exception.
+  test("dependentStageMap entry is cleaned up when a dependent stage aborts and its " +
+       "parent stage is shared with another job") {
+    // This exercises the cleanup path in markStageAsFinished. When the dependent stage
+    // (here, B) aborts before its parent (A) finishes, the cascade through
+    // failJobAndIndependentStages only marks stages that are *independent* to the failing job
+    // as finished — shared stages are left alone. Without the explicit
+    // `dependentStageMap.remove(stage)` at the end of markStageAsFinished, B's entry would
+    // leak in dependentStageMap until A eventually finished for the other job.
+
+    // Job 1 (regular batch): rddC depends on rddA via shuffleDepA.
+    val rddA = new MyRDD(sc, 1, Nil).setName("rddA")
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val rddC = new MyRDD(sc, 1, List(shuffleDepA)).setName("rddC")
+    submit(rddC, Array(0))  // properties = null implies non-concurrent.
+
+    // After job 1: rddA's stage is running, rddC's stage is waiting.
+    assert(scheduler.runningStages.exists(_.rdd.name == "rddA"),
+      "rddA's stage should be running after job 1 submission")
+
+    // Job 2 (concurrent): rddB also depends on the same shuffleDepA → rddA's stage is shared.
+    val rddB = new MyRDD(sc, 3, List(shuffleDepA)).setName("rddB")
+    submit(rddB, Array(0), properties = testProperties)
+
+    val concurrentScheduler = scheduler.asInstanceOf[TestConcurrentStageDAGScheduler]
+    val depStageMap = concurrentScheduler.dependentStageMap
+    // B is in dependentStageMap with rddA's stage as a parent.
+    assert(depStageMap.keys.map(_.rdd.name) === Set("rddB"))
+    assert(depStageMap.values.flatMap(_.parents.map(_.rdd.name)).toSet === Set("rddA"))
+
+    // Fail rddB's taskset. abortStage's failJobAndIndependentStages only marks rddB
+    // finished — rddA is shared with job 1, so it is NOT cancelled.
+    val taskSetB = taskSets.find(_.tasks.head.stageId ==
+      scheduler.runningStages.find(_.rdd.name == "rddB").get.id).get
+    failed(taskSetB, "test failure: rddB aborted before parent rddA finished")
+
+    // rddA is still running for job 1.
+    assert(scheduler.runningStages.exists(_.rdd.name == "rddA"),
+      "Shared parent rddA's stage should still be running for job 1 after job 2 aborted")
+
+    // rddB's entry must have been removed by markStageAsFinished's cleanup, even though
+    // rddA is still running (and would normally be the stage whose markStageAsFinished
+    // cleans up B's entry).
+    assert(depStageMap.isEmpty,
+      s"dependentStageMap should be empty after rddB aborted, but contains: $depStageMap")
+  }
+
+  test("concurrentStages is empty after slot-check failure") {
+    // The DAG walk in onFinalStageCreated accumulates stages into a local set and only commits
+    // them to `concurrentStages` after the slot check passes. This test verifies that a slot-
+    // check failure leaves `concurrentStages` empty (rather than leaking the visited stages).
+    sc.conf.set(STREAMING_REALTIME_MODE_SLOTS_CHECK_DISABLED, false)
+    try {
+      // local[2] gives us 2 slots; a 4-partition job exceeds that.
+      val rdd = new MyRDD(sc, 4, Nil)
+
+      val jobListener = new TestJobListener()
+      submit(rdd, Array(0, 1, 2, 3), properties = testProperties, listener = jobListener)
+
+      assert(jobListener.expectFailure().getMessage.contains(
+        "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT"))
+
+      val concurrentScheduler = scheduler.asInstanceOf[TestConcurrentStageDAGScheduler]
+      assert(concurrentScheduler.concurrentStages.isEmpty,
+        s"concurrentStages should be empty after slot-check failure, but contains: " +
+          s"${concurrentScheduler.concurrentStages}")
+    } finally {
+      sc.conf.set(STREAMING_REALTIME_MODE_SLOTS_CHECK_DISABLED, true)
+    }
+  }
+
+  test("concurrentStages and dependentStageMap are cleaned up after job cancellation") {
+    val mapStage = new MyRDD(sc, 1, Nil) // stage_0
+    val shuffleDep = new ShuffleDependency(mapStage, new HashPartitioner(1))
+    val resultStage = new MyRDD(sc, 3, List(shuffleDep)) // stage_1
+
+    val jobId = submit(resultStage, Array(0), properties = testProperties)
+
+    val concurrentScheduler = scheduler.asInstanceOf[TestConcurrentStageDAGScheduler]
+    // Both stages running concurrently and dependentStageMap is populated.
+    assert(scheduler.runningStages.map(_.id) === Set(0, 1))
+    assert(concurrentScheduler.dependentStageMap.nonEmpty)
+
+    // Cancel the job mid-execution. handleJobCancellation marks all stages of the cancelled
+    // job finished via markStageAsFinished, which runs our cleanup.
+    cancel(jobId)
+
+    assert(concurrentScheduler.concurrentStages.isEmpty,
+      s"concurrentStages should be empty after cancellation, " +
+        s"but contains: ${concurrentScheduler.concurrentStages}")
+    assert(concurrentScheduler.dependentStageMap.isEmpty,
+      s"dependentStageMap should be empty after cancellation, " +
+        s"but contains: ${concurrentScheduler.dependentStageMap}")
+  }
+
+  test("concurrentStages and dependentStageMap are cleaned up after executor-loss " +
+       "induced abort") {
+    val mapStage = new MyRDD(sc, 1, Nil) // stage_0
+    val shuffleDep = new ShuffleDependency(mapStage, new HashPartitioner(1))
+    val resultStage = new MyRDD(sc, 3, List(shuffleDep)) // stage_1
+
+    submit(resultStage, Array(0), properties = testProperties)
+
+    val concurrentScheduler = scheduler.asInstanceOf[TestConcurrentStageDAGScheduler]
+    assert(concurrentScheduler.dependentStageMap.nonEmpty)
+
+    // In real-time mode TaskSchedulerImpl caps maxFailures at 1 and TaskSetManager counts
+    // ExecutorLostFailure toward task failures, so a single executor loss aborts the
+    // TaskSet immediately. Simulate the resulting TaskSetFailed event.
+    failed(taskSets(1), "executor lost: simulated for test")
+
+    assert(concurrentScheduler.concurrentStages.isEmpty,
+      s"concurrentStages should be empty after executor-loss abort, " +
+        s"but contains: ${concurrentScheduler.concurrentStages}")
+    assert(concurrentScheduler.dependentStageMap.isEmpty,
+      s"dependentStageMap should be empty after executor-loss abort, " +
+        s"but contains: ${concurrentScheduler.dependentStageMap}")
+  }
+
+  test("Should fail if speculative execution is enabled (per-job property)") {
+    // Try to a run job with two stages with speculative execution as a per-job local
+    // property. It should fail the job with exception.
 
     val mapStage = new MyRDD(sc, 1, Nil) // stage_0
     val shuffleDep = new ShuffleDependency(mapStage, new HashPartitioner(1))
@@ -276,5 +420,26 @@ class ConcurrentStageDAGSchedulerSuite extends DAGSchedulerSuiteBase {
 
     assert(jobListener.expectFailure().getMessage.contains(
       "Speculative execution is not supported with concurrent stages"))
+  }
+
+  test("Should fail if speculative execution is enabled (cluster-wide SparkConf)") {
+    // Same as the previous test, but speculation is set on SparkConf (the documented way to
+    // enable speculation) instead of the per-job local property. Every other consumer of
+    // SPECULATION_ENABLED reads it via sc.conf, so this is the common case.
+
+    sc.conf.set(SPECULATION_ENABLED, true)
+    try {
+      val mapStage = new MyRDD(sc, 1, Nil) // stage_0
+      val shuffleDep = new ShuffleDependency(mapStage, new HashPartitioner(1))
+      val resultStage = new MyRDD(sc, 3, List(shuffleDep)) // stage_1
+
+      val jobListener = new TestJobListener()
+      submit(resultStage, Array(0), properties = testProperties, listener = jobListener)
+
+      assert(jobListener.expectFailure().getMessage.contains(
+        "Speculative execution is not supported with concurrent stages"))
+    } finally {
+      sc.conf.set(SPECULATION_ENABLED, false)
+    }
   }
 }

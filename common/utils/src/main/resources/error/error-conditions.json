@@ -892,7 +892,7 @@
   },
   "CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT" : {
     "message" : [
-      "The minimum number of free slots required in the cluster is <numTasks>, however, the cluster has only has <numSlots> slots free. Query will stall or fail. Increase cluster size to proceed."
+      "The minimum number of free slots required in the cluster is <numTasks>, however, the cluster has only <numSlots> slots free. Query will stall or fail. Increase cluster size to proceed."
     ],
     "sqlState" : "53000"
   },

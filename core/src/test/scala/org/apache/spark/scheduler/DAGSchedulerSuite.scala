@@ -567,12 +567,12 @@ abstract class DAGSchedulerSuiteBase extends SparkFunSuite with TempLocalSparkCo
   }
 
   /** Sends TaskSetFailed to the scheduler. */
-  private def failed(taskSet: TaskSet, message: String): Unit = {
+  protected def failed(taskSet: TaskSet, message: String): Unit = {
     runEvent(TaskSetFailed(taskSet, message, None))
   }
 
   /** Sends JobCancelled to the DAG scheduler. */
-  private def cancel(jobId: Int): Unit = {
+  protected def cancel(jobId: Int): Unit = {
     runEvent(JobCancelled(jobId, None))
   }
 
@@ -6133,7 +6133,14 @@ abstract class DAGSchedulerSuiteBase extends SparkFunSuite with TempLocalSparkCo
     assert(scheduler.shuffleIdToMapStage.isEmpty)
     assert(scheduler.waitingStages.isEmpty)
     assert(scheduler.outputCommitCoordinator.isEmpty)
+    extraEmptyChecks()
   }
+
+  /**
+   * Hook for subclasses to extend the empty-state assertions with their own state checks.
+   * Default is a no-op.
+   */
+  protected def extraEmptyChecks(): Unit = ()
 
   // Nothing in this test should break if the task info's fields are null, but
   // OutputCommitCoordinator requires the task info itself to not be null.
