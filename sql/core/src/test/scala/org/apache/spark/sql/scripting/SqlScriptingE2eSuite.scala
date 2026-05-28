@@ -437,58 +437,6 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
     verifySqlScriptResultWithNamedParams(sqlScriptText, Seq(Row("smaller")), args)
   }
 
-  // Parameterized SQL scripts where substituted values are longer than the parameter
-  // markers should not cause StringIndexOutOfBoundsException.
-  test("named params - substituted value longer than short marker") {
-    val sqlScriptText = "BEGIN SELECT :x; END"
-    val args: Map[String, Any] = Map("x" -> ("y" * 200))
-    verifySqlScriptResultWithNamedParams(sqlScriptText, Seq(Row("y" * 200)), args)
-  }
-
-  test("named params - long marker name") {
-    val sqlScriptText = "BEGIN SELECT :longParamName; END"
-    val args: Map[String, Any] = Map("longParamName" -> ("y" * 200))
-    verifySqlScriptResultWithNamedParams(sqlScriptText, Seq(Row("y" * 200)), args)
-  }
-
-  test("named params - multiple long markers") {
-    val sqlScriptText = "BEGIN SELECT :firstName, :lastName; END"
-    val args: Map[String, Any] = Map(
-      "firstName" -> ("x" * 100),
-      "lastName" -> ("y" * 100))
-    verifySqlScriptResultWithNamedParams(
-      sqlScriptText, Seq(Row("x" * 100, "y" * 100)), args)
-  }
-
-  test("named params - long value inside IF control flow") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  IF :condition = 'yes' THEN
-        |    SELECT :value;
-        |  END IF;
-        |END
-        |""".stripMargin
-    val args: Map[String, Any] = Map(
-      "condition" -> "yes",
-      "value" -> ("z" * 200))
-    verifySqlScriptResultWithNamedParams(sqlScriptText, Seq(Row("z" * 200)), args)
-  }
-
-  test("named params - two statements each with a long param") {
-    val sqlScriptText =
-      """
-        |BEGIN
-        |  SELECT :firstName;
-        |  SELECT :lastName;
-        |END
-        |""".stripMargin
-    val args: Map[String, Any] = Map(
-      "firstName" -> ("a" * 200),
-      "lastName" -> ("b" * 200))
-    verifySqlScriptResultWithNamedParams(sqlScriptText, Seq(Row("b" * 200)), args)
-  }
-
   test("positional params") {
     val sqlScriptText =
       """

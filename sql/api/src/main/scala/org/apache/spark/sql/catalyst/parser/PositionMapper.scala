@@ -91,12 +91,12 @@ case class PositionMapper(
   }
 
   /**
-   * Extract the original text fragment corresponding to a range in the substituted text.
-   * Maps both start and stop positions back to the original text and returns the substring.
+   * Extract the original text fragment corresponding to a range in the substituted text. Maps
+   * both start and stop positions back to the original text and returns the substring.
    *
-   * For the stop position, mapToOriginal maps positions within a substitution range to the
-   * start of the original marker. To get the correct end, we map stopIndex + 1 (which lands
-   * in the unmapped region after the substitution) and subtract 1.
+   * For the stop position, mapToOriginal maps positions within a substitution range to the start
+   * of the original marker. To get the correct end, we map stopIndex + 1 (which lands in the
+   * unmapped region after the substitution) and subtract 1.
    *
    * @param substitutedStart
    *   Inclusive start position in the substituted text

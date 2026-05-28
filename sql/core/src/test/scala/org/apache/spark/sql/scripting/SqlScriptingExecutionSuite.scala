@@ -21,8 +21,9 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.{SparkArithmeticException, SparkConf}
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.CompoundBody
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.catalyst.parser.NamedParameterContext
+import org.apache.spark.sql.catalyst.plans.logical.{CompoundBody, SingleStatement}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.internal.SQLConf
@@ -4326,5 +4327,94 @@ class SqlScriptingExecutionSuite extends SharedSparkSession {
         |""".stripMargin
       verifySqlScriptResult(sqlScript2, expected)
     }
+  }
+
+  // Parameterized SQL scripts where substituted values are longer than the parameter
+  // markers should not cause StringIndexOutOfBoundsException.
+  test("parameterized script - short marker") {
+    val scriptText = "BEGIN SELECT :x; END"
+    val args = Map("x" -> ("y" * 200))
+    checkAnswer(spark.sql(scriptText, args), Row("y" * 200))
+  }
+
+  test("parameterized script - long marker name") {
+    val scriptText = "BEGIN SELECT :longParamName; END"
+    val args = Map("longParamName" -> ("y" * 200))
+    checkAnswer(spark.sql(scriptText, args), Row("y" * 200))
+  }
+
+  test("parameterized script - multiple long markers") {
+    val scriptText = "BEGIN SELECT :firstName, :lastName; END"
+    val args = Map("firstName" -> ("x" * 100), "lastName" -> ("y" * 100))
+    checkAnswer(spark.sql(scriptText, args), Row("x" * 100, "y" * 100))
+  }
+
+  test("parameterized script - IF control flow") {
+    val scriptText =
+      """
+        |BEGIN
+        |  IF :condition = 'yes' THEN
+        |    SELECT :value;
+        |  END IF;
+        |END
+        |""".stripMargin
+    val args = Map("condition" -> "yes", "value" -> ("z" * 200))
+    checkAnswer(spark.sql(scriptText, args), Row("z" * 200))
+  }
+
+  test("parameterized script - two statements each with a param") {
+    val scriptText =
+      """
+        |BEGIN
+        |  SELECT :firstName;
+        |  SELECT :lastName;
+        |END
+        |""".stripMargin
+    val args = Map("firstName" -> ("a" * 200), "lastName" -> ("b" * 200))
+    checkAnswer(spark.sql(scriptText, args), Row("b" * 200))
+  }
+
+  private def getStatementTexts(
+      scriptText: String,
+      args: Map[String, Expression]): Seq[String] = {
+    val compoundBody = spark.sessionState.sqlParser
+      .parsePlanWithParameters(scriptText, NamedParameterContext(args))
+      .asInstanceOf[CompoundBody]
+    compoundBody.collection.collect { case s: SingleStatement => s.getText }
+  }
+
+  test("getText returns original text with short marker") {
+    val texts = getStatementTexts(
+      "BEGIN SELECT :x; END",
+      Map("x" -> Literal("y" * 200)))
+    assert(texts == Seq("SELECT :x"))
+  }
+
+  test("getText returns original text with long marker name") {
+    val texts = getStatementTexts(
+      "BEGIN SELECT :longParamName; END",
+      Map("longParamName" -> Literal("y" * 200)))
+    assert(texts == Seq("SELECT :longParamName"))
+  }
+
+  test("getText returns original text with multiple long markers") {
+    val texts = getStatementTexts(
+      "BEGIN SELECT :firstName, :lastName; END",
+      Map("firstName" -> Literal("a" * 200), "lastName" -> Literal("b" * 200)))
+    assert(texts == Seq("SELECT :firstName, :lastName"))
+  }
+
+  test("getText - two statements each with param") {
+    val scriptText =
+      """
+        |BEGIN
+        |  SELECT :firstName;
+        |  SELECT :lastName;
+        |END
+        |""".stripMargin
+    val texts = getStatementTexts(
+      scriptText,
+      Map("firstName" -> Literal("a" * 200), "lastName" -> Literal("b" * 200)))
+    assert(texts == Seq("SELECT :firstName", "SELECT :lastName"))
   }
 }
