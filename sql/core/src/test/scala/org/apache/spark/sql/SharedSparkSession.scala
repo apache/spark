@@ -96,9 +96,21 @@ trait SharedSparkSession
   }
 
   /**
+   * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
+   * tests. That trait initializes the spark session in its [[beforeAll()]] implementation before
+   * the automatic thread snapshot is performed, so the audit code could fail to report threads
+   * leaked by that shared session.
+   *
+   * The behavior is overridden here to take the snapshot before the spark session is initialized.
+   */
+  override protected val enableAutoThreadAudit = false
+
+  /**
    * Make sure the [[TestSparkSession]] is initialized before any tests are run.
    */
   protected override def beforeAll(): Unit = {
+    doThreadPreAudit()
+
     initializeSession()
 
     // Ensure we have initialized the context before calling parent code
@@ -122,8 +134,12 @@ trait SharedSparkSession
           }
         }
       } finally {
-        SparkSession.clearActiveSession()
-        SparkSession.clearDefaultSession()
+        try {
+          SparkSession.clearActiveSession()
+          SparkSession.clearDefaultSession()
+        } finally {
+          doThreadPostAudit()
+        }
       }
     }
   }

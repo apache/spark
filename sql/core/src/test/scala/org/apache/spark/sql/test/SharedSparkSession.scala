@@ -24,29 +24,6 @@ import org.apache.spark.sql.{classic, QueryTest, QueryTestBase, SparkSession, Sp
 
 trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
 
-  /**
-   * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
-   * tests. That trait initializes the spark session in its [[beforeAll()]] implementation before
-   * the automatic thread snapshot is performed, so the audit code could fail to report threads
-   * leaked by that shared session.
-   *
-   * The behavior is overridden here to take the snapshot before the spark session is initialized.
-   */
-  override protected val enableAutoThreadAudit = false
-
-  protected override def beforeAll(): Unit = {
-    doThreadPreAudit()
-    super.beforeAll()
-  }
-
-  protected override def afterAll(): Unit = {
-    try {
-      super.afterAll()
-    } finally {
-      doThreadPostAudit()
-    }
-  }
-
   // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
   // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
   def runAndFetchMetrics(func: => Unit): Map[(Long, String, String), String] = {
