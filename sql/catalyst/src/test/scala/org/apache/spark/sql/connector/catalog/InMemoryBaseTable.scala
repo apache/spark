@@ -100,12 +100,12 @@ abstract class InMemoryBaseTable(
   /**
    * Copies version and validated version from another table.
    *
-   * Test catalogs that decorate tables (e.g. [[NullColumnIdInMemoryTableCatalog]],
-   * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create new objects that start
-   * at version 0. Without this call, [[V2TableRefreshUtil]] would see version 0 on
-   * every load and never detect that the table has changed, breaking stale-table
-   * refresh for incrementally constructed queries (e.g. joining DataFrames analyzed
-   * at different times).
+   * Decorating catalogs (e.g. [[NullColumnIdInMemoryTableCatalog]],
+   * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create new table objects whose
+   * version counter starts at 0. Without this call the monotonic-version assumption
+   * that downstream consumers rely on (e.g. validated-version propagation, join-refresh
+   * tests in [[DSv2IncrementallyConstructedQueryTests]]) is broken because the counter
+   * resets on every wrap.
    */
   def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
     setVersion(sourceTable.version())

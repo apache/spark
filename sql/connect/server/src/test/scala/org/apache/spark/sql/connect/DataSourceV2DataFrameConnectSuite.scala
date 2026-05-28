@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
-import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests, DSv2IncrementallyConstructedQueryTests}
+import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2IncrementallyConstructedQueryTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests}
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, TableCatalog}
 
 /**
@@ -54,6 +54,7 @@ class DataSourceV2DataFrameConnectSuite
     .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
 
   override protected def testPrefix: String = "[connect] "
+  override protected def isConnect: Boolean = true
 
   override protected def withTestSession(fn: SparkSession => Unit): Unit =
     withSession(fn)

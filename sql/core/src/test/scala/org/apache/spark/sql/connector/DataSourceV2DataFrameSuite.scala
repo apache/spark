@@ -96,6 +96,7 @@ class DataSourceV2DataFrameSuite
 
   // DSv2ExternalMutationTestBase implementations for classic mode
   override protected def testPrefix: String = ""
+  override protected def isConnect: Boolean = false
 
   override protected def withTestSession(fn: SparkSession => Unit): Unit = fn(spark)
 

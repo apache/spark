@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.catalog.{Column, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, TableCatalog, TableChange, TableInfo}
+import org.apache.spark.sql.connector.catalog.{Column, InMemoryTableCatalog, TableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -192,7 +192,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             },
             condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
             matchPVals = true,
-            parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+            parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
         }
       }
     }
@@ -225,7 +225,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             },
             condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMNS_MISMATCH",
             matchPVals = true,
-            parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+            parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
         }
       }
     }
@@ -338,7 +338,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         session.sql(s"INSERT INTO $nullBothT VALUES (1, 100)").collect()
 
         val df1 = session.table(nullBothT)
-        val catalog = getTableCatalog[NullTableIdAndNullColumnIdInMemoryTableCatalog](
+        val catalog = getTableCatalog[TableCatalog](
           session, "nullbothidscat")
         assert(catalog.loadTable(testIdent).id == null,
           "NullTableIdAndNullColumnIdInMemoryTableCatalog should produce null table IDs")
@@ -403,7 +403,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             },
             condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
             matchPVals = true,
-            parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+            parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
         }
       }
     }
@@ -419,7 +419,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
         val df1 = session.table(nullBothT)
 
-        val catalog = getTableCatalog[NullTableIdAndNullColumnIdInMemoryTableCatalog](
+        val catalog = getTableCatalog[TableCatalog](
           session, "nullbothidscat")
         catalog.alterTable(
           testIdent, TableChange.deleteColumn(Array("salary"), false))
@@ -477,7 +477,7 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             },
             condition = "INCOMPATIBLE_TABLE_CHANGE_AFTER_ANALYSIS.COLUMN_ID_MISMATCH",
             matchPVals = true,
-            parameters = Map("tableName" -> ".*", "errors" -> ".*"))
+            parameters = Map("tableName" -> ".*", "errors" -> "(?s).*"))
         }
       }
     }
