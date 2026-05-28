@@ -209,16 +209,36 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Converts a `java.time.LocalDateTime` into the composite `(epochMicros, nanosWithinMicro)`
-   * pair used by `TimestampNTZNanosType`. The sub-microsecond part of `localDateTime.getNano`
-   * (its last three decimal digits, in `[0, 999]`) is preserved as `nanosWithinMicro`; the rest
-   * of the local date-time becomes `epochMicros` via [[localDateTimeToMicros]] (i.e. interpreted
-   * at UTC). The conversion is lossless within the valid range of `TimestampNTZNanosType`.
+   * Truncates the sub-microsecond nanosecond part to the given timestamp precision `p` in [7, 9].
+   * Precision 9 keeps all three digits, 8 zeros the last digit, 7 zeros the last two; precisions
+   * outside that range are passed through unchanged because the surrounding types already
+   * validate the bound.
    */
-  def localDateTimeToTimestampNanos(localDateTime: LocalDateTime): TimestampNanosVal = {
+  private def truncateNanosWithinMicroToPrecision(nanosWithinMicro: Int, precision: Int): Int = {
+    precision match {
+      case 7 => (nanosWithinMicro / 100) * 100
+      case 8 => (nanosWithinMicro / 10) * 10
+      case _ => nanosWithinMicro
+    }
+  }
+
+  /**
+   * Converts a `java.time.LocalDateTime` into the composite `(epochMicros, nanosWithinMicro)`
+   * pair used by `TimestampNTZNanosType(precision)`. The sub-microsecond part of
+   * `localDateTime.getNano` (its last three decimal digits, in `[0, 999]`) is truncated to the
+   * target precision (floor toward zero of the fractional second) and stored as
+   * `nanosWithinMicro`; the rest of the local date-time becomes `epochMicros` via
+   * [[localDateTimeToMicros]] (i.e. interpreted at UTC). At `precision = 9` the conversion is
+   * lossless within the valid range; at 7 / 8 the lower 2 / 1 sub-micro digits are dropped to
+   * match `CAST(... AS TIMESTAMP_NTZ(p))` semantics.
+   */
+  def localDateTimeToTimestampNanos(
+      localDateTime: LocalDateTime,
+      precision: Int): TimestampNanosVal = {
     val epochMicros = localDateTimeToMicros(localDateTime)
-    val nanosWithinMicro = (localDateTime.getNano % NANOS_PER_MICROS).toShort
-    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro)
+    val rawNanosWithinMicro = localDateTime.getNano % NANOS_PER_MICROS.toInt
+    val nanosWithinMicro = truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
   }
 
   /**
@@ -232,15 +252,18 @@ trait SparkDateTimeUtils {
 
   /**
    * Converts a `java.time.Instant` into the composite `(epochMicros, nanosWithinMicro)` pair used
-   * by `TimestampLTZNanosType`. `epochMicros` is computed via [[instantToMicros]] (floor division
-   * of `instant.getNano` to micros), and the last three sub-micro nanosecond digits are kept as
-   * `nanosWithinMicro` in `[0, 999]`. The conversion is lossless within the valid range of
-   * `TimestampLTZNanosType`.
+   * by `TimestampLTZNanosType(precision)`. `epochMicros` is computed via [[instantToMicros]]
+   * (floor division of `instant.getNano` to micros); the last three sub-micro nanosecond digits
+   * are truncated to the target precision (floor toward zero of the fractional second) and kept
+   * as `nanosWithinMicro` in `[0, 999]`. At `precision = 9` the conversion is lossless within the
+   * valid range; at 7 / 8 the lower 2 / 1 sub-micro digits are dropped to match
+   * `CAST(... AS TIMESTAMP_LTZ(p))` semantics.
    */
-  def instantToTimestampNanos(instant: Instant): TimestampNanosVal = {
+  def instantToTimestampNanos(instant: Instant, precision: Int): TimestampNanosVal = {
     val epochMicros = instantToMicros(instant)
-    val nanosWithinMicro = (instant.getNano % NANOS_PER_MICROS).toShort
-    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro)
+    val rawNanosWithinMicro = instant.getNano % NANOS_PER_MICROS.toInt
+    val nanosWithinMicro = truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
   }
 
   /**

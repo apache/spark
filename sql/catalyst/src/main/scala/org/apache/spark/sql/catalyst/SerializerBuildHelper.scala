@@ -173,7 +173,7 @@ object SerializerBuildHelper {
       DateTimeUtils.getClass,
       TimestampNTZNanosType(precision),
       "localDateTimeToTimestampNanos",
-      inputObject :: Nil,
+      inputObject :: Literal(precision) :: Nil,
       returnNullable = false)
   }
 
@@ -184,7 +184,7 @@ object SerializerBuildHelper {
       DateTimeUtils.getClass,
       TimestampLTZNanosType(precision),
       "instantToTimestampNanos",
-      inputObject :: Nil,
+      inputObject :: Literal(precision) :: Nil,
       returnNullable = false)
   }
 

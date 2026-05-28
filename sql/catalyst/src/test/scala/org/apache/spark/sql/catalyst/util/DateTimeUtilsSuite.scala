@@ -1864,7 +1864,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       LocalDateTime.parse("2019-02-26T16:56:00.123456789"),
       LocalDateTime.parse("9999-12-31T23:59:59.999999999"))
     for (ldt <- cases) {
-      val v = localDateTimeToTimestampNanos(ldt)
+      val v = localDateTimeToTimestampNanos(ldt, precision = 9)
       assert(v.nanosWithinMicro >= 0 && v.nanosWithinMicro <= 999,
         s"nanosWithinMicro out of range for $ldt: $v")
       assert(v.nanosWithinMicro === (ldt.getNano % 1000).toShort)
@@ -1884,7 +1884,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       Instant.parse("2019-02-26T16:56:00.123456789Z"),
       Instant.parse("9999-12-31T23:59:59.999999999Z"))
     for (i <- cases) {
-      val v = instantToTimestampNanos(i)
+      val v = instantToTimestampNanos(i, precision = 9)
       assert(v.nanosWithinMicro >= 0 && v.nanosWithinMicro <= 999,
         s"nanosWithinMicro out of range for $i: $v")
       assert(v.nanosWithinMicro === (i.getNano % 1000).toShort)
@@ -1902,13 +1902,37 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       val secs = min + math.abs(rnd.nextLong()) % (max - min + 1)
       val nano = rnd.nextInt(1_000_000_000)
       val i = Instant.ofEpochSecond(secs, nano.toLong)
-      val v = instantToTimestampNanos(i)
+      val v = instantToTimestampNanos(i, precision = 9)
       assert(timestampNanosToInstant(v) === i)
       val ldt = LocalDateTime.ofInstant(i, ZoneOffset.UTC)
-      val v2 = localDateTimeToTimestampNanos(ldt)
+      val v2 = localDateTimeToTimestampNanos(ldt, precision = 9)
       assert(timestampNanosToLocalDateTime(v2) === ldt)
       // Internal layout matches direct decomposition.
       assert(v === TimestampNanosVal.fromParts(instantToMicros(i), (nano % 1000).toShort))
+    }
+  }
+
+  test("SPARK-57033: localDateTimeToTimestampNanos truncates sub-micro to precision") {
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    // precision 9 keeps all 3 sub-micro digits, 8 drops the last, 7 drops the last two.
+    assert(localDateTimeToTimestampNanos(ldt, precision = 9).nanosWithinMicro === 789)
+    assert(localDateTimeToTimestampNanos(ldt, precision = 8).nanosWithinMicro === 780)
+    assert(localDateTimeToTimestampNanos(ldt, precision = 7).nanosWithinMicro === 700)
+    // epochMicros is unaffected by sub-micro truncation.
+    val expectedMicros = DateTimeUtils.localDateTimeToMicros(ldt)
+    for (p <- 7 to 9) {
+      assert(localDateTimeToTimestampNanos(ldt, precision = p).epochMicros === expectedMicros)
+    }
+  }
+
+  test("SPARK-57033: instantToTimestampNanos truncates sub-micro to precision") {
+    val i = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    assert(instantToTimestampNanos(i, precision = 9).nanosWithinMicro === 789)
+    assert(instantToTimestampNanos(i, precision = 8).nanosWithinMicro === 780)
+    assert(instantToTimestampNanos(i, precision = 7).nanosWithinMicro === 700)
+    val expectedMicros = instantToMicros(i)
+    for (p <- 7 to 9) {
+      assert(instantToTimestampNanos(i, precision = p).epochMicros === expectedMicros)
     }
   }
 }

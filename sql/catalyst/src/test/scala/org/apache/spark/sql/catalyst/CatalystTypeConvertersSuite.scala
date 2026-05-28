@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String}
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, TimestampNanosVal, UTF8String}
 
 class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
@@ -263,7 +263,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       Seq(7, 8, 9).foreach { p =>
         val dt = TimestampNTZNanosType(p)
         val result = CatalystTypeConverters.createToCatalystConverter(dt)(input)
-        val expected = DateTimeUtils.localDateTimeToTimestampNanos(input)
+        val expected = DateTimeUtils.localDateTimeToTimestampNanos(input, p)
         assert(result === expected)
       }
     }
@@ -278,7 +278,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       "2019-02-26T16:56:00.123456789",
       "9999-12-31T23:59:59.999999999").foreach { text =>
       val ldt = LocalDateTime.parse(text)
-      val v = DateTimeUtils.localDateTimeToTimestampNanos(ldt)
+      val v = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision = 9)
       Seq(7, 8, 9).foreach { p =>
         val dt = TimestampNTZNanosType(p)
         assert(CatalystTypeConverters.createToScalaConverter(dt)(v) === ldt)
@@ -299,7 +299,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       Seq(7, 8, 9).foreach { p =>
         val dt = TimestampLTZNanosType(p)
         val result = CatalystTypeConverters.createToCatalystConverter(dt)(input)
-        val expected = DateTimeUtils.instantToTimestampNanos(input)
+        val expected = DateTimeUtils.instantToTimestampNanos(input, p)
         assert(result === expected)
       }
     }
@@ -314,7 +314,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       "2019-02-26T16:56:00.123456789Z",
       "9999-12-31T23:59:59.999999999Z").foreach { text =>
       val instant = Instant.parse(text)
-      val v = DateTimeUtils.instantToTimestampNanos(instant)
+      val v = DateTimeUtils.instantToTimestampNanos(instant, precision = 9)
       Seq(7, 8, 9).foreach { p =>
         val dt = TimestampLTZNanosType(p)
         assert(CatalystTypeConverters.createToScalaConverter(dt)(v) === instant)
@@ -324,7 +324,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-57033: TimestampLTZNanosType -> Instant ignores java8 API flag") {
     val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
-    val v = DateTimeUtils.instantToTimestampNanos(instant)
+    val v = DateTimeUtils.instantToTimestampNanos(instant, precision = 9)
     val dt = TimestampLTZNanosType()
     Seq("true", "false").foreach { flag =>
       withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> flag) {
@@ -346,13 +346,37 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     val row = Row(ldt, instant)
     val catalystRow = toCat(row).asInstanceOf[InternalRow]
     assert(catalystRow.getTimestampNTZNanos(0) ===
-      DateTimeUtils.localDateTimeToTimestampNanos(ldt))
+      DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision = 9))
     assert(catalystRow.getTimestampLTZNanos(1) ===
-      DateTimeUtils.instantToTimestampNanos(instant))
+      DateTimeUtils.instantToTimestampNanos(instant, precision = 9))
     assert(toScala(catalystRow) === row)
     // Null row.
     val nullRow = Row.fromSeq(Seq(null, null))
     assert(toScala(toCat(nullRow)) === nullRow)
+  }
+
+  test("SPARK-57033: TimestampNTZNanosType converter truncates sub-micro to precision") {
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    val cases = Map(7 -> 700, 8 -> 780, 9 -> 789)
+    cases.foreach { case (p, expectedNanosWithinMicro) =>
+      val dt = TimestampNTZNanosType(p)
+      val v = CatalystTypeConverters.createToCatalystConverter(dt)(ldt)
+        .asInstanceOf[TimestampNanosVal]
+      assert(v.nanosWithinMicro === expectedNanosWithinMicro,
+        s"precision=$p: expected $expectedNanosWithinMicro, got ${v.nanosWithinMicro}")
+    }
+  }
+
+  test("SPARK-57033: TimestampLTZNanosType converter truncates sub-micro to precision") {
+    val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val cases = Map(7 -> 700, 8 -> 780, 9 -> 789)
+    cases.foreach { case (p, expectedNanosWithinMicro) =>
+      val dt = TimestampLTZNanosType(p)
+      val v = CatalystTypeConverters.createToCatalystConverter(dt)(instant)
+        .asInstanceOf[TimestampNanosVal]
+      assert(v.nanosWithinMicro === expectedNanosWithinMicro,
+        s"precision=$p: expected $expectedNanosWithinMicro, got ${v.nanosWithinMicro}")
+    }
   }
 
   test("converting java.time.LocalDate to DateType") {

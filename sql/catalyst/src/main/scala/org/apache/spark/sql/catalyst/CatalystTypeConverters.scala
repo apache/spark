@@ -520,7 +520,7 @@ object CatalystTypeConverters {
   private class TimestampNTZNanosConverter(dataType: TimestampNTZNanosType)
     extends CatalystTypeConverter[Any, LocalDateTime, TimestampNanosVal] {
     override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
-      case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l)
+      case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l, dataType.precision)
       case other => throw new SparkIllegalArgumentException(
         errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
@@ -544,7 +544,7 @@ object CatalystTypeConverters {
   private class TimestampLTZNanosConverter(dataType: TimestampLTZNanosType)
     extends CatalystTypeConverter[Any, Instant, TimestampNanosVal] {
     override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
-      case i: Instant => DateTimeUtils.instantToTimestampNanos(i)
+      case i: Instant => DateTimeUtils.instantToTimestampNanos(i, dataType.precision)
       case other => throw new SparkIllegalArgumentException(
         errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(

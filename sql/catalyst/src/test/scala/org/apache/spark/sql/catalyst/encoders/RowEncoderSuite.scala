@@ -387,10 +387,10 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val schema = new StructType().add("t", TimestampNTZNanosType(p))
       val encoder = ExpressionEncoder(schema).resolveAndBind()
       val row = toRow(encoder, Row(localDateTime))
-      assert(row.getTimestampNTZNanos(0) ===
-        DateTimeUtils.localDateTimeToTimestampNanos(localDateTime))
+      val expected = DateTimeUtils.localDateTimeToTimestampNanos(localDateTime, p)
+      assert(row.getTimestampNTZNanos(0) === expected)
       val readback = fromRow(encoder, row)
-      assert(readback.get(0) === localDateTime)
+      assert(readback.get(0) === DateTimeUtils.timestampNanosToLocalDateTime(expected))
     }
   }
 
@@ -400,10 +400,10 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
       val schema = new StructType().add("t", TimestampLTZNanosType(p))
       val encoder = ExpressionEncoder(schema).resolveAndBind()
       val row = toRow(encoder, Row(instant))
-      assert(row.getTimestampLTZNanos(0) ===
-        DateTimeUtils.instantToTimestampNanos(instant))
+      val expected = DateTimeUtils.instantToTimestampNanos(instant, p)
+      assert(row.getTimestampLTZNanos(0) === expected)
       val readback = fromRow(encoder, row)
-      assert(readback.get(0) === instant)
+      assert(readback.get(0) === DateTimeUtils.timestampNanosToInstant(expected))
     }
   }
 
@@ -415,7 +415,7 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
         val encoder = ExpressionEncoder(schema).resolveAndBind()
         val row = toRow(encoder, Row(instant))
         assert(row.getTimestampLTZNanos(0) ===
-          DateTimeUtils.instantToTimestampNanos(instant))
+          DateTimeUtils.instantToTimestampNanos(instant, precision = 9))
         val readback = fromRow(encoder, row)
         assert(readback.get(0) === instant)
       }
