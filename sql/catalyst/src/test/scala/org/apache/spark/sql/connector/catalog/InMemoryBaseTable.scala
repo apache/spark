@@ -98,8 +98,9 @@ abstract class InMemoryBaseTable(
   }
 
   /**
-   * Copies version and validated version from another table so that
-   * [[V2TableRefreshUtil]] can detect changes and refresh stale references.
+   * Copies version and validated version from another table. Test catalogs that wrap
+   * tables in decorator objects (e.g. to null out IDs) must call this so the wrapper
+   * reports the same version as the underlying table it represents.
    */
   def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
     setVersion(sourceTable.version())
