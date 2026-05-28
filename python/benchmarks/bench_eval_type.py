@@ -756,7 +756,7 @@ class _CogroupedMapArrowBenchMixin:
         "few_groups_lg": (50, 50_000, 1, 4),
         "many_groups_sm": (2_000, 500, 1, 4),
         "many_groups_lg": (500, 10_000, 1, 4),
-        "wide_values": (200, 5_000, 1, 20),
+        "wide_cols": (200, 5_000, 1, 20),
         "multi_key": (200, 5_000, 3, 5),
     }
 
@@ -850,7 +850,7 @@ class _CogroupedMapPandasBenchMixin:
         "few_groups_lg": (50, 10_000, 1, 4),
         "many_groups_sm": (500, 200, 1, 4),
         "many_groups_lg": (200, 2_000, 1, 4),
-        "wide_values": (100, 1_000, 1, 20),
+        "wide_cols": (100, 1_000, 1, 20),
         "multi_key": (100, 1_000, 3, 5),
     }
 
@@ -1150,7 +1150,7 @@ class _GroupedMapArrowBenchMixin:
         "few_groups_lg": (50, 50_000, 1, 4),
         "many_groups_sm": (2_000, 500, 1, 4),
         "many_groups_lg": (500, 10_000, 1, 4),
-        "wide_values": (200, 5_000, 1, 20),
+        "wide_cols": (200, 5_000, 1, 20),
         "multi_key": (200, 5_000, 3, 5),
     }
 
