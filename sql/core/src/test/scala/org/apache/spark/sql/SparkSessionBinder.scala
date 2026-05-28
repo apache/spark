@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.TestSparkSession
 
-trait SharedSparkSession
+trait SparkSessionBinder
   extends SparkFunSuite
   with SparkSessionProvider
   with BeforeAndAfterEach
