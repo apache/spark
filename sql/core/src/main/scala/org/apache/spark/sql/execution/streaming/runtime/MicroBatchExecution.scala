@@ -228,14 +228,10 @@ class MicroBatchExecution(
             // Passes the full output schema (not a pruned subset) so that connectors
             // implementing SupportsMetadataColumns can include metadata columns in readSchema().
             val scanBuilder = table.newScanBuilder(options)
-            val pruneColumnsEnabled =
-              sparkSession.sessionState.conf.getConf(SQLConf.STREAMING_V2_PRUNE_COLUMNS_ENABLED)
-            if (pruneColumnsEnabled) {
-              scanBuilder match {
-                case r: SupportsPushDownRequiredColumns =>
-                  r.pruneColumns(output.toStructType)
-                case _ =>
-              }
+            scanBuilder match {
+              case r: SupportsPushDownRequiredColumns =>
+                r.pruneColumns(output.toStructType)
+              case _ =>
             }
             val scan = scanBuilder.build()
             val stream = scan.toMicroBatchStream(metadataPath)
