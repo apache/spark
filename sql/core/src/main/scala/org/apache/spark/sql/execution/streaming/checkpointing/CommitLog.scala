@@ -250,8 +250,7 @@ object CommitMetadataV3 {
  * Per-sink metadata recorded in a [[CommitMetadataV3]] entry.
  *
  * @param sinkName Sink name as supplied via `DataStreamWriter.name()`, or
- *                 [[org.apache.spark.sql.execution.streaming.runtime.MicroBatchExecution.DEFAULT_SINK_NAME]]
- *                 when sink evolution is disabled.
+ *                 `MicroBatchExecution.DEFAULT_SINK_NAME` when sink evolution is disabled.
  * @param commitOffset The latest offset committed to the sink as a JSON string
  *                     (i.e. [[OffsetV2.json()]]), or [[OffsetSeqLog.SERIALIZED_VOID_OFFSET]] if
  *                     no offset is available.
