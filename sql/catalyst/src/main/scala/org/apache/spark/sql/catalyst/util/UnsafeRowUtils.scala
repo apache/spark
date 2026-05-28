@@ -24,26 +24,26 @@ import org.apache.spark.sql.types._
 
 object UnsafeRowUtils {
 
-  sealed trait PaddingProvider {
+  private[util] sealed trait PaddingProvider {
     def getPadding(row: UnsafeRow, index: Int, bitShift: Int): Long
     def getPaddingBoolean(row: UnsafeRow, index: Int): Long
   }
 
-  object PaddingProviderLE extends PaddingProvider {
+  private[util] object PaddingProviderLE extends PaddingProvider {
     override def getPadding(
       row: UnsafeRow, index: Int, bitShift: Int): Long = row.getLong(index) >> bitShift
     override def getPaddingBoolean(
       row: UnsafeRow, index: Int): Long = row.getLong(index) >> 1
   }
 
-  object PaddingProviderBE extends PaddingProvider {
+  private[util] object PaddingProviderBE extends PaddingProvider {
     override def getPadding(
       row: UnsafeRow, index: Int, bitShift: Int): Long = row.getLong(index) << bitShift
     override def getPaddingBoolean(
       row: UnsafeRow, index: Int): Long = row.getLong(index) & 0xFEFFFFFFFFFFFFFFL
   }
 
-  private final val padder: PaddingProvider = if (nativeOrder().equals(BIG_ENDIAN)) {
+  private val padder: PaddingProvider = if (nativeOrder() == BIG_ENDIAN) {
     PaddingProviderBE
   } else {
     PaddingProviderLE
