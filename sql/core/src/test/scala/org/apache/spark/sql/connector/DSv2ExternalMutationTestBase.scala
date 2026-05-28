@@ -51,6 +51,9 @@ trait DSv2ExternalMutationTestBase extends QueryTest {
   /** Prefix for test names, e.g. "" or "[connect] ". */
   protected def testPrefix: String
 
+  /** Whether this suite runs under Spark Connect. */
+  protected def isConnect: Boolean = testPrefix.nonEmpty
+
   /** Execute a test body with a session. */
   protected def withTestSession(fn: SparkSession => Unit): Unit
 

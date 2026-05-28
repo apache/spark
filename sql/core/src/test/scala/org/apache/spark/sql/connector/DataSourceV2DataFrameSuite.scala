@@ -50,8 +50,8 @@ class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
   with DSv2TempViewWithStoredPlanTests
   with DSv2RepeatedTableAccessTests
-  with DSv2CacheTableReadTests
-  with DSv2JoinRefreshTests {
+  with DSv2IncrementallyConstructedQueryTests
+  with DSv2CacheTableReadTests {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
@@ -2652,8 +2652,8 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // No column ID error because IDs are null. The table is refreshed via version
-      // tracking, so the re-added salary column has null values.
+      // No column ID error because IDs are null. The table version changed, so
+      // [[V2TableRefreshUtil]] reloads it and the re-added salary column has null values.
       checkAnswer(df, Seq(Row(1, null)))
     }
   }

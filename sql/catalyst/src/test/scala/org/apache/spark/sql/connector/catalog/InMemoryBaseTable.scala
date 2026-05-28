@@ -98,9 +98,14 @@ abstract class InMemoryBaseTable(
   }
 
   /**
-   * Copies version and validated version from another table. Test catalogs that wrap
-   * tables in decorator objects (e.g. to null out IDs) must call this so the wrapper
-   * reports the same version as the underlying table it represents.
+   * Copies version and validated version from another table.
+   *
+   * Test catalogs that decorate tables (e.g. [[NullColumnIdInMemoryTableCatalog]],
+   * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create new objects that start
+   * at version 0. Without this call, [[V2TableRefreshUtil]] would see version 0 on
+   * every load and never detect that the table has changed, breaking stale-table
+   * refresh for incrementally constructed queries (e.g. joining DataFrames analyzed
+   * at different times).
    */
   def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
     setVersion(sourceTable.version())
