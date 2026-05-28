@@ -333,25 +333,34 @@ object AutoCdcAuxiliaryTable {
   val scdTypePropertyKey: String = s"${PipelinesTableProperties.pipelinesPrefix}autocdc.scdType"
 
   /**
-   * Table property recording the auxiliary table's AutoCDC key column names as a JSON string
-   * array (e.g. `["id","region"]`). Written once when the auxiliary table is created and is
+   * Table property recording the auxiliary table's unquoted AutoCDC key column names as a JSON
+   * string array (e.g. `["id","region"]`). Written once when the auxiliary table is created and is
    * considered immutable; full-refresh is the only way to change it.
    */
   val keyColumnNamesProperty: String =
     s"${PipelinesTableProperties.pipelinesPrefix}autocdc.keyColumnNames"
 
-  /** Serialize key column names to the JSON form stored at [[keyColumnNamesProperty]]. */
+  /**
+   * Serialize key column names to the JSON form stored at [[keyColumnNamesProperty]].
+   * Round-trips an empty list as `[]`; callers are expected to enforce a non-empty key set
+   * upstream.
+   */
   def serializeKeyColumnNames(names: Seq[String]): String = {
     import org.json4s.JsonAST.{JArray, JString}
     import org.json4s.jackson.JsonMethods.compact
     compact(JArray(names.map(JString(_)).toList))
   }
 
-  /** Parse a [[keyColumnNamesProperty]] value. `None` if it is not a JSON array of strings. */
+  /**
+   * Parse a [[keyColumnNamesProperty]] value. `None` if it is not a JSON array of strings.
+   * Round-trips an empty list as `[]`; callers are expected to enforce a non-empty key set
+   * upstream.
+   */
   def parseKeyColumnNames(raw: String): Option[Seq[String]] = {
     import org.json4s.JsonAST.{JArray, JString}
     import org.json4s.jackson.JsonMethods.parse
-    scala.util.Try(parse(raw)).toOption.flatMap {
+    val parsed = try Some(parse(raw)) catch { case NonFatal(_) => None }
+    parsed.flatMap {
       case JArray(elems) =>
         val names = elems.collect { case JString(s) => s }
         if (names.size == elems.size) Some(names) else None
@@ -362,6 +371,10 @@ object AutoCdcAuxiliaryTable {
 
 /**
  * Base trait for AutoCDC merge-based write flows.
+ * 
+ * Today, this trait and its children manage auxiliary table creation and validation across
+ * pipeline executions. Eventually we should evolve DatasetManager to be aware of the concept of
+ * auxiliary tables, and streamline creation/validation there.
  */
 trait AutoCdcMergeWriteBase {
   /** The spark session the AutoCDC flow is going to be planned in. */
@@ -441,7 +454,8 @@ trait AutoCdcMergeWriteBase {
           // all changeArgs.keys exist in the deduced aux/target table schemas by now.
           throw SparkException.internalError(
             s"AutoCDC key column '${key.name}' is missing from the auxiliary table schema " +
-            s"for target ${destination.identifier.quotedString}."
+            s"for flow ${identifier.unquotedString} writing to target " +
+            s"${destination.identifier.quotedString}."
           )
         )
     }
@@ -472,6 +486,123 @@ trait AutoCdcMergeWriteBase {
       )
     }
   }
+
+  /**
+   * If the auxiliary table for this flow's destination already exists, validate that the
+   * AutoCDC keys the flow expects line up with the keys recorded in the auxiliary
+   * table. On a fresh pipeline (or after a full refresh dropped the auxiliary), the
+   * auxiliary is absent and there's nothing to drift from, so this is a no-op.
+   */
+  protected def validateNoAutoCdcKeyDriftIfAuxTableExists(): Unit = {
+    val auxIdent = AutoCdcAuxiliaryTable.identifier(destination.identifier)
+    val (catalog, v2Identifier) = PipelinesCatalogUtils.resolveTableCatalog(spark, auxIdent)
+    if (catalog.tableExists(v2Identifier)) {
+      validateNoAutoCdcKeyDrift(catalog.loadTable(v2Identifier), auxIdent)
+    }
+  }
+
+  /**
+   * Validate that the AutoCDC key columns the flow expects match the keys recorded in the
+   * existing auxiliary table at [[auxIdent]] as a set: same arity, same set of names (per the
+   * session resolver), same per-name `dataType`s.
+   */
+  private def validateNoAutoCdcKeyDrift(
+      existingAuxTable: org.apache.spark.sql.connector.catalog.Table,
+      auxIdent: TableIdentifier): Unit = {
+    val resolver = spark.sessionState.conf.resolver
+    val existingAuxSchema = CatalogV2Util.v2ColumnsToStructType(existingAuxTable.columns())
+
+    // The expected key fields are looked up in [[auxiliaryTableSchema]], which by construction
+    // contains every key column with its source-derived dataType. We deliberately do not look
+    // them up in [[existingAuxSchema]] - that's the recorded side, and conflating the two
+    // sides would mask drift.
+    val expectedKeyFields: Seq[StructField] = changeArgs.keys.map { key =>
+      auxiliaryTableSchema.fields
+        .find(field => resolver(field.name, key.name))
+        .getOrElse(
+          // Construction of [[auxiliaryTableSchema]] already enforces all of the user-specified
+          // keys are present, so if we don't find a key it is truly an internal error.
+          throw SparkException.internalError(
+            s"Key column '${key.name}' was not found in the AutoCDC auxiliary table schema."
+          )
+        )
+    }
+    val recordedKeyNames = parseRecordedKeyColumnNames(existingAuxTable, auxIdent)
+    val recordedKeyFields: Seq[StructField] = recordedKeyNames.map { name =>
+      existingAuxSchema.fields
+        .find(field => resolver(field.name, name))
+        .getOrElse(
+          // Either an implementation bug or, more likely, the user has corrupted the auxiliary
+          // table schema (e.g. dropped the key column). The remedy is full-refresh in either
+          // case.
+          throw new AnalysisException(
+            errorClass = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_KEY_COLUMN_MISSING",
+            messageParameters = Map(
+              "flowName" -> identifier.unquotedString,
+              "auxTableName" -> auxIdent.unquotedString,
+              "keyColumnName" -> name,
+              "propertyName" -> AutoCdcAuxiliaryTable.keyColumnNamesProperty
+            )
+          )
+        )
+    }
+
+    val drifted =
+      // Arity drift (added or dropped keys).
+      recordedKeyFields.length != expectedKeyFields.length ||
+      // Name or dataType drift: every expected key must have a same-name (resolver-aware)
+      // recorded counterpart with an equivalent dataType.
+      expectedKeyFields.exists { expected =>
+        recordedKeyFields.find(rf => resolver(rf.name, expected.name)) match {
+          case None => true
+          case Some(recorded) => !recorded.dataType.sameType(expected.dataType)
+        }
+      }
+
+    if (drifted) {
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_INVALID_STATE.KEY_SCHEMA_DRIFT",
+        messageParameters = Map(
+          "flowName" -> identifier.unquotedString,
+          "auxTableName" -> auxIdent.unquotedString,
+          "expectedKeySchema" -> StructType(expectedKeyFields).toDDL,
+          "recordedKeySchema" -> StructType(recordedKeyFields).toDDL
+        )
+      )
+    }
+  }
+
+  /**
+   * Read the [[AutoCdcAuxiliaryTable.keyColumnNamesProperty]] off an existing auxiliary table
+   * and parse it into the ordered list of recorded AutoCDC key column names.
+   */
+  private def parseRecordedKeyColumnNames(
+      existingAuxTable: org.apache.spark.sql.connector.catalog.Table,
+      auxIdent: TableIdentifier): Seq[String] = {
+    val rawValue = Option(
+      existingAuxTable.properties().get(AutoCdcAuxiliaryTable.keyColumnNamesProperty)
+    ).getOrElse {
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MISSING",
+        messageParameters = Map(
+          "flowName" -> identifier.unquotedString,
+          "auxTableName" -> auxIdent.unquotedString,
+          "propertyName" -> AutoCdcAuxiliaryTable.keyColumnNamesProperty
+        )
+      )
+    }
+    AutoCdcAuxiliaryTable.parseKeyColumnNames(rawValue).getOrElse {
+      throw new AnalysisException(
+        errorClass = "AUTOCDC_INVALID_STATE.AUXILIARY_TABLE_PROPERTY_MALFORMED",
+        messageParameters = Map(
+          "flowName" -> identifier.unquotedString,
+          "auxTableName" -> auxIdent.unquotedString,
+          "propertyName" -> AutoCdcAuxiliaryTable.keyColumnNamesProperty,
+          "rawValue" -> rawValue
+        )
+      )
+    }
+  }
 }
 
 /**
@@ -490,6 +621,7 @@ class Scd1MergeStreamingWrite(
 ) extends StreamingFlowExecution with AutoCdcMergeWriteBase {
 
   requireDestinationSupportsRowLevelOps()
+  validateNoAutoCdcKeyDriftIfAuxTableExists()
 
   override def getOrigin: QueryOrigin = flow.origin
 

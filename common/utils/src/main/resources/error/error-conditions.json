@@ -216,7 +216,7 @@
     "subClass" : {
       "AUXILIARY_TABLE_KEY_COLUMN_MISSING" : {
         "message" : [
-          "The auxiliary table <auxTableName> is missing key column `<keyColumnName>` that is recorded in its <propertyName> table property. The auxiliary table schema may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+          "The auxiliary table <auxTableName> is missing key column <keyColumnName> that is recorded in its <propertyName> table property. The auxiliary table schema may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
         ]
       },
       "AUXILIARY_TABLE_PROPERTY_MALFORMED" : {
