@@ -22,7 +22,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, QueryTest, Row, SparkSession}
 import org.apache.spark.sql.connector.DSv2JoinRefreshTests
-import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, TableCatalog}
 
 /**
  * Connect-mode runner for [[DSv2JoinRefreshTests]]. All test logic lives in the shared trait;
@@ -35,8 +35,6 @@ class DataSourceV2JoinRefreshConnectSuite
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
-    .set("spark.sql.catalog.nullidcat", classOf[NullTableIdInMemoryTableCatalog].getName)
-    .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
     .set(
       "spark.sql.catalog.nullbothidscat",
       classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
