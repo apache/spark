@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
@@ -426,6 +426,27 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
           DateTimeUtils.instantToTimestampNanos(instant, precision = 9))
         val readback = fromRow(encoder, row)
         assert(readback.get(0) === instant)
+      }
+    }
+  }
+
+  test("SPARK-57033: RowEncoder rejects nanos timestamp types when feature flag is off") {
+    Seq(
+      new StructType().add("t", TimestampNTZNanosType()),
+      new StructType().add("t", TimestampLTZNanosType())
+    ).foreach { schema =>
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[SparkException] {
+            ExpressionEncoder(schema)
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"
+          )
+        )
       }
     }
   }

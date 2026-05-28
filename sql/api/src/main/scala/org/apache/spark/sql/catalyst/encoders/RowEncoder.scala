@@ -22,7 +22,7 @@ import scala.reflect.classTag
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, GeographyEncoder, GeometryEncoder, InstantEncoder, InstantNanosEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalDateTimeNanosEncoder, LocalTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
-import org.apache.spark.sql.errors.DataTypeErrorsBase
+import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase}
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.ops.TypeApiOps
@@ -101,8 +101,12 @@ object RowEncoder extends DataTypeErrorsBase {
       case TimestampNTZType => LocalDateTimeEncoder
       // Nano timestamp types intentionally do not honor `lenient`: legacy `java.sql.Timestamp` /
       // `java.sql.Date` external types are out of scope for nanosecond precision (SPARK-57033).
-      case t: TimestampNTZNanosType => LocalDateTimeNanosEncoder(t.precision)
-      case t: TimestampLTZNanosType => InstantNanosEncoder(t.precision)
+      case t: TimestampNTZNanosType =>
+        DataTypeErrors.checkTimestampNanosTypesEnabled()
+        LocalDateTimeNanosEncoder(t.precision)
+      case t: TimestampLTZNanosType =>
+        DataTypeErrors.checkTimestampNanosTypesEnabled()
+        InstantNanosEncoder(t.precision)
       case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
       case DateType => DateEncoder(lenient)
       case _: TimeType => LocalTimeEncoder
