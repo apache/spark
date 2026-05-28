@@ -46,7 +46,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
       rowCount = Some(10),
       colStats = Map(
         "id" -> idColStat,
-        // "extra" is not in schema — should be silently skipped
+        // "extra" is not in schema, should be silently skipped
         "extra" -> CatalogColumnStat(distinctCount = Some(5))))
 
     val v2Stats = DataSourceV2Relation.v1StatsToV2Stats(catalogStats, schema)
@@ -118,7 +118,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     val ident = Some(Identifier.of(Array("ns"), "t"))
     val opts = CaseInsensitiveStringMap.empty()
 
-    // Same id on both sides — strict path. Different Table instances, same id => equal.
+    // Same id on both sides, strict path. Different Table instances, same id => equal.
     val a1 = DataSourceV2Relation(new StubTable("a", schema, id = "id-1"),
       output, catalog, ident, opts)
     val a2 = DataSourceV2Relation(new StubTable("a-wrapped", schema, id = "id-1"),
@@ -126,7 +126,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(a1.sameResult(a2),
       "two relations to the same logical table should canonicalize equal")
 
-    // Null id on both sides — permissive path. Same catalog+identifier => still equal.
+    // Null id on both sides, permissive path. Same catalog+identifier => still equal.
     val b1 = DataSourceV2Relation(new StubTable("b", schema, id = null),
       output, catalog, ident, opts)
     val b2 = DataSourceV2Relation(new StubTable("b-wrapped", schema, id = null),
@@ -143,7 +143,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(!c1.sameResult(c2),
       "id present vs null should not compare equal")
 
-    // Different non-null ids — drop+recreate scenario. Must compare unequal.
+    // Different non-null ids, drop+recreate scenario. Must compare unequal.
     val d1 = DataSourceV2Relation(new StubTable("d", schema, id = "id-1"),
       output, catalog, ident, opts)
     val d2 = DataSourceV2Relation(new StubTable("d", schema, id = "id-2"),
@@ -151,7 +151,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(!d1.sameResult(d2),
       "different ids (drop+recreate) should not compare equal")
 
-    // Different identifier — must compare unequal even if ids would otherwise match.
+    // Different identifier, must compare unequal even if ids would otherwise match.
     val otherIdent = Some(Identifier.of(Array("ns"), "other"))
     val e1 = DataSourceV2Relation(new StubTable("e", schema, id = "id-1"),
       output, catalog, ident, opts)
@@ -160,7 +160,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     assert(!e1.sameResult(e2),
       "different identifiers should not compare equal")
 
-    // Different catalog — must compare unequal even with same identifier and id.
+    // Different catalog, must compare unequal even with same identifier and id.
     val otherCatalog = Some(new StubCatalog("other"))
     val f1 = DataSourceV2Relation(new StubTable("f", schema, id = "id-1"),
       output, catalog, ident, opts)
@@ -177,7 +177,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
     val opts = CaseInsensitiveStringMap.empty()
 
     // No catalog: falls through to the default canonical form. Equality reduces to reference
-    // equality on the `table` field — same instance is equal, different instances are not.
+    // equality on the `table` field, same instance is equal, different instances are not.
     val sharedTable = new StubTable("shared", schema, id = "id-1")
     val sameInstance1 = DataSourceV2Relation(sharedTable, output, None, ident, opts)
     val sameInstance2 = DataSourceV2Relation(sharedTable, output, None, ident, opts)
@@ -206,5 +206,5 @@ private class StubTable(
   override def id(): String = id
   override def columns(): Array[org.apache.spark.sql.connector.catalog.Column] =
     org.apache.spark.sql.connector.catalog.CatalogV2Util.structTypeToV2Columns(schema)
-  override def capabilities(): java.util.Set[TableCapability] = java.util.Collections.emptySet()
+  override def capabilities(): java.util.Set[TableCapability] = java.util.Set.of()
 }

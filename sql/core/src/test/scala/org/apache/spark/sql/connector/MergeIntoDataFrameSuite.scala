@@ -1236,7 +1236,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
   // The DataFrame cache is bypassed during a transaction unless the connector approves the cached
   // scans via Transaction#registerScans. The next two tests exercise that path against the merge
-  // source — a common case where users cache an expensive source DataFrame before running MERGE.
+  // source, a common case where users cache an expensive source DataFrame before running MERGE.
   // The test connector's registerScans accepts when the cached scan's table version matches the
   // current version (no intervening writes) and refuses otherwise.
 
@@ -1268,7 +1268,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
     assert(txn.currentState == Committed)
 
-    // Cached scan's version == current version → registerScans accepted → cache substituted.
+    // Cached scan's version == current version -> registerScans accepted -> cache substituted.
     // The non-empty registeredScans buffer is the witness that the connector ran the
     // cache-acceptance path (not a fresh scan-builder path).
     assert(txn.registeredScans.nonEmpty,
@@ -1277,7 +1277,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     // Even though the cache was used, registerScans recorded the read on the target's TxnTable
     // so that scanEvents uniformly captures cached and fresh reads. The MERGE plan references
     // the source twice (matched and not-matched branches), so the source filter appears twice
-    // in scanEvents — whether contributed by registerScans (cache path) or by fresh scans
+    // in scanEvents, whether contributed by registerScans (cache path) or by fresh scans
     // (rescan path). The `registeredScans` non-empty assertion above is what distinguishes
     // the two cases.
     val targetTxnTable = txnTables(tableNameAsString)
@@ -1313,17 +1313,17 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     // Simulate an external committer bumping the table version between caching and the MERGE.
     // A write done through Spark (e.g. another `append`) would also bump the version, but it
     // would additionally trigger CacheManager.refreshCache, which re-materializes our cached
-    // InMemoryRelation against the new snapshot — defeating the test. The `registerScans`
+    // InMemoryRelation against the new snapshot, defeating the test. The `registerScans`
     // path is meant to defend against writes Spark didn't observe (other clusters, other
     // sessions, direct table mutations), so we bump the version directly.
     //
     // NOTE on fidelity: the in-memory test catalog does not separate "metastore version" from
-    // "loaded snapshot version" — `InMemoryBaseTable.tableVersion` is shared mutable state, so
+    // "loaded snapshot version",`InMemoryBaseTable.tableVersion` is shared mutable state, so
     // a scan's `currentTableVersion` immediately reflects this bump. A real DSv2 Delta
     // connector holds a Table loaded at V1 and would not observe an external bump to V2 unless
     // it explicitly refreshed from the metastore (per go/spark-refresh design doc, Section 5
     // Scenario 1). The test therefore exercises a stricter connector policy than Delta's
-    // default — namely one that polices version drift on every registerScans call. A more
+    // default, namely one that polices version drift on every registerScans call. A more
     // faithful model would capture the txn's pinned snapshot in TxnTable at txn-begin and
     // compare scan.builtAt against that pinned value; see follow-up notes in memory.
     table.increaseVersion()
@@ -1338,7 +1338,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
-    // Cached scan's builtAtTableVersion != currentTableVersion → registerScans refused; nothing
+    // Cached scan's builtAtTableVersion != currentTableVersion -> registerScans refused; nothing
     // recorded.
     assert(txn.registeredScans.isEmpty,
       "registerScans should have refused the stale cached scan")
@@ -1368,7 +1368,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin)
 
-    // Build the source from spark.range — no DataSourceV2Relation, no catalog reference at all.
+    // Build the source from spark.range, no DataSourceV2Relation, no catalog reference at all.
     // Inside the txn, validateCachedEntryForTransaction's txnTables set is empty for this cached
     // entry, so the short-circuit accepts the cache without ever consulting registerScans.
     val sourceDF = spark.range(2)
@@ -1409,7 +1409,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     // Create + populate a lookup table in the same txn catalog. We cache a DataFrame against
     // this lookup, then drive a MERGE whose source filters by an IN-subquery against the
     // cached lookup. The cache substitution can only happen via useCachedData's recursive
-    // descent into SubqueryExpression — transformDown alone would not find the cached subtree
+    // descent into SubqueryExpression, transformDown alone would not find the cached subtree
     // hidden inside the IN expression.
     val lookupName = "cat.ns1.cache_lookup"
     withTable(lookupName) {
@@ -1434,7 +1434,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
       }
 
       assert(txn.currentState == Committed)
-      // The lookup is the only cached entry in this plan, and it sits inside an IN-subquery —
+      // The lookup is the only cached entry in this plan, and it sits inside an IN-subquery ,
       // so the only way the registered scans can include it is via useCachedData's recursive
       // descent into SubqueryExpression. Every registered scan must point at the lookup.
       val lookupTable = catalog.loadTable(Identifier.of(Array("ns1"), "cache_lookup"))
