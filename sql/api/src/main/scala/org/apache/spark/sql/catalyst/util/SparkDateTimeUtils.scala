@@ -210,9 +210,13 @@ trait SparkDateTimeUtils {
 
   /**
    * Truncates the sub-microsecond nanosecond part to the given timestamp precision `p` in [7, 9].
-   * Precision 9 keeps all three digits, 8 zeros the last digit, 7 zeros the last two; precisions
-   * outside that range are passed through unchanged because the surrounding types already
-   * validate the bound.
+   * Precision 9 keeps all three digits, 8 zeros the last digit, 7 zeros the last two.
+   *
+   * The input is the already-extracted `nanosWithinMicro` component (`0..999`), so truncation is
+   * independent of the epoch sign of the original timestamp value.
+   *
+   * Precisions outside `[7, 9]` are passed through unchanged because the surrounding timestamp
+   * nanos types validate the bound.
    */
   private def truncateNanosWithinMicroToPrecision(nanosWithinMicro: Int, precision: Int): Int = {
     precision match {
