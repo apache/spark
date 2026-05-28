@@ -200,11 +200,9 @@ class MockDataFactory:
 
     NAMED_TYPE_POOLS: dict[str, list[tuple[Callable, Any]]] = {
         "mixed": MIXED_TYPES,
-        "pure_ints": [
-            (lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)), IntegerType())
-        ],
-        "pure_floats": [(lambda r: pa.array(np.random.rand(r)), DoubleType())],
-        "pure_strings": [(lambda r: pa.array([f"s{j}" for j in range(r)]), StringType())],
+        "pure_ints": [TYPE_REGISTRY["int"]],
+        "pure_floats": [TYPE_REGISTRY["double"]],
+        "pure_strings": [TYPE_REGISTRY["string"]],
         "pure_ts": [
             (
                 lambda r: pa.array(
