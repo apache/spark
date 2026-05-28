@@ -107,17 +107,6 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
       val txnCat = spark.sessionState.catalogManager.catalog("txncat")
         .asInstanceOf[InMemoryRowLevelOperationTableCatalog]
 
-      // Transactional catalog configured: pathBased resolves txncat as a
-      // TransactionalCatalogPlugin and opens the transaction there instead.
-      withSQLConf("spark.datasource.pathformat2.catalog" -> "txncat") {
-        createPathTable("pathformat2.`/path/to/t2`")
-        sql("INSERT INTO pathformat2.`/path/to/t2` VALUES (1, 'a')")
-        assert(txnCat.lastTransaction.currentState === Committed)
-        assert(txnCat.lastTransaction.isClosed)
-      }
-
-      txnCat.lastTransaction = null  // reset to distinguish from block 1
-
       // Non-transactional catalog configured.
       withSQLConf("spark.datasource.pathformat2.catalog" -> "nontxncat") {
         createPathTable("pathformat2.`/path/to/t1`")
@@ -125,6 +114,17 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
         // The transaction was not routed to any of the transactional catalogs.
         assert(catalog.lastTransaction == null)
         assert(txnCat.lastTransaction == null)
+      }
+
+      txnCat.lastTransaction = null  // Reset to distinguish from block 1.
+
+      // Transactional catalog configured: pathBased resolves txncat as a
+      // TransactionalCatalogPlugin and opens the transaction there instead.
+      withSQLConf("spark.datasource.pathformat2.catalog" -> "txncat") {
+        createPathTable("pathformat2.`/path/to/t2`")
+        sql("INSERT INTO pathformat2.`/path/to/t2` VALUES (1, 'a')")
+        assert(txnCat.lastTransaction.currentState === Committed)
+        assert(txnCat.lastTransaction.isClosed)
       }
     }
   }

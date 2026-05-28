@@ -121,9 +121,17 @@ private[sql] trait LookupCatalog extends Logging {
         // this custom catalog can't be accessed.
         Some((catalogManager.v2SessionCatalog, nameParts.asIdentifier))
       } else {
+        // Path-based data sources (e.g. `pathformat2.'/path/to/t'`) whose format declares a
+        // catalog via SupportsCatalogOptions are routed to that catalog with the full nameParts
+        // as the identifier.
+        val (catalogName, ident) =
+          Option(catalogManager.catalogForDataSource(nameParts.head)).flatten match {
+            case Some(catName) => (catName, nameParts.asIdentifier)
+            case None => (nameParts.head, nameParts.tail.asIdentifier)
+          }
+
         try {
-          val catalog = catalogManager.catalog(nameParts.head)
-          val ident = nameParts.tail.asIdentifier
+          val catalog = catalogManager.catalog(catalogName)
           if (CatalogV2Util.isSessionCatalog(catalog)) {
             // Reject only when namespace is empty (e.g. spark_catalog.t with no database).
             // Allow multi-part namespace for metadata tables (e.g. default.table.snapshots).
@@ -135,17 +143,7 @@ private[sql] trait LookupCatalog extends Logging {
           Some((catalog, ident))
         } catch {
           case _: CatalogNotFoundException =>
-            // For path-based data sources (e.g. `pathformat2.'/path/to/t'`): if the format
-            // implements SupportsCatalogOptions and returns a catalog name, route the identifier
-            // to that catalog. This ensures CREATE TABLE and DML both land in the same catalog,
-            // which is necessary for transactional routing via pathBased().
-            val dataSourceCatalog = Option(catalogManager.catalogForDataSource(nameParts.head))
-              .flatten
-              .flatMap { catName =>
-                try Some(catalogManager.catalog(catName))
-                catch { case _: CatalogNotFoundException => None }
-              }
-            Some((dataSourceCatalog.getOrElse(currentCatalog), nameParts.asIdentifier))
+            Some((currentCatalog, nameParts.asIdentifier))
         }
       }
     }

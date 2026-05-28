@@ -55,6 +55,7 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   def defaultSessionCatalog: CatalogPlugin
   def v1SessionCatalog: SessionCatalog
   def tempVariableManager: TempVariableManager
+  def dataSourceCatalogResolver: DataSourceCatalogResolver
 
   // ---- Catalog access ----
   def catalog(name: String): CatalogPlugin
@@ -73,10 +74,11 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
 
   /**
    * Returns the catalog name that owns path-based tables for the given data source format name,
-   * or None if the format is unknown or does not implement SupportsCatalogOptions.
-   * Overridden in sql/core via [[BaseSessionStateBuilder]] to use the real DataSource API.
+   * or None if the format is unknown or does not implement [[SupportsCatalogOptions]]. Delegates
+   * to [[dataSourceCatalogResolver]], which is supplied by sql/core's session-state builder.
    */
-  def catalogForDataSource(formatName: String): Option[String] = None
+  def catalogForDataSource(formatName: String): Option[String] =
+    dataSourceCatalogResolver.catalogFor(formatName)
 
   // ---- Transactions ----
   def transaction: Option[Transaction] = None
@@ -119,7 +121,9 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
  */
 private[sql] class DefaultCatalogManager(
     override val defaultSessionCatalog: CatalogPlugin,
-    override val v1SessionCatalog: SessionCatalog) extends CatalogManager {
+    override val v1SessionCatalog: SessionCatalog,
+    override val dataSourceCatalogResolver: DataSourceCatalogResolver =
+      DataSourceCatalogResolver.NoOp) extends CatalogManager {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 

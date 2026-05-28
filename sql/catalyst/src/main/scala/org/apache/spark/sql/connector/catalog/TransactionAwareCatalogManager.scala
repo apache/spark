@@ -37,6 +37,8 @@ private[sql] class TransactionAwareCatalogManager(
   override def defaultSessionCatalog: CatalogPlugin = delegate.defaultSessionCatalog
   override def v1SessionCatalog: SessionCatalog = delegate.v1SessionCatalog
   override def tempVariableManager: TempVariableManager = delegate.tempVariableManager
+  override def dataSourceCatalogResolver: DataSourceCatalogResolver =
+    delegate.dataSourceCatalogResolver
 
   // ---- Catalog access: redirect to txn catalog when names match. ----
   override def catalog(name: String): CatalogPlugin = {
@@ -54,11 +56,6 @@ private[sql] class TransactionAwareCatalogManager(
   override def withTransaction(newTxn: Transaction): CatalogManager =
     throw SparkException.internalError("Cannot nest transactions: a transaction is already active.")
 
-  override def catalog(name: String): CatalogPlugin = {
-    val resolved = delegate.catalog(name)
-    if (txn.catalog.name() == resolved.name()) txn.catalog else resolved
-  }
-
   /**
    * Validates that a table loaded during relation resolution belongs to the transaction catalog.
    * All table loads during a transaction must come from the same catalog to ensure isolation.
@@ -69,9 +66,6 @@ private[sql] class TransactionAwareCatalogManager(
         txn.catalog.name(), catalog.name())
     }
   }
-
-  override def catalogForDataSource(formatName: String): Option[String] =
-    delegate.catalogForDataSource(formatName)
 
   override def currentCatalog: CatalogPlugin = {
     val c = delegate.currentCatalog
