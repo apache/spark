@@ -233,11 +233,10 @@ trait SparkDateTimeUtils {
    * the last three decimal digits of `localDateTime.getNano` (`[0, 999]`) become
    * `nanosWithinMicro` after dropping `(9 - precision)` low digits.
    *
-   * Combined, the result is the floor toward `-inf` of the original nanosecond value rounded
-   * down to the precision step (10^(9 - precision) ns). At `precision = 9` the conversion is
-   * lossless within the valid range; at 7 / 8 the lowest 2 / 1 sub-micro digits are dropped.
-   * The same flooring will be the basis of the future `CAST(... AS TIMESTAMP_NTZ(precision))`
-   * rule.
+   * Combined, the result is the floor toward `-inf` of the original nanosecond value rounded down
+   * to the precision step (10^(9 - precision) ns). At `precision = 9` the conversion is lossless
+   * within the valid range; at 7 / 8 the lowest 2 / 1 sub-micro digits are dropped. The same
+   * flooring will be the basis of the future `CAST(... AS TIMESTAMP_NTZ(precision))` rule.
    */
   def localDateTimeToTimestampNanos(
       localDateTime: LocalDateTime,
@@ -261,14 +260,13 @@ trait SparkDateTimeUtils {
    * Converts a `java.time.Instant` into the composite `(epochMicros, nanosWithinMicro)` pair used
    * by `TimestampLTZNanosType(precision)`. `epochMicros` comes from [[instantToMicros]] (floor
    * toward `-inf` for the integral micro part); the last three decimal digits of
-   * `instant.getNano` (`[0, 999]`) become `nanosWithinMicro` after dropping `(9 - precision)`
-   * low digits.
+   * `instant.getNano` (`[0, 999]`) become `nanosWithinMicro` after dropping `(9 - precision)` low
+   * digits.
    *
-   * Combined, the result is the floor toward `-inf` of the original nanosecond value rounded
-   * down to the precision step (10^(9 - precision) ns). At `precision = 9` the conversion is
-   * lossless within the valid range; at 7 / 8 the lowest 2 / 1 sub-micro digits are dropped.
-   * The same flooring will be the basis of the future `CAST(... AS TIMESTAMP_LTZ(precision))`
-   * rule.
+   * Combined, the result is the floor toward `-inf` of the original nanosecond value rounded down
+   * to the precision step (10^(9 - precision) ns). At `precision = 9` the conversion is lossless
+   * within the valid range; at 7 / 8 the lowest 2 / 1 sub-micro digits are dropped. The same
+   * flooring will be the basis of the future `CAST(... AS TIMESTAMP_LTZ(precision))` rule.
    */
   def instantToTimestampNanos(instant: Instant, precision: Int): TimestampNanosVal = {
     val epochMicros = instantToMicros(instant)
