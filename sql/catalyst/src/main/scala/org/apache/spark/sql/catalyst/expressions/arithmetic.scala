@@ -280,7 +280,7 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
     case DecimalType.Fixed(precision, scale) =>
       val castUtils = classOf[CastUtils].getName
       if (failOnError) {
-        val errorContextCode = getContextOrNullCode(ctx, failOnError)
+        val errorContextCode = getContextOrNullCode(ctx)
         defineCodeGen(ctx, ev, (eval1, eval2) =>
           s"$castUtils.changePrecisionExact(" +
             s"$eval1.$decimalMethod($eval2), $precision, $scale, $errorContextCode)")
