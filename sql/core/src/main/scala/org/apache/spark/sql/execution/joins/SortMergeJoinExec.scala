@@ -222,15 +222,18 @@ case class SortMergeJoinExec(
     val streamedRow = ctx.addMutableState("InternalRow", "streamedRow", forceInline = true)
     val bufferedRow = ctx.addMutableState("InternalRow", "bufferedRow", forceInline = true)
 
-    // Create variables for join keys from both sides. When all keys are statically non-nullable,
-    // `isNull` is `FalseLiteral` for each and the null-check disjunction would always be `false`;
-    // we skip emitting the check (and the dead handler branch) entirely in that case.
+    // Create variables for join keys from both sides. Filter out `FalseLiteral` `isNull`
+    // terms before building the disjunction so the emitted check has no statically-dead
+    // `false` operands. When every key is statically non-nullable, the disjunction is
+    // empty and we skip emitting the check (and the dead handler branch) entirely.
     val streamedKeyVars = createJoinKey(ctx, streamedRow, streamedKeys, streamedOutput)
-    val streamedKeysNullable = streamedKeyVars.exists(_.isNull != FalseLiteral)
-    val streamedAnyNull = streamedKeyVars.map(_.isNull).mkString(" || ")
+    val nullableStreamedIsNulls = streamedKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val streamedKeysNullable = nullableStreamedIsNulls.nonEmpty
+    val streamedAnyNull = nullableStreamedIsNulls.mkString(" || ")
     val bufferedKeyTmpVars = createJoinKey(ctx, bufferedRow, bufferedKeys, bufferedOutput)
-    val bufferedKeysNullable = bufferedKeyTmpVars.exists(_.isNull != FalseLiteral)
-    val bufferedAnyNull = bufferedKeyTmpVars.map(_.isNull).mkString(" || ")
+    val nullableBufferedIsNulls = bufferedKeyTmpVars.map(_.isNull).filter(_ != FalseLiteral)
+    val bufferedKeysNullable = nullableBufferedIsNulls.nonEmpty
+    val bufferedAnyNull = nullableBufferedIsNulls.mkString(" || ")
     // Copy the buffered key as class members so they could be used in next function call.
     val bufferedKeyVars = copyKeys(ctx, bufferedKeyTmpVars)
 
@@ -828,14 +831,17 @@ case class SortMergeJoinExec(
     val leftInputRow = ctx.addMutableState("InternalRow", "leftInputRow", forceInline = true)
     val rightInputRow = ctx.addMutableState("InternalRow", "rightInputRow", forceInline = true)
 
-    // Create variables for join keys from both sides. As in `genScanner`, omit the null check
-    // when all keys are statically non-nullable.
+    // Create variables for join keys from both sides. As in `genScanner`, drop FalseLiteral
+    // `isNull` terms before joining the disjunction so the emitted check has no dead `false`
+    // operands; omit the check entirely when every key is statically non-nullable.
     val leftKeyVars = createJoinKey(ctx, leftInputRow, leftKeys, left.output)
-    val leftKeysNullable = leftKeyVars.exists(_.isNull != FalseLiteral)
-    val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
+    val nullableLeftIsNulls = leftKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val leftKeysNullable = nullableLeftIsNulls.nonEmpty
+    val leftAnyNull = nullableLeftIsNulls.mkString(" || ")
     val rightKeyVars = createJoinKey(ctx, rightInputRow, rightKeys, right.output)
-    val rightKeysNullable = rightKeyVars.exists(_.isNull != FalseLiteral)
-    val rightAnyNull = rightKeyVars.map(_.isNull).mkString(" || ")
+    val nullableRightIsNulls = rightKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val rightKeysNullable = nullableRightIsNulls.nonEmpty
+    val rightAnyNull = nullableRightIsNulls.mkString(" || ")
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
     val leftMatchedKeyVars = createJoinKey(ctx, leftInputRow, leftKeys, left.output)
     val rightMatchedKeyVars = createJoinKey(ctx, rightInputRow, rightKeys, right.output)
