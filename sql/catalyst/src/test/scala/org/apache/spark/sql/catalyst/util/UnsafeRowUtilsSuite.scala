@@ -211,13 +211,13 @@ class UnsafeRowUtilsSuite extends SparkFunSuite {
     row.setLong(3, 0xFFFFFFFFFFFFFFFFL)
     row.setLong(4, 0xFFFFFFFFFFFFFFFFL)
 
-    // The PaddingProvider implementations get the full 8 bytes of the field using UnsafeRow.getLong(n)
-    // which is platform endianness dependent.
+    // The PaddingProvider implementations get the full 8 bytes of the field using
+    // UnsafeRow.getLong(n) which is platform endianness dependent.
     // When testing PaddingProviderBE on little endian platforms, the big endian byte arrays
     // must be reversed so that UnsafeRow.getLong(n) returns the long value that would be seen
     // on a big endian platform.
     // The opposite is true when testing PaddingProviderLE on big endian platforms.
-    def overwrite(src: Array[Byte], fieldIdx: Int, reverse: Boolean) = {
+    def overwrite(src: Array[Byte], fieldIdx: Int, reverse: Boolean): Unit = {
       Array.copy(if (reverse) src.reverse else src, 0, data, fieldsStartIdx + (fieldIdx * 8), 8)
     }
 
