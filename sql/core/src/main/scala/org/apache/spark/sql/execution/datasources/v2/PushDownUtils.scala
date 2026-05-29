@@ -110,25 +110,43 @@ object PushDownUtils extends Logging {
           }
         }
 
-        val rejectedFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
-          DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
-        }
+        val postScanPredicates = r.pushPredicates(translatedFilters.toArray)
 
-        val remainingFilters = (rejectedFilters ++ untranslatableExprs).toSeq
-        val postScanFilters =
+        val finalPostScanFilters =
           if (!partitionFields.exists(_.nonEmpty) || !r.supportsIterativePushdown) {
-            remainingFilters
+            rebuildExpressions(postScanPredicates.toSeq, translatedFilterToExpr) ++
+              untranslatableExprs
           } else {
-            pushPartitionPredicates(r, partitionFields.get, remainingFilters)
+            // Second pass: only filters that were not already pushed down (partially or fully)
+            // in the first pass (not in pushedPredicates) are eligible to be pushed down again.
+            // This avoids pushing the same filter down twice.
+            val (pushedPostScanFilters, notPushedPostScanFilters) =
+              postScanPredicates.toSeq.partition(r.pushedPredicates().toSet.contains)
+            val candidates = rebuildExpressions(notPushedPostScanFilters, translatedFilterToExpr) ++
+              untranslatableExprs
+            pushPartitionPredicates(r, partitionFields.get, candidates) ++
+              rebuildExpressions(pushedPostScanFilters, translatedFilterToExpr)
           }
 
-        val orderedPostScanFilters = prioritizeFilters(postScanFilters,
+        val orderedPostScanFilters = prioritizeFilters(finalPostScanFilters,
           ExpressionSet(untranslatableExprs))
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
         val postScanFilters = r.pushFilters(filters)
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
+    }
+  }
+
+  /**
+   * Rebuilds the Catalyst [[Expression]]s for a sequence of data source [[Predicate]]s, using the
+   * mapping from translated data source predicates to their original Catalyst expressions.
+   */
+  private def rebuildExpressions(
+      predicates: Seq[Predicate],
+      translatedFilterToExpr: mutable.HashMap[Predicate, Expression]): Seq[Expression] = {
+    predicates.map { predicate =>
+      DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
     }
   }
 
