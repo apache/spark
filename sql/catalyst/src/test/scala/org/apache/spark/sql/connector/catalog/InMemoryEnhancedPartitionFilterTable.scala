@@ -74,7 +74,7 @@ class InMemoryEnhancedPartitionFilterTable(
         .toBoolean
 
     // Default false. When true, first-pass partition predicates that are accepted (pushed) are
-    // ALSO returned for post-scan evaluation, simulating a partial pushdown (e.g. a Parquet
+    // also returned for post-scan evaluation, simulating a partial pushdown (e.g. a Parquet
     // row group filter). Such predicates are reported by pushedPredicates() but still appear in
     // the pushPredicates() return value.
     private val returnAcceptedPartitionPredicates =
