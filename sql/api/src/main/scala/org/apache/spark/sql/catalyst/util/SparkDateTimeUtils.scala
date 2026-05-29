@@ -832,8 +832,8 @@ trait SparkDateTimeUtils {
 
   /**
    * Trims and parses a given UTF8 string into a [[TimestampNanosVal]] (epoch microseconds plus a
-   * sub-microsecond remainder in [0, 999]) for `TIMESTAMP_LTZ(precision)` with `precision` in
-   * [7, 9]. Fractional digits beyond `precision` are truncated. The return type is [[Option]] in
+   * sub-microsecond remainder in [0, 999]) for `TIMESTAMP_LTZ(precision)` with `precision` in [7,
+   * 9]. Fractional digits beyond `precision` are truncated. The return type is [[Option]] in
    * order to distinguish between a valid zero value and null. Please refer to
    * `parseTimestampString` for the allowed formats.
    */
@@ -858,8 +858,9 @@ trait SparkDateTimeUtils {
       val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
       val instant = Instant.from(zonedDateTime)
       val epochMicros = instantToMicros(instant)
-      Some(TimestampNanosVal.fromParts(
-        epochMicros, truncateNanosWithinMicro(segments(9), precision)))
+      Some(
+        TimestampNanosVal
+          .fromParts(epochMicros, truncateNanosWithinMicro(segments(9), precision)))
     } catch {
       case NonFatal(_) => None
     }
@@ -872,17 +873,19 @@ trait SparkDateTimeUtils {
       context: QueryContext = null): TimestampNanosVal = {
     stringToTimestampLTZNanos(s, precision, timeZoneId).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(
-        s, TimestampLTZNanosType(precision), context)
+        s,
+        TimestampLTZNanosType(precision),
+        context)
     }
   }
 
   /**
    * Trims and parses a given UTF8 string into a [[TimestampNanosVal]] (epoch microseconds plus a
-   * sub-microsecond remainder in [0, 999]) for `TIMESTAMP_NTZ(precision)` with `precision` in
-   * [7, 9]. Fractional digits beyond `precision` are truncated. The result is independent of time
-   * zones; a time zone component is discarded when `allowTimeZone` is `true` and rejected (returns
-   * `None`) otherwise. The return type is [[Option]] in order to distinguish between a valid zero
-   * value and null. Please refer to `parseTimestampString` for the allowed formats.
+   * sub-microsecond remainder in [0, 999]) for `TIMESTAMP_NTZ(precision)` with `precision` in [7,
+   * 9]. Fractional digits beyond `precision` are truncated. The result is independent of time
+   * zones; a time zone component is discarded when `allowTimeZone` is `true` and rejected
+   * (returns `None`) otherwise. The return type is [[Option]] in order to distinguish between a
+   * valid zero value and null. Please refer to `parseTimestampString` for the allowed formats.
    */
   def stringToTimestampNTZNanos(
       s: UTF8String,
@@ -898,8 +901,9 @@ trait SparkDateTimeUtils {
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))
       val localDateTime = LocalDateTime.of(localDate, localTime)
       val epochMicros = localDateTimeToMicros(localDateTime)
-      Some(TimestampNanosVal.fromParts(
-        epochMicros, truncateNanosWithinMicro(segments(9), precision)))
+      Some(
+        TimestampNanosVal
+          .fromParts(epochMicros, truncateNanosWithinMicro(segments(9), precision)))
     } catch {
       case NonFatal(_) => None
     }
@@ -911,7 +915,9 @@ trait SparkDateTimeUtils {
       context: QueryContext = null): TimestampNanosVal = {
     stringToTimestampNTZNanos(s, precision).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(
-        s, TimestampNTZNanosType(precision), context)
+        s,
+        TimestampNTZNanosType(precision),
+        context)
     }
   }
 
