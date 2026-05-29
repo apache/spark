@@ -381,8 +381,8 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Restore Coursier local repository
-      uses: actions/cache/restore@v5
+    - name: Cache Coursier local repository
+      uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
         key: coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
