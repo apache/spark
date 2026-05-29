@@ -30,7 +30,7 @@ import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
-import org.apache.spark.sql.types.{DateType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{DateType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampType, TimeType}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.SparkClassUtils
 
@@ -567,6 +567,11 @@ trait SparkDateTimeUtils {
    *     - +|-hhmmss
    *   - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
    *
+   * Up to 9 fractional-second digits are accepted. Digits 1-6 are kept as microseconds in
+   * `segments(6)` (backward-compatible micro behavior), digits 7-9 are kept as the
+   * sub-microsecond remainder in `segments(9)` (a value in [0, 999]), and digits beyond the 9th
+   * are dropped.
+   *
    * @return
    *   timestamp segments, time zone id and whether the input is just time without a date. If the
    *   input string can't be parsed as timestamp, the result timestamp segments are empty.
@@ -585,7 +590,11 @@ trait SparkDateTimeUtils {
       return (Array.empty, None, false)
     }
     var tz: Option[String] = None
-    val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
+    // Indices 0-6 hold year, month, day, hour, minute, second and the microsecond part of the
+    // fractional second (digits 1-6). Index 9 is an output-only slot that holds the
+    // sub-microsecond remainder (fractional digits 7-9) as a value in [0, 999]; it is not touched
+    // by the parsing loop below. Indices 7-8 are used while validating a region-based zone id.
+    val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
     var currentSegmentDigits = 0
@@ -598,6 +607,7 @@ trait SparkDateTimeUtils {
     }
 
     var digitsMilli = 0
+    var nanosWithinMicro = 0
     var justTime = false
     var yearSign: Option[Int] = None
     if (bytes(j) == '-' || bytes(j) == '+') {
@@ -680,7 +690,9 @@ trait SparkDateTimeUtils {
             i += 1
           }
         } else {
-          if (i < segments.length && (b == ':' || b == ' ')) {
+          // Bound is fixed at 9 (the original number of parsed segments) so that the trailing
+          // output-only slot segments(9) is never written by the parsing loop.
+          if (i < 9 && (b == ':' || b == ' ')) {
             if (!isValidDigits(i, currentSegmentDigits)) {
               return (Array.empty, None, false)
             }
@@ -696,10 +708,13 @@ trait SparkDateTimeUtils {
         if (i == 6) {
           digitsMilli += 1
         }
-        // We will truncate the nanosecond part if there are more than 6 digits, which results
-        // in loss of precision
         if (i != 6 || currentSegmentDigits < 6) {
+          // Fractional digits 1-6 form the microsecond part stored in segments(6).
           currentSegmentValue = currentSegmentValue * 10 + parsedValue
+        } else if (currentSegmentDigits < 9) {
+          // Fractional digits 7-9 are retained as the sub-microsecond remainder. Digits beyond
+          // the 9th are dropped (loss of precision below the nanosecond grid).
+          nanosWithinMicro = nanosWithinMicro * 10 + parsedValue
         }
         currentSegmentDigits += 1
       }
@@ -715,6 +730,17 @@ trait SparkDateTimeUtils {
       segments(6) *= 10
       digitsMilli += 1
     }
+
+    // Right-pad the captured sub-microsecond digits (the 7th to 9th fractional digits) so that
+    // segments(9) always holds a value in [0, 999]. The number of captured digits is
+    // clamp(digitsMilli - 6, 0, 3); fewer captured digits means the remainder is left-aligned and
+    // must be scaled up (e.g. ".0000001" -> 100, ".00000012" -> 120, ".000000123" -> 123).
+    var subMicroDigits = math.max(0, math.min(digitsMilli, 9) - 6)
+    while (subMicroDigits < 3) {
+      nanosWithinMicro *= 10
+      subMicroDigits += 1
+    }
+    segments(9) = nanosWithinMicro
 
     // This step also validates time zone part
     val zoneId = tz.map(zoneName => getZoneId(zoneName.trim))
@@ -786,6 +812,106 @@ trait SparkDateTimeUtils {
       Some(localDateTimeToMicros(localDateTime))
     } catch {
       case NonFatal(_) => None
+    }
+  }
+
+  /**
+   * Truncates the sub-microsecond remainder (`segments(9)`, a value in [0, 999]) to the given
+   * fractional-second `precision`. Since microseconds occupy fractional digits 1-6, a `precision`
+   * in [7, 9] only affects the sub-microsecond digits: digits beyond `precision` are dropped
+   * (truncation toward zero, consistent with the microsecond parsing path).
+   */
+  private def truncateNanosWithinMicro(nanosWithinMicro: Int, precision: Int): Short = {
+    val factor = precision match {
+      case 7 => 100
+      case 8 => 10
+      case _ => 1
+    }
+    ((nanosWithinMicro / factor) * factor).toShort
+  }
+
+  /**
+   * Trims and parses a given UTF8 string into a [[TimestampNanosVal]] (epoch microseconds plus a
+   * sub-microsecond remainder in [0, 999]) for `TIMESTAMP_LTZ(precision)` with `precision` in
+   * [7, 9]. Fractional digits beyond `precision` are truncated. The return type is [[Option]] in
+   * order to distinguish between a valid zero value and null. Please refer to
+   * `parseTimestampString` for the allowed formats.
+   */
+  def stringToTimestampLTZNanos(
+      s: UTF8String,
+      precision: Int,
+      timeZoneId: ZoneId): Option[TimestampNanosVal] = {
+    try {
+      val (segments, parsedZoneId, justTime) = parseTimestampString(s)
+      if (segments.isEmpty) {
+        return None
+      }
+      val zoneId = parsedZoneId.getOrElse(timeZoneId)
+      val nanoseconds = MICROSECONDS.toNanos(segments(6))
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      val localDate = if (justTime) {
+        LocalDate.now(zoneId)
+      } else {
+        LocalDate.of(segments(0), segments(1), segments(2))
+      }
+      val localDateTime = LocalDateTime.of(localDate, localTime)
+      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+      val instant = Instant.from(zonedDateTime)
+      val epochMicros = instantToMicros(instant)
+      Some(TimestampNanosVal.fromParts(
+        epochMicros, truncateNanosWithinMicro(segments(9), precision)))
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  def stringToTimestampLTZNanosAnsi(
+      s: UTF8String,
+      precision: Int,
+      timeZoneId: ZoneId,
+      context: QueryContext = null): TimestampNanosVal = {
+    stringToTimestampLTZNanos(s, precision, timeZoneId).getOrElse {
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(
+        s, TimestampLTZNanosType(precision), context)
+    }
+  }
+
+  /**
+   * Trims and parses a given UTF8 string into a [[TimestampNanosVal]] (epoch microseconds plus a
+   * sub-microsecond remainder in [0, 999]) for `TIMESTAMP_NTZ(precision)` with `precision` in
+   * [7, 9]. Fractional digits beyond `precision` are truncated. The result is independent of time
+   * zones; a time zone component is discarded when `allowTimeZone` is `true` and rejected (returns
+   * `None`) otherwise. The return type is [[Option]] in order to distinguish between a valid zero
+   * value and null. Please refer to `parseTimestampString` for the allowed formats.
+   */
+  def stringToTimestampNTZNanos(
+      s: UTF8String,
+      precision: Int,
+      allowTimeZone: Boolean = true): Option[TimestampNanosVal] = {
+    try {
+      val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
+      if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
+        return None
+      }
+      val nanoseconds = MICROSECONDS.toNanos(segments(6))
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+      val localDateTime = LocalDateTime.of(localDate, localTime)
+      val epochMicros = localDateTimeToMicros(localDateTime)
+      Some(TimestampNanosVal.fromParts(
+        epochMicros, truncateNanosWithinMicro(segments(9), precision)))
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  def stringToTimestampNTZNanosAnsi(
+      s: UTF8String,
+      precision: Int,
+      context: QueryContext = null): TimestampNanosVal = {
+    stringToTimestampNTZNanos(s, precision).getOrElse {
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(
+        s, TimestampNTZNanosType(precision), context)
     }
   }
 
