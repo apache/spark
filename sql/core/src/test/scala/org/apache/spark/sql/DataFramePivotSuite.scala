@@ -373,6 +373,127 @@ class DataFramePivotSuite extends QueryTest with SharedSparkSession {
     assert(e.getMessage.contains("pivot is not supported on a streaming DataFrames/Datasets"))
   }
 
+  test("SPARK-56305: pivot with UTF8_LCASE collation should match case-insensitively") {
+    withTable("lcase_pivot") {
+      sql(
+        """CREATE TABLE lcase_pivot (
+          |  dept STRING COLLATE UTF8_LCASE,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql("INSERT INTO lcase_pivot VALUES ('SALES', 100), ('sales', 50)")
+
+      // With UTF8_LCASE, 'sales' should match both 'SALES' and 'sales' rows
+      checkAnswer(
+        sql(
+          """SELECT * FROM lcase_pivot
+            |PIVOT (SUM(amount) FOR dept IN ('sales' AS sales))""".stripMargin),
+        Row(150))
+    }
+  }
+
+  test("SPARK-56305: pivot with UNICODE_CI collation") {
+    withTable("uci_pivot") {
+      sql(
+        """CREATE TABLE uci_pivot (
+          |  dept STRING COLLATE UNICODE_CI,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql("INSERT INTO uci_pivot VALUES ('HR', 10), ('hr', 20), ('Hr', 30)")
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM uci_pivot
+            |PIVOT (SUM(amount) FOR dept IN ('hr' AS hr))""".stripMargin),
+        Row(60))
+    }
+  }
+
+  test("SPARK-56305: pivot with multiple case-insensitive pivot values") {
+    withTable("multi_pivot") {
+      sql(
+        """CREATE TABLE multi_pivot (
+          |  dept STRING COLLATE UTF8_LCASE,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql(
+        """INSERT INTO multi_pivot VALUES
+          |('SALES', 100), ('Sales', 50), ('ENG', 200), ('eng', 80)""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM multi_pivot
+            |PIVOT (SUM(amount) FOR dept IN ('sales' AS sales, 'eng' AS eng))""".stripMargin),
+        Row(150, 280))
+    }
+  }
+
+  test("SPARK-56305: pivot with binary collation keeps case-sensitive behavior") {
+    withTable("binary_pivot") {
+      sql(
+        """CREATE TABLE binary_pivot (
+          |  dept STRING,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql("INSERT INTO binary_pivot VALUES ('SALES', 100), ('sales', 50)")
+
+      // With default binary collation, 'sales' and 'SALES' are different
+      checkAnswer(
+        sql(
+          """SELECT * FROM binary_pivot
+            |PIVOT (SUM(amount) FOR dept IN ('sales' AS sales, 'SALES' AS SALES))""".stripMargin),
+        Row(50, 100))
+    }
+  }
+
+  test("SPARK-56305: pivot with non-string types still works") {
+    withTempView("int_pivot") {
+      sql(
+        """CREATE OR REPLACE TEMP VIEW int_pivot AS
+          |SELECT * FROM VALUES (1, 10), (2, 20), (1, 30) AS t(key, amount)""".stripMargin)
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM int_pivot
+            |PIVOT (SUM(amount) FOR key IN (1 AS one, 2 AS two))""".stripMargin),
+        Row(40, 20))
+    }
+  }
+
+  test("SPARK-56305: pivot with NULL in collated pivot column") {
+    withTable("null_pivot") {
+      sql(
+        """CREATE TABLE null_pivot (
+          |  dept STRING COLLATE UTF8_LCASE,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql("INSERT INTO null_pivot VALUES ('sales', 100), (NULL, 50), ('SALES', 75)")
+
+      // NULL rows should be ignored, only 'sales' and 'SALES' match
+      checkAnswer(
+        sql(
+          """SELECT * FROM null_pivot
+            |PIVOT (SUM(amount) FOR dept IN ('sales' AS sales))""".stripMargin),
+        Row(175))
+    }
+  }
+
+  test("SPARK-56305: pivot with empty string pivot values and collation") {
+    withTable("empty_pivot") {
+      sql(
+        """CREATE TABLE empty_pivot (
+          |  dept STRING COLLATE UTF8_LCASE,
+          |  amount INT
+          |) USING PARQUET""".stripMargin)
+      sql("INSERT INTO empty_pivot VALUES ('', 10), ('sales', 90)")
+
+      checkAnswer(
+        sql(
+          """SELECT * FROM empty_pivot
+            |PIVOT (SUM(amount) FOR dept IN ('' AS empty, 'sales' AS sales))""".stripMargin),
+        Row(10, 90))
+    }
+  }
+
   test("SPARK-55483: pivot with null non-atomic pivot column should not throw NPE") {
     // When the pivot column is a non-atomic type (struct, array), PivotFirst uses a TreeMap
     // whose comparison-based lookup throws NPE on null keys. Null pivot column values should

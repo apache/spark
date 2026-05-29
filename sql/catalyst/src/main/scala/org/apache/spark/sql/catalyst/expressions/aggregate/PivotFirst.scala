@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{GenericArrayData, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CollationFactory, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 object PivotFirst {
 
@@ -87,7 +88,16 @@ case class PivotFirst(
   override val dataType: DataType = ArrayType(valueDataType)
 
   val pivotIndex: Map[Any, Int] = if (pivotColumn.dataType.isInstanceOf[AtomicType]) {
-    HashMap(pivotColumnValues.zipWithIndex: _*)
+    val entries = pivotColumn.dataType match {
+      case st: StringType if !st.supportsBinaryEquality =>
+        pivotColumnValues.zipWithIndex.map { case (v, i) =>
+          val key = if (v == null) null
+          else CollationFactory.getCollationKey(v.asInstanceOf[UTF8String], st.collationId)
+          key -> i
+        }
+      case _ => pivotColumnValues.zipWithIndex
+    }
+    HashMap(entries: _*)
   } else {
     TreeMap(pivotColumnValues.zipWithIndex: _*)(
       TypeUtils.getInterpretedOrdering(pivotColumn.dataType))
@@ -100,7 +110,13 @@ case class PivotFirst(
   // never match any pivot value.
   private def findPivotIndex(key: Any): Int = key match {
     case null if !pivotColumn.dataType.isInstanceOf[AtomicType] => -1
-    case _ => pivotIndex.getOrElse(key, -1)
+    case _ =>
+      val lookupKey = pivotColumn.dataType match {
+        case st: StringType if !st.supportsBinaryEquality && key != null =>
+          CollationFactory.getCollationKey(key.asInstanceOf[UTF8String], st.collationId)
+        case _ => key
+      }
+      pivotIndex.getOrElse(lookupKey, -1)
   }
 
   val indexSize = pivotIndex.size
