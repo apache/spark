@@ -197,7 +197,8 @@ class TimestampNanosParseSuite extends SparkFunSuite {
     val result = stringToTimestampNTZNanosAnsi(
       UTF8String.fromString("2015-03-18T12:03:17.123456789Z"), 9)
     assert(result ===
-      TimestampNanosVal.fromParts(date(2015, 3, 18, 12, 3, 17, 123456, ZoneOffset.UTC), 789.toShort))
+      TimestampNanosVal.fromParts(
+        date(2015, 3, 18, 12, 3, 17, 123456, ZoneOffset.UTC), 789.toShort))
   }
 
   test("ANSI variants throw on invalid input") {

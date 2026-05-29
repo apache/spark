@@ -846,9 +846,10 @@ trait SparkDateTimeUtils {
       s: UTF8String,
       precision: Int,
       timeZoneId: ZoneId): Option[TimestampNanosVal] = {
-    if (precision < 7 || precision > 9)
+    if (precision < 7 || precision > 9) {
       throw SparkException.internalError(
         s"stringToTimestampLTZNanos: precision $precision is out of range [7, 9]")
+    }
     try {
       val (segments, parsedZoneId, justTime) = parseTimestampString(s)
       if (segments.isEmpty) {
@@ -899,9 +900,10 @@ trait SparkDateTimeUtils {
       s: UTF8String,
       precision: Int,
       allowTimeZone: Boolean = true): Option[TimestampNanosVal] = {
-    if (precision < 7 || precision > 9)
+    if (precision < 7 || precision > 9) {
       throw SparkException.internalError(
         s"stringToTimestampNTZNanos: precision $precision is out of range [7, 9]")
+    }
     try {
       val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
       if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
@@ -921,10 +923,11 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * ANSI variant of [[stringToTimestampNTZNanos]]. Throws [[org.apache.spark.SparkDateTimeException]]
-   * on invalid input. Uses `allowTimeZone = true`: a time zone component in the string is silently
-   * discarded rather than rejected. Callers that need strict NTZ rejection should call
-   * [[stringToTimestampNTZNanos]] directly with `allowTimeZone = false`.
+   * ANSI variant of [[stringToTimestampNTZNanos]]. Throws
+   * [[org.apache.spark.SparkDateTimeException]] on invalid input. Uses `allowTimeZone = true`: a
+   * time zone component in the string is silently discarded rather than rejected. Callers that
+   * need strict NTZ rejection should call [[stringToTimestampNTZNanos]] directly with
+   * `allowTimeZone = false`.
    */
   def stringToTimestampNTZNanosAnsi(
       s: UTF8String,
