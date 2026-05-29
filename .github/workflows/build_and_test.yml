@@ -385,8 +385,9 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
-        key: coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
+          ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
           coursier-
     - name: Free up disk space
       run: |
