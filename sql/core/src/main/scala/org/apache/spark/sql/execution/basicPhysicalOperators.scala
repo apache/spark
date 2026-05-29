@@ -82,12 +82,24 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       ("", exprs.map(_.genCode(ctx)), Seq.empty)
     }
 
+    // Only emit the common sub-expression scaffold when subexpression elimination actually
+    // produced code. Otherwise (CSE disabled, or no common subexpressions found) the comment and
+    // empty blocks are statically dead text emitted into every generated stage. Note that
+    // `evaluateVariables` clears the code of the evaluated variables, so it must run regardless.
+    val localVals = evaluateVariables(localValInputs)
+    val commonSubExprs = if (localVals.isEmpty && subExprsCode.isEmpty) {
+      ""
+    } else {
+      s"""
+         |// common sub-expressions
+         |$localVals
+         |$subExprsCode""".stripMargin
+    }
+
     // Evaluation of non-deterministic expressions can't be deferred.
     val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
     s"""
-       |// common sub-expressions
-       |${evaluateVariables(localValInputs)}
-       |$subExprsCode
+       |$commonSubExprs
        |${evaluateRequiredVariables(output, resultVars, AttributeSet(nonDeterministicAttrs))}
        |${consume(ctx, resultVars)}
      """.stripMargin

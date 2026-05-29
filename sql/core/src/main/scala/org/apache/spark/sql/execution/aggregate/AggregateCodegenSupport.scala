@@ -242,10 +242,18 @@ trait AggregateCodegenSupport
 
     val codeToEvalAggFuncs = generateEvalCodeForAggFuncs(
       ctx, input, inputAttrs, boundUpdateExprs, aggNames, aggCodeBlocks, subExprs)
+    // Only emit the common sub-expression scaffold when subexpression elimination produced code;
+    // otherwise the comment is statically dead text emitted into every generated stage.
+    val commonSubExprs = if (effectiveCodes.nonEmpty) {
+      s"""
+         |// common sub-expressions
+         |$effectiveCodes""".stripMargin
+    } else {
+      ""
+    }
     s"""
        |// do aggregate
-       |// common sub-expressions
-       |$effectiveCodes
+       |$commonSubExprs
        |// evaluate aggregate functions and update aggregation buffers
        |$codeToEvalAggFuncs
      """.stripMargin

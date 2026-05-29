@@ -768,9 +768,16 @@ case class HashAggregateExec(
 
       val codeToEvalAggFuncs = generateEvalCodeForAggFuncs(
         ctx, input, inputAttrs, boundUpdateExprs, aggNames, aggCodeBlocks, subExprs)
+      // Only emit the common sub-expression scaffold when subexpression elimination produced code.
+      val commonSubExprs = if (effectiveCodes.nonEmpty) {
+        s"""
+           |// common sub-expressions
+           |$effectiveCodes""".stripMargin
+      } else {
+        ""
+      }
       s"""
-         |// common sub-expressions
-         |$effectiveCodes
+         |$commonSubExprs
          |// evaluate aggregate functions and update aggregation buffers
          |$codeToEvalAggFuncs
        """.stripMargin
@@ -814,13 +821,21 @@ case class HashAggregateExec(
           val codeToEvalAggFuncs = generateEvalCodeForAggFuncs(
             ctx, input, inputAttrs, boundUpdateExprs, aggNames, aggCodeBlocks, subExprs)
 
+          // Only emit the common sub-expression scaffold when subexpression elimination produced
+          // code.
+          val commonSubExprs = if (effectiveCodes.nonEmpty) {
+            s"""
+               |  // common sub-expressions
+               |  $effectiveCodes""".stripMargin
+          } else {
+            ""
+          }
           // If vectorized fast hash map is on, we first generate code to update row
           // in vectorized fast hash map, if the previous loop up hit vectorized fast hash map.
           // Otherwise, update row in regular hash map.
           s"""
              |if ($fastRowBuffer != null) {
-             |  // common sub-expressions
-             |  $effectiveCodes
+             |  $commonSubExprs
              |  // evaluate aggregate functions and update aggregation buffers
              |  $codeToEvalAggFuncs
              |} else {

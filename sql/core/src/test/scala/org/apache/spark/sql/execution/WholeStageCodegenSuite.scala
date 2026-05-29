@@ -1186,4 +1186,38 @@ class WholeStageCodegenSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-57149: omit dead common sub-expression scaffold in Project and aggregate codegen") {
+    def codegen(df: Dataset[Row]): String = {
+      val plan = df.queryExecution.executedPlan
+      assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+        "query should be in whole-stage codegen")
+      codegenString(plan)
+    }
+
+    withSQLConf(
+      SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+      val data = spark.range(10).selectExpr("id as a", "id + 1 as b")
+
+      // Project without common subexpressions: the scaffold is statically dead and must be omitted.
+      val plainProject = data.selectExpr("a", "b")
+      assert(!codegen(plainProject).contains("common sub-expressions"),
+        "Project without common subexpressions should not emit the dead scaffold")
+      checkAnswer(plainProject, (0 until 10).map(i => Row(i, i + 1)))
+
+      // Project with a repeated subexpression: the scaffold must still be emitted.
+      val cseProject = data.selectExpr("(a + b) as x", "(a + b) + 1 as y")
+      assert(codegen(cseProject).contains("common sub-expressions"),
+        "Project with common subexpressions should still emit the scaffold")
+      checkAnswer(cseProject, (0 until 10).map(i => Row(i + (i + 1), i + (i + 1) + 1)))
+
+      // Simple aggregate without common subexpressions: the scaffold must be omitted.
+      val plainAgg = data.groupBy("a").agg(sum("b").as("s"))
+      assert(!codegen(plainAgg).contains("common sub-expressions"),
+        "Aggregate without common subexpressions should not emit the dead scaffold")
+      checkAnswer(plainAgg, (0 until 10).map(i => Row(i, (i + 1).toLong)))
+    }
+  }
 }
