@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 /**
  * Collapses a grouped `SUM(COUNT(1))` rollup to a single `SUM(1)` aggregation.
  *
- * Data source scan planning invokes this after first attempting to push the original `COUNT(1)`,
- * and before final column pruning when the collapse is needed.
+ * The V2 scan-planning path invokes this after first attempting to push the original `COUNT(1)`
+ * and before final column pruning. The V1 path runs it in `SparkOptimizer.earlyScanPushDownRules`,
+ * followed by another `SchemaPruning` pass, when the collapse is needed.
  */
 object CollapseGroupedSumOfCount extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
