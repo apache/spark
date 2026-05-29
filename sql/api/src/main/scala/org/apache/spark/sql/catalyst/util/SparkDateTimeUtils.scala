@@ -26,7 +26,7 @@ import java.util.regex.Pattern
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.QueryContext
+import org.apache.spark.{QueryContext, SparkException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
@@ -550,10 +550,10 @@ trait SparkDateTimeUtils {
    * order to distinguish between 0L and null. The following formats are allowed:
    *
    * `[+-]yyyy*` `[+-]yyyy*-[m]m` `[+-]yyyy*-[m]m-[d]d` `[+-]yyyy*-[m]m-[d]d `
-   * `[+-]yyyy*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `[+-]yyyy*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]yyyy*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][ns][ns][ns][zone_id]`
+   * `[+-]yyyy*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][ns][ns][ns][zone_id]`
+   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][ns][ns][ns][zone_id]`
+   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][ns][ns][ns][zone_id]`
    *
    * where `zone_id` should have one of the forms:
    *   - Z - Zulu time zone UTC+0
@@ -580,7 +580,8 @@ trait SparkDateTimeUtils {
     def isValidDigits(segment: Int, digits: Int): Boolean = {
       // A Long is able to represent a timestamp within [+-]200 thousand years
       val maxDigitsYear = 6
-      // For the nanosecond part, more than 6 digits is allowed, but will be truncated.
+      // Fractional digits 1-6 form microseconds; digits 7-9 are retained as the sub-microsecond
+      // remainder in segments(9); only digits beyond the 9th are dropped.
       segment == 6 || (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
       // For the zoneId segment(7), it's could be zero digits when it's a region-based zone ID
       (segment == 7 && digits <= 2) ||
@@ -592,8 +593,9 @@ trait SparkDateTimeUtils {
     var tz: Option[String] = None
     // Indices 0-6 hold year, month, day, hour, minute, second and the microsecond part of the
     // fractional second (digits 1-6). Index 9 is an output-only slot that holds the
-    // sub-microsecond remainder (fractional digits 7-9) as a value in [0, 999]; it is not touched
-    // by the parsing loop below. Indices 7-8 are used while validating a region-based zone id.
+    // sub-microsecond remainder (fractional digits 7-9) as a value in [0, 999]; it is never
+    // written by the parsing loop below. Indices 7-8 are written by the loop as `i` advances
+    // but their values are never read by any caller.
     val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0, 0)
     var i = 0
     var currentSegmentValue = 0
@@ -825,7 +827,10 @@ trait SparkDateTimeUtils {
     val factor = precision match {
       case 7 => 100
       case 8 => 10
-      case _ => 1
+      case 9 => 1
+      case _ =>
+        throw SparkException.internalError(
+          s"truncateNanosWithinMicro called with precision $precision outside [7, 9]")
     }
     ((nanosWithinMicro / factor) * factor).toShort
   }
@@ -841,6 +846,9 @@ trait SparkDateTimeUtils {
       s: UTF8String,
       precision: Int,
       timeZoneId: ZoneId): Option[TimestampNanosVal] = {
+    if (precision < 7 || precision > 9)
+      throw SparkException.internalError(
+        s"stringToTimestampLTZNanos: precision $precision is out of range [7, 9]")
     try {
       val (segments, parsedZoneId, justTime) = parseTimestampString(s)
       if (segments.isEmpty) {
@@ -891,6 +899,9 @@ trait SparkDateTimeUtils {
       s: UTF8String,
       precision: Int,
       allowTimeZone: Boolean = true): Option[TimestampNanosVal] = {
+    if (precision < 7 || precision > 9)
+      throw SparkException.internalError(
+        s"stringToTimestampNTZNanos: precision $precision is out of range [7, 9]")
     try {
       val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
       if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
@@ -909,6 +920,12 @@ trait SparkDateTimeUtils {
     }
   }
 
+  /**
+   * ANSI variant of [[stringToTimestampNTZNanos]]. Throws [[org.apache.spark.SparkDateTimeException]]
+   * on invalid input. Uses `allowTimeZone = true`: a time zone component in the string is silently
+   * discarded rather than rejected. Callers that need strict NTZ rejection should call
+   * [[stringToTimestampNTZNanos]] directly with `allowTimeZone = false`.
+   */
   def stringToTimestampNTZNanosAnsi(
       s: UTF8String,
       precision: Int,

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.{ZoneId, ZoneOffset}
 
-import org.apache.spark.{SparkDateTimeException, SparkFunSuite}
+import org.apache.spark.{SparkDateTimeException, SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
@@ -146,10 +146,58 @@ class TimestampNanosParseSuite extends SparkFunSuite {
         date(9999, 12, 31, 23, 59, 59, 999999, ZoneOffset.UTC), 999.toShort))
   }
 
+  test("null input returns None") {
+    assert(stringToTimestampNTZNanos(null, 9).isEmpty)
+    assert(stringToTimestampLTZNanos(null, 9, ZoneOffset.UTC).isEmpty)
+  }
+
   test("invalid inputs return None") {
     assert(ntz("not a timestamp", 9).isEmpty)
     assert(ntz("", 9).isEmpty)
     assert(ltz("2015-13-40 99:99:99.123456789", 9, ZoneOffset.UTC).isEmpty)
+  }
+
+  test("LTZ: time-only input uses the session zone's current date") {
+    // Time-only strings are accepted by the LTZ path (date is filled with LocalDate.now);
+    // they are rejected by the NTZ path because the date is indeterminate.
+    val result = ltz("12:03:17.123456789", 9, ZoneOffset.UTC)
+    assert(result.isDefined)
+    assert(result.get.nanosWithinMicro === 789.toShort)
+    assert(ntz("12:03:17.123456789", 9).isEmpty)
+  }
+
+  test("pre-epoch (negative) timestamps with sub-microsecond fractions") {
+    // Exercises the yearSign path together with segments(9).
+    assert(ntz("-0001-01-01 00:00:00.000000001", 9).get ===
+      TimestampNanosVal.fromParts(
+        date(-1, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC), 1.toShort))
+    assert(ntz("1582-10-14 23:59:59.999999999", 9).get ===
+      TimestampNanosVal.fromParts(
+        date(1582, 10, 14, 23, 59, 59, 999999, ZoneOffset.UTC), 999.toShort))
+  }
+
+  test("truncateNanosWithinMicro throws internalError for out-of-range precision") {
+    // Precision must be in [7, 9]; anything outside is a caller bug and should surface loudly.
+    Seq(0, 6, 10, -1).foreach { p =>
+      checkError(
+        exception = intercept[SparkException] {
+          stringToTimestampNTZNanos(
+            UTF8String.fromString("2020-01-01 00:00:00.123456789"), p)
+        },
+        condition = "INTERNAL_ERROR",
+        parameters = Map(
+          "message" -> s"stringToTimestampNTZNanos: precision $p is out of range [7, 9]"))
+    }
+  }
+
+  test("ANSI NTZ: time zone component in the string is silently discarded") {
+    // allowTimeZone defaults to true in the ANSI variant: the zone suffix is dropped, not
+    // rejected. Callers that need strict rejection must use stringToTimestampNTZNanos directly
+    // with allowTimeZone = false.
+    val result = stringToTimestampNTZNanosAnsi(
+      UTF8String.fromString("2015-03-18T12:03:17.123456789Z"), 9)
+    assert(result ===
+      TimestampNanosVal.fromParts(date(2015, 3, 18, 12, 3, 17, 123456, ZoneOffset.UTC), 789.toShort))
   }
 
   test("ANSI variants throw on invalid input") {
