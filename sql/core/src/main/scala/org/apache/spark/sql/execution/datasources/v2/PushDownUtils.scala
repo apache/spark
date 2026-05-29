@@ -113,12 +113,11 @@ object PushDownUtils extends Logging {
         }
 
         val postScanPredicates = r.pushPredicates(translatedFilters.toArray)
-        val postScanFilters =
-          rebuildExpressions(postScanPredicates.toSeq, translatedFilterToExpr) ++ untranslatableExprs
 
         val finalPostScanFilters =
           if (!partitionFields.exists(_.nonEmpty) || !r.supportsIterativePushdown) {
-            postScanFilters
+            rebuildExpressions(postScanPredicates.toSeq, translatedFilterToExpr) ++
+              untranslatableExprs
           } else {
             // Second pass: only filters that were not already pushed down (partially or fully)
             // in the first pass (not in pushedPredicates) are eligible to be pushed down again.
@@ -142,7 +141,7 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Rebuilds the Catalyst [[Expression]]s for a sequence of pushed-down [[Predicate]]s, using the
+   * Rebuilds the Catalyst [[Expression]]s for a sequence of data source [[Predicate]]s, using the
    * mapping from translated data source predicates to their original Catalyst expressions.
    */
   private def rebuildExpressions(
