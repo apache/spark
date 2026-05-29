@@ -61,7 +61,7 @@ case class Scd2BatchProcessor(
   private def extendMicrobatchRowsWithStartAt(microbatchDf: DataFrame): DataFrame = {
     microbatchDf.withColumn(
       colName = Scd2BatchProcessor.startAtColName,
-      col = changeArgs.sequencing
+      col = changeArgs.sequencing.cast(resolvedSequencingType)
     )
   }
 
@@ -209,63 +209,63 @@ case class Scd2BatchProcessor(
  * ordering should ensure their sequencing column is unique per (key, event).
  */
 object Scd2BatchProcessor {
-    /**
-     * Metadata field that represents the exact time (sequence) of the CDC event that produced
-     * this row. Null only for synthetic decomposition tails.
-     */
-    private[autocdc] val recordStartAtFieldName: String = "__RECORD_START_AT"
+  /**
+   * Metadata field that represents the exact time (sequence) of the CDC event that produced
+   * this row. Null only for synthetic decomposition tails.
+   */
+  private[autocdc] val recordStartAtFieldName: String = "__RECORD_START_AT"
 
-    /**
-     * What this column represents depends on which AutoCDC artifact table it is read from.
-     *
-     * In the target table:
-     *    The user-visible column representing when this row is considered active from, i.e.
-     *    this upsert run's head [[recordStartAtFieldName]].
-     * In the aux table:
-     *    If this row represents a tombstone, then the same value as [[recordStartAtFieldName]].
-     *    Else this row represents a coalesced no-op row that is part of an upsert run.
-     *    Inherit the [[recordStartAtFieldName]] of the head of this upsert's run.
-     *
-     * The invariant in both tables is: startAtColName <= recordStartAtFieldName. If an event was
-     * generated at time X, it is active by time X, or earlier if it is not a run head.
-     */
-    private[autocdc] val startAtColName: String = "__START_AT"
+  /**
+   * What this column represents depends on which AutoCDC artifact table it is read from.
+   *
+   * In the target table:
+   *    The user-visible column representing when this row is considered active from, i.e.
+   *    this upsert run's head [[recordStartAtFieldName]].
+   * In the aux table:
+   *    If this row represents a tombstone, then the same value as [[recordStartAtFieldName]].
+   *    Else this row represents a coalesced no-op row that is part of an upsert run.
+   *    Inherit the [[recordStartAtFieldName]] of the head of this upsert's run.
+   *
+   * The invariant in both tables is: startAtColName <= recordStartAtFieldName. If an event was
+   * generated at time X, it is active by time X, or earlier if it is not a run head.
+   */
+  private[autocdc] val startAtColName: String = "__START_AT"
 
-    /**
-     * What this column represents depends on which AutoCDC artifact table it is read from.
-     *
-     * In the target table:
-     *    The user-visible column representing when this row became inactive. Null IFF the row
-     *    is active: neither superseded by a state-changing upsert nor affected by a delete.
-     * In the aux table:
-     *    If this row is a tombstone, then by convention the sequence of the delete event that
-     *    produced it. Delete events are considered instantaneous in time.
-     *    Else this row is a coalesced no-op row that is part of an upsert run, and by
-     *    convention the value will always be null.
-     */
-    private[autocdc] val endAtColName: String = "__END_AT"
+  /**
+   * What this column represents depends on which AutoCDC artifact table it is read from.
+   *
+   * In the target table:
+   *    The user-visible column representing when this row became inactive. Null IFF the row
+   *    is active: neither superseded by a state-changing upsert nor affected by a delete.
+   * In the aux table:
+   *    If this row is a tombstone, then by convention the sequence of the delete event that
+   *    produced it. Delete events are considered instantaneous in time.
+   *    Else this row is a coalesced no-op row that is part of an upsert run, and by
+   *    convention the value will always be null.
+   */
+  private[autocdc] val endAtColName: String = "__END_AT"
 
-    /**
-     * Column names reserved by AutoCDC, that will be projected onto the microbatch and target
-     * tables. If the user's source dataframe contains any of these columns, SCD2 reconciliation
-     * will fail.
-     */
-    private val reservedFrameworkColNames: Set[String] = Set(
-        startAtColName,
-        endAtColName,
-        AutoCdcReservedNames.cdcMetadataColName
-    )
+  /**
+   * Column names reserved by AutoCDC, that will be projected onto the microbatch and target
+   * tables. If the user's source dataframe contains any of these columns, SCD2 reconciliation
+   * will fail.
+   */
+  private val reservedFrameworkColNames: Set[String] = Set(
+      startAtColName,
+      endAtColName,
+      AutoCdcReservedNames.cdcMetadataColName
+  )
 
-    /**
-     * Construct the CDC metadata struct column for SCD1, following the exact schema and field
-     * ordering defined by [[cdcMetadataColSchema]].
-     */
-    def constructCdcMetadataStruct(
-        recordStartAt: Column,
-        sequencingType: DataType
-    ): Column = {
-        F.struct(
-            recordStartAt.cast(sequencingType).as(recordStartAtFieldName)
-        )
-    }
+  /**
+   * Construct the CDC metadata struct column for SCD1, following the exact schema and field
+   * ordering defined by [[cdcMetadataColSchema]].
+   */
+  def constructCdcMetadataStruct(
+      recordStartAt: Column,
+      sequencingType: DataType
+  ): Column = {
+      F.struct(
+          recordStartAt.cast(sequencingType).as(recordStartAtFieldName)
+      )
+  }
 }
