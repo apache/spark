@@ -293,6 +293,7 @@ class SetPathSuite extends SharedSparkSession {
     // contract. The default `sessionFunctionResolutionOrder` is "second" (builtin first, then
     // session, then catalog entries); ordering tests for the other modes live below.
     withPathEnabled {
+      sql("USE spark_catalog.default")
       sql("SET PATH = DEFAULT_PATH")
       val entries = pathEntries(currentPath())
       assert(entries === Seq("system.builtin", "system.session", "spark_catalog.default"),
@@ -316,11 +317,11 @@ class SetPathSuite extends SharedSparkSession {
 
   test("PATH enabled: SET PATH = SYSTEM_PATH, system.session is the documented migration form") {
     // SPARK-57109: callers who relied on the old SYSTEM_PATH expansion (system.builtin +
-    // system.session) can name system.session explicitly. Pre-PR this would have raised
-    // DUPLICATE_SQL_PATH_ENTRY because SYSTEM_PATH already carried system.session; post-PR it
-    // is legal and expands to [system.builtin, system.session]. Pinning this here locks in
-    // the migration contract and guards against a future re-expansion of SYSTEM_PATH that
-    // would silently turn this back into a duplicate.
+    // system.session) can name system.session explicitly. Because SYSTEM_PATH now expands to
+    // only system.builtin, listing system.session alongside it is legal and yields
+    // [system.builtin, system.session]. If SYSTEM_PATH ever re-expanded to carry system.session
+    // again, this entry would collide and raise DUPLICATE_SQL_PATH_ENTRY -- which is the
+    // regression this test guards against.
     withPathEnabled {
       sql("SET PATH = SYSTEM_PATH, system.session")
       val entries = pathEntries(currentPath())
