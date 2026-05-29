@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.expressions.Rand
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.functions.rand
+import org.apache.spark.sql.functions.{lit, rand, uniform}
 import org.apache.spark.sql.test.SharedSparkSession
 
 class DataFrameZipSuite extends QueryTest with SharedSparkSession {
@@ -170,23 +170,26 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
     // `r` twice and evaluate the producer once per copy. Assert the optimized plan keeps a single
     // Rand.
     val df = spark.range(10).toDF("id")
-    val parent = df.withColumn("r", (rand() * 1000000).cast("int"))
+    // `uniform(0, 1000000)` (no explicit seed) is a nondeterministic random int producer.
+    val parent = df.withColumn("r", uniform(lit(0), lit(1000000)))
     val left = parent.select("r")
     val right = parent.withColumn("x", $"r" + $"r").select("x")
     val zipped = left.zip(right)
 
+    // Structural guard against duplication: the producer (a Rand inside uniform's replacement)
+    // must appear exactly once in the optimized plan.
     val optimized = zipped.queryExecution.optimizedPlan
     val randCount = optimized.flatMap { p =>
       p.expressions.flatMap(_.collect { case _: Rand => 1 })
     }.sum
     assert(randCount == 1,
-      s"rand() must appear exactly once after the rewrite, got $randCount; plan:\n$optimized")
+      s"the random producer must appear exactly once after the rewrite, got $randCount; " +
+        s"plan:\n$optimized")
 
-    // Runtime check: `r` is an int in [0, 1000000), so `x = r + r` stays well within Int range --
-    // no overflow, and integer equality is exact. `x` must equal `r + r` for the exact `r`
-    // emitted in the output, which holds only if the producer is evaluated once. A second draw
-    // would make x = r2 + r2 while the output carries r1, so x != r + r. Reduce to a single
-    // boolean via distinct.
+    // Result correctness: the emitted `x` must equal `r + r` for the exact `r` emitted in the
+    // output, i.e. the merge wired `x` to the same producer instance that feeds the `r` column.
+    // `r` is an int in [0, 1000000) so `r + r` is exact and cannot overflow Int. Reduce to a
+    // single boolean via distinct.
     checkAnswer(zipped.select(($"x" === $"r" + $"r").as("ok")).distinct(), Row(true))
   }
 }
