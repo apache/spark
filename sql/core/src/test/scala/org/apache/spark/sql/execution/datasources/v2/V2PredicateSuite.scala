@@ -358,7 +358,6 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(v1Filter.toV2).get == v1Filter)
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
   }
-
 }
 
 object V2PredicateSuite {
