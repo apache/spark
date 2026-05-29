@@ -24,6 +24,7 @@ import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.connector.catalog.SharedTablesInMemoryRowLevelOperationTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   ChangeArgs,
   ColumnSelection,
   Scd1BatchProcessor,
@@ -145,7 +146,7 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
    * Assumes sequence type is BIGINT (Long).
    */
   protected val cdcMetadataDdl: String = {
-    val col = Scd1BatchProcessor.cdcMetadataColName
+    val col = AutoCdcReservedNames.cdcMetadataColName
     val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
     val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
     s"$col STRUCT<$del:BIGINT,$ups:BIGINT> NOT NULL"

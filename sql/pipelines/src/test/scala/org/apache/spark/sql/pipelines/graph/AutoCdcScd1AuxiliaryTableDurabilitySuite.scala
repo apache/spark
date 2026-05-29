@@ -21,8 +21,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   ColumnSelection,
-  Scd1BatchProcessor,
   UnqualifiedColumnName
 }
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
@@ -157,7 +157,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     // The auxiliary table only contains keys and the metadata column, hence "name" should not be
     // included.
-    assert(auxSchema.fieldNames.toSeq == Seq("id", Scd1BatchProcessor.cdcMetadataColName))
+    assert(auxSchema.fieldNames.toSeq == Seq("id", AutoCdcReservedNames.cdcMetadataColName))
     assert(getAuxTableKeyColumnNames(target = "target") == Seq("id"))
   }
 
@@ -195,7 +195,7 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     val auxSchema = spark.table(auxTableNameFor("target")).schema
     assert(auxSchema.fieldNames.toSeq ==
-      Seq("region", "id", Scd1BatchProcessor.cdcMetadataColName))
+      Seq("region", "id", AutoCdcReservedNames.cdcMetadataColName))
     assert(getAuxTableKeyColumnNames(target = "target") == Seq("region", "id"))
   }
 

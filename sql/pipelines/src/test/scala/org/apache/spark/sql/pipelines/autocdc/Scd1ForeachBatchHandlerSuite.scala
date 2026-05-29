@@ -41,12 +41,12 @@ class Scd1ForeachBatchHandlerSuite
 
   private val auxiliarySchema = new StructType()
     .add("id", IntegerType)
-    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+    .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
 
   private val targetSchema = new StructType()
     .add("id", IntegerType)
     .add("value", StringType)
-    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+    .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
 
   private val processor = Scd1BatchProcessor(
     changeArgs = ChangeArgs(
@@ -155,11 +155,11 @@ class Scd1ForeachBatchHandlerSuite
     val compositeAuxSchema = new StructType()
       .add("country", StringType)
       .add("city", StringType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
     val compositeTargetSchema = new StructType()
       .add("country", StringType)
       .add("city", StringType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
 
     val compositeProcessor = Scd1BatchProcessor(
       changeArgs = ChangeArgs(
@@ -492,12 +492,12 @@ class Scd1ForeachBatchHandlerSuite
     val compositeAuxSchema = new StructType()
       .add("country", StringType)
       .add("city", StringType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
     val compositeTargetSchema = new StructType()
       .add("country", StringType)
       .add("city", StringType)
       .add("population", LongType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
 
     val compositeProcessor = Scd1BatchProcessor(
       changeArgs = ChangeArgs(

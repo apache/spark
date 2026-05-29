@@ -143,7 +143,7 @@ case class Scd1BatchProcessor(
       F.when(rowDeleteSequence.isNull, changeArgs.sequencing).otherwise(F.lit(null))
 
     validatedMicrobatch.withColumn(
-      Scd1BatchProcessor.cdcMetadataColName,
+      AutoCdcReservedNames.cdcMetadataColName,
       Scd1BatchProcessor.constructCdcMetadataCol(
         deleteSequence = rowDeleteSequence,
         upsertSequence = rowUpsertSequence,
@@ -175,7 +175,7 @@ case class Scd1BatchProcessor(
       schema = microbatchWithCdcMetadataDf.schema,
       columnSelection = Some(
         ColumnSelection.ExcludeColumns(
-          Seq(UnqualifiedColumnName(Scd1BatchProcessor.cdcMetadataColName))
+          Seq(UnqualifiedColumnName(AutoCdcReservedNames.cdcMetadataColName))
         )
       ),
       caseSensitive = caseSensitiveColumnComparison
@@ -197,7 +197,7 @@ case class Scd1BatchProcessor(
         // select. Identifiers could have special characters such as '.'.
         F.col(QuotingUtils.quoteIdentifier(colName))
       }) :+ F.col(
-        Scd1BatchProcessor.cdcMetadataColName
+        AutoCdcReservedNames.cdcMetadataColName
       )
 
     microbatchWithCdcMetadataDf.select(
@@ -223,7 +223,7 @@ case class Scd1BatchProcessor(
     val aliasedMicrobatchDf = microbatchDf.alias("microbatch")
     val aliasedAuxiliaryTableDf = auxiliaryTableDf.alias("auxiliaryTable")
 
-    val cdcMetadata = Scd1BatchProcessor.cdcMetadataColName
+    val cdcMetadata = AutoCdcReservedNames.cdcMetadataColName
 
     val microbatchCdcMetadata = F.col(s"microbatch.$cdcMetadata")
     val effectiveSeq = F.greatest(
@@ -267,7 +267,7 @@ case class Scd1BatchProcessor(
       auxiliaryTableIdentifier: TableIdentifier
   ): Unit = {
     val auxIdentQuoted = auxiliaryTableIdentifier.quotedString
-    val meta = Scd1BatchProcessor.cdcMetadataColName
+    val meta = AutoCdcReservedNames.cdcMetadataColName
 
     // Project the reconciled microbatch down to just keys + `_cdc_metadata`; data columns are
     // irrelevant for the auxiliary table and should not be persisted.
@@ -330,7 +330,7 @@ case class Scd1BatchProcessor(
       reconciledMicrobatchDf: DataFrame,
       targetTableIdentifier: TableIdentifier
   ): Unit = {
-    val meta = Scd1BatchProcessor.cdcMetadataColName
+    val meta = AutoCdcReservedNames.cdcMetadataColName
 
     val destinationTableStr = targetTableIdentifier.quotedString
     // (Re-)alias the reconciled microbatch DF for easy reference for the remainder of the merge.
@@ -415,7 +415,6 @@ object Scd1BatchProcessor {
    * enforced at [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction.
    */
   private[autocdc] val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
-  private[pipelines] val cdcMetadataColName: String = s"${AutoCdcReservedNames.prefix}metadata"
 
   private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
   private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"

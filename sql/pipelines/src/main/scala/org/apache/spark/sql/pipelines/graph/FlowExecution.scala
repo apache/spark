@@ -688,11 +688,12 @@ class Scd1MergeStreamingWrite(
   /** CDC metadata field resolved out of the flow's augmented schema. */
   private lazy val cdcMetadataField: StructField = {
     val resolver = updateContext.spark.sessionState.conf.resolver
+    val cdcMetadataColName = AutoCdcReservedNames.cdcMetadataColName
     flow.schema.fields
-      .find(field => resolver(field.name, Scd1BatchProcessor.cdcMetadataColName))
+      .find(field => resolver(field.name, cdcMetadataColName))
       .getOrElse(
         throw SparkException.internalError(
-          s"CDC metadata column '${Scd1BatchProcessor.cdcMetadataColName}' was not found in the " +
+          s"CDC metadata column '$cdcMetadataColName' was not found in the " +
           s"AutoCDC flow's target table schema."
         )
       )
