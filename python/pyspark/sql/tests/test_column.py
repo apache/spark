@@ -24,6 +24,7 @@ import uuid
 
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
+from pyspark.sql.window import Window
 from pyspark.sql.types import StructType, StructField, IntegerType, LongType, StringType
 from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -620,8 +621,6 @@ class ColumnTestsMixin:
         # 4-layer DataFrame pipeline: filter -> semi-join -> groupBy/agg
         # -> window functions. ``layered.col`` references appear in both
         # filter and select at the outermost surface.
-        from pyspark.sql.window import Window
-
         events_data = [
             (1, 1, "Books", 100.0, 2, True),
             (2, 1, "Books", 50.0, 3, True),
@@ -679,8 +678,6 @@ class ColumnTestsMixin:
         # access -> cube aggregation -> window NTILE. ``layered.col``
         # references appear in both filter and select at the outermost
         # surface.
-        from pyspark.sql.window import Window
-
         events_schema = StructType(
             [
                 StructField("id", IntegerType()),
@@ -764,8 +761,6 @@ class ColumnTestsMixin:
         # 4-layer DataFrame pipeline: filter -> running-total window ->
         # per-partition max window -> UDF wrap. ``layered.col`` references
         # appear in both filter and select at the outermost surface.
-        from pyspark.sql.window import Window
-
         data = [
             (1, "A", 100),
             (2, "A", 200),
@@ -833,6 +828,8 @@ class ColumnTestsMixin:
         # Two consecutive withColumn calls each shadow `c` with a new
         # attribute of the same name, so the original `c` leaves the
         # projection and the tagged `df.c` cannot resolve.
+        # Connect lenient diverges: name-based fallback resolves the
+        # shadowed name (overridden in the lenient parity suite).
         df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException):
             df.withColumn("c", sf.col("c").cast("string")).withColumn(
@@ -841,6 +838,8 @@ class ColumnTestsMixin:
 
     def test_resolve_after_select_alias_shadow(self):
         # Same shadowing shape as withColumn but via select + alias.
+        # Connect lenient diverges: name-based fallback resolves the
+        # shadowed name (overridden in the lenient parity suite).
         df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException):
             df.select(df.c.cast("string").alias("c")).select(df.c).collect()
@@ -890,6 +889,8 @@ class ColumnTestsMixin:
         # An aggregate output aliased `c` collides by name with the source
         # `c`, but the tagged `df.c` still references the aggregated-away
         # source attribute, so it cannot resolve.
+        # Connect lenient diverges: name-based fallback resolves the
+        # aliased name (overridden in the lenient parity suite).
         df = self.spark.sql("SELECT 1 AS x")
         with self.assertRaises(AnalysisException):
             df.groupBy().agg(sf.sum("x").alias("c")).select(df.c).collect()
