@@ -172,6 +172,10 @@ object TimestampNanosTestUtils {
     TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION foreach body
   }
 
+  // Index `i` holds 10^i; sized to cover excessDigits in [0, NANOS_PRECISION].
+  private val POWERS_OF_10 =
+    Array(1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000)
+
   /**
    * Returns a function that truncates a nano-of-second value (`0..999_999_999`, as produced by
    * [[LocalDateTime.getNano]] / [[Instant.getNano]]) to the given fractional-second precision.
@@ -186,7 +190,7 @@ object TimestampNanosTestUtils {
     val excessDigits = TimestampNTZNanosType.NANOS_PRECISION - precision
     if (excessDigits <= 0) identity
     else {
-      val factor = math.pow(10.0, excessDigits.toDouble).toInt
+      val factor = POWERS_OF_10(excessDigits)
       n => (n / factor) * factor
     }
   }
