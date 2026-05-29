@@ -20,6 +20,7 @@ from enum import Enum
 from itertools import chain
 import datetime
 import unittest
+import uuid
 
 from pyspark.sql import Column, Row
 from pyspark.sql import functions as sf
@@ -813,6 +814,174 @@ class ColumnTestsMixin:
                 (5, "C", 50, 50, 50, 100),
             ],
         )
+
+    # --- Tagged DataFrame column resolution --------------------------------
+    #
+    # ``df.col`` / ``df["col"]`` carries the source DataFrame's plan id. These
+    # tests pin how that tagged reference resolves after assorted operators.
+    # The behavior is shared across Spark Classic and Spark Connect (both
+    # ``spark.sql.analyzer.strictDataFrameColumnResolution`` modes) except for
+    # a few diverging cases, which are overridden in the Connect parity suites
+    # (``ColumnParityTests`` / ``...WithNonStrictDFColResolution``):
+    #
+    #   * the shadowing trio - Classic and Connect strict raise, Connect
+    #     lenient resolves the shadowed name via name-based fallback;
+    #   * union - Classic resolves via attribute-id propagation, Connect
+    #     raises in both modes.
+
+    def test_resolve_after_chained_withcolumn_shadow(self):
+        # Two consecutive withColumn calls each shadow `c` with a new
+        # attribute of the same name, so the original `c` leaves the
+        # projection and the tagged `df.c` cannot resolve.
+        df = self.spark.sql("SELECT 1 AS c")
+        with self.assertRaises(AnalysisException):
+            df.withColumn("c", sf.col("c").cast("string")).withColumn(
+                "c", sf.col("c").cast("int")
+            ).select(df.c).collect()
+
+    def test_resolve_after_select_alias_shadow(self):
+        # Same shadowing shape as withColumn but via select + alias.
+        df = self.spark.sql("SELECT 1 AS c")
+        with self.assertRaises(AnalysisException):
+            df.select(df.c.cast("string").alias("c")).select(df.c).collect()
+
+    def test_resolve_after_withcolumnrenamed(self):
+        # withColumnRenamed drops the original `c` attribute and projects it
+        # as `c2`; the tagged `df.c` matches neither the original attribute
+        # nor a current column named `c`, so all modes raise.
+        df = self.spark.sql("SELECT 1 AS c")
+        with self.assertRaises(AnalysisException):
+            df.withColumnRenamed("c", "c2").select(df.c).collect()
+
+    def test_resolve_after_drop(self):
+        # drop("c") removes the column entirely; the tagged `df.c` cannot
+        # resolve under any mode.
+        df = self.spark.sql("SELECT 1 AS c, 2 AS d")
+        with self.assertRaises(AnalysisException):
+            df.drop("c").select(df.c).collect()
+
+    def test_resolve_through_filter(self):
+        # filter is a pass-through operator: the child Project's attributes
+        # flow through unchanged, so the tagged reference resolves.
+        df = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
+        rows = df.filter(df.c > 0).select(df.c).collect()
+        self.assertEqual(sorted(r.c for r in rows), [1, 2])
+
+    def test_resolve_through_sort(self):
+        # sort is also a pass-through operator.
+        df = self.spark.sql("SELECT 2 AS c UNION ALL SELECT 1 AS c")
+        rows = df.sort(df.c).select(df.c).collect()
+        self.assertEqual([r.c for r in rows], [1, 2])
+
+    def test_resolve_through_distinct(self):
+        # distinct preserves attribute identity for column resolution.
+        df = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c")
+        rows = df.distinct().select(df.c).collect()
+        self.assertEqual([r.c for r in rows], [1])
+
+    def test_resolve_after_groupby_count(self):
+        # groupBy("c").count() preserves the grouping key's attribute id, so
+        # the tagged reference resolves.
+        df = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 1 AS c UNION ALL SELECT 2 AS c")
+        rows = df.groupBy("c").count().select(df.c).collect()
+        self.assertEqual(sorted(r.c for r in rows), [1, 2])
+
+    def test_resolve_after_agg_alias_shadow(self):
+        # An aggregate output aliased `c` collides by name with the source
+        # `c`, but the tagged `df.c` still references the aggregated-away
+        # source attribute, so it cannot resolve.
+        df = self.spark.sql("SELECT 1 AS x")
+        with self.assertRaises(AnalysisException):
+            df.groupBy().agg(sf.sum("x").alias("c")).select(df.c).collect()
+
+    def test_resolve_after_pivot(self):
+        # pivot preserves the grouping key's attribute id, so the tagged
+        # reference resolves.
+        df = self.spark.sql(
+            "SELECT 1 AS c, 'a' AS k, 10 AS v UNION ALL SELECT 2 AS c, 'b' AS k, 20 AS v"
+        )
+        rows = df.groupBy("c").pivot("k").sum("v").select(df.c).collect()
+        self.assertEqual(sorted(r.c for r in rows), [1, 2])
+
+    def test_resolve_after_union(self):
+        # Union emits new attribute ids. Classic resolves the tagged
+        # left-side reference by attribute-id propagation and succeeds;
+        # Connect treats Union as a leaf when walking the plan tree for
+        # plan-id resolution and raises in both modes (overridden there).
+        df1 = self.spark.sql("SELECT 1 AS c")
+        df2 = self.spark.sql("SELECT 2 AS c")
+        rows = df1.union(df2).select(df1.c).collect()
+        self.assertEqual(sorted(r.c for r in rows), [1, 2])
+
+    def test_resolve_after_intersect(self):
+        # intersect, like union, emits new attribute ids, but the propagated
+        # id is retained in the output, so the tagged reference resolves in
+        # all modes.
+        df1 = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
+        df2 = self.spark.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
+        rows = df1.intersect(df2).select(df1.c).collect()
+        self.assertEqual([r.c for r in rows], [2])
+
+    def test_resolve_self_join_alias(self):
+        # Both self-join sides originate from the same plan-id-tagged
+        # ancestor, yielding two equal-depth candidates with the same
+        # attribute id. Disambiguation cannot tiebreak and all modes raise
+        # an ambiguous-reference error.
+        df = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
+        a, b = df.alias("a"), df.alias("b")
+        with self.assertRaises(AnalysisException):
+            a.join(b, a.c == b.c).select(df.c).collect()
+
+    def test_resolve_after_subquery_view(self):
+        # Persisting the DataFrame as a temp view and reading it back via
+        # table() produces a new plan; the tagged reference still resolves in
+        # all modes.
+        view = f"v_{uuid.uuid4().hex}"
+        df = self.spark.sql("SELECT 1 AS c")
+        df.createOrReplaceTempView(view)
+        try:
+            rows = self.spark.table(view).select(df.c).collect()
+            self.assertEqual([r.c for r in rows], [1])
+        finally:
+            self.spark.sql(f"DROP VIEW IF EXISTS {view}")
+
+    def test_resolve_cross_dataframe_illegal_reference(self):
+        # Referencing a column from a DataFrame whose plan id is not an
+        # ancestor of the target plan (`df1.select(df2.id)`) fails in all
+        # modes; the strict / lenient switch does not gate this throw.
+        df1 = self.spark.range(3)
+        df2 = self.spark.range(5)
+        with self.assertRaises(AnalysisException):
+            df1.select(df2.id).collect()
+
+    def test_resolve_df_star(self):
+        # `df["*"]` is an UnresolvedDataFrameStar carrying df's plan id; the
+        # analyzer expands it to the matched node's output in all modes.
+        df = self.spark.sql(
+            "SELECT 'Books' AS c, 100 AS v UNION ALL SELECT 'Electronics' AS c, 200 AS v"
+        )
+        rows = df.select(df["*"]).collect()
+        self.assertEqual(sorted((r.c, r.v) for r in rows), [("Books", 100), ("Electronics", 200)])
+
+    def test_resolve_self_join_withcolumnrenamed(self):
+        # Documented ColumnResolutionHelper case: df1 = range(10) + col `a`;
+        # df2 = df1 renamed `a` -> `b`; df1.join(df2, df1.a == df2.b). The
+        # node with df1's plan id is found on both Join sides; the right
+        # candidate is filtered out because its `a` is not in the renaming
+        # Project's output, so disambiguation succeeds in all modes.
+        df1 = self.spark.range(10).withColumn("a", sf.col("id"))
+        df2 = df1.withColumnRenamed("a", "b")
+        rows = df1.join(df2, df1.a == df2.b).select(df1.a, df2.b).collect()
+        self.assertEqual(len(rows), 10)
+
+    def test_resolve_sort_missing_attr_recovery(self):
+        # Documented ColumnResolutionHelper case: df.select(df.v).sort(df.id)
+        # where df.id is not in the select's output. The analyzer descends
+        # through the Project, resolves df.id via plan id at the source, and
+        # adds it back to the upstream projection. Works in all modes.
+        df = self.spark.range(10).withColumn("v", sf.col("id") + 1)
+        rows = df.select(df.v).sort(df.id).collect()
+        self.assertEqual(len(rows), 10)
 
 
 class ColumnTests(ColumnTestsMixin, ReusedSQLTestCase):
