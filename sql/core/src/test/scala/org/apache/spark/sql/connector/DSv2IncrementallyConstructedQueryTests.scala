@@ -353,15 +353,16 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
               Column.create("id", IntegerType),
               Column.create("salary", IntegerType)))
             .build())
+        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
         val df2 = session.table(nullBothT)
 
-        // Neither TABLE_ID_MISMATCH nor COLUMN_ID_MISMATCH fires.
-        // Both sides refresh to the recreated (empty) table. The join succeeds
-        // but returns no rows because the new table has no data.
+        // Neither TABLE_ID_MISMATCH nor COLUMN_ID_MISMATCH fires, so the drop and
+        // recreate goes undetected. Both sides refresh to the recreated table and
+        // the join sees the row appended after recreate, in both classic and Connect.
         checkRows(
           df1.join(df2, df1("id") === df2("id")),
-          Seq.empty)
+          Seq(Row(2, 200, 2, 200)))
       }
     }
   }
