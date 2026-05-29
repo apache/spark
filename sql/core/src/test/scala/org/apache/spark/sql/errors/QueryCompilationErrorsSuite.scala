@@ -893,17 +893,18 @@ class QueryCompilationErrorsSuite
     }
   }
 
-  test("SPARK-52219: the schema level collations feature is unsupported") {
-    // TODO: when schema level collations are supported, change this test to set the flag to false
-    Seq(
-      "CREATE SCHEMA test_schema DEFAULT COLLATION UNICODE",
-      "ALTER SCHEMA test_schema DEFAULT COLLATION UNICODE"
-    ).foreach {
-      sqlText =>
-        checkError(
-          exception = intercept[AnalysisException](sql(sqlText)),
-          condition = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS"
-        )
+  test("SPARK-52219: the schema level collations feature is unsupported when flag is disabled") {
+    withSQLConf(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED.key -> "false") {
+      Seq(
+        "CREATE SCHEMA test_schema DEFAULT COLLATION UNICODE",
+        "ALTER SCHEMA test_schema DEFAULT COLLATION UNICODE"
+      ).foreach {
+        sqlText =>
+          checkError(
+            exception = intercept[AnalysisException](sql(sqlText)),
+            condition = "UNSUPPORTED_FEATURE.SCHEMA_LEVEL_COLLATIONS"
+          )
+      }
     }
   }
 

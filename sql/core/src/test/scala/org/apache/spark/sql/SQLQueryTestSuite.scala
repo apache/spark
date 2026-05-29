@@ -177,7 +177,6 @@ class SQLQueryTestSuite extends SharedSparkSession
     // SPARK-39564: don't print out serde to avoid introducing complicated and error-prone
     // regex magic.
     .set("spark.test.noSerdeInExplain", "true")
-    .set(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED, true)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.
