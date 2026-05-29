@@ -99,10 +99,7 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
 
     // Commit to commitLog with checkpoint IDs
     val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
-    val commitMetadata = targetCheckpointMetadata.commitLog.createMetadata(
-      nextBatchWatermarkMs = latestCommit.nextBatchWatermarkMs,
-      stateUniqueIds = checkpointInfos,
-      commitLogFormatVersion = latestCommit.version)
+    val commitMetadata = latestCommit.withStateUniqueIds(checkpointInfos)
     targetCheckpointMetadata.commitLog.add(writeBatchId, commitMetadata)
     val versionToCheck = writeBatchId + 1
 

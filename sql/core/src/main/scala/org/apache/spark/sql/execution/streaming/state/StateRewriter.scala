@@ -381,7 +381,7 @@ class StateRewriter(
     // StateRewriter from writing state files in a format that disagrees with the source
     // checkpoint. Using the read batch commit since the latest commit could be a skipped batch.
     readCheckpoint.commitLog.get(readBatchId).foreach { metadata =>
-      val configuredVersion = readCheckpoint.commitLog.VERSION
+      val configuredVersion = readCheckpoint.commitLog.defaultVersion
       if (metadata.version != configuredVersion) {
         throw StateRewriterErrors.stateCheckpointFormatVersionMismatchError(
           checkpointLocationForRead,

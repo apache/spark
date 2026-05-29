@@ -294,10 +294,9 @@ class OfflineStateRepartitionRunner(
       lastCommittedBatchId: Long,
       opIdToStateStoreCkptInfo: Option[Map[Long, Array[Array[String]]]]): Unit = {
     val latestCommit = checkpointMetadata.commitLog.get(lastCommittedBatchId).get
-    val commitMetadata = checkpointMetadata.commitLog.createMetadata(
-      nextBatchWatermarkMs = latestCommit.nextBatchWatermarkMs,
-      stateUniqueIds = opIdToStateStoreCkptInfo,
-      commitLogFormatVersion = latestCommit.version)
+    // Derive the new commit from the latest one so version-specific fields are preserved and the
+    // wire format version stays consistent with the source checkpoint.
+    val commitMetadata = latestCommit.withStateUniqueIds(opIdToStateStoreCkptInfo)
 
     if (!checkpointMetadata.commitLog.add(newBatchId, commitMetadata)) {
       throw QueryExecutionErrors.concurrentStreamLogUpdate(newBatchId)

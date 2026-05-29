@@ -57,7 +57,7 @@ class CommitLog(
 
   // The configured commit log format version. Used as the default version when callers
   // construct metadata through [[createMetadata]].
-  private[sql] val VERSION: Int = sparkSession.conf.get(
+  private[sql] val defaultVersion: Int = sparkSession.conf.get(
     SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key).toInt
 
   override protected[sql] def deserialize(in: InputStream): CommitMetadataBase = {
@@ -80,12 +80,14 @@ class CommitLog(
   def createMetadata(
       nextBatchWatermarkMs: Long = 0,
       stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None,
-      commitLogFormatVersion: Int = VERSION): CommitMetadataBase = {
+      commitLogFormatVersion: Int = defaultVersion): CommitMetadataBase = {
     commitLogFormatVersion match {
       case VERSION_2 =>
         CommitMetadataV2(nextBatchWatermarkMs, stateUniqueIds)
       case VERSION_1 =>
-        CommitMetadata(nextBatchWatermarkMs)
+        // VERSION_1 cannot persist stateUniqueIds; withStateUniqueIds enforces this invariant
+        // (it throws if stateUniqueIds is non-empty).
+        CommitMetadata(nextBatchWatermarkMs).withStateUniqueIds(stateUniqueIds)
       case v =>
         throw QueryExecutionErrors.logVersionGreaterThanSupported(v, CommitLog.MAX_VERSION)
     }
@@ -126,6 +128,16 @@ trait CommitMetadataBase extends Serializable {
   def nextBatchWatermarkMs: Long
   def stateUniqueIds: Option[Map[Long, Array[Array[String]]]]
 
+  /**
+   * Returns a copy of this metadata with the given state store unique ids, preserving the
+   * concrete subclass and all of its other fields. Deriving a new commit from an existing one
+   * should go through this method (rather than reconstructing via [[CommitLog.createMetadata]])
+   * so that version-specific fields are not silently dropped when new metadata versions are
+   * introduced.
+   */
+  def withStateUniqueIds(
+      stateUniqueIds: Option[Map[Long, Array[Array[String]]]]): CommitMetadataBase
+
   def json: String = Serialization.write(this)(CommitMetadata.format)
 }
 
@@ -138,6 +150,14 @@ case class CommitMetadata(
     nextBatchWatermarkMs: Long = 0) extends CommitMetadataBase {
   override def version: Int = CommitLog.VERSION_1
   override def stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None
+
+  override def withStateUniqueIds(
+      stateUniqueIds: Option[Map[Long, Array[Array[String]]]]): CommitMetadata = {
+    require(stateUniqueIds.forall(_.isEmpty),
+      s"stateUniqueIds cannot be set for commit log format version ${CommitLog.VERSION_1}; " +
+        s"use version ${CommitLog.VERSION_2} to persist state store checkpoint ids.")
+    this
+  }
 }
 
 object CommitMetadata {
@@ -174,10 +194,14 @@ case class CommitMetadataV2(
     nextBatchWatermarkMs: Long = 0,
     stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None) extends CommitMetadataBase {
   override def version: Int = CommitLog.VERSION_2
+
+  override def withStateUniqueIds(
+      stateUniqueIds: Option[Map[Long, Array[Array[String]]]]): CommitMetadataV2 =
+    copy(stateUniqueIds = stateUniqueIds)
 }
 
 object CommitMetadataV2 {
-  implicit val format: Formats = Serialization.formats(NoTypeHints)
+  import CommitMetadata.format
 
   def apply(json: String): CommitMetadataV2 = Serialization.read[CommitMetadataV2](json)
 }

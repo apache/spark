@@ -131,4 +131,34 @@ class CommitLogSuite extends SharedSparkSession {
       assert(commitMetadata.stateUniqueIds.isEmpty)
     }
   }
+
+  test("SPARK-56970: creating a V1 commit with stateUniqueIds should fail") {
+    withTempDir { tmpDir =>
+      val commitLog = new CommitLog(spark, tmpDir.getCanonicalPath)
+      val stateUniqueIds: Map[Long, Array[Array[String]]] =
+        Map(0L -> Array(Array("unique_id1", "unique_id2")))
+
+      // Through the createMetadata factory with an explicit V1 format version.
+      val e1 = intercept[IllegalArgumentException] {
+        commitLog.createMetadata(
+          nextBatchWatermarkMs = 1,
+          stateUniqueIds = Some(stateUniqueIds),
+          commitLogFormatVersion = CommitLog.VERSION_1)
+      }
+      assert(e1.getMessage.contains("stateUniqueIds cannot be set"))
+
+      // Directly through withStateUniqueIds on a V1 metadata.
+      val e2 = intercept[IllegalArgumentException] {
+        CommitMetadata(1).withStateUniqueIds(Some(stateUniqueIds))
+      }
+      assert(e2.getMessage.contains("stateUniqueIds cannot be set"))
+
+      // None and an empty map are allowed for V1 (no unique ids to persist).
+      assert(CommitMetadata(1).withStateUniqueIds(None).stateUniqueIds.isEmpty)
+      assert(commitLog.createMetadata(
+        nextBatchWatermarkMs = 1,
+        stateUniqueIds = Some(Map.empty[Long, Array[Array[String]]]),
+        commitLogFormatVersion = CommitLog.VERSION_1).version === CommitLog.VERSION_1)
+    }
+  }
 }
