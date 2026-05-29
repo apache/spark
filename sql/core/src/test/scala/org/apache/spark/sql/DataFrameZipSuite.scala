@@ -172,12 +172,19 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
     val parent = df.withColumn("r", rand())
     val left = parent.select("r")
     val right = parent.withColumn("x", $"r" + $"r").select("x")
+    val zipped = left.zip(right)
 
-    val optimized = left.zip(right).queryExecution.optimizedPlan
+    val optimized = zipped.queryExecution.optimizedPlan
     val randCount = optimized.flatMap { p =>
       p.expressions.flatMap(_.collect { case _: Rand => 1 })
     }.sum
     assert(randCount == 1,
       s"rand() must appear exactly once after the rewrite, got $randCount; plan:\n$optimized")
+
+    // Runtime check: `x` must equal `r + r` for the exact `r` emitted in the output. This can
+    // only hold if rand() is evaluated once -- a second draw would make x = r2 + r2 while the
+    // output column carries r1, so x != r + r. `r + r` is exact in floating point (multiply by
+    // two), so the equality is robust. Reduce to a single boolean via distinct.
+    checkAnswer(zipped.select(($"x" === $"r" + $"r").as("ok")).distinct(), Row(true))
   }
 }
