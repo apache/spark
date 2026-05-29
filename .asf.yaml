@@ -31,8 +31,8 @@ github:
     - spark
   enabled_merge_buttons:
     merge: false
-    squash: true
-    rebase: true
+    squash: false
+    rebase: false
   ghp_branch: master
   ghp_path: /docs
 
