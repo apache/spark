@@ -242,6 +242,24 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
   private val notNullAttributes = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
 
+  // Whether `otherPreds` contain any common subexpression worth eliminating. The CSE codegen
+  // path eagerly evaluates every `otherPreds` input column at the top of the row loop (the
+  // `inputVarsEvalCode` prologue), which is required so the eliminated subexpressions can be
+  // materialized into shared variables. That eager evaluation defeats the short-circuiting the
+  // non-CSE path gets from loading columns lazily, just before the predicate that needs them.
+  // When there is no common subexpression to eliminate, the CSE path provides no benefit but
+  // still pays the eager-decode cost (e.g. decoding a decimal column for rows a cheaper earlier
+  // predicate would have rejected), so we fall back to the non-CSE `generatePredicateCode`.
+  // This uses the same binding (`output`) and detection (`getCommonSubexpressions`) as the CSE
+  // codegen below, so it agrees exactly with whether that path would find anything to eliminate.
+  private lazy val hasCommonSubexpressions: Boolean = {
+    val equivalentExpressions = new EquivalentExpressions
+    otherPreds.foreach { p =>
+      equivalentExpressions.addExprTree(BindReferences.bindReference(p, output))
+    }
+    equivalentExpressions.getCommonSubexpressions.nonEmpty
+  }
+
   // Mark this as empty. We'll evaluate the input during doConsume(). We don't want to evaluate
   // all the variables at the beginning to take advantage of short circuiting.
   override def usedInputs: AttributeSet = AttributeSet.empty
@@ -292,7 +310,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       for free, since the IsNotNull check fires before the CSE precompute keyed
     //       off the same reference.
     val (prologueCode, predicateCode) =
-      if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
+      if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty &&
+          hasCommonSubexpressions) {
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
         // fails when otherPreds reference the same input columns that CSE already
