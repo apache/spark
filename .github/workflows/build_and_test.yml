@@ -577,7 +577,8 @@ jobs:
         fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
         fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
         fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
-        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true')
+        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true' ||
+        fromJson(needs.precondition.outputs.required).tpcds-1g == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -1403,8 +1404,8 @@ jobs:
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1447,6 +1448,20 @@ jobs:
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
