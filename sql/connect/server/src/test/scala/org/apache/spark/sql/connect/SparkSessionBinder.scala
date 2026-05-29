@@ -19,20 +19,15 @@ package org.apache.spark.sql.connect
 
 import java.util.UUID
 
-import scala.concurrent.duration._
-
-import org.scalatest.concurrent.Eventually
-
-import org.apache.spark.DebugFilesystem
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.connect.client.SparkConnectClient
-import org.apache.spark.sql.connect.common.config.ConnectCommon
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.service.SparkConnectService
 
 /**
- * A test trait that provides a Connect [[SparkSession]] backed by an in-process gRPC server.
+ * Provides a [[SparkSession connect.SparkSession]] backed by an in-process gRPC server.
  * Extends [[sql.SparkSessionBinder sql.SparkSessionBinder]] (which creates a
  * [[classic.SparkSession classic.SparkSession]] and SparkContext), then layers a Connect client
  * session on top by starting the gRPC service in-process.
@@ -42,15 +37,11 @@ import org.apache.spark.sql.connect.service.SparkConnectService
  * class FooWithConnectSuite
  *   extends FooSuite
  *   with connect.SparkSessionBinder
- *   with connect.QueryTest
  * }}}
  */
-trait SparkSessionBinder extends sql.SparkSessionBinder {
+trait SparkSessionBinder extends sql.SparkSessionBinder with QueryTest {
 
-  private val serverPort: Int =
-    ConnectCommon.CONNECT_GRPC_BINDING_PORT + util.Random.nextInt(1000)
-
-  @volatile private var _connectSpark: SparkSession = _
+  private var _connectSpark: SparkSession = _
 
   protected override def spark: SparkSession = _connectSpark
 
@@ -59,12 +50,17 @@ trait SparkSessionBinder extends sql.SparkSessionBinder {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    withSparkEnvConfs((Connect.CONNECT_GRPC_BINDING_PORT.key, serverPort.toString)) {
+    val prevPort = SparkEnv.get.conf.get(Connect.CONNECT_GRPC_BINDING_PORT)
+    try {
+      // set GRPC_BINDING_PORT to 0 so that the server picks a random, freely available port.
+      SparkEnv.get.conf.set(Connect.CONNECT_GRPC_BINDING_PORT, 0)
       SparkConnectService.start(classicSpark.sparkContext)
+    } finally {
+      SparkEnv.get.conf.set(Connect.CONNECT_GRPC_BINDING_PORT, prevPort)
     }
     val client = SparkConnectClient
       .builder()
-      .port(serverPort)
+      .port(SparkConnectService.localPort)
       .sessionId(UUID.randomUUID().toString)
       .userId("test")
       .build()
@@ -83,16 +79,6 @@ trait SparkSessionBinder extends sql.SparkSessionBinder {
       SparkConnectService.stop()
     } finally {
       super.afterAll()
-    }
-  }
-
-  // The base SharedSparkSessionBase.afterEach calls spark.sharedState which is not supported
-  // on Connect. Override to use the classic session for cleanup.
-  protected override def afterEach(): Unit = {
-    // super.afterEach() from BeforeAndAfterEach (skipping SharedSparkSessionBase)
-    classicSpark.sharedState.cacheManager.clearCache()
-    Eventually.eventually(Eventually.timeout(10.seconds), Eventually.interval(2.seconds)) {
-      DebugFilesystem.assertNoOpenStreams()
     }
   }
 }

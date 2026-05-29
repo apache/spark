@@ -19,9 +19,6 @@ package org.apache.spark.sql.classic
 
 import org.apache.spark.sql
 
-/**
- * A common trait for test suites that require a classic [[SparkSession]].
- */
 trait SparkSessionProvider extends sql.SparkSessionProvider {
   override protected def spark: SparkSession
 }

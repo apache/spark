@@ -19,11 +19,16 @@ package org.apache.spark.sql.test
 
 import scala.concurrent.duration._
 
-import org.apache.spark.sql
-import org.apache.spark.sql.{classic, QueryTest, QueryTestBase}
+import org.scalatest.Suite
 
-@deprecated("Use SparkSessionBinder and QueryTest instead")
-trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
+import org.apache.spark.sql
+import org.apache.spark.sql.{classic, QueryTest}
+
+@deprecated("Use SparkSessionBinder (or classic.SparkSessionBinder if required) instead", "4.2.0")
+trait SharedSparkSession extends sql.SparkSessionBinder {
+
+  protected override def spark: classic.SparkSession =
+    super.spark.asInstanceOf[classic.SparkSession]
 
   // Runs func (which must trigger exactly one SQL execution) and returns the SQL metrics of that
   // execution as a map keyed by (planNodeId, planNodeName, metricName) -> metricValue.
@@ -56,8 +61,8 @@ trait SharedSparkSession extends QueryTest with SharedSparkSessionBase {
 /**
  * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-@deprecated("Use SparkSessionBinder and QueryTest instead")
-trait SharedSparkSessionBase extends sql.SparkSessionBinder with QueryTestBase {
+@deprecated("Use SparkSessionBinder (or classic.SparkSessionBinder if required) instead", "4.2.0")
+trait SharedSparkSessionBase extends sql.SparkSessionBinderBase { self: Suite =>
 
   protected override def spark: classic.SparkSession =
     super.spark.asInstanceOf[classic.SparkSession]

@@ -20,10 +20,13 @@ package org.apache.spark.sql.connect
 import org.apache.spark.{sql => sqlApi}
 
 /**
- * Extends [[sqlApi.QueryTest]] for use with Connect sessions.
+ * Extends [[sqlApi.QueryTest]] to provide connect-specific overrides to helpers like
+ * [[checkAnswer]] that avoid classic-only APIs.
  *
- * Overrides [[checkAnswer]] to avoid classic-only code paths (e.g. `queryExecution`,
- * `logicalPlan`, `materializedRdd`) that are not available on Connect DataFrames.
+ * Can be used together with [[SparkSessionBinder connect.SparkSessionBinder]] to create a
+ * 'connect variant' of a test.
+ *
+ * Note: broader use will require more overrides.
  */
 trait QueryTest extends sqlApi.QueryTest with SparkSessionProvider {
 

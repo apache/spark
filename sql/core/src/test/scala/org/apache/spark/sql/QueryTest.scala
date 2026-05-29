@@ -510,6 +510,7 @@ trait QueryTestBase
   /**
    * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
    */
+  @deprecated("Classic-only method, use classic.QueryTest", "4.2.0")
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
     val withoutFilters = df.queryExecution.executedPlan.transform {
@@ -524,6 +525,7 @@ trait QueryTestBase
    * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
    * way to construct `DataFrame` directly out of local data without relying on implicits.
    */
+  @deprecated("Classic-only method, use classic.QueryTest", "4.2.0")
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): classic.DataFrame = {
     classic.Dataset.ofRows(spark.asInstanceOf[classic.SparkSession], plan)
   }
@@ -1211,7 +1213,7 @@ object QueryTest extends Assertions {
 
 }
 
-class QueryTestSuite extends QueryTest with SparkSessionBinder {
+class QueryTestSuite extends QueryTest {
   test("SPARK-16940: checkAnswer should raise TestFailedException for wrong results") {
     intercept[org.scalatest.exceptions.TestFailedException] {
       checkAnswer(sql("SELECT 1"), Row(2) :: Nil)

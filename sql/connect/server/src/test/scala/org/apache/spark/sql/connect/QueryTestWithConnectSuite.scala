@@ -22,11 +22,10 @@ import org.apache.spark.sql.QueryTestSuite
 /**
  * Runs [[QueryTestSuite]] tests through a Connect session.
  *
- * This validates the `FooSuite with connect.SharedSparkSession` pattern: the existing
+ * This validates the `FooSuite with connect.QueryTest` pattern: the existing
  * [[QueryTestSuite]] tests are inherited unchanged, but execute against a
- * [[org.apache.spark.sql.connect.SparkSession connect.SparkSession]] instead of a classic one.
+ * [[SparkSession connect.SparkSession]] instead of a classic one.
  */
 class QueryTestWithConnectSuite
   extends QueryTestSuite
-    with SparkSessionBinder
     with QueryTest

@@ -19,8 +19,9 @@ package org.apache.spark.sql.classic
 
 import org.apache.spark.sql
 
-trait SparkSessionBinder
-  extends sql.SparkSessionBinder
-  with SparkSessionProvider {
+/**
+ * Overrides [[spark]] to provide a [[SparkSession classic.SparkSession]]
+ */
+trait SparkSessionBinder extends sql.SparkSessionBinder with QueryTest {
   override protected def spark: SparkSession = super.spark.asInstanceOf[SparkSession]
 }

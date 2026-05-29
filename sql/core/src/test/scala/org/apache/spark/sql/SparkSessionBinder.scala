@@ -22,18 +22,44 @@ import scala.concurrent.duration._
 import org.scalatest.{BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{DebugFilesystem, SparkConf, SparkFunSuite}
+import org.apache.spark.{DebugFilesystem, SparkConf}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.TestSparkSession
 
-trait SparkSessionBinder
-  extends SparkFunSuite
+trait SparkSessionBinder extends QueryTest with SparkSessionBinderBase {
+
+  /**
+   * Suites extending this trait are sharing resources (e.g. SparkSession) in their
+   * tests. This trait initializes the spark session in its [[beforeAll()]] implementation before
+   * the automatic thread snapshot is performed, so the audit code could fail to report threads
+   * leaked by that shared session.
+   *
+   * The behavior is overridden here to take the snapshot before the spark session is initialized.
+   */
+  override protected val enableAutoThreadAudit = false
+
+  protected override def beforeAll(): Unit = {
+    doThreadPreAudit()
+    super.beforeAll()
+  }
+
+  protected override def afterAll(): Unit = {
+    try {
+      super.afterAll()
+    } finally {
+      doThreadPostAudit()
+    }
+  }
+}
+
+trait SparkSessionBinderBase
+  extends QueryTestBase
   with SparkSessionProvider
   with BeforeAndAfterEach
-  with Eventually {
+  with Eventually { self: Suite =>
 
   protected def sparkConf = {
     val conf = new SparkConf()
@@ -96,21 +122,9 @@ trait SparkSessionBinder
   }
 
   /**
-   * Suites extending [[SharedSparkSession]] are sharing resources (e.g. SparkSession) in their
-   * tests. That trait initializes the spark session in its [[beforeAll()]] implementation before
-   * the automatic thread snapshot is performed, so the audit code could fail to report threads
-   * leaked by that shared session.
-   *
-   * The behavior is overridden here to take the snapshot before the spark session is initialized.
-   */
-  override protected val enableAutoThreadAudit = false
-
-  /**
    * Make sure the [[TestSparkSession]] is initialized before any tests are run.
    */
   protected override def beforeAll(): Unit = {
-    doThreadPreAudit()
-
     initializeSession()
 
     // Ensure we have initialized the context before calling parent code
@@ -134,12 +148,8 @@ trait SparkSessionBinder
           }
         }
       } finally {
-        try {
-          SparkSession.clearActiveSession()
-          SparkSession.clearDefaultSession()
-        } finally {
-          doThreadPostAudit()
-        }
+        SparkSession.clearActiveSession()
+        SparkSession.clearDefaultSession()
       }
     }
   }
