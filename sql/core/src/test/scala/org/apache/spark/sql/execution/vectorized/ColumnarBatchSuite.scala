@@ -45,8 +45,7 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.TimestampNanosVal
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
