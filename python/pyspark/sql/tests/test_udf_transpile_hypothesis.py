@@ -301,6 +301,34 @@ def add_two(x, y):
         return 0
 
 
+def eq_zero(x):
+    # Exercises ast.Compare(Eq) via _lower_eq with a non-None left and
+    # a literal 0 on the right. The None guard keeps the comparison
+    # itself away from NULL operands so the test stays single-path.
+    if x is not None:
+        return x == 0
+
+
+def neq_zero(x):
+    # Exercises ast.Compare(NotEq) through _lower_eq.
+    if x is not None:
+        return x != 0
+
+
+def eq_pair(x, y):
+    # Two-arg ``x == y`` exercising the full _lower_eq four-branch when
+    # chain that reproduces Python's None-equality semantics:
+    #   None == None -> True;  None == 0 -> False;  0 == None -> False.
+    # Note: no None guard, so every NULL combination runs through the
+    # transpiler's lowering.
+    return x == y
+
+
+def neq_pair(x, y):
+    # Sister of ``eq_pair`` for ast.Compare(NotEq).
+    return x != y
+
+
 # A lambda captured at module scope so ``inspect.getsource`` can read
 # its definition. Exercises the ``ast.Lambda`` branch in
 # ``_get_function_from_ast``.
@@ -594,6 +622,63 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             self.assertEqual(
                 transpiled, interpreted, f"either_positive mismatch on (x={x!r}, y={y!r})"
             )
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(_LONG_PAIR_EDGES)
+        def test_eq_pair_matches_python(self, x, y):
+            # Python's ``==`` has different NULL semantics from SQL ``=``:
+            # ``None == None`` is True, ``None == n`` is False. The
+            # transpiler's _lower_eq reproduces those semantics, so the
+            # transpiled and interpreted runs must agree on every NULL
+            # combination as well as the non-NULL cases.
+            schema = StructType(
+                [
+                    StructField("a", LongType(), nullable=True),
+                    StructField("b", LongType(), nullable=True),
+                ]
+            )
+            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            transpiled, interpreted = self._run(eq_pair, BooleanType(), df, "a", "b")
+            self.assertEqual(
+                transpiled, interpreted, f"eq_pair mismatch on (x={x!r}, y={y!r})"
+            )
+
+        @_hyp_settings
+        @given(x=_long_strategy, y=_long_strategy)
+        @_seed_pair_examples(_LONG_PAIR_EDGES)
+        def test_neq_pair_matches_python(self, x, y):
+            # Sister of ``test_eq_pair_matches_python`` for the NotEq arm.
+            schema = StructType(
+                [
+                    StructField("a", LongType(), nullable=True),
+                    StructField("b", LongType(), nullable=True),
+                ]
+            )
+            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            transpiled, interpreted = self._run(neq_pair, BooleanType(), df, "a", "b")
+            self.assertEqual(
+                transpiled, interpreted, f"neq_pair mismatch on (x={x!r}, y={y!r})"
+            )
+
+        @_hyp_settings
+        @given(value=_long_strategy)
+        @_seed_examples(_LONG_EDGES)
+        def test_eq_zero_matches_python(self, value):
+            # Single-arg ``x == 0`` with a None guard, exercising _lower_eq's
+            # non-None-on-both-sides arm.
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(eq_zero, BooleanType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"eq_zero mismatch on {value!r}")
+
+        @_hyp_settings
+        @given(value=_long_strategy)
+        @_seed_examples(_LONG_EDGES)
+        def test_neq_zero_matches_python(self, value):
+            # Sister of ``test_eq_zero_matches_python`` for the NotEq arm.
+            df = self._single_arg_df(value, LongType())
+            transpiled, interpreted = self._run(neq_zero, BooleanType(), df, "a")
+            self.assertEqual(transpiled, interpreted, f"neq_zero mismatch on {value!r}")
 
         @_hyp_settings
         @given(value=_long_strategy)
