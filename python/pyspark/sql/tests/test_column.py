@@ -610,14 +610,14 @@ class ColumnTestsMixin:
     # These tests chain multiple DataFrame transformations - semi-joins
     # (for SQL EXISTS/IN), window functions, cube aggregations, UDFs and
     # struct field access - into 4-5 layer pipelines, then reference the
-    # final layered DataFrame's columns via ``layered[col]`` in both filter
+    # final layered DataFrame's columns via ``layered.col`` in both filter
     # and select at the outermost surface. The goal is to catch regressions
     # in plan-id propagation across analyzer rules that single-operator
     # tests miss when rules interact.
 
     def test_layered_semijoin_groupby_window(self):
         # 4-layer DataFrame pipeline: filter -> semi-join -> groupBy/agg
-        # -> window functions. ``layered[col]`` references appear in both
+        # -> window functions. ``layered.col`` references appear in both
         # filter and select at the outermost surface.
         from pyspark.sql.window import Window
 
@@ -637,40 +637,36 @@ class ColumnTestsMixin:
         users = self.spark.createDataFrame(users_data, users_cols)
         # Layer 1: filter + semi-join (DataFrame-API equivalent of
         # WHERE is_active AND EXISTS (user with age > 20)).
-        active = events.where(events["is_active"]).join(
-            users.where(users["age"] > 20),
-            events["user_id"] == users["id"],
+        active = events.where(events.is_active).join(
+            users.where(users.age > 20),
+            events.user_id == users.id,
             "left_semi",
         )
         # Layer 2: groupBy + agg, then post-agg filter (HAVING equivalent).
-        totals = (
-            active.groupBy("category")
-            .agg(
-                sf.sum(active["amount"] * active["quantity"] * sf.lit(0.1)).alias("total_amt"),
-                sf.sum(active["amount"]).alias("amount_sum"),
-            )
-            .where(sf.col("amount_sum") > 50)
-            .select("category", "total_amt")
+        agg = active.groupBy("category").agg(
+            sf.sum(active.amount * active.quantity * sf.lit(0.1)).alias("total_amt"),
+            sf.sum(active.amount).alias("amount_sum"),
         )
+        totals = agg.where(agg.amount_sum > 50).select("category", "total_amt")
         # Layer 3: window functions on top of the aggregate.
         running = Window.orderBy("total_amt").rowsBetween(-1, 1)
-        ranking = Window.orderBy(sf.col("total_amt").desc())
+        ranking = Window.orderBy(totals.total_amt.desc())
         windowed = totals.select(
             "category",
             "total_amt",
-            sf.avg(sf.col("total_amt")).over(running).alias("running_avg"),
+            sf.avg(totals.total_amt).over(running).alias("running_avg"),
             sf.rank().over(ranking).alias("rank_num"),
         )
         # Layer 4: outer filter.
-        layered = windowed.where(sf.col("rank_num") <= 5)
+        layered = windowed.where(windowed.rank_num <= 5)
 
         rows = (
-            layered.filter(layered["rank_num"] <= 3)
+            layered.filter(layered.rank_num <= 3)
             .select(
-                layered["category"],
-                layered["total_amt"],
-                layered["running_avg"],
-                layered["rank_num"],
+                layered.category,
+                layered.total_amt,
+                layered.running_avg,
+                layered.rank_num,
             )
             .collect()
         )
@@ -679,7 +675,7 @@ class ColumnTestsMixin:
 
     def test_layered_struct_semijoin_cube_ntile(self):
         # 5-layer DataFrame pipeline: filter -> semi-join -> struct field
-        # access -> cube aggregation -> window NTILE. ``layered[col]``
+        # access -> cube aggregation -> window NTILE. ``layered.col``
         # references appear in both filter and select at the outermost
         # surface.
         from pyspark.sql.window import Window
@@ -716,42 +712,42 @@ class ColumnTestsMixin:
         categories = self.spark.createDataFrame(categories_data, categories_cols)
         # Layer 1: filter + semi-join (DataFrame-API equivalent of
         # WHERE quantity > 1 AND category IN (SELECT ...)).
-        filtered = events.where(events["quantity"] > 1).join(
-            categories.where(categories["priority"] <= 3),
-            events["category"] == categories["name"],
+        filtered = events.where(events.quantity > 1).join(
+            categories.where(categories.priority <= 3),
+            events.category == categories.name,
             "left_semi",
         )
-        # Layer 2: project with struct field access.
+        # Layer 2: project with struct field access (struct subfields use
+        # bracket access since ``detail.name`` would hit ``Column.name``).
         base = filtered.select(
-            filtered["id"],
-            filtered["category"],
-            filtered["status"],
-            filtered["amount"],
-            filtered["detail"]["name"].alias("detail_name"),
-            filtered["detail"]["nested"]["x"].alias("nx"),
+            filtered.id,
+            filtered.category,
+            filtered.status,
+            filtered.amount,
+            filtered.detail["name"].alias("detail_name"),
+            filtered.detail["nested"]["x"].alias("nx"),
         )
         # Layer 3: cube aggregation (mixed grouping levels - similar
         # surface area to SQL GROUPING SETS without an exact equivalent
         # in the DataFrame API).
-        grouped = (
-            base.cube("category", "status", "detail_name")
-            .agg(sf.sum(sf.col("amount")).alias("total"), sf.count(sf.lit(1)).alias("cnt"))
-            .where(sf.col("category").isNotNull() & sf.col("status").isNotNull())
+        agg = base.cube("category", "status", "detail_name").agg(
+            sf.sum(base.amount).alias("total"), sf.count(sf.lit(1)).alias("cnt")
         )
+        grouped = agg.where(agg.category.isNotNull() & agg.status.isNotNull())
         # Layer 4: NTILE window.
-        tiled = grouped.withColumn("tile", sf.ntile(2).over(Window.orderBy(sf.col("total").desc())))
+        tiled = grouped.withColumn("tile", sf.ntile(2).over(Window.orderBy(grouped.total.desc())))
         # Layer 5: outer filter.
-        layered = tiled.where(sf.col("tile") <= 2)
+        layered = tiled.where(tiled.tile <= 2)
 
         rows = (
-            layered.filter(layered["tile"] >= 1)
+            layered.filter(layered.tile >= 1)
             .select(
-                layered["category"],
-                layered["status"],
-                layered["detail_name"],
-                layered["total"],
-                layered["cnt"],
-                layered["tile"],
+                layered.category,
+                layered.status,
+                layered.detail_name,
+                layered.total,
+                layered.cnt,
+                layered.tile,
             )
             .collect()
         )
@@ -765,7 +761,7 @@ class ColumnTestsMixin:
 
     def test_layered_window_window_udf(self):
         # 4-layer DataFrame pipeline: filter -> running-total window ->
-        # per-partition max window -> UDF wrap. ``layered[col]`` references
+        # per-partition max window -> UDF wrap. ``layered.col`` references
         # appear in both filter and select at the outermost surface.
         from pyspark.sql.window import Window
 
@@ -780,27 +776,27 @@ class ColumnTestsMixin:
 
         df = self.spark.createDataFrame(data, cols)
         # Layer 1: filter (replaces WHERE EXISTS amount > 0).
-        filtered = df.where(df["amount"] > 0)
+        filtered = df.where(df.amount > 0)
         # Layer 2: running total window.
         run_w = Window.partitionBy("category").orderBy("id")
-        with_run = filtered.withColumn("run_amt", sf.sum(sf.col("amount")).over(run_w))
+        with_run = filtered.withColumn("run_amt", sf.sum(filtered.amount).over(run_w))
         # Layer 3: per-category max window (replaces correlated subquery
         # for cat_max).
         cat_w = Window.partitionBy("category")
-        with_max = with_run.withColumn("cat_max", sf.max(sf.col("amount")).over(cat_w))
+        with_max = with_run.withColumn("cat_max", sf.max(with_run.amount).over(cat_w))
         # Layer 4: UDF.
         double = sf.udf(lambda x: x * 2 if x is not None else None, IntegerType())
-        layered = with_max.withColumn("doubled_amt", double(sf.col("amount")))
+        layered = with_max.withColumn("doubled_amt", double(with_max.amount))
 
         rows = (
-            layered.filter(layered["amount"] > 0)
+            layered.filter(layered.amount > 0)
             .select(
-                layered["id"],
-                layered["category"],
-                layered["amount"],
-                layered["run_amt"],
-                layered["cat_max"],
-                layered["doubled_amt"],
+                layered.id,
+                layered.category,
+                layered.amount,
+                layered.run_amt,
+                layered.cat_max,
+                layered.doubled_amt,
             )
             .collect()
         )
