@@ -108,6 +108,22 @@ private[sql] trait LookupCatalog extends Logging {
 
     private val globalTempDB = SQLConf.get.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)
 
+    /**
+     * Consults the [[DataSourceCatalogResolver]] for path-based v2 SCO sources. If the
+     * connector claims the identifier, routes to its designated catalog. Otherwise falls
+     * back to `(currentCatalog, nameParts.asIdentifier)` and lets later analysis raise
+     * table-not-found.
+     */
+    private def resolveViaDataSource(
+        nameParts: Seq[String]): Some[(CatalogPlugin, Identifier)] = {
+      Option(catalogManager.catalogAndIdentForDataSource(nameParts)).flatten match {
+        case Some((catName, providerIdent)) =>
+          Some((catalogManager.catalog(catName), providerIdent))
+        case None =>
+          Some((currentCatalog, nameParts.asIdentifier))
+      }
+    }
+
     def unapply(nameParts: Seq[String]): Option[(CatalogPlugin, Identifier)] = {
       assert(nameParts.nonEmpty)
       if (nameParts.length == 1) {
@@ -135,17 +151,17 @@ private[sql] trait LookupCatalog extends Logging {
           Some((catalog, ident))
         } catch {
           case _: CatalogNotFoundException =>
-            // No catalog matched. As a fallback, try path-based data sources:
-            // formats implementing SupportsCatalogOptions (e.g. `pathformat.`/path/to/t``)
-            // route to the catalog the connector designates. If no SCO format claims the
-            // identifier head, fall through to currentCatalog and let later analysis raise
-            // table-not-found. This matches the v1 file-format precedence (catalog first,
-            // path-based as fallback).
-            Option(catalogManager.catalogAndIdentForDataSource(nameParts)).flatten match {
-              case Some((catName, providerIdent)) =>
-                Some((catalogManager.catalog(catName), providerIdent))
-              case None =>
+            // No catalog matched the head. It could mean one of:
+            //   (a) `head` is a namespace inside `currentCatalog` (e.g. a database
+            //       in `spark_catalog`), or
+            //   (b) `head` is a path-based v2 data source format whose connector
+            //       implements `SupportsCatalogOptions` (e.g. `delta.`/path/to/t``).
+            // Resolve in priority order.
+            currentCatalog match {
+              case ns: SupportsNamespaces if ns.namespaceExists(Array(nameParts.head)) =>
                 Some((currentCatalog, nameParts.asIdentifier))
+              case _ if SQLConf.get.runSQLonFile => resolveViaDataSource(nameParts)
+              case _ => Some((currentCatalog, nameParts.asIdentifier))
             }
         }
       }

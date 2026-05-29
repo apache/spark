@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SharedTablesInMemoryRowLevelOperationTableCatalog, Txn, TxnTable}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryRowLevelOperationTableCatalog, InMemoryTableCatalog, SecondSharedTablesInMemoryRowLevelOperationTableCatalog, SharedTablesInMemoryRowLevelOperationTableCatalog, Txn, TxnTable}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.sources
@@ -44,13 +44,16 @@ class PathBasedTableTransactionSuite extends RowLevelOperationSuiteBase {
     spark.conf.set(
       V2_SESSION_CATALOG_IMPLEMENTATION.key,
       classOf[SharedTablesInMemoryRowLevelOperationTableCatalog].getName)
+    // pathformat_cat uses a second, independent shared map so that tables created via
+    // SCO routing do not leak into the session catalog's namespace listing.
     spark.conf.set(
       s"spark.sql.catalog.${FakePathBasedSource.CATALOG_NAME}",
-      classOf[SharedTablesInMemoryRowLevelOperationTableCatalog].getName)
+      classOf[SecondSharedTablesInMemoryRowLevelOperationTableCatalog].getName)
   }
 
   override def afterEach(): Unit = {
     SharedTablesInMemoryRowLevelOperationTableCatalog.reset()
+    SecondSharedTablesInMemoryRowLevelOperationTableCatalog.reset()
     spark.conf.unset(V2_SESSION_CATALOG_IMPLEMENTATION.key)
     spark.conf.unset(s"spark.sql.catalog.${FakePathBasedSource.CATALOG_NAME}")
     super.afterEach()

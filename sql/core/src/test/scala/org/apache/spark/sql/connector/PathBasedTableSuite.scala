@@ -19,14 +19,15 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Non-transactional tests for SQL resolution of path-based tables surfaced by a
  * [[org.apache.spark.sql.connector.catalog.SupportsCatalogOptions]] data source
  * (e.g. `pathformat.`/path/to/t``). [[FakePathBasedSource]] routes resolution to a
- * dedicated `pathformat_cat` catalog rather than the session catalog, so assertions
- * against that catalog unambiguously confirm the SCO seam fired — without SCO,
+ * dedicated `pathformat_cat` catalog rather than the session catalog. Assertions
+ * against that catalog unambiguously confirm the SCO seam fired. Without SCO,
  * `CatalogAndIdentifier`'s fallback lands in the (default) session catalog and the
  * named catalog stays empty.
  */
@@ -155,6 +156,32 @@ class PathBasedTableSuite extends QueryTest with SharedSparkSession {
       val homonymCat = spark.sessionState.catalogManager.catalog("pathformat")
         .asInstanceOf[InMemoryTableCatalog]
       assert(homonymCat.listTables(Array.empty).map(_.name()).contains("/path/to/t"))
+      assert(!pathformatCat.namespaceExists(Array("pathformat")))
+    }
+  }
+
+  test("namespace precedence: same-named database wins over SCO data source") {
+    // A database in the current (session) catalog with the same name as a
+    // registered SCO short-name should have precedence over the SCO resolver.
+    withDatabase("pathformat") {
+      sql("CREATE DATABASE pathformat")
+      sql("CREATE TABLE pathformat.t (id INT, data STRING) USING parquet")
+      sql("INSERT INTO pathformat.t VALUES (1, 'a')")
+
+      checkAnswer(spark.table("pathformat.t"), Row(1, "a") :: Nil)
+
+      // pathformat_cat is untouched: the namespace check matched, so the SCO
+      // resolver was never consulted.
+      assert(!pathformatCat.namespaceExists(Array("pathformat")))
+    }
+  }
+
+  test("runSQLOnFiles=false disables SCO interception") {
+    withSQLConf(SQLConf.RUN_SQL_ON_FILES.key -> "false") {
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $tablePath")
+      }
+      assert(e.getCondition == "TABLE_OR_VIEW_NOT_FOUND")
       assert(!pathformatCat.namespaceExists(Array("pathformat")))
     }
   }
