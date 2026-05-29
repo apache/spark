@@ -54,13 +54,13 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       "streaming")
 
   /**
-   * Helper method to run tests with source evolution configs enabled.
+   * Helper method to run tests with source evolution enabled. Enabling source evolution
+   * automatically forces offset log format V2 (OffsetMap) for new queries, since named sources
+   * require it.
    */
   private def testWithSourceEvolution(testName: String)(testFun: => Unit): Unit = {
     test(testName) {
-      withSQLConf(
-        "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
-        "spark.sql.streaming.offsetLog.formatVersion" -> "2") {
+      withSQLConf("spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true") {
         testFun
       }
     }
