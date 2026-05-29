@@ -17,11 +17,9 @@
 # under the License.
 #
 
-name: "Build / Non-ANSI (branch-4.2, Hadoop 3, JDK 17, Scala 2.13)"
+name: "Build / Java17 (Scala 2.13, Hadoop 3, JDK 17)"
 
 on:
-  schedule:
-    - cron: '0 3 */2 * *'
   workflow_dispatch:
 
 jobs:
@@ -33,22 +31,20 @@ jobs:
     if: github.repository == 'apache/spark'
     with:
       java: 17
-      branch: branch-4.2
       hadoop: hadoop3
       envs: >-
         {
-          "PYSPARK_IMAGE_TO_TEST": "python-311",
-          "PYTHON_TO_TEST": "python3.11",
-          "SPARK_ANSI_SQL_MODE": "false",
+          "SCALA_PROFILE": "scala2.13",
+          "PYSPARK_IMAGE_TO_TEST": "",
+          "PYTHON_TO_TEST": "",
+          "ORACLE_DOCKER_IMAGE_NAME": "gvenzl/oracle-free:23.7-slim"
         }
       jobs: >-
         {
           "build": "true",
-          "build-core-utils": "false",
-          "docs": "true",
-          "pyspark": "true",
           "sparkr": "true",
           "tpcds-1g": "true",
           "docker-integration-tests": "true",
-          "yarn": "true"
+          "k8s-integration-tests": "true",
+          "lint" : "true"
         }
