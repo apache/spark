@@ -49,7 +49,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             def __call__(self, col):
                 return col + 4
 
-        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": True}):
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
             # Make sure we can transpile the object
             call = PlusFour()
             pudf = UserDefinedFunction(call, LongType())
@@ -349,6 +354,195 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with self.assertRaises(Exception) as ctx:
                 df.select(pudf("a")).collect()
             self.assertIn("cannot compare NULL", str(ctx.exception))
+
+    def test_udf_transpile_eq_none_semantics(self):
+        # Python ``==``/``!=`` differ from Spark's three-valued NULL equality:
+        # in Python ``None == None`` is ``True`` and ``None == 0`` is ``False``,
+        # whereas SQL ``NULL = NULL`` and ``NULL = 0`` both yield ``NULL``. The
+        # transpiler's ``_lower_eq`` reproduces Python's semantics; this test
+        # exercises every arm of that logic.
+        from pyspark.sql.types import StructField, StructType
+
+        def x_eq_zero(x):
+            if x is not None:
+                return x == 0
+            else:
+                return None
+
+        def x_neq_zero(x):
+            if x is not None:
+                return x != 0
+            else:
+                return None
+
+        def x_eq_y(x, y):
+            return x == y
+
+        def x_neq_y(x, y):
+            return x != y
+
+        long_schema = StructType([StructField("a", LongType(), nullable=True)])
+        two_col_schema = StructType(
+            [
+                StructField("a", LongType(), nullable=True),
+                StructField("b", LongType(), nullable=True),
+            ]
+        )
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            # Single-arg ``x == 0`` / ``x != 0`` with a None guard.
+            pudf_eq = UserDefinedFunction(x_eq_zero, BooleanType())
+            pudf_neq = UserDefinedFunction(x_neq_zero, BooleanType())
+            self.assertTrue(pudf_eq.transpiled, "x == 0 should transpile")
+            self.assertTrue(pudf_neq.transpiled, "x != 0 should transpile")
+            for value, eq_expected, neq_expected in [
+                (0, True, False),
+                (1, False, True),
+                (-3, False, True),
+                (None, None, None),
+            ]:
+                with self.subTest(value=value):
+                    df = self.spark.createDataFrame([Row(a=value)], schema=long_schema)
+                    [row_eq] = df.select(pudf_eq("a")).collect()
+                    [row_neq] = df.select(pudf_neq("a")).collect()
+                    self.assertEqual(row_eq[0], eq_expected)
+                    self.assertEqual(row_neq[0], neq_expected)
+
+            # Two-arg ``x == y`` / ``x != y`` exercising every NULL combination.
+            pudf_eq_xy = UserDefinedFunction(x_eq_y, BooleanType())
+            pudf_neq_xy = UserDefinedFunction(x_neq_y, BooleanType())
+            self.assertTrue(pudf_eq_xy.transpiled, "x == y should transpile")
+            self.assertTrue(pudf_neq_xy.transpiled, "x != y should transpile")
+            # Python semantics:
+            #   None == None -> True;     None != None -> False
+            #   None == 0    -> False;    None != 0    -> True
+            #   0    == None -> False;    0    != None -> True
+            #   1    == 1    -> True;     1    != 1    -> False
+            #   1    == 2    -> False;    1    != 2    -> True
+            for x, y, eq_expected, neq_expected in [
+                (None, None, True, False),
+                (None, 0, False, True),
+                (0, None, False, True),
+                (1, 1, True, False),
+                (1, 2, False, True),
+            ]:
+                with self.subTest(x=x, y=y):
+                    df = self.spark.createDataFrame(
+                        [Row(a=x, b=y)], schema=two_col_schema
+                    )
+                    [row_eq] = df.select(pudf_eq_xy("a", "b")).collect()
+                    [row_neq] = df.select(pudf_neq_xy("a", "b")).collect()
+                    self.assertEqual(row_eq[0], eq_expected, f"({x} == {y})")
+                    self.assertEqual(row_neq[0], neq_expected, f"({x} != {y})")
+
+    def test_udf_transpile_lte_gte(self):
+        # ``<=`` and ``>=`` go through the same ``_lower_value_compare`` path
+        # as ``<`` / ``>`` (and so share the NULL-raises-TypeError guard), but
+        # the entry points are not exercised elsewhere. Cover both with a None
+        # guard so the comparison only sees non-NULL operands here.
+        from pyspark.sql.types import StructField, StructType
+
+        def lte_zero(x):
+            if x is not None:
+                return x <= 0
+
+        def gte_zero(x):
+            if x is not None:
+                return x >= 0
+
+        schema = StructType([StructField("a", LongType(), nullable=True)])
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            pudf_lte = UserDefinedFunction(lte_zero, BooleanType())
+            pudf_gte = UserDefinedFunction(gte_zero, BooleanType())
+            self.assertTrue(pudf_lte.transpiled, "x <= 0 should transpile")
+            self.assertTrue(pudf_gte.transpiled, "x >= 0 should transpile")
+            for value, lte_expected, gte_expected in [
+                (-1, True, False),
+                (0, True, True),
+                (1, False, True),
+                (None, None, None),
+            ]:
+                with self.subTest(value=value):
+                    df = self.spark.createDataFrame([Row(a=value)], schema=schema)
+                    [row_lte] = df.select(pudf_lte("a")).collect()
+                    [row_gte] = df.select(pudf_gte("a")).collect()
+                    self.assertEqual(row_lte[0], lte_expected)
+                    self.assertEqual(row_gte[0], gte_expected)
+
+    def test_udf_transpile_chained_comparison_falls_back(self):
+        # ``a < b < c`` is a chained comparison: Python evaluates it as
+        # ``(a < b) and (b < c)``. The transpiler refuses chained Compare
+        # nodes (``len(ops) != 1``) and must fall back to interpreted Python.
+        import warnings as _warnings
+        from pyspark.sql.types import StructField, StructType
+
+        def chained(x):
+            return 0 < x < 10
+
+        schema = StructType([StructField("a", LongType(), nullable=False)])
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            with _warnings.catch_warnings(record=True) as caught:
+                _warnings.simplefilter("always")
+                pudf = UserDefinedFunction(chained, BooleanType())
+            self.assertEqual(
+                [], pudf.transpiled, "chained comparison must NOT transpile"
+            )
+            fallback = [
+                w
+                for w in caught
+                if "Unable to transpile" in str(w.message)
+                or "Errors encountered" in str(w.message)
+            ]
+            self.assertTrue(fallback, "expected a fallback warning")
+            for value, expected in [(5, True), (0, False), (10, False), (-3, False)]:
+                with self.subTest(value=value):
+                    df = self.spark.createDataFrame([Row(a=value)], schema=schema)
+                    [row] = df.select(pudf("a")).collect()
+                    self.assertEqual(row[0], expected)
+
+    def test_udf_transpile_multi_row(self):
+        # Every other transpile test uses a 1-row DataFrame; this one runs
+        # the same arithmetic transpile on a multi-row input to catch any
+        # column-reference / batch-boundary bug that single-row tests can't.
+        from pyspark.sql.types import StructField, StructType
+
+        def plus_four(x):
+            if x is not None:
+                return x + 4
+
+        schema = StructType([StructField("a", LongType(), nullable=True)])
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
+            pudf = UserDefinedFunction(plus_four, LongType())
+            self.assertTrue(pudf.transpiled)
+            inputs = [Row(a=v) for v in [-3, -1, 0, 1, 7, None, 100]]
+            df = self.spark.createDataFrame(inputs, schema=schema)
+            transformed_df = df.select(pudf("a").alias("result"))
+            rows = transformed_df.collect()
+            actual = [row[0] for row in rows]
+            expected = [None if v is None else v + 4 for v in [-3, -1, 0, 1, 7, None, 100]]
+            self.assertEqual(actual, expected)
+            # Plan should also have the UDF stripped under the rewrite.
+            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
+            self.assertNotIn("UDF", physical_plan)
 
     def test_udf_transpile_falls_back_for_non_boolean_short_circuit(self):
         # Python's `x or 0` returns x if truthy else 0; Spark's `|` is
