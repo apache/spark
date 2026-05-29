@@ -21,11 +21,11 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreatePipelineDataset, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, DeserializeToObject, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, SerializeFromObject, SupportsDefaultCollation, TableSpec}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.{areSameBaseType, isDefaultStringCharOrVarcharType, replaceDefaultStringCharAndVarcharTypes}
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces, TableCatalog, V1ViewInfo, ViewInfo}
 import org.apache.spark.sql.types.{DataType, StringHelper, StringType}
 
@@ -38,10 +38,15 @@ import org.apache.spark.sql.types.{DataType, StringHelper, StringType}
  */
 object ApplyDefaultCollation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
+    if (shouldSkipApplyingDefaultCollation(plan)) {
+      return plan
+    }
     val preprocessedPlan = resolveDefaultCollation(pruneRedundantAlterColumnTypes(plan))
 
     fetchDefaultCollation(preprocessedPlan) match {
-      case Some(collation) =>
+      // No need to explicitly apply UTF8_BINARY collation.
+      case Some(collation) if CollationFactory.collationNameToId(collation) !=
+          CollationFactory.UTF8_BINARY_COLLATION_ID =>
         val transformedPlan = transform(preprocessedPlan, collation)
         if (preprocessedPlan fastEquals transformedPlan) {
           preprocessedPlan
@@ -80,7 +85,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           // expect resolved expressions can be applied.
           CollationTypeCasts(transformedPlan)
         }
-      case None => preprocessedPlan
+      case _ => preprocessedPlan
     }
   }
 
@@ -105,26 +110,31 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    */
   private def fetchDefaultCollation(plan: LogicalPlan): Option[String] = {
     plan match {
-      case CreateTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _) =>
-        tableSpec.collation
+      case createTable: CreateTable =>
+        createTable.tableSpec.collation
 
-      case CreateTableAsSelect(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
-        tableSpec.collation
+      case createTableAsSelect: CreateTableAsSelect =>
+        createTableAsSelect.tableSpec.collation
 
-      case ReplaceTableAsSelect(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _, _, _) =>
-        tableSpec.collation
+      case replaceTableAsSelect: ReplaceTableAsSelect =>
+        replaceTableAsSelect.tableSpec.collation
 
       // CreateView also handles CREATE OR REPLACE VIEW
       case createView: CreateView =>
         createView.collation
 
-      case ReplaceTable(_: ResolvedIdentifier, _, _, tableSpec: TableSpec, _) =>
-        tableSpec.collation
+      case replaceTable: ReplaceTable =>
+        replaceTable.tableSpec.collation
 
       // Temporary views are created via CreateViewCommand, which we can't import here.
       // Instead, we use the CreateTempView trait to access the collation.
       case createTempView: CreateTempView =>
         createTempView.collation
+
+      // Matches sql/core commands (CreateViewCommand, CreateSQLFunctionCommand) that expose their
+      // collation through the SupportsDefaultCollation trait.
+      case plan: SupportsDefaultCollation =>
+        plan.collation
 
       // In `transform` we handle these 3 ALTER TABLE commands.
       case cmd: AddColumns => getCollationFromTableProps(cmd.table)
@@ -140,11 +150,17 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           case _ => None
         }
 
-      // Check if view has default collation
-      case _ if AnalysisContext.get.collation.isDefined =>
+      // Inside a view body or SQL function body: use the object's own collation if set;
+      // do not fall back to session collation. AnalysisContext.collation is populated by
+      // `withAnalysisContext(viewDesc)` for views and `withAnalysisContext(function)` for
+      // SQL functions before the body is resolved.
+      case _ if AnalysisContext.isInsideViewResolution ||
+          SQLFunctionContext.isInsideSQLFunctionResolution =>
         AnalysisContext.get.collation
 
-      case _ => None
+      // For top-level queries and standalone SQL scripting, use session collation.
+      case _ =>
+        Some(conf.sessionDefaultCollation)
     }
   }
 
@@ -257,6 +273,17 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           newCreateUserDefinedFunction.copyTagsFrom(createUserDefinedFunction)
           newCreateUserDefinedFunction
 
+        // Temporary views and functions inherit session collation when no explicit collation is
+        // set. They are created via CreateViewCommand and CreateSQLFunctionCommand, but those
+        // commands can't be matched directly in this rule, so we use the SupportsDefaultCollation
+        // trait instead.
+        case plan: SupportsDefaultCollation if plan.isTemp && plan.collation.isEmpty =>
+          val newPlan = CurrentOrigin.withOrigin(plan.origin) {
+            plan.withCollation(Some(conf.sessionDefaultCollation))
+          }
+          newPlan.copyTagsFrom(plan)
+          newPlan
+
         case other =>
           other
       }
@@ -276,25 +303,15 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
     Option(metadata.get(TableCatalog.PROP_COLLATION))
   }
 
-  private def isCreateOrAlterPlan(plan: LogicalPlan): Boolean = plan match {
-    // For CREATE TABLE, only v2 CREATE TABLE command is supported.
-    case _: V2CreateTablePlan | _: ReplaceTable | _: CreateView | _: AlterViewAs |
-         _: CreateTempView => true
-    case _ => false
-  }
-
   private def transform(plan: LogicalPlan, collation: String): LogicalPlan = {
     plan resolveOperators {
-      case p if isCreateOrAlterPlan(p) || AnalysisContext.get.collation.isDefined =>
-        transformPlan(p, collation)
-
       case addCols: AddColumns =>
         addCols.copy(columnsToAdd = replaceColumnTypes(addCols.columnsToAdd, collation))
 
       case replaceCols: ReplaceColumns =>
         replaceCols.copy(columnsToAdd = replaceColumnTypes(replaceCols.columnsToAdd, collation))
 
-      case a @ AlterColumns(ResolvedTable(_, _, _, _), specs: Seq[AlterColumnSpec]) =>
+      case a @ AlterColumns(_, specs: Seq[AlterColumnSpec]) =>
         val newSpecs = specs.map {
           case spec if shouldApplyDefaultCollationToAlterColumn(spec) =>
             spec.copy(newDataType =
@@ -302,6 +319,23 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
           case col => col
         }
         a.copy(specs = newSpecs)
+
+      case p =>
+        transformPlan(p, collation)
+    }
+  }
+
+  /**
+   * Returns true if applying the default collation should be skipped for the given plan.
+   *
+   * Plans originating from internal components (Delta, optimizers, pipeline systems, etc.) should
+   * skip this rule. Applying the default collation to internal plans could lead to incorrect
+   * behavior. The list may need to be extended as more such plans are discovered.
+   */
+  private def shouldSkipApplyingDefaultCollation(plan: LogicalPlan): Boolean = {
+    plan match {
+      case _: DeserializeToObject | _: SerializeFromObject | _: CreatePipelineDataset => true
+      case _ => false
     }
   }
 

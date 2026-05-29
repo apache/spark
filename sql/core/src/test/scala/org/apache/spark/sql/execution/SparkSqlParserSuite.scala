@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkConf, SparkThrowable}
+import org.apache.spark.{SparkConf, SparkException, SparkThrowable}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias,
@@ -409,6 +410,60 @@ class SparkSqlParserSuite extends AnalysisTest with SharedSparkSession {
         fragment = "SET `a`=1;2",
         start = 0,
         stop = 10))
+  }
+
+  test("SET COLLATION - feature flag enabled with valid collation") {
+    withSQLConf(SQLConf.SESSION_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      assertEqual("SET COLLATION UTF8_LCASE",
+        SetCommand(Some(SQLConf.DEFAULT_COLLATION.key -> Some("UTF8_LCASE"))))
+      assertEqual("SET COLLATION UTF8_BINARY",
+        SetCommand(Some(SQLConf.DEFAULT_COLLATION.key -> Some("UTF8_BINARY"))))
+      assertEqual("SET COLLATION UNICODE",
+        SetCommand(Some(SQLConf.DEFAULT_COLLATION.key -> Some("UNICODE"))))
+      assertEqual("SET COLLATION `UNICODE`",
+        SetCommand(Some(SQLConf.DEFAULT_COLLATION.key -> Some("UNICODE"))))
+      assertEqual("SET COLLATION `uniCODe`",
+        SetCommand(Some(SQLConf.DEFAULT_COLLATION.key -> Some("UNICODE"))))
+      assertEqual("SET COLLATION utf8_lcase",
+        SetCommand(Some(SQLConf.DEFAULT_COLLATION.key -> Some("UTF8_LCASE"))))
+      assertEqual("SET COLLATION `UtF8_BinaRY`",
+        SetCommand(Some(SQLConf.DEFAULT_COLLATION.key -> Some("UTF8_BINARY"))))
+    }
+  }
+
+  test("SET COLLATION - feature flag enabled with invalid collation") {
+    withSQLConf(SQLConf.SESSION_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkException] {
+          sql("SET COLLATION INVALID_COLLATION").collect()
+        },
+        condition = "COLLATION_INVALID_NAME",
+        parameters = Map(
+          "collationName" -> "INVALID_COLLATION",
+          "proposals" -> "id_IDN"))
+    }
+  }
+
+  test("SET COLLATION - feature flag disabled with valid collation") {
+    withSQLConf(SQLConf.SESSION_LEVEL_COLLATIONS_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET COLLATION UTF8_LCASE").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.SESSION_LEVEL_COLLATIONS",
+        parameters = Map.empty)
+    }
+  }
+
+  test("SET COLLATION - feature flag disabled with invalid collation") {
+    withSQLConf(SQLConf.SESSION_LEVEL_COLLATIONS_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SET COLLATION INVALID_COLLATION").collect()
+        },
+        condition = "UNSUPPORTED_FEATURE.SESSION_LEVEL_COLLATIONS",
+        parameters = Map.empty)
+    }
   }
 
   test("refresh resource") {

@@ -472,6 +472,16 @@ trait QueryTestBase
   }
 
   /**
+   * Restores session collation to its previous value after calling `f`.
+   */
+  protected def withSessionCollation(f: => Unit): Unit = {
+    val originalCollation = spark.conf.get(SQLConf.DEFAULT_COLLATION.key)
+    Utils.tryWithSafeFinally(f) {
+      spark.sql(s"SET COLLATION $originalCollation")
+    }
+  }
+
+  /**
    * Enables Locale `language` before executing `f`, then switches back to the default locale of
    * JVM after `f` returns.
    */

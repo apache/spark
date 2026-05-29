@@ -655,7 +655,7 @@ class ExpressionResolver(
   ): (Expression, ExpressionResolutionContext) = {
     traversals.withNewTraversal(
       parentOperator = parentOperator,
-      defaultCollation = resolver.getViewResolver.getViewResolutionContext.flatMap(_.collation),
+      defaultCollation = getDefaultCollation,
       isFilterOnTopOfAggregate = isFilterOnTopOfAggregate(parentOperator),
       isSortOnTopOfAggregate = isSortOnTopOfAggregate(parentOperator)
     ) {
@@ -979,6 +979,24 @@ class ExpressionResolver(
     parentOperator match {
       case _: Sort if scopes.current.baseAggregate.isDefined => true
       case _ => false
+    }
+  }
+
+  /**
+   * Returns the default collation to apply to default-typed string expressions during single-pass
+   * resolution.
+   *
+   *  1. View collation - if we are inside a view resolution, use the view's collation. If the
+   *     view does not have a custom collation, return [[None]] rather than falling back to the
+   *     session collation.
+   *  2. Session collation - for top-level queries and standalone SQL scripting, use the session's
+   *     default collation from [[SQLConf]].
+   */
+  private def getDefaultCollation: Option[String] = {
+    if (resolver.getViewResolver.getViewResolutionContext.isDefined) {
+      resolver.getViewResolver.getViewResolutionContext.get.collation
+    } else {
+      Some(conf.sessionDefaultCollation)
     }
   }
 

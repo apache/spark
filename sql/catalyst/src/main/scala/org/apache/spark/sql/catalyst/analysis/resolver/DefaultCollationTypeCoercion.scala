@@ -23,13 +23,14 @@ import org.apache.spark.sql.catalyst.expressions.{
   Expression,
   Literal
 }
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.types.{DataType, StringType}
 
 /**
  * This type coercion object is only used in the single-pass analyzer and is not part of the
  * [[TypeCoercion]] rules used in the fixed-point analyzer.
  *
- * When the database object (e.g. [[View]]) has a custom default collation and a
+ * When the database object (e.g. [[View]]) or the session has a custom default collation and a
  * resolving expression's dataType is the companion object [[StringType]], we need to treat the
  * dataType as a collated [[StringType]]. To do this, we wrap the expression with a cast to a
  * [[StringType]] with the default collation or change the dataType to [[StringType]] with the
@@ -40,12 +41,23 @@ import org.apache.spark.sql.types.{DataType, StringType}
 object DefaultCollationTypeCoercion {
 
   /**
-   * Apply [[View]]'s default collation to the expression.
+   * Apply default collation (from a [[View]] or the session) to the expression.
+   *
+   * If the default collation is UTF8_BINARY, it does not need to be applied since it's a noop.
    */
   def apply(expression: Expression, collation: String): Expression = {
+    if (CollationFactory.collationNameToId(collation) ==
+        CollationFactory.UTF8_BINARY_COLLATION_ID) {
+      expression
+    } else {
+      applyCollation(expression, collation)
+    }
+  }
+
+  private def applyCollation(expression: Expression, collation: String): Expression = {
     val collatedStringType = StringType(collation)
     expression match {
-      case _: DefaultStringProducingExpression if collatedStringType != StringType =>
+      case _: DefaultStringProducingExpression =>
         Cast(child = expression, dataType = collatedStringType)
       case literal: Literal if hasDefaultStringType(literal.dataType) =>
         literal.copy(dataType = replaceDefaultStringType(literal.dataType, collatedStringType))

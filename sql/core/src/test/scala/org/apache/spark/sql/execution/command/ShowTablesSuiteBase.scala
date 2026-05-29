@@ -350,6 +350,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |Last Access: <last access>
              |Created By: <created by>
              |Type: VIEW
+             |Collation: UTF8_BINARY
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Schema Mode: BINDING
              |View Catalog and Namespace: spark_catalog.default
@@ -377,6 +378,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |Last Access: <last access>
              |Created By: <created by>
              |Type: VIEW
+             |Collation: UTF8_BINARY
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Schema Mode: BINDING
              |View Catalog and Namespace: spark_catalog.default
@@ -395,6 +397,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
              |Last Access: <last access>
              |Created By: <created by>
              |Type: VIEW
+             |Collation: UTF8_BINARY
              |View Text: SELECT id FROM $catalog.$namespace.$table
              |View Schema Mode: BINDING
              |View Catalog and Namespace: spark_catalog.default
