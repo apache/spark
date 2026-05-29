@@ -101,12 +101,16 @@ case class UserDefinedPythonFunction(
         expression match {
           case UnresolvedAttribute(nameParts)
               if nameParts.length == 1 && nameParts.head.startsWith("_udf_param_") =>
-            val index = nameParts.head.stripPrefix("_udf_param_").toInt
+            val suffix = nameParts.head.stripPrefix("_udf_param_")
+            val index = suffix.toIntOption.getOrElse {
+              throw new IllegalArgumentException(
+                s"Invalid UDF parameter placeholder: ${nameParts.head}")
+            }
             if (index >= 0 && index < children.length) {
               val result = children(index)
               result
             } else {
-              throw new Exception(f"Invalid UDF parameter index: $index")
+              throw new IllegalArgumentException(s"Invalid UDF parameter index: $index")
             }
           case _ =>
             expression.mapChildren(resolveUDFParams(_, children))
