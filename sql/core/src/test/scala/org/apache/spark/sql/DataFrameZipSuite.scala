@@ -165,11 +165,12 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
   }
 
   test("zip: shared parent alias is not double-evaluated") {
-    // Both sides derive from the same `parent` whose alias `r` is nondeterministic. Each side's
-    // chain walk collects `r`, so without de-duplication the layered chain would emit `r` twice
-    // and evaluate rand() once per copy. Assert the optimized plan keeps a single rand().
+    // Both sides derive from the same `parent` whose alias `r` is a nondeterministic random int.
+    // Each side's chain walk collects `r`, so without de-duplication the layered chain would emit
+    // `r` twice and evaluate the producer once per copy. Assert the optimized plan keeps a single
+    // Rand.
     val df = spark.range(10).toDF("id")
-    val parent = df.withColumn("r", rand())
+    val parent = df.withColumn("r", (rand() * 1000000).cast("int"))
     val left = parent.select("r")
     val right = parent.withColumn("x", $"r" + $"r").select("x")
     val zipped = left.zip(right)
@@ -181,12 +182,11 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
     assert(randCount == 1,
       s"rand() must appear exactly once after the rewrite, got $randCount; plan:\n$optimized")
 
-    // Runtime check: `rand()` returns a Double in [0, 1), so `x = r + r` is in [0, 2) -- no
-    // overflow. The equality compares the stored `x` against the identical `r + r` recomputed
-    // from the same output column; IEEE-754 addition is deterministic, so the same operand
-    // through the same op is bit-identical and `===` is exact when rand() is evaluated once. A
-    // second draw would make x = r2 + r2 while the output carries r1, so x != r + r. Reduce to a
-    // single boolean via distinct.
+    // Runtime check: `r` is an int in [0, 1000000), so `x = r + r` stays well within Int range --
+    // no overflow, and integer equality is exact. `x` must equal `r + r` for the exact `r`
+    // emitted in the output, which holds only if the producer is evaluated once. A second draw
+    // would make x = r2 + r2 while the output carries r1, so x != r + r. Reduce to a single
+    // boolean via distinct.
     checkAnswer(zipped.select(($"x" === $"r" + $"r").as("ok")).distinct(), Row(true))
   }
 }
