@@ -18,7 +18,6 @@ package org.apache.spark.sql.vectorized;
 
 import scala.PartialFunction;
 
-import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
