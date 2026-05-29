@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, ExprId, NamedExpression, PythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, Expression, ExprId, NamedExpression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Zip}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.ZIP
@@ -33,13 +33,14 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.ZIP
  * (`Project.resolved` already rejects Generator, AggregateExpression, and WindowExpression;
  * this rule additionally rejects non-scalar Python UDFs that break the 1:1 row mapping).
  *
- * The rewrite collects every alias introduced by either chain, groups them by dependency
- * depth (depth 1 = references only base attributes; depth k = references at least one
- * depth-(k-1) alias), and emits one `Project` layer per depth so each user-written alias
- * stays in its own `Alias`. `CollapseProject` runs later with its existing safety guards
- * (`canCollapseExpressions`), so nondeterministic producers (`rand()`, `uuid()`) and
- * expensive producers referenced more than once stay separate -- avoiding the double
- * evaluation that an unguarded inline would cause.
+ * The rewrite collects every alias introduced by either chain, deduplicates aliases that
+ * share the same canonicalized child (a shared parent that feeds both sides is re-instanced
+ * by the analyzer, so its producer surfaces twice), groups them by dependency depth (depth 1
+ * = references only base attributes; depth k = references at least one depth-(k-1) alias), and
+ * emits one `Project` layer per depth so each user-written alias stays in its own `Alias`.
+ * `CollapseProject` runs later with its existing safety guards (`canCollapseExpressions`), so
+ * nondeterministic producers (`rand()`, `uuid()`) and expensive producers referenced more than
+ * once stay separate -- avoiding the double evaluation that an unguarded inline would cause.
  *
  * If the two sides cannot be merged, the `Zip` node remains unresolved and `CheckAnalysis`
  * reports a `ZIP_PLANS_NOT_MERGEABLE` error.
@@ -65,9 +66,36 @@ object ResolveZip extends Rule[LogicalPlan] {
     val remappedRightAliases = rightAliases.map(remapAlias(_, attrMapping))
     val remappedRightTopList = rightTopList.map(remapNamedExpr(_, attrMapping))
 
-    val layered = buildLayeredChain(leftAliases ++ remappedRightAliases, leftBase)
+    // When both sides walk through a shared parent `Project`, the analyzer re-instances the
+    // right side, so the shared producer surfaces as two aliases with different exprIds but the
+    // same child expression (e.g. two `rand(sameSeed)`). Keeping both would evaluate the producer
+    // twice per row. Deduplicate by canonicalized child: keep the first alias for each distinct
+    // child, and remap references to the dropped aliases (in surviving alias bodies and in the
+    // output lists) to the survivor. A freshly written producer gets a distinct seed, so its
+    // canonical form differs and it is never merged with an unrelated one.
+    val canonToKept = mutable.LinkedHashMap.empty[Expression, Alias]
+    val droppedToSurvivor = mutable.HashMap.empty[ExprId, Attribute]
+    (leftAliases ++ remappedRightAliases).foreach { a =>
+      canonToKept.get(a.child.canonicalized) match {
+        case Some(kept) => droppedToSurvivor(a.exprId) = kept.toAttribute
+        case None => canonToKept(a.child.canonicalized) = a
+      }
+    }
+
+    def remapDropped[E <: Expression](e: E): E = if (droppedToSurvivor.isEmpty) {
+      e
+    } else {
+      e.transform { case a: Attribute => droppedToSurvivor.getOrElse(a.exprId, a) }
+        .asInstanceOf[E]
+    }
+
+    // Rewrite surviving alias bodies so references to dropped aliases point at the survivors.
+    val dedupedAliases = canonToKept.values.toSeq.map { a =>
+      remapAliasChild(a, remapDropped(a.child))
+    }
+    val layered = buildLayeredChain(dedupedAliases, leftBase)
     val finalProjectList: Seq[NamedExpression] =
-      leftTopList.map(_.toAttribute) ++ remappedRightTopList.map(_.toAttribute)
+      (leftTopList ++ remappedRightTopList).map(ne => remapDropped(ne.toAttribute))
     Some(Project(finalProjectList, layered))
   }
 
@@ -93,6 +121,11 @@ object ResolveZip extends Rule[LogicalPlan] {
     val newChild = a.child.transform {
       case attr: Attribute => attrMapping.getOrElse(attr, attr)
     }
+    remapAliasChild(a, newChild)
+  }
+
+  /** Returns a copy of `a` with `newChild` as its body, preserving name, exprId, and metadata. */
+  private def remapAliasChild(a: Alias, newChild: Expression): Alias = {
     Alias(newChild, a.name)(
       exprId = a.exprId,
       qualifier = a.qualifier,

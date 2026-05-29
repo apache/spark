@@ -163,4 +163,21 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
     assert(randCount == 1,
       s"rand() must appear exactly once after the rewrite, got $randCount; plan:\n$optimized")
   }
+
+  test("zip: shared parent alias is not double-evaluated") {
+    // Both sides derive from the same `parent` whose alias `r` is nondeterministic. Each side's
+    // chain walk collects `r`, so without de-duplication the layered chain would emit `r` twice
+    // and evaluate rand() once per copy. Assert the optimized plan keeps a single rand().
+    val df = spark.range(10).toDF("id")
+    val parent = df.withColumn("r", rand())
+    val left = parent.select("r")
+    val right = parent.withColumn("x", $"r" + $"r").select("x")
+
+    val optimized = left.zip(right).queryExecution.optimizedPlan
+    val randCount = optimized.flatMap { p =>
+      p.expressions.flatMap(_.collect { case _: Rand => 1 })
+    }.sum
+    assert(randCount == 1,
+      s"rand() must appear exactly once after the rewrite, got $randCount; plan:\n$optimized")
+  }
 }
