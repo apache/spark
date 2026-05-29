@@ -181,10 +181,12 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
     assert(randCount == 1,
       s"rand() must appear exactly once after the rewrite, got $randCount; plan:\n$optimized")
 
-    // Runtime check: `x` must equal `r + r` for the exact `r` emitted in the output. This can
-    // only hold if rand() is evaluated once -- a second draw would make x = r2 + r2 while the
-    // output column carries r1, so x != r + r. `r + r` is exact in floating point (multiply by
-    // two), so the equality is robust. Reduce to a single boolean via distinct.
+    // Runtime check: `rand()` returns a Double in [0, 1), so `x = r + r` is in [0, 2) -- no
+    // overflow. The equality compares the stored `x` against the identical `r + r` recomputed
+    // from the same output column; IEEE-754 addition is deterministic, so the same operand
+    // through the same op is bit-identical and `===` is exact when rand() is evaluated once. A
+    // second draw would make x = r2 + r2 while the output carries r1, so x != r + r. Reduce to a
+    // single boolean via distinct.
     checkAnswer(zipped.select(($"x" === $"r" + $"r").as("ok")).distinct(), Row(true))
   }
 }
