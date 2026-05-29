@@ -2670,12 +2670,12 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     // join with OneRowRelation").
     case Join(LocalRelation(lOut, lData, false, _), right, Inner, condition, JoinHint.NONE)
         if lData.length == 1 && !condition.exists(hasUnevaluableExpr) &&
-          !isSingleRowLeaf(right) =>
+          !isOneRowPlan(right) =>
       foldSingleRowJoin(lOut, lData.head, leftIsSingleRow = true, right, condition)
 
     case Join(left, LocalRelation(rOut, rData, false, _), Inner, condition, JoinHint.NONE)
         if rData.length == 1 && !condition.exists(hasUnevaluableExpr) &&
-          !isSingleRowLeaf(left) =>
+          !isOneRowPlan(left) =>
       foldSingleRowJoin(rOut, rData.head, leftIsSingleRow = false, left, condition)
   }
 
@@ -2683,16 +2683,12 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
     expr.exists(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference])
   }
 
-  // SPARK-57039: When BOTH sides of an Inner join are statically-single-row, folding the
-  // join would hide a cartesian product from CheckCartesianProducts and silently bypass the
-  // spark.sql.crossJoin.enabled=false guardrail. Leave those for the cartesian check.
-  //
-  // Use maxRows (not leaf-only pattern match): the optimizer is iterative and when this rule
-  // fires one side may still be wrapped (e.g. Project(LocalRelation(1 row))) while the other has
-  // already collapsed to a bare LocalRelation. maxRows transparently propagates through
-  // Project/Filter/Limit/etc., so the guard stays accurate regardless of which side reduces
-  // first. See SPARK-33100 CliSuite (t1(1 row) JOIN t2(1 row)) which exercised this race in r5.
-  def isSingleRowLeaf(plan: LogicalPlan): Boolean = plan.maxRows.contains(1L)
+  // SPARK-57039: When BOTH sides of an Inner join are statically known to produce one row,
+  // folding the join would hide an Inner-without-condition (cartesian-shaped) join from
+  // CheckCartesianProducts and silently bypass the spark.sql.crossJoin.enabled=false guardrail.
+  // Use maxRows so the check transparently sees through Project/Filter/Limit wrappers that may
+  // remain on one side mid-iteration. See SPARK-33100 CliSuite (t1(1 row) JOIN t2(1 row)).
+  def isOneRowPlan(plan: LogicalPlan): Boolean = plan.maxRows.contains(1L)
 
   /**
    * Build a `Project(...) [Filter(condition)]` plan that is logically equivalent to
@@ -2737,12 +2733,12 @@ object FoldInnerJoinWithOneRowRelation extends Rule[LogicalPlan] {
     _.containsPattern(INNER_LIKE_JOIN), ruleId) {
     case Join(left, _: OneRowRelation, Inner, condition, JoinHint.NONE)
         if !condition.exists(ConvertToLocalRelation.hasUnevaluableExpr) &&
-          !ConvertToLocalRelation.isSingleRowLeaf(left) =>
+          !ConvertToLocalRelation.isOneRowPlan(left) =>
       condition.map(Filter(_, left)).getOrElse(left)
 
     case Join(_: OneRowRelation, right, Inner, condition, JoinHint.NONE)
         if !condition.exists(ConvertToLocalRelation.hasUnevaluableExpr) &&
-          !ConvertToLocalRelation.isSingleRowLeaf(right) =>
+          !ConvertToLocalRelation.isOneRowPlan(right) =>
       condition.map(Filter(_, right)).getOrElse(right)
   }
 }

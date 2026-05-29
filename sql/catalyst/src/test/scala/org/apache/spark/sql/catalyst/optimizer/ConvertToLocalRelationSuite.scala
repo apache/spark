@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 
 class ConvertToLocalRelationSuite extends PlanTest {
@@ -146,6 +148,29 @@ class ConvertToLocalRelationSuite extends PlanTest {
     val plan = tbl.join(multiRow, Inner, None).analyze
     val optimized = Optimize.execute(plan)
     comparePlans(optimized, plan)
+  }
+
+  test("SPARK-57039: fold InnerJoin with single-row LocalRelation carrying complex types") {
+    val structType =
+      StructType(StructField("x", IntegerType) :: StructField("y", StringType) :: Nil)
+    val singleRowComplex = LocalRelation(
+      Seq(Symbol("s").struct(structType), Symbol("arr").array(IntegerType),
+          Symbol("m").map(StringType, IntegerType), Symbol("str").string),
+      InternalRow(
+        InternalRow(1, UTF8String.fromString("a")),
+        new GenericArrayData(Array(10, 20, 30)),
+        ArrayBasedMapData(Map(UTF8String.fromString("k") -> 1)),
+        UTF8String.fromString("hello")) :: Nil)
+
+    val plan = tbl.join(singleRowComplex, Inner, None).analyze
+    val optimized = Optimize.execute(plan)
+    assert(optimized.collectFirst { case _: Join => () }.isEmpty,
+      "Expected Join to be folded away even when single-row side carries complex types")
+    assert(optimized.output.length == 6,
+      "Expected 6-column output (2 from tbl + 4 from singleRowComplex)")
+    val outIds = optimized.output.map(_.exprId).toSet
+    singleRowComplex.output.foreach(a =>
+      assert(outIds.contains(a.exprId), s"exprId for ${a.name} should survive fold"))
   }
 
   test("SPARK-57039: preserve exprId across single-row fold") {
