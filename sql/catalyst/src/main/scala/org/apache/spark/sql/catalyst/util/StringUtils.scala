@@ -280,8 +280,8 @@ object StringUtils extends Logging {
   }
 
   // Structural scanner for splitting SQL by semicolons.
-  // Handles: quoted strings with escapes, line comments (--), nested block comments (/* */),
-  // and semicolons inside strings/comments are not treated as delimiters.
+  // Handles quoted strings with escapes, line comments (--), and nested block comments (/* */).
+  // Semicolons inside strings or comments are not treated as delimiters.
   // Note: [SPARK-31595], [SPARK-33100], [SPARK-54876]
   def splitSemiColonWithIndex(line: String, enableSqlScripting: Boolean): List[String] = {
     lazy val insideSqlScript: Boolean = isSqlScript(line)
@@ -342,10 +342,5 @@ object StringUtils extends Logging {
     }
     if (chunkHasSql || chunkHasUnclosed) ret += line.substring(chunkStart)
     ret.toList
-  }
-
-  /** Convenience wrapper: splits on semicolons without SQL scripting awareness. */
-  def splitSemiColon(line: String): List[String] = {
-    splitSemiColonWithIndex(line, enableSqlScripting = false)
   }
 }

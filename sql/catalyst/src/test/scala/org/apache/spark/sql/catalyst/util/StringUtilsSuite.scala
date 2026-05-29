@@ -322,5 +322,33 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
         "/* a */ -- foo\n/* b */",
         enableSqlScripting = false) == Seq()
     )
+
+    // SPARK-54876: unterminated block comment at EOF
+    assert(
+      splitSemiColonWithIndex(
+        "SELECT 1; /* unterminated",
+        enableSqlScripting = false) == Seq("SELECT 1", " /* unterminated")
+    )
+
+    // SPARK-54876: unterminated string literal (single input, no semicolon)
+    assert(
+      splitSemiColonWithIndex(
+        "'unterminated",
+        enableSqlScripting = false) == Seq("'unterminated")
+    )
+
+    // SPARK-54876: unterminated string literal after semicolon
+    assert(
+      splitSemiColonWithIndex(
+        "SELECT 1; 'unterminated string",
+        enableSqlScripting = false) == Seq("SELECT 1", " 'unterminated string")
+    )
+
+    // SPARK-54876: unterminated block comment (single input, no semicolon)
+    assert(
+      splitSemiColonWithIndex(
+        "/* only a comment that never closes",
+        enableSqlScripting = false) == Seq("/* only a comment that never closes")
+    )
   }
 }
