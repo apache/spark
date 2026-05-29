@@ -392,7 +392,17 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * @since 3.5.0
    */
   override def createTable(tableName: String, path: String): DataFrame = {
-    createTable(tableName, path, "parquet")
+    // Leave the source unset so the server resolves spark.sql.sources.default, as documented
+    // above. Routing through createTable(tableName, path, "parquet") would hardcode the provider
+    // and ignore that configuration.
+    sparkSession.execute { builder =>
+      builder.getCatalogBuilder.getCreateTableBuilder
+        .setTableName(tableName)
+        .setSchema(DataTypeProtoConverter.toConnectProtoType(new StructType))
+        .setDescription("")
+        .putOptions("path", path)
+    }
+    sparkSession.table(tableName)
   }
 
   /**
