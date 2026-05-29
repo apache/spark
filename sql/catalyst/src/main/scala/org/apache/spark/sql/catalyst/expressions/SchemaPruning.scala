@@ -140,6 +140,19 @@ object SchemaPruning extends SQLConfHelper {
    */
   private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
+      case ArrayTransform(argument, lambda: LambdaFunction) =>
+        // Field accesses through the lambda variable are not directly rooted at the input
+        // attribute. Convert them into a projected type for the transform argument so that
+        // physical nested column pruning can see them.
+        val nestedRootFields = lambda.arguments.headOption.collect {
+          case elementVar: NamedLambdaVariable =>
+            getArrayTransformRootField(argument, lambda.function, elementVar)
+        }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
+        if (nestedRootFields.nonEmpty) {
+          nestedRootFields ++ getRootFields(lambda.function)
+        } else {
+          expr.children.flatMap(getRootFields)
+        }
       case att: Attribute =>
         RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
           derivedFromAtt = true) :: Nil
@@ -159,6 +172,84 @@ object SchemaPruning extends SQLConfHelper {
         s.references.toSeq.flatMap(getRootFields)
       case _ =>
         expr.children.flatMap(getRootFields)
+    }
+  }
+
+  private def getArrayTransformRootField(
+      argument: Expression,
+      function: Expression,
+      elementVar: NamedLambdaVariable): Option[StructField] = {
+    argument.dataType match {
+      case ArrayType(_: StructType, containsNull) =>
+        val selectedFields = collectLambdaVariableFields(function, elementVar)
+        if (selectedFields.exists(_.nonEmpty)) {
+          val mergedElementSchema = selectedFields
+            .get
+            .map(field => StructType(Array(field)))
+            .reduceLeft(_ merge _)
+          SelectedField.withDataType(
+            argument,
+            ArrayType(mergedElementSchema, containsNull))
+        } else {
+          None
+        }
+      case _ => None
+    }
+  }
+
+  /**
+   * Collects statically identifiable nested fields read from `elementVar`.
+   *
+   * `Some(Seq.empty)` means this subtree does not reference the element variable, and
+   * `Some(fields)` means every reference can be satisfied by the listed nested fields. `None`
+   * means the full element is required somewhere (for example, `x => struct(x.a, x)`), so it is
+   * not safe to prune the element struct.
+   *
+   * Currently only `GetStructField` chains rooted at `elementVar` are collected; array or map
+   * traversal within the lambda conservatively requires the full element. Keep this set of
+   * supported paths in sync with `ProjectionOverLambdaVariable` in `ProjectionOverSchema`.
+   */
+  private def collectLambdaVariableFields(
+      expr: Expression,
+      elementVar: NamedLambdaVariable): Option[Seq[StructField]] = {
+    expr match {
+      case LambdaVariableField(field, variable) if variable.semanticEquals(elementVar) =>
+        Some(field :: Nil)
+      case variable: NamedLambdaVariable if variable.semanticEquals(elementVar) =>
+        None
+      case _ =>
+        expr.children.foldLeft(Option(Seq.empty[StructField])) {
+          case (Some(fields), child) =>
+            collectLambdaVariableFields(child, elementVar).map(fields ++ _)
+          case (None, _) => None
+        }
+    }
+  }
+
+  /**
+   * Converts a field access rooted at the lambda element into the single nested
+   * [[StructField]] shape needed by the input array schema. For example,
+   * `x.company.address` becomes `company: struct<address: ...>`.
+   */
+  private object LambdaVariableField {
+    def unapply(expr: Expression): Option[(StructField, NamedLambdaVariable)] = {
+      def selectField(
+          expression: Expression,
+          dataTypeOpt: Option[DataType]): Option[(StructField, NamedLambdaVariable)] =
+        expression match {
+        case variable: NamedLambdaVariable =>
+          dataTypeOpt.collect {
+            case schema: StructType if schema.length == 1 =>
+              schema.head -> variable
+          }
+        case getStructField: GetStructField =>
+          val field = getStructField.childSchema(getStructField.ordinal)
+          val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
+          selectField(getStructField.child, Some(StructType(Array(newField))))
+        case _ => None
+      }
+
+      selectField(expr, None)
     }
   }
 

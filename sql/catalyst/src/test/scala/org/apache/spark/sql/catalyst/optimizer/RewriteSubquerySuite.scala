@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, IsNull, ListQuery, Not}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Exists, IsNull, ListQuery, Literal, Not}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -95,5 +95,43 @@ class RewriteSubquerySuite extends PlanTest {
         Some($"_aggregateexpression" === $"c3"))
       .select($"exists".as("(sum(col2) IN (listquery()))")).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57005: No None.get when correlated predicates are eliminated") {
+    // When BooleanSimplification in PullupCorrelatedPredicates eliminates all correlated
+    // predicates (e.g., FALSE AND correlated_pred -> FALSE), the Exists node ends up with
+    // outerAttrs non-empty but joinCond empty. RewritePredicateSubquery must handle this.
+    object OptimizeWithPullup extends RuleExecutor[LogicalPlan] {
+      val batches =
+        Batch("Pullup Correlated Expressions", Once,
+          PullupCorrelatedPredicates) ::
+        Batch("Rewrite Subquery", FixedPoint(1),
+          RewritePredicateSubquery,
+          PruneFilters,
+          PropagateEmptyRelation,
+          ColumnPruning,
+          CollapseProject,
+          RemoveNoopOperators) :: Nil
+    }
+
+    val outer = LocalRelation($"a".int, $"b".int)
+    val inner = LocalRelation($"x".int, $"y".int)
+
+    // NOT EXISTS with FALSE AND correlated_pred: subquery is always empty,
+    // so NOT EXISTS is always true and the filter is eliminated.
+    // Since outer is an empty LocalRelation, the result is also empty.
+    val notExistsQuery = outer.where(
+      Not(Exists(inner.where(Literal.FalseLiteral && $"a" === $"x")))).select($"a")
+    val notExistsOptimized = OptimizeWithPullup.execute(notExistsQuery.analyze)
+    val notExistsExpected = LocalRelation(notExistsQuery.analyze.output).analyze
+    comparePlans(notExistsOptimized, notExistsExpected)
+
+    // EXISTS with FALSE AND correlated_pred: subquery is always empty,
+    // so EXISTS is always false and no rows pass the filter.
+    val existsQuery = outer.where(
+      Exists(inner.where(Literal.FalseLiteral && $"a" === $"x"))).select($"a")
+    val existsOptimized = OptimizeWithPullup.execute(existsQuery.analyze)
+    val existsExpected = LocalRelation(existsQuery.analyze.output).analyze
+    comparePlans(existsOptimized, existsExpected)
   }
 }

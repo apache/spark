@@ -954,16 +954,10 @@ case class SortMergeJoinExec(
          |  }
          |
          |  // Reset bit sets of buffers accordingly
-         |  if ($leftBuffer.size() <= $leftMatched.capacity()) {
-         |    $leftMatched.clearUntil($leftBuffer.size());
-         |  } else {
-         |    $leftMatched = new $matchedClsName($leftBuffer.size());
-         |  }
-         |  if ($rightBuffer.size() <= $rightMatched.capacity()) {
-         |    $rightMatched.clearUntil($rightBuffer.size());
-         |  } else {
-         |    $rightMatched = new $matchedClsName($rightBuffer.size());
-         |  }
+         |  $leftMatched = ${classOf[JoinHelper].getName}.resetMatched(
+         |    $leftMatched, $leftBuffer.size());
+         |  $rightMatched = ${classOf[JoinHelper].getName}.resetMatched(
+         |    $rightMatched, $rightBuffer.size());
          |}
        """.stripMargin)
 
@@ -1457,16 +1451,8 @@ private class SortMergeFullOuterJoinScanner(
       advancedRight()
     }
 
-    if (leftMatches.size <= leftMatched.capacity) {
-      leftMatched.clearUntil(leftMatches.size)
-    } else {
-      leftMatched = new BitSet(leftMatches.size)
-    }
-    if (rightMatches.size <= rightMatched.capacity) {
-      rightMatched.clearUntil(rightMatches.size)
-    } else {
-      rightMatched = new BitSet(rightMatches.size)
-    }
+    leftMatched = JoinHelper.resetMatched(leftMatched, leftMatches.size)
+    rightMatched = JoinHelper.resetMatched(rightMatched, rightMatches.size)
   }
 
   /**

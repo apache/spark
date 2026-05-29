@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -746,7 +746,10 @@ case class Join(
     }
   }
 
-  override def output: Seq[Attribute] = Join.computeOutput(joinType, left.output, right.output)
+  override def output: Seq[Attribute] = {
+    val base = Join.computeOutput(joinType, left.output, right.output)
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {
@@ -827,6 +830,8 @@ case class Join(
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Join = copy(left = newLeft, right = newRight)
+
+  override def isStateful: Boolean = left.isStreaming && right.isStreaming
 }
 
 /**
@@ -1223,7 +1228,10 @@ case class Aggregate(
     expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
-  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = {
+    val base = aggregateExpressions.map(_.toAttribute)
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
@@ -1242,6 +1250,8 @@ case class Aggregate(
 
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
+
+  override def isStateful: Boolean = child.isStreaming
 
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
@@ -1745,7 +1755,10 @@ object Limit {
  * order.
  */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -1757,6 +1770,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
 
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
+
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -1998,10 +2013,16 @@ case class Sample(
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
+  // Distinct is rewritten to Aggregate by ReplaceDistinctWithAggregate, hence potentially
+  // stateful (same criteria as Aggregate).
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -2165,10 +2186,14 @@ case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
@@ -2176,10 +2201,14 @@ case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) 
   override def references: AttributeSet = AttributeSet(keys) ++
     AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): DeduplicateWithinWatermark =
     copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**

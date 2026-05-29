@@ -105,15 +105,23 @@ class ArrowWriterSuite extends SparkFunSuite {
     }
 
     val geographies = wkbs.map(x => InternalGeography.fromWkb(x, 4326).getValue)
+    val geographies4267 = wkbs.map(x => InternalGeography.fromWkb(x, 4267).getValue)
+    val geographies4269 = wkbs.map(x => InternalGeography.fromWkb(x, 4269).getValue)
     val geometries = wkbs.map(x => InternalGeometry.fromWkb(x, 0).getValue)
     val mixedGeometries = wkbs.zip(Seq(0, 4326)).map {
       case (g, srid) => InternalGeometry.fromWkb(g, srid).getValue
     }
+    val mixedGeographies = wkbs.zip(Seq(4267, 4269)).map {
+      case (g, srid) => InternalGeography.fromWkb(g, srid).getValue
+    }
 
     check(GeometryType(0), geometries)
     check(GeographyType(4326), geographies)
+    check(GeographyType(4267), geographies4267)
+    check(GeographyType(4269), geographies4269)
     check(GeometryType("ANY"), mixedGeometries)
     check(GeographyType("ANY"), geographies)
+    check(GeographyType("ANY"), mixedGeographies)
     check(BooleanType, Seq(true, null, false))
     check(ByteType, Seq(1.toByte, 2.toByte, null, 4.toByte))
     check(ShortType, Seq(1.toShort, 2.toShort, null, 4.toShort))

@@ -23,7 +23,7 @@ import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, MaxBy, MaxMinByK, MinBy, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -74,13 +74,15 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
 
   val testRelationC = LocalRelation($"c".decimal(7, 2))
 
-  test("Decimal Average Aggregation widened-cast peel: Optimized (p=7, p'=12)") {
+  test("Decimal Average Aggregation widened-cast peel: " +
+      "Not Optimized (pPrime+4 > MAX_DOUBLE_DIGITS preserves Decimal-exact path)") {
+    // pPrime=12, pPrime+4=16 > 15. The new AVG arm only fires inside the
+    // existing Double-regime envelope (pPrime+4 <= 15); for wider outer casts
+    // the un-rewritten Decimal-exact path is preserved.
     val widened = $"c".cast(DecimalType(12, 2))
     val originalQuery = testRelationC.select(avg(widened))
     val optimized = Optimize.execute(originalQuery.analyze)
-    val correctAnswer = testRelationC
-      .select((avg(UnscaledValue($"c")) / 100.0).cast(DecimalType(16, 6))
-        .as("avg(CAST(c AS DECIMAL(12,2)))")).analyze
+    val correctAnswer = originalQuery.analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -107,7 +109,10 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Decimal Average Aggregation widened-cast peel: Not Optimized (boundary p=8)") {
+  test("Decimal Average Aggregation widened-cast peel: " +
+      "Not Optimized (pPrime+4 > MAX_DOUBLE_DIGITS, boundary)") {
+    // pPrime=13, pPrime+4=17 > 15. AVG peel does not fire; existing un-widened
+    // arm also does not fire on the outer Cast (same guard). Plan unchanged.
     val testRelationE = LocalRelation($"e".decimal(8, 2))
     val widened = $"e".cast(DecimalType(13, 2))
     val originalQuery = testRelationE.select(avg(widened))
@@ -117,29 +122,25 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     comparePlans(optimized, correctAnswer)
   }
 
-  // SPARK-56627 F2 regression: with `pPrime in [8, 11]`, the outer Cast's
-  // dataType `Decimal(pPrime, s)` would let the un-widened existing
-  // `Average(DecimalExpression)` arm match first via `prec + 4 <= MAX_DOUBLE_DIGITS`
-  // (= pPrime <= 11). New AVG peel arm must be ordered before to win this band
-  // and rewrite via the inner `p`-based UnscaledValue path.
+  // Cast-hoisting plan simplification: when pPrime+4 <= MAX_DOUBLE_DIGITS, the
+  // existing un-widened AVG arm would also match the outer Cast, but wraps
+  // UnscaledValue around the OUTER Cast (running the Cast per row). The new
+  // arm is ordered before so that UnscaledValue feeds directly off the inner.
   test("Decimal Average Aggregation widened-cast peel: " +
-      "Optimized for pPrime band [8, 11] (must beat existing AVG fast-path arm)") {
+      "Optimized for pPrime band [p+1, 11] (drops per-row inner Cast)") {
     val testRelationE = LocalRelation($"e".decimal(7, 2))
     val widened = $"e".cast(DecimalType(10, 2))
     val originalQuery = testRelationE.select(avg(widened).as("avg_widened"))
     val optimized = Optimize.execute(originalQuery.analyze)
     // Expected: peeled via WidenedDecimalChild(inner=e, p=7, pPrime=10, s=2),
-    // outer Cast bounded(pPrime+4=14, s+4=6). NOT
-    // `MakeDecimal(Sum(UnscaledValue(cast(e as dec(10,2)))), 14, 2)` (existing
-    // arm form), which would lose F2's intent of avoiding the widened-cast
-    // intermediate.
+    // outer Cast target DecimalType(pPrime+4=14, s+4=6).
     val correctAnswer = testRelationE
       .select(
         Cast(
           Divide(
             avg(UnscaledValue($"e")),
             Literal.create(math.pow(10.0, 2), DoubleType)),
-          DecimalType.bounded(14, 6),
+          DecimalType(14, 6),
           Option(conf.sessionLocalTimeZone))
           .as("avg_widened"))
       .analyze
@@ -147,18 +148,19 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     comparePlans(optimized, correctAnswer)
   }
 
-  // SPARK-56627 F1 regression: `WidenedDecimalChild` must NOT peel when the
-  // inner expression is a `CheckOverflow` (introduced by `DecimalPrecision`
-  // analyzer for nullOnOverflow semantics). Peeling through `CheckOverflow`
-  // would change the overflow behavior of the inner aggregate.
+  // WidenedDecimalChild must NOT peel when the inner expression is a
+  // CheckOverflow (introduced by DecimalPrecision for nullOnOverflow
+  // semantics). Peeling through CheckOverflow would hoist a per-row
+  // overflow check out of the aggregate.
   //
-  // The existing un-widened `Average(DecimalExpression)` arm still fires on
-  // the outer Cast (dataType `Decimal(pPrime=10, s=2)`, `pPrime + 4 = 14 <= 15`),
-  // so the optimized plan wraps `UnscaledValue` around the OUTER cast (not
-  // the inner CheckOverflow). The peel-arm-fired form would instead be
-  // `UnscaledValue(CheckOverflow(e))` (no outer cast), which we want to AVOID.
+  // The existing un-widened Average(DecimalExpression) arm still fires on
+  // the outer Cast (dataType Decimal(pPrime=10, s=2), pPrime + 4 = 14 <= 15),
+  // so the optimized plan wraps UnscaledValue around the OUTER cast. Without
+  // the CheckOverflow guard the peel arm would feed UnscaledValue off the
+  // inner CheckOverflow instead, which we want to AVOID.
   test("Decimal Average Aggregation widened-cast peel: " +
-      "Not peeled for Cast(CheckOverflow(inner), wider) form (F1 guard)") {
+      "Not peeled for Cast(CheckOverflow(inner), wider) form " +
+      "(CheckOverflow guard)") {
     val testRelationE = LocalRelation($"e".decimal(7, 2))
     val co = CheckOverflow($"e", DecimalType(7, 2), nullOnOverflow = true)
     val widened = Cast(co, DecimalType(10, 2))
@@ -255,28 +257,22 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     $"i".int)
 
   test("SPARK-56627: SUM(CAST(dec(7,2) AS dec(17,2))) peels via widened-Cast fast path") {
-    // Witness chosen so p+10=17 <= MAX_LONG_DIGITS(18) < pPrime+10=27 -- the
-    // new case fires (a bare-Cast inner cannot fall through to the existing
-    // DecimalExpression case). Expected shape:
-    //   Cast(MakeDecimal(Sum(UnscaledValue(d7_2)), p+10=17, s=2),
-    //        DecimalType.bounded(pPrime+10=27, s=2),
-    //        Option(conf.sessionLocalTimeZone))
+    // Cast-hoisting framing: SUM(Cast(x, dec(pPrime, s))) is rewritten to
+    // SUM(x) wrapped in a MakeDecimal whose precision equals the un-rewritten
+    // Sum's output type `min(pPrime + 10, 38)`. Expected shape:
+    //   MakeDecimal(Sum(UnscaledValue(d7_2)), min(pPrime+10, 38)=27, s=2)
     val q = widenRel.select(sum($"d7_2".cast(DecimalType(17, 2))))
     val optimized = Optimize.execute(q.analyze)
     val correctAnswer = widenRel
-      .select(Cast(
-        MakeDecimal(sum(UnscaledValue($"d7_2")), 17, 2),
-        DecimalType.bounded(27, 2),
-        Option(conf.sessionLocalTimeZone))
+      .select(MakeDecimal(sum(UnscaledValue($"d7_2")), 27, 2)
         .as("sum(CAST(d7_2 AS DECIMAL(17,2)))")).analyze
     comparePlans(optimized, correctAnswer)
   }
 
   test("SPARK-56627: SUM(CAST(dec(7,2) AS dec(17,2))) -- peel preserves schema") {
-    // Schema invariance via DataType equality (not string).
-    // Top-level output type of SUM(dec(p,s)) is DecimalType(min(p+10,38), s);
-    // peeled tree wraps inner with outer Cast(_, dec(pPrime+10,s)) = dec(27,2)
-    // -- identical to baseline schema.
+    // Schema invariance via DataType equality. Top-level output type of
+    // `SUM(Cast(x, dec(pPrime, s)))` is `DecimalType.bounded(pPrime+10, s)`;
+    // the peeled MakeDecimal target precision matches.
     val q = widenRel.select(sum($"d7_2".cast(DecimalType(17, 2))))
     val baselineSchema = q.analyze.schema
     val optimized = Optimize.execute(q.analyze)
@@ -293,8 +289,9 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     comparePlans(optimized, correctAnswer)
   }
 
-  test("SPARK-56627: AVG(CAST(dec(7,2) AS dec(17,2))) -- peel preserves schema") {
-    val q = widenRel.select(avg($"d7_2".cast(DecimalType(17, 2))))
+  test("SPARK-56627: AVG(CAST(dec(7,2) AS dec(10,2))) -- peel preserves schema") {
+    // Witness inside the new AVG peel bound (pPrime+4 = 14 <= 15).
+    val q = widenRel.select(avg($"d7_2".cast(DecimalType(10, 2))))
     val baselineSchema = q.analyze.schema
     val optimized = Optimize.execute(q.analyze)
     assert(optimized.schema === baselineSchema,
@@ -387,10 +384,7 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     val q = widenRel.select(sum(nullLit.cast(DecimalType(17, 2))))
     val optimized = Optimize.execute(q.analyze)
     val correctAnswer = widenRel
-      .select(Cast(
-        MakeDecimal(sum(UnscaledValue(nullLit)), 17, 2),
-        DecimalType.bounded(27, 2),
-        Option(conf.sessionLocalTimeZone))
+      .select(MakeDecimal(sum(UnscaledValue(nullLit)), 27, 2)
         .as("sum(CAST(NULL AS DECIMAL(17,2)))")).analyze
     comparePlans(optimized, correctAnswer)
   }
@@ -401,10 +395,7 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     val q = emptyRel.select(sum($"d7_2".cast(DecimalType(17, 2))))
     val optimized = Optimize.execute(q.analyze)
     val correctAnswer = emptyRel
-      .select(Cast(
-        MakeDecimal(sum(UnscaledValue($"d7_2")), 17, 2),
-        DecimalType.bounded(27, 2),
-        Option(conf.sessionLocalTimeZone))
+      .select(MakeDecimal(sum(UnscaledValue($"d7_2")), 27, 2)
         .as("sum(CAST(d7_2 AS DECIMAL(17,2)))")).analyze
     comparePlans(optimized, correctAnswer)
   }
@@ -453,69 +444,39 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     comparePlans(optimized, q)
   }
 
-  // Plan-shape property: structural invariants on the peeled tree.
+  // Plan-shape property: structural invariants on the peeled SUM tree.
   //
-  // Sweeps the (p, p', s) lattice where the widened-cast peel fires:
-  //   regime (ii):  p + 10 <= 18 <= p' + 10  (new arm, old fast-path off)
-  //   regime (iii): p + 10 <= 18 < p' + 10 <= 38
-  // Assertion (peel-on, structural -- NOT a hand-typed RHS clone):
-  //   - aggregate expression is wrapped by exactly one outer Cast
-  //   - the outer Cast wraps exactly one MakeDecimal
-  //   - inside MakeDecimal, the Sum's child has dataType=LongType (i.e.
-  //     UnscaledValue was inserted)
-  //   - outer Cast target precision = p' + 10 (or 38, clamped)
-  //   - outer Cast target scale = s
-  // Reframed away from RHS-equality to detect behavioural regressions
-  // rather than just refactor drift.
-  // Peel-off branch: plan is unchanged relative to its analyzed form
-  // (the local RuleExecutor runs only DecimalAggregates; no other rule
-  // can rewrite the SUM when the peel does not fire for a Cast child).
+  // Sweeps the (p, p', s) lattice where the widened-cast SUM peel fires:
+  // p + 10 <= 18 and p' > p, with p' <= 38. The rewrite produces a single
+  // MakeDecimal at precision min(p' + 10, 38) wrapping Sum(UnscaledValue(x)).
+  //   I1. exactly one Sum node, whose child has LongType.
+  //   I2. exactly one MakeDecimal node, with precision = min(p' + 10, 38)
+  //       and scale = s -- matches Sum(Cast(x, dec(p', s))).dataType, so the
+  //       final-value overflow boundary is unchanged from un-rewritten.
 
   private case class PeelInputs(p: Int, pPrime: Int, s: Int)
 
-  private val peelGen: Gen[PeelInputs] = Gen.frequency(
-    5 -> (for {
-      p <- Gen.choose(1, 8)
-      pPrime <- Gen.choose(math.max(p + 1, 9), 28)
-      s <- Gen.choose(0, p)
-    } yield PeelInputs(p, pPrime, s)),
-    5 -> (for {
-      p <- Gen.choose(1, 8)
-      pPrime <- Gen.choose(9, 28)
-      s <- Gen.choose(0, p)
-    } yield PeelInputs(p, pPrime, s))
-  )
-
-  private val boundaryGen: Gen[PeelInputs] = Gen.oneOf(
-    PeelInputs(7, 17, 2), PeelInputs(7, 18, 2), PeelInputs(7, 19, 2))
-
-  private val peelSpaceGen: Gen[PeelInputs] = Gen.frequency(
-    8 -> peelGen,
-    2 -> boundaryGen
-  ).retryUntil(in => in.p + 10 <= 18 && in.p < in.pPrime && in.pPrime + 10 <= 38)
+  // Bounds already enforce the peel-firing predicate:
+  //   p + 10 <= 18 (p <= 8), p < pPrime (pPrime >= p+1), pPrime + 10 <= 38
+  //   (pPrime <= 28).
+  private val peelGen: Gen[PeelInputs] = for {
+    p <- Gen.choose(1, 8)
+    pPrime <- Gen.choose(p + 1, 28)
+    s <- Gen.choose(0, p)
+  } yield PeelInputs(p, pPrime, s)
 
   implicit override val generatorDrivenConfig: PropertyCheckConfiguration =
     PropertyCheckConfiguration(minSuccessful = 50, minSize = 0, sizeRange = 0)
 
   test("SPARK-56627: DecimalAggregates widened-Cast SUM peel -- plan-shape " +
       "structural-invariants property") {
-    forAll(peelSpaceGen) { in =>
+    forAll(peelGen) { in =>
       val rel = LocalRelation($"x".decimal(in.p, in.s))
       val q = rel.select(sum($"x".cast(DecimalType(in.pPrime, in.s))))
       val analyzed = q.analyze
 
       val optimized = Optimize.execute(analyzed)
 
-      // Structural invariants the peel rewrite must establish, regardless
-      // of incidental tree-shape changes from neighbouring rules:
-      //
-      //   I1. exactly one Sum node, whose child has LongType (the peeled
-      //       UnscaledValue feed);
-      //   I2. exactly one MakeDecimal node in the tree (rebuilds Decimal
-      //       from the LONG accumulator);
-      //   I3. an outer Cast whose target DecimalType has precision at
-      //       least as wide as the user-written widened cast, so we never
-      //       narrow result precision below the baseline plan.
       val sums = optimized.expressions.flatMap(_.collect { case s: Sum => s })
       assert(sums.size == 1, s"expected exactly 1 Sum, got ${sums.size} in $optimized")
       assert(sums.head.child.dataType == LongType,
@@ -524,43 +485,23 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
       val mds = optimized.expressions.flatMap(_.collect { case m: MakeDecimal => m })
       assert(mds.size == 1,
         s"expected exactly 1 MakeDecimal, got ${mds.size} in $optimized")
-
-      val outerCasts = optimized.expressions.flatMap(_.collect {
-        case c @ Cast(_, _: DecimalType, _, _) => c
-      })
-      assert(outerCasts.nonEmpty,
-        s"expected an outer Cast to DecimalType, got none in $optimized")
-      val outerPrec = outerCasts.map(_.dataType.asInstanceOf[DecimalType].precision).max
-      assert(outerPrec >= in.pPrime,
-        s"outer Cast precision $outerPrec < baseline ${in.pPrime} in $optimized")
+      val expectedPrec = math.min(in.pPrime + 10, DecimalType.MAX_PRECISION)
+      assert(mds.head.precision == expectedPrec && mds.head.scale == in.s,
+        s"expected MakeDecimal($expectedPrec, ${in.s}), got " +
+          s"MakeDecimal(${mds.head.precision}, ${mds.head.scale}) in $optimized")
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // F5 (skeptic round 1): Long-accumulator / Double-regime safety boundary
-  // invariant guards.
-  //
-  // Background: a strict "overflow oracle" cannot be written at unit-test
-  // scale -- the existing fast-path guards (`p + 10 <= MAX_LONG_DIGITS = 18`
-  // for SUM, `AVG_PEEL_MAX_INNER_PRECISION = 7` for AVG) keep the peel-eligible
-  // inner-precision band so narrow that the Long accumulator (~9.22e18) cannot
-  // wrap on any reachable peel input: at `p=8` we'd need ~9.22e10 rows. So
-  // there is no production input that exercises a "peeled Long-wrap vs
-  // un-peeled CheckOverflow" asymmetry to oracle against.
-  //
-  // What we CAN lock is the boundary itself: if someone in the future relaxes
-  // either guard (raising `MAX_LONG_DIGITS - 10` for SUM, or
-  // `AVG_PEEL_MAX_INNER_PRECISION` for AVG), the input shapes below WOULD
-  // start peeling -- and the assertion that the rule is a no-op for these
-  // inputs would fail. That is the safety net we want: a mechanical guard
-  // that catches accidental widening of the peel-trigger surface.
+  // Safety-boundary guards: pin the SUM Long-fast-path and AVG Double-fast-path
+  // bounds. If either guard is later relaxed (raising `MAX_LONG_DIGITS - 10`
+  // for SUM, or relaxing `pPrime + 4 <= MAX_DOUBLE_DIGITS` for AVG), the input
+  // shapes below would start peeling and these tests would fail, flagging the
+  // change for re-review.
   test("SPARK-56627: SUM(CAST(dec(9,2) AS dec(19,2))) does NOT peel " +
       "(Long-accumulator safety boundary)") {
-    // Boundary witness: inner p=9 makes widened-arm `p + 10 = 19 > 18` reject,
-    // AND outer-cast existing-arm `prec + 10 = 29 > 18` reject. Both arms are
-    // no-ops by design -- peel cannot fire on this shape today, and must not
-    // start firing if the inner-precision band is later widened without
-    // re-deriving the Long-accumulator bound.
+    // Inner p=9 makes the widened-arm guard p + 10 = 19 > 18 reject. The
+    // existing un-widened arm also rejects (prec + 10 = 29 > 18 on the outer
+    // Cast). Both arms are no-ops by design.
     val q = widenRel.select(sum($"d9_2".cast(DecimalType(19, 2))))
     val optimized = Optimize.execute(q.analyze)
     val correctAnswer = q.analyze
@@ -568,15 +509,10 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
   }
 
   test("SPARK-56627: AVG(CAST(dec(8,2) AS dec(20,2))) does NOT peel " +
-      "(Double-regime / SPARK-37024 safety boundary)") {
-    // Boundary witness: inner p=8 makes widened-AVG arm
-    // `p > AVG_PEEL_MAX_INNER_PRECISION (7)` reject, AND outer-cast existing
-    // AVG arm `prec + 4 = 24 > MAX_DOUBLE_DIGITS (15)` reject. The strict-
-    // subset guard `p <= 7` keeps this rule's trigger surface strictly
-    // inside the existing AVG fast path's surface, so SPARK-37024
-    // (Double-regime silent precision loss) is not amplified. If someone
-    // raises `AVG_PEEL_MAX_INNER_PRECISION` past 7 without first fixing
-    // SPARK-37024, this test will start firing and flag the regression.
+      "(Double-regime safety boundary)") {
+    // pPrime=20, pPrime+4 = 24 > 15 rejects the widened AVG peel arm. The
+    // existing un-widened AVG arm also rejects on the outer Cast (same
+    // guard). Plan unchanged.
     val q = widenRel.select(avg($"d8_2".cast(DecimalType(20, 2))))
     val optimized = Optimize.execute(q.analyze)
     val correctAnswer = q.analyze
@@ -638,11 +574,13 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
 
   test("SPARK-56949: DecimalAggregates preserves Average.evalMode " +
       "for try_avg on widened-cast peel arm") {
-    val tryAvg = Average($"d7_2".cast(DecimalType(12, 2)), EvalMode.TRY)
+    // pPrime=10 keeps pPrime+4=14 <= MAX_DOUBLE_DIGITS so the AVG peel arm
+    // fires. (pPrime=12 is outside the new bound; see SPARK-56983.)
+    val tryAvg = Average($"d7_2".cast(DecimalType(10, 2)), EvalMode.TRY)
     val q = widenRel.select(tryAvg.toAggregateExpression().as("ta"))
     val optimized = Optimize.execute(q.analyze)
     val avgs = findAverage(optimized)
-    assert(avgs.nonEmpty, "widened-cast AVG peel should fire for dec(7,2)->dec(12,2)")
+    assert(avgs.nonEmpty, "widened-cast AVG peel should fire for dec(7,2)->dec(10,2)")
     assert(avgs.forall(_.evalMode == EvalMode.TRY),
       s"evalMode should be preserved as TRY after rewrite, got " +
         avgs.map(_.evalMode).mkString(","))
@@ -674,5 +612,81 @@ class DecimalAggregatesSuite extends PlanTest with ScalaCheckDrivenPropertyCheck
     assert(avgs.forall(_.evalMode == EvalMode.TRY),
       s"evalMode should be preserved as TRY after rewrite, got " +
         avgs.map(_.evalMode).mkString(","))
+  }
+  test("SPARK-57023: MIN(CAST(dec(7,2) AS dec(12,2))) peels via widened-Cast fast path") {
+    val widened = $"d7_2".cast(DecimalType(12, 2))
+    val originalQuery = widenRel.select(min(widened).as("min_widened"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = widenRel
+      .select(
+        Cast(
+          min($"d7_2"),
+          DecimalType(12, 2),
+          Option(conf.sessionLocalTimeZone))
+          .as("min_widened"))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MAX(CAST(dec(7,2) AS dec(12,2))) peels via widened-Cast fast path") {
+    val widened = $"d7_2".cast(DecimalType(12, 2))
+    val originalQuery = widenRel.select(max(widened).as("max_widened"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = widenRel
+      .select(
+        Cast(
+          max($"d7_2"),
+          DecimalType(12, 2),
+          Option(conf.sessionLocalTimeZone))
+          .as("max_widened"))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MIN(CAST(dec(7,2) AS dec(12,4))) does NOT peel (scale change)") {
+    val rescaled = $"d7_2".cast(DecimalType(12, 4))
+    val originalQuery = widenRel.select(min(rescaled).as("min_rescaled"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MIN(CAST(dec(17,2) AS dec(10,2))) does NOT peel (narrowing)") {
+    val narrowed = $"d17_2".cast(DecimalType(10, 2))
+    val originalQuery = widenRel.select(min(narrowed).as("min_narrowed"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MIN/MAX(CheckOverflow) does NOT peel (CheckOverflow guard)") {
+    val co = CheckOverflow($"d7_2", DecimalType(7, 2), nullOnOverflow = true)
+    val widened = Cast(co, DecimalType(12, 2))
+    val originalQuery = widenRel.select(min(widened).as("min_co"), max(widened).as("max_co"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-57023: MinBy/MaxBy/MaxMinByK with widened-Cast value do NOT peel " +
+      "(rule pattern matches only Min/Max)") {
+    val widened = $"d7_2".cast(DecimalType(12, 2))
+    val ordering = $"i"
+    val minByExpr = MinBy(widened, ordering).toAggregateExpression()
+    val maxByExpr = MaxBy(widened, ordering).toAggregateExpression()
+    val maxMinByKExpr = MaxMinByK(widened, ordering, Literal(3)).toAggregateExpression()
+    val originalQuery = widenRel.select(
+      minByExpr.as("min_by_w"),
+      maxByExpr.as("max_by_w"),
+      maxMinByKExpr.as("mmbk_w"))
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 }

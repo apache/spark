@@ -1255,4 +1255,15 @@ class ExpressionParserSuite extends AnalysisTest {
         start = 0,
         stop = 14))
   }
+
+  test("collate expression origin") {
+    val sql = "a COLLATE utf8_lcase"
+    val parsed = defaultParser.parseExpression(sql)
+    val collation = parsed.collect { case u: UnresolvedCollation => u }
+    assert(collation.length == 1)
+    val origin = collation.head.origin
+    assert(origin.startIndex.isDefined)
+    assert(origin.stopIndex.isDefined)
+    assert(sql.substring(origin.startIndex.get, origin.stopIndex.get + 1) == "utf8_lcase")
+  }
 }

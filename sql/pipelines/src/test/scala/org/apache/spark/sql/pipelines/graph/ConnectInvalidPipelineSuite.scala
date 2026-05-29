@@ -19,6 +19,7 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -546,5 +547,221 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
     val streamingTableHint = "please full refresh"
     assert(!ex1.getMessage.contains(streamingTableHint))
     assert(ex2.getMessage.contains(streamingTableHint))
+  }
+
+  test(
+    "AutoCDC flow targeting a materialized view fails with " +
+    "STREAMING_RELATION_FOR_MATERIALIZED_VIEW"
+  ) {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      val cdcEvents = MemoryStream[Int].toDF().select($"value" as "id", $"value" as "seq")
+      registerTable(
+        Table(
+          identifier = fullyQualifiedIdentifier("target"),
+          comment = None,
+          specifiedSchema = None,
+          partitionCols = None,
+          clusterCols = None,
+          properties = Map.empty,
+          origin = QueryOrigin.empty,
+          format = Some("parquet"),
+          normalizedPath = None,
+          isStreamingTable = false
+        )
+      )
+      registerFlow(
+        AutoCdcFlow(
+          identifier = fullyQualifiedIdentifier("auto_cdc_flow"),
+          destinationIdentifier = fullyQualifiedIdentifier("target"),
+          func = dfFlowFunc(cdcEvents),
+          queryContext = QueryContext(
+            currentCatalog = Some(TestGraphRegistrationContext.DEFAULT_CATALOG),
+            currentDatabase = Some(TestGraphRegistrationContext.DEFAULT_DATABASE)
+          ),
+          origin = QueryOrigin.empty,
+          changeArgs = ChangeArgs(
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = $"seq",
+            storedAsScdType = ScdType.Type1
+          )
+        )
+      )
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_MATERIALIZED_VIEW",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("auto_cdc_flow").quotedString,
+        "tableIdentifier" -> fullyQualifiedIdentifier("target").quotedString
+      )
+    )
+  }
+
+  test(
+    "AutoCDC flow targeting a persisted view fails with STREAMING_RELATION_FOR_PERSISTED_VIEW"
+  ) {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      val cdcEvents = MemoryStream[Int].toDF().select($"value" as "id", $"value" as "seq")
+      registerView(
+        PersistedView(
+          identifier = fullyQualifiedIdentifier("target_view"),
+          properties = Map.empty,
+          sqlText = None,
+          comment = None,
+          origin = QueryOrigin.empty
+        )
+      )
+      registerFlow(
+        AutoCdcFlow(
+          identifier = fullyQualifiedIdentifier("target_view"),
+          destinationIdentifier = fullyQualifiedIdentifier("target_view"),
+          func = dfFlowFunc(cdcEvents),
+          queryContext = QueryContext(
+            currentCatalog = Some(TestGraphRegistrationContext.DEFAULT_CATALOG),
+            currentDatabase = Some(TestGraphRegistrationContext.DEFAULT_DATABASE)
+          ),
+          origin = QueryOrigin.empty,
+          changeArgs = ChangeArgs(
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = $"seq",
+            storedAsScdType = ScdType.Type1
+          )
+        )
+      )
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.STREAMING_RELATION_FOR_PERSISTED_VIEW",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("target_view").quotedString,
+        "viewIdentifier" -> fullyQualifiedIdentifier("target_view").quotedString
+      )
+    )
+  }
+
+  test(
+    "AutoCDC flow targeting a temporary view fails with AUTOCDC_RELATION_FOR_TEMPORARY_VIEW"
+  ) {
+    // Temporary views in SDP normally accept either streaming or batch producing flows, but
+    // AutoCDC flows are an explicit exception: SCD reconciliation only runs at the
+    // streaming-table sink (`Scd1ForeachBatchHandler`), so pointing an AutoCDC flow at a view
+    // would silently drop reconciliation and expose just the projected CDF to consumers.
+    // `validateFlowStreamingness` rejects this case with a dedicated sub-condition under
+    // INVALID_FLOW_QUERY_TYPE.
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      val cdcEvents = MemoryStream[Int].toDF().select($"value" as "id", $"value" as "seq")
+      // A pipeline must contain at least one non-temporary dataset; register an unrelated
+      // streaming table so the pipeline is non-empty and we can exercise the AutoCDC path.
+      registerTable(
+        "dummy_table",
+        query = Some(dfFlowFunc(MemoryStream[Int].toDF()))
+      )
+      registerView(
+        TemporaryView(
+          identifier = fullyQualifiedIdentifier("target_view"),
+          properties = Map.empty,
+          sqlText = None,
+          comment = None,
+          origin = QueryOrigin.empty
+        )
+      )
+      registerFlow(
+        AutoCdcFlow(
+          identifier = fullyQualifiedIdentifier("target_view"),
+          destinationIdentifier = fullyQualifiedIdentifier("target_view"),
+          func = dfFlowFunc(cdcEvents),
+          queryContext = QueryContext(
+            currentCatalog = Some(TestGraphRegistrationContext.DEFAULT_CATALOG),
+            currentDatabase = Some(TestGraphRegistrationContext.DEFAULT_DATABASE)
+          ),
+          origin = QueryOrigin.empty,
+          changeArgs = ChangeArgs(
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = $"seq",
+            storedAsScdType = ScdType.Type1
+          )
+        )
+      )
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "INVALID_FLOW_QUERY_TYPE.AUTOCDC_RELATION_FOR_TEMPORARY_VIEW",
+      parameters = Map(
+        "flowIdentifier" -> fullyQualifiedIdentifier("target_view").quotedString,
+        "viewIdentifier" -> fullyQualifiedIdentifier("target_view").quotedString
+      )
+    )
+  }
+
+  test("A multiquery table cannot have an AutoCDC query input") {
+    val session = spark
+    import session.implicits._
+
+    val graph = new TestGraphRegistrationContext(spark) {
+      val cdcEvents = MemoryStream[Int].toDF().select($"value" as "id", $"value" as "seq")
+      registerTable("target")
+      registerFlow(
+        AutoCdcFlow(
+          identifier = fullyQualifiedIdentifier("auto_cdc_flow"),
+          destinationIdentifier = fullyQualifiedIdentifier("target"),
+          func = dfFlowFunc(cdcEvents),
+          queryContext = QueryContext(
+            currentCatalog = Some(TestGraphRegistrationContext.DEFAULT_CATALOG),
+            currentDatabase = Some(TestGraphRegistrationContext.DEFAULT_DATABASE)
+          ),
+          origin = QueryOrigin.empty,
+          changeArgs = ChangeArgs(
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = $"seq",
+            storedAsScdType = ScdType.Type1
+          )
+        )
+      )
+      registerFlow(
+        destinationName = "target",
+        name = "extra_flow",
+        query = dfFlowFunc(MemoryStream[Int].toDF().select($"value" as "id", $"value" as "seq"))
+      )
+    }.resolveToDataflowGraph()
+
+    val ex = intercept[AnalysisException] {
+      graph.validate()
+    }
+
+    checkError(
+      exception = ex,
+      condition = "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET",
+      parameters = Map(
+        "tableName" -> fullyQualifiedIdentifier("target").unquotedString,
+        "flows" -> Seq(
+          fullyQualifiedIdentifier("auto_cdc_flow").unquotedString,
+          fullyQualifiedIdentifier("extra_flow").unquotedString
+        ).sorted.mkString(", ")
+      )
+    )
   }
 }

@@ -40,10 +40,13 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
   private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =
     mutable.Map.empty
 
-  // Stores the most recent ChangelogInfo passed to loadChangelog(), so tests can verify
-  // that the parser/DataFrame API correctly constructed and forwarded it.
-  private var _lastChangelogInfo: Option[ChangelogInfo] = None
-  def lastChangelogInfo: Option[ChangelogInfo] = _lastChangelogInfo
+  // Stores the most recent ChangelogContext and options passed to loadChangelog(), so tests
+  // can verify that the parser/DataFrame API correctly constructed and forwarded them.
+  private var _lastChangelogContext: Option[ChangelogContext] = None
+  def lastChangelogContext: Option[ChangelogContext] = _lastChangelogContext
+
+  private var _lastOptions: Option[CaseInsensitiveStringMap] = None
+  def lastOptions: Option[CaseInsensitiveStringMap] = _lastOptions
 
   // Per-table overrides for Changelog properties (carry-over rows, intermediate changes,
   // update representation, row identity). Tests can set these to exercise post-processing.
@@ -63,8 +66,10 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
 
   override def loadChangelog(
       ident: Identifier,
-      changelogInfo: ChangelogInfo): Changelog = {
-    _lastChangelogInfo = Some(changelogInfo)
+      changelogContext: ChangelogContext,
+      options: CaseInsensitiveStringMap): Changelog = {
+    _lastChangelogContext = Some(changelogContext)
+    _lastOptions = Some(options)
     if (!tableExists(ident)) {
       throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
@@ -74,7 +79,7 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
     val numDataCols = table.columns.length
     // _commit_version is at index numDataCols + 1 (after _change_type)
     val commitVersionIdx = numDataCols + 1
-    val filtered = filterByRange(allRows.toSeq, commitVersionIdx, changelogInfo.range())
+    val filtered = filterByRange(allRows.toSeq, commitVersionIdx, changelogContext.range())
     val props = changelogProperties.getOrElse(ident.toString, ChangelogProperties())
     new InMemoryChangelog(
       table.name + "_changelog", table.columns, filtered, props)

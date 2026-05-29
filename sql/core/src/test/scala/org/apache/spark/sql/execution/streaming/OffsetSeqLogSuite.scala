@@ -21,10 +21,12 @@ import java.io.File
 
 import org.scalatest.Tag
 
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.stringToFile
 import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata}
 import org.apache.spark.sql.execution.streaming.runtime.{LongOffset, MemoryStream, SerializedOffset}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
@@ -363,6 +365,51 @@ class OffsetSeqLogSuite extends SharedSparkSession {
               query2.stop()
             }
           }
+        }
+      }
+    }
+  }
+
+  test("enabling source evolution on an existing V1 checkpoint is rejected") {
+    withTempDir { checkpointDir =>
+      withTempDir { outputDir =>
+        val inputData = MemoryStream[Int]
+
+        // Start query without source evolution, writing V1 offset log entries.
+        val query1 = inputData.toDF()
+          .writeStream
+          .format("parquet")
+          .option("path", outputDir.getAbsolutePath)
+          .option("checkpointLocation", checkpointDir.getAbsolutePath)
+          .start()
+        inputData.addData(1, 2)
+        query1.processAllAvailable()
+        query1.stop()
+
+        val offsetLog = new OffsetSeqLog(spark, s"${checkpointDir.getAbsolutePath}/offsets")
+        val initialBatch = offsetLog.getLatest()
+        assert(initialBatch.isDefined)
+        assert(initialBatch.get._2.version === 1)
+        assert(initialBatch.get._2.isInstanceOf[OffsetSeq])
+
+        // Restart with the source evolution session flag enabled. The existing V1 checkpoint does
+        // not support OffsetMap-based named source tracking, so the query must fail loudly rather
+        // than silently downgrading the user's session config.
+        withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
+          val query2 = inputData.toDF()
+            .writeStream
+            .format("parquet")
+            .option("path", outputDir.getAbsolutePath)
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start()
+          val ex = intercept[StreamingQueryException] {
+            inputData.addData(3, 4)
+            query2.processAllAvailable()
+          }
+          checkError(
+            exception = ex.cause.asInstanceOf[AnalysisException],
+            condition = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+            parameters = Map("existingVersion" -> "1"))
         }
       }
     }

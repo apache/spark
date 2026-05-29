@@ -152,6 +152,14 @@ public final class STUtils {
     return toPhysVal(Geography.fromWkb(wkb));
   }
 
+  public static GeographyVal stGeogFromWKB(byte[] wkb, int srid) {
+    // We only allow setting the SRID to geographic values.
+    if(!GeographyType.isSridSupported(srid)) {
+      throw QueryExecutionErrors.stInvalidSridValueError(srid);
+    }
+    return toPhysVal(Geography.fromWkb(wkb, srid));
+  }
+
   // ST_GeomFromWKB
   public static GeometryVal stGeomFromWKB(byte[] wkb) {
     return toPhysVal(Geometry.fromWkb(wkb));

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.pipelines.autocdc.ScdType
 import org.apache.spark.sql.streaming.Trigger
 
 /**
@@ -73,10 +75,30 @@ class FlowPlanner(
               trigger = triggerFor(sf),
               checkpointPath = flowMetadata.latestCheckpointLocation
             )
-          case _ =>
-            throw new UnsupportedOperationException(
-              s"Unsupported destination type: ${output.getClass.getSimpleName} for " +
-              s"streaming flow ${sf.identifier} (${flow.destinationIdentifier})"
+          case _ => unsupportedDestinationType(sf, output)
+        }
+      case acmf: AutoCdcMergeFlow =>
+        acmf.changeArgs.storedAsScdType match {
+          case ScdType.Type1 =>
+            val flowMetadata = FlowSystemMetadata(updateContext, acmf, graph)
+            output match {
+              case o: Table =>
+                new Scd1MergeStreamingWrite(
+                  identifier = acmf.identifier,
+                  flow = acmf,
+                  graph = graph,
+                  updateContext = updateContext,
+                  checkpointPath = flowMetadata.latestCheckpointLocation,
+                  trigger = triggerFor(acmf),
+                  destination = o,
+                  sqlConf = acmf.sqlConf
+                )
+              case _ => unsupportedDestinationType(acmf, output)
+            }
+          case ScdType.Type2 =>
+            throw new AnalysisException(
+              errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
+              messageParameters = Map.empty
             )
         }
       case _ =>
@@ -84,5 +106,12 @@ class FlowPlanner(
           s"Unable to plan flow of type ${flow.getClass.getSimpleName}"
         )
     }
+  }
+
+  private def unsupportedDestinationType(flow: ResolvedFlow, output: Output): Nothing = {
+    throw new UnsupportedOperationException(
+      s"Unsupported destination type: ${output.getClass.getSimpleName} for " +
+      s"flow ${flow.identifier} writing to ${flow.destinationIdentifier}"
+    )
   }
 }

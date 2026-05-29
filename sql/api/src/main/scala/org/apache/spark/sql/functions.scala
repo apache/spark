@@ -2032,7 +2032,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_bigint", e, k)
@@ -2044,7 +2044,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_bigint", e, lit(k))
@@ -2056,7 +2056,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(columnName: String, k: Int): Column =
     kll_merge_agg_bigint(Column(columnName), k)
@@ -2067,7 +2067,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column): Column =
     Column.fn("kll_merge_agg_bigint", e)
@@ -2078,7 +2078,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(columnName: String): Column =
     kll_merge_agg_bigint(Column(columnName))
@@ -2089,7 +2089,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_float", e, k)
@@ -2100,7 +2100,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_float", e, lit(k))
@@ -2111,7 +2111,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(columnName: String, k: Int): Column =
     kll_merge_agg_float(Column(columnName), k)
@@ -2121,7 +2121,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column): Column =
     Column.fn("kll_merge_agg_float", e)
@@ -2131,7 +2131,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(columnName: String): Column =
     kll_merge_agg_float(Column(columnName))
@@ -2142,7 +2142,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_double", e, k)
@@ -2153,7 +2153,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_double", e, lit(k))
@@ -2164,7 +2164,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(columnName: String, k: Int): Column =
     kll_merge_agg_double(Column(columnName), k)
@@ -2174,7 +2174,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column): Column =
     Column.fn("kll_merge_agg_double", e)
@@ -2184,7 +2184,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(columnName: String): Column =
     kll_merge_agg_double(Column(columnName))
@@ -2553,7 +2553,7 @@ object functions {
    *   according to the order defined by the window's ORDER BY clause.
    *
    * @group window_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def counter_diff(value: Column): Column = Column.fn("counter_diff", value)
 
@@ -2583,7 +2583,7 @@ object functions {
    *   according to the order defined by the window's ORDER BY clause.
    *
    * @group window_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def counter_diff(value: Column, startTime: Column): Column =
     Column.fn("counter_diff", value, startTime)

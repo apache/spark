@@ -29,4 +29,12 @@ jobs:
     permissions:
       packages: write
     name: Run
+    # Skip:
+    #   - pushes to `branch-4.x` on apache/spark: post-merge CI on this
+    #     integration/staging branch is disabled to save resources.
+    #   - pushes to `master` on forks: the "Sync fork" button mirrors
+    #     apache/spark and would otherwise re-run the full build on every sync.
+    if: >-
+      (github.repository == 'apache/spark' && github.ref != 'refs/heads/branch-4.x')
+      || (github.repository != 'apache/spark' && github.ref != 'refs/heads/master')
     uses: ./.github/workflows/build_and_test.yml

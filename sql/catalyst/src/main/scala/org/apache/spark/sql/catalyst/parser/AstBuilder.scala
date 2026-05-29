@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogInfo, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -2649,17 +2649,17 @@ class AstBuilder extends DataTypeAstBuilder
     withOrigin(ctx) {
       val relation = createUnresolvedRelation(ctx.identifierReference, Option(ctx.optionsClause))
       val options = resolveOptions(Option(ctx.optionsClause))
-      val changelogInfo = buildChangelogInfo(ctx.changesClause, options)
-      val result = RelationChanges(relation, changelogInfo)
+      val changelogContext = buildChangelogContext(ctx.changesClause, options)
+      val result = RelationChanges(relation, changelogContext)
       mayApplyAliasPlan(ctx.tableAlias, result)
     }
 
   /**
-   * Build a [[ChangelogInfo]] from a batch changesClause context and optional WITH options.
+   * Build a [[ChangelogContext]] from a batch changesClause context and optional WITH options.
    */
-  private def buildChangelogInfo(
+  private def buildChangelogContext(
       ctx: ChangesClauseContext,
-      options: CaseInsensitiveStringMap): ChangelogInfo = {
+      options: CaseInsensitiveStringMap): ChangelogContext = {
     val startExclusive = ctx.startExclusive != null
     val endExclusive = ctx.endExclusive != null
     val startInclusive = !startExclusive
@@ -2704,16 +2704,16 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val (deduplicationMode, computeUpdates) = resolveChangelogOptions(options)
-    new ChangelogInfo(range, deduplicationMode, computeUpdates)
+    new ChangelogContext(range, deduplicationMode, computeUpdates)
   }
 
   /**
-   * Build a [[ChangelogInfo]] from a streaming streamChangesClause context and optional
+   * Build a [[ChangelogContext]] from a streaming streamChangesClause context and optional
    * WITH options.
    */
-  private def buildStreamChangelogInfo(
+  private def buildStreamChangelogContext(
       ctx: StreamChangesClauseContext,
-      options: CaseInsensitiveStringMap): ChangelogInfo = {
+      options: CaseInsensitiveStringMap): ChangelogContext = {
     val startExclusive = ctx.startExclusive != null
     val startInclusive = !startExclusive
 
@@ -2744,7 +2744,7 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
     val (deduplicationMode, computeUpdates) = resolveChangelogOptions(options)
-    new ChangelogInfo(range, deduplicationMode, computeUpdates)
+    new ChangelogContext(range, deduplicationMode, computeUpdates)
   }
 
   /**
@@ -2752,17 +2752,8 @@ class AstBuilder extends DataTypeAstBuilder
    * Defaults: DROP_CARRYOVERS for deduplicationMode, false for computeUpdates.
    */
   private def resolveChangelogOptions(
-      options: CaseInsensitiveStringMap)
-      : (ChangelogInfo.DeduplicationMode, Boolean) = {
-    val deduplicationModeStr = Option(options.get("deduplicationMode"))
-      .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
-    val deduplicationMode = deduplicationModeStr match {
-      case "none" => ChangelogInfo.DeduplicationMode.NONE
-      case "dropcarryovers" => ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS
-      case "netchanges" => ChangelogInfo.DeduplicationMode.NET_CHANGES
-      case other =>
-        throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
-    }
+      options: CaseInsensitiveStringMap): (ChangelogContext.DeduplicationMode, Boolean) = {
+    val deduplicationMode = ChangelogContextUtils.parseDeduplicationMode(options)
     val computeUpdates = options.getBoolean("computeUpdates", false)
     (deduplicationMode, computeUpdates)
   }
@@ -2925,8 +2916,8 @@ class AstBuilder extends DataTypeAstBuilder
       case Some(changesCtx) =>
         // Streaming CDC: wrap in RelationChanges and NamedStreamingRelation
         val options = resolveOptions(Option(ctx.optionsClause))
-        val changelogInfo = buildStreamChangelogInfo(changesCtx, options)
-        val result = RelationChanges(relation, changelogInfo)
+        val changelogContext = buildStreamChangelogContext(changesCtx, options)
+        val result = RelationChanges(relation, changelogContext)
         val table = mayApplyAliasPlan(ctx.tableAlias, result)
         val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
         val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
@@ -3595,8 +3586,10 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCollate(ctx: CollateContext): Expression = withOrigin(ctx) {
     val collationName = visitCollateClause(ctx.collateClause())
-
-    Collate(expression(ctx.primaryExpression), UnresolvedCollation(collationName))
+    val unresolvedCollation = withOrigin(ctx.collateClause().collationName) {
+      UnresolvedCollation(collationName)
+    }
+    Collate(expression(ctx.primaryExpression), unresolvedCollation)
   }
 
   override def visitCollateClause(ctx: CollateClauseContext): Seq[String] = withOrigin(ctx) {

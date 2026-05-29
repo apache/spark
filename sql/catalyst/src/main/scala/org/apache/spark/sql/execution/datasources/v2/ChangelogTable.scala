@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{EnumSet => JEnumSet, Set => JSet}
 
-import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo, Column, SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext, Column, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -35,7 +35,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  */
 case class ChangelogTable(
     changelog: Changelog,
-    changelogInfo: ChangelogInfo,
+    changelogContext: ChangelogContext,
     resolved: Boolean = false) extends Table with SupportsRead {
 
   // Validate that the connector returned a schema with the required CDC metadata columns
