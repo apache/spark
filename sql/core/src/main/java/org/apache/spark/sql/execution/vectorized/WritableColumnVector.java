@@ -762,7 +762,10 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType || c.type instanceof VariantType) {
+        if (c.type instanceof StructType || c.type instanceof VariantType
+            || c.type instanceof CalendarIntervalType
+            || c.type instanceof TimestampNTZNanosType
+            || c.type instanceof TimestampLTZNanosType) {
           c.appendStruct(true);
         } else {
           c.appendNull();

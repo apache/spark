@@ -332,7 +332,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the nanosecond NTZ timestamp value for {@code rowId}, or null if the slot is null.
    * <p>
    * To support this type, implementations must implement {@link #getChild(int)} and define 2 child
-   * vectors: child 0 is a long vector holding {@code epochMicros}; child 1 is an int vector
+   * vectors: child 0 is a long vector holding {@code epochMicros}; child 1 is a short vector
    * holding {@code nanosWithinMicro} (values in [0, 999]).
    */
   public TimestampNanosVal getTimestampNTZNanos(int rowId) {
