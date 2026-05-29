@@ -177,13 +177,11 @@ case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
  * Storage layout is identical to [[PhysicalTimestampLTZNanosType]]; both types exist so the
  * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
  *
- * Ordering, compare, and hash are not implemented yet and will be added in a follow-up issue.
+ * Hash is not implemented yet and will be added in a follow-up issue.
  */
 class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
-  override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
-      "PhysicalTimestampNTZNanosType")
   override private[sql] type InternalType = TimestampNanosVal
+  override private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
@@ -197,13 +195,11 @@ case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
  * Storage layout is identical to [[PhysicalTimestampNTZNanosType]]; both types exist so the
  * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
  *
- * Ordering, compare, and hash are not implemented yet and will be added in a follow-up issue.
+ * Hash is not implemented yet and will be added in a follow-up issue.
  */
 class PhysicalTimestampLTZNanosType() extends PhysicalDataType {
-  override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
-      "PhysicalTimestampLTZNanosType")
   override private[sql] type InternalType = TimestampNanosVal
+  override private[sql] val ordering = implicitly[Ordering[InternalType]]
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalTimestampLTZNanosType extends PhysicalTimestampLTZNanosType
