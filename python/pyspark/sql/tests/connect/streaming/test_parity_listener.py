@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import time
 
 import pyspark.cloudpickle
@@ -216,6 +217,8 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             for q in self.spark.streams.active:
                 q.stop()
 
+    # TODO(SPARK-57145): Unskip once the flakiness on macOS is resolved.
+    @unittest.skipIf(sys.platform == "darwin", "Flaky on macOS (SPARK-57145)")
     def test_listener_events_spark_command(self):
         test_listener = TestListenerSpark()
 
