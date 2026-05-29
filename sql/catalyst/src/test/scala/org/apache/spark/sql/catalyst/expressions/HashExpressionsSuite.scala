@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjecti
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -883,6 +883,50 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Murmur3Hash(Seq(time), 10), 545499634)
     checkEvaluation(XxHash64(Seq(time), 10), -3550518982366774761L)
     checkEvaluation(HiveHash(Seq(time)), -1567775210)
+  }
+
+  test("HashExpression supports nanosecond timestamp types") {
+    // (epochMicros, nanosWithinMicro) pairs covering zero/mid/max nanos, negative micros, and
+    // the Long epoch-micro boundaries.
+    val values = Seq(
+      TimestampNanosVal.fromParts(0L, 0.toShort),
+      TimestampNanosVal.fromParts(1L, 1.toShort),
+      TimestampNanosVal.fromParts(1234567890L, 999.toShort),
+      TimestampNanosVal.fromParts(-1L, 500.toShort),
+      TimestampNanosVal.fromParts(Long.MinValue, 0.toShort),
+      TimestampNanosVal.fromParts(Long.MaxValue, 999.toShort))
+
+    Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9),
+        TimestampNTZNanosType(7), TimestampLTZNanosType(7)).foreach { dt =>
+      (values.map(Literal.create(_, dt)) :+ Literal.create(null, dt)).foreach { lit =>
+        // checkEvaluation asserts the interpreted, codegen, and unsafe paths all agree.
+        checkEvaluation(Murmur3Hash(Seq(lit), 42), Murmur3Hash(Seq(lit), 42).eval())
+        checkEvaluation(XxHash64(Seq(lit), 42L), XxHash64(Seq(lit), 42L).eval())
+        checkEvaluation(HiveHash(Seq(lit)), HiveHash(Seq(lit)).eval())
+      }
+    }
+  }
+
+  test("nanosecond timestamp hash is consistent with equality") {
+    val dt = TimestampNTZNanosType(9)
+    def lit(micros: Long, nanos: Short): Literal =
+      Literal.create(TimestampNanosVal.fromParts(micros, nanos), dt)
+
+    val a = lit(1234567890L, 123)
+    val aCopy = lit(1234567890L, 123)
+    val diffNanos = lit(1234567890L, 124) // same micros, different sub-micro nanos
+    val diffMicros = lit(1234567891L, 123) // different micros, same nanos
+
+    Seq[Expression => Any](
+      e => Murmur3Hash(Seq(e), 42).eval(),
+      e => XxHash64(Seq(e), 42L).eval(),
+      e => HiveHash(Seq(e)).eval()).foreach { hash =>
+      // Equal values hash equally.
+      assert(hash(a) === hash(aCopy))
+      // Both fields contribute to the hash (guards against a dropped epochMicros/nanos field).
+      assert(hash(a) !== hash(diffNanos))
+      assert(hash(a) !== hash(diffMicros))
+    }
   }
 
   private def testHash(inputSchema: StructType): Unit = {
