@@ -29,7 +29,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
  *
  * The V2 scan-planning path invokes this after first attempting to push the original `COUNT(1)`
  * and before final column pruning. The V1 path runs it in `SparkOptimizer.earlyScanPushDownRules`,
- * followed by another `SchemaPruning` pass, when the collapse is needed.
+ * followed by another `SchemaPruning` pass, when the collapse is needed. Unlike the standalone V1
+ * invocation, the nested V2 invocation must explicitly honor `spark.sql.optimizer.excludedRules`.
  */
 object CollapseGroupedSumOfCount extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
@@ -66,14 +67,13 @@ object CollapseGroupedSumOfCount extends Rule[LogicalPlan] {
     val upperAggs = upper.aggregateExpressions.flatMap(_.collect {
       case ae: AggregateExpression => ae
     })
-    val hasCollapsibleSum = upperAggs.exists {
+    def isCollapsibleSum(ae: AggregateExpression): Boolean = ae match {
       case AggregateExpression(Sum(a: Attribute, context), _, false, None, _) =>
         context.evalMode != EvalMode.TRY && countOutputs.contains(a)
       case _ => false
     }
-    if (!hasCollapsibleSum || !upperAggs.forall {
-      case AggregateExpression(Sum(a: Attribute, context), _, false, None, _) =>
-        context.evalMode != EvalMode.TRY && countOutputs.contains(a)
+    if (!upperAggs.exists(isCollapsibleSum) || !upperAggs.forall {
+      case ae if isCollapsibleSum(ae) => true
       case AggregateExpression(_: Max, _, false, None, _) => true
       case AggregateExpression(_: Min, _, false, None, _) => true
       case _ => false
@@ -93,6 +93,7 @@ object CollapseGroupedSumOfCount extends Rule[LogicalPlan] {
       .filter(_.deterministic)
       .filterNot(AggregateExpression.containsAggregate)
       .map(_.toAttribute))
+    // MIN and MAX above are safe only when their inputs are retained lower grouping outputs.
     if (!rewritten.references.subsetOf(lowerNonAggOutputs)) {
       return None
     }
