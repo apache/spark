@@ -25,6 +25,7 @@ import org.mockito.Mockito._
 import org.scalatest.Tag
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeqLog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.Trigger._
@@ -210,6 +211,33 @@ class StreamingSourceEvolutionSuite extends StreamTest {
   // =======================
   // Metadata Path Tests
   // =======================
+
+  testWithSourceEvolution("offset log uses VERSION_2 when source evolution is enabled") {
+    LastOptions.clear()
+
+    val checkpointLocation = new Path(newMetadataDir)
+
+    val df1 = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .name("source1")
+      .load()
+
+    val q = df1.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", checkpointLocation.toString)
+      .trigger(ProcessingTime(10.seconds))
+      .start()
+    q.processAllAvailable()
+    q.stop()
+
+    val offsetLog = new OffsetSeqLog(spark, s"$checkpointLocation/offsets")
+    val latestBatch = offsetLog.getLatest()
+    assert(latestBatch.isDefined, "Offset log should have at least one entry")
+    val (_, offsetSeq) = latestBatch.get
+    assert(offsetSeq.isInstanceOf[OffsetMap],
+      s"Expected OffsetMap but got ${offsetSeq.getClass.getSimpleName}")
+    assert(offsetSeq.version === 2, s"Expected version 2 but got ${offsetSeq.version}")
+  }
 
   testWithSourceEvolution("named sources - metadata path uses source name") {
     LastOptions.clear()
@@ -506,13 +534,12 @@ class StreamingSourceEvolutionSuite extends StreamTest {
 
   /**
    * Helper method to run tests with source evolution enabled.
-   * Sets offset log format to V2 (OffsetMap) since named sources require it.
+   * Enabling source evolution automatically forces offset log format V2 (OffsetMap) for new
+   * queries, since named sources require it.
    */
   def testWithSourceEvolution(testName: String, testTags: Tag*)(testBody: => Any): Unit = {
     test(testName, testTags: _*) {
-      withSQLConf(
-        SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true",
-        SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key -> "2") {
+      withSQLConf(SQLConf.ENABLE_STREAMING_SOURCE_EVOLUTION.key -> "true") {
         testBody
       }
     }
