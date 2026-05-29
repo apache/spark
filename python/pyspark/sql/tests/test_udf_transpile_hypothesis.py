@@ -640,9 +640,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             )
             df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
             transpiled, interpreted = self._run(eq_pair, BooleanType(), df, "a", "b")
-            self.assertEqual(
-                transpiled, interpreted, f"eq_pair mismatch on (x={x!r}, y={y!r})"
-            )
+            self.assertEqual(transpiled, interpreted, f"eq_pair mismatch on (x={x!r}, y={y!r})")
 
         @_hyp_settings
         @given(x=_long_strategy, y=_long_strategy)
@@ -657,9 +655,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             )
             df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
             transpiled, interpreted = self._run(neq_pair, BooleanType(), df, "a", "b")
-            self.assertEqual(
-                transpiled, interpreted, f"neq_pair mismatch on (x={x!r}, y={y!r})"
-            )
+            self.assertEqual(transpiled, interpreted, f"neq_pair mismatch on (x={x!r}, y={y!r})")
 
         @_hyp_settings
         @given(value=_long_strategy)
