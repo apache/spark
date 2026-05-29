@@ -431,9 +431,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 (1, 2, False, True),
             ]:
                 with self.subTest(x=x, y=y):
-                    df = self.spark.createDataFrame(
-                        [Row(a=x, b=y)], schema=two_col_schema
-                    )
+                    df = self.spark.createDataFrame([Row(a=x, b=y)], schema=two_col_schema)
                     [row_eq] = df.select(pudf_eq_xy("a", "b")).collect()
                     [row_neq] = df.select(pudf_neq_xy("a", "b")).collect()
                     self.assertEqual(row_eq[0], eq_expected, f"({x} == {y})")
@@ -498,14 +496,11 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with _warnings.catch_warnings(record=True) as caught:
                 _warnings.simplefilter("always")
                 pudf = UserDefinedFunction(chained, BooleanType())
-            self.assertEqual(
-                [], pudf.transpiled, "chained comparison must NOT transpile"
-            )
+            self.assertEqual([], pudf.transpiled, "chained comparison must NOT transpile")
             fallback = [
                 w
                 for w in caught
-                if "Unable to transpile" in str(w.message)
-                or "Errors encountered" in str(w.message)
+                if "Unable to transpile" in str(w.message) or "Errors encountered" in str(w.message)
             ]
             self.assertTrue(fallback, "expected a fallback warning")
             for value, expected in [(5, True), (0, False), (10, False), (-3, False)]:
