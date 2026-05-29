@@ -22,11 +22,7 @@ import scala.util.Random
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
-import org.apache.spark.sql.pipelines.autocdc.{
-  ColumnSelection,
-  Scd1BatchProcessor,
-  UnqualifiedColumnName
-}
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.graph.AutoCdcScd1OutOfOrderConvergenceSuite.SourceRow
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -62,10 +58,18 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
     with SharedSparkSession
     with AutoCdcGraphExecutionTestMixin {
 
+  // Distinct keys in the generated event stream.
   private val numDistinctKeys: Int = 3
-  private val maxEventsPerKey: Int = 25
+  // Upper bound on unique events (one per sequence) generated per key, before intentionally
+  // duplicating some events.
+  private val maxUniqueEventsPerKey: Int = 25
+  // Probability an event is a delete; (1 - this) is the upsert probability.
   private val deleteEventProbability: Double = 0.20
-  private val triplicateEventProbability: Double = 0.15
+  // Probability an event is immediately re-emitted with the same sequence and payload.
+  private val duplicateEventProbability: Double = 0.15
+  // Probability an optional payload column is non-null; (1 - this) is the null probability.
+  private val nonNullProbability: Double = 0.75
+  // Number of microbatches the out-of-order pipeline splits the shuffled events across.
   private val numOutOfOrderBatches: Int = 4
 
   private val keyColumn: String = "key"
@@ -78,18 +82,15 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
   private val sourceColumnNames: Seq[String] =
     Seq(keyColumn, nameColumn, amountColumn, activeColumn, sequenceColumn, isDeleteColumn)
 
-  private def randomOptional[T](rand: Random, value: => T, nullProbability: Double = 0.25)
-      : Option[T] =
-    if (rand.nextDouble() < nullProbability) None else Some(value)
-
   private def randomUpsertOrDelete(
       rand: Random, key: Int, sequence: Long, isDelete: Boolean): SourceRow = {
     val colorPalette = Seq("red", "blue", "green", "yellow")
     SourceRow(
       key = key,
-      name = randomOptional(rand, colorPalette(rand.nextInt(colorPalette.length))),
-      amount = randomOptional(rand, rand.nextInt(200) - 100),
-      active = randomOptional(rand, rand.nextBoolean()),
+      name = Option.when(rand.nextDouble() < nonNullProbability)(
+        colorPalette(rand.nextInt(colorPalette.length))),
+      amount = Option.when(rand.nextDouble() < nonNullProbability)(rand.nextInt(100)),
+      active = Option.when(rand.nextDouble() < nonNullProbability)(rand.nextBoolean()),
       sequence = sequence,
       isDelete = isDelete
     )
@@ -98,20 +99,14 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
   private def generateRandomCdcEventStream(rand: Random): Seq[SourceRow] = {
     var nextSequence: Long = 0L
     val events = ArrayBuffer.empty[SourceRow]
-    (0 until numDistinctKeys).foreach { _ =>
-      val key = rand.nextInt(50)
-      val numEventsForKey = 1 + rand.nextInt(maxEventsPerKey)
-      var keyHasLiveRow = false
-      (0 until numEventsForKey).foreach { _ =>
-        val isDelete = keyHasLiveRow && rand.nextDouble() < deleteEventProbability
-        keyHasLiveRow = !isDelete
+    (0 until numDistinctKeys).foreach { key =>
+      val numUniqueEventsForKey = rand.between(1, maxUniqueEventsPerKey + 1)
+      (0 until numUniqueEventsForKey).foreach { _ =>
+        val isDelete = rand.nextDouble() < deleteEventProbability
         val event = randomUpsertOrDelete(rand, key, nextSequence, isDelete)
         nextSequence += 1
-        if (rand.nextDouble() < triplicateEventProbability) {
-          events += event
-          events += event
-          events += event
-        } else {
+        events += event
+        if (rand.nextDouble() < duplicateEventProbability) {
           events += event
         }
       }
@@ -142,23 +137,19 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
   private def createTargetTable(targetTable: String): Unit = {
     spark.sql(
       s"CREATE TABLE $catalog.$namespace.$targetTable (" +
-      s"$keyColumn INT NOT NULL, " +
-      s"$nameColumn STRING, " +
-      s"$amountColumn INT, " +
-      s"$activeColumn BOOLEAN, " +
-      s"$sequenceColumn BIGINT NOT NULL, " +
+      s"`$keyColumn` INT NOT NULL, " +
+      s"`$nameColumn` STRING, " +
+      s"`$amountColumn` INT, " +
+      s"`$activeColumn` BOOLEAN, " +
+      s"`$sequenceColumn` BIGINT NOT NULL, " +
       s"$cdcMetadataDdl)"
     )
   }
 
-  // The two pipelines see the same logical events but not the same per-row sequence values
-  // along the way, so `_cdc_metadata` (which holds the per-row delete/upsert sequence) can
-  // legitimately differ even when the visible row content matches. Drop it before comparing.
   private def assertTargetsConverge(inOrderTable: String, outOfOrderTable: String): Unit = {
-    val cdcMetadataColumn = Scd1BatchProcessor.cdcMetadataColName
     checkAnswer(
-      spark.table(s"$catalog.$namespace.$outOfOrderTable").drop(cdcMetadataColumn),
-      spark.table(s"$catalog.$namespace.$inOrderTable").drop(cdcMetadataColumn)
+      spark.table(s"$catalog.$namespace.$outOfOrderTable"),
+      spark.table(s"$catalog.$namespace.$inOrderTable")
     )
   }
 
@@ -199,18 +190,8 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
     }
   }
 
-  test("SCD1 merge converges across micro-batch shuffling for randomly generated " +
-    "CDC events (seed 1)") {
-    runConvergenceTest(seed = 1L)
-  }
-
-  test("SCD1 merge converges across micro-batch shuffling for randomly generated " +
-    "CDC events (seed 2)") {
-    runConvergenceTest(seed = 2L)
-  }
-
-  test("SCD1 merge converges across micro-batch shuffling for randomly generated " +
-    "CDC events (seed 3)") {
-    runConvergenceTest(seed = 3L)
+  gridTest("SCD1 merge converges across micro-batch shuffling for randomly generated " +
+    "CDC events, seed")(Seq(1L, 2L, 3L)) { seed =>
+    runConvergenceTest(seed)
   }
 }
