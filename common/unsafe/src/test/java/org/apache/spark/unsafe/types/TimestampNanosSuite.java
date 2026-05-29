@@ -145,6 +145,13 @@ public class TimestampNanosSuite {
   }
 
   @Test
+  public void compareToThrowsOnNull() {
+    // The Comparable javadoc requires NullPointerException when the argument is null.
+    TimestampNanosVal v = TimestampNanosVal.fromParts(0L, (short) 0);
+    assertThrows(NullPointerException.class, () -> v.compareTo(null));
+  }
+
+  @Test
   public void arraysSortUsesComparable() {
     TimestampNanosVal[] xs = new TimestampNanosVal[] {
       TimestampNanosVal.fromParts(5L, (short) 0),
