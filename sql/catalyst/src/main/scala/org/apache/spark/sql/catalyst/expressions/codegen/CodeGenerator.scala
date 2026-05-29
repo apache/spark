@@ -1150,13 +1150,21 @@ class CodegenContext extends Logging {
    *      evaluation, we can look for generated subexpressions and do replacement.
    */
   def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
-    // Create a clear EquivalentExpressions and SubExprEliminationState mapping
+    // Create a clear EquivalentExpressions and compute the common subexpressions.
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
+    expressions.foreach(equivalentExpressions.addExprTree(_))
+    subexpressionEliminationForWholeStageCodegen(equivalentExpressions)
+  }
+
+  /**
+   * Same as above, but takes a pre-built [[EquivalentExpressions]]. A caller that has already
+   * analyzed the expressions (e.g. to decide whether any common subexpression exists) can reuse
+   * that analysis here instead of rebuilding it.
+   */
+  def subexpressionEliminationForWholeStageCodegen(
+      equivalentExpressions: EquivalentExpressions): SubExprCodes = {
     val localSubExprEliminationExprsForNonSplit =
       mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
-
-    // Add each expression tree and compute the common subexpressions.
-    expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
