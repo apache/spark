@@ -81,5 +81,4 @@ class JoinExecCanonicalizationSuite  extends SparkPlanTest with SharedSparkSessi
     assert(join2.isInstanceOf[SortMergeJoinExec])
     assert(join1.sameResult(join2))
   }
-
 }
