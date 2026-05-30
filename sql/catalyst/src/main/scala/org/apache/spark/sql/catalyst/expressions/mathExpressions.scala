@@ -418,40 +418,11 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
   since = "3.0.0",
   group = "math_funcs")
 case class Acosh(child: Expression)
-  extends UnaryMathExpression((x: Double) => {
-    // fdlibm e_acosh.c algorithm
-    if (x < 1.0) {
-      Double.NaN
-    } else if (x >= (1 << 28)) {
-      StrictMath.log(x) + StrictMath.log(2.0)
-    } else if (x == 1.0) {
-      0.0
-    } else if (x > 2.0) {
-      StrictMath.log(2.0 * x - 1.0 / (x + math.sqrt(x * x - 1.0)))
-    } else {
-      val t = x - 1.0
-      StrictMath.log1p(t + math.sqrt(2.0 * t + t * t))
-    }
-  }, "ACOSH") {
+  // fdlibm e_acosh.c algorithm, shared with codegen via ExpressionImplUtils.acosh.
+  extends UnaryMathExpression((x: Double) => ExpressionImplUtils.acosh(x), "ACOSH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val sm = "java.lang.StrictMath"
-      val t = ctx.freshName("t")
-      s"""
-         |if ($c < 1.0) {
-         |  ${ev.value} = java.lang.Double.NaN;
-         |} else if ($c >= ${1 << 28}.0) {
-         |  ${ev.value} = $sm.log($c) + $sm.log(2.0);
-         |} else if ($c == 1.0) {
-         |  ${ev.value} = 0.0;
-         |} else if ($c > 2.0) {
-         |  ${ev.value} = $sm.log(2.0 * $c - 1.0 / ($c + java.lang.Math.sqrt($c * $c - 1.0)));
-         |} else {
-         |  double $t = $c - 1.0;
-         |  ${ev.value} = $sm.log1p($t + java.lang.Math.sqrt(2.0 * $t + $t * $t));
-         |}
-         |""".stripMargin
-    })
+    val utils = classOf[ExpressionImplUtils].getName
+    defineCodeGen(ctx, ev, c => s"$utils.acosh($c)")
   }
   override protected def withNewChildInternal(newChild: Expression): Acosh = copy(child = newChild)
 }
