@@ -893,7 +893,7 @@ class ColumnTestsMixin:
         # aliased name (overridden in the lenient parity suite).
         df = self.spark.sql("SELECT 1 AS x")
         with self.assertRaises(AnalysisException):
-            df.groupBy().agg(sf.sum("x").alias("c")).select(df.c).collect()
+            df.groupBy().agg(sf.sum("x").alias("c")).select(df["c"]).collect()
 
     def test_resolve_after_pivot(self):
         # pivot preserves the grouping key's attribute id, so the tagged
