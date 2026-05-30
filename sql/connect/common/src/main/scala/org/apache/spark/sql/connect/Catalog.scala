@@ -395,14 +395,12 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
     // Leave the source unset so the server resolves spark.sql.sources.default, as documented
     // above. Routing through createTable(tableName, path, "parquet") would hardcode the provider
     // and ignore that configuration.
-    sparkSession.execute { builder =>
-      builder.getCatalogBuilder.getCreateTableBuilder
-        .setTableName(tableName)
-        .setSchema(DataTypeProtoConverter.toConnectProtoType(new StructType))
-        .setDescription("")
-        .putOptions("path", path)
-    }
-    sparkSession.table(tableName)
+    createTable(
+      tableName = tableName,
+      source = None,
+      schema = new StructType,
+      description = "",
+      options = Map("path" -> path))
   }
 
   /**
@@ -488,12 +486,26 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
       schema: StructType,
       description: String,
       options: Map[String, String]): DataFrame = {
+    createTable(tableName, Some(source), schema, description, options)
+  }
+
+  /**
+   * Shared implementation for the public `createTable` overloads. When `source` is `None`, the
+   * proto's `source` field is left unset so the server resolves `spark.sql.sources.default`;
+   * otherwise the provided source is pinned via `setSource`.
+   */
+  private def createTable(
+      tableName: String,
+      source: Option[String],
+      schema: StructType,
+      description: String,
+      options: Map[String, String]): DataFrame = {
     sparkSession.execute { builder =>
       val createTableBuilder = builder.getCatalogBuilder.getCreateTableBuilder
         .setTableName(tableName)
-        .setSource(source)
         .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
         .setDescription(description)
+      source.foreach(createTableBuilder.setSource)
       options.foreach { case (k, v) =>
         createTableBuilder.putOptions(k, v)
       }
