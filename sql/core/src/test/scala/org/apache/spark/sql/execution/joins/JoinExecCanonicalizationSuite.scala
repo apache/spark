@@ -29,7 +29,7 @@ class JoinExecCanonicalizationSuite  extends SparkPlanTest with SharedSparkSessi
       sparkContext.parallelize(Seq(
         Row(1, 1.0, "a"),
         Row(2, 2.0, "b" ),
-        Row(3, 3.0, "c" ),
+        Row(3, 3.0, "c" )
       )),
       new StructType().add("a1", IntegerType).add("b1", DoubleType).add("c1", StringType))
       .createOrReplaceTempView("table1")
@@ -41,7 +41,7 @@ class JoinExecCanonicalizationSuite  extends SparkPlanTest with SharedSparkSessi
       sparkContext.parallelize(Seq(
         Row(1, 1.0, "a"),
         Row(2, 2.0, "b"),
-        Row(3, 3.0, "c"),
+        Row(3, 3.0, "c")
       )),
       new StructType().add("a2", IntegerType).add("b2", DoubleType).add("c2", StringType))
         .createOrReplaceTempView("table2")
