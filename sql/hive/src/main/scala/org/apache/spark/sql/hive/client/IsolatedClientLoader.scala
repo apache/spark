@@ -99,6 +99,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       case (3, 1, _) => Some(hive.v3_1)
       case (4, 0, _) => Some(hive.v4_0)
       case (4, 1, _) => Some(hive.v4_1)
+      case (4, 2, _) => Some(hive.v4_2)
       case _ => None
     }.getOrElse {
       throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
@@ -194,6 +195,14 @@ private[hive] class IsolatedClientLoader(
     val sharedPrefixes: Seq[String] = Seq.empty,
     val barrierPrefixes: Seq[String] = Seq.empty)
   extends Logging {
+
+  // Hive 4.2 requires Java 21 or later. The guard lives on the client-construction path rather
+  // than in IsolatedClientLoader.hiveVersion, which is also used for version-string validation,
+  // so the actionable message reaches the user instead of being swallowed.
+  if (version == hive.v4_2 && !Utils.isJavaVersionAtLeast21) {
+    throw QueryExecutionErrors.unsupportedHiveMetastoreVersionForJavaError(
+      version.fullVersion, 21, Runtime.version().feature())
+  }
 
   /**
    * This controls whether the generated clients maintain an independent/isolated copy of the
