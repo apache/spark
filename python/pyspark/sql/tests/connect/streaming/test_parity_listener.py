@@ -17,6 +17,7 @@
 
 import sys
 import time
+import unittest
 
 import pyspark.cloudpickle
 from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
@@ -217,8 +218,8 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
             for q in self.spark.streams.active:
                 q.stop()
 
-    # TODO(SPARK-57145): Unskip once the flakiness on macOS is resolved.
-    @unittest.skipIf(sys.platform == "darwin", "Flaky on macOS (SPARK-57145)")
+    # TODO(SPARK-57145): Flaky on macOS, should be fixed in SPARK-57145.
+    @unittest.skipIf(sys.platform == "darwin", "Flaky on macOS")
     def test_listener_events_spark_command(self):
         test_listener = TestListenerSpark()
 
