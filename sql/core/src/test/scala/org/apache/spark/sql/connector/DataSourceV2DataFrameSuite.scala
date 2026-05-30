@@ -34,8 +34,8 @@ import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColu
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, Extract, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, Cast => V2Cast, Extract, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
@@ -1156,100 +1156,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  private def executeAndKeepPhysicalPlan[T <: SparkPlan](func: => Unit): T = {
-    val qe = withQueryExecutionsCaptured(spark) {
-      func
-    }.head
-    stripAQEPlan(qe.executedPlan).asInstanceOf[T]
-  }
-
-  private def checkDefaultValues(
-      columns: Array[Column],
-      expectedDefaultValues: Array[ColumnDefaultValue],
-      compareValue: Boolean = true): Unit = {
-    assert(columns.length == expectedDefaultValues.length)
-
-    columns.zip(expectedDefaultValues).foreach {
-      case (column, expectedDefault) =>
-        assert(compareColumnDefaultValue(column.defaultValue(), expectedDefault, compareValue),
-          s"Default value mismatch for column '${column.toString}': " +
-            s"expected $expectedDefault but found ${column.defaultValue}")
-    }
-  }
-
-  private def checkDefaultValues(
-      columns: Array[AddColumn],
-      expectedDefaultValues: Array[ColumnDefaultValue]): Unit = {
-    assert(columns.length == expectedDefaultValues.length)
-
-    columns.zip(expectedDefaultValues).foreach {
-      case (column, expectedDefault) =>
-        assert(
-          column.defaultValue == expectedDefault,
-          s"Default value mismatch for column '${column.toString}': " +
-          s"expected $expectedDefault but found ${column.defaultValue}")
-    }
-  }
-
-  private def checkDefaultValues(
-      columns: Array[UpdateColumnDefaultValue],
-      expectedDefaultValues: Array[DefaultValue]): Unit = {
-    assert(columns.length == expectedDefaultValues.length)
-
-    columns.zip(expectedDefaultValues).foreach {
-      case (column, expectedDefault) =>
-        assert(
-          column.newCurrentDefault() == expectedDefault,
-          s"Default value mismatch for column '${column.toString}': " +
-            s"expected $expectedDefault but found ${column.newCurrentDefault}")
-    }
-  }
-
-  private def checkDropDefaultValue(
-      column: UpdateColumnDefaultValue): Unit = {
-    assert(
-      column.newCurrentDefault() == null,
-      s"Default value mismatch for column '${column.toString}': " +
-        s"expected empty but found ${column.newCurrentDefault()}")
-  }
-
-  private def compareColumnDefaultValue(
-      left: ColumnDefaultValue,
-      right: ColumnDefaultValue,
-      compareValue: Boolean) = {
-    (left, right) match {
-      case (null, null) => true
-      case (null, _) | (_, null) => false
-      case _ => left.getSql == right.getSql &&
-        left.getExpression == right.getExpression &&
-        (!compareValue || left.getValue == right.getValue)
-    }
-  }
-
-  private def checkGenerationExpressions(
-      columns: Array[Column],
-      expectedGenerationExprs: Array[GenerationExpression]): Unit = {
-    assert(columns.length == expectedGenerationExprs.length)
-
-    columns.zip(expectedGenerationExprs).foreach {
-      case (column, expectedGenExpr) =>
-        assert(
-          compareGenerationExpression(column.columnGenerationExpression(), expectedGenExpr),
-          s"Generation expression mismatch for column '${column.toString}': " +
-            s"expected $expectedGenExpr but found ${column.columnGenerationExpression}")
-    }
-  }
-
-  private def compareGenerationExpression(
-      left: GenerationExpression,
-      right: GenerationExpression): Boolean = {
-    (left, right) match {
-      case (null, null) => true
-      case (null, _) | (_, null) => false
-      case _ => left.getSql == right.getSql && left.getExpression == right.getExpression
-    }
-  }
-
   test("create/replace table with generated columns should have V2 Expression") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
@@ -1468,6 +1374,120 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  test("generated column with CAST should have V2 Cast expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b BIGINT GENERATED ALWAYS AS (CAST(a AS BIGINT))
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression(
+            "CAST(a AS BIGINT)",
+            new V2Cast(FieldReference("a"), IntegerType, LongType))))
+    }
+  }
+
+  test("generated column with comparison should have V2 Predicate expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b BOOLEAN GENERATED ALWAYS AS (a > 5)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression(
+            "a > 5",
+            new V2Predicate(
+              ">",
+              Array(FieldReference("a"), LiteralValue(5, IntegerType))))))
+    }
+  }
+
+  test("generated column with CASE WHEN should have V2 expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (CASE WHEN a > 0 THEN 1 ELSE 0 END)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression(
+            "CASE WHEN a > 0 THEN 1 ELSE 0 END",
+            new GeneralScalarExpression(
+              "CASE_WHEN",
+              Array(
+                new V2Predicate(">", Array(FieldReference("a"), LiteralValue(0, IntegerType))),
+                LiteralValue(1, IntegerType),
+                LiteralValue(0, IntegerType))))))
+    }
+  }
+
+  test("generated column with a literal should have V2 Literal expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (1)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression("1", LiteralValue(1, IntegerType))))
+    }
+  }
+
+  test("generated column with a non-translatable expression preserves SQL but has null V2 expr") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      // `factorial` is a built-in, deterministic function, so the generated column is valid, but
+      // V2ExpressionBuilder has no mapping for it. The V2 expression is therefore null while the
+      // original SQL text is still preserved.
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b BIGINT GENERATED ALWAYS AS (factorial(a))
+             |) USING foo""".stripMargin)
+      }
+
+      assert(createExec.columns.length == 2)
+      assert(createExec.columns(0).columnGenerationExpression() == null)
+
+      val genExpr = createExec.columns(1).columnGenerationExpression()
+      assert(genExpr != null)
+      assert(genExpr.getSql == "factorial(a)")
+      assert(genExpr.getExpression == null,
+        s"Expected null V2 expression but got ${genExpr.getExpression}")
+    }
+  }
+
   test("generation expression with special column name should fail") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
@@ -1503,6 +1523,76 @@ class DataSourceV2DataFrameSuite
       assert(createExec.columns.length == 1)
       assert(createExec.columns(0).columnGenerationExpression() != null)
       assert(createExec.columns(0).columnGenerationExpression().getSql == "CURRENT_TIME")
+    }
+  }
+
+  private def executeAndKeepPhysicalPlan[T <: SparkPlan](func: => Unit): T = {
+    val qe = withQueryExecutionsCaptured(spark) {
+      func
+    }.head
+    stripAQEPlan(qe.executedPlan).asInstanceOf[T]
+  }
+
+  private def checkDefaultValues(
+      columns: Array[Column],
+      expectedDefaultValues: Array[ColumnDefaultValue],
+      compareValue: Boolean = true): Unit = {
+    assert(columns.length == expectedDefaultValues.length)
+
+    columns.zip(expectedDefaultValues).foreach {
+      case (column, expectedDefault) =>
+        assert(compareColumnDefaultValue(column.defaultValue(), expectedDefault, compareValue),
+          s"Default value mismatch for column '${column.toString}': " +
+            s"expected $expectedDefault but found ${column.defaultValue}")
+    }
+  }
+
+  private def checkDefaultValues(
+      columns: Array[AddColumn],
+      expectedDefaultValues: Array[ColumnDefaultValue]): Unit = {
+    assert(columns.length == expectedDefaultValues.length)
+
+    columns.zip(expectedDefaultValues).foreach {
+      case (column, expectedDefault) =>
+        assert(
+          column.defaultValue == expectedDefault,
+          s"Default value mismatch for column '${column.toString}': " +
+          s"expected $expectedDefault but found ${column.defaultValue}")
+    }
+  }
+
+  private def checkDefaultValues(
+      columns: Array[UpdateColumnDefaultValue],
+      expectedDefaultValues: Array[DefaultValue]): Unit = {
+    assert(columns.length == expectedDefaultValues.length)
+
+    columns.zip(expectedDefaultValues).foreach {
+      case (column, expectedDefault) =>
+        assert(
+          column.newCurrentDefault() == expectedDefault,
+          s"Default value mismatch for column '${column.toString}': " +
+            s"expected $expectedDefault but found ${column.newCurrentDefault}")
+    }
+  }
+
+  private def checkDropDefaultValue(
+      column: UpdateColumnDefaultValue): Unit = {
+    assert(
+      column.newCurrentDefault() == null,
+      s"Default value mismatch for column '${column.toString}': " +
+        s"expected empty but found ${column.newCurrentDefault()}")
+  }
+
+  private def compareColumnDefaultValue(
+      left: ColumnDefaultValue,
+      right: ColumnDefaultValue,
+      compareValue: Boolean) = {
+    (left, right) match {
+      case (null, null) => true
+      case (null, _) | (_, null) => false
+      case _ => left.getSql == right.getSql &&
+        left.getExpression == right.getExpression &&
+        (!compareValue || left.getValue == right.getValue)
     }
   }
 
@@ -3869,6 +3959,30 @@ class DataSourceV2DataFrameSuite
         },
         condition = "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE",
         parameters = Map.empty)
+    }
+  }
+
+  private def checkGenerationExpressions(
+      columns: Array[Column],
+      expectedGenerationExprs: Array[GenerationExpression]): Unit = {
+    assert(columns.length == expectedGenerationExprs.length)
+
+    columns.zip(expectedGenerationExprs).foreach {
+      case (column, expectedGenExpr) =>
+        assert(
+          compareGenerationExpression(column.columnGenerationExpression(), expectedGenExpr),
+          s"Generation expression mismatch for column '${column.toString}': " +
+            s"expected $expectedGenExpr but found ${column.columnGenerationExpression}")
+    }
+  }
+
+  private def compareGenerationExpression(
+      left: GenerationExpression,
+      right: GenerationExpression): Boolean = {
+    (left, right) match {
+      case (null, null) => true
+      case (null, _) | (_, null) => false
+      case _ => left.getSql == right.getSql && left.getExpression == right.getExpression
     }
   }
 }

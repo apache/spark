@@ -582,7 +582,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             WindowResolution.validateResolvedWindowExpression(w)
 
           case s: SubqueryExpression =>
-            // Check if this subquery is inside a generated column expression
+            // A subquery inside a generation expression is unsupported. Surface a
+            // generated-column-specific error here, before the generic subquery validation below
+            // reports a less helpful message. GeneratedColumnExpression.validate also rejects it.
             operator match {
               case create: V2CreateTablePlan =>
                 create.columns.find { col =>
@@ -920,13 +922,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                     )
                   )
                 }
-                // Check for user-defined functions - only built-in functions are allowed
-                // in generated columns. Traverse the entire expression tree.
+                // Only built-in functions are allowed in generated columns. Functions that are
+                // not built-in already fail earlier in analysis: unknown functions with
+                // UNRESOLVED_ROUTINE and persistent SQL functions with UNSUPPORTED_SQL_UDF_USAGE.
+                // Here we only need to reject user-defined functions (Scala/Python/Java/Hive UDFs
+                // and v2 catalog functions, all of which are `UserDefinedExpression`), which
+                // resolve successfully.
                 genExpr.child.foreach {
-                  case u: UnresolvedFunction =>
-                    val fnName = toSQLId(u.nameParts)
-                    throw unsupportedExpressionError(
-                      s"failed to resolve $fnName to a built-in function")
                   case udf: UserDefinedExpression =>
                     throw unsupportedExpressionError(
                       s"failed to resolve `${udf.name}` to a built-in function")

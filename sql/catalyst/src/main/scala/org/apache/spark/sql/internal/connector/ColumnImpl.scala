@@ -29,7 +29,7 @@ case class ColumnImpl(
     nullable: Boolean,
     comment: String,
     defaultValue: ColumnDefaultValue,
-    columnGenerationExpression: GenerationExpression,
+    override val columnGenerationExpression: GenerationExpression,
     identityColumnSpec: IdentityColumnSpec,
     metadataInJSON: String,
     override val id: String = null) extends Column {
