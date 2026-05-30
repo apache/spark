@@ -209,6 +209,41 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("merge returned and lambda fields for array higher-order functions") {
+    val elementType = StructType.fromDDL("a int, b int, c int")
+    val eventType = StructType(Seq(
+      StructField("rules", ArrayType(elementType, containsNull = true))))
+    val event = AttributeReference("event", eventType)()
+    val argument = GetStructField(event, 0, Some("rules"))
+    val element = NamedLambdaVariable("x", elementType, nullable = true)
+    val predicate = LambdaFunction(
+      GreaterThan(GetStructField(element, 2, Some("c")), Literal(0)),
+      Seq(element))
+    val left = NamedLambdaVariable("left", elementType, nullable = true)
+    val right = NamedLambdaVariable("right", elementType, nullable = true)
+    val comparator = LambdaFunction(
+      Subtract(
+        GetStructField(left, 2, Some("c")),
+        GetStructField(right, 2, Some("c"))),
+      Seq(left, right))
+
+    Seq(ArrayFilter(argument, predicate), ArraySort(argument, comparator)).foreach { function =>
+      val selected = GetArrayStructFields(
+        function,
+        elementType(0),
+        ordinal = 0,
+        numFields = elementType.length,
+        containsNull = true)
+      val rootFields = SchemaPruning.getRootFields(selected)
+      val prunedSchema = SchemaPruning.pruneSchema(
+        StructType(Seq(StructField("event", eventType))),
+        rootFields)
+
+      assert(prunedSchema === StructType.fromDDL(
+        "event struct<rules:array<struct<a:int,c:int>>>"))
+    }
+  }
+
   test("do not collect ArrayExists and ArrayForAll lambda fields when the whole element is used") {
     val elementType = StructType.fromDDL("a int, b int")
     val eventType = StructType(Seq(
@@ -224,5 +259,25 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
           StructField("event", eventType, nullable = true),
           derivedFromAtt = false)))
     }
+  }
+
+  test("do not prune ArrayFilter when the whole result is used") {
+    val elementType = StructType.fromDDL("a int, b int")
+    val eventType = StructType(Seq(
+      StructField("rules", ArrayType(elementType, containsNull = true))))
+    val event = AttributeReference("event", eventType)()
+    val element = NamedLambdaVariable("x", elementType, nullable = true)
+    val filtered = ArrayFilter(
+      GetStructField(event, 0, Some("rules")),
+      LambdaFunction(
+        GreaterThan(GetStructField(element, 0, Some("a")), Literal(0)),
+        Seq(element)))
+
+    val rootFields = SchemaPruning.getRootFields(filtered)
+
+    assert(rootFields.contains(
+      SchemaPruning.RootField(
+        StructField("event", eventType, nullable = true),
+        derivedFromAtt = false)))
   }
 }

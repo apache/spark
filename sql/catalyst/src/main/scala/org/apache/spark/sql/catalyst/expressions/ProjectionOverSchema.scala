@@ -69,17 +69,38 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
       case GetMapValue(child, key) =>
         getProjection(child).map { projection => GetMapValue(projection, key) }
       case transform @ ArrayTransform(argument, lambda: LambdaFunction) =>
-        projectArrayHigherOrderFunction(argument, lambda) { (projection, projectedLambda) =>
-          transform.copy(argument = projection, function = projectedLambda)
+        projectArrayHigherOrderFunction(argument, lambda, numElementVariables = 1) {
+          (projection, projectedLambda) =>
+            transform.copy(argument = projection, function = projectedLambda)
         }
       case exists @ ArrayExists(argument, lambda: LambdaFunction, _) =>
-        projectArrayHigherOrderFunction(argument, lambda) { (projection, projectedLambda) =>
-          exists.copy(argument = projection, function = projectedLambda)
+        projectArrayHigherOrderFunction(argument, lambda, numElementVariables = 1) {
+          (projection, projectedLambda) =>
+            exists.copy(argument = projection, function = projectedLambda)
         }
       case forall @ ArrayForAll(argument, lambda: LambdaFunction) =>
-        projectArrayHigherOrderFunction(argument, lambda) { (projection, projectedLambda) =>
-          forall.copy(argument = projection, function = projectedLambda)
+        projectArrayHigherOrderFunction(argument, lambda, numElementVariables = 1) {
+          (projection, projectedLambda) =>
+            forall.copy(argument = projection, function = projectedLambda)
         }
+      case filter @ ArrayFilter(argument, lambda: LambdaFunction) =>
+        projectArrayHigherOrderFunction(argument, lambda, numElementVariables = 1) {
+          (projection, projectedLambda) =>
+            filter.copy(argument = projection, function = projectedLambda)
+        }
+      case sort @ ArraySort(argument, lambda: LambdaFunction, _) =>
+        projectArrayHigherOrderFunction(argument, lambda, numElementVariables = 2) {
+          (projection, projectedLambda) =>
+            sort.copy(argument = projection, function = projectedLambda)
+        }
+      case reverse @ Reverse(child) =>
+        getProjection(child).map(projection => reverse.copy(child = projection))
+      case shuffle @ Shuffle(child, _) =>
+        getProjection(child).map(projection => shuffle.copy(child = projection))
+      case slice @ Slice(x, _, _) =>
+        getProjection(x).map(projection => slice.copy(x = projection))
+      case knownNotContainsNull @ KnownNotContainsNull(child) =>
+        getProjection(child).map(projection => knownNotContainsNull.copy(child = projection))
       case GetStructFieldObject(child, field: StructField) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema: StructType) =>
@@ -97,29 +118,32 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
 
   private def projectArrayHigherOrderFunction(
       argument: Expression,
-      lambda: LambdaFunction)(
+      lambda: LambdaFunction,
+      numElementVariables: Int)(
       rebuild: (Expression, LambdaFunction) => Expression): Option[Expression] = {
     getProjection(argument).map {
       case projection @ ArrayTypeProjection(projectedElementSchema) =>
-        lambda.arguments.headOption match {
-          case Some(elementVar: NamedLambdaVariable) =>
-            // Pruning fields changes the physical ordinal layout of the element struct.
-            // For example, pruning struct<a, b, c> to struct<a, c> moves c from ordinal 2
-            // to ordinal 1, so rewrite both the variable type and its field accesses.
-            val projectedElementVar = elementVar.copy(dataType = projectedElementSchema)
-            val lambdaProjection =
-              ProjectionOverLambdaVariable(elementVar, projectedElementVar)
-            val projectedBody = lambda.function.transformDown {
-              case lambdaProjection(expr) => expr
-            }
-            rebuild(
-              projection,
-              lambda.copy(
-                function = projectedBody,
-                arguments = projectedElementVar +: lambda.arguments.tail))
-          case _ =>
-            rebuild(projection, lambda)
+        val projectedArguments = lambda.arguments.zipWithIndex.map {
+          case (elementVar: NamedLambdaVariable, index) if index < numElementVariables =>
+            elementVar.copy(dataType = projectedElementSchema)
+          case (argument, _) =>
+            argument
         }
+        val projectedBody =
+          lambda.arguments.zip(projectedArguments).foldLeft(lambda.function) {
+            case (body, (elementVar: NamedLambdaVariable, projectedElementVar:
+                NamedLambdaVariable)) if elementVar ne projectedElementVar =>
+              val lambdaProjection =
+                ProjectionOverLambdaVariable(elementVar, projectedElementVar)
+              body.transformDown {
+                case lambdaProjection(expr) => expr
+              }
+            case (body, _) =>
+              body
+          }
+        rebuild(
+          projection,
+          lambda.copy(function = projectedBody, arguments = projectedArguments))
       case projection =>
         rebuild(projection, lambda)
     }

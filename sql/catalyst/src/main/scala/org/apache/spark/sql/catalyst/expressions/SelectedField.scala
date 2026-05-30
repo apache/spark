@@ -163,6 +163,18 @@ object SelectedField {
             val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
             selectField(left, opt)
         }
+      case ArrayFilter(argument, _: LambdaFunction) =>
+        selectField(argument, dataTypeOpt)
+      case ArraySort(argument, _: LambdaFunction, _) =>
+        selectField(argument, dataTypeOpt)
+      case Reverse(child) =>
+        selectField(child, dataTypeOpt)
+      case Shuffle(child, _) =>
+        selectField(child, dataTypeOpt)
+      case Slice(x, _, _) =>
+        selectField(x, dataTypeOpt)
+      case KnownNotContainsNull(child) =>
+        selectField(child, dataTypeOpt)
       case _ =>
         None
     }
