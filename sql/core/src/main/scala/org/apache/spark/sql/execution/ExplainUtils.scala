@@ -87,32 +87,7 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
       // overwrites and to allow intentional overwriting of IDs generated in previous AQE iteration
       val idMap = new IdentityHashMap[QueryPlan[_], Int]()
       localIdMap.set(idMap)
-      // Initialize an array of ReusedExchanges to help find Adaptively Optimized Out
-      // Exchanges as part of SPARK-42753
-      val reusedExchanges = ArrayBuffer.empty[ReusedExchangeExec]
-
-      var currentOperatorID = 0
-      currentOperatorID = generateOperatorIDs(plan, currentOperatorID, idMap, reusedExchanges,
-        true)
-
-      val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, BaseSubqueryExec)]
-      getSubqueries(plan, subqueries)
-
-      currentOperatorID = subqueries.foldLeft(currentOperatorID) {
-        (curId, plan) => generateOperatorIDs(plan._3.child, curId, idMap, reusedExchanges,
-          true)
-      }
-
-      // SPARK-42753: Process subtree for a ReusedExchange with unknown child
-      val optimizedOutExchanges = ArrayBuffer.empty[Exchange]
-      reusedExchanges.foreach{ reused =>
-        val child = reused.child
-        if (!idMap.containsKey(child)) {
-          optimizedOutExchanges.append(child)
-          currentOperatorID = generateOperatorIDs(child, currentOperatorID, idMap,
-            reusedExchanges, false)
-        }
-      }
+      val (subqueries, optimizedOutExchanges) = assignOperatorIds(plan, idMap)
 
       val collectedOperators = BitSet.empty
       processPlanSkippingSubqueries(plan, append, collectedOperators)
@@ -148,6 +123,41 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
     } finally {
       localIdMap.set(prevIdMap)
     }
+  }
+
+  /**
+   * Assigns operator IDs to all operators across the full plan tree — the main plan,
+   * any subqueries, and any adaptively-optimized-out exchanges (SPARK-42753) — by populating
+   * the supplied idMap. Returns the discovered subqueries and optimized-out exchanges so
+   * the caller ([[processPlan]]) can perform post-assignment work (text output) without
+   * rediscovering them.
+   */
+  private def assignOperatorIds(
+      plan: QueryPlan[_],
+      idMap: java.util.Map[QueryPlan[_], Int])
+      : (ArrayBuffer[(SparkPlan, Expression, BaseSubqueryExec)], ArrayBuffer[Exchange]) = {
+    // Initialize an array of ReusedExchanges to help find Adaptively Optimized Out
+    // Exchanges as part of SPARK-42753
+    val reusedExchanges = ArrayBuffer.empty[ReusedExchangeExec]
+    var currentOperatorID = generateOperatorIDs(plan, 0, idMap, reusedExchanges, true)
+
+    val subqueries = ArrayBuffer.empty[(SparkPlan, Expression, BaseSubqueryExec)]
+    getSubqueries(plan, subqueries)
+    currentOperatorID = subqueries.foldLeft(currentOperatorID) {
+      (curId, sub) => generateOperatorIDs(sub._3.child, curId, idMap, reusedExchanges, true)
+    }
+
+    // SPARK-42753: Process subtree for a ReusedExchange with unknown child
+    val optimizedOutExchanges = ArrayBuffer.empty[Exchange]
+    reusedExchanges.foreach { reused =>
+      val child = reused.child
+      if (!idMap.containsKey(child)) {
+        optimizedOutExchanges.append(child)
+        currentOperatorID = generateOperatorIDs(child, currentOperatorID, idMap,
+          reusedExchanges, false)
+      }
+    }
+    (subqueries, optimizedOutExchanges)
   }
 
   /**
