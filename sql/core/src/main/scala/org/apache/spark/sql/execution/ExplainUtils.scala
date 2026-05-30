@@ -126,8 +126,8 @@ object ExplainUtils extends AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Assigns operator IDs to all operators across the full plan tree — the main plan,
-   * any subqueries, and any adaptively-optimized-out exchanges (SPARK-42753) — by populating
+   * Assigns operator IDs to all operators across the full plan tree -- the main plan,
+   * any subqueries, and any adaptively-optimized-out exchanges (SPARK-42753) -- by populating
    * the supplied idMap. Returns the discovered subqueries and optimized-out exchanges so
    * the caller ([[processPlan]]) can perform post-assignment work (text output) without
    * rediscovering them.

@@ -27,8 +27,6 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class ExplainUtilsSuite extends SharedSparkSession {
 
-  import testImplicits._
-
   private def explainOutput(plan: SparkPlan): String = {
     val concat = new StringConcat()
     ExplainUtils.processPlan(plan, concat.append)
