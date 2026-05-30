@@ -342,4 +342,21 @@ public class ExpressionImplUtils {
     String sp = str.toString().replaceAll(qtChar, qtCharRep);
     return UTF8String.fromString(qtChar + sp + qtChar);
   }
+
+  /**
+   * Returns the single-character string for the {@code chr} expression: the
+   * ASCII/Latin-1 character for {@code longVal & 0xFF}. A negative argument
+   * yields the empty string. Shared by the eval and codegen paths so the
+   * generated Java is a single call rather than an inline if/else chain.
+   */
+  public static UTF8String chr(long longVal) {
+    if (longVal < 0) {
+      return UTF8String.EMPTY_UTF8;
+    } else if ((longVal & 0xFF) == 0) {
+      return UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
+    } else {
+      char c = (char) (longVal & 0xFF);
+      return UTF8String.fromString(String.valueOf(c));
+    }
+  }
 }
