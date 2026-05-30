@@ -94,8 +94,23 @@ object ResolveZip extends Rule[LogicalPlan] {
       remapAliasChild(a, remapDropped(a.child))
     }
     val layered = buildLayeredChain(dedupedAliases, leftBase)
+    // Build the top-level output list. For each top-level expression:
+    //   - If it references a dropped alias, use the survivor attribute -- but re-alias it to the
+    //     original name/exprId so the schema stays correct. Two sides may expose the same
+    //     deterministic producer under different names (e.g. df.select($"a".as("x")).zip(
+    //     df.select($"a".as("y")))); dedup keeps the survivor's name only for internal references,
+    //     not for user-visible output columns.
+    //   - Otherwise pass the attribute through unchanged.
     val finalProjectList: Seq[NamedExpression] =
-      (leftTopList ++ remappedRightTopList).map(ne => remapDropped(ne.toAttribute))
+      (leftTopList ++ remappedRightTopList).map { ne =>
+        val attr = ne.toAttribute
+        droppedToSurvivor.get(attr.exprId) match {
+          case Some(survivorAttr) =>
+            // Preserve the original output name and exprId; only the producer is shared.
+            Alias(survivorAttr, attr.name)(exprId = attr.exprId)
+          case None => remapDropped(attr)
+        }
+      }
     Some(Project(finalProjectList, layered))
   }
 

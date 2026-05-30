@@ -195,4 +195,17 @@ class ResolveZipSuite extends AnalysisTest {
       "Resolved plan should be a Project chain rooted at the shared base")
     assert(resolved.output.map(_.name) == Seq("a", "b", "c", "d", "e", "a", "b", "c", "f"))
   }
+
+  test("resolve Zip: shared-producer dedup preserves each side's output column name") {
+    // Both sides project the same deterministic expression over the shared base, but under
+    // different user-given names. The dedup must merge the producer but keep each side's name.
+    val left = base.select($"a".as("x")).analyze
+    val right = base.select($"a".as("y")).analyze
+    val zip = Zip(left, right)
+
+    val resolved = Resolve.execute(zip)
+    assert(resolved.isInstanceOf[Project])
+    assert(resolved.output.map(_.name) == Seq("x", "y"),
+      s"schema should be [x, y] but got ${resolved.output.map(_.name)}")
+  }
 }

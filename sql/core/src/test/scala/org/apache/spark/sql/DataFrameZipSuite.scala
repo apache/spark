@@ -192,4 +192,21 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
     // single boolean via distinct.
     checkAnswer(zipped.select(($"x" === $"r" + $"r").as("ok")).distinct(), Row(true))
   }
+
+  test("zip: shared-producer dedup preserves output column names") {
+    // When both sides project the same deterministic expression under different names, the
+    // dedup merges the producers but must keep each side's user-given output name intact.
+    val df = Seq((1, 2), (3, 4)).toDF("a", "b")
+    // Same column `a` aliased differently on each side.
+    val zipped = df.select($"a".as("x")).zip(df.select($"a".as("y")))
+    assert(zipped.columns === Array("x", "y"),
+      s"expected schema [x, y] but got ${zipped.columns.mkString("[", ", ", "]")}")
+    checkAnswer(zipped, Row(1, 1) :: Row(3, 3) :: Nil)
+
+    // Same expression over shared base, different output names.
+    val zipped2 = df.select(($"a" + 1).as("x")).zip(df.select(($"a" + 1).as("y")))
+    assert(zipped2.columns === Array("x", "y"),
+      s"expected schema [x, y] but got ${zipped2.columns.mkString("[", ", ", "]")}")
+    checkAnswer(zipped2, Row(2, 2) :: Row(4, 4) :: Nil)
+  }
 }
