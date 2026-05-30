@@ -1253,17 +1253,14 @@ object RegExpUtils {
     val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
     val termPattern = ctx.addMutableState(classNamePattern, "pattern")
     val collationRegexFlags = CollationSupport.collationAwareRegexFlags(collationId)
+    val utils = classOf[ExpressionImplUtils].getName
 
     s"""
        |if (!$regexp.equals($termLastRegex)) {
        |  // regex value changed
-       |  try {
-       |    UTF8String r = $regexp.clone();
-       |    $termPattern = $classNamePattern.compile(r.toString(), $collationRegexFlags);
-       |    $termLastRegex = r;
-       |  } catch (java.util.regex.PatternSyntaxException e) {
-       |    throw QueryExecutionErrors.invalidPatternError("$prettyName", e.getPattern(), e);
-       |  }
+       |  UTF8String r = $regexp.clone();
+       |  $termPattern = $utils.compileRegexPattern(r.toString(), $collationRegexFlags, "$prettyName");
+       |  $termLastRegex = r;
        |}
        |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
        |""".stripMargin
@@ -1272,12 +1269,8 @@ object RegExpUtils {
   def getPatternAndLastRegex(p: Any, prettyName: String, collationId: Int): (Pattern, UTF8String) =
   {
     val r = p.asInstanceOf[UTF8String].clone()
-    val pattern = try {
-      Pattern.compile(r.toString, CollationSupport.collationAwareRegexFlags(collationId))
-    } catch {
-      case e: PatternSyntaxException =>
-        throw QueryExecutionErrors.invalidPatternError(prettyName, e.getPattern, e)
-    }
+    val pattern = ExpressionImplUtils.compileRegexPattern(
+      r.toString, CollationSupport.collationAwareRegexFlags(collationId), prettyName)
     (pattern, r)
   }
 }
