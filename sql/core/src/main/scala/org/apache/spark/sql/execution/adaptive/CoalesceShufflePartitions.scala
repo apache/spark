@@ -23,7 +23,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -90,9 +90,43 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       }
     }
 
+    // For groups that feed a partitioned join (SortMergeJoin/ShuffledHashJoin), enforce a
+    // minimum partition count to avoid eliminating join parallelism.
+    // Design choice: we use a pre-coalesce floor (Option A) rather than post-coalesce skew
+    // re-checking (Option B). Option A is simpler and avoids re-running skew detection after
+    // coalescing. Option B would be more robust for edge cases but adds significant complexity
+    // and can be explored as a follow-up.
+    val adjustedMinNumPartitionsByGroup = coalesceGroups.zip(minNumPartitionsByGroup).map {
+      case (group, minNum) if group.feedsJoin =>
+        // mapStats is always Some here because coalescing runs after stage materialization in
+        // AQE. If stats are unexpectedly absent, flatMap safely contributes 0 bytes and the
+        // floor is effectively skipped (totalSize <= advisorySize), preserving correctness.
+        val totalSize = group.shuffleStages.flatMap(
+          _.shuffleStage.mapStats.map(_.bytesByPartitionId.sum)).sum
+        val advisorySize = advisoryPartitionSize(group)
+        if (totalSize <= advisorySize) {
+          // Tiny data: all join data fits in one advisory-sized partition, so coalescing
+          // to 1 is fine -- no parallelism benefit from multiple partitions.
+          minNum
+        } else if (conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM).isDefined) {
+          // User explicitly set COALESCE_PARTITIONS_MIN_PARTITION_NUM — respect that intent.
+          // minNum already incorporates the config value, so no additional floor is needed.
+          minNum
+        } else {
+          // Compute a data-aware floor: the number of partitions needed to keep each partition
+          // at or below the advisory target size. The max(2, ...) ensures we never collapse to
+          // a single reducer for join data -- for totalSize between advisorySize and
+          // 2*advisorySize, ceil gives 1 or 2, so the floor of 2 prevents single-partition joins.
+          val joinFloor = math.max(2, math.ceil(totalSize.toDouble / advisorySize).toInt)
+          math.max(minNum, joinFloor)
+        }
+      case (_, minNum) => minNum
+    }
+
     val specsMap = mutable.HashMap.empty[Int, Seq[ShufflePartitionSpec]]
     // Coalesce partitions for each coalesce group independently.
-    coalesceGroups.zip(minNumPartitionsByGroup).foreach { case (coalesceGroup, minNumPartitions) =>
+    coalesceGroups.zip(adjustedMinNumPartitionsByGroup).foreach {
+      case (coalesceGroup, minNumPartitions) =>
       val advisoryTargetSize = advisoryPartitionSize(coalesceGroup)
       val minPartitionSize = if (Utils.isTesting) {
         // In the tests, we usually set the target size to a very small value that is even smaller
@@ -171,7 +205,11 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       if (shuffleStages.forall(s => isSupported(s.shuffleStage.shuffle))) {
         // The recursion stops here, we need to call `p.exists(isExplodingJoin)` and find out if
         // there is any exploding join in this sub-plan-tree.
-        Seq(CoalesceGroup(shuffleStages, hasExplodingJoin || p.exists(isExplodingJoin)))
+        // `isPartitionedJoin(p)` catches the case where `p` itself is the join node.
+        // `p.exists(isPartitionedJoin)` catches cases where the join is below `p`
+        // (e.g., Project(SortMergeJoin(...))).
+        Seq(CoalesceGroup(shuffleStages, hasExplodingJoin || p.exists(isExplodingJoin),
+          feedsJoin = isPartitionedJoin(p) || p.exists(isPartitionedJoin)))
       } else {
         Seq.empty
       }
@@ -190,6 +228,12 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
   private def isExplodingJoin(p: SparkPlan): Boolean = p match {
     case _: BroadcastNestedLoopJoinExec => true
     case _: CartesianProductExec => true
+    case _ => false
+  }
+
+  private def isPartitionedJoin(p: SparkPlan): Boolean = p match {
+    case _: SortMergeJoinExec => true
+    case _: ShuffledHashJoinExec => true
     case _ => false
   }
 
@@ -228,4 +272,5 @@ private object ShuffleStageInfo {
 
 private case class CoalesceGroup(
   shuffleStages: Seq[ShuffleStageInfo],
-  hasExplodingJoin: Boolean)
+  hasExplodingJoin: Boolean,
+  feedsJoin: Boolean = false)

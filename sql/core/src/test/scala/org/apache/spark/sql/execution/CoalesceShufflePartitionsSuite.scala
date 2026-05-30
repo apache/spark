@@ -569,6 +569,236 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with SQLConfHelper
     }
     withSparkSession(test, 100, None)
   }
+
+  test("SPARK-56145: CoalesceShufflePartitions should not coalesce join to 1 partition") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      spark.sessionState.conf.unsetConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key, "false")
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "10")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key, "1")
+
+      // Use enough data so totalSize > advisorySize (100000 bytes)
+      val df1 = spark.range(0, 10000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key1", "id as value1")
+      val df2 = spark.range(0, 10000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key2", "id as value2")
+
+      val join = df1.join(df2, col("key1") === col("key2")).select(col("key1"), col("value2"))
+      join.collect()
+
+      val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
+      val shuffleReads = finalPlan.collect {
+        case r @ CoalescedShuffleRead() => r
+      }
+
+      // After fix: join should NOT be coalesced to 1 partition
+      assert(shuffleReads.nonEmpty, "Expected coalesced shuffle reads")
+      val numPartitions = shuffleReads.head.outputPartitioning.numPartitions
+      assert(numPartitions > 1,
+        s"Join stage should not be coalesced to 1 partition, got $numPartitions")
+    }
+    // Advisory size 100000: with ~320KB join data, floor = ceil(320000/100000) = 4
+    withSparkSession(test, 100000, None)
+  }
+
+
+  test("SPARK-56145: explicit COALESCE_PARTITIONS_MIN_PARTITION_NUM used as floor for joins") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key, "false")
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "10")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key, "1")
+
+      val df1 = spark.range(0, 1000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key1", "id as value1")
+      val df2 = spark.range(0, 1000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key2", "id as value2")
+
+      val join = df1.join(df2, col("key1") === col("key2")).select(col("key1"), col("value2"))
+      join.collect()
+
+      val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
+      val shuffleReads = finalPlan.collect {
+        case r @ CoalescedShuffleRead() => r
+      }
+      assert(shuffleReads.nonEmpty, "Expected coalesced shuffle reads")
+      val numPartitions = shuffleReads.head.outputPartitioning.numPartitions
+      assert(numPartitions >= 3,
+        s"Join should respect explicit min partition num (3), got $numPartitions")
+    }
+    withSparkSession(test, 100000, None)
+  }
+
+  test("SPARK-56145: non-join stages can still coalesce to 1 partition") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      spark.sessionState.conf.unsetConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key, "false")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "10")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key, "1")
+
+      // Simple aggregation -- no join, should coalesce freely
+      val df = spark.range(0, 10, 1, numInputPartitions)
+        .selectExpr("id % 2 as key", "id as value")
+        .groupBy("key").count()
+      df.collect()
+
+      val finalPlan = stripAQEPlan(df.queryExecution.executedPlan)
+      val shuffleReads = finalPlan.collect {
+        case r @ CoalescedShuffleRead() => r
+      }
+      assert(shuffleReads.nonEmpty, "Expected coalesced shuffle reads for aggregation")
+      // With tiny data and no join floor, coalescing to 1 is allowed
+      val numPartitions = shuffleReads.head.outputPartitioning.numPartitions
+      assert(numPartitions <= 2,
+        s"Non-join aggregation should coalesce freely, got $numPartitions")
+    }
+    withSparkSession(test, 100000, None)
+  }
+
+
+
+  test("SPARK-56145: multi-way join respects partition floor for all join stages") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      spark.sessionState.conf.unsetConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key, "false")
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "10")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key, "1")
+
+      // Use enough data so totalSize > advisorySize (100000 bytes)
+      val df1 = spark.range(0, 10000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key1", "id as value1")
+      val df2 = spark.range(0, 10000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key2", "id as value2")
+      val df3 = spark.range(0, 10000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key3", "id as value3")
+
+      val join = df1.join(df2, col("key1") === col("key2"))
+        .join(df3, col("key1") === col("key3"))
+        .select(col("key1"), col("value2"), col("value3"))
+      join.collect()
+
+      val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
+      val shuffleReads = finalPlan.collect {
+        case r @ CoalescedShuffleRead() => r
+      }
+      assert(shuffleReads.nonEmpty, "Expected coalesced shuffle reads")
+      shuffleReads.foreach { read =>
+        val numPartitions = read.outputPartitioning.numPartitions
+        assert(numPartitions > 1,
+          s"Multi-way join stage should not be coalesced to 1 partition, got $numPartitions")
+      }
+    }
+    withSparkSession(test, 100000, None)
+  }
+
+  test("SPARK-56145: tiny data join can coalesce to 1 partition") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      spark.sessionState.conf.unsetConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key, "false")
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "10")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key, "1")
+
+      // Very small data -- total size well below advisory target size (100000 bytes)
+      val df1 = spark.range(0, 5, 1, numInputPartitions)
+        .selectExpr("id as key1", "id as value1")
+      val df2 = spark.range(0, 5, 1, numInputPartitions)
+        .selectExpr("id as key2", "id as value2")
+
+      val join = df1.join(df2, col("key1") === col("key2")).select(col("key1"), col("value2"))
+      join.collect()
+
+      val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
+      val shuffleReads = finalPlan.collect {
+        case r @ CoalescedShuffleRead() => r
+      }
+      assert(shuffleReads.nonEmpty, "Expected coalesced shuffle reads")
+      // Tiny data: total size < advisory size, so join floor is NOT enforced
+      val numPartitions = shuffleReads.head.outputPartitioning.numPartitions
+      assert(numPartitions === 1,
+        s"Tiny join data should coalesce to 1 partition, got $numPartitions")
+    }
+    withSparkSession(test, 100000, None)
+  }
+
+  test("SPARK-56145: data-aware floor formula computes correct partition count") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      spark.sessionState.conf.unsetConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key, "false")
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "10")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key, "1")
+
+      // With 10000 rows per side (~160KB each, ~320KB total) and advisory size 100000,
+      // floor = max(2, ceil(320000 / 100000)) = max(2, 4) = 4
+      val df1 = spark.range(0, 10000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key1", "id as value1")
+      val df2 = spark.range(0, 10000, 1, numInputPartitions)
+        .selectExpr("id % 500 as key2", "id as value2")
+
+      val join = df1.join(df2, col("key1") === col("key2")).select(col("key1"), col("value2"))
+      join.collect()
+
+      val finalPlan = stripAQEPlan(join.queryExecution.executedPlan)
+      val shuffleReads = finalPlan.collect {
+        case r @ CoalescedShuffleRead() => r
+      }
+      assert(shuffleReads.nonEmpty, "Expected coalesced shuffle reads")
+      val numPartitions = shuffleReads.head.outputPartitioning.numPartitions
+      // With data > advisory size, floor should produce multiple partitions (>= 2)
+      assert(numPartitions >= 2,
+        s"Data-aware floor should produce multiple partitions, got $numPartitions")
+    }
+    withSparkSession(test, 100000, None)
+  }
+
+  test("SPARK-56145: aggregate over join does not inherit join floor") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      spark.sessionState.conf.unsetConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST.key, "false")
+      spark.conf.set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
+      spark.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "10")
+      spark.conf.set(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key, "1")
+
+      // Aggregate(Join(A, B)) -- the aggregate's shuffle is a SEPARATE coalesce group
+      // from the join's shuffles. The aggregate group should NOT be marked feedsJoin.
+      val df1 = spark.range(0, 10, 1, numInputPartitions)
+        .selectExpr("id % 5 as key1", "id as value1")
+      val df2 = spark.range(0, 10, 1, numInputPartitions)
+        .selectExpr("id % 5 as key2", "id as value2")
+
+      val result = df1.join(df2, col("key1") === col("key2"))
+        .groupBy("key1").count()
+      result.collect()
+
+      val finalPlan = stripAQEPlan(result.queryExecution.executedPlan)
+      // The final aggregate shuffle read (topmost) should be able to coalesce freely
+      // because it's a separate coalesce group from the join
+      val shuffleReads = finalPlan.collect {
+        case r @ CoalescedShuffleRead() => r
+      }
+      // The aggregate's coalesce group has tiny data (10 rows aggregated to 5 groups)
+      // and is NOT a join, so it can coalesce to 1
+      assert(shuffleReads.nonEmpty, "Expected coalesced shuffle reads")
+      // Find the topmost shuffle read (aggregate stage)
+      val topRead = shuffleReads.last
+      val numPartitions = topRead.outputPartitioning.numPartitions
+      assert(numPartitions <= 2,
+        s"Aggregate over join should coalesce freely (not inherit join floor), " +
+          s"got $numPartitions")
+    }
+    withSparkSession(test, 100000, None)
+  }
 }
 
 object CoalescedShuffleRead {
