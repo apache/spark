@@ -1259,7 +1259,8 @@ object RegExpUtils {
        |if (!$regexp.equals($termLastRegex)) {
        |  // regex value changed
        |  UTF8String r = $regexp.clone();
-       |  $termPattern = $utils.compileRegexPattern(r.toString(), $collationRegexFlags, "$prettyName");
+       |  $termPattern =
+       |    $utils.compileRegexPattern(r.toString(), $collationRegexFlags, "$prettyName");
        |  $termLastRegex = r;
        |}
        |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
