@@ -19,7 +19,11 @@ package org.apache.spark.sql.catalyst.expressions;
 
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 
+import org.apache.spark.SparkDateTimeException;
+import org.apache.spark.sql.catalyst.util.DateTimeConstants;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.IntervalUtils;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
@@ -66,6 +70,68 @@ public final class DateTimeExpressionUtils {
       return IntervalUtils.makeInterval(years, months, weeks, days, hours, mins, secs);
     } catch (ArithmeticException e) {
       throw QueryExecutionErrors.arithmeticOverflowError(e.getMessage(), "", null);
+    }
+  }
+
+  /**
+   * Builds the microsecond count for
+   * {@code MakeTimestamp(year, month, day, hour, min, secAndMicros[, timezone])}.
+   * {@code secAndMicros} carries the whole seconds plus the microsecond fraction
+   * (scale 6); a value of {@code 60} seconds with no fraction is accepted for
+   * PostgreSQL compatibility and rolls over to the next minute. When
+   * {@code timestampNTZ} is {@code true} the result is the local-time micros
+   * (no zone applied); otherwise {@code zoneId} is used to resolve the instant.
+   *
+   * <p>This is the shared, exception-raising core used by both the eval and
+   * codegen paths. It throws {@link SparkDateTimeException} for an invalid
+   * fraction-of-second and {@link DateTimeException} for an invalid
+   * year/month/day/hour/min combination; callers decide how to translate those.
+   */
+  public static long makeTimestampMicros(
+      int year, int month, int day, int hour, int min,
+      Decimal secAndMicros, ZoneId zoneId, boolean timestampNTZ) {
+    assert secAndMicros.scale() == 6 :
+      "Seconds fraction must have 6 digits for microseconds but got " + secAndMicros.scale();
+    // 8 digits cannot overflow Int.
+    int totalMicros = (int) secAndMicros.toUnscaledLong();
+    int microsPerSecond = (int) DateTimeConstants.MICROS_PER_SECOND;
+    int seconds = Math.floorDiv(totalMicros, microsPerSecond);
+    int nanos = Math.floorMod(totalMicros, microsPerSecond) * (int) DateTimeConstants.NANOS_PER_MICROS;
+    LocalDateTime ldt;
+    if (seconds == 60) {
+      if (nanos == 0) {
+        // This case of sec = 60 and nanos = 0 is supported for compatibility with PostgreSQL.
+        ldt = LocalDateTime.of(year, month, day, hour, min, 0, 0).plusMinutes(1);
+      } else {
+        throw QueryExecutionErrors.invalidFractionOfSecondError(secAndMicros.toDouble());
+      }
+    } else {
+      ldt = LocalDateTime.of(year, month, day, hour, min, seconds, nanos);
+    }
+    if (timestampNTZ) {
+      return DateTimeUtils.localDateTimeToMicros(ldt);
+    } else {
+      return DateTimeUtils.instantToMicros(ldt.atZone(zoneId).toInstant());
+    }
+  }
+
+  /**
+   * ANSI ({@code failOnError = true}) variant of {@link #makeTimestampMicros}: a
+   * {@link SparkDateTimeException} (e.g. an invalid fraction of second) is
+   * rethrown as-is to preserve its message, while any other
+   * {@link DateTimeException} is translated to {@code ansiDateTimeArgumentOutOfRange}.
+   * {@code SparkDateTimeException} is caught first because it is itself a
+   * {@link DateTimeException}.
+   */
+  public static long makeTimestampExact(
+      int year, int month, int day, int hour, int min,
+      Decimal secAndMicros, ZoneId zoneId, boolean timestampNTZ) {
+    try {
+      return makeTimestampMicros(year, month, day, hour, min, secAndMicros, zoneId, timestampNTZ);
+    } catch (SparkDateTimeException e) {
+      throw e;
+    } catch (DateTimeException e) {
+      throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);
     }
   }
 }
