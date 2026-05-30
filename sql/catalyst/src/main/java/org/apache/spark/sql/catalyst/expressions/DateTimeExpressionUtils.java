@@ -95,8 +95,9 @@ public final class DateTimeExpressionUtils {
     // 8 digits cannot overflow Int.
     int totalMicros = (int) secAndMicros.toUnscaledLong();
     int microsPerSecond = (int) DateTimeConstants.MICROS_PER_SECOND;
+    int nanosPerMicros = (int) DateTimeConstants.NANOS_PER_MICROS;
     int seconds = Math.floorDiv(totalMicros, microsPerSecond);
-    int nanos = Math.floorMod(totalMicros, microsPerSecond) * (int) DateTimeConstants.NANOS_PER_MICROS;
+    int nanos = Math.floorMod(totalMicros, microsPerSecond) * nanosPerMicros;
     LocalDateTime ldt;
     if (seconds == 60) {
       if (nanos == 0) {
