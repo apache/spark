@@ -39,11 +39,11 @@ trait BaseJoinExec extends BinaryExecNode {
 
   override def doCanonicalize(): BaseJoinExec = {
     val baseCanonicalized = super.doCanonicalize().asInstanceOf[BaseJoinExec]
-    val (newLeft, newRight) = baseCanonicalized.leftKeys.zip(baseCanonicalized.rightKeys)
+    val (newLeftKeys, newRightKeys) = baseCanonicalized.leftKeys.zip(baseCanonicalized.rightKeys)
       .sortBy {
         case (l, _) => l.hashCode()
       }.unzip
-    doCanonicalizePart2(baseCanonicalized, newLeft, newRight)
+    doCanonicalizePart2(baseCanonicalized, newLeftKeys, newRightKeys)
   }
 
   override def simpleStringWithNodeId(): String = {
