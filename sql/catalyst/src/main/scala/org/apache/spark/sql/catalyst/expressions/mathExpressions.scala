@@ -877,47 +877,11 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
   since = "3.0.0",
   group = "math_funcs")
 case class Asinh(child: Expression)
-  extends UnaryMathExpression((x: Double) => {
-    // fdlibm s_asinh.c algorithm
-    val ax = Math.abs(x)
-    val w = if (ax.isInfinite || ax.isNaN) {
-      ax
-    } else if (ax < 1.0 / (1 << 28)) {
-      ax
-    } else if (ax > (1 << 28)) {
-      StrictMath.log(ax) + StrictMath.log(2.0)
-    } else if (ax > 2.0) {
-      StrictMath.log(2.0 * ax + 1.0 / (math.sqrt(x * x + 1.0) + ax))
-    } else {
-      val t = x * x
-      StrictMath.log1p(ax + t / (1.0 + math.sqrt(1.0 + t)))
-    }
-    Math.copySign(w, x)
-  }, "ASINH") {
+  // fdlibm s_asinh.c algorithm, shared with codegen via ExpressionImplUtils.asinh.
+  extends UnaryMathExpression((x: Double) => ExpressionImplUtils.asinh(x), "ASINH") {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, c => {
-      val sm = "java.lang.StrictMath"
-      val ax = ctx.freshName("ax")
-      val w = ctx.freshName("w")
-      val t = ctx.freshName("t")
-      s"""
-         |double $ax = java.lang.Math.abs($c);
-         |double $w;
-         |if (java.lang.Double.isInfinite($ax) || java.lang.Double.isNaN($ax)) {
-         |  $w = $ax;
-         |} else if ($ax < ${1.0 / (1 << 28)}) {
-         |  $w = $ax;
-         |} else if ($ax > ${1 << 28}.0) {
-         |  $w = $sm.log($ax) + $sm.log(2.0);
-         |} else if ($ax > 2.0) {
-         |  $w = $sm.log(2.0 * $ax + 1.0 / (java.lang.Math.sqrt($c * $c + 1.0) + $ax));
-         |} else {
-         |  double $t = $c * $c;
-         |  $w = $sm.log1p($ax + $t / (1.0 + java.lang.Math.sqrt(1.0 + $t)));
-         |}
-         |${ev.value} = java.lang.Math.copySign($w, $c);
-         |""".stripMargin
-    })
+    val utils = classOf[ExpressionImplUtils].getName
+    defineCodeGen(ctx, ev, c => s"$utils.asinh($c)")
   }
   override protected def withNewChildInternal(newChild: Expression): Asinh = copy(child = newChild)
 }
