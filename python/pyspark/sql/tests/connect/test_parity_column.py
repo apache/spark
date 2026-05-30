@@ -100,8 +100,8 @@ class ColumnParityTestsWithNonStrictDFColResolution(ColumnParityTests):
         self.assertEqual([r.c for r in rows], ["1"])
 
     def test_resolve_after_agg_alias_shadow(self):
-        df = self.spark.sql("SELECT 1 AS x")
-        rows = df.groupBy().agg(sf.sum("x").alias("c")).select(df["c"]).collect()
+        df = self.spark.sql("SELECT 1 AS c")
+        rows = df.groupBy().agg(sf.sum("c").alias("c")).select(df.c).collect()
         self.assertEqual([r.c for r in rows], [1])
 
 

@@ -891,9 +891,9 @@ class ColumnTestsMixin:
         # source attribute, so it cannot resolve.
         # Connect lenient diverges: name-based fallback resolves the
         # aliased name (overridden in the lenient parity suite).
-        df = self.spark.sql("SELECT 1 AS x")
+        df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException):
-            df.groupBy().agg(sf.sum("x").alias("c")).select(df["c"]).collect()
+            df.groupBy().agg(sf.sum("c").alias("c")).select(df.c).collect()
 
     def test_resolve_after_pivot(self):
         # pivot preserves the grouping key's attribute id, so the tagged
