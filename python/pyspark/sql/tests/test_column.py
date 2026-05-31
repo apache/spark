@@ -750,7 +750,7 @@ class ColumnTestsMixin:
             .collect()
         )
         # Cube emits one (category, status, detail_name) group per distinct
-        # combination plus one (category, status, NULL) rollup per distinct
+        # combination plus one (category, status, NULL) subtotal per distinct
         # (category, status) pair. The where filter keeps both.
         self.assertEqual(len(rows), 6)
         self.assertEqual({r.category for r in rows}, {"Books", "Electronics", "Home"})
