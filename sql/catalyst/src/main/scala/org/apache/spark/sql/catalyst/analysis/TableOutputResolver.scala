@@ -327,7 +327,25 @@ object TableOutputResolver extends SQLConfHelper with Logging {
             tableName, newColPath.quoted
           )
         }
-        Some(applyColumnMetadata(defaultExpr.get, expectedCol))
+        // Apply CHAR/VARCHAR length check to the default expression so that non-foldable
+        // defaults (e.g. current_user()) that exceed the column length are caught at runtime.
+        // Uses getRawType so it works for both V1 and V2 tables.
+        val checkedExpr = defaultExpr.map { expr =>
+          val rawType = CharVarcharUtils.getRawType(expectedCol.metadata)
+            .getOrElse(expectedCol.dataType)
+          if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(rawType)) {
+            expr match {
+              case a: Alias =>
+                a.copy(child = CharVarcharUtils.stringLengthCheck(a.child, rawType))(
+                  a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
+              case other =>
+                Alias(CharVarcharUtils.stringLengthCheck(other, rawType), expectedCol.name)()
+            }
+          } else {
+            expr
+          }
+        }
+        Some(applyColumnMetadata(checkedExpr.get, expectedCol))
       } else if (matched.length > 1) {
         throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
           tableName, newColPath.quoted

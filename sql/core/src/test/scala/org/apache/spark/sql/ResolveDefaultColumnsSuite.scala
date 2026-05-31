@@ -308,4 +308,83 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
       checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
     }
   }
+
+  test("SPARK-57187: current_user() as default for CHAR column should not throw INTERNAL_ERROR") {
+    val tableName = "test_current_user_char"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s CHAR(100) DEFAULT current_user()) USING parquet")
+      sql(s"INSERT INTO $tableName (i) VALUES (1)")
+      val result = sql(s"SELECT i, TRIM(s) FROM $tableName").collect()
+      assert(result.length == 1)
+      assert(result.head.getInt(0) == 1)
+      assert(result.head.getString(1) == user)
+    }
+  }
+
+  test("SPARK-57187: current_user() as default for VARCHAR column") {
+    val tableName = "test_current_user_varchar"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s VARCHAR(100) DEFAULT current_user()) USING parquet")
+      sql(s"INSERT INTO $tableName (i) VALUES (1)")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(1, user)))
+    }
+  }
+
+  test("SPARK-57187: ALTER TABLE with current_user() default for CHAR column") {
+    val tableName = "test_current_user_char_alter"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(id INT, created_by CHAR(100)) USING parquet")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN created_by SET DEFAULT current_user()")
+      sql(s"INSERT INTO $tableName (id) VALUES (1)")
+      val result = sql(s"SELECT id, TRIM(created_by) FROM $tableName").collect()
+      assert(result.length == 1)
+      assert(result.head.getInt(0) == 1)
+      assert(result.head.getString(1) == user)
+    }
+  }
+
+  test("SPARK-57187: foldable default exceeding CHAR/VARCHAR length fails at DDL time") {
+    // Foldable expressions are still validated eagerly at DDL time (existing behavior)
+    Seq("CHAR", "VARCHAR").foreach { typeName =>
+      checkError(
+        exception = intercept[SparkRuntimeException](
+          sql(s"CREATE TABLE t(c $typeName(3) DEFAULT 'toolong') USING parquet")),
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+    }
+  }
+
+  test("SPARK-57187: non-foldable default exceeding CHAR/VARCHAR length fails at INSERT time " +
+      "(implicit default)") {
+    // current_user() exceeds CHAR(1)/VARCHAR(1) -- DDL succeeds because the expression is
+    // non-foldable, but INSERT should fail at runtime with EXCEED_LIMIT_LENGTH.
+    Seq("CHAR", "VARCHAR").foreach { typeName =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(i INT, s $typeName(1) DEFAULT current_user()) USING parquet")
+        checkError(
+          exception = intercept[SparkRuntimeException](
+            sql("INSERT INTO t (i) VALUES (1)")),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "1"))
+      }
+    }
+  }
+
+  test("SPARK-57187: non-foldable default exceeding CHAR/VARCHAR length fails at INSERT time " +
+      "(explicit DEFAULT keyword)") {
+    // Using the explicit DEFAULT keyword in VALUES goes through the checkField path.
+    Seq("CHAR", "VARCHAR").foreach { typeName =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(i INT, s $typeName(1) DEFAULT current_user()) USING parquet")
+        checkError(
+          exception = intercept[SparkRuntimeException](
+            sql("INSERT INTO t VALUES (1, DEFAULT)")),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "1"))
+      }
+    }
+  }
 }
