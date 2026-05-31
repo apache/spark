@@ -197,7 +197,7 @@ case class SortMergeJoinExec(
     val firstCompare = pairs.headOption.map { case ((l, r), i) =>
       s"comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};"
     }.getOrElse("comp = 0;")
-    val restCompares = pairs.tail.map { case ((l, r), i) =>
+    val restCompares = pairs.drop(1).map { case ((l, r), i) =>
       s"""
          |if (comp == 0) {
          |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
@@ -363,7 +363,7 @@ case class SortMergeJoinExec(
          |    if (!streamedIter.hasNext()) return false;
          |    $streamedRow = (InternalRow) streamedIter.next();
          |    ${streamedKeyVars.map(_.code).mkString("\n")}
-         |    $checkStreamedAnyNull
+         |    ${checkStreamedAnyNull.trim}
          |    if (!$matches.isEmpty()) {
          |      ${genComparison(ctx, streamedKeyVars, matchedKeyVars)}
          |      if (comp == 0) {
@@ -380,7 +380,7 @@ case class SortMergeJoinExec(
          |        }
          |        $bufferedRow = (InternalRow) bufferedIter.next();
          |        ${bufferedKeyTmpVars.map(_.code).mkString("\n")}
-         |        $checkBufferedAnyNull
+         |        ${checkBufferedAnyNull.trim}
          |        ${bufferedKeyVars.map(_.code).mkString("\n")}
          |      }
          |      ${genComparison(ctx, streamedKeyVars, bufferedKeyVars)}
@@ -957,10 +957,10 @@ case class SortMergeJoinExec(
          |  }
          |
          |  ${leftKeyVars.map(_.code).mkString("\n")}
-         |  $checkLeftAnyNull
+         |  ${checkLeftAnyNull.trim}
          |
          |  ${rightKeyVars.map(_.code).mkString("\n")}
-         |  $checkRightAnyNull
+         |  ${checkRightAnyNull.trim}
          |
          |  ${genComparison(ctx, leftKeyVars, rightKeyVars)}
          |  if (comp < 0) {
