@@ -272,6 +272,8 @@ private object RowToColumnConverter {
       case _: GeometryType => GeometryConverter
       case CalendarIntervalType => CalendarConverter
       case VariantType => VariantConverter
+      case _: TimestampNTZNanosType => TimestampNTZNanosConverter
+      case _: TimestampLTZNanosType => TimestampLTZNanosConverter
       case at: ArrayType => ArrayConverter(getConverterForType(at.elementType, at.containsNull))
       case st: StructType => new StructConverter(st.fields.map(
         (f) => getConverterForType(f.dataType, f.nullable)))
@@ -284,6 +286,8 @@ private object RowToColumnConverter {
     if (nullable) {
       dataType match {
         case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
+        case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+          new StructNullableTypeConverter(core)
         case st: StructType => new StructNullableTypeConverter(core)
         case _ => new BasicNullableTypeConverter(core)
       }
@@ -371,6 +375,24 @@ private object RowToColumnConverter {
       cv.appendStruct(false)
       cv.getChild(0).appendByteArray(v.getValue, 0, v.getValue.length)
       cv.getChild(1).appendByteArray(v.getMetadata, 0, v.getMetadata.length)
+    }
+  }
+
+  private object TimestampNTZNanosConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val v = row.getTimestampNTZNanos(column)
+      cv.appendStruct(false)
+      cv.getChild(0).appendLong(v.epochMicros)
+      cv.getChild(1).appendShort(v.nanosWithinMicro)
+    }
+  }
+
+  private object TimestampLTZNanosConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val v = row.getTimestampLTZNanos(column)
+      cv.appendStruct(false)
+      cv.getChild(0).appendLong(v.epochMicros)
+      cv.getChild(1).appendShort(v.nanosWithinMicro)
     }
   }
 
