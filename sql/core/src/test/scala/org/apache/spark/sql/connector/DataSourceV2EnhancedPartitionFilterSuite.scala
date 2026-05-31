@@ -49,6 +49,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * 6. Untranslatable, Data Filter -> Post-Scan Filters
  * 7. Untranslatable, Partition Filter, 2nd Pass Returned -> Post-Scan Filters
  * 8. Untranslatable, Partition Filter, 2nd Pass Accepted -> Pushed Down
+ * 9. Translated, Partition Filter, 1st Pass Accepted AND Returned (partial pushdown) ->
+ *    Pushed Down in 1st pass, NOT re-derived in 2nd pass.
  */
 class DataSourceV2EnhancedPartitionFilterSuite
   extends SharedSparkSession with BeforeAndAfter with PredicateHelper {
@@ -220,6 +222,30 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
+  test("case 9: partition filter pushed but returned in first pass is not re-pushed second pass") {
+    withTable(partFilterTableName) {
+      // The source accepts the partition predicate in the first pass (so it is reported by
+      // pushedPredicates and prunes partitions) but also returns it for post-scan evaluation,
+      // simulating a partial pushdown (e.g. a row group filter).
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col) " +
+        "TBLPROPERTIES('return-accepted-partition-predicates' = 'true')")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
+
+      // Translated, Partition Filter; 1st Pass Accepted AND Returned.
+      // The second pass derives PartitionPredicates only from filters that were NOT already
+      // pushed (not in pushedPredicates). Since this filter was pushed in the first pass, it must
+      // NOT be pushed again as a PartitionPredicate in the second pass.
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col = 'b'")
+      checkAnswer(df, Seq(Row("b", "y")))
+      assertPushedPartitionPredicates(df, 0)
+      assertScanReturnsPartitionKeys(df, Set("b"))
+      // The returned filter is still evaluated after the scan.
+      assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]),
+        "Partition filter returned in first pass should remain as a post-scan Filter")
+    }
+  }
+
   test("nested identity partition: second-pass PartitionPredicate with UDF on nested key") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName " +
@@ -254,6 +280,34 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row(Row("LA", 1), "a")))
       assertPushedPartitionPredicates(df, 0)
       assertScanReturnsPartitionKeys(df, Set("LA", "NY"))
+    }
+  }
+
+  test("nested identity partition: case 9 partition filter pushed but returned in first pass " +
+    "is not re-pushed second pass") {
+    withTable(partFilterTableName) {
+      // The source accepts the partition predicate in the first pass (so it is reported by
+      // pushedPredicates and prunes partitions) but also returns it for post-scan evaluation,
+      // simulating a partial pushdown (e.g. a row group filter).
+      sql(s"CREATE TABLE $partFilterTableName " +
+        s"(s struct<tz: string, x: int>, data string) USING $v2Source " +
+        "PARTITIONED BY (s.tz) " +
+        "TBLPROPERTIES('return-accepted-partition-predicates' = 'true')")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "(named_struct('tz', 'LA', 'x', 1), 'a'), " +
+        "(named_struct('tz', 'NY', 'x', 2), 'b')")
+
+      // Translated, Partition Filter; 1st Pass Accepted AND Returned.
+      // The second pass derives PartitionPredicates only from filters that were NOT already
+      // pushed (not in pushedPredicates). Since this filter was pushed in the first pass, it must
+      // NOT be pushed again as a PartitionPredicate in the second pass.
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE s.tz = 'LA'")
+      checkAnswer(df, Seq(Row(Row("LA", 1), "a")))
+      assertPushedPartitionPredicates(df, 0)
+      assertScanReturnsPartitionKeys(df, Set("LA"))
+      // The returned filter is still evaluated after the scan.
+      assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]),
+        "Partition filter returned in first pass should remain as a post-scan Filter")
     }
   }
 

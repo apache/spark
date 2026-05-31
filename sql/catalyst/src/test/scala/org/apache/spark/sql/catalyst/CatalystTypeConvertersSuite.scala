@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String}
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, TimestampNanosVal, UTF8String}
 
 class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
 
@@ -109,7 +109,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(structType)("test")
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -149,7 +149,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(decimalType)("test")
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -169,7 +169,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(StringType)(0.1)
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "0.1",
         "otherClass" -> "java.lang.Double",
@@ -248,6 +248,244 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       assert(CatalystTypeConverters.createToScalaConverter(TimestampNTZType)(us) ===
         localDateTime)
     }
+  }
+
+  test("SPARK-57033: converting java.time.LocalDateTime to TimestampNTZNanosType") {
+    Seq(
+      "0001-01-01T00:00:00",
+      "1582-10-02T01:02:03.04",
+      "1582-12-31T23:59:59.999999999",
+      "1970-01-01T00:00:00.000000001",
+      "1972-12-31T23:59:59.123456789",
+      "2019-02-26T16:56:00.123456789",
+      "9999-12-31T23:59:59.999999999").foreach { text =>
+      val input = LocalDateTime.parse(text)
+      Seq(7, 8, 9).foreach { p =>
+        val dt = TimestampNTZNanosType(p)
+        val result = CatalystTypeConverters.createToCatalystConverter(dt)(input)
+        val expected = DateTimeUtils.localDateTimeToTimestampNanos(input, p)
+        assert(result === expected)
+      }
+    }
+  }
+
+  test("SPARK-57033: converting TimestampNTZNanosType to java.time.LocalDateTime") {
+    Seq(
+      "1582-10-02T01:02:03.04",
+      "1582-12-31T23:59:59.999999999",
+      "1970-01-01T00:00:00.000000001",
+      "1972-12-31T23:59:59.123456789",
+      "2019-02-26T16:56:00.123456789",
+      "9999-12-31T23:59:59.999999999").foreach { text =>
+      val ldt = LocalDateTime.parse(text)
+      val v = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision = 9)
+      Seq(7, 8, 9).foreach { p =>
+        val dt = TimestampNTZNanosType(p)
+        assert(CatalystTypeConverters.createToScalaConverter(dt)(v) === ldt)
+      }
+    }
+  }
+
+  test("SPARK-57033: converting java.time.Instant to TimestampLTZNanosType") {
+    Seq(
+      "0001-01-01T00:00:00Z",
+      "1582-10-02T01:02:03.04Z",
+      "1582-12-31T23:59:59.999999999Z",
+      "1970-01-01T00:00:00.000000001Z",
+      "1972-12-31T23:59:59.123456789Z",
+      "2019-02-26T16:56:00.123456789Z",
+      "9999-12-31T23:59:59.999999999Z").foreach { text =>
+      val input = Instant.parse(text)
+      Seq(7, 8, 9).foreach { p =>
+        val dt = TimestampLTZNanosType(p)
+        val result = CatalystTypeConverters.createToCatalystConverter(dt)(input)
+        val expected = DateTimeUtils.instantToTimestampNanos(input, p)
+        assert(result === expected)
+      }
+    }
+  }
+
+  test("SPARK-57033: converting TimestampLTZNanosType to java.time.Instant") {
+    Seq(
+      "1582-10-02T01:02:03.04Z",
+      "1582-12-31T23:59:59.999999999Z",
+      "1970-01-01T00:00:00.000000001Z",
+      "1972-12-31T23:59:59.123456789Z",
+      "2019-02-26T16:56:00.123456789Z",
+      "9999-12-31T23:59:59.999999999Z").foreach { text =>
+      val instant = Instant.parse(text)
+      val v = DateTimeUtils.instantToTimestampNanos(instant, precision = 9)
+      Seq(7, 8, 9).foreach { p =>
+        val dt = TimestampLTZNanosType(p)
+        assert(CatalystTypeConverters.createToScalaConverter(dt)(v) === instant)
+      }
+    }
+  }
+
+  test("SPARK-57033: TimestampLTZNanosType -> Instant ignores java8 API flag") {
+    val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val v = DateTimeUtils.instantToTimestampNanos(instant, precision = 9)
+    val dt = TimestampLTZNanosType()
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> flag) {
+        assert(CatalystTypeConverters.createToCatalystConverter(dt)(instant) === v)
+        assert(CatalystTypeConverters.createToScalaConverter(dt)(v) === instant)
+      }
+    }
+  }
+
+  test("SPARK-57033: TimestampNanosConverter null handling in rows") {
+    val schema = StructType(
+      StructField("ntz", TimestampNTZNanosType(9), nullable = true) ::
+        StructField("ltz", TimestampLTZNanosType(9), nullable = true) :: Nil)
+    val toCat = CatalystTypeConverters.createToCatalystConverter(schema)
+    val toScala = CatalystTypeConverters.createToScalaConverter(schema)
+    // Reference value to ensure non-null cells are kept as-is.
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    val instant = Instant.parse("2019-02-26T16:56:00.987654321Z")
+    val row = Row(ldt, instant)
+    val catalystRow = toCat(row).asInstanceOf[InternalRow]
+    assert(catalystRow.getTimestampNTZNanos(0) ===
+      DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision = 9))
+    assert(catalystRow.getTimestampLTZNanos(1) ===
+      DateTimeUtils.instantToTimestampNanos(instant, precision = 9))
+    assert(toScala(catalystRow) === row)
+    // Null row.
+    val nullRow = Row.fromSeq(Seq(null, null))
+    assert(toScala(toCat(nullRow)) === nullRow)
+  }
+
+  test("SPARK-57033: TimestampNTZNanosType converter truncates sub-micro to precision") {
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    val negativeEpochLdt = LocalDateTime.parse("1969-12-31T23:59:59.123456789")
+    val cases = Map(7 -> 700, 8 -> 780, 9 -> 789)
+    Seq(ldt, negativeEpochLdt).foreach { input =>
+      cases.foreach { case (p, expectedNanosWithinMicro) =>
+        val dt = TimestampNTZNanosType(p)
+        val v = CatalystTypeConverters.createToCatalystConverter(dt)(input)
+          .asInstanceOf[TimestampNanosVal]
+        assert(v.nanosWithinMicro === expectedNanosWithinMicro,
+          s"input=$input, precision=$p: expected $expectedNanosWithinMicro, " +
+            s"got ${v.nanosWithinMicro}")
+      }
+    }
+  }
+
+  test("SPARK-57033: TimestampLTZNanosType converter truncates sub-micro to precision") {
+    val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val negativeEpochInstant = Instant.parse("1969-12-31T23:59:59.123456789Z")
+    val cases = Map(7 -> 700, 8 -> 780, 9 -> 789)
+    Seq(instant, negativeEpochInstant).foreach { input =>
+      cases.foreach { case (p, expectedNanosWithinMicro) =>
+        val dt = TimestampLTZNanosType(p)
+        val v = CatalystTypeConverters.createToCatalystConverter(dt)(input)
+          .asInstanceOf[TimestampNanosVal]
+        assert(v.nanosWithinMicro === expectedNanosWithinMicro,
+          s"input=$input, precision=$p: expected $expectedNanosWithinMicro, " +
+            s"got ${v.nanosWithinMicro}")
+      }
+    }
+  }
+
+  test("SPARK-57033: TimestampNTZNanosType converter rejects wrong external type") {
+    val dt = TimestampNTZNanosType(9)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(dt)("not-a-LocalDateTime")
+      },
+      condition = "INVALID_EXTERNAL_VALUE",
+      parameters = Map(
+        "other" -> "not-a-LocalDateTime",
+        "otherClass" -> "java.lang.String",
+        "dataType" -> "TIMESTAMP_NTZ(9)"))
+    // An `Instant` is also not accepted - the NTZ nano converter is wall-clock only.
+    val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(dt)(instant)
+      },
+      condition = "INVALID_EXTERNAL_VALUE",
+      parameters = Map(
+        "other" -> instant.toString,
+        "otherClass" -> "java.time.Instant",
+        "dataType" -> "TIMESTAMP_NTZ(9)"))
+  }
+
+  test("SPARK-57033: TimestampLTZNanosType converter rejects wrong external type") {
+    val dt = TimestampLTZNanosType(9)
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(dt)("not-an-Instant")
+      },
+      condition = "INVALID_EXTERNAL_VALUE",
+      parameters = Map(
+        "other" -> "not-an-Instant",
+        "otherClass" -> "java.lang.String",
+        "dataType" -> "TIMESTAMP_LTZ(9)"))
+    // A `LocalDateTime` is also not accepted - LTZ requires an absolute instant.
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(dt)(ldt)
+      },
+      condition = "INVALID_EXTERNAL_VALUE",
+      parameters = Map(
+        "other" -> ldt.toString,
+        "otherClass" -> "java.time.LocalDateTime",
+        "dataType" -> "TIMESTAMP_LTZ(9)"))
+    // The legacy `java.sql.Timestamp` external type is intentionally out of scope for
+    // `TimestampLTZNanosType` (see SPARK-57033). Verify it is rejected, not silently
+    // accepted via a fallback.
+    val ts = java.sql.Timestamp.from(Instant.parse("2019-02-26T16:56:00.123456789Z"))
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        CatalystTypeConverters.createToCatalystConverter(dt)(ts)
+      },
+      condition = "INVALID_EXTERNAL_VALUE",
+      parameters = Map(
+        "other" -> ts.toString,
+        "otherClass" -> "java.sql.Timestamp",
+        "dataType" -> "TIMESTAMP_LTZ(9)"))
+  }
+
+  test("SPARK-57033: nested nanos timestamp types in arrays / maps / structs") {
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    val instant = Instant.parse("2019-02-26T16:56:00.987654321Z")
+    val ldtNano = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision = 9)
+    val instantNano = DateTimeUtils.instantToTimestampNanos(instant, precision = 9)
+
+    // Array of TimestampNTZNanosType.
+    val ntzArrayType = ArrayType(TimestampNTZNanosType(9), containsNull = true)
+    val ldts = Seq(ldt, null, ldt)
+    val catArr = CatalystTypeConverters.createToCatalystConverter(ntzArrayType)(ldts)
+      .asInstanceOf[GenericArrayData]
+    assert(catArr.numElements() === 3)
+    assert(catArr.get(0, TimestampNTZNanosType(9)) === ldtNano)
+    assert(catArr.isNullAt(1))
+    assert(catArr.get(2, TimestampNTZNanosType(9)) === ldtNano)
+    assert(CatalystTypeConverters.createToScalaConverter(ntzArrayType)(catArr) === ldts)
+
+    // Map of (String -> TimestampLTZNanosType).
+    val ltzMapType = MapType(StringType, TimestampLTZNanosType(9), valueContainsNull = true)
+    val instants = Map[String, Instant]("a" -> instant, "b" -> null)
+    val catMap = CatalystTypeConverters.createToCatalystConverter(ltzMapType)(instants)
+    val backMap = CatalystTypeConverters.createToScalaConverter(ltzMapType)(catMap)
+      .asInstanceOf[Map[Any, Any]]
+    assert(backMap("a") === instant)
+    assert(backMap("b") == null)
+
+    // Struct with both nano fields plus a non-nano field, and a null row.
+    val nestedStruct = StructType(
+      StructField("ntz", TimestampNTZNanosType(9), nullable = true) ::
+        StructField("ltz", TimestampLTZNanosType(9), nullable = true) ::
+        StructField("name", StringType, nullable = true) :: Nil)
+    val outerStruct = StructType(StructField("inner", nestedStruct, nullable = true) :: Nil)
+    val outerToCat = CatalystTypeConverters.createToCatalystConverter(outerStruct)
+    val outerToScala = CatalystTypeConverters.createToScalaConverter(outerStruct)
+    val outerRow = Row(Row(ldt, instant, "abc"))
+    val nullOuterRow = Row(null)
+    assert(outerToScala(outerToCat(outerRow)) === outerRow)
+    assert(outerToScala(outerToCat(nullOuterRow)) === nullOuterRow)
   }
 
   test("converting java.time.LocalDate to DateType") {
@@ -579,7 +817,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(gt)("test")
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",
@@ -592,7 +830,7 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       exception = intercept[SparkIllegalArgumentException] {
         CatalystTypeConverters.createToCatalystConverter(gt)("test")
       },
-      condition = "_LEGACY_ERROR_TEMP_3219",
+      condition = "INVALID_EXTERNAL_VALUE",
       parameters = Map(
         "other" -> "test",
         "otherClass" -> "java.lang.String",

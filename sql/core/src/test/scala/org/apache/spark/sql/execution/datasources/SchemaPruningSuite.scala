@@ -636,6 +636,22 @@ abstract class SchemaPruningSuite
     checkAnswer(query4, Row(2, null) :: Row(2, 4) :: Nil)
   }
 
+  testSchemaPruning("SPARK-57043: prune nested grouping field after collapsing count rollup") {
+    val query = sql(
+      """
+        |SELECT id, SUM(cnt)
+        |FROM (
+        |  SELECT id, name.last, COUNT(*) AS cnt
+        |  FROM contacts
+        |  WHERE name.first IS NOT NULL
+        |  GROUP BY id, name.last
+        |)
+        |GROUP BY id
+        |""".stripMargin)
+    checkScan(query, "struct<id:int,name:struct<first:string>>")
+    checkAnswer(query.orderBy("id"), Row(0, 1L) :: Row(1, 1L) :: Row(2, 1L) :: Row(3, 1L) :: Nil)
+  }
+
   testSchemaPruning("select nested field in window function") {
     val windowSql =
       """
