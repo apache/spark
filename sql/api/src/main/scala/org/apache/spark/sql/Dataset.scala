@@ -820,6 +820,28 @@ abstract class Dataset[T] extends Serializable {
   def crossJoin(right: Dataset[_]): DataFrame
 
   /**
+   * Combines the columns of this DataFrame with another DataFrame side-by-side, preserving row
+   * alignment between the two inputs.
+   *
+   * Both DataFrames must produce the same canonicalized plan after stripping outer `Project`
+   * chains. In practice this means they derive from a common source through chains of
+   * projection-only operations (`select`, `withColumn`, `withColumnRenamed`, etc.); the chains
+   * may differ between the two sides, but anything below them -- including any `filter`,
+   * `orderBy`, `join`, or aggregation -- must be identical on both sides so the two sides stay
+   * row-aligned. Non-scalar Python UDFs (e.g., `GROUPED_MAP`) are not allowed on either side. An
+   * `AnalysisException` is thrown when the two DataFrames cannot be aligned.
+   *
+   * @param other
+   *   The DataFrame to combine with, which must derive from the same source as this DataFrame.
+   * @return
+   *   A new DataFrame containing the columns of this DataFrame followed by the columns of
+   *   `other`.
+   * @group untypedrel
+   * @since 4.3.0
+   */
+  def zip(other: Dataset[_]): DataFrame
+
+  /**
    * Joins this Dataset returning a `Tuple2` for each pair where `condition` evaluates to true.
    *
    * This is similar to the relation `join` function with one important difference in the result

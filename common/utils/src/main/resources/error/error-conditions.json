@@ -8965,6 +8965,12 @@
     ],
     "sqlState" : "42KDF"
   },
+  "ZIP_PLANS_NOT_MERGEABLE" : {
+    "message" : [
+      "The two DataFrames in zip() cannot be merged. They must produce the same canonicalized plan after stripping outer Project chains, and must not contain non-scalar Python UDFs."
+    ],
+    "sqlState" : "42K03"
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."
