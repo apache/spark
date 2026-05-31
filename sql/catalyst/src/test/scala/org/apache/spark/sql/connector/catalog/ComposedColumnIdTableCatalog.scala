@@ -96,6 +96,7 @@ class ComposedColumnIdTableCatalog extends InMemoryTableCatalog {
       table.constraints,
       id = table.id)
     composedTable.alterTableWithData(table.data, table.schema)
+    composedTable.setVersionAndValidatedVersionFrom(table)
     tables.put(ident, composedTable)
     composedTable
   }
@@ -157,6 +158,7 @@ class ComposedColumnIdTableCatalog extends InMemoryTableCatalog {
       alteredTable.constraints,
       id = alteredTable.id)
     composedTable.alterTableWithData(alteredTable.data, alteredTable.schema)
+    composedTable.setVersionAndValidatedVersionFrom(alteredTable)
     tables.put(ident, composedTable)
     composedTable
   }
