@@ -96,18 +96,21 @@ object ResolveZip extends Rule[LogicalPlan] {
     val layered = buildLayeredChain(dedupedAliases, leftBase)
     // Build the top-level output list. For each top-level expression:
     //   - If it references a dropped alias, use the survivor attribute -- but re-alias it to the
-    //     original name/exprId so the schema stays correct. Two sides may expose the same
-    //     deterministic producer under different names (e.g. df.select($"a".as("x")).zip(
-    //     df.select($"a".as("y")))); dedup keeps the survivor's name only for internal references,
-    //     not for user-visible output columns.
+    //     dropped column's own name, exprId, and metadata so the schema stays correct. Two sides
+    //     may expose the same deterministic producer under different names (e.g.
+    //     df.select($"a".as("x")).zip(df.select($"a".as("y")))); dedup keeps the survivor's
+    //     identity only for internal references, not for user-visible output columns. Only the
+    //     producer (value) is shared; the dropped column keeps its own name and metadata.
     //   - Otherwise pass the attribute through unchanged.
     val finalProjectList: Seq[NamedExpression] =
       (leftTopList ++ remappedRightTopList).map { ne =>
         val attr = ne.toAttribute
         droppedToSurvivor.get(attr.exprId) match {
           case Some(survivorAttr) =>
-            // Preserve the original output name and exprId; only the producer is shared.
-            Alias(survivorAttr, attr.name)(exprId = attr.exprId)
+            // Force explicitMetadata so the output column keeps the dropped column's own metadata
+            // even though its value now comes from the survivor attribute.
+            Alias(survivorAttr, attr.name)(
+              exprId = attr.exprId, explicitMetadata = Some(attr.metadata))
           case None => remapDropped(attr)
         }
       }

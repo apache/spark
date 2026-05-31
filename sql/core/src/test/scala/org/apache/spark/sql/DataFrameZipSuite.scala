@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.Rand
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions.{lit, rand, uniform}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.MetadataBuilder
 
 class DataFrameZipSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -208,5 +209,21 @@ class DataFrameZipSuite extends QueryTest with SharedSparkSession {
     assert(zipped2.columns === Array("x", "y"),
       s"expected schema [x, y] but got ${zipped2.columns.mkString("[", ", ", "]")}")
     checkAnswer(zipped2, Row(2, 2) :: Row(4, 4) :: Nil)
+  }
+
+  test("zip: shared-producer dedup preserves each side's output column metadata") {
+    // Both sides project the same producer under different names AND different metadata. The
+    // dedup shares the producer (value), but each output column must keep its own metadata --
+    // the dropped column must not inherit the survivor's.
+    val mx = new MetadataBuilder().putString("desc", "left").build()
+    val my = new MetadataBuilder().putString("desc", "right").build()
+    val df = Seq((1, 2), (3, 4)).toDF("a", "b")
+    val zipped = df.select($"a".as("x", mx)).zip(df.select($"a".as("y", my)))
+    assert(zipped.columns === Array("x", "y"))
+    assert(zipped.schema("x").metadata === mx,
+      s"column x lost its metadata: ${zipped.schema("x").metadata}")
+    assert(zipped.schema("y").metadata === my,
+      s"column y inherited the survivor's metadata: ${zipped.schema("y").metadata}")
+    checkAnswer(zipped, Row(1, 1) :: Row(3, 3) :: Nil)
   }
 }
