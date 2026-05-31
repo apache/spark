@@ -1742,7 +1742,7 @@ class Analyzer(
                   // These columns will be added by ResolveSchemaEvolution later.
                   sourceTable.output.map { sourceAttr =>
                     val key = findAttrInTarget(sourceAttr.name).getOrElse(
-                      UnresolvedAttribute(sourceAttr.name))
+                      UnresolvedAttribute.quoted(sourceAttr.name))
                     Assignment(key, sourceAttr)
                   }
                 } else {
@@ -1778,7 +1778,7 @@ class Analyzer(
                   // These columns will be added by ResolveSchemaEvolution later.
                   sourceTable.output.map { sourceAttr =>
                     val key = findAttrInTarget(sourceAttr.name).getOrElse(
-                      UnresolvedAttribute(sourceAttr.name))
+                      UnresolvedAttribute.quoted(sourceAttr.name))
                     Assignment(key, sourceAttr)
                   }
                 } else {
