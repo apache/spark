@@ -195,7 +195,14 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     compareNanos(dt,
       TimestampNanosVal.fromParts(-1L, 999.toShort),
       TimestampNanosVal.fromParts(0L, 0.toShort), -1)
+    // null sorts before any value under default NullsFirst semantics
+    compareNanos(dt, null, TimestampNanosVal.fromParts(0L, 0.toShort), -1)
   }
+
+  // Ordering is precision-independent. One case at p = 7 documents that intent.
+  compareNanos(TimestampNTZNanosType(7),
+    TimestampNanosVal.fromParts(0L, 0.toShort),
+    TimestampNanosVal.fromParts(0L, 1.toShort), -1)
 
   test("SPARK-21344: BinaryType comparison does signed byte array comparison") {
     val data = Seq(

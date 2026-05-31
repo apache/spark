@@ -667,6 +667,8 @@ class CodegenContext extends Logging {
     case dt: DataType if isPrimitiveType(dt) => s"($c1 > $c2 ? 1 : $c1 < $c2 ? -1 : 0)"
     case BinaryType => s"org.apache.spark.unsafe.types.ByteArray.compareBinary($c1, $c2)"
     case CalendarIntervalType => s"$c1.compareTo($c2)"
+    // TimestampNanosVal exposes only `compareTo`; the AtomicType fallback below emits
+    // `$c1.compare($c2)`, which would not resolve as a Java method call.
     case _: TimestampNTZNanosType | _: TimestampLTZNanosType => s"$c1.compareTo($c2)"
     case NullType => "0"
     case array: ArrayType =>
