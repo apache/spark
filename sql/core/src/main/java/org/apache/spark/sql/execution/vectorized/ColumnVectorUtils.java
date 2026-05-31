@@ -107,9 +107,8 @@ public class ColumnVectorUtils {
       } else if (pdt instanceof PhysicalCalendarIntervalType) {
         // The value of `numRows` is irrelevant.
         col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
-      } else if (pdt instanceof PhysicalTimestampNTZNanosType) {
-        col.setTimestampNanosVal((TimestampNanosVal) row.get(fieldIdx, t));
-      } else if (pdt instanceof PhysicalTimestampLTZNanosType) {
+      } else if (pdt instanceof PhysicalTimestampNTZNanosType ||
+          pdt instanceof PhysicalTimestampLTZNanosType) {
         col.setTimestampNanosVal((TimestampNanosVal) row.get(fieldIdx, t));
       } else if (pdt instanceof PhysicalVariantType) {
         col.setVariant((VariantVal)row.get(fieldIdx, t));

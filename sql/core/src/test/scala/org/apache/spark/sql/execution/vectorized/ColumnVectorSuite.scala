@@ -423,6 +423,22 @@ class ColumnVectorSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  testVectors("mutable ColumnarRow with TimestampLTZNanosType", 5,
+      TimestampLTZNanosType(9)) { testVector =>
+    val mutableRow = new MutableColumnarRow(Array(testVector))
+    val values = (0 until 5).map(i => TimestampNanosVal.fromParts(i * 100L, i.toShort))
+    values.zipWithIndex.foreach { case (v, i) =>
+      mutableRow.rowId = i
+      mutableRow.setTimestampLTZNanos(0, v)
+    }
+    values.zipWithIndex.foreach { case (v, i) =>
+      mutableRow.rowId = i
+      assert(mutableRow.getTimestampLTZNanos(0) === v)
+      assert(mutableRow.get(0, TimestampLTZNanosType(9)) === v)
+      assert(mutableRow.copy().get(0, TimestampLTZNanosType(9)) === v)
+    }
+  }
+
   testVectors("mutable ColumnarRow with TimestampNTZType", 10, TimestampNTZType) { testVector =>
     val mutableRow = new MutableColumnarRow(Array(testVector))
     (0 until 10).foreach { i =>
