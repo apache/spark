@@ -905,19 +905,24 @@ class ColumnTestsMixin:
         self.assertEqual(sorted(r.c for r in rows), [1, 2])
 
     def test_resolve_after_union(self):
-        # Union emits new attribute ids. Classic resolves the tagged
-        # left-side reference by attribute-id propagation and succeeds;
-        # Connect treats Union as a leaf when walking the plan tree for
-        # plan-id resolution and raises in both modes (overridden there).
+        # Union's output keeps the left child's attribute ids
+        # (Union.mergeChildOutputs), so Classic resolves the tagged
+        # left-side reference directly against that output and succeeds.
+        # Connect resolves by walking the plan tree for the plan id but
+        # treats Union as a leaf (ColumnResolutionHelper), so the id below
+        # the Union is never found and it raises in both modes (overridden
+        # there).
         df1 = self.spark.sql("SELECT 1 AS c")
         df2 = self.spark.sql("SELECT 2 AS c")
         rows = df1.union(df2).select(df1.c).collect()
         self.assertEqual(sorted(r.c for r in rows), [1, 2])
 
     def test_resolve_after_intersect(self):
-        # intersect, like union, emits new attribute ids, but the propagated
-        # id is retained in the output, so the tagged reference resolves in
-        # all modes.
+        # Intersect's output also keeps the left child's attribute ids
+        # (Intersect.mergeChildOutputs). Unlike Union, it is not treated as
+        # a leaf during plan-id resolution, so Connect's tree walk descends
+        # into the left child, finds the tagged node and resolves it; all
+        # modes succeed.
         df1 = self.spark.sql("SELECT 1 AS c UNION ALL SELECT 2 AS c")
         df2 = self.spark.sql("SELECT 2 AS c UNION ALL SELECT 3 AS c")
         rows = df1.intersect(df2).select(df1.c).collect()
