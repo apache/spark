@@ -8601,8 +8601,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   /**
    * Orders the given catalog path entries by [[sessionFunctionResolutionOrder]], inserting
-   * system.session and system.builtin. Used by both the legacy single-schema resolution and
-   * by SET PATH's DEFAULT_PATH / SYSTEM_PATH expansion to keep ordering in sync.
+   * system.session and system.builtin. Used by the legacy single-schema resolution and by
+   * SET PATH's DEFAULT_PATH expansion (when `spark.sql.defaultPath` is empty) to keep
+   * ordering in sync. SYSTEM_PATH no longer flows through here -- see [[systemPathOrder]].
    *
    * @param catalogEntries persistent catalog path entries (may be empty).
    */
@@ -8623,8 +8624,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
-  /** System-only path (builtin + session) ordered by [[sessionFunctionResolutionOrder]]. */
-  def systemPathOrder: Seq[Seq[String]] = defaultPathOrder(Seq.empty)
+  /**
+   * System-only path used by `SET PATH = SYSTEM_PATH`. Contains the system-managed namespaces
+   * under the `system` catalog whose contents are wholly defined by Spark itself; today that
+   * is only `system.builtin`, but the shortcut is reserved for future system-managed schemas
+   * (e.g. AI, geospatial, ML).
+   */
+  def systemPathOrder: Seq[Seq[String]] = Seq(Seq("system", "builtin"))
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)
