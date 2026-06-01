@@ -2040,9 +2040,10 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "errorClass" : "INVALID_TABLESAMPLE_FRACTION",
+  "sqlState" : "22023",
   "messageParameters" : {
-    "msg" : "Sampling fraction (-1.0) must be on interval [0, 1]"
+    "fraction" : "-1.0"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2105,9 +2106,10 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "errorClass" : "INVALID_TABLESAMPLE_FRACTION",
+  "sqlState" : "22023",
   "messageParameters" : {
-    "msg" : "Sampling fraction (2.0) must be on interval [0, 1]"
+    "fraction" : "2.0"
   },
   "queryContext" : [ {
     "objectType" : "",

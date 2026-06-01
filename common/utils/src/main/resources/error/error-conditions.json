@@ -4776,6 +4776,16 @@
           "Partition key <partKey> must set value."
         ]
       },
+      "EMPTY_QUANTIFIED_PATTERN" : {
+        "message" : [
+          "Expected something between '(' and ')'."
+        ]
+      },
+      "EMPTY_REFRESH_RESOURCE_PATH" : {
+        "message" : [
+          "Resource paths cannot be empty in REFRESH statements. Use / to match everything."
+        ]
+      },
       "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
         "message" : [
           "The function <prettyName> does not support <syntax>."
@@ -4786,14 +4796,29 @@
           "Expected a column reference for transform <transform>: <expr>."
         ]
       },
+      "INVALID_REFRESH_RESOURCE_PATH" : {
+        "message" : [
+          "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths."
+        ]
+      },
       "INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES" : {
         "message" : [
           "Syntax error: call to table-valued function is invalid because parentheses are missing around the provided TABLE argument <argumentName>; please surround this with parentheses and try again."
         ]
       },
+      "INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING" : {
+        "message" : [
+          "The table function call includes a table argument with an invalid partitioning/ordering specification: the <clause> clause included multiple expressions without parentheses surrounding them; please add parentheses around these expressions and then retry the query again."
+        ]
+      },
       "INVALID_TABLE_VALUED_FUNC_NAME" : {
         "message" : [
           "Table valued function cannot specify database name: <funcName>."
+        ]
+      },
+      "INVALID_WINDOW_FRAME_BOUND" : {
+        "message" : [
+          "Frame bound value must be a literal."
         ]
       },
       "INVALID_WINDOW_REFERENCE" : {
@@ -4846,6 +4871,11 @@
           "Unsupported function name <funcName>."
         ]
       },
+      "UNSUPPORTED_ROW_FORMAT_LINES_TERMINATED_BY" : {
+        "message" : [
+          "LINES TERMINATED BY only supports newline '\\n' right now: <value>."
+        ]
+      },
       "UNSUPPORTED_SQL_STATEMENT" : {
         "message" : [
           "Unsupported SQL statement: <sqlText>."
@@ -4895,6 +4925,12 @@
       }
     },
     "sqlState" : "42823"
+  },
+  "INVALID_TABLESAMPLE_FRACTION" : {
+    "message" : [
+      "Sampling fraction (<fraction>) must be on interval [0, 1]."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_TEMP_OBJ_QUALIFIER" : {
     "message" : [
@@ -9113,11 +9149,6 @@
     ]
   },
   "_LEGACY_ERROR_TEMP_0063" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0064" : {
     "message" : [
       "<msg>."
     ]
