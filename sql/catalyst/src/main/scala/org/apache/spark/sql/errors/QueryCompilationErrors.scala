@@ -297,6 +297,70 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("types" -> dataTypes.mkString(", ")))
   }
 
+  def binByAlignToTypeMismatchError(
+      originType: DataType,
+      rangeType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_ALIGN_TO_TYPE_MISMATCH",
+      messageParameters = Map(
+        "originType" -> toSQLType(originType),
+        "rangeType" -> toSQLType(rangeType)))
+  }
+
+  def binByColumnNotFoundError(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_COLUMN_NOT_FOUND",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
+  def binByDistributeTypeMismatchError(
+      columnName: String,
+      columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_DISTRIBUTE_TYPE_MISMATCH",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
+  def binByDuplicateDistributeColumnError(columnName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
+  def binByInvalidBinWidthError(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_INVALID_BIN_WIDTH",
+      messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
+  def binByMissingDistributeError(): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_MISSING_DISTRIBUTE",
+      messageParameters = Map.empty)
+  }
+
+  def binByNonFoldableInputError(inputName: String, expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      messageParameters = Map(
+        "sqlExpr" -> toSQLExpr(expr),
+        "inputName" -> toSQLId(inputName),
+        "inputType" -> toSQLType(expr.dataType),
+        "inputExpr" -> toSQLExpr(expr)))
+  }
+
+  def binByRangeTypeMismatchError(
+      columnName: String,
+      columnType: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_RANGE_TYPE_MISMATCH",
+      messageParameters = Map(
+        "columnName" -> toSQLId(columnName),
+        "columnType" -> toSQLType(columnType)))
+  }
+
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.INSERT_PARTITION_SPEC_IF_NOT_EXISTS",
