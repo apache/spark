@@ -176,7 +176,33 @@ class TimestampNanosParseSuite extends SparkFunSuite {
         date(1582, 10, 14, 23, 59, 59, 999999, ZoneOffset.UTC), 999.toShort))
   }
 
-  test("truncateNanosWithinMicro throws internalError for out-of-range precision") {
+  test("micro path through parseTimestampString is unchanged by the nanos extension") {
+    // Regression guard for the highest-blast-radius change: growing the segments array and
+    // pinning the parse-loop bound must not alter the microsecond results returned by the
+    // existing stringToTimestamp / stringToTimestampWithoutTimeZone APIs. On the micro path the
+    // sub-microsecond digits 7-9 are dropped, exactly as before this change.
+    def micros(str: String): Option[Long] =
+      stringToTimestamp(UTF8String.fromString(str), ZoneOffset.UTC)
+    def microsNtz(str: String): Option[Long] =
+      stringToTimestampWithoutTimeZone(UTF8String.fromString(str), allowTimeZone = true)
+
+    // 9 fractional digits: still truncated to 6 (micros); digits 7-9 ignored on the micro path.
+    assert(micros("2015-01-02 00:00:00.123456789") ===
+      Some(date(2015, 1, 2, 0, 0, 0, 123456, ZoneOffset.UTC)))
+    assert(microsNtz("2015-01-02 00:00:00.123456789") ===
+      Some(date(2015, 1, 2, 0, 0, 0, 123456, ZoneOffset.UTC)))
+    // Fewer than 6 fractional digits still right-pad to micros.
+    assert(microsNtz("2015-01-02 00:00:00.1") ===
+      Some(date(2015, 1, 2, 0, 0, 0, 100000, ZoneOffset.UTC)))
+    // Exactly 6 fractional digits are unchanged.
+    assert(microsNtz("2015-01-02 00:00:00.000456") ===
+      Some(date(2015, 1, 2, 0, 0, 0, 456, ZoneOffset.UTC)))
+    // 10+ fractional digits are still accepted and truncated to micros.
+    assert(microsNtz("2015-01-02 00:00:00.1234567890") ===
+      Some(date(2015, 1, 2, 0, 0, 0, 123456, ZoneOffset.UTC)))
+  }
+
+  test("stringToTimestampNTZNanos throws internalError for out-of-range precision") {
     // Precision must be in [7, 9]; anything outside is a caller bug and should surface loudly.
     Seq(0, 6, 10, -1).foreach { p =>
       checkError(
