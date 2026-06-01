@@ -20,9 +20,13 @@ package org.apache.spark.sql.pipelines.graph
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.atomic.AtomicBoolean
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
+
+import org.json4s.JsonAST.{JArray, JString}
+import org.json4s.jackson.JsonMethods.{compact, parse}
 
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
@@ -346,8 +350,6 @@ object AutoCdcAuxiliaryTable {
    * upstream.
    */
   def serializeKeyColumnNames(names: Seq[String]): String = {
-    import org.json4s.JsonAST.{JArray, JString}
-    import org.json4s.jackson.JsonMethods.compact
     compact(JArray(names.map(JString(_)).toList))
   }
 
@@ -357,8 +359,6 @@ object AutoCdcAuxiliaryTable {
    * upstream.
    */
   def parseKeyColumnNames(raw: String): Option[Seq[String]] = {
-    import org.json4s.JsonAST.{JArray, JString}
-    import org.json4s.jackson.JsonMethods.parse
     val parsed = try Some(parse(raw)) catch { case NonFatal(_) => None }
     parsed.flatMap {
       case JArray(elems) =>
@@ -406,7 +406,7 @@ trait AutoCdcMergeWriteBase {
     val (catalog, v2Identifier) = PipelinesCatalogUtils.resolveTableCatalog(spark, auxIdent)
 
     if (!catalog.tableExists(v2Identifier)) {
-      val properties = scala.collection.mutable.Map.empty[String, String]
+      val properties = mutable.Map.empty[String, String]
 
       // Inherit the target's format so MERGE semantics line up. When unspecified, omit the
       // provider so the catalog falls back to its default.
@@ -440,18 +440,21 @@ trait AutoCdcMergeWriteBase {
   }
 
   /**
-   * Returns the resolved AutoCDC key column names as they appear in the auxiliary schema, in
-   * `changeArgs.keys` declaration order.
+   * Resolves each AutoCDC key in `changeArgs.keys` to its [[StructField]] in
+   * [[auxiliaryTableSchema]], preserving `changeArgs.keys` declaration order. This is the
+   * expected (flow-declared) side of drift validation, distinct from the keys recorded on an
+   * existing auxiliary table.
+   *
+   * [[AutoCdcMergeFlow]] should have validated that all `changeArgs.keys` exist in the deduced
+   * aux/target schemas by now, so a missing key is an internal error rather than a user-facing
+   * condition.
    */
-  private def auxiliaryKeyColumnNames: Seq[String] = {
+  private def expectedAuxiliaryKeyFields: Seq[StructField] = {
     val resolver = spark.sessionState.conf.resolver
     changeArgs.keys.map { key =>
       auxiliaryTableSchema.fields
         .find(field => resolver(field.name, key.name))
-        .map(_.name)
         .getOrElse(
-          // This should never happen at this point, as [[AutoCdcMergeFlow]] should have validated
-          // all changeArgs.keys exist in the deduced aux/target table schemas by now.
           throw SparkException.internalError(
             s"AutoCDC key column '${key.name}' is missing from the auxiliary table schema " +
             s"for flow ${identifier.unquotedString} writing to target " +
@@ -460,6 +463,12 @@ trait AutoCdcMergeWriteBase {
         )
     }
   }
+
+  /**
+   * Returns the resolved AutoCDC key column names as they appear in the auxiliary schema, in
+   * `changeArgs.keys` declaration order.
+   */
+  private def auxiliaryKeyColumnNames: Seq[String] = expectedAuxiliaryKeyFields.map(_.name)
 
   /**
    * Validate that the target table's underlying connector implements
@@ -512,21 +521,10 @@ trait AutoCdcMergeWriteBase {
     val resolver = spark.sessionState.conf.resolver
     val existingAuxSchema = CatalogV2Util.v2ColumnsToStructType(existingAuxTable.columns())
 
-    // The expected key fields are looked up in [[auxiliaryTableSchema]], which by construction
-    // contains every key column with its source-derived dataType. We deliberately do not look
-    // them up in [[existingAuxSchema]] - that's the recorded side, and conflating the two
-    // sides would mask drift.
-    val expectedKeyFields: Seq[StructField] = changeArgs.keys.map { key =>
-      auxiliaryTableSchema.fields
-        .find(field => resolver(field.name, key.name))
-        .getOrElse(
-          // Construction of [[auxiliaryTableSchema]] already enforces all of the user-specified
-          // keys are present, so if we don't find a key it is truly an internal error.
-          throw SparkException.internalError(
-            s"Key column '${key.name}' was not found in the AutoCDC auxiliary table schema."
-          )
-        )
-    }
+    // Resolve the flow-declared (expected) keys from [[auxiliaryTableSchema]]. We deliberately
+    // do not look them up in [[existingAuxSchema]] - that's the recorded side, and conflating
+    // the two sides would mask drift. See [[expectedAuxiliaryKeyFields]].
+    val expectedKeyFields: Seq[StructField] = expectedAuxiliaryKeyFields
     val recordedKeyNames = parseRecordedKeyColumnNames(existingAuxTable, auxIdent)
     val recordedKeyFields: Seq[StructField] = recordedKeyNames.map { name =>
       existingAuxSchema.fields

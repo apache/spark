@@ -19,7 +19,6 @@ package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.functions
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -58,34 +57,16 @@ class AutoCdcScd1MultiPipelineSuite
     // cat.ns1.__spark_autocdc_aux_state_t_a must not affect pipeline #2's `t_b`.
     val streamA = MemoryStream[(Int, String, Long)]
     streamA.addData((1, "alice", 100L))
-    val ctxA = new TestGraphRegistrationContext(spark) {
-      registerTable("t_a", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_a",
-        target = "t_a",
-        query = dfFlowFunc(streamA.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctxA)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "flow_a", "t_a", streamA.toDF().toDF("id", "name", "version"), Seq("id")))
 
     // Pipeline #2 only knows about `t_b`. Uses a deliberately *lower* sequence to verify
     // the watermark from pipeline #1's auxiliary table (seq=100) does not leak into
     // pipeline #2.
     val streamB = MemoryStream[(Int, String, Long)]
     streamB.addData((9, "bob", 1L))
-    val ctxB = new TestGraphRegistrationContext(spark) {
-      registerTable("t_b", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_b",
-        target = "t_b",
-        query = dfFlowFunc(streamB.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctxB)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "flow_b", "t_b", streamB.toDF().toDF("id", "name", "version"), Seq("id")))
 
     checkAnswer(
       spark.table(s"$catalog.$namespace.t_a"),
@@ -113,17 +94,8 @@ class AutoCdcScd1MultiPipelineSuite
     )
     val stream = MemoryStream[(Int, String, Long)]
     stream.addData((1, "alice", 1L), (2, "bob", 1L))
-    val ctxWriter = new TestGraphRegistrationContext(spark) {
-      registerTable("src", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "writer",
-        target = "src",
-        query = dfFlowFunc(stream.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctxWriter)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "writer", "src", stream.toDF().toDF("id", "name", "version"), Seq("id")))
 
     // Pipeline #2 is a regular materialized view that selects the user-data columns from
     // `src` (a different graph entirely). It must observe the merged AutoCDC rows and be
@@ -161,17 +133,8 @@ class AutoCdcScd1MultiPipelineSuite
     // Pipeline #1: inserts rows with id=1 and id=2 at version=1.
     val stream1 = MemoryStream[(Int, String, Long)]
     stream1.addData((1, "alice", 1L), (2, "bob", 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v1",
-        target = "shared_target",
-        query = dfFlowFunc(stream1.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "flow_v1", "shared_target", stream1.toDF().toDF("id", "name", "version"), Seq("id")))
 
     // Sanity-check pipeline #1's effect before pipeline #2 runs.
     checkAnswer(
@@ -186,17 +149,8 @@ class AutoCdcScd1MultiPipelineSuite
     // (new key). id=1 is untouched and must survive into the final target unchanged.
     val stream2 = MemoryStream[(Int, String, Long)]
     stream2.addData((2, "bob-v2", 2L), (3, "carol", 1L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v2",
-        target = "shared_target",
-        query = dfFlowFunc(stream2.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx2)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "flow_v2", "shared_target", stream2.toDF().toDF("id", "name", "version"), Seq("id")))
 
     // Final target: id=1 untouched (pipeline #1's state), id=2 updated by pipeline #2,
     // id=3 freshly inserted by pipeline #2.
@@ -229,16 +183,8 @@ class AutoCdcScd1MultiPipelineSuite
     // Pipeline #1: source DF schema is (id, name, version); inserts id=1 and id=2.
     val stream1 = MemoryStream[(Int, String, Long)]
     stream1.addData((1, "alice", 1L), (2, "bob", 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v1",
-        target = "shared_target",
-        query = dfFlowFunc(stream1.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
+    val ctx1 = singleAutoCdcFlowPipeline(
+      "flow_v1", "shared_target", stream1.toDF().toDF("id", "name", "version"), Seq("id"))
     runPipeline(ctx1)
 
     // Sanity-check pipeline #1's state before schema evolution kicks in.
@@ -255,17 +201,8 @@ class AutoCdcScd1MultiPipelineSuite
     // is backfilled to NULL.
     val stream2 = MemoryStream[(Int, String, Option[Int], Long)]
     stream2.addData((2, "bob-v2", Some(25), 2L), (3, "carol", Some(30), 1L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v2",
-        target = "shared_target",
-        query = dfFlowFunc(stream2.toDF().toDF("id", "name", "age", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx2)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "flow_v2", "shared_target", stream2.toDF().toDF("id", "name", "age", "version"), Seq("id")))
 
     checkAnswer(
       spark.table(s"$catalog.$namespace.shared_target"),
@@ -309,32 +246,15 @@ class AutoCdcScd1MultiPipelineSuite
     // (id, _cdc_metadata).
     val stream1 = MemoryStream[(Int, String, Long)]
     stream1.addData((1, "alice", 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v1",
-        target = "shared_target",
-        query = dfFlowFunc(stream1.toDF().toDF("id", "name", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "flow_v1", "shared_target", stream1.toDF().toDF("id", "name", "version"), Seq("id")))
 
     // Pipeline #2: completely separate graph, but targets the same physical `shared_target`
     // table with `keys = Seq("name")`.
     val stream2 = MemoryStream[(Int, String, Long)]
     stream2.addData((2, "alice", 1L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("shared_target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v2",
-        target = "shared_target",
-        query = dfFlowFunc(stream2.toDF().toDF("id", "name", "version")),
-        keys = Seq("name"),
-        sequencing = functions.col("version")
-      ))
-    }
+    val ctx2 = singleAutoCdcFlowPipeline(
+      "flow_v2", "shared_target", stream2.toDF().toDF("id", "name", "version"), Seq("name"))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(

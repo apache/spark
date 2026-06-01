@@ -52,18 +52,11 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     // resume cleanly.
     val changeDataFeedStream = MemoryStream[(Int, String, Long)]
     def buildGraphRegistrationContext(): TestGraphRegistrationContext =
-      new TestGraphRegistrationContext(spark) {
-        registerTable("target", catalog = Some(catalog), database = Some(namespace))
-        registerFlow(autoCdcFlow(
-          name = "auto_cdc_flow",
-          target = "target",
-          query = dfFlowFunc(
-            changeDataFeedStream.toDF().toDF("id", "name", "version")
-          ),
-          keys = Seq("id"),
-          sequencing = functions.col("version")
-        ))
-      }
+      singleAutoCdcFlowPipeline(
+        "auto_cdc_flow",
+        "target",
+        changeDataFeedStream.toDF().toDF("id", "name", "version"),
+        Seq("id"))
 
     // Run #1: insert id=1 at seq=1.
     changeDataFeedStream.addData((1, "alice", 1L))
@@ -98,20 +91,17 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     // Single MemoryStream reused across both runs so the streaming checkpoint can resume.
     val stream = MemoryStream[(Int, String, Long, Boolean)]
-    def buildCtx(): TestGraphRegistrationContext = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream.toDF().toDF("id", "name", "version", "is_delete")),
-        keys = Seq("id"),
-        sequencing = functions.col("version"),
+    def buildCtx(): TestGraphRegistrationContext =
+      singleAutoCdcFlowPipeline(
+        "auto_cdc_flow",
+        "target",
+        stream.toDF().toDF("id", "name", "version", "is_delete"),
+        Seq("id"),
         deleteCondition = Some(functions.col("is_delete") === true),
         columnSelection = Some(ColumnSelection.ExcludeColumns(
           Seq(UnqualifiedColumnName("is_delete"))
         ))
-      ))
-    }
+      )
 
     // Run #1: delete id=1 at seq=10. Auxiliary table records seq=10 as the watermark.
     stream.addData((1, "alice", 10L, true))
@@ -141,17 +131,8 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     val stream = MemoryStream[(String, Int, Long)]
     stream.addData(("alice", 1, 1L))
-    val ctx = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream.toDF().toDF("name", "id", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "auto_cdc_flow", "target", stream.toDF().toDF("name", "id", "version"), Seq("id")))
 
     val auxSchema = spark.table(auxTableNameFor("target")).schema
 
@@ -181,17 +162,9 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     val stream = MemoryStream[(String, Int, String, Long)]
     stream.addData(("v", 1, "us", 1L))
-    val ctx = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream.toDF().toDF("value", "id", "region", "version")),
-        keys = Seq("region", "id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx)
+    runPipeline(singleAutoCdcFlowPipeline(
+      "auto_cdc_flow", "target", stream.toDF().toDF("value", "id", "region", "version"),
+      Seq("region", "id")))
 
     val auxSchema = spark.table(auxTableNameFor("target")).schema
     assert(auxSchema.fieldNames.toSeq ==
@@ -211,16 +184,9 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     // Single MemoryStream reused across both runs so the streaming checkpoint can resume.
     val stream = MemoryStream[(Int, Long)]
-    def buildCtx(): TestGraphRegistrationContext = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
+    def buildCtx(): TestGraphRegistrationContext =
+      singleAutoCdcFlowPipeline(
+        "auto_cdc_flow", "target", stream.toDF().toDF("id", "version"), Seq("id"))
 
     stream.addData((1, 1L))
     runPipeline(buildCtx())
@@ -276,18 +242,12 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
 
     // Single MemoryStream reused across both runs so the streaming checkpoint can resume.
     val stream = MemoryStream[(String, String, String, String, Long)]
-    def buildCtx(): TestGraphRegistrationContext = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "auto_cdc_flow",
-        target = "target",
-        query = dfFlowFunc(
-          stream.toDF().toDF((keyNames :+ "version"): _*)
-        ),
-        keys = backtickQuotedKeys,
-        sequencing = functions.col("version")
-      ))
-    }
+    def buildCtx(): TestGraphRegistrationContext =
+      singleAutoCdcFlowPipeline(
+        "auto_cdc_flow",
+        "target",
+        stream.toDF().toDF((keyNames :+ "version"): _*),
+        backtickQuotedKeys)
 
     // Run #1: a single insert with arbitrary non-empty key values.
     stream.addData(("v1", "v2", "v3", "v4", 1L))

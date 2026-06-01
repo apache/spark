@@ -18,7 +18,6 @@
 package org.apache.spark.sql.pipelines.graph
 
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
-import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -54,31 +53,13 @@ class AutoCdcScd1KeyDriftSuite
     // Pipeline #1 declares one key (`id`). Aux table is created with schema (id, _cdc_metadata).
     val stream1 = MemoryStream[(Int, String, Long)]
     stream1.addData((1, "us", 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v1",
-        target = "target",
-        query = dfFlowFunc(stream1.toDF().toDF("id", "region", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(buildPipeline("flow_v1", stream1.toDF().toDF("id", "region", "version"), Seq("id")))
 
     // Pipeline #2 declares two keys (`region` + `id`) - arity drift.
     val stream2 = MemoryStream[(Int, String, Long)]
     stream2.addData((1, "us", 2L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v2",
-        target = "target",
-        query = dfFlowFunc(stream2.toDF().toDF("id", "region", "version")),
-        keys = Seq("region", "id"),
-        sequencing = functions.col("version")
-      ))
-    }
+    val ctx2 = buildPipeline(
+      "flow_v2", stream2.toDF().toDF("id", "region", "version"), Seq("region", "id"))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(
@@ -112,31 +93,13 @@ class AutoCdcScd1KeyDriftSuite
     // would slip through with `id` silently matching at position 0 of the recorded schema.
     val stream1 = MemoryStream[(String, Int, Long)]
     stream1.addData(("us", 1, 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v1",
-        target = "target",
-        query = dfFlowFunc(stream1.toDF().toDF("region", "id", "version")),
-        keys = Seq("region", "id"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(buildPipeline(
+      "flow_v1", stream1.toDF().toDF("region", "id", "version"), Seq("region", "id")))
 
     // Pipeline #2 declares only [id] - arity drift.
     val stream2 = MemoryStream[(String, Int, Long)]
     stream2.addData(("us", 1, 2L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v2",
-        target = "target",
-        query = dfFlowFunc(stream2.toDF().toDF("region", "id", "version")),
-        keys = Seq("id"),
-        sequencing = functions.col("version")
-      ))
-    }
+    val ctx2 = buildPipeline("flow_v2", stream2.toDF().toDF("region", "id", "version"), Seq("id"))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(
@@ -169,33 +132,16 @@ class AutoCdcScd1KeyDriftSuite
     // Pipeline #1 declares [id, region].
     val stream1 = MemoryStream[(Int, String, String, Long)]
     stream1.addData((1, "us", "USA", 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v1",
-        target = "target",
-        query = dfFlowFunc(stream1.toDF().toDF("id", "region", "country", "version")),
-        keys = Seq("id", "region"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(buildPipeline(
+      "flow_v1", stream1.toDF().toDF("id", "region", "country", "version"), Seq("id", "region")))
 
     // Pipeline #2 declares [id, country] - same arity, different key set. An arity-only check
     // would silently match `id` at position 0 and the swapped `region`/`country` would slip
     // through; the by-name set comparison must catch it.
     val stream2 = MemoryStream[(Int, String, String, Long)]
     stream2.addData((1, "us", "USA", 2L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v2",
-        target = "target",
-        query = dfFlowFunc(stream2.toDF().toDF("id", "region", "country", "version")),
-        keys = Seq("id", "country"),
-        sequencing = functions.col("version")
-      ))
-    }
+    val ctx2 = buildPipeline(
+      "flow_v2", stream2.toDF().toDF("id", "region", "country", "version"), Seq("id", "country"))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(
@@ -261,32 +207,12 @@ class AutoCdcScd1KeyDriftSuite
     // columns and their dataTypes.
     val stream1 = MemoryStream[(Int, String, Long)]
     stream1.addData((1, "x", 1L))
-    val ctx1 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v1",
-        target = "target",
-        query = dfFlowFunc(stream1.toDF().toDF("a", "b", "version")),
-        keys = Seq("a", "b"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx1)
+    runPipeline(buildPipeline("flow_v1", stream1.toDF().toDF("a", "b", "version"), Seq("a", "b")))
 
     // Pipeline #2 declares the same key set in the reversed order [b, a]. Must NOT throw.
     val stream2 = MemoryStream[(Int, String, Long)]
     stream2.addData((2, "y", 1L))
-    val ctx2 = new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = "flow_v2",
-        target = "target",
-        query = dfFlowFunc(stream2.toDF().toDF("a", "b", "version")),
-        keys = Seq("b", "a"),
-        sequencing = functions.col("version")
-      ))
-    }
-    runPipeline(ctx2)
+    runPipeline(buildPipeline("flow_v2", stream2.toDF().toDF("a", "b", "version"), Seq("b", "a")))
   }
 
   test("a pipeline execution that changes a key column's nullability or metadata in an " +
@@ -546,21 +472,12 @@ class AutoCdcScd1KeyDriftSuite
 
   /**
    * Build a single-flow pipeline targeting `cat.ns1.target` with the given source DF and key
-   * column list.
+   * column list. Thin wrapper over [[singleAutoCdcFlowPipeline]] since every drift test targets
+   * the same `target` table.
    */
   private def buildPipeline(
       flowName: String,
       sourceDf: org.apache.spark.sql.classic.DataFrame,
-      keys: Seq[String]): TestGraphRegistrationContext = {
-    new TestGraphRegistrationContext(spark) {
-      registerTable("target", catalog = Some(catalog), database = Some(namespace))
-      registerFlow(autoCdcFlow(
-        name = flowName,
-        target = "target",
-        query = dfFlowFunc(sourceDf),
-        keys = keys,
-        sequencing = functions.col("version")
-      ))
-    }
-  }
+      keys: Seq[String]): TestGraphRegistrationContext =
+    singleAutoCdcFlowPipeline(flowName, "target", sourceDf, keys)
 }
