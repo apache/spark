@@ -818,24 +818,6 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Truncates the sub-microsecond remainder (`segments(9)`, a value in [0, 999]) to the given
-   * fractional-second `precision`. Since microseconds occupy fractional digits 1-6, a `precision`
-   * in [7, 9] only affects the sub-microsecond digits: digits beyond `precision` are dropped
-   * (truncation toward zero, consistent with the microsecond parsing path).
-   */
-  private def truncateNanosWithinMicro(nanosWithinMicro: Int, precision: Int): Short = {
-    val factor = precision match {
-      case 7 => 100
-      case 8 => 10
-      case 9 => 1
-      case _ =>
-        throw SparkException.internalError(
-          s"truncateNanosWithinMicro called with precision $precision outside [7, 9]")
-    }
-    ((nanosWithinMicro / factor) * factor).toShort
-  }
-
-  /**
    * Trims and parses a given UTF8 string into a [[TimestampNanosVal]] (epoch microseconds plus a
    * sub-microsecond remainder in [0, 999]) for `TIMESTAMP_LTZ(precision)` with `precision` in [7,
    * 9]. Fractional digits beyond `precision` are truncated. The return type is [[Option]] in
@@ -856,8 +838,12 @@ trait SparkDateTimeUtils {
         return None
       }
       val zoneId = parsedZoneId.getOrElse(timeZoneId)
-      val nanoseconds = MICROSECONDS.toNanos(segments(6))
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      // Combine the microsecond part (digits 1-6) and the sub-microsecond remainder (digits 7-9)
+      // into a full nano-of-second so the java.time value carries the complete fraction; the
+      // shared `instantToTimestampNanos` then splits it back into (epochMicros, nanosWithinMicro)
+      // and applies the `precision` truncation.
+      val nanoOfSecond = (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoOfSecond)
       val localDate = if (justTime) {
         LocalDate.now(zoneId)
       } else {
@@ -866,10 +852,7 @@ trait SparkDateTimeUtils {
       val localDateTime = LocalDateTime.of(localDate, localTime)
       val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
       val instant = Instant.from(zonedDateTime)
-      val epochMicros = instantToMicros(instant)
-      Some(
-        TimestampNanosVal
-          .fromParts(epochMicros, truncateNanosWithinMicro(segments(9), precision)))
+      Some(instantToTimestampNanos(instant, precision))
     } catch {
       case NonFatal(_) => None
     }
@@ -909,14 +892,15 @@ trait SparkDateTimeUtils {
       if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
         return None
       }
-      val nanoseconds = MICROSECONDS.toNanos(segments(6))
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+      // Combine the microsecond part (digits 1-6) and the sub-microsecond remainder (digits 7-9)
+      // into a full nano-of-second so the java.time value carries the complete fraction; the
+      // shared `localDateTimeToTimestampNanos` then splits it back into
+      // (epochMicros, nanosWithinMicro) and applies the `precision` truncation.
+      val nanoOfSecond = (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt
+      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoOfSecond)
       val localDate = LocalDate.of(segments(0), segments(1), segments(2))
       val localDateTime = LocalDateTime.of(localDate, localTime)
-      val epochMicros = localDateTimeToMicros(localDateTime)
-      Some(
-        TimestampNanosVal
-          .fromParts(epochMicros, truncateNanosWithinMicro(segments(9), precision)))
+      Some(localDateTimeToTimestampNanos(localDateTime, precision))
     } catch {
       case NonFatal(_) => None
     }
