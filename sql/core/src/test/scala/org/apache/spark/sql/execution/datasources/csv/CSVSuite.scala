@@ -3506,6 +3506,66 @@ abstract class CSVSuite
     assert(textParsingException.getCause.isInstanceOf[ArrayIndexOutOfBoundsException])
   }
 
+  test("SPARK-57195: multiLine CSV schema inference surfaces MALFORMED_CSV_RECORD for a row " +
+    "exceeding maxColumns") {
+    // multiLine schema inference reads through UnivocityParser.tokenizeStream, whose parseNext
+    // call was unguarded (SPARK-49444 only fixed the per-line parseLine path). A row with more
+    // columns than maxColumns must surface as MALFORMED_CSV_RECORD, not a raw
+    // ArrayIndexOutOfBoundsException. The overflow is on a later row so it is hit during inference.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b\nc,d\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[SparkException] {
+        spark.read
+          .option("header", "false")
+          .option("inferSchema", "true")
+          .option("multiLine", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+      }
+      val malformed = firstSparkRuntimeException(e)
+      assert(malformed.isDefined,
+        s"Expected a SparkRuntimeException in the cause chain, got: ${e.getMessage}")
+      checkError(
+        exception = malformed.get,
+        condition = "MALFORMED_CSV_RECORD",
+        parameters = Map("badRecord" -> ""),
+        sqlState = "KD000")
+    }
+  }
+
+  test("SPARK-57195: non-multiLine CSV schema inference surfaces MALFORMED_CSV_RECORD for a row " +
+    "exceeding maxColumns") {
+    // Without multiLine, inference reads through TextInputCSVDataSource.inferFromDataset, which
+    // parsed each line with a raw Univocity CsvParser, bypassing the guarded parseLine. A row with
+    // more columns than maxColumns must surface as MALFORMED_CSV_RECORD, not a raw
+    // ArrayIndexOutOfBoundsException.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b\nc,d\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[SparkException] {
+        spark.read
+          .option("header", "false")
+          .option("inferSchema", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+      }
+      val malformed = firstSparkRuntimeException(e)
+      assert(malformed.isDefined,
+        s"Expected a SparkRuntimeException in the cause chain, got: ${e.getMessage}")
+      checkError(
+        exception = malformed.get,
+        condition = "MALFORMED_CSV_RECORD",
+        parameters = Map("badRecord" -> "1,2,3"),
+        sqlState = "KD000")
+    }
+  }
+
+  /** Finds the first SparkRuntimeException in the cause chain, if any. */
+  private def firstSparkRuntimeException(t: Throwable): Option[SparkRuntimeException] = t match {
+    case null => None
+    case r: SparkRuntimeException => Some(r)
+    case other => firstSparkRuntimeException(other.getCause)
+  }
+
   test("csv with variant") {
     withTempPath { path =>
       val data =

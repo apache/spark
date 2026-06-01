@@ -111,7 +111,8 @@ object CSVDataSource extends Logging {
       Some(headerColumnNames => {
         parser.headerColumnNames = headerColumnNames.orElse {
           CSVUtils.readHeaderLine(file.toPath, parser.options, conf).map { line =>
-            new CsvParser(parser.options.asParserSettings).parseLine(line)
+            UnivocityParser.parseLine(
+              new CsvParser(parser.options.asParserSettings), line)
           }
         }
       })
@@ -162,7 +163,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       maybeFirstLine: Option[String],
       parsedOptions: CSVOptions): StructType = {
     val csvParser = new CsvParser(parsedOptions.asParserSettings)
-    maybeFirstLine.map(csvParser.parseLine(_)) match {
+    maybeFirstLine.map(UnivocityParser.parseLine(csvParser, _)) match {
       case Some(firstRow) if firstRow != null =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
@@ -172,7 +173,7 @@ object TextInputCSVDataSource extends CSVDataSource {
           val linesWithoutHeader =
             CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)
-          linesWithoutHeader.map(parser.parseLine)
+          linesWithoutHeader.map(UnivocityParser.parseLine(parser, _))
         }
         SQLExecution.withSQLConfPropagated(csv.sparkSession) {
           new CSVInferSchema(parsedOptions).infer(tokenRDD, header)

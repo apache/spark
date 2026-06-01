@@ -23,8 +23,8 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
-import com.univocity.parsers.common.TextParsingException
 import com.univocity.parsers.csv.CsvParser
+import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
@@ -314,19 +314,8 @@ class UnivocityParser(
     }
   }
 
-  private def parseLine(line: String): Array[String] = {
-    try {
-      tokenizer.parseLine(line)
-    }
-    catch {
-      case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
-        throw new SparkRuntimeException(
-          errorClass = "MALFORMED_CSV_RECORD",
-          messageParameters = Map("badRecord" -> line),
-          cause = e
-        )
-    }
-  }
+  private def parseLine(line: String): Array[String] =
+    UnivocityParser.parseLine(tokenizer, line)
 
   /**
    * Parses a single CSV string and turns it into either one resulting row or no row (if the
@@ -634,7 +623,19 @@ private[sql] object UnivocityParser {
     // We can handle header here since here the stream is open.
     handleHeader()
 
-    private var nextRecord = tokenizer.parseNext()
+    // Streaming parse path used by CSV schema inference and multi-line reads. The raw record text
+    // is not available here, so the MALFORMED_CSV_RECORD error reports an empty bad record.
+    private def parseNextRecord(): Array[String] = {
+      try {
+        tokenizer.parseNext()
+      } catch {
+        case e: Exception if ExceptionUtils.getThrowables(e).exists(
+            _.isInstanceOf[ArrayIndexOutOfBoundsException]) =>
+          throw malformedCsvRecord(e, "")
+      }
+    }
+
+    private var nextRecord = parseNextRecord()
 
     override def hasNext: Boolean = nextRecord != null
 
@@ -643,8 +644,35 @@ private[sql] object UnivocityParser {
         throw QueryExecutionErrors.endOfStreamError()
       }
       val curRecord = convert(nextRecord)
-      nextRecord = tokenizer.parseNext()
+      nextRecord = parseNextRecord()
       curRecord
+    }
+  }
+
+  /**
+   * Builds the user-facing MALFORMED_CSV_RECORD error raised when Univocity hits an
+   * ArrayIndexOutOfBoundsException for a malformed record (e.g. more columns than `maxColumns`).
+   * Univocity raises it either bare or wrapped in a TextParsingException depending on the call.
+   * SPARK-49444 fixed the per-line path; this also covers the streaming path.
+   */
+  private def malformedCsvRecord(cause: Throwable, badRecord: String): SparkRuntimeException =
+    new SparkRuntimeException(
+      errorClass = "MALFORMED_CSV_RECORD",
+      messageParameters = Map("badRecord" -> badRecord),
+      cause = cause)
+
+  /**
+   * Parses a single CSV line with the given Univocity tokenizer, translating the
+   * ArrayIndexOutOfBoundsException Univocity raises for a malformed record into
+   * MALFORMED_CSV_RECORD so the per-line and streaming paths fail consistently.
+   */
+  def parseLine(tokenizer: CsvParser, line: String): Array[String] = {
+    try {
+      tokenizer.parseLine(line)
+    } catch {
+      case e: Exception if ExceptionUtils.getThrowables(e).exists(
+          _.isInstanceOf[ArrayIndexOutOfBoundsException]) =>
+        throw malformedCsvRecord(e, line)
     }
   }
 
