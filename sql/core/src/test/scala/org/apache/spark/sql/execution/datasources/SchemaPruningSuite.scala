@@ -590,6 +590,48 @@ abstract class SchemaPruningSuite
     }
   }
 
+  testSchemaPruning("do not prune through Slice with non-foldable bounds") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(
+        slice(col("friends"), col("employer.id") + 1, lit(1)).getField("first"),
+        col("employer.company.name"))
+
+    checkScan(query,
+      "struct<friends:array<struct<first:string,middle:string,last:string>>," +
+        "employer:struct<id:int,company:struct<name:string>>>")
+    checkAnswer(query,
+      Row(Array("Susan"), "abc") ::
+      Row(Array.empty[String], null) ::
+      Nil)
+  }
+
+  testSchemaPruning("select ArrayTransform over array-returning higher-order functions") {
+    val expressions = Seq(
+      transform(
+        org.apache.spark.sql.functions.filter(
+          col("friends"), friend => friend.getField("last") === "Smith"),
+        friend => friend.getField("first")),
+      transform(
+        array_sort(col("friends"), (left, right) =>
+          when(left.getField("last") < right.getField("last"), -1)
+            .when(left.getField("last") > right.getField("last"), 1)
+            .otherwise(0)),
+        friend => friend.getField("first")))
+
+    expressions.foreach { expression =>
+      val query = spark.table("contacts")
+        .where("p = 1")
+        .select(expression)
+
+      checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+      checkAnswer(query,
+        Row(Array("Susan")) ::
+        Row(Array.empty[String]) ::
+        Nil)
+    }
+  }
+
   testSchemaPruning("select nested field returned by ArrayCompact with null elements") {
     withDataSourceTable(organizations, "organizations") {
       val query = spark.table("organizations")

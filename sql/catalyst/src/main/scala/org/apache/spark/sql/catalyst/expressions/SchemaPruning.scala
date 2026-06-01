@@ -182,7 +182,8 @@ object SchemaPruning extends SQLConfHelper {
         getArrayHigherOrderFunctionRootField(argument, lambda.function, elementVar)
     }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
     if (nestedRootFields.nonEmpty) {
-      nestedRootFields ++ getRootFields(lambda.function)
+      nestedRootFields ++ getRootFields(lambda.function) ++
+        getArrayReturningHigherOrderFunctionRootFields(argument)
     } else {
       expr.children.flatMap(getRootFields)
     }

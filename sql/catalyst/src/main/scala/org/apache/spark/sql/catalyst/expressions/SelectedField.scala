@@ -171,7 +171,7 @@ object SelectedField {
         selectField(child, dataTypeOpt)
       case Shuffle(child, _) =>
         selectField(child, dataTypeOpt)
-      case Slice(x, _, _) =>
+      case Slice(x, start, length) if start.foldable && length.foldable =>
         selectField(x, dataTypeOpt)
       case KnownNotContainsNull(child) =>
         selectField(child, dataTypeOpt)
