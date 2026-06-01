@@ -230,6 +230,54 @@
     ],
     "sqlState" : "22003"
   },
+  "BIN_BY_ALIGN_TO_TYPE_MISMATCH" : {
+    "message" : [
+      "The ALIGN TO expression type <originType> must match the range column type <rangeType>."
+    ],
+    "sqlState" : "42804"
+  },
+  "BIN_BY_COLUMN_NOT_FOUND" : {
+    "message" : [
+      "The column <columnName> referenced in BIN BY was not found in the input relation."
+    ],
+    "sqlState" : "42703"
+  },
+  "BIN_BY_DISTRIBUTE_TYPE_MISMATCH" : {
+    "message" : [
+      "The DISTRIBUTE UNIFORM columns in BIN BY must be numeric or DAY-TIME INTERVAL. Column <columnName> has type <columnType>."
+    ],
+    "sqlState" : "42804"
+  },
+  "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN" : {
+    "message" : [
+      "Column <columnName> appears multiple times in the BIN BY DISTRIBUTE UNIFORM clause."
+    ],
+    "sqlState" : "42701"
+  },
+  "BIN_BY_INVALID_BIN_WIDTH" : {
+    "message" : [
+      "The BIN WIDTH expression must be a positive DAY-TIME INTERVAL. Got: <expr>."
+    ],
+    "sqlState" : "42K09"
+  },
+  "BIN_BY_INVALID_RANGE" : {
+    "message" : [
+      "The input row to BIN BY has range_start (<rangeStart>) greater than range_end (<rangeEnd>). BIN BY requires range_start <= range_end."
+    ],
+    "sqlState" : "22023"
+  },
+  "BIN_BY_MISSING_DISTRIBUTE" : {
+    "message" : [
+      "BIN BY requires at least one column in DISTRIBUTE UNIFORM (...)."
+    ],
+    "sqlState" : "42601"
+  },
+  "BIN_BY_RANGE_TYPE_MISMATCH" : {
+    "message" : [
+      "The range columns in BIN BY must be TIMESTAMP or TIMESTAMP_NTZ. Column <columnName> has type <columnType>. Both range columns must have the same type."
+    ],
+    "sqlState" : "42804"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."

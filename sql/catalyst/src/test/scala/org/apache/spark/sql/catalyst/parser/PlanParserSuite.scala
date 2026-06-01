@@ -2746,6 +2746,174 @@ class PlanParserSuite extends AnalysisTest {
       parameters = Map("error" -> "'ts'", "hint" -> ""))
   }
 
+  test("BIN BY: clause parses into the expected UnresolvedBinBy") {
+    // Minimal clause: all optionals (ALIGN TO, output renames) omitted.
+    val minimal = singleBinBy(parsePlan(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin))
+    assert(minimal.rangeStartCol == UnresolvedAttribute(Seq("ts_start")))
+    assert(minimal.rangeEndCol == UnresolvedAttribute(Seq("ts_end")))
+    assert(minimal.originExpr.isEmpty)
+    assert(minimal.distributeColumns == Seq(UnresolvedAttribute(Seq("value"))))
+    assert(minimal.outputAliases == BinByOutputAliases.empty)
+
+    // Qualified column references and a partial HOUR TO MINUTE interval as BIN WIDTH.
+    val qualified = singleBinBy(parsePlan(
+      """SELECT * FROM t1 JOIN t2 ON t1.id = t2.id BIN BY (
+        |  RANGE t1.ts_start TO t1.ts_end
+        |  BIN WIDTH INTERVAL '5:30' HOUR TO MINUTE
+        |  DISTRIBUTE UNIFORM (t1.value)
+        |)""".stripMargin))
+    assert(qualified.rangeStartCol == UnresolvedAttribute(Seq("t1", "ts_start")))
+    assert(qualified.rangeEndCol == UnresolvedAttribute(Seq("t1", "ts_end")))
+    assert(qualified.distributeColumns == Seq(UnresolvedAttribute(Seq("t1", "value"))))
+
+    // Maximal clause: explicit ALIGN TO, multiple DISTRIBUTE UNIFORM columns, all three renames.
+    val maximal = singleBinBy(parsePlan(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '1' HOUR
+        |  ALIGN TO TIMESTAMP '2024-01-01 00:30:00'
+        |  DISTRIBUTE UNIFORM (bytes_sent, requests)
+        |  BIN_START AS ws
+        |  BIN_END AS we
+        |  BIN_DISTRIBUTE_RATIO AS frac
+        |)""".stripMargin))
+    assert(maximal.originExpr.contains(parseExpression("TIMESTAMP '2024-01-01 00:30:00'")))
+    assert(maximal.distributeColumns == Seq(
+      UnresolvedAttribute(Seq("bytes_sent")),
+      UnresolvedAttribute(Seq("requests"))))
+    assert(maximal.outputAliases.binStart.contains("ws"))
+    assert(maximal.outputAliases.binEnd.contains("we"))
+    assert(maximal.outputAliases.binRatio.contains("frac"))
+  }
+
+  test("BIN BY: malformed clauses raise PARSE_SYNTAX_ERROR") {
+    def assertSyntaxError(query: String): Unit =
+      assert(parseException(query).getCondition == "PARSE_SYNTAX_ERROR")
+
+    // BIN WIDTH missing.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin)
+
+    // DISTRIBUTE UNIFORM missing.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |)""".stripMargin)
+
+    // DISTRIBUTE UNIFORM with an empty column list.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM ()
+        |)""".stripMargin)
+
+    // RANGE missing.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin)
+
+    // Clauses out of order: BIN WIDTH must come after RANGE.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  RANGE ts_start TO ts_end
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin)
+  }
+
+  test("BIN BY: new keywords stay non-reserved and `bin` still parses as a table alias") {
+    // The seven new keywords are in `ansiNonReserved`, so they stay usable as plain identifiers
+    // outside a BIN BY clause.
+    assert(binByNodes(parsePlan(
+      "SELECT bin, width, uniform, align, bin_start, bin_end, bin_distribute_ratio " +
+        "FROM t WHERE bin > 0")).isEmpty)
+
+    // `bin` not followed by BY stays a table alias, both bare and when referenced downstream.
+    assert(binByNodes(parsePlan("SELECT * FROM t bin")).isEmpty)
+    assert(binByNodes(parsePlan("SELECT bin.x FROM t bin WHERE bin.x > 0")).isEmpty)
+  }
+
+  test("BIN BY: composition, chaining, trailing alias, and pipe operator") {
+    // Composes with a subquery in FROM and a downstream WHERE.
+    assert(binByNodes(parsePlan(
+      """SELECT * FROM (SELECT * FROM metrics) BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |) WHERE value > 0""".stripMargin)).size == 1)
+
+    // Composes after PIVOT.
+    assert(binByNodes(parsePlan(
+      """SELECT * FROM events
+        |PIVOT (sum(amount) FOR category IN ('a', 'b'))
+        |BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (a, b)
+        |)""".stripMargin)).size == 1)
+
+    // Two BIN BY clauses chain on the same relation.
+    assert(binByNodes(parsePlan(
+      """SELECT * FROM metrics
+        |BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |)
+        |BIN BY (
+        |  RANGE bin_start TO bin_end
+        |  BIN WIDTH INTERVAL '1' HOUR
+        |  DISTRIBUTE UNIFORM (value)
+        |  BIN_START AS hr_start
+        |  BIN_END AS hr_end
+        |  BIN_DISTRIBUTE_RATIO AS hr_ratio
+        |)""".stripMargin)).size == 2)
+
+    // Trailing alias, with and without the AS keyword, wraps the BinBy in a SubqueryAlias.
+    Seq(") AS binned", ") binned").foreach { tail =>
+      val parsed = parsePlan(
+        s"""SELECT * FROM metrics BIN BY (
+           |  RANGE ts_start TO ts_end
+           |  BIN WIDTH INTERVAL '5' MINUTE
+           |  DISTRIBUTE UNIFORM (value)
+           |$tail""".stripMargin)
+      val aliases = parsed.collect { case s: SubqueryAlias if s.alias == "binned" => s }
+      assert(aliases.size == 1, s"alias tail '$tail' did not produce a SubqueryAlias")
+      assert(aliases.head.child.isInstanceOf[UnresolvedBinBy])
+    }
+
+    // Works as a SQL pipe-operator stage with |>.
+    assert(binByNodes(parsePlan(
+      """FROM metrics
+        ||> BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin)).size == 1)
+  }
+
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)()
+
+  // Helpers shared by the BIN BY parser tests.
+  private def binByNodes(plan: LogicalPlan): Seq[UnresolvedBinBy] =
+    plan.collect { case b: UnresolvedBinBy => b }
+
+  private def singleBinBy(plan: LogicalPlan): UnresolvedBinBy = {
+    val nodes = binByNodes(plan)
+    assert(nodes.size == 1, s"expected exactly one BIN BY node, got ${nodes.size}")
+    nodes.head
+  }
 }
