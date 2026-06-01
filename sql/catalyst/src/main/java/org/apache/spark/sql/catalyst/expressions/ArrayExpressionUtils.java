@@ -248,4 +248,39 @@ public class ArrayExpressionUtils {
   public static int binarySearch(Object[] data, Object value, Comparator<Object> comp) {
     return Arrays.binarySearch(data, value, comp);
   }
+
+  // ----- slice(array, start, length) index resolution -----
+  // Pure 1-based -> 0-based index arithmetic, independent of the array element
+  // type, shared by Slice's eval and codegen paths.
+
+  /**
+   * Resolves the 0-based start index for {@code slice(array, start, length)}.
+   * SQL {@code slice} is 1-based; a negative {@code start} counts back from the
+   * end of the array. A {@code start} of 0 is rejected.
+   */
+  public static int sliceStartIndex(int start, int numElements, String functionName) {
+    if (start == 0) {
+      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(functionName);
+    } else if (start < 0) {
+      return start + numElements;
+    } else {
+      // arrays in SQL are 1-based instead of 0-based
+      return start - 1;
+    }
+  }
+
+  /**
+   * Resolves the result length for {@code slice(array, start, length)} given the
+   * already-resolved {@code startIdx}, clamping it to the number of elements
+   * remaining after {@code startIdx}. A negative {@code length} is rejected.
+   */
+  public static int sliceLength(int length, int numElements, int startIdx, String functionName) {
+    if (length < 0) {
+      throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(functionName, length);
+    } else if (length > numElements - startIdx) {
+      return numElements - startIdx;
+    } else {
+      return length;
+    }
+  }
 }

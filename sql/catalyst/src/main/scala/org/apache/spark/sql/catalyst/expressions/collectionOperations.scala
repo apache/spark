@@ -2052,13 +2052,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val startInt = startVal.asInstanceOf[Int]
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
-    val startIndex = if (startInt == 0) {
-      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName)
-    } else if (startInt < 0) {
-      startInt + arr.numElements()
-    } else {
-      startInt - 1
-    }
+    val startIndex = ArrayExpressionUtils.sliceStartIndex(startInt, arr.numElements(), prettyName)
     if (lengthInt < 0) {
       throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, lengthInt)
     }
@@ -2075,26 +2069,12 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     nullSafeCodeGen(ctx, ev, (x, start, length) => {
       val startIdx = ctx.freshName("startIdx")
       val resLength = ctx.freshName("resLength")
-      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
+      val utils = classOf[ArrayExpressionUtils].getName
       s"""
-         |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
-         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
-         |if ($start == 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError("$prettyName");
-         |} else if ($start < 0) {
-         |  $startIdx = $start + $x.numElements();
-         |} else {
-         |  // arrays in SQL are 1-based instead of 0-based
-         |  $startIdx = $start - 1;
-         |}
-         |if ($length < 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(
-         |    "$prettyName", $length);
-         |} else if ($length > $x.numElements() - $startIdx) {
-         |  $resLength = $x.numElements() - $startIdx;
-         |} else {
-         |  $resLength = $length;
-         |}
+         |${CodeGenerator.JAVA_INT} $startIdx =
+         |  $utils.sliceStartIndex($start, $x.numElements(), "$prettyName");
+         |${CodeGenerator.JAVA_INT} $resLength =
+         |  $utils.sliceLength($length, $x.numElements(), $startIdx, "$prettyName");
          |${genCodeForResult(ctx, ev, x, startIdx, resLength)}
        """.stripMargin
     })
