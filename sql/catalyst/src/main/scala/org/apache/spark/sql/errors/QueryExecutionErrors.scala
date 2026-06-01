@@ -1202,6 +1202,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       new java.util.HashMap[String, String]())
   }
 
+  def aggregateOutOfMemoryError(): SparkOutOfMemoryError = {
+    new SparkOutOfMemoryError(
+      "AGGREGATE_OUT_OF_MEMORY",
+      new java.util.HashMap[String, String]())
+  }
+
   def cannotAcquireMemoryForWindowAggregateError(
       requestedBytes: Long,
       receivedBytes: Long): SparkOutOfMemoryError = {
