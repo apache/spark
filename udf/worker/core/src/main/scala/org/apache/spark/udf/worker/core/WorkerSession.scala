@@ -19,31 +19,7 @@ package org.apache.spark.udf.worker.core
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.annotation.Experimental
-
-/**
- * :: Experimental ::
- * Carries all information needed to initialize a UDF execution on a worker.
- *
- * This message is passed to [[WorkerSession#init]] and contains the function
- * definition, schemas, and any additional configuration.
- *
- * Placeholder: will be replaced by a generated proto message once the
- * UDF wire protocol lands. Do not rely on case-class equality --
- * `Array[Byte]` fields compare by reference.
- *
- * @param functionPayload serialized function (e.g., pickled Python, JVM bytes)
- * @param inputSchema     serialized input schema (e.g., Arrow schema bytes)
- * @param outputSchema    serialized output schema (e.g., Arrow schema bytes)
- * @param properties      additional key-value configuration. Can carry
- *                        protocol-specific or engine-specific metadata that
- *                        does not yet have a dedicated field.
- */
-@Experimental
-case class InitMessage(
-    functionPayload: Array[Byte],
-    inputSchema: Array[Byte],
-    outputSchema: Array[Byte],
-    properties: Map[String, String] = Map.empty)
+import org.apache.spark.udf.worker.Init
 
 /**
  * :: Experimental ::
@@ -62,7 +38,11 @@ case class InitMessage(
  * {{{
  *   val session = dispatcher.createSession(securityScope = None)
  *   try {
- *     session.init(InitMessage(functionPayload, inputSchema, outputSchema))
+ *     session.init(Init.newBuilder()
+ *       .setProtocolVersion(1)
+ *       .setUdf(UdfPayload.newBuilder().setPayload(callable).setFormat(fmt).build())
+ *       .setDataFormat(UDFWorkerDataFormat.ARROW)
+ *       .build())
  *     val results = session.process(inputBatches)
  *     results.foreach(handleBatch)
  *   } finally {
@@ -74,7 +54,8 @@ case class InitMessage(
  *  - [[init]] must be called exactly once before [[process]].
  *  - [[process]] must be called at most once per session.
  *  - [[close]] must always be called (use try-finally).
- *  - [[cancel]] may be called at any time to abort execution.
+ *  - [[cancel]] may be called at any time from any execution context.
+ *    See [[cancel]] for the full contract.
  *
  * The lifecycle is enforced here: [[init]] and [[process]] are `final`
  * and delegate to [[doInit]] / [[doProcess]] after AtomicBoolean guards.
@@ -93,10 +74,11 @@ abstract class WorkerSession extends AutoCloseable {
    *
    * Throws `IllegalStateException` if called more than once.
    *
-   * @param message the initialization parameters including the serialized
-   *                function, input/output schemas, and configuration.
+   * @param message the [[Init]] message carrying the UDF body, data
+   *                format, optional schemas, and any session context
+   *                the worker needs to start processing.
    */
-  final def init(message: InitMessage): Unit = {
+  final def init(message: Init): Unit = {
     if (!initialized.compareAndSet(false, true)) {
       throw new IllegalStateException("init has already been called on this session")
     }
@@ -108,7 +90,7 @@ abstract class WorkerSession extends AutoCloseable {
    *
    * Follows Spark's Iterator-to-Iterator pattern: input batches are streamed
    * to the worker, and result batches are lazily pulled from the returned
-   * iterator. The session sends a Finish signal to the worker when the input
+   * iterator. The session sends a finish signal to the worker when the input
    * iterator is exhausted.
    *
    * Must be called after [[init]] and at most once per session.
@@ -127,8 +109,12 @@ abstract class WorkerSession extends AutoCloseable {
     doProcess(input)
   }
 
-  /** Subclass hook for [[init]]. Called once, after the guard. */
-  protected def doInit(message: InitMessage): Unit
+  /**
+   * Subclass hook for [[init]]. Called once, after the guard.
+   * Implementations MUST establish the worker connection here, not
+   * earlier. This ensures [[cancel]] before [[init]] is a no-op.
+   */
+  protected def doInit(message: Init): Unit
 
   /** Subclass hook for [[process]]. Called at most once, after the guard. */
   protected def doProcess(input: Iterator[Array[Byte]]): Iterator[Array[Byte]]
@@ -136,13 +122,51 @@ abstract class WorkerSession extends AutoCloseable {
   /**
    * Requests cancellation of the current UDF execution.
    *
-   * '''Thread-safety:''' implementations must allow [[cancel]] to be called
-   * from a thread different from the one driving [[process]] (typically a
-   * task interruption thread). It may be invoked at any point after
-   * [[init]] and should be a no-op if execution has already finished.
+   * '''Thread-safety:''' [[cancel]] may be called concurrently with
+   * [[process]] from any execution context.
+   *
+   * '''Lifecycle:''' [[cancel]] is idempotent and safe at any point in
+   * the session's life:
+   *  - before [[init]] -- a no-op; the session may still be closed
+   *    normally via [[close]].
+   *  - between [[init]] and [[process]] -- signals that the session
+   *    should be terminated; the caller should not invoke [[process]]
+   *    and should call [[close]] to release resources.
+   *    Implementations SHOULD surface this as an error if [[process]]
+   *    is subsequently invoked despite the cancellation.
+   *  - during [[process]] (data flowing or awaiting completion)
+   *    -- requests the worker to abort on a best-effort basis.
+   *  - after [[process]] has returned (session already terminated)
+   *    -- a no-op.
+   *
+   * Implementations are responsible for the lifecycle-aware behavior
+   * described above so that the caller does not need to coordinate
+   * with the execution context driving [[process]].
    */
   def cancel(): Unit
 
-  /** Closes this session and releases resources. */
-  override def close(): Unit
+  /**
+   * Closes this session and releases resources. Idempotent; safe to
+   * call from a `finally` block regardless of whether [[init]],
+   * [[process]], or [[cancel]] have been invoked.
+   *
+   * If [[init]] was called but [[process]] was not (e.g. an exception
+   * was thrown between the two), [[close]] signals cancellation to the
+   * worker before releasing resources so it can clean up
+   * deterministically. Subclasses implement [[doClose]] for resource
+   * teardown; the base class handles the cancel-before-close guarantee
+   * automatically.
+   */
+  final override def close(): Unit = {
+    if (initialized.get() && !processed.get()) {
+      cancel()
+    }
+    doClose()
+  }
+
+  /** Subclass hook for [[close]]. The base class guarantees that
+   *  [[cancel]] has already been called if [[init]] was invoked but
+   *  [[process]] was not.
+   */
+  protected def doClose(): Unit
 }

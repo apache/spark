@@ -108,6 +108,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveUnresolvedHaving" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUpdateEventTimeWatermarkColumn" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveWindowTime" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveZip" ::
       "org.apache.spark.sql.catalyst.analysis.SessionWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
       "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
@@ -119,6 +120,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.expressions.ValidateAndStripPipeExpressions" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
+      "org.apache.spark.sql.catalyst.optimizer.CollapseGroupedSumOfCount" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseWindow" ::
@@ -176,6 +178,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.ReplaceIntersectWithSemiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.ReplaceNullWithFalseInPredicate" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin" ::
+      "org.apache.spark.sql.catalyst.optimizer.RewriteNearestByJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteExceptAll" ::
       "org.apache.spark.sql.catalyst.optimizer.RewriteIntersectAll" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyBinaryComparison" ::

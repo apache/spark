@@ -48,6 +48,7 @@ public class ViewInfo extends TableInfo {
   private final Map<String, String> sqlConfigs;
   private final String schemaMode;
   private final String[] queryColumnNames;
+  private final DependencyList viewDependencies;
 
   protected ViewInfo(Builder builder) {
     super(builder);
@@ -57,11 +58,11 @@ public class ViewInfo extends TableInfo {
     this.sqlConfigs = Collections.unmodifiableMap(builder.sqlConfigs);
     this.schemaMode = builder.schemaMode;
     this.queryColumnNames = builder.queryColumnNames;
-    // Force PROP_TABLE_TYPE = VIEW so that `properties()` reflects the typed ViewInfo
-    // classification. Catalogs and generic viewers reading PROP_TABLE_TYPE from the properties
-    // bag (e.g. TableCatalog.listTableSummaries default impl, DESCRIBE) see "VIEW" without
-    // requiring authors to remember to call withTableType(VIEW).
-    properties().put(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
+    this.viewDependencies = builder.viewDependencies;
+    // Default PROP_TABLE_TYPE = VIEW so `properties()` reflects the typed ViewInfo
+    // classification. Callers can refine to a more specific view kind (for example,
+    // METRIC_VIEW) by calling BaseBuilder.withTableType(...) on the builder before build().
+    properties().putIfAbsent(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
   }
 
   /** The SQL text of the view. */
@@ -102,6 +103,14 @@ public class ViewInfo extends TableInfo {
    */
   public String[] queryColumnNames() { return queryColumnNames; }
 
+  /**
+   * Returns the structured list of objects this view depends on (source tables and functions),
+   * or {@code null} if no dependency list was supplied. Unlike other view metadata which is
+   * encoded into {@link #properties()}, dependency lists are a first-class field because their
+   * nested structure does not round-trip cleanly through flat string properties.
+   */
+  public DependencyList viewDependencies() { return viewDependencies; }
+
   public static class Builder extends BaseBuilder<Builder> {
     private String queryText;
     private String currentCatalog;
@@ -109,6 +118,7 @@ public class ViewInfo extends TableInfo {
     private Map<String, String> sqlConfigs = new HashMap<>();
     private String schemaMode;
     private String[] queryColumnNames = new String[0];
+    private DependencyList viewDependencies = null;
 
     @Override
     protected Builder self() { return this; }
@@ -140,6 +150,16 @@ public class ViewInfo extends TableInfo {
 
     public Builder withQueryColumnNames(String[] queryColumnNames) {
       this.queryColumnNames = queryColumnNames == null ? new String[0] : queryColumnNames;
+      return this;
+    }
+
+    /**
+     * Sets the structured dependency list for this view. Source tables and functions referenced
+     * by the view text should be recorded here so downstream consumers (e.g. catalogs persisting
+     * lineage) can access them without re-analyzing the view body.
+     */
+    public Builder withViewDependencies(DependencyList viewDependencies) {
+      this.viewDependencies = viewDependencies;
       return this;
     }
 

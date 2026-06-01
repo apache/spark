@@ -17,11 +17,11 @@
 # under the License.
 #
 
-name: "Build / Maven (master, Scala 2.13, Hadoop 3, JDK 21)"
+name: "Build / Maven (Scala 2.13, Hadoop 3, JDK 21)"
 
 on:
   schedule:
-    - cron: '0 14 * * *'
+    - cron: '0 14 */2 * *'
   workflow_dispatch:
 
 jobs:

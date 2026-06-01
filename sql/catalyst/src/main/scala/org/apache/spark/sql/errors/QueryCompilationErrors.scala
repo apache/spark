@@ -396,13 +396,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
-  def trimCollationNotEnabledError(): Throwable = {
-    new AnalysisException(
-      errorClass = "UNSUPPORTED_FEATURE.TRIM_COLLATION",
-      messageParameters = Map.empty
-    )
-  }
-
   def trailingCommaInSelectError(origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "TRAILING_COMMA_IN_SELECT",
@@ -916,23 +909,15 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
-  def unresolvedVariableError(name: Seq[String], searchPath: Seq[String]): Throwable = {
-    new AnalysisException(
-      errorClass = "UNRESOLVED_VARIABLE",
-      messageParameters = Map(
-        "variableName" -> toSQLId(name),
-        "searchPath" -> toSQLId(searchPath)))
-  }
-
   def unresolvedVariableError(
       name: Seq[String],
-      searchPath: Seq[String],
+      pathEntries: Seq[Seq[String]],
       origin: Origin): Throwable = {
     new AnalysisException(
       errorClass = "UNRESOLVED_VARIABLE",
       messageParameters = Map(
         "variableName" -> toSQLId(name),
-        "searchPath" -> toSQLId(searchPath)),
+        "searchPath" -> pathEntries.map(toSQLId).mkString("[", ", ", "]")),
       origin = origin)
   }
 
@@ -2545,10 +2530,22 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("sourceName" -> sourceName))
   }
 
+  def invalidStreamingSinkNameError(sinkName: String): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SINK_NAME",
+      messageParameters = Map("sinkName" -> sinkName))
+  }
+
   def duplicateStreamingSourceNamesError(duplicateNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.DUPLICATE_SOURCE_NAMES",
       messageParameters = Map("names" -> duplicateNames.mkString(", ")))
+  }
+
+  def cannotEnableSourceEvolutionOnExistingCheckpointError(existingVersion: Int): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.CANNOT_ENABLE_ON_EXISTING_CHECKPOINT",
+      messageParameters = Map("existingVersion" -> existingVersion.toString))
   }
 
   def columnNotFoundInExistingColumnsError(
@@ -2824,6 +2821,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1207",
       messageParameters = Map.empty)
+  }
+
+  def invalidMetricViewYamlError(message: String, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_METRIC_VIEW_YAML",
+      messageParameters = Map("message" -> message),
+      cause = Some(cause))
   }
 
   def noSuchStructFieldInGivenFieldsError(
@@ -3323,6 +3327,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("tableName" -> toSQLId(table)))
   }
 
+  def showCreateTableNotSupportedOnMetricViewError(table: String): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_METRIC_VIEW",
+      messageParameters = Map("tableName" -> toSQLId(table)))
+  }
+
   def showCreateTableNotSupportTransactionalHiveTableError(table: CatalogTable): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_SHOW_CREATE_TABLE.ON_TRANSACTIONAL_HIVE_TABLE",
@@ -3432,6 +3442,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "viewIdent" -> toSQLId(viewIdent),
         "newPath" -> newPath.map(toSQLId).mkString(" -> ")))
+  }
+
+  def recursiveFileLookupNotSupportedForPartitionedDataSourceError(): Throwable = {
+    new AnalysisException(
+      errorClass = "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE",
+      messageParameters = Map.empty)
   }
 
   def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(

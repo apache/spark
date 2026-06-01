@@ -1354,3 +1354,1305 @@ struct<a:int,b:int,count(1):bigint>
 3	NULL	2
 3	NULL	2
 3	NULL	2
+
+
+-- !query
+CREATE TEMPORARY VIEW gidSrc AS SELECT * FROM VALUES
+  (1, 10), (2, 20), (1, 30)
+  AS gidSrc(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW aggSrc AS SELECT * FROM VALUES
+  (1, 10), (2, 20), (1, 30), (2, 40)
+  AS aggSrc(a, b)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW pairAb AS SELECT * FROM VALUES
+  (1, 10), (2, 20)
+  AS pairAb(a, b)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW qualSrc AS SELECT * FROM VALUES
+  (1, 2)
+  AS qualSrc(c1, c2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW triStr AS SELECT * FROM VALUES
+  (1, 'a', 10), (1, 'b', 20), (2, 'a', 30)
+  AS triStr(col1, col2, col3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW subOuter3 AS SELECT * FROM VALUES
+  (1, 10), (1, 20), (2, 30)
+  AS subOuter3(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW subOuter4 AS SELECT * FROM VALUES
+  (1, 10), (1, 20), (2, 30), (3, 40)
+  AS subOuter4(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW notInOuter AS SELECT * FROM VALUES
+  (1, 10), (2, 20), (3, 30)
+  AS notInOuter(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW exprOuter AS SELECT * FROM VALUES
+  (1, 10, 100), (1, 10, 200), (2, 30, 300)
+  AS exprOuter(col1, col2, col3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW cubeStr AS SELECT * FROM VALUES
+  (1, 'a', 10), (2, 'b', 20)
+  AS cubeStr(col1, col2, col3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW localOuter AS SELECT * FROM VALUES (10), (20) AS localOuter(col2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW sub12 AS SELECT * FROM VALUES (1), (2) AS sub12(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW sub13 AS SELECT * FROM VALUES (1), (3) AS sub13(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW sub1132 AS SELECT * FROM VALUES (11), (32) AS sub1132(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW one3 AS SELECT * FROM VALUES (3) AS one3(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW maxW AS SELECT * FROM VALUES (10), (20) AS maxW(y)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW zeroDummy AS SELECT * FROM VALUES (0) AS zeroDummy(dummy)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW nums3 AS SELECT * FROM VALUES (1), (2), (3) AS nums3(x)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW wide34 AS SELECT * FROM VALUES
+  (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34)
+  AS wide34(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,
+            c21,c22,c23,c24,c25,c26,c27,c28,c29,c30,c31,c32,c33,c34)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW structThree AS SELECT * FROM VALUES
+  ('a', 'b', named_struct('val', CAST(1 AS BIGINT)), named_struct('val', 1.0), named_struct('val', 2.0))
+  AS structThree(col1, col2, s1, s2, s3)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW structOne AS SELECT * FROM VALUES
+  ('a', 'b', named_struct('val', CAST(1 AS BIGINT)))
+  AS structOne(col1, col2, s1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+CREATE TEMPORARY VIEW structNested AS SELECT * FROM VALUES
+  ('a', named_struct('inner', named_struct('val', CAST(1 AS BIGINT))))
+  AS structNested(col1, s1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT col1, grouping_id()
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query schema
+struct<col1:int,grouping_id():bigint>
+-- !query output
+NULL	1
+1	0
+2	0
+
+
+-- !query
+SELECT col1, col2, grouping_id()
+FROM gidSrc
+GROUP BY GROUPING SETS ((col1, col2), (col1), ())
+ORDER BY col1, col2
+-- !query schema
+struct<col1:int,col2:int,grouping_id():bigint>
+-- !query output
+NULL	NULL	3
+1	NULL	1
+1	10	0
+1	30	0
+2	NULL	1
+2	20	0
+
+
+-- !query
+SELECT col1, grouping_id() AS gid, gid + 1 AS gid_plus
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query schema
+struct<col1:int,gid:bigint,gid_plus:bigint>
+-- !query output
+NULL	1	2
+1	0	1
+2	0	1
+
+
+-- !query
+SELECT col1, grouping(col1) AS g, g + 1 AS g_plus
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query schema
+struct<col1:int,g:tinyint,g_plus:int>
+-- !query output
+NULL	1	2
+1	0	1
+2	0	1
+
+
+-- !query
+SELECT col1, grouping_id() AS gid, CASE WHEN gid = 0 THEN 'detail' ELSE 'total' END AS level
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query schema
+struct<col1:int,gid:bigint,level:string>
+-- !query output
+NULL	1	total
+1	0	detail
+2	0	detail
+
+
+-- !query
+SELECT grouping_id() AS gid, SUM(col2) AS s, gid + s AS combined
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query schema
+struct<gid:bigint,s:bigint,combined:bigint>
+-- !query output
+1	60	61
+0	40	40
+0	20	20
+
+
+-- !query
+SELECT count(*)
+FROM wide34
+GROUP BY GROUPING SETS ((c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,
+                         c18,c19,c20,c21,c22,c23,c24,c25,c26,c27,c28,c29,c30,c31,c32,c33,c34))
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+
+
+-- !query
+SELECT col1, col2, SUM(col3)
+FROM triStr
+GROUP BY ROLLUP(1, 2)
+ORDER BY col1 NULLS LAST, col2 NULLS LAST
+-- !query schema
+struct<col1:int,col2:string,sum(col3):bigint>
+-- !query output
+1	a	10
+1	b	20
+1	NULL	30
+2	a	30
+2	NULL	30
+NULL	NULL	60
+
+
+-- !query
+SELECT a, b, count(1)
+FROM pairAb
+GROUP BY GROUPING SETS ((1, a), (b))
+ORDER BY a, b
+-- !query schema
+struct<a:int,b:int,count(1):bigint>
+-- !query output
+NULL	10	1
+NULL	20	1
+1	NULL	1
+2	NULL	1
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY GROUPING SETS ((a, b), (a))
+HAVING SUM(b) > 15
+ORDER BY a, b
+-- !query schema
+struct<a:int,b:int,sb:bigint>
+-- !query output
+1	NULL	40
+1	30	30
+2	NULL	60
+2	20	20
+2	40	40
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY CUBE(a, b)
+HAVING SUM(b) > 15
+ORDER BY a, b
+-- !query schema
+struct<a:int,b:int,sb:bigint>
+-- !query output
+NULL	NULL	100
+NULL	20	20
+NULL	30	30
+NULL	40	40
+1	NULL	40
+1	30	30
+2	NULL	60
+2	20	20
+2	40	40
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY ROLLUP(a, b)
+HAVING SUM(b) > 15
+ORDER BY a, b
+-- !query schema
+struct<a:int,b:int,sb:bigint>
+-- !query output
+NULL	NULL	100
+1	NULL	40
+1	30	30
+2	NULL	60
+2	20	20
+2	40	40
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY GROUPING SETS ((a, b), (a))
+HAVING COUNT(b) > 1
+ORDER BY a, b
+-- !query schema
+struct<a:int,b:int,sb:bigint>
+-- !query output
+1	NULL	40
+2	NULL	60
+
+
+-- !query
+SELECT a + 1 AS ak, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY GROUPING SETS ((a + 1, b), (a + 1))
+HAVING SUM(b) > 15
+ORDER BY ak, b
+-- !query schema
+struct<ak:int,b:int,sb:bigint>
+-- !query output
+2	NULL	40
+2	30	30
+3	NULL	60
+3	20	20
+3	40	40
+
+
+-- !query
+SELECT a, b, SUM(a + b) AS s
+FROM aggSrc
+GROUP BY GROUPING SETS ((a, b), (a))
+HAVING SUM(a + b) > 20
+ORDER BY a, b
+-- !query schema
+struct<a:int,b:int,s:bigint>
+-- !query output
+1	NULL	42
+1	30	31
+2	NULL	64
+2	20	22
+2	40	42
+
+
+-- !query
+SELECT c1
+FROM qualSrc
+GROUP BY ROLLUP(qualSrc.c1)
+HAVING qualSrc.c1 = 1
+-- !query schema
+struct<c1:int>
+-- !query output
+1
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY GROUPING SETS ((a, b), (a))
+ORDER BY SUM(b)
+-- !query schema
+struct<a:int,b:int,sb:bigint>
+-- !query output
+1	NULL	40
+2	NULL	60
+1	10	10
+2	20	20
+1	30	30
+2	40	40
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY CUBE(a, b)
+ORDER BY SUM(b)
+-- !query schema
+struct<a:int,b:int,sb:bigint>
+-- !query output
+1	NULL	40
+2	NULL	60
+NULL	NULL	100
+1	10	10
+NULL	10	10
+NULL	20	20
+2	20	20
+NULL	30	30
+1	30	30
+2	40	40
+NULL	40	40
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY ROLLUP(a, b)
+ORDER BY SUM(b)
+-- !query schema
+struct<a:int,b:int,sb:bigint>
+-- !query output
+1	NULL	40
+2	NULL	60
+NULL	NULL	100
+1	10	10
+2	20	20
+1	30	30
+2	40	40
+
+
+-- !query
+SELECT col1, col2, SUM(s1.val) AS sum1, SUM(s2.val) AS sum2, SUM(s3.val) AS sum3
+FROM structThree
+GROUP BY GROUPING SETS ((col1, col2), ())
+ORDER BY col1
+-- !query schema
+struct<col1:string,col2:string,sum1:bigint,sum2:decimal(12,1),sum3:decimal(12,1)>
+-- !query output
+NULL	NULL	1	1.0	2.0
+a	b	1	1.0	2.0
+
+
+-- !query
+SELECT col1, col2, SUM(s1.val) AS sum1
+FROM structOne
+GROUP BY ROLLUP (col1, col2)
+ORDER BY col1, col2
+-- !query schema
+struct<col1:string,col2:string,sum1:bigint>
+-- !query output
+NULL	NULL	1
+a	NULL	1
+a	b	1
+
+
+-- !query
+SELECT col1, SUM(s1.inner.val) AS sum1
+FROM structNested
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY col1
+-- !query schema
+struct<col1:string,sum1:bigint>
+-- !query output
+NULL	1
+a	1
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM nums3) AS const_cnt
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,const_cnt:bigint>
+-- !query output
+1	30	3
+2	30	3
+NULL	60	3
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM nums3) AS const_cnt
+FROM subOuter3
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,const_cnt:bigint>
+-- !query output
+1	30	3
+2	30	3
+NULL	60	3
+
+
+-- !query
+SELECT col1, col2, SUM(col3) AS s,
+       (SELECT COUNT(*) FROM sub12) AS const_cnt
+FROM cubeStr
+GROUP BY CUBE(col1, col2)
+ORDER BY col1 NULLS LAST, col2 NULLS LAST
+-- !query schema
+struct<col1:int,col2:string,s:bigint,const_cnt:bigint>
+-- !query output
+1	a	10	2
+1	NULL	10	2
+2	b	20	2
+2	NULL	20	2
+NULL	a	10	2
+NULL	b	20	2
+NULL	NULL	30	2
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM sub12) AS cnt,
+       (SELECT MAX(y) FROM maxW) AS max_val
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,cnt:bigint,max_val:int>
+-- !query output
+1	30	2	20
+2	30	2	20
+NULL	60	2	20
+
+
+-- !query
+SELECT 1 + 1 AS gkey, SUM(col2) AS s,
+       (SELECT 1 + 1 FROM zeroDummy) AS local_expr
+FROM localOuter
+GROUP BY ROLLUP(1 + 1)
+ORDER BY gkey NULLS LAST
+-- !query schema
+struct<gkey:int,s:bigint,local_expr:int>
+-- !query output
+2	30	2
+NULL	30	2
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE col1 IN (SELECT x FROM sub12)
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint>
+-- !query output
+1	30
+2	30
+NULL	60
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE EXISTS (SELECT 1 FROM sub12 WHERE sub12.x = subOuter4.col1)
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint>
+-- !query output
+1	30
+2	30
+NULL	60
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM notInOuter
+WHERE col1 NOT IN (SELECT x FROM one3)
+GROUP BY GROUPING SETS((col1), ())
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint>
+-- !query output
+1	10
+2	20
+NULL	30
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       EXISTS (SELECT 1 FROM sub12 WHERE sub12.x = col1) AS has_match
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "PLAN_VALIDATION_FAILED_RULE_IN_BATCH",
+  "sqlState" : "XXKD0",
+  "messageParameters" : {
+    "batch" : "Pullup Correlated Expressions",
+    "reason" : "Aggregate: Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, exists#x [col1#x && (x#x = col1#x)] AS has_match#x]\n:  +- Project [1 AS 1#x, x#x]\n:     +- Project [cast(x#x as int) AS x#x]\n:        +- Project [x#x]\n:           +- LocalRelation [x#x]\n+- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]\n   +- Project [col1#x, col2#x, col1#x AS col1#x]\n      +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]\n         +- LocalRelation [col1#x, col2#x]\n is not a valid aggregate expression: [MISSING_AGGREGATION] The non-aggregating expression \"x\" is based on columns which are not participating in the GROUP BY clause.\nAdd the columns or the expression to the GROUP BY, aggregate the expression, or use \"any_value(x)\" if you do not care which of the values within a group is returned. SQLSTATE: 42803\nPrevious schema:col1#x, s#xL, has_match#x\nPrevious plan: Sort [col1#x ASC NULLS LAST], true\n+- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, exists#x [col1#x] AS has_match#x]\n   :  +- Project [1 AS 1#x]\n   :     +- Filter (x#x = outer(col1#x))\n   :        +- Project [cast(x#x as int) AS x#x]\n   :           +- Project [x#x]\n   :              +- LocalRelation [x#x]\n   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]\n      +- Project [col1#x, col2#x, col1#x AS col1#x]\n         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]\n            +- LocalRelation [col1#x, col2#x]\n",
+    "rule" : "org.apache.spark.sql.catalyst.optimizer.PullupCorrelatedPredicates"
+  }
+}
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       col1 IN (SELECT x FROM sub13) AS in_result
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,in_result:boolean>
+-- !query output
+1	30	true
+2	30	false
+NULL	60	false
+
+
+-- !query
+SELECT col1 + col2 AS gkey, SUM(col3) AS s,
+       (col1 + col2) IN (SELECT x FROM sub1132) AS in_result
+FROM exprOuter
+GROUP BY ROLLUP(col1 + col2)
+ORDER BY gkey NULLS LAST
+-- !query schema
+struct<gkey:int,s:bigint,in_result:boolean>
+-- !query output
+11	300	true
+32	300	true
+NULL	600	false
+
+
+-- !query
+SELECT GROUPING(col2)
+FROM gidSrc
+GROUP BY ROLLUP(col1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_COLUMN_MISMATCH",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "grouping" : "col2#x",
+    "groupingColumns" : "col1#x"
+  }
+}
+
+
+-- !query
+SELECT GROUPING_ID(col1, col2)
+FROM gidSrc
+GROUP BY ROLLUP(col1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_ID_COLUMN_MISMATCH",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "groupByColumns" : "col1#x",
+    "groupingIdColumn" : "col1#x,col2#x"
+  }
+}
+
+
+-- !query
+SELECT SUM(a)
+FROM (SELECT 1 AS a) t
+GROUP BY ROW_NUMBER() OVER (ORDER BY a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 76,
+    "fragment" : "GROUP BY ROW_NUMBER() OVER (ORDER BY a)"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW distSrc AS SELECT * FROM VALUES
+  (1, 10), (1, 10), (1, 20), (2, 30), (2, 30)
+  AS distSrc(a, b)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT a, COUNT(DISTINCT b) AS dcnt, SUM(DISTINCT b) AS dsum
+FROM distSrc
+GROUP BY ROLLUP(a)
+ORDER BY a NULLS LAST
+-- !query schema
+struct<a:int,dcnt:bigint,dsum:bigint>
+-- !query output
+1	2	30
+2	1	30
+NULL	3	60
+
+
+-- !query
+SELECT a, COUNT(DISTINCT b) AS dcnt
+FROM distSrc
+GROUP BY CUBE(a)
+ORDER BY a NULLS LAST
+-- !query schema
+struct<a:int,dcnt:bigint>
+-- !query output
+1	2
+2	1
+NULL	3
+
+
+-- !query
+SELECT a, SUM(b) AS s
+FROM distSrc
+GROUP BY ROLLUP(a)
+HAVING COUNT(DISTINCT b) > 1
+ORDER BY a NULLS LAST
+-- !query schema
+struct<a:int,s:bigint>
+-- !query output
+1	40
+NULL	100
+
+
+-- !query
+SELECT a, b, SUM(b) FILTER (WHERE b > 15) AS sfilt
+FROM aggSrc
+GROUP BY CUBE(a, b)
+ORDER BY a NULLS LAST, b NULLS LAST
+-- !query schema
+struct<a:int,b:int,sfilt:bigint>
+-- !query output
+1	10	NULL
+1	30	30
+1	NULL	30
+2	20	20
+2	40	40
+2	NULL	60
+NULL	10	NULL
+NULL	20	20
+NULL	30	30
+NULL	40	40
+NULL	NULL	90
+
+
+-- !query
+SELECT a, COUNT(*) FILTER (WHERE b > 15) AS cfilt
+FROM aggSrc
+GROUP BY ROLLUP(a)
+ORDER BY a NULLS LAST
+-- !query schema
+struct<a:int,cfilt:bigint>
+-- !query output
+1	1
+2	2
+NULL	3
+
+
+-- !query
+SELECT a, b, SUM(b) AS s
+FROM aggSrc
+GROUP BY CUBE(a, b)
+HAVING GROUPING_ID(a, b) = 0 AND SUM(b) > 15
+ORDER BY a, b
+-- !query schema
+struct<a:int,b:int,s:bigint>
+-- !query output
+1	30	30
+2	20	20
+2	40	40
+
+
+-- !query
+SELECT a, SUM(b) AS s, GROUPING(a) AS ga
+FROM aggSrc
+GROUP BY ROLLUP(a)
+HAVING SUM(b) > 30
+ORDER BY a NULLS LAST
+-- !query schema
+struct<a:int,s:bigint,ga:tinyint>
+-- !query output
+1	40	0
+2	60	0
+NULL	100	1
+
+
+-- !query
+SELECT SUM(b) AS s
+FROM aggSrc
+GROUP BY GROUPING SETS (())
+-- !query schema
+struct<s:bigint>
+-- !query output
+100
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM nums3 WHERE x < (SELECT MAX(y) FROM maxW)) AS nested_cnt
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,nested_cnt:bigint>
+-- !query output
+1	30	3
+2	30	3
+NULL	60	3
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM (SELECT a FROM aggSrc GROUP BY CUBE(a))) AS cube_rows
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,cube_rows:bigint>
+-- !query output
+1	30	3
+2	30	3
+NULL	60	3
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM (SELECT a FROM aggSrc GROUP BY a)) AS distinct_a
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,distinct_a:bigint>
+-- !query output
+1	30	2
+2	30	2
+NULL	60	2
+
+
+-- !query
+SELECT col1, col2, COUNT(*) AS cnt
+FROM cubeStr
+WHERE col1 IN (SELECT a FROM aggSrc GROUP BY ROLLUP(a) HAVING a IS NOT NULL)
+GROUP BY CUBE(col1, col2)
+ORDER BY col1 NULLS LAST, col2 NULLS LAST
+-- !query schema
+struct<col1:int,col2:string,cnt:bigint>
+-- !query output
+1	a	1
+1	NULL	1
+2	b	1
+2	NULL	1
+NULL	a	1
+NULL	b	1
+NULL	NULL	2
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE col1 IN (SELECT x FROM sub13 WHERE x IN (SELECT a FROM aggSrc))
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint>
+-- !query output
+1	30
+NULL	30
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE EXISTS (
+  SELECT 1 FROM sub12
+  WHERE sub12.x = subOuter4.col1 AND sub12.x IN (SELECT a FROM aggSrc)
+)
+GROUP BY GROUPING SETS((col1), ())
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint>
+-- !query output
+1	30
+2	30
+NULL	60
+
+
+-- !query
+SELECT a, SUM(b) AS s
+FROM aggSrc
+GROUP BY ROLLUP(a)
+HAVING SUM(b) > (SELECT AVG(y) FROM maxW)
+ORDER BY a NULLS LAST
+-- !query schema
+struct<a:int,s:bigint>
+-- !query output
+1	40
+2	60
+NULL	100
+
+
+-- !query
+SELECT a, SUM(b) AS s
+FROM aggSrc
+GROUP BY ROLLUP(a)
+HAVING SUM(b) > (SELECT MIN(y) FROM maxW) AND COUNT(*) >= (SELECT COUNT(*) FROM sub12) - 2
+ORDER BY a NULLS LAST
+-- !query schema
+struct<a:int,s:bigint>
+-- !query output
+1	40
+2	60
+NULL	100
+
+
+-- !query
+SELECT a, SUM(b) AS s
+FROM aggSrc
+GROUP BY CUBE(a)
+ORDER BY SUM(b) + (SELECT MAX(y) FROM maxW), a NULLS LAST
+-- !query schema
+struct<a:int,s:bigint>
+-- !query output
+1	40
+2	60
+NULL	100
+
+
+-- !query
+SELECT a, b, SUM(b) + (SELECT MAX(y) FROM maxW) AS s_plus
+FROM aggSrc
+GROUP BY CUBE(a, b)
+ORDER BY a NULLS LAST, b NULLS LAST
+-- !query schema
+struct<a:int,b:int,s_plus:bigint>
+-- !query output
+1	10	30
+1	30	50
+1	NULL	60
+2	20	40
+2	40	60
+2	NULL	80
+NULL	10	30
+NULL	20	40
+NULL	30	50
+NULL	40	60
+NULL	NULL	120
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM nums3) AS n
+FROM subOuter4
+WHERE col1 IN (SELECT x FROM sub12)
+GROUP BY ROLLUP(col1)
+HAVING SUM(col2) > (SELECT MIN(y) FROM maxW)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,n:bigint>
+-- !query output
+1	30	3
+2	30	3
+NULL	60	3
+
+
+-- !query
+SELECT col1, col2, COUNT(*) AS cnt, (SELECT SUM(y) FROM maxW) AS total
+FROM cubeStr
+WHERE col1 IN (SELECT a FROM aggSrc)
+GROUP BY CUBE(col1, col2)
+ORDER BY col1 NULLS LAST, col2 NULLS LAST
+-- !query schema
+struct<col1:int,col2:string,cnt:bigint,total:bigint>
+-- !query output
+1	a	1	30
+1	NULL	1	30
+2	b	1	30
+2	NULL	1	30
+NULL	a	1	30
+NULL	b	1	30
+NULL	NULL	2	30
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE col1 NOT IN (SELECT x FROM sub12 WHERE x > 1)
+GROUP BY GROUPING SETS((col1), ())
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint>
+-- !query output
+1	30
+3	40
+NULL	70
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       col1 IN (SELECT MAX(a) FROM aggSrc) AS is_max_a
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint,is_max_a:boolean>
+-- !query output
+1	30	false
+2	30	true
+NULL	60	false
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE col2 > (SELECT AVG(x) FROM sub12 WHERE x <= subOuter4.col1)
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query schema
+struct<col1:int,s:bigint>
+-- !query output
+1	30
+2	30
+3	40
+NULL	100
+
+
+-- !query
+DROP VIEW testData
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW courseSales
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW gidSrc
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW aggSrc
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW pairAb
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW qualSrc
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW triStr
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW subOuter3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW subOuter4
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW notInOuter
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW exprOuter
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW cubeStr
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW localOuter
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW sub12
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW sub13
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW sub1132
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW one3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW maxW
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW zeroDummy
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW nums3
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW wide34
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW structThree
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW structOne
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW structNested
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP VIEW distSrc
+-- !query schema
+struct<>
+-- !query output
+

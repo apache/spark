@@ -379,6 +379,12 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
+    def zip(self, other: ParentDataFrame) -> ParentDataFrame:
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={"feature": "zip"},
+        )
+
     def _check_same_session(self, other: ParentDataFrame) -> "DataFrame":
         if (
             not isinstance(other, DataFrame)
@@ -723,6 +729,30 @@ class DataFrame(ParentDataFrame):
             how = how.lower().replace("_", "")
         return DataFrame(
             plan.LateralJoin(left=self._plan, right=other._plan, on=on, how=how),
+            session=self._session,
+        )
+
+    def nearestByJoin(
+        self,
+        other: ParentDataFrame,
+        rankingExpression: Column,
+        numResults: int,
+        mode: str,
+        direction: str,
+        *,
+        joinType: str = "inner",
+    ) -> ParentDataFrame:
+        other = self._check_same_session(other)
+        return DataFrame(
+            plan.NearestByJoin(
+                left=self._plan,
+                right=other._plan,
+                ranking_expression=rankingExpression,
+                num_results=int(numResults),
+                join_type=joinType,
+                mode=mode,
+                direction=direction,
+            ),
             session=self._session,
         )
 
@@ -2484,6 +2514,10 @@ def _test() -> None:
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.dataframe.__dict__.copy()
+
+    # `zip` is not yet supported on Spark Connect; the parent docstring's
+    # example would call into the connect impl and fail with NOT_IMPLEMENTED.
+    del pyspark.sql.dataframe.DataFrame.zip.__doc__
 
     if not is_remote_only():
         del pyspark.sql.dataframe.DataFrame.toJSON.__doc__

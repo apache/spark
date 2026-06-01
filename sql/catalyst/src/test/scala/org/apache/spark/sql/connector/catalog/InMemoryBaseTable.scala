@@ -97,6 +97,25 @@ abstract class InMemoryBaseTable(
     tableVersion = version.toInt
   }
 
+  /**
+   * Copies version and validated version from another table.
+   *
+   * Some test catalogs (e.g. [[NullColumnIdInMemoryTableCatalog]],
+   * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create a new table object
+   * that overrides specific behavior (such as nulling out column IDs). The new
+   * object's version counter starts at 0. Without this call, the version counter
+   * resets every time the catalog creates such a replacement table, breaking the
+   * monotonic-version assumption that downstream consumers rely on (e.g.
+   * [[InMemoryTable]].copy, validated-version propagation, and the join-refresh
+   * tests in [[DSv2IncrementallyConstructedQueryTests]]).
+   */
+  def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
+    setVersion(sourceTable.version())
+    if (sourceTable.validatedVersion() != null) {
+      setValidatedVersion(sourceTable.validatedVersion())
+    }
+  }
+
   def increaseVersion(): Unit = {
     tableVersion += 1
   }
@@ -545,7 +564,8 @@ abstract class InMemoryBaseTable(
     override def json(): String = rowCount.toString
   }
 
-  class InMemoryMicroBatchStream extends MicroBatchStream {
+  class InMemoryMicroBatchStream(readSchema: StructType, tableSchema: StructType)
+      extends MicroBatchStream {
     override def initialOffset(): Offset = new InMemoryTableOffset(0)
     override def latestOffset(): Offset =
       new InMemoryTableOffset(InMemoryBaseTable.this.rows.size.toLong)
@@ -554,14 +574,13 @@ abstract class InMemoryBaseTable(
       val e = end.asInstanceOf[InMemoryTableOffset].rowCount.toInt
       Array(InMemoryMicroBatchPartition(InMemoryBaseTable.this.rows.slice(s, e)))
     }
-    override def createReaderFactory(): PartitionReaderFactory = { partition =>
-      val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
-      new PartitionReader[InternalRow] {
-        private var idx = -1
-        override def next(): Boolean = { idx += 1; idx < rows.size }
-        override def get(): InternalRow = rows(idx)
-        override def close(): Unit = {}
+    override def createReaderFactory(): PartitionReaderFactory = {
+      val metadataColNames = new mutable.ArrayBuffer[String]()
+      readSchema.foreach {
+        case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name
+        case _ =>
       }
+      new InMemoryMicroBatchReaderFactory(metadataColNames.toArray)
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
@@ -655,7 +674,7 @@ abstract class InMemoryBaseTable(
     }
 
     override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream =
-      new InMemoryMicroBatchStream
+      new InMemoryMicroBatchStream(readSchema, tableSchema)
   }
 
   case class InMemoryBatchScan(
@@ -788,30 +807,43 @@ abstract class InMemoryBaseTable(
     }
 
     override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+
+    protected def doCommit(messages: Array[WriterCommitMessage]): Unit
+
+    override final def commit(messages: Array[WriterCommitMessage]): Unit = {
+      doCommit(messages)
+      commits += Commit(Instant.now().toEpochMilli)
+    }
+
+    override final def commit(
+        messages: Array[WriterCommitMessage],
+        summary: WriteSummary): Unit = {
+      doCommit(messages)
+      commits += Commit(Instant.now().toEpochMilli, writeSummary = Some(summary))
+    }
   }
 
   class Append(val info: LogicalWriteInfo) extends TestBatchWrite {
-
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override protected def doCommit(
+        messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
   class DynamicOverwrite(val info: LogicalWriteInfo) extends TestBatchWrite {
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override protected def doCommit(
+        messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
       dataMap --= newData.flatMap(_.rows.map(getKey))
       withData(newData)
-      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
   class TruncateAndAppend(val info: LogicalWriteInfo) extends TestBatchWrite {
-    override def commit(messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
+    override protected def doCommit(
+        messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       dataMap.clear()
       withData(messages.map(_.asInstanceOf[BufferedRows]))
-      commits += Commit(Instant.now().toEpochMilli)
     }
   }
 
@@ -939,6 +971,30 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
   override def filesCount(): OptionalLong = OptionalLong.of(100L)
 
   def clear(): Unit = rows.clear()
+}
+
+private class InMemoryMicroBatchReaderFactory(
+    metaNames: Array[String]) extends PartitionReaderFactory with Serializable {
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
+    new PartitionReader[InternalRow] {
+      private var idx = -1
+      override def next(): Boolean = { idx += 1; idx < rows.size }
+      override def get(): InternalRow = {
+        val rawRow = rows(idx)
+        if (metaNames.isEmpty) rawRow
+        else {
+          val metaRow = new GenericInternalRow(metaNames.map {
+            case "index" => idx.asInstanceOf[Any]
+            case "_partition" => UTF8String.fromString("").asInstanceOf[Any]
+            case _ => null
+          })
+          new JoinedRow(rawRow, metaRow)
+        }
+      }
+      override def close(): Unit = {}
+    }
+  }
 }
 
 object BufferedRows {

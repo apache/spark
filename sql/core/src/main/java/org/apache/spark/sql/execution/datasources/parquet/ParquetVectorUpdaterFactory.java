@@ -363,9 +363,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putLong(offset + i, valuesReader.readInteger());
-      }
+      valuesReader.readIntegersAsLongs(total, values, offset);
     }
 
     @Override
@@ -398,9 +396,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putDouble(offset + i, valuesReader.readInteger());
-      }
+      valuesReader.readIntegersAsDoubles(total, values, offset);
     }
 
     @Override
@@ -433,9 +429,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
-      }
+      valuesReader.readIntegersAsTimestampMicros(total, values, offset);
     }
 
     @Override
@@ -688,9 +682,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putInt(offset + i, (int) valuesReader.readLong());
-      }
+      valuesReader.readLongsAsInts(total, values, offset);
     }
 
     @Override
@@ -712,7 +704,9 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      values.putLong(offset, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+      // 32-bit Decimal target (precision <= 9) is stored in `intData`; `longData` is
+      // unallocated, so use `putInt` with the same narrowing cast as `readValue`/`readValues`.
+      values.putInt(offset, (int) dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
     }
   }
 
@@ -953,9 +947,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putDouble(offset + i, valuesReader.readFloat());
-      }
+      valuesReader.readFloatsAsDoubles(total, values, offset);
     }
 
     @Override

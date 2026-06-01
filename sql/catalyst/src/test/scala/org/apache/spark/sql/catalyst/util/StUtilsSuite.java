@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util;
 import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -37,6 +38,8 @@ class STUtilsSuite {
 
   private final byte[] testWkb = new byte[] {0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, (byte)0xF0, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40};
+
+  private final UTF8String ENDIANNESS_NDR = UTF8String.fromString("NDR");
 
   // A sample Geography byte array for testing purposes, representing a POINT(1 2) with SRID 4326.
   private final int testGeographySrid = 4326;
@@ -111,7 +114,7 @@ class STUtilsSuite {
   @Test
   void testStAsBinaryGeography() {
     GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
-    byte[] geographyWkb = STUtils.stAsBinary(geographyVal);
+    byte[] geographyWkb = STUtils.stAsBinary(geographyVal, ENDIANNESS_NDR);
     assertNotNull(geographyWkb);
     assertArrayEquals(testWkb, geographyWkb);
   }
@@ -119,7 +122,7 @@ class STUtilsSuite {
   @Test
   void testStAsBinaryGeometry() {
     GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
-    byte[] geometryWkb = STUtils.stAsBinary(geometryVal);
+    byte[] geometryWkb = STUtils.stAsBinary(geometryVal, ENDIANNESS_NDR);
     assertNotNull(geometryWkb);
     assertArrayEquals(testWkb, geometryWkb);
   }
@@ -139,10 +142,42 @@ class STUtilsSuite {
 
   // ST_GeogFromWKB
   @Test
-  void testStGeogFromWKB() {
+  void testStGeogFromWKBNoSrid() {
     GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkb);
     assertNotNull(geographyVal);
     assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKBWithDefaultSrid() {
+    GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkb, testGeographySrid);
+    assertNotNull(geographyVal);
+    assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKBWithValidSrid() {
+    // Geography supports a variety of geographic SRIDs (not just the default 4326).
+    for (int validGeographySrid : new int[]{4267, 4269, 4326, 4612, 37001, 104030}) {
+      GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkb, validGeographySrid);
+      assertNotNull(geographyVal);
+      byte[] expectedBytes = new byte[testWkb.length + sridLen];
+      byte[] geogSrid = ByteBuffer.allocate(sridLen).order(end).putInt(validGeographySrid).array();
+      System.arraycopy(geogSrid, 0, expectedBytes, 0, sridLen);
+      System.arraycopy(testWkb, 0, expectedBytes, sridLen, testWkb.length);
+      assertArrayEquals(expectedBytes, geographyVal.getBytes());
+    }
+  }
+
+  @Test
+  void testStGeogFromWKBWithInvalidSrid() {
+    // SRIDs that are either out of range or correspond to non-geographic SRSes (e.g. 0, 3857).
+    for (int invalidGeographySrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+              () -> STUtils.stGeogFromWKB(testWkb, invalidGeographySrid));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidGeographySrid + "."));
+    }
   }
 
   // ST_GeomFromWKB

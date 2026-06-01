@@ -97,7 +97,7 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
     val leftKP = KeyedPartitioning(Seq(exprA), partitionKeys)
     val rightKP = KeyedPartitioning(Seq(exprB), partitionKeys)
     val child = DummySparkPlan(
-      outputPartitioning = PartitioningCollection(Seq(leftKP, rightKP)),
+      outputPartitioning = PartitioningCollection.fromPartitionings(Seq(leftKP, rightKP)),
       outputOrdering = Seq(SortOrder(exprA, Ascending, sameOrderExpressions = Seq(exprB))))
     val gpe = GroupPartitionsExec(child)
 

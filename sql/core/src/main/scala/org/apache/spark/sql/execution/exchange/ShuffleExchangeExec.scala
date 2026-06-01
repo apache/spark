@@ -30,7 +30,9 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow, UnsafeRowChecksum}
+import org.apache.spark.sql.catalyst.expressions.{
+  Attribute, BoundReference, CollationAwareMurmur3Hash, Literal, Pmod, UnsafeProjection,
+  UnsafeRow, UnsafeRowChecksum}
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -349,6 +351,10 @@ object ShuffleExchangeExec {
         // For HashPartitioning, the partitioning key is already a valid partition ID, as we use
         // `HashPartitioning.partitionIdExpression` to produce partitioning key.
         new PartitionIdPassthrough(n)
+      case NullAwareHashPartitioning(_, n) =>
+        // The null-aware extractor below produces partition IDs directly:
+        // Pmod(hash, n) for non-NULL keys, and a round-robin counter for NULL keys.
+        new PartitionIdPassthrough(n)
       case ShufflePartitionIdPassThrough(_, n) =>
         // For ShufflePartitionIdPassThrough, the DirectShufflePartitionID expression directly
         // produces partition IDs, so we use PartitionIdPassthrough to pass them through directly.
@@ -403,11 +409,37 @@ object ShuffleExchangeExec {
       case h: HashPartitioning =>
         val projection = UnsafeProjection.create(h.partitionIdExpression :: Nil, outputAttributes)
         row => projection(row).getInt(0)
+      case h: NullAwareHashPartitioning =>
+        // Non-NULL keys must produce the same partition id as
+        // HashPartitioning.partitionIdExpression so opted-in HashShuffleSpec and
+        // NullAwareHashShuffleSpec inputs stay aligned.
+        val joinKeyProjection = UnsafeProjection.create(h.expressions, outputAttributes)
+        val boundJoinKeys = h.expressions.zipWithIndex.map { case (expr, index) =>
+          BoundReference(index, expr.dataType, expr.nullable)
+        }
+        val partitionIdExpression = Pmod(
+          new CollationAwareMurmur3Hash(boundJoinKeys),
+          Literal(h.numPartitions))
+        val partitionIdProjection = UnsafeProjection.create(partitionIdExpression :: Nil)
+        var nullKeyPartition =
+          new XORShiftRandom(TaskContext.get().partitionId()).nextInt(h.numPartitions)
+        row => {
+          val joinKeys = joinKeyProjection(row)
+          if (joinKeys.anyNull()) {
+            // NULL join keys cannot match under ordinary equi-join semantics. Spread them
+            // round-robin within each map task so identical rows do not collapse to one reducer.
+            val partition = nullKeyPartition
+            nullKeyPartition = (nullKeyPartition + 1) % h.numPartitions
+            partition
+          } else {
+            partitionIdProjection(joinKeys).getInt(0)
+          }
+        }
       case RangePartitioning(sortingExpressions, _) =>
         val projection = UnsafeProjection.create(sortingExpressions.map(_.child), outputAttributes)
         row => projection(row)
       case SinglePartition => identity
-      case KeyedPartitioning(expressions, _, _) =>
+      case KeyedPartitioning(expressions, _, _, _) =>
         row => bindReferences(expressions, outputAttributes).map(_.eval(row))
       case s: ShufflePartitionIdPassThrough =>
         // For ShufflePartitionIdPassThrough, the expression directly evaluates to the partition ID
@@ -419,9 +451,14 @@ object ShuffleExchangeExec {
 
     val isRoundRobin = newPartitioning.isInstanceOf[RoundRobinPartitioning] &&
       newPartitioning.numPartitions > 1
+    val isNullAwareHashPartitioning =
+      newPartitioning.isInstanceOf[NullAwareHashPartitioning] &&
+        newPartitioning.numPartitions > 1
+    val needsDeterministicLocalSort =
+      (isRoundRobin || isNullAwareHashPartitioning) && SQLConf.get.sortBeforeRepartition
 
     val rddWithPartitionIds: RDD[Product2[Int, InternalRow]] = {
-      // [SPARK-23207] Have to make sure the generated RoundRobinPartitioning is deterministic,
+      // [SPARK-23207] Have to make sure stateful row-to-partition assignment is deterministic,
       // otherwise a retry task may output different rows and thus lead to data loss.
       //
       // Currently we following the most straight-forward way that perform a local sort before
@@ -429,7 +466,7 @@ object ShuffleExchangeExec {
       //
       // Note that we don't perform local sort if the new partitioning has only 1 partition, under
       // that case all output rows go to the same partition.
-      val newRdd = if (isRoundRobin && SQLConf.get.sortBeforeRepartition) {
+      val newRdd = if (needsDeterministicLocalSort) {
         rdd.mapPartitionsInternal { iter =>
           val recordComparatorSupplier = new Supplier[RecordComparator] {
             override def get: RecordComparator = new RecordBinaryComparator()
@@ -468,7 +505,9 @@ object ShuffleExchangeExec {
       }
 
       // round-robin function is order sensitive if we don't sort the input.
-      val isOrderSensitive = isRoundRobin && !SQLConf.get.sortBeforeRepartition
+      // Stateful partition assignment is order-sensitive when it depends on row visitation order.
+      val isOrderSensitive =
+        (isRoundRobin || isNullAwareHashPartitioning) && !SQLConf.get.sortBeforeRepartition
       if (needToCopyObjectsBeforeShuffle(part)) {
         newRdd.mapPartitionsWithIndexInternal((_, iter) => {
           val getPartitionKey = getPartitionKeyExtractor()

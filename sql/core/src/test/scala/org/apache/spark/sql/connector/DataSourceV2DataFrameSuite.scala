@@ -21,13 +21,14 @@ import java.util
 import java.util.Collections
 
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangeResetsColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -45,7 +46,11 @@ import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
+  with DSv2TempViewWithStoredPlanTests
+  with DSv2RepeatedTableAccessTests
+  with DSv2IncrementallyConstructedQueryTests
+  with DSv2CacheTableReadTests {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
@@ -54,12 +59,18 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.cachingcat",
+      classOf[CachingInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.cachingcat.copyOnLoad", "true")
     .set("spark.sql.catalog.nullidcat",
       classOf[NullTableIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
     .set("spark.sql.catalog.nullcolidcat",
       classOf[NullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullbothidscat",
+      classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
     .set("spark.sql.catalog.resetidcat",
       classOf[TypeChangeResetsColIdTableCatalog].getName)
     .set("spark.sql.catalog.resetidcat.copyOnLoad", "true")
@@ -71,6 +82,7 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.composedidcat.copyOnLoad", "true")
 
   after {
+    catalog("cachingcat").asInstanceOf[CachingInMemoryTableCatalog].clearCache()
     spark.sessionState.catalogManager.reset()
   }
 
@@ -80,6 +92,36 @@ class DataSourceV2DataFrameSuite
   protected def catalog(name: String): InMemoryTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog(name)
     catalog.asInstanceOf[InMemoryTableCatalog]
+  }
+
+  // DSv2ExternalMutationTestBase implementations for classic mode
+  override protected def testPrefix: String = ""
+  override protected def isConnect: Boolean = false
+
+  override protected def withTestSession(fn: SparkSession => Unit): Unit = fn(spark)
+
+  override protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit =
+    checkAnswer(df, expected)
+
+  override protected def getTableCatalog[C <: TableCatalog: ClassTag](
+      session: SparkSession,
+      catalogName: String): C = {
+    val c = catalog(catalogName)
+    val ct = implicitly[ClassTag[C]]
+    require(
+      ct.runtimeClass.isInstance(c),
+      s"Expected ${ct.runtimeClass.getName} but got ${c.getClass.getName}")
+    c.asInstanceOf[C]
+  }
+
+  override protected def withTestTableAndViews(
+      session: SparkSession,
+      table: String,
+      views: Seq[String] = Seq.empty)(fn: => Unit): Unit = {
+    withTable(table) {
+      try { fn }
+      finally { views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v")) }
+    }
   }
 
   override def verifyTable(tableName: String, expected: DataFrame): Unit = {
@@ -102,7 +144,9 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t2 (id bigint, data string) USING foo")
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.insertInto(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       spark.table(t1).write.insertInto(t2)
+      checkInsertMetrics(t2, numInsertedRows = 3)
       checkAnswer(spark.table(t2), df)
     }
   }
@@ -112,6 +156,7 @@ class DataSourceV2DataFrameSuite
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -129,6 +174,7 @@ class DataSourceV2DataFrameSuite
 
       // appends are by name not by position
       df.select($"data", $"id").write.mode("append").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -157,6 +203,7 @@ class DataSourceV2DataFrameSuite
     withTable(t1) {
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.mode("ignore").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
       checkAnswer(spark.table(t1), df)
     }
   }
@@ -190,6 +237,7 @@ class DataSourceV2DataFrameSuite
 
       val df = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
       df.write.option("other", "20").mode("append").saveAsTable(t1)
+      checkInsertMetrics(t1, numInsertedRows = 3)
 
       sparkContext.listenerBus.waitUntilEmpty()
       plan match {
@@ -391,24 +439,29 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq((1, "hr")).toDF("id", "dep")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       sql(s"ALTER TABLE $tableName ADD COLUMN txt STRING DEFAULT 'initial-text'")
 
       val df2 = Seq((2, "hr"), (3, "software")).toDF("id", "dep")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN txt SET DEFAULT 'new-text'")
 
       val df3 = Seq((4, "hr"), (5, "hr")).toDF("id", "dep")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       val df4 = Seq((6, "hr", null), (7, "hr", "explicit-text")).toDF("id", "dep", "txt")
       df4.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN txt DROP DEFAULT")
 
       val df5 = Seq((8, "hr"), (9, "hr")).toDF("id", "dep")
       df5.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -432,11 +485,13 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq(1, 2).toDF("id")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT 'it'")
 
       val df2 = Seq(3, 4).toDF("id")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -450,6 +505,7 @@ class DataSourceV2DataFrameSuite
 
       val df3 = Seq(1, 2).toDF("id")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 2)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -493,11 +549,13 @@ class DataSourceV2DataFrameSuite
 
       val df1 = Seq(1).toDF("id")
       df1.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       sql(s"ALTER TABLE $tableName ALTER COLUMN dep SET DEFAULT ('i' || 't')")
 
       val df2 = Seq(2).toDF("id")
       df2.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -536,6 +594,7 @@ class DataSourceV2DataFrameSuite
 
       val df3 = Seq(1).toDF("id")
       df3.writeTo(tableName).append()
+      checkInsertMetrics(tableName, numInsertedRows = 1)
 
       checkAnswer(
         sql(s"SELECT * FROM $tableName"),
@@ -2503,29 +2562,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("temp view with stored plan after session drop and re-add column same type") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
-
-      // create two temp views with salary filters
-      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
-      spark.table(t).filter("salary IS NULL").createOrReplaceTempView("v_null")
-      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
-      checkAnswer(spark.table("v_null"), Seq.empty)
-
-      // drop and re-add column with same name and type
-      sql(s"ALTER TABLE $t DROP COLUMN salary")
-      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
-
-      // salary values are now null, so the salary < 999 filter returns nothing
-      checkAnswer(spark.table("v"), Seq.empty)
-      // IS NULL filter now matches all rows
-      checkAnswer(spark.table("v_null"), Seq(Row(1, null), Row(10, null)))
-    }
-  }
-
   // Column ID tests: Write operations
   //
   // [[writeTo().append()]] eagerly executes the command during the
@@ -2599,7 +2635,8 @@ class DataSourceV2DataFrameSuite
 
   // Column ID tests: Null column ID connector
 
-  // When a connector does not support column IDs, validation is skipped.
+  // When a connector does not support column IDs, validation is skipped, but version
+  // tracking still detects the schema change and refreshes the table reference.
   test("connector with null column IDs: drop+re-add column not detected") {
     val t = "nullcolidcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -2615,8 +2652,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // succeeds because column ID validation is skipped when IDs are null
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because IDs are null. The table version changed, so
+      // [[V2TableRefreshUtil]] reloads it and the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2664,8 +2702,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() == null, "salary should have a null ID after re-add")
 
-      // succeeds because current column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because current ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2694,8 +2733,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() != null, "salary should have a non-null ID after re-add")
 
-      // succeeds because original column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because original ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2706,6 +2746,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // add top-level column to underlying table
@@ -2713,6 +2754,7 @@ class DataSourceV2DataFrameSuite
 
       // accessing temp view should succeed as top-level column additions are allowed
       // view captures original columns
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert data to verify view still works correctly
@@ -2728,6 +2770,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "address"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // add nested column to underlying table
@@ -2752,6 +2795,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data", "age"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // drop column from underlying table
@@ -2776,6 +2820,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "address"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // drop nested column from underlying table
@@ -2800,6 +2845,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // change nullability constraint using ALTER TABLE
@@ -2841,6 +2887,7 @@ class DataSourceV2DataFrameSuite
       assert(originalTableId != newTableId)
 
       // accessing temp view should work despite table ID change (returns empty data)
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert new data and verify view reflects it
@@ -2856,6 +2903,7 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t (id bigint, data STRING, extra INT) USING foo")
 
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data", "extra"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // alter table
@@ -2866,6 +2914,7 @@ class DataSourceV2DataFrameSuite
 
       // recreate view with updated schema
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // now it should work with new schema
@@ -2896,6 +2945,7 @@ class DataSourceV2DataFrameSuite
 
       // accessing temp view should succeed as top-level column additions are allowed
 
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
     }
   }
@@ -2908,6 +2958,7 @@ class DataSourceV2DataFrameSuite
 
         // create temp view using SQL that should capture plan
         sql(s"CREATE OR REPLACE TEMPORARY VIEW v AS SELECT * FROM $t")
+        assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
         checkAnswer(spark.table("v"), Seq.empty)
 
         // verify that view stores analyzed plan
@@ -2918,6 +2969,7 @@ class DataSourceV2DataFrameSuite
         sql(s"ALTER TABLE $t ADD COLUMN age int")
 
         // accessing temp view should succeed as top-level column additions are allowed
+        assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
         checkAnswer(spark.table("v"), Seq.empty)
 
         // insert data to verify view still works correctly
@@ -2934,6 +2986,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "name"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // change VARCHAR(10) to VARCHAR(20)
@@ -2958,6 +3011,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert data into underlying table (no schema change)
@@ -3060,6 +3114,7 @@ class DataSourceV2DataFrameSuite
 
       // verify external changes are reflected correctly when table is queried
       assertNotCached(spark.table(t))
+      assert(spark.table(t).schema.fieldNames.toSeq == Seq("id", "value", "category"))
       checkAnswer(spark.table(t), Seq.empty)
     }
   }

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -156,6 +157,16 @@ public final class ColumnarBatchRow extends InternalRow {
   }
 
   @Override
+  public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampNTZNanos(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampLTZNanos(rowId);
+  }
+
+  @Override
   public VariantVal getVariant(int ordinal) {
     return columns[ordinal].getVariant(rowId);
   }
@@ -215,6 +226,8 @@ public final class ColumnarBatchRow extends InternalRow {
       return getMap(ordinal);
     } else if (dataType instanceof VariantType) {
       return getVariant(ordinal);
+    } else if (dataType instanceof UserDefinedType<?> udt) {
+      return get(ordinal, udt.sqlType());
     } else {
       throw new SparkUnsupportedOperationException(
         "_LEGACY_ERROR_TEMP_3152", Map.of("dataType", String.valueOf(dataType)));

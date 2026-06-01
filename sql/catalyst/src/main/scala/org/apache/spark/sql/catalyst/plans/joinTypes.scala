@@ -181,3 +181,65 @@ object LateralJoinType {
       )
   }
 }
+
+object NearestByDirection {
+
+  /** @see [[NearestByJoinValidation.SupportedDirections]] */
+  val supported: Seq[String] = NearestByJoinValidation.SupportedDirections
+
+  def apply(direction: String): NearestByDirection = {
+    direction.toLowerCase(Locale.ROOT) match {
+      case "distance" => NearestByDistance
+      case "similarity" => NearestBySimilarity
+      case _ =>
+        throw new AnalysisException(
+          errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_DIRECTION",
+          messageParameters = Map(
+            "direction" -> direction,
+            "supported" -> supported.mkString("'", "', '", "'")))
+    }
+  }
+}
+
+sealed abstract class NearestByDirection
+
+case object NearestByDistance extends NearestByDirection
+case object NearestBySimilarity extends NearestByDirection
+
+object NearestByJoinType {
+
+  /** @see [[NearestByJoinValidation.SupportedJoinTypes]] */
+  val supported: Seq[String] = NearestByJoinValidation.SupportedJoinTypes
+
+  /** @see [[NearestByJoinValidation.SupportedJoinTypeDisplay]] */
+  val supportedDisplay: String = NearestByJoinValidation.SupportedJoinTypeDisplay
+
+  def apply(typ: String): JoinType = typ.toLowerCase(Locale.ROOT).replace("_", "") match {
+    case "inner" => Inner
+    case "leftouter" | "left" => LeftOuter
+    case _ =>
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_JOIN_TYPE",
+        messageParameters = Map(
+          "joinType" -> typ,
+          "supported" -> supportedDisplay))
+  }
+}
+
+object NearestByJoinMode {
+
+  /** @see [[NearestByJoinValidation.SupportedModes]] */
+  val supported: Seq[String] = NearestByJoinValidation.SupportedModes
+
+  /** Returns true for APPROX, false for EXACT. */
+  def apply(mode: String): Boolean = mode.toLowerCase(Locale.ROOT) match {
+    case "approx" => true
+    case "exact" => false
+    case _ =>
+      throw new AnalysisException(
+        errorClass = "NEAREST_BY_JOIN.UNSUPPORTED_MODE",
+        messageParameters = Map(
+          "mode" -> mode,
+          "supported" -> supported.mkString("'", "', '", "'")))
+  }
+}

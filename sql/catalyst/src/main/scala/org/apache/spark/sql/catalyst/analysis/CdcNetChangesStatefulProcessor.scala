@@ -80,13 +80,10 @@ private[analysis] class CdcNetChangesStatefulProcessor(
   private val changeTypeIdx: Int = inputSchema.fieldIndex("_change_type")
   private val commitVersionIdx: Int = inputSchema.fieldIndex("_commit_version")
 
-  // `_commit_version` is connector-defined and may be any atomic orderable type
-  // (LongType, StringType, IntegerType, TimestampType, BinaryType, ...). To order
-  // rows generically -- without assuming the boxed external Java value is
-  // `Comparable` (e.g. BinaryType -> Array[Byte], which is not) -- we route the
-  // value through Catalyst: convert the external Row value to its Catalyst-internal
-  // form and compare with the type-aware interpreted ordering. This mirrors the
-  // batch path which uses Catalyst's `SortOrder` on the same attribute.
+  // `_commit_version` is connector-defined and is restricted to LongType or StringType
+  // (validated in `ChangelogTable.validateSchema`). We still route through Catalyst's
+  // type-aware interpreted ordering for symmetry with the batch path's `SortOrder` on
+  // the same attribute.
   private val versionDataType = inputSchema(commitVersionIdx).dataType
   private val versionToCatalyst: Any => Any =
     CatalystTypeConverters.createToCatalystConverter(versionDataType)

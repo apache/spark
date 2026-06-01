@@ -453,6 +453,66 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
     )
   }
 
+  test("compatibility: NullAwareHashShuffleSpec") {
+    val spreadAB = ClusteredDistribution(Seq($"a", $"b"), allowNullKeySpreading = true)
+    val spreadCD = ClusteredDistribution(Seq($"c", $"d"), allowNullKeySpreading = true)
+    val regularAB = ClusteredDistribution(Seq($"a", $"b"))
+
+    val nullAwareAB = NullAwareHashShuffleSpec(
+      NullAwareHashPartitioning(Seq($"a", $"b"), 10), spreadAB)
+    val nullAwareCD = NullAwareHashShuffleSpec(
+      NullAwareHashPartitioning(Seq($"c", $"d"), 10), spreadCD)
+    val regularABSpec = HashShuffleSpec(
+      HashPartitioning(Seq($"a", $"b"), 10), regularAB)
+    val spreadABHashSpec = HashShuffleSpec(
+      HashPartitioning(Seq($"a", $"b"), 10), spreadAB)
+
+    checkCompatible(nullAwareAB, nullAwareCD, expected = true)
+    checkCompatible(nullAwareAB, SinglePartitionShuffleSpec, expected = false)
+    checkCompatible(
+      NullAwareHashShuffleSpec(NullAwareHashPartitioning(Seq($"a", $"b"), 1), spreadAB),
+      SinglePartitionShuffleSpec,
+      expected = true)
+    checkCompatible(nullAwareAB, regularABSpec, expected = false)
+    checkCompatible(nullAwareAB, spreadABHashSpec, expected = true)
+    checkCompatible(spreadABHashSpec, nullAwareAB, expected = true)
+  }
+
+  test("canCreatePartitioning: NullAwareHashShuffleSpec") {
+    val spreadDistribution =
+      ClusteredDistribution(Seq($"a", $"b"), allowNullKeySpreading = true)
+    val partialSpec = NullAwareHashShuffleSpec(
+      NullAwareHashPartitioning(Seq($"a"), 10), spreadDistribution)
+    val fullSpec = NullAwareHashShuffleSpec(
+      NullAwareHashPartitioning(Seq($"a", $"b"), 10), spreadDistribution)
+
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+      assert(partialSpec.canCreatePartitioning)
+    }
+    withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+      assert(!partialSpec.canCreatePartitioning)
+      assert(fullSpec.canCreatePartitioning)
+    }
+  }
+
+  test("createPartitioning: NullAwareHashShuffleSpec") {
+    checkCreatePartitioning(
+      NullAwareHashShuffleSpec(
+        NullAwareHashPartitioning(Seq($"a"), 10),
+        ClusteredDistribution(Seq($"a", $"b"), allowNullKeySpreading = true)),
+      ClusteredDistribution(Seq($"c", $"d"), allowNullKeySpreading = true),
+      NullAwareHashPartitioning(Seq($"c"), 10)
+    )
+
+    checkCreatePartitioning(
+      HashShuffleSpec(
+        HashPartitioning(Seq($"a"), 10),
+        ClusteredDistribution(Seq($"a", $"b"), allowNullKeySpreading = true)),
+      ClusteredDistribution(Seq($"c", $"d"), allowNullKeySpreading = true),
+      NullAwareHashPartitioning(Seq($"c"), 10)
+    )
+  }
+
   test("createPartitioning: other specs") {
     val distribution = ClusteredDistribution(Seq($"a", $"b"))
     checkCreatePartitioning(SinglePartitionShuffleSpec,

@@ -163,45 +163,22 @@ case class CheckOverflowInSum(
 
   override def nullable: Boolean = true
 
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      if (nullOnOverflow) null
-      else {
-        throw QueryExecutionErrors.overflowInSumOfDecimalError(context, suggestedFunc = "try_sum")
-      }
-    } else {
-      value.asInstanceOf[Decimal].toPrecision(
-        dataType.precision,
-        dataType.scale,
-        Decimal.ROUND_HALF_UP,
-        nullOnOverflow,
-        context)
-    }
-  }
+  override def eval(input: InternalRow): Any = DecimalExpressionUtils.checkOverflowInSum(
+    child.eval(input).asInstanceOf[Decimal],
+    dataType.precision, dataType.scale, nullOnOverflow, context)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
-    val nullHandling = if (nullOnOverflow) {
-      ""
-    } else {
-      s"""throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode, "try_sum");"""
-    }
-    // scalastyle:off line.size.limit
+    val helper = classOf[DecimalExpressionUtils].getName
+    val input = ctx.freshName("input")
     val code = code"""
        |${childGen.code}
-       |boolean ${ev.isNull} = ${childGen.isNull};
-       |Decimal ${ev.value} = null;
-       |if (${childGen.isNull}) {
-       |  $nullHandling
-       |} else {
-       |  ${ev.value} = ${childGen.value}.toPrecision(
-       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-       |  ${ev.isNull} = ${ev.value} == null;
-       |}
+       |Decimal $input = ${childGen.isNull} ? null : ${childGen.value};
+       |Decimal ${ev.value} = $helper.checkOverflowInSum(
+       |  $input, ${dataType.precision}, ${dataType.scale}, $nullOnOverflow, $errorContextCode);
+       |boolean ${ev.isNull} = ${ev.value} == null;
        |""".stripMargin
-    // scalastyle:on line.size.limit
 
     ev.copy(code = code)
   }
@@ -244,6 +221,37 @@ case class DecimalAddNoOverflowCheck(
 
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): DecimalAddNoOverflowCheck =
+    copy(left = newLeft, right = newRight)
+}
+
+/**
+ * A subtract expression for decimal values which is only used internally.
+ *
+ * Note that, this expression does not check overflow which is different from `Subtract`.
+ * It is the caller's responsibility to ensure that the result fits in the declared precision and
+ * scale. For example, `counter_diff` only invokes this on operands that have already been validated
+ * to satisfy `left >= right >= 0`, so the result is non-negative and bounded above by `left`.
+ */
+case class DecimalSubtractNoOverflowCheck(
+    left: Expression,
+    right: Expression,
+    override val dataType: DataType) extends BinaryOperator {
+  require(dataType.isInstanceOf[DecimalType])
+
+  override def inputType: AbstractDataType = DecimalType
+  override def symbol: String = "-"
+  private def decimalMethod: String = "$minus"
+
+  private lazy val numeric = TypeUtils.getNumeric(dataType)
+
+  override protected def nullSafeEval(input1: Any, input2: Any): Any =
+    numeric.minus(input1, input2)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    defineCodeGen(ctx, ev, (eval1, eval2) => s"$eval1.$decimalMethod($eval2)")
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): DecimalSubtractNoOverflowCheck =
     copy(left = newLeft, right = newRight)
 }
 

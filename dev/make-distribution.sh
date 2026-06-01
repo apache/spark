@@ -203,6 +203,11 @@ echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 # Copy jars
 cp -r "$SPARK_HOME"/assembly/target/scala*/jars/* "$DISTDIR/jars/"
 
+# SPARK-53327: Use the modified ResourceImpl.class in spark-catalyst which is compatible with Java 25
+if [ -f "$DISTDIR"/jars/datasketches-memory-3.0.2.jar ]; then
+  zip -d "$DISTDIR"/jars/datasketches-memory-3.0.2.jar org/apache/datasketches/memory/internal/ResourceImpl.class
+fi
+
 # Only create the yarn directory if the yarn artifacts were built.
 if [ -f "$SPARK_HOME"/common/network-yarn/target/scala*/spark-*-yarn-shuffle.jar ]; then
   mkdir "$DISTDIR/yarn"
@@ -289,7 +294,11 @@ mkdir "$DISTDIR/conf"
 cp "$SPARK_HOME"/conf/*.template "$DISTDIR/conf"
 cp "$SPARK_HOME/README.md" "$DISTDIR"
 cp -r "$SPARK_HOME/bin" "$DISTDIR"
-cp -r "$SPARK_HOME/python" "$DISTDIR"
+if command -v git && command -v cpio && git rev-parse --git-dir 2>/dev/null; then
+  git ls-files -z "$SPARK_HOME/python" | cpio -0pdm "$DISTDIR"
+else
+  cp -r "$SPARK_HOME/python" "$DISTDIR"
+fi
 
 # Remove the python distribution from dist/ if we built it
 if [ "$MAKE_PIP" == "true" ]; then

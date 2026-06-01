@@ -19,16 +19,19 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
+import org.apache.spark.sql.catalyst.plans.physical.{KeyedPartitioning, Partitioning}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, InternalRowComparableWrapper}
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder}
+import org.apache.spark.sql.connector.expressions.{IdentityTransform, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, SampleMethod => SampleMethodV2, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
 import org.apache.spark.sql.internal.SQLConf
@@ -109,19 +112,25 @@ object PushDownUtils extends Logging {
           }
         }
 
-        val rejectedFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
-          DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
-        }
+        val postScanPredicates = r.pushPredicates(translatedFilters.toArray)
 
-        val remainingFilters = (rejectedFilters ++ untranslatableExprs).toSeq
-        val postScanFilters =
+        val finalPostScanFilters =
           if (!partitionFields.exists(_.nonEmpty) || !r.supportsIterativePushdown) {
-            remainingFilters
+            rebuildExpressions(postScanPredicates.toSeq, translatedFilterToExpr) ++
+              untranslatableExprs
           } else {
-            pushPartitionPredicates(r, partitionFields.get, remainingFilters)
+            // Second pass: only filters that were not already pushed down (partially or fully)
+            // in the first pass (not in pushedPredicates) are eligible to be pushed down again.
+            // This avoids pushing the same filter down twice.
+            val (pushedPostScanFilters, notPushedPostScanFilters) =
+              postScanPredicates.toSeq.partition(r.pushedPredicates().toSet.contains)
+            val candidates = rebuildExpressions(notPushedPostScanFilters, translatedFilterToExpr) ++
+              untranslatableExprs
+            pushPartitionPredicates(r, partitionFields.get, candidates) ++
+              rebuildExpressions(pushedPostScanFilters, translatedFilterToExpr)
           }
 
-        val orderedPostScanFilters = prioritizeFilters(postScanFilters,
+        val orderedPostScanFilters = prioritizeFilters(finalPostScanFilters,
           ExpressionSet(untranslatableExprs))
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
@@ -132,11 +141,26 @@ object PushDownUtils extends Logging {
   }
 
   /**
+   * Rebuilds the Catalyst [[Expression]]s for a sequence of data source [[Predicate]]s, using the
+   * mapping from translated data source predicates to their original Catalyst expressions.
+   */
+  private def rebuildExpressions(
+      predicates: Seq[Predicate],
+      translatedFilterToExpr: mutable.HashMap[Predicate, Expression]): Seq[Expression] = {
+    predicates.map { predicate =>
+      DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
+    }
+  }
+
+  /**
    * Pushes runtime filters to a [[SupportsRuntimeV2Filtering]] scan. Translatable filters are
    * pushed first, followed by [[PartitionPredicate]] if the scan supports iterative filtering.
    * Only runtime filters whose translated form was not already accepted by the data source in
    * the first pass are used to derive PartitionPredicates in the second pass, avoiding duplicate
    * pushdown.
+   *
+   * Note: Do not call multiple times for the same `scan` instance;
+   * [[SupportsRuntimeV2Filtering.filter]] is mutating.
    *
    * @return true if any filters were pushed to the data source
    */
@@ -187,6 +211,98 @@ object PushDownUtils extends Logging {
   }
 
   /**
+   * Pushes runtime filters into `scan` and re-plans its input partitions. For scans whose
+   * `outputPartitioning` is a [[KeyedPartitioning]] (SPJ-active), validates that the data source
+   * preserved the original partitioning and pads with `None` to preserve key alignment with the
+   * pre-filter partition set.
+   *
+   * Notes:
+   *  - Do not call multiple times for the same `scan` instance;
+   *    [[SupportsRuntimeV2Filtering.filter]] is mutating.
+   *  - When `outputPartitioning` is a [[KeyedPartitioning]], every split from
+   *    `planInputPartitions()` used on this path must implement [[HasPartitionKey]].
+   *
+   * @param scan                the V2 scan to push filters into
+   * @param runtimeFilters      runtime filters to translate and push
+   * @param table               the table backing the scan, used to derive the partition-predicate
+   *                            schema for iterative [[PartitionPredicate]] pushdown
+   * @param output              scan output attributes
+   * @param outputPartitioning  Spark-side output partitioning (used for SPJ validation)
+   * @param originalPartitions  unfiltered partitions, consulted only when no runtime filters fire
+   * @return one entry per original input partition: `Some(part)` for surviving partitions and
+   *         `None` for partition keys whose splits were entirely pruned (SPJ alignment)
+   */
+  def replanWithRuntimeFilters(
+      scan: Scan,
+      runtimeFilters: Seq[Expression],
+      table: Table,
+      output: Seq[AttributeReference],
+      outputPartitioning: Partitioning,
+      originalPartitions: => Seq[InputPartition]): Seq[Option[InputPartition]] = {
+    val filtered = pushRuntimeFilters(scan, runtimeFilters, table, output)
+    if (filtered) {
+      // call toBatch again to get filtered partitions
+      val newPartitions = scan.toBatch.planInputPartitions()
+
+      outputPartitioning match {
+        case k: KeyedPartitioning =>
+          if (newPartitions.exists(!_.isInstanceOf[HasPartitionKey])) {
+            throw new SparkException("Data source must have preserved the original partitioning " +
+                "during runtime filtering: not all partitions implement HasPartitionKey after " +
+                "filtering")
+          }
+
+          val inputMap = k.partitionKeys.groupBy(identity).view.mapValues(_.size)
+          val comparableKeyWrapperFactory = InternalRowComparableWrapper
+            .getInternalRowComparableWrapperFactory(k.expressionDataTypes)
+          val filteredMap = newPartitions.groupBy(
+            p => comparableKeyWrapperFactory(p.asInstanceOf[HasPartitionKey].partitionKey())
+          )
+
+          if (!filteredMap.keySet.subsetOf(inputMap.keySet)) {
+            throw new SparkException("During runtime filtering, data source must not report new " +
+                "partition keys that are not present in the original partitioning.")
+          }
+
+          // Pad the post-filter partitions with `None` per original key so SPJ key alignment with
+          // the other side of the join is preserved when splits are entirely pruned.
+          inputMap.toSeq
+            .sortBy(_._1)(k.keyOrdering)
+            .flatMap { case (key, size) =>
+              // We require the new number of partitions to be equal or less than the old number of
+              // partitions for a given key. In the case of less than, empty partitions are added.
+              val fps = filteredMap.getOrElse(key, Array.empty)
+
+              if (fps.size > size) {
+                throw new SparkException("During runtime filtering, data source must not report " +
+                  s"new partitions for a given key. Before: $size partitions. " +
+                  s"After: ${fps.size} partitions")
+              }
+
+              fps.map(Some).padTo(size, None)
+            }
+
+        case _ =>
+          // no validation is needed as the data source did not report any specific partitioning
+          newPartitions.toSeq.map(Some)
+      }
+
+    } else {
+      val parts = originalPartitions
+      (outputPartitioning match {
+        case k: KeyedPartitioning =>
+          if (parts.exists(!_.isInstanceOf[HasPartitionKey])) {
+            throw new SparkException("Original partitions must implement HasPartitionKey when " +
+                "outputPartitioning is KeyedPartitioning.")
+          }
+          parts.sortBy(_.asInstanceOf[HasPartitionKey].partitionKey())(k.keyRowOrdering)
+
+        case _ => parts
+      }).map(Some)
+    }
+  }
+
+  /**
    * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
    * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
    */
@@ -201,7 +317,19 @@ object PushDownUtils extends Logging {
    */
   def getPartitionPredicateSchema(table: Table, output: Seq[AttributeReference])
   : Option[Seq[PartitionPredicateField]] = {
-    val transforms = table.partitioning
+    getPartitionPredicateSchema(table.partitioning, output)
+  }
+
+  /**
+   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
+   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
+   *
+   * Use this overload when the caller has access to the partition transforms but not the
+   * full [[Table]].
+   */
+  def getPartitionPredicateSchema(
+      transforms: Array[Transform],
+      output: Seq[AttributeReference]): Option[Seq[PartitionPredicateField]] = {
     if (transforms.isEmpty) {
       None
     } else {
@@ -398,7 +526,11 @@ object PushDownUtils extends Logging {
     scanBuilder match {
       case s: SupportsPushDownTableSample =>
         s.pushTableSample(
-          sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed)
+          sample.lowerBound, sample.upperBound, sample.withReplacement, sample.seed,
+          sample.sampleMethod match {
+            case SampleMethod.Bernoulli => SampleMethodV2.BERNOULLI
+            case SampleMethod.System => SampleMethodV2.SYSTEM
+          })
       case _ => false
     }
   }

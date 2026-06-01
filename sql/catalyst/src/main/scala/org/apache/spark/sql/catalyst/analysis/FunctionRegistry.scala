@@ -922,6 +922,7 @@ object FunctionRegistry {
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
     expression[PercentRank]("percent_rank"),
+    expressionBuilder("counter_diff", CounterDiffExpressionBuilder),
 
     // predicates
     expression[Between]("between"),
@@ -979,6 +980,7 @@ object FunctionRegistry {
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
     expression[ToVariantObject]("to_variant_object"),
+    expression[IsValidVariant]("is_valid_variant"),
 
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),

@@ -217,6 +217,15 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
     shouldNotCast(checkedType, IntegralType)
   }
 
+  test("SPARK-56152: implicit type cast - TimeType") {
+    val checkedType = TimeType()
+    checkTypeCasting(checkedType, castableTypes = Seq(checkedType, StringType) ++ datetimeTypes)
+    shouldCast(checkedType, AnyTimeType, AnyTimeType.defaultConcreteType)
+    shouldNotCast(checkedType, DecimalType)
+    shouldNotCast(checkedType, NumericType)
+    shouldNotCast(checkedType, IntegralType)
+  }
+
   test("implicit type cast between two Map types") {
     val sourceType = MapType(IntegerType, IntegerType, true)
     val castableTypes = numericTypes ++ Seq(StringType).filter(!Cast.forceNullable(IntegerType, _))
@@ -523,6 +532,7 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     shouldCast(checkedType, DecimalType, DecimalType.SYSTEM_DEFAULT)
     shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
     shouldCast(checkedType, AnyTimestampType, AnyTimestampType.defaultConcreteType)
+    shouldCast(checkedType, AnyTimeType, AnyTimeType.defaultConcreteType)
     shouldNotCast(checkedType, IntegralType)
   }
 

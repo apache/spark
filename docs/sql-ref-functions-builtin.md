@@ -17,6 +17,10 @@ license: |
   limitations under the License.
 ---
 
+All built-in functions live in the virtual schema `system.builtin`. They can always be referenced
+unambiguously by their fully qualified name (for example `system.builtin.abs`), regardless of any
+user-defined function that may share the same name.
+
 ### Aggregate Functions
 {% include_api_gen generated-agg-funcs-table.html %}
 #### Examples
@@ -126,3 +130,8 @@ license: |
 {% include_api_gen generated-variant-funcs-table.html %}
 #### Examples
 {% include_api_gen generated-variant-funcs-examples.html %}
+
+### Geospatial ST Functions
+{% include_api_gen generated-st-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-st-funcs-examples.html %}

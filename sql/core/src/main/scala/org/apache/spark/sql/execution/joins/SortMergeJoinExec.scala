@@ -191,7 +191,13 @@ case class SortMergeJoinExec(
   }
 
   private def genComparison(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
-    val comparisons = a.zip(b).zipWithIndex.map { case ((l, r), i) =>
+    // The first key compare always runs, so emit it unguarded. Each subsequent key compare runs
+    // only when previous keys were equal (comp == 0).
+    val pairs = a.zip(b).zipWithIndex
+    val firstCompare = pairs.headOption.map { case ((l, r), i) =>
+      s"comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};"
+    }.getOrElse("comp = 0;")
+    val restCompares = pairs.drop(1).map { case ((l, r), i) =>
       s"""
          |if (comp == 0) {
          |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
@@ -199,8 +205,8 @@ case class SortMergeJoinExec(
        """.stripMargin.trim
     }
     s"""
-       |comp = 0;
-       |${comparisons.mkString("\n")}
+       |$firstCompare
+       |${restCompares.mkString("\n")}
      """.stripMargin
   }
 
@@ -216,11 +222,18 @@ case class SortMergeJoinExec(
     val streamedRow = ctx.addMutableState("InternalRow", "streamedRow", forceInline = true)
     val bufferedRow = ctx.addMutableState("InternalRow", "bufferedRow", forceInline = true)
 
-    // Create variables for join keys from both sides.
+    // Create variables for join keys from both sides. Filter out `FalseLiteral` `isNull`
+    // terms before building the disjunction so the emitted check has no statically-dead
+    // `false` operands. When every key is statically non-nullable, the disjunction is
+    // empty and we skip emitting the check (and the dead handler branch) entirely.
     val streamedKeyVars = createJoinKey(ctx, streamedRow, streamedKeys, streamedOutput)
-    val streamedAnyNull = streamedKeyVars.map(_.isNull).mkString(" || ")
+    val nullableStreamedIsNulls = streamedKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val streamedKeysNullable = nullableStreamedIsNulls.nonEmpty
+    val streamedAnyNull = nullableStreamedIsNulls.mkString(" || ")
     val bufferedKeyTmpVars = createJoinKey(ctx, bufferedRow, bufferedKeys, bufferedOutput)
-    val bufferedAnyNull = bufferedKeyTmpVars.map(_.isNull).mkString(" || ")
+    val nullableBufferedIsNulls = bufferedKeyTmpVars.map(_.isNull).filter(_ != FalseLiteral)
+    val bufferedKeysNullable = nullableBufferedIsNulls.nonEmpty
+    val bufferedAnyNull = nullableBufferedIsNulls.mkString(" || ")
     // Copy the buffered key as class members so they could be used in next function call.
     val bufferedKeyVars = copyKeys(ctx, bufferedKeyTmpVars)
 
@@ -287,6 +300,27 @@ case class SortMergeJoinExec(
         s"$matches.add((UnsafeRow) $bufferedRow);"
       }
 
+    val checkStreamedAnyNull = if (streamedKeysNullable) {
+      s"""
+         |if ($streamedAnyNull) {
+         |  $handleStreamedAnyNull
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    val checkBufferedAnyNull = if (bufferedKeysNullable) {
+      s"""
+         |if ($bufferedAnyNull) {
+         |  $bufferedRow = null;
+         |  continue;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
     // Generate a function to scan both streamed and buffered sides to find a match.
     // Return whether a match is found.
     //
@@ -329,9 +363,7 @@ case class SortMergeJoinExec(
          |    if (!streamedIter.hasNext()) return false;
          |    $streamedRow = (InternalRow) streamedIter.next();
          |    ${streamedKeyVars.map(_.code).mkString("\n")}
-         |    if ($streamedAnyNull) {
-         |      $handleStreamedAnyNull
-         |    }
+         |    ${checkStreamedAnyNull.trim}
          |    if (!$matches.isEmpty()) {
          |      ${genComparison(ctx, streamedKeyVars, matchedKeyVars)}
          |      if (comp == 0) {
@@ -348,10 +380,7 @@ case class SortMergeJoinExec(
          |        }
          |        $bufferedRow = (InternalRow) bufferedIter.next();
          |        ${bufferedKeyTmpVars.map(_.code).mkString("\n")}
-         |        if ($bufferedAnyNull) {
-         |          $bufferedRow = null;
-         |          continue;
-         |        }
+         |        ${checkBufferedAnyNull.trim}
          |        ${bufferedKeyVars.map(_.code).mkString("\n")}
          |      }
          |      ${genComparison(ctx, streamedKeyVars, bufferedKeyVars)}
@@ -439,13 +468,6 @@ case class SortMergeJoinExec(
   }
 
   override def needCopyResult: Boolean = true
-
-  /**
-   * This is called by generated Java class, should be public.
-   */
-  def getTaskContext(): TaskContext = {
-    TaskContext.get()
-  }
 
   override def doProduce(ctx: CodegenContext): String = {
     // Specialize `doProduce` code for full outer join, because full outer join needs to
@@ -591,16 +613,9 @@ case class SortMergeJoinExec(
     }
 
     val initJoin = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initJoin")
+    val helperCls = classOf[JoinHelper].getName
     val addHookToRecordMetrics =
-      s"""
-         |$thisPlan.getTaskContext().addTaskCompletionListener(
-         |  new org.apache.spark.util.TaskCompletionListener() {
-         |    @Override
-         |    public void onTaskCompletion(org.apache.spark.TaskContext context) {
-         |      ${metricTerm(ctx, "spillSize")}.add($matches.spillSize());
-         |    }
-         |});
-       """.stripMargin
+      s"$helperCls.recordSpillSizeOnTaskCompletion($matches, ${metricTerm(ctx, "spillSize")});"
 
     s"""
        |if (!$initJoin) {
@@ -802,11 +817,17 @@ case class SortMergeJoinExec(
     val leftInputRow = ctx.addMutableState("InternalRow", "leftInputRow", forceInline = true)
     val rightInputRow = ctx.addMutableState("InternalRow", "rightInputRow", forceInline = true)
 
-    // Create variables for join keys from both sides.
+    // Create variables for join keys from both sides. As in `genScanner`, drop FalseLiteral
+    // `isNull` terms before joining the disjunction so the emitted check has no dead `false`
+    // operands; omit the check entirely when every key is statically non-nullable.
     val leftKeyVars = createJoinKey(ctx, leftInputRow, leftKeys, left.output)
-    val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
+    val nullableLeftIsNulls = leftKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val leftKeysNullable = nullableLeftIsNulls.nonEmpty
+    val leftAnyNull = nullableLeftIsNulls.mkString(" || ")
     val rightKeyVars = createJoinKey(ctx, rightInputRow, rightKeys, right.output)
-    val rightAnyNull = rightKeyVars.map(_.isNull).mkString(" || ")
+    val nullableRightIsNulls = rightKeyVars.map(_.isNull).filter(_ != FalseLiteral)
+    val rightKeysNullable = nullableRightIsNulls.nonEmpty
+    val rightAnyNull = nullableRightIsNulls.mkString(" || ")
     val matchedKeyVars = copyKeys(ctx, leftKeyVars)
     val leftMatchedKeyVars = createJoinKey(ctx, leftInputRow, leftKeys, left.output)
     val rightMatchedKeyVars = createJoinKey(ctx, rightInputRow, rightKeys, right.output)
@@ -880,6 +901,30 @@ case class SortMergeJoinExec(
     //  - Step 3: Buffer rows with same join keys from both sides into `leftBuffer` and
     //            `rightBuffer`. Reset bit sets for both buffers accordingly (`leftMatched` and
     //            `rightMatched`).
+    val checkLeftAnyNull = if (leftKeysNullable) {
+      s"""
+         |if ($leftAnyNull) {
+         |  // The left row join key is null, join it with null row
+         |  $outputLeftNoMatch
+         |  return;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
+    val checkRightAnyNull = if (rightKeysNullable) {
+      s"""
+         |if ($rightAnyNull) {
+         |  // The right row join key is null, join it with null row
+         |  $outputRightNoMatch
+         |  return;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+
     val findNextJoinRowsFuncName = ctx.freshName("findNextJoinRows")
     ctx.addNewFunction(findNextJoinRowsFuncName,
       s"""
@@ -898,18 +943,10 @@ case class SortMergeJoinExec(
          |  }
          |
          |  ${leftKeyVars.map(_.code).mkString("\n")}
-         |  if ($leftAnyNull) {
-         |    // The left row join key is null, join it with null row
-         |    $outputLeftNoMatch
-         |    return;
-         |  }
+         |  ${checkLeftAnyNull.trim}
          |
          |  ${rightKeyVars.map(_.code).mkString("\n")}
-         |  if ($rightAnyNull) {
-         |    // The right row join key is null, join it with null row
-         |    $outputRightNoMatch
-         |    return;
-         |  }
+         |  ${checkRightAnyNull.trim}
          |
          |  ${genComparison(ctx, leftKeyVars, rightKeyVars)}
          |  if (comp < 0) {
@@ -954,16 +991,10 @@ case class SortMergeJoinExec(
          |  }
          |
          |  // Reset bit sets of buffers accordingly
-         |  if ($leftBuffer.size() <= $leftMatched.capacity()) {
-         |    $leftMatched.clearUntil($leftBuffer.size());
-         |  } else {
-         |    $leftMatched = new $matchedClsName($leftBuffer.size());
-         |  }
-         |  if ($rightBuffer.size() <= $rightMatched.capacity()) {
-         |    $rightMatched.clearUntil($rightBuffer.size());
-         |  } else {
-         |    $rightMatched = new $matchedClsName($rightBuffer.size());
-         |  }
+         |  $leftMatched = ${classOf[JoinHelper].getName}.resetMatched(
+         |    $leftMatched, $leftBuffer.size());
+         |  $rightMatched = ${classOf[JoinHelper].getName}.resetMatched(
+         |    $rightMatched, $rightBuffer.size());
          |}
        """.stripMargin)
 
@@ -1457,16 +1488,8 @@ private class SortMergeFullOuterJoinScanner(
       advancedRight()
     }
 
-    if (leftMatches.size <= leftMatched.capacity) {
-      leftMatched.clearUntil(leftMatches.size)
-    } else {
-      leftMatched = new BitSet(leftMatches.size)
-    }
-    if (rightMatches.size <= rightMatched.capacity) {
-      rightMatched.clearUntil(rightMatches.size)
-    } else {
-      rightMatched = new BitSet(rightMatches.size)
-    }
+    leftMatched = JoinHelper.resetMatched(leftMatched, leftMatches.size)
+    rightMatched = JoinHelper.resetMatched(rightMatched, rightMatches.size)
   }
 
   /**

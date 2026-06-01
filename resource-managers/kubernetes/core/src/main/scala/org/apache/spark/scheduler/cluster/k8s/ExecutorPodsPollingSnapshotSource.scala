@@ -47,6 +47,7 @@ class ExecutorPodsPollingSnapshotSource(
 
   private val pollingInterval = conf.get(KUBERNETES_EXECUTOR_API_POLLING_INTERVAL)
   private val pollingEnabled = conf.get(KUBERNETES_EXECUTOR_ENABLE_API_POLLING)
+  private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
   private var pollingFuture: Future[_] = _
 
@@ -76,6 +77,7 @@ class ExecutorPodsPollingSnapshotSource(
       logDebug(s"Resynchronizing full executor pod state from Kubernetes.")
       val pods = kubernetesClient
         .pods()
+        .inNamespace(namespace)
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")

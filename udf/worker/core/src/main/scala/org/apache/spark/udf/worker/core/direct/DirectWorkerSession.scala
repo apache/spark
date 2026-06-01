@@ -27,7 +27,7 @@ import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerSession}
  *
  * This is the session type returned by [[DirectWorkerDispatcher]]. It ties
  * the session lifecycle to the worker's ref-count: the dispatcher increments
- * the count before construction, and [[close]] decrements it, so the
+ * the count before construction, and [[doClose]] decrements it, so the
  * dispatcher knows when a worker process is idle and can be terminated or
  * reused.
  *
@@ -48,7 +48,7 @@ abstract class DirectWorkerSession(
   /** The connection to the worker for this session. */
   def connection: WorkerConnection = workerProcess.connection
 
-  override def close(): Unit = {
+  override protected def doClose(): Unit = {
     if (released.compareAndSet(false, true)) {
       workerProcess.releaseSession()
     }

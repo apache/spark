@@ -24,6 +24,8 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
+import org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -159,6 +161,19 @@ public abstract class UnsafeWriter {
     setOffsetAndSize(ordinal, 16);
     // move the cursor forward.
     increaseCursor(16);
+  }
+
+  // 16-byte variable-length payload; same layout as UnsafeRow#setTimestampNanosPayload.
+  public void write(int ordinal, TimestampNanosVal input) {
+    grow(TimestampNanosRowValues.SIZE_IN_BYTES);
+    if (input == null) {
+      BitSetMethods.set(getBuffer(), startingOffset, ordinal);
+    } else {
+      TimestampNanosRowValues.writePayload(
+        getBuffer(), 0, (int) cursor(), input.epochMicros, input.nanosWithinMicro);
+    }
+    setOffsetAndSize(ordinal, TimestampNanosRowValues.SIZE_IN_BYTES);
+    increaseCursor(TimestampNanosRowValues.SIZE_IN_BYTES);
   }
 
   public void write(int ordinal, VariantVal input) {

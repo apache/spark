@@ -36,7 +36,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.sql.types.Decimal
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
@@ -695,6 +695,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       withDefaultTimeZone(zid) {
         val inputTS = DateTimeUtils.stringToTimestamp(
           UTF8String.fromString("1769-10-17T17:10:02.123456"), defaultZoneId)
+        testTrunc(DateTimeUtils.TRUNC_TO_DAY, "1769-10-17T00:00:00", inputTS.get, zid)
+        testTrunc(DateTimeUtils.TRUNC_TO_HOUR, "1769-10-17T17:00:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_MINUTE, "1769-10-17T17:10:00", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_SECOND, "1769-10-17T17:10:02", inputTS.get, zid)
         testTrunc(DateTimeUtils.TRUNC_TO_MILLISECOND, "1769-10-17T17:10:02.123", inputTS.get, zid)
@@ -764,6 +766,97 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         testTrunc(DateTimeUtils.TRUNC_TO_QUARTER, "2015-04-01T00:00:00", inputTS2.get, zid)
       }
     }
+  }
+
+  test("truncTimestamp with sub-hour zone offsets") {
+    // Asia/Kolkata (+05:30) and Asia/Kathmandu (+05:45) are not aligned to HOUR in UTC.
+    // The fast path applies the offset as part of its arithmetic, so HOUR/DAY truncation
+    // produces the correct local-aligned result without needing the slow path.
+    val kolkata = getZoneId("Asia/Kolkata")
+    val ts = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T09:42:17.123456+05:30"), kolkata).get
+    val expectedHour = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T09:00:00+05:30"), kolkata).get
+    assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_HOUR, kolkata) === expectedHour)
+    val expectedDay = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T00:00:00+05:30"), kolkata).get
+    assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_DAY, kolkata) === expectedDay)
+
+    val kathmandu = getZoneId("Asia/Kathmandu")
+    val ts2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T09:42:17.123456+05:45"), kathmandu).get
+    val expectedHour2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-01-15T09:00:00+05:45"), kathmandu).get
+    assert(DateTimeUtils.truncTimestamp(
+      ts2, DateTimeUtils.TRUNC_TO_HOUR, kathmandu) === expectedHour2)
+  }
+
+  test("truncTimestamp across DST transitions") {
+    val la = getZoneId("America/Los_Angeles")
+    // Spring-forward in LA: local 02:00-02:59 doesn't exist on 2024-03-10
+    // (01:59 PST jumps to 03:00 PDT). Pick 03:30 PDT just after the transition
+    // so the HOUR/DAY truncation candidate falls into the pre-transition window.
+    val postSpring = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-03-10T03:30:00-07:00"), la).get
+    val expectedHour = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-03-10T03:00:00-07:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(postSpring, DateTimeUtils.TRUNC_TO_HOUR, la)
+      === expectedHour)
+    val expectedDay = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-03-10T00:00:00-08:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(postSpring, DateTimeUtils.TRUNC_TO_DAY, la)
+      === expectedDay)
+
+    // Fall-back in LA: 2024-11-03 01:30 occurs twice. Truncation to HOUR/DAY should
+    // produce the same wall-clock boundary as the slow path regardless.
+    val postFall = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-11-03T01:30:00-08:00"), la).get
+    val expectedHour2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-11-03T01:00:00-08:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(postFall, DateTimeUtils.TRUNC_TO_HOUR, la)
+      === expectedHour2)
+    val expectedDay2 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2024-11-03T00:00:00-07:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(postFall, DateTimeUtils.TRUNC_TO_DAY, la)
+      === expectedDay2)
+  }
+
+  test("SPARK-30766/30857: truncTimestamp before the epoch in HOUR/DAY") {
+    val la = getZoneId("America/Los_Angeles")
+    val ts1 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1960-02-11T00:01:02.123"), la).get
+    val expectedHour1 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1960-02-11T00:00:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(ts1, DateTimeUtils.TRUNC_TO_HOUR, la) === expectedHour1)
+    val expectedDay1 = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("1960-02-11T00:00:00"), la).get
+    assert(DateTimeUtils.truncTimestamp(ts1, DateTimeUtils.TRUNC_TO_DAY, la) === expectedDay1)
+  }
+
+  test("truncTimestamp at America/Sao_Paulo midnight DST gap") {
+    // 2018-11-04 was the last Brazilian DST start; the offset jumped from -3
+    // to -2 at exactly midnight local. The local times 00:00-00:59 on this
+    // date did not exist, so DAY truncation must resolve the gap forward to
+    // 01:00 BRST. Exercises the fast path's DST-fallback for midnight gaps.
+    val zone = getZoneId("America/Sao_Paulo")
+    val ts = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2018-11-04T12:00:00-02:00"), zone).get
+    val expected = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2018-11-04T01:00:00-02:00"), zone).get
+    assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_DAY, zone) === expected)
+  }
+
+  test("truncTimestamp at Pacific/Apia after the 2011 calendar shift") {
+    // Pacific/Apia jumped from UTC-11 to UTC+13 on 2011-12-30, skipping the
+    // local date Dec 30 entirely. Verify that DAY truncation at a clean,
+    // post-transition, no-DST instant (June 2012, austral winter, +13)
+    // resolves to local midnight via the fast path.
+    val zone = getZoneId("Pacific/Apia")
+    val ts = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2012-06-15T13:00:00+13:00"), zone).get
+    val expected = DateTimeUtils.stringToTimestamp(
+      UTF8String.fromString("2012-06-15T00:00:00+13:00"), zone).get
+    assert(DateTimeUtils.truncTimestamp(ts, DateTimeUtils.TRUNC_TO_DAY, zone) === expected)
   }
 
   test("SPARK-51554: time truncation using timeTrunc") {
@@ -876,6 +969,32 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
   test("microsToMillis") {
     assert(DateTimeUtils.microsToMillis(-9223372036844776001L) === -9223372036844777L)
     assert(DateTimeUtils.microsToMillis(-157700927876544L) === -157700927877L)
+  }
+
+  test("daysToMicros: ZoneOffset.UTC fast path matches the generic zone path") {
+    // The UTC fast path returns `days * MICROS_PER_DAY` directly; assert it agrees with the
+    // `LocalDate -> ZonedDateTime -> Instant` path used for any other zone whose offset is 0
+    // (e.g. `Etc/GMT`). Covers zero, positive, negative, and values bounded by the largest
+    // `days` for which `days * MICROS_PER_DAY` does not overflow `Long`.
+    val maxSafeDays = (Long.MaxValue / MICROS_PER_DAY).toInt
+    val cases = Seq(0, 1, -1, 365, -365, 16800, -16800, 1_000_000, -1_000_000,
+      maxSafeDays, -maxSafeDays)
+    val gmt = ZoneId.of("Etc/GMT")
+    cases.foreach { d =>
+      assert(daysToMicros(d, ZoneOffset.UTC) === daysToMicros(d, gmt),
+        s"UTC fast path diverged from Etc/GMT path at days=$d")
+      assert(daysToMicros(d, ZoneOffset.UTC) === d.toLong * MICROS_PER_DAY,
+        s"UTC fast path != days * MICROS_PER_DAY at days=$d")
+    }
+
+    // Overflow: any `days` past `maxSafeDays` overflows `Long` and must throw rather than
+    // silently wrap.
+    intercept[ArithmeticException] {
+      daysToMicros(maxSafeDays + 1, ZoneOffset.UTC)
+    }
+    intercept[ArithmeticException] {
+      daysToMicros(-maxSafeDays - 1, ZoneOffset.UTC)
+    }
   }
 
   test("SPARK-29012: special timestamp values") {
@@ -1730,6 +1849,152 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     // Extreme ts: instantToMicros overflow on the converted bucket boundary.
     intercept[ArithmeticException] {
       timeBucketYMInterval(1, Long.MinValue, 0L, utc)
+    }
+  }
+
+  test("SPARK-57033: java.time.LocalDateTime <-> TimestampNanosVal roundtrip") {
+    val cases = Seq(
+      LocalDateTime.parse("0001-01-01T00:00:00"),
+      LocalDateTime.parse("1582-10-02T01:02:03.04"),
+      LocalDateTime.parse("1582-12-31T23:59:59.999999999"),
+      LocalDateTime.parse("1969-12-31T23:59:59.999999999"),
+      LocalDateTime.parse("1970-01-01T00:00:00"),
+      LocalDateTime.parse("1970-01-01T00:00:00.000000001"),
+      LocalDateTime.parse("1970-01-01T00:00:00.123456789"),
+      LocalDateTime.parse("2019-02-26T16:56:00.123456789"),
+      LocalDateTime.parse("9999-12-31T23:59:59.999999999"))
+    for (ldt <- cases) {
+      val v = localDateTimeToTimestampNanos(ldt, precision = 9)
+      assert(v.nanosWithinMicro >= 0 && v.nanosWithinMicro <= 999,
+        s"nanosWithinMicro out of range for $ldt: $v")
+      assert(v.nanosWithinMicro === (ldt.getNano % 1000).toShort)
+      assert(v.epochMicros === DateTimeUtils.localDateTimeToMicros(ldt))
+      assert(timestampNanosToLocalDateTime(v) === ldt)
+    }
+  }
+
+  test("SPARK-57033: java.time.Instant <-> TimestampNanosVal roundtrip") {
+    val cases = Seq(
+      Instant.EPOCH,
+      Instant.parse("0001-01-01T00:00:00Z"),
+      Instant.parse("1582-10-02T01:02:03.04Z"),
+      Instant.parse("1582-12-31T23:59:59.999999999Z"),
+      Instant.parse("1969-12-31T23:59:59.999999999Z"),
+      Instant.parse("1970-01-01T00:00:00.000000001Z"),
+      Instant.parse("2019-02-26T16:56:00.123456789Z"),
+      Instant.parse("9999-12-31T23:59:59.999999999Z"))
+    for (i <- cases) {
+      val v = instantToTimestampNanos(i, precision = 9)
+      assert(v.nanosWithinMicro >= 0 && v.nanosWithinMicro <= 999,
+        s"nanosWithinMicro out of range for $i: $v")
+      assert(v.nanosWithinMicro === (i.getNano % 1000).toShort)
+      assert(v.epochMicros === instantToMicros(i))
+      assert(timestampNanosToInstant(v) === i)
+    }
+  }
+
+  test("SPARK-57033: TimestampNanosVal random roundtrip") {
+    val rnd = new scala.util.Random(0)
+    // Random instants across the valid range with every possible sub-micro digit.
+    val min = Instant.parse("0001-01-01T00:00:00Z").getEpochSecond
+    val max = Instant.parse("9999-12-31T23:59:59.999999999Z").getEpochSecond
+    for (_ <- 0 until 200) {
+      val secs = min + math.abs(rnd.nextLong()) % (max - min + 1)
+      val nano = rnd.nextInt(1_000_000_000)
+      val i = Instant.ofEpochSecond(secs, nano.toLong)
+      val v = instantToTimestampNanos(i, precision = 9)
+      assert(timestampNanosToInstant(v) === i)
+      val ldt = LocalDateTime.ofInstant(i, ZoneOffset.UTC)
+      val v2 = localDateTimeToTimestampNanos(ldt, precision = 9)
+      assert(timestampNanosToLocalDateTime(v2) === ldt)
+      // Internal layout matches direct decomposition.
+      assert(v === TimestampNanosVal.fromParts(instantToMicros(i), (nano % 1000).toShort))
+    }
+  }
+
+  test("SPARK-57033: localDateTimeToTimestampNanos truncates sub-micro to precision") {
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    // precision 9 keeps all 3 sub-micro digits, 8 drops the last, 7 drops the last two.
+    assert(localDateTimeToTimestampNanos(ldt, precision = 9).nanosWithinMicro === 789)
+    assert(localDateTimeToTimestampNanos(ldt, precision = 8).nanosWithinMicro === 780)
+    assert(localDateTimeToTimestampNanos(ldt, precision = 7).nanosWithinMicro === 700)
+    // epochMicros is unaffected by sub-micro truncation.
+    val expectedMicros = DateTimeUtils.localDateTimeToMicros(ldt)
+    for (p <- 7 to 9) {
+      assert(localDateTimeToTimestampNanos(ldt, precision = p).epochMicros === expectedMicros)
+    }
+
+    val negativeEpochLdt = LocalDateTime.parse("1969-12-31T23:59:59.123456789")
+    assert(localDateTimeToTimestampNanos(negativeEpochLdt, precision = 9).nanosWithinMicro === 789)
+    assert(localDateTimeToTimestampNanos(negativeEpochLdt, precision = 8).nanosWithinMicro === 780)
+    assert(localDateTimeToTimestampNanos(negativeEpochLdt, precision = 7).nanosWithinMicro === 700)
+    val negativeExpectedMicros = DateTimeUtils.localDateTimeToMicros(negativeEpochLdt)
+    for (p <- 7 to 9) {
+      assert(localDateTimeToTimestampNanos(negativeEpochLdt, precision = p).epochMicros ===
+        negativeExpectedMicros)
+    }
+  }
+
+  test("SPARK-57033: instantToTimestampNanos truncates sub-micro to precision") {
+    val i = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    assert(instantToTimestampNanos(i, precision = 9).nanosWithinMicro === 789)
+    assert(instantToTimestampNanos(i, precision = 8).nanosWithinMicro === 780)
+    assert(instantToTimestampNanos(i, precision = 7).nanosWithinMicro === 700)
+    val expectedMicros = instantToMicros(i)
+    for (p <- 7 to 9) {
+      assert(instantToTimestampNanos(i, precision = p).epochMicros === expectedMicros)
+    }
+
+    val negativeEpochInstant = Instant.parse("1969-12-31T23:59:59.123456789Z")
+    assert(instantToTimestampNanos(negativeEpochInstant, precision = 9).nanosWithinMicro === 789)
+    assert(instantToTimestampNanos(negativeEpochInstant, precision = 8).nanosWithinMicro === 780)
+    assert(instantToTimestampNanos(negativeEpochInstant, precision = 7).nanosWithinMicro === 700)
+    val negativeExpectedMicros = instantToMicros(negativeEpochInstant)
+    for (p <- 7 to 9) {
+      assert(instantToTimestampNanos(negativeEpochInstant, precision = p).epochMicros ===
+        negativeExpectedMicros)
+    }
+  }
+
+  test("SPARK-57033: random roundtrip across precisions floors to the precision step") {
+    val rnd = new scala.util.Random(0)
+    val min = Instant.parse("0001-01-01T00:00:00Z").getEpochSecond
+    val max = Instant.parse("9999-12-31T23:59:59.999999999Z").getEpochSecond
+    // For each random instant, verify both helpers floor the original nanosecond value
+    // (toward `-inf`) to the precision step `10^(9 - p)` ns. The whole-instant nanosecond
+    // count overflows `Long` for far-future dates, so we check the floor on the components
+    // instead: `epochMicros` is invariant across precisions (matches `instantToMicros`) and
+    // the sub-micro nanosecond residual is floored to the precision step.
+    for (_ <- 0 until 10) {
+      val secs = min + math.abs(rnd.nextLong()) % (max - min + 1)
+      val nano = rnd.nextInt(1_000_000_000)
+      val instant = Instant.ofEpochSecond(secs, nano.toLong)
+      val ldt = LocalDateTime.ofInstant(instant, ZoneOffset.UTC)
+      val expectedMicros = instantToMicros(instant)
+      val rawSubMicro = (nano % 1000).toShort
+      for (p <- 7 to 9) {
+        val step = math.pow(10, 9 - p).toLong.toShort
+        val expectedSubMicro = ((rawSubMicro / step) * step).toShort
+
+        val ltz = instantToTimestampNanos(instant, p)
+        assert(ltz.epochMicros === expectedMicros,
+          s"LTZ p=$p instant=$instant epochMicros=${ltz.epochMicros}")
+        assert(ltz.nanosWithinMicro === expectedSubMicro,
+          s"LTZ p=$p instant=$instant nanosWithinMicro=${ltz.nanosWithinMicro}")
+        // Roundtrip preserves the truncated value.
+        val ltzBack = timestampNanosToInstant(ltz)
+        assert(instantToMicros(ltzBack) === expectedMicros)
+        assert(ltzBack.getNano % 1000 === expectedSubMicro)
+
+        val ntz = localDateTimeToTimestampNanos(ldt, p)
+        assert(ntz.epochMicros === expectedMicros,
+          s"NTZ p=$p ldt=$ldt epochMicros=${ntz.epochMicros}")
+        assert(ntz.nanosWithinMicro === expectedSubMicro,
+          s"NTZ p=$p ldt=$ldt nanosWithinMicro=${ntz.nanosWithinMicro}")
+        val ntzBack = timestampNanosToLocalDateTime(ntz)
+        assert(DateTimeUtils.localDateTimeToMicros(ntzBack) === expectedMicros)
+        assert(ntzBack.getNano % 1000 === expectedSubMicro)
+      }
     }
   }
 }

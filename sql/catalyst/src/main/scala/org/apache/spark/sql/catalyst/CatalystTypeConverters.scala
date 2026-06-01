@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String}
+import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
@@ -88,6 +88,8 @@ object CatalystTypeConverters {
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
+      case t: TimestampNTZNanosType => new TimestampNTZNanosConverter(t)
+      case t: TimestampLTZNanosType => new TimestampLTZNanosConverter(t)
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -298,7 +300,7 @@ object CatalystTypeConverters {
         }
         new GenericInternalRow(ar)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -357,7 +359,7 @@ object CatalystTypeConverters {
       case chr: Char => UTF8String.fromString(chr.toString)
       case ac: Array[Char] => UTF8String.fromString(String.valueOf(ac))
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -383,7 +385,7 @@ object CatalystTypeConverters {
       case g: org.apache.spark.sql.types.Geometry if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeomFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -408,7 +410,7 @@ object CatalystTypeConverters {
       case g: org.apache.spark.sql.types.Geography if SQLConf.get.geospatialEnabled =>
         STUtils.serializeGeogFromWKB(g, dataType)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -432,7 +434,7 @@ object CatalystTypeConverters {
       case d: Date => DateTimeUtils.fromJavaDate(d)
       case l: LocalDate => DateTimeUtils.localDateToDays(l)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -472,7 +474,7 @@ object CatalystTypeConverters {
       case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
       case i: Instant => DateTimeUtils.instantToMicros(i)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -500,7 +502,7 @@ object CatalystTypeConverters {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
       case other => throw new SparkIllegalArgumentException(
-        errorClass = "_LEGACY_ERROR_TEMP_3219",
+        errorClass = "INVALID_EXTERNAL_VALUE",
         messageParameters = scala.collection.immutable.Map(
           "other" -> other.toString,
           "otherClass" -> other.getClass.getCanonicalName,
@@ -515,6 +517,50 @@ object CatalystTypeConverters {
       DateTimeUtils.microsToLocalDateTime(row.getLong(column))
   }
 
+  private class TimestampNTZNanosConverter(dataType: TimestampNTZNanosType)
+    extends CatalystTypeConverter[Any, LocalDateTime, TimestampNanosVal] {
+    override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
+      case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l, dataType.precision)
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_EXTERNAL_VALUE",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> dataType.sql))
+    }
+
+    override def toScala(catalystValue: TimestampNanosVal): LocalDateTime =
+      if (catalystValue == null) null
+      else DateTimeUtils.timestampNanosToLocalDateTime(catalystValue)
+
+    override def toScalaImpl(row: InternalRow, column: Int): LocalDateTime =
+      DateTimeUtils.timestampNanosToLocalDateTime(row.getTimestampNTZNanos(column))
+  }
+
+  // Always maps `TimestampLTZNanosType` to `java.time.Instant`. Unlike micro `TimestampType`,
+  // the mapping does not consult `spark.sql.datetime.java8API.enabled`: the nanos LTZ type is
+  // post-Java-8 and the legacy `java.sql.Timestamp` external type is intentionally out of scope
+  // here. See SPARK-57033.
+  private class TimestampLTZNanosConverter(dataType: TimestampLTZNanosType)
+    extends CatalystTypeConverter[Any, Instant, TimestampNanosVal] {
+    override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
+      case i: Instant => DateTimeUtils.instantToTimestampNanos(i, dataType.precision)
+      case other => throw new SparkIllegalArgumentException(
+        errorClass = "INVALID_EXTERNAL_VALUE",
+        messageParameters = scala.collection.immutable.Map(
+          "other" -> other.toString,
+          "otherClass" -> other.getClass.getCanonicalName,
+          "dataType" -> dataType.sql))
+    }
+
+    override def toScala(catalystValue: TimestampNanosVal): Instant =
+      if (catalystValue == null) null
+      else DateTimeUtils.timestampNanosToInstant(catalystValue)
+
+    override def toScalaImpl(row: InternalRow, column: Int): Instant =
+      DateTimeUtils.timestampNanosToInstant(row.getTimestampLTZNanos(column))
+  }
+
   private class DecimalConverter(dataType: DecimalType)
     extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
 
@@ -527,7 +573,7 @@ object CatalystTypeConverters {
         case d: JavaBigInteger => Decimal(d)
         case d: Decimal => d
         case other => throw new SparkIllegalArgumentException(
-          errorClass = "_LEGACY_ERROR_TEMP_3219",
+          errorClass = "INVALID_EXTERNAL_VALUE",
           messageParameters = scala.collection.immutable.Map(
             "other" -> other.toString,
             "otherClass" -> other.getClass.getCanonicalName,
@@ -655,6 +701,9 @@ object CatalystTypeConverters {
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: LocalTime => TimeConverter.toCatalyst(t)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
+    // SPARK-57033: schema-less convertToCatalyst keeps bare `Instant` / `LocalDateTime` on the
+    // microsecond converters. The nanosecond path is schema-driven only - users opt in via an
+    // explicit `TimestampLTZNanosType` / `TimestampNTZNanosType` column in the schema.
     case i: Instant => InstantConverter.toCatalyst(i)
     case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
     case d: BigDecimal =>
@@ -666,7 +715,7 @@ object CatalystTypeConverters {
     case r: Row => InternalRow(r.toSeq.map(convertToCatalyst): _*)
     case arr: Array[Byte] => arr
     case g: org.apache.spark.sql.types.Geometry => STUtils.stGeomFromWKB(g.getBytes, g.getSrid)
-    case g: org.apache.spark.sql.types.Geography => STUtils.stGeogFromWKB(g.getBytes)
+    case g: org.apache.spark.sql.types.Geography => STUtils.stGeogFromWKB(g.getBytes, g.getSrid)
     case arr: Array[Char] => StringConverter.toCatalyst(arr)
     case arr: Array[_] => new GenericArrayData(arr.map(convertToCatalyst))
     case map: Map[_, _] =>

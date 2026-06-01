@@ -415,8 +415,8 @@ private[parquet] class ParquetRowConverter(
       case geom: GeometryType =>
         new ParquetGeometryConverter(geom.srid, updater)
 
-      case _: GeographyType =>
-        new ParquetGeographyConverter(updater)
+      case geog: GeographyType =>
+        new ParquetGeographyConverter(geog.srid, updater)
 
       // As long as the parquet type is INT64 timestamp, whether logical annotation
       // `isAdjustedToUTC` is false or true, it will be read as Spark's TimestampLTZ type
@@ -619,7 +619,7 @@ private[parquet] class ParquetRowConverter(
   }
 
   /**
-   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   * Parquet converter for geometries. A dictionary is used to minimize WKB decoding cost.
    */
   private final class ParquetGeometryConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
@@ -655,9 +655,9 @@ private[parquet] class ParquetRowConverter(
   }
 
   /**
-   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   * Parquet converter for geographies. A dictionary is used to minimize WKB decoding cost.
    */
-  private final class ParquetGeographyConverter(updater: ParentContainerUpdater)
+  private final class ParquetGeographyConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
 
     private var expandedDictionary: Array[GeographyVal] = null
@@ -666,7 +666,7 @@ private[parquet] class ParquetRowConverter(
 
     override def setDictionary(dictionary: Dictionary): Unit = {
       this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
-        STUtils.stGeogFromWKB(dictionary.decodeToBinary(i).getBytesUnsafe)
+        STUtils.stGeogFromWKB(dictionary.decodeToBinary(i).getBytesUnsafe, srid)
       }
     }
 
@@ -678,15 +678,15 @@ private[parquet] class ParquetRowConverter(
       val buffer = value.toByteBuffer
       val numBytes = buffer.remaining()
 
-      val geometry = if (buffer.hasArray) {
+      val geography = if (buffer.hasArray) {
         val array = buffer.array()
         val offset = buffer.arrayOffset() + buffer.position()
-        STUtils.stGeogFromWKB(array.slice(offset, offset + numBytes))
+        STUtils.stGeogFromWKB(array.slice(offset, offset + numBytes), srid)
       } else {
-        STUtils.stGeogFromWKB(value.getBytesUnsafe)
+        STUtils.stGeogFromWKB(value.getBytesUnsafe, srid)
       }
 
-      updater.set(geometry)
+      updater.set(geography)
     }
   }
 

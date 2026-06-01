@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo}
+import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor}
@@ -91,6 +91,17 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   }
 
   /**
+   * Metadata-key marker placed on the `__spark_cdc_events` aggregate's output attribute
+   * by [[addStreamingRowLevelPostProcessing]]. Downstream rules
+   * (`UnsupportedOperationChecker`'s CDC-specific output-mode check) detect the
+   * streaming row-level rewrite by looking for this marker rather than by string-matching
+   * the helper column's name -- mirroring the existing `EventTimeWatermark.delayKey` and
+   * `SessionWindow.marker` patterns and surviving any optimization that might relabel
+   * or rewrite the alias.
+   */
+  final val streamingPostProcessingMarker = "spark.cdc.streamingPostProcessing"
+
+  /**
    * Reserved (`__spark_cdc_*`) column names used internally by net-change
    * computation; connectors must not emit columns with these names.
    */
@@ -112,7 +123,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) if !table.resolved =>
       val changelog = table.changelog
-      val req = evaluateRequirements(changelog, table.changelogInfo)
+      val req = evaluateRequirements(changelog, table.changelogContext)
 
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
       var updatedRel: LogicalPlan = resolvedRel
@@ -129,14 +140,14 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         val rowIdExprs =
           V2ExpressionUtils.resolveRefs[NamedExpression](changelog.rowId().toSeq, resolvedRel)
         updatedRel = injectNetChangeComputation(
-          updatedRel, rowIdExprs, table.changelogInfo.computeUpdates())
+          updatedRel, rowIdExprs, table.changelogContext.computeUpdates())
       }
       updatedRel
 
     case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _)
         if !table.resolved =>
       val changelog = table.changelog
-      val req = evaluateRequirements(changelog, table.changelogInfo)
+      val req = evaluateRequirements(changelog, table.changelogContext)
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
       var updatedRel: LogicalPlan = resolvedRel
       if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
@@ -153,7 +164,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         // output, so name-based resolution against `updatedRel` recovers the right
         // attributes regardless of any preceding wrapping.
         updatedRel = addStreamingNetChangeComputation(
-          updatedRel, changelog, table.changelogInfo.computeUpdates())
+          updatedRel, changelog, table.changelogContext.computeUpdates())
       }
       updatedRel
   }
@@ -164,7 +175,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
   /**
    * Captures which post-processing passes a CDC query requires, derived from the
-   * user-provided [[ChangelogInfo]] options and the connector-declared [[Changelog]]
+   * user-provided [[ChangelogContext]] and the connector-declared [[Changelog]]
    * capability flags.
    */
   private case class PostProcessingRequirements(
@@ -183,14 +194,14 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    */
   private def evaluateRequirements(
       changelog: Changelog,
-      options: ChangelogInfo): PostProcessingRequirements = {
+      context: ChangelogContext): PostProcessingRequirements = {
     val requiresCarryOverRemoval =
-      options.deduplicationMode() != ChangelogInfo.DeduplicationMode.NONE &&
+      context.deduplicationMode() != ChangelogContext.DeduplicationMode.NONE &&
         changelog.containsCarryoverRows()
     val requiresUpdateDetection =
-      options.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
+      context.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
     val requiresNetChanges =
-      options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES &&
+      context.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES &&
         changelog.containsIntermediateChanges()
 
     // If carry-overs are surfaced and update detection is enabled without carry-over
@@ -198,7 +209,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     // results. Hence we throw.
     if (requiresUpdateDetection &&
         changelog.containsCarryoverRows() &&
-        options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE) {
+        context.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE) {
       throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(
         changelog.name())
     }
@@ -385,23 +396,22 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     // both inside the struct and as top-level grouping outputs; the top-level duplicates
     // are dropped via `unrequiredChildIndex` below.
     val structOfAllCols = CreateStruct(watermarked.output)
+    // Attach a metadata marker to the `__spark_cdc_events` alias so downstream rules
+    // can detect the streaming row-level rewrite by metadata rather than by helper
+    // column name (mirrors `SessionWindow.marker` / `EventTimeWatermark.delayKey`).
+    val eventsMetadata = new MetadataBuilder()
+      .putBoolean(streamingPostProcessingMarker, true)
+      .build()
     val eventsAlias = Alias(
-      new CollectList(structOfAllCols).toAggregateExpression(), HelperColumn.Events)()
+      new CollectList(structOfAllCols).toAggregateExpression(), HelperColumn.Events)(
+      explicitMetadata = Some(eventsMetadata))
 
     val aggregateExprs: Seq[NamedExpression] =
       groupingNamedExprs ++ Seq(delCntAlias, insCntAlias) ++ rvAliases :+ eventsAlias
     val aggregated = Aggregate(groupingExprs, aggregateExprs, watermarked)
 
     val filtered: LogicalPlan = if (requiresCarryOverRemoval) {
-      val delCnt = getAttribute(aggregated, HelperColumn.DelCnt)
-      val insCnt = getAttribute(aggregated, HelperColumn.InsCnt)
-      val minRv = getAttribute(aggregated, HelperColumn.MinRv)
-      val maxRv = getAttribute(aggregated, HelperColumn.MaxRv)
-      val rvCnt = getAttribute(aggregated, HelperColumn.RvCnt)
-      val isCarryoverPair = And(
-        And(EqualTo(delCnt, Literal(1L)), EqualTo(insCnt, Literal(1L))),
-        And(EqualTo(rvCnt, Literal(2L)), EqualTo(minRv, maxRv)))
-      Filter(Not(isCarryoverPair), aggregated)
+      Filter(Not(buildCarryOverPairPredicate(aggregated)), aggregated)
     } else aggregated
 
     // Inline the struct array back into rows. Drop the events column (consumed by Inline)
@@ -531,23 +541,33 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   }
 
   /**
-   * Adds a Filter node that drops rows belonging to a CoW carry-over pair.
-   * A pair is a carry-over iff
-   * `_del_cnt = 1 AND _ins_cnt = 1 AND _rv_cnt = 2 AND _min_rv = _max_rv`.
-   * The `_rv_cnt = 2` clause guards against a NULL rowVersion silently matching
+   * Builds the carry-over pair predicate against the helper attributes exposed by
+   * `input`: a pair is a CoW carry-over iff
+   * `_del_cnt = 1 AND _ins_cnt = 1 AND _rv_cnt = 2 AND _min_rv = _max_rv`. The
+   * `_rv_cnt = 2` clause guards against a NULL rowVersion silently matching
    * `_min_rv = _max_rv` (Spark's min/max skip NULLs).
+   *
+   * Used by both the batch path (`addCarryOverPairFilter` over a Window child) and the
+   * streaming path (in `addStreamingRowLevelPostProcessing` over an Aggregate child).
+   * The helper-attribute layout is the same in both cases.
    */
-  private def addCarryOverPairFilter(input: LogicalPlan): LogicalPlan = {
+  private def buildCarryOverPairPredicate(input: LogicalPlan): Expression = {
     val delCnt = getAttribute(input, HelperColumn.DelCnt)
     val insCnt = getAttribute(input, HelperColumn.InsCnt)
     val minRv = getAttribute(input, HelperColumn.MinRv)
     val maxRv = getAttribute(input, HelperColumn.MaxRv)
     val rvCnt = getAttribute(input, HelperColumn.RvCnt)
-
-    val isCarryoverPair = And(
+    And(
       And(EqualTo(delCnt, Literal(1L)), EqualTo(insCnt, Literal(1L))),
       And(EqualTo(rvCnt, Literal(2L)), EqualTo(minRv, maxRv)))
-    Filter(Not(isCarryoverPair), input)
+  }
+
+  /**
+   * Adds a Filter node that drops rows belonging to a CoW carry-over pair, using the
+   * shared `buildCarryOverPairPredicate`.
+   */
+  private def addCarryOverPairFilter(input: LogicalPlan): LogicalPlan = {
+    Filter(Not(buildCarryOverPairPredicate(input)), input)
   }
 
   /**

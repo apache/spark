@@ -245,7 +245,8 @@ object EvaluatePython {
         val geographySrid = s.get("srid").asInstanceOf[Int]
         g.assertSridAllowedForType(geographySrid)
         STUtils.stGeogFromWKB(
-          s.get("wkb").asInstanceOf[Array[Byte]])
+          s.get("wkb").asInstanceOf[Array[Byte]],
+          geographySrid)
     }
 
     case g: GeometryType => (obj: Any) => nullSafeConvert(obj) {

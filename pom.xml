@@ -26,7 +26,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent_2.13</artifactId>
-  <version>4.2.0-SNAPSHOT</version>
+  <version>5.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>https://spark.apache.org/</url>
@@ -122,7 +122,7 @@
     <java.version>17</java.version>
     <java.minimum.version>17.0.11</java.minimum.version>
     <maven.compiler.release>${java.version}</maven.compiler.release>
-    <maven.version>3.9.15</maven.version>
+    <maven.version>3.9.16</maven.version>
     <exec-maven-plugin.version>3.6.1</exec-maven-plugin.version>
     <sbt.project.name>spark</sbt.project.name>
     <asm.version>9.9.1</asm.version>
@@ -143,10 +143,10 @@
     <kafka.version>3.9.2</kafka.version>
     <!-- After 10.17.1.0, the minimum required version is JDK19 -->
     <derby.version>10.16.1.1</derby.version>
-    <parquet.version>1.17.0</parquet.version>
+    <parquet.version>1.17.1</parquet.version>
     <orc.version>2.3.0</orc.version>
     <orc.classifier>shaded-protobuf</orc.classifier>
-    <jetty.version>12.1.8</jetty.version>
+    <jetty.version>12.1.9</jetty.version>
     <jakartaservlet.version>6.0.0</jakartaservlet.version>
     <!-- SPARK-46938: Required by Hive / LibThrift libs -->
     <javaxservlet.version>4.0.1</javaxservlet.version>
@@ -183,7 +183,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.21.2</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.21.3</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.2.0</netlib.ludovic.dev.version>
@@ -199,10 +199,10 @@
     <datanucleus-core.version>4.1.17</datanucleus-core.version>
     <guava.version>33.6.0-jre</guava.version>
     <guava.failureaccess.version>1.0.3</guava.failureaccess.version>
-    <gson.version>2.13.2</gson.version>
+    <gson.version>2.14.0</gson.version>
     <janino.version>3.1.9</janino.version>
     <jersey.version>3.1.11</jersey.version>
-    <joda.version>2.14.1</joda.version>
+    <joda.version>2.14.2</joda.version>
     <jsr305.version>3.0.0</jsr305.version>
     <jaxb.version>2.2.11</jaxb.version>
     <libthrift.version>0.16.0</libthrift.version>
@@ -215,9 +215,13 @@
     <commons-cli.version>1.11.0</commons-cli.version>
     <bouncycastle.version>1.84</bouncycastle.version>
     <tink.version>1.20.0</tink.version>
+    <!--
+      TODO: Once upgrade datasketches to a version that supports Java 25,
+            SPARK-53327 workaround should be reverted.
+     -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.12.Final</netty.version>
-    <netty-tcnative.version>2.0.76.Final</netty-tcnative.version>
+    <netty.version>4.2.13.Final</netty.version>
+    <netty-tcnative.version>2.0.77.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -237,7 +241,7 @@
 
     <!-- org.fusesource.leveldbjni will be used except on arm64 platform. -->
     <leveldbjni.group>org.fusesource.leveldbjni</leveldbjni.group>
-    <kubernetes-client.version>7.6.1</kubernetes-client.version>
+    <kubernetes-client.version>7.7.0</kubernetes-client.version>
     <vertx.version>4.5.26</vertx.version>
     <xz.version>1.12</xz.version>
 
@@ -336,12 +340,13 @@
       -Dio.netty.tryReflectionSetAccessible=true
       -Dio.netty.allocator.type=pooled
       -Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE
-      -Dio.netty.noUnsafe=false
+      --sun-misc-unsafe-memory-access=allow
       --enable-native-access=ALL-UNNAMED
+      -XX:+EnableDynamicAgentLoading
     </extraJavaTestArgs>
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
-    <postgresql.version>42.7.10</postgresql.version>
+    <postgresql.version>42.7.11</postgresql.version>
     <db2.jcc.version>11.5.9.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
@@ -739,23 +744,6 @@
         <version>${ivy.version}</version>
       </dependency>
       <dependency>
-        <groupId>io.jsonwebtoken</groupId>
-        <artifactId>jjwt-api</artifactId>
-        <version>${jjwt.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>io.jsonwebtoken</groupId>
-        <artifactId>jjwt-impl</artifactId>
-        <version>${jjwt.version}</version>
-        <scope>${jjwt.deps.scope}</scope>
-      </dependency>
-      <dependency>
-        <groupId>io.jsonwebtoken</groupId>
-        <artifactId>jjwt-jackson</artifactId>
-        <version>${jjwt.version}</version>
-        <scope>${jjwt.deps.scope}</scope>
-      </dependency>
-      <dependency>
         <groupId>com.google.code.findbugs</groupId>
         <artifactId>jsr305</artifactId>
         <version>${jsr305.version}</version>
@@ -784,7 +772,7 @@
       <dependency>
         <groupId>org.rocksdb</groupId>
         <artifactId>rocksdbjni</artifactId>
-        <version>9.8.4</version>
+        <version>10.10.1.1</version>
       </dependency>
       <dependency>
         <groupId>${leveldbjni.group}</groupId>
@@ -894,7 +882,7 @@
       <dependency>
         <groupId>com.github.luben</groupId>
         <artifactId>zstd-jni</artifactId>
-        <version>1.5.7-7</version>
+        <version>1.5.7-9</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -1113,6 +1101,13 @@
         <version>${fasterxml.jackson.version}</version>
         <scope>import</scope>
         <type>pom</type>
+      </dependency>
+      <dependency>
+        <groupId>io.jsonwebtoken</groupId>
+        <artifactId>jjwt-bom</artifactId>
+        <version>${jjwt.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
       <dependency>
         <groupId>org.apache.ws.xmlschema</groupId>

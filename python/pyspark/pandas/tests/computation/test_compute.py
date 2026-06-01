@@ -21,7 +21,6 @@ import pandas as pd
 from pyspark.sql import functions as sf
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Computations / Descriptive Stats'
@@ -570,7 +569,6 @@ class FrameComputeMixin:
 class FrameComputeTests(
     FrameComputeMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

@@ -217,6 +217,10 @@ singleTableSchema
     : colTypeList EOF
     ;
 
+singlePathElementList
+    : pathElement (COMMA pathElement)* EOF
+    ;
+
 singleRoutineParamList
     : colDefinitionList EOF
     ;
@@ -1049,7 +1053,7 @@ relationExtension
     ;
 
 joinRelation
-    : (joinType) JOIN LATERAL? right=relationPrimary joinCriteria?
+    : (joinType) JOIN LATERAL? right=relationPrimary (joinCriteria | nearestByClause)?
     | NATURAL joinType JOIN LATERAL? right=relationPrimary
     ;
 
@@ -1068,8 +1072,14 @@ joinCriteria
     | USING identifierList
     ;
 
+nearestByClause
+    : (APPROX | EXACT) NEAREST num=INTEGER_VALUE? BY (DISTANCE | SIMILARITY) expression
+    ;
+
 sample
-    : TABLESAMPLE LEFT_PAREN sampleMethod? RIGHT_PAREN (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
+    : TABLESAMPLE (sampleType=(SYSTEM | BERNOULLI))?
+      LEFT_PAREN sampleMethod? RIGHT_PAREN
+      (REPEATABLE LEFT_PAREN seed=integerValue RIGHT_PAREN)?
     ;
 
 sampleMethod
@@ -1473,7 +1483,10 @@ nonTrivialPrimitiveType
     | INTERVAL
         (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
          fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
-    | TIMESTAMP (withLocalTimeZone | withoutTimeZone)?
+    | TIMESTAMP (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
+        (withLocalTimeZone | withoutTimeZone)?
+    | TIMESTAMP_LTZ (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
+    | TIMESTAMP_NTZ (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
@@ -1488,7 +1501,6 @@ trivialPrimitiveType
     | FLOAT | REAL
     | DOUBLE
     | DATE
-    | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | BINARY
     | VOID
     | VARIANT
@@ -1930,6 +1942,7 @@ ansiNonReserved
     | ANALYZE
     | ANTI
     | ANY_VALUE
+    | APPROX
     | ARCHIVE
     | ARRAY
     | ASC
@@ -1937,6 +1950,7 @@ ansiNonReserved
     | AT
     | ATOMIC
     | BEGIN
+    | BERNOULLI
     | BETWEEN
     | BIGINT
     | BINARY
@@ -2006,6 +2020,7 @@ ansiNonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTRIBUTE
     | DIV
     | DO
@@ -2015,6 +2030,7 @@ ansiNonReserved
     | ENFORCED
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2112,6 +2128,7 @@ ansiNonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2187,6 +2204,7 @@ ansiNonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2207,6 +2225,7 @@ ansiNonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM
     | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION
@@ -2303,6 +2322,7 @@ nonReserved
     | AND
     | ANY
     | ANY_VALUE
+    | APPROX
     | ARCHIVE
     | ARRAY
     | AS
@@ -2312,6 +2332,7 @@ nonReserved
     | ATOMIC
     | AUTHORIZATION
     | BEGIN
+    | BERNOULLI
     | BETWEEN
     | BIGINT
     | BINARY
@@ -2398,6 +2419,7 @@ nonReserved
     | DFS
     | DIRECTORIES
     | DIRECTORY
+    | DISTANCE
     | DISTINCT
     | DISTRIBUTE
     | DIV
@@ -2411,6 +2433,7 @@ nonReserved
     | ESCAPE
     | ESCAPED
     | EVOLUTION
+    | EXACT
     | EXCHANGE
     | EXCLUDE
     | EXCLUSIVE
@@ -2523,6 +2546,7 @@ nonReserved
     | NAMESPACES
     | NANOSECOND
     | NANOSECONDS
+    | NEAREST
     | NEXT
     | NO
     | NONE
@@ -2609,6 +2633,7 @@ nonReserved
     | SETS
     | SHORT
     | SHOW
+    | SIMILARITY
     | SINGLE
     | SKEWED
     | SMALLINT
@@ -2631,6 +2656,7 @@ nonReserved
     | SUBSTR
     | SUBSTRING
     | SYNC
+    | SYSTEM
     | SYSTEM_PATH
     | SYSTEM_TIME
     | SYSTEM_VERSION

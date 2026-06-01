@@ -29,9 +29,8 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{OutputMode, RunningCountStatefulProcessor, StreamTest, TimeMode}
 import org.apache.spark.sql.streaming.OutputMode.{Complete, Update}
-import org.apache.spark.sql.test.SharedSparkSession
 
-class OperatorStateMetadataSuite extends StreamTest with SharedSparkSession {
+class OperatorStateMetadataSuite extends StreamTest {
   import testImplicits._
 
   private lazy val hadoopConf = spark.sessionState.newHadoopConf()

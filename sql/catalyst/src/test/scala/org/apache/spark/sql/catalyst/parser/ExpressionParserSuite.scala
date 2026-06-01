@@ -261,8 +261,8 @@ class ExpressionParserSuite extends AnalysisTest {
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a like $quantifier()"),
-        condition = "_LEGACY_ERROR_TEMP_0064",
-        parameters = Map("msg" -> "Expected something between '(' and ')'."),
+        condition = "INVALID_SQL_SYNTAX.EMPTY_QUANTIFIED_PATTERN",
+        parameters = Map.empty,
         context = ExpectedContext(
           fragment = s"like $quantifier()",
           start = 2,
@@ -461,8 +461,8 @@ class ExpressionParserSuite extends AnalysisTest {
     // We cannot use an arbitrary expression.
     checkError(
       exception = parseException("foo(*) over (partition by a order by b rows exp(b) preceding)"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Frame bound value must be a literal."),
+      condition = "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = "exp(b) preceding",
         start = 44,
@@ -1232,8 +1232,8 @@ class ExpressionParserSuite extends AnalysisTest {
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a ilike $quantifier()"),
-        condition = "_LEGACY_ERROR_TEMP_0064",
-        parameters = Map("msg" -> "Expected something between '(' and ')'."),
+        condition = "INVALID_SQL_SYNTAX.EMPTY_QUANTIFIED_PATTERN",
+        parameters = Map.empty,
         context = ExpectedContext(
           fragment = s"ilike $quantifier()",
           start = 2,
@@ -1254,5 +1254,16 @@ class ExpressionParserSuite extends AnalysisTest {
         fragment = "time '12-13.14'",
         start = 0,
         stop = 14))
+  }
+
+  test("collate expression origin") {
+    val sql = "a COLLATE utf8_lcase"
+    val parsed = defaultParser.parseExpression(sql)
+    val collation = parsed.collect { case u: UnresolvedCollation => u }
+    assert(collation.length == 1)
+    val origin = collation.head.origin
+    assert(origin.startIndex.isDefined)
+    assert(origin.stopIndex.isDefined)
+    assert(sql.substring(origin.startIndex.get, origin.stopIndex.get + 1) == "utf8_lcase")
   }
 }

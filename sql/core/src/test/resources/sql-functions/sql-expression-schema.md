@@ -94,6 +94,7 @@
 | org.apache.spark.sql.catalyst.expressions.Cos | cos | SELECT cos(0) | struct<COS(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Cosh | cosh | SELECT cosh(0) | struct<COSH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Cot | cot | SELECT cot(1) | struct<COT(1):double> |
+| org.apache.spark.sql.catalyst.expressions.CounterDiffExpressionBuilder | counter_diff | SELECT m, t, c, counter_diff(c) OVER (PARTITION BY m ORDER BY t) AS diff FROM VALUES ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:00:00', 100), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:01:00', 200), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:02:00', 400), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:03:00', 50), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:04:00', 100) AS tab(m, t, c) ORDER BY t | struct<m:string,t:timestamp_ntz,c:int,diff:int> |
 | org.apache.spark.sql.catalyst.expressions.Crc32 | crc32 | SELECT crc32('Spark') | struct<crc32(Spark):bigint> |
 | org.apache.spark.sql.catalyst.expressions.CreateArray | array | SELECT array(1, 2, 3) | struct<array(1, 2, 3):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateMap | map | SELECT map(1.0, '2', 3.0, '4') | struct<map(1.0, 2, 3.0, 4):map<decimal(2,1),string>> |
@@ -537,11 +538,12 @@
 | org.apache.spark.sql.catalyst.expressions.aggregate.VariancePop | var_pop | SELECT var_pop(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_pop(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | var_samp | SELECT var_samp(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<var_samp(col):double> |
 | org.apache.spark.sql.catalyst.expressions.aggregate.VarianceSamp | variance | SELECT variance(col) FROM VALUES (1), (2), (3) AS tab(col) | struct<variance(col):double> |
-| org.apache.spark.sql.catalyst.expressions.st.ST_AsBinary | st_asbinary | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))):string> |
-| org.apache.spark.sql.catalyst.expressions.st.ST_GeogFromWKB | st_geogfromwkb | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))):string> |
-| org.apache.spark.sql.catalyst.expressions.st.ST_GeomFromWKB | st_geomfromwkb | SELECT hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0))):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_AsBinary | st_asbinary | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), NDR)):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_GeogFromWKB | st_geogfromwkb | SELECT hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), NDR)):string> |
+| org.apache.spark.sql.catalyst.expressions.st.ST_GeomFromWKB | st_geomfromwkb | SELECT hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040'))) | struct<hex(st_asbinary(st_geomfromwkb(X'0101000000000000000000F03F0000000000000040', 0), NDR)):string> |
 | org.apache.spark.sql.catalyst.expressions.st.ST_SetSrid | st_setsrid | SELECT st_srid(st_setsrid(ST_GeogFromWKB(X'0101000000000000000000F03F0000000000000040'), 4326)) | struct<st_srid(st_setsrid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040'), 4326)):int> |
 | org.apache.spark.sql.catalyst.expressions.st.ST_Srid | st_srid | SELECT st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')) | struct<st_srid(st_geogfromwkb(X'0101000000000000000000F03F0000000000000040')):int> |
+| org.apache.spark.sql.catalyst.expressions.variant.IsValidVariant | is_valid_variant | SELECT is_valid_variant(parse_json('null')) | struct<is_valid_variant(parse_json(null)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.variant.IsVariantNull | is_variant_null | SELECT is_variant_null(parse_json('null')) | struct<is_variant_null(parse_json(null)):boolean> |
 | org.apache.spark.sql.catalyst.expressions.variant.ParseJsonExpressionBuilder | parse_json | SELECT parse_json('{"a":1,"b":0.8}') | struct<parse_json({"a":1,"b":0.8}):variant> |
 | org.apache.spark.sql.catalyst.expressions.variant.SchemaOfVariant | schema_of_variant | SELECT schema_of_variant(parse_json('null')) | struct<schema_of_variant(parse_json(null)):string> |

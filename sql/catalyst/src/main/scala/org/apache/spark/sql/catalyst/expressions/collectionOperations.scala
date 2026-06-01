@@ -32,12 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  ARRAYS_ZIP,
-  CONCAT,
-  MAP_FROM_ENTRIES,
-  TreePattern
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAY_DISTINCT, ARRAY_EXCEPT, ARRAY_INTERSECT, ARRAY_UNION, ARRAYS_OVERLAP, ARRAYS_ZIP, CONCAT, MAP_FROM_ENTRIES, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -1809,6 +1804,9 @@ case class ArrayAppend(left: Expression, right: Expression) extends ArrayPendBas
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
   extends BinaryArrayExpressionWithImplicitCast with Predicate {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_OVERLAP)
+
   override def nullIntolerant: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
@@ -2738,19 +2736,23 @@ case class ElementAt(
   override def nullSafeEval(value: Any, ordinal: Any): Any = doElementAt(value, ordinal)
 
   @transient private lazy val doElementAt: (Any, Any) => Any = left.dataType match {
+    // ArrayType is split into ANSI (failOnError) and non-ANSI branches.
+    // Order matters: the guarded case must come first.
+    case _: ArrayType if failOnError =>
+      (value, ordinal) => {
+        val array = value.asInstanceOf[ArrayData]
+        val idx = ArrayExpressionUtils.resolveArrayIndex(
+          array.numElements(), ordinal.asInstanceOf[Int], getContextOrNull())
+        if (arrayElementNullable && array.isNullAt(idx)) null else array.get(idx, dataType)
+      }
     case _: ArrayType =>
       (value, ordinal) => {
         val array = value.asInstanceOf[ArrayData]
         val index = ordinal.asInstanceOf[Int]
         if (array.numElements() < math.abs(index)) {
-          if (failOnError) {
-            throw QueryExecutionErrors.invalidElementAtIndexError(
-              index, array.numElements(), getContextOrNull())
-          } else {
-            defaultValueOutOfBound match {
-              case Some(value) => value.eval()
-              case None => null
-            }
+          defaultValueOutOfBound match {
+            case Some(value) => value.eval()
+            case None => null
           }
         } else {
           val idx = if (index == 0) {
@@ -2773,6 +2775,31 @@ case class ElementAt(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     left.dataType match {
+      // ArrayType is split into ANSI (failOnError) and non-ANSI branches.
+      // Order matters: the guarded case must come first.
+      case _: ArrayType if failOnError =>
+        nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+          val index = ctx.freshName("elementAtIndex")
+          val errorContext = getContextOrNullCode(ctx)
+          val utils = classOf[ArrayExpressionUtils].getName
+          val assignment = s"${ev.value} = ${CodeGenerator.getValue(eval1, dataType, index)};"
+          val body = if (arrayElementNullable) {
+            s"""
+               |if ($eval1.isNullAt($index)) {
+               |  ${ev.isNull} = true;
+               |} else {
+               |  $assignment
+               |}
+             """.stripMargin
+          } else {
+            assignment
+          }
+          s"""
+             |int $index = $utils.resolveArrayIndex(
+             |  $eval1.numElements(), (int) $eval2, $errorContext);
+             |$body
+           """.stripMargin
+        })
       case _: ArrayType =>
         nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
           val index = ctx.freshName("elementAtIndex")
@@ -2786,21 +2813,15 @@ case class ElementAt(
             ""
           }
           val errorContext = getContextOrNullCode(ctx)
-          val indexOutOfBoundBranch = if (failOnError) {
-            // scalastyle:off line.size.limit
-            s"throw QueryExecutionErrors.invalidElementAtIndexError($index, $eval1.numElements(), $errorContext);"
-            // scalastyle:on line.size.limit
-          } else {
-            defaultValueOutOfBound match {
-              case Some(value) =>
-                val defaultValueEval = value.genCode(ctx)
-                s"""
-                  ${defaultValueEval.code}
-                  ${ev.isNull} = ${defaultValueEval.isNull};
-                  ${ev.value} = ${defaultValueEval.value};
-                """.stripMargin
-              case None => s"${ev.isNull} = true;"
-            }
+          val indexOutOfBoundBranch = defaultValueOutOfBound match {
+            case Some(value) =>
+              val defaultValueEval = value.genCode(ctx)
+              s"""
+                ${defaultValueEval.code}
+                ${ev.isNull} = ${defaultValueEval.isNull};
+                ${ev.value} = ${defaultValueEval.value};
+              """.stripMargin
+            case None => s"${ev.isNull} = true;"
           }
 
           s"""
@@ -4212,6 +4233,9 @@ trait ArraySetLike {
   since = "2.4.0")
 case class ArrayDistinct(child: Expression)
   extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_DISTINCT)
+
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
@@ -4408,6 +4432,8 @@ trait ArrayBinaryLike
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_UNION)
+
   @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
@@ -4584,6 +4610,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_INTERSECT)
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck
@@ -4800,7 +4828,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 }
 
 /**
- * Returns an array of the elements in the intersect of x and y, without duplicates
+ * Returns an array of the elements in x but not in y, without duplicates
  */
 @ExpressionDescription(
   usage = """
@@ -4816,6 +4844,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_EXCEPT)
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck

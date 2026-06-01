@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.CheckInvariant
 import org.apache.spark.sql.catalyst.plans.logical.Filter
@@ -24,6 +25,7 @@ import org.apache.spark.sql.connector.catalog.{Aborted, Committed}
 import org.apache.spark.sql.connector.catalog.InMemoryTable
 import org.apache.spark.sql.connector.write.DeleteSummary
 import org.apache.spark.sql.execution.datasources.v2.{DeleteFromTableExec, ReplaceDataExec, WriteDeltaExec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 
 abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
@@ -422,6 +424,46 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(2, 2, "hardware") :: Row(3, null, "hr") :: Nil)
       checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+    }
+  }
+
+  test("metric values are stable across stage retries") {
+    // Force a shuffle in the DELETE plan via an IN-subquery (with broadcast disabled), then
+    // have the DAGScheduler corrupt the first attempt of every upstream shuffle map stage.
+    // The scan-side numOutputRows doubles up across attempts, and the driver-side derivation
+    // numDeletedRows = numScannedRows - numCopiedRows in `ReplaceDataExec.getWriteSummary`
+    // propagates that doubling into `DeleteSummary`. With SQLLastAttemptMetric on the scan,
+    // the surfaced numDeletedRows stays correct. (The current fetch-failure injection does
+    // not retry the writer stage, so writer-side numCopiedRows isn't actually exercised
+    // here; follow-up #55738 will fill that gap.)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |{ "pk": 4, "salary": 400, "dep": "software" }
+            |""".stripMargin)
+
+        val sourceDF = Seq(1, 2).toDF("pk")
+        sourceDF.createOrReplaceTempView("source")
+
+        withSparkContextConf(
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+          sql(
+            s"""DELETE FROM $tableNameAsString
+               |WHERE pk IN (SELECT pk FROM source)
+               |""".stripMargin)
+        }
+
+        checkDeleteMetrics(numDeletedRows = 2, numCopiedRows = 2)
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(3, 300, "hr"),
+            Row(4, 400, "software")))
+      }
     }
   }
 
@@ -957,6 +999,29 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
       Seq(
         Row(1, 100, "hr"),
         Row(2, 200, "software")))
+  }
+
+  test("delete with NOT IN over empty subquery") {
+    withTempView("empty_subq") {
+      createAndInitTable("pk INT NOT NULL, id INT NOT NULL, dep STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr" }
+          |{ "pk": 2, "id": 2, "dep": "hr" }
+          |{ "pk": 3, "id": 3, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq.empty[Int].toDF("v").createOrReplaceTempView("empty_subq")
+
+      sql(
+        s"""DELETE FROM $tableNameAsString
+           |WHERE id NOT IN (SELECT v FROM empty_subq)
+           |""".stripMargin)
+
+      checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Nil)
+      // The filter gets replaced by an EmptyRelation in the ReplaceData executed plan, which hides
+      // the executed BatchScan and prevents computing numDeletedRows using numOutputRows of the
+      // scan node.
+      checkDeleteMetrics(numDeletedRows = if (deltaDelete) 3 else -1, numCopiedRows = 0)
+    }
   }
 
   private def executeDeleteWithFilters(query: String): Unit = {

@@ -26,6 +26,7 @@ from pyspark.sql.types import (
     StructField,
     ArrayType,
     IntegerType,
+    MapType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -765,6 +766,37 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
                     cdf.select(ccol.over(cwin)).toPandas(),
                     sdf.select(scol.over(swin)).toPandas(),
                 )
+
+        # test counter_diff: requires non-negative values and has a two-argument form that
+        # accepts a start_time parameter, so a separate dataset is used.
+        counter_diff_query = """
+            SELECT * FROM VALUES
+            (0, TIMESTAMP_NTZ '2026-01-01 00:00:00',  100, TIMESTAMP_NTZ '2025-12-31 00:00:00'),
+            (0, TIMESTAMP_NTZ '2026-01-01 00:01:00',  200, TIMESTAMP_NTZ '2025-12-31 00:00:00'),
+            (0, TIMESTAMP_NTZ '2026-01-01 00:02:00',  300, TIMESTAMP_NTZ '2025-12-31 00:00:00'),
+            (0, TIMESTAMP_NTZ '2026-01-01 00:03:00', 1200, TIMESTAMP_NTZ '2026-01-01 00:02:15'),
+            (0, TIMESTAMP_NTZ '2026-01-01 00:04:00', 1300, TIMESTAMP_NTZ '2026-01-01 00:02:15'),
+            (0, TIMESTAMP_NTZ '2026-01-01 00:05:00',   50, TIMESTAMP_NTZ '2026-01-01 00:02:15'),
+            (0, TIMESTAMP_NTZ '2026-01-01 00:06:00',  100, TIMESTAMP_NTZ '2026-01-01 00:02:15'),
+            (0, TIMESTAMP_NTZ '2026-01-01 00:07:00',   20, TIMESTAMP_NTZ '2026-01-01 00:06:45'),
+            (0, TIMESTAMP_NTZ '2026-01-01 00:08:00',   60, TIMESTAMP_NTZ '2026-01-01 00:06:45'),
+            (1, TIMESTAMP_NTZ '2026-01-01 00:00:00',  100, TIMESTAMP_NTZ '2025-12-31 00:00:00'),
+            (1, TIMESTAMP_NTZ '2026-01-01 00:01:00',  200, TIMESTAMP_NTZ '2025-12-31 00:00:00'),
+            (1, TIMESTAMP_NTZ '2026-01-01 00:02:00',  300, TIMESTAMP_NTZ '2025-12-31 00:00:00'),
+            (1, TIMESTAMP_NTZ '2026-01-01 00:03:00', 1000, TIMESTAMP_NTZ '2025-12-31 00:00:00'),
+            (1, TIMESTAMP_NTZ '2026-01-01 00:04:00',   75, TIMESTAMP_NTZ '2026-01-01 00:03:15')
+            AS tab(p, t, c, s)
+            """
+        cdf_cd = self.connect.sql(counter_diff_query)
+        sdf_cd = self.spark.sql(counter_diff_query)
+        for ccol, scol in [
+            (CF.counter_diff("c"), SF.counter_diff("c")),
+            (CF.counter_diff("c", "s"), SF.counter_diff("c", "s")),
+        ]:
+            self.assert_eq(
+                cdf_cd.select(ccol.over(CW.partitionBy("p").orderBy("t"))).toPandas(),
+                sdf_cd.select(scol.over(SW.partitionBy("p").orderBy("t"))).toPandas(),
+            )
 
         # test aggregation functions
         for ccol, scol in [
@@ -1794,6 +1826,7 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             "MAP<STRING,INT>",
             StructType([StructField("a", IntegerType())]),
             ArrayType(StructType([StructField("a", IntegerType())])),
+            MapType(StringType(), IntegerType()),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_json(cdf.a, schema)),
