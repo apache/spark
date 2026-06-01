@@ -68,29 +68,29 @@ class ConvertToCatalystSuite extends PlanTest {
 
   // ---- tests ----
 
-  test("transpiles when not nested (parent_is_udf = false)") {
+  test("transpiles when not nested (parentIsUdf = false)") {
     transpileOn {
       val tpudf = makeTPUDF(makePyUDF(), catalystExpr)
-      val result = ConvertToCatalyst.applyExpr(tpudf, parent_is_udf = false)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(!result.isInstanceOf[TranspiledPythonUDF])
       assert(!result.isInstanceOf[PythonUDF])
     }
   }
 
-  test("prevents transpilation when parent_is_udf=true and inputs are plain PythonUDFs") {
+  test("prevents transpilation when parentIsUdf=true and inputs are plain PythonUDFs") {
     // PythonUDF -> TranspiledPythonUDF -> PythonUDF: the middle node should NOT be
     // transpiled when called from an outer UDF context, to preserve the batch pipeline.
     transpileOn {
       val innerPyUDF = makePyUDF(attrA)
       val outerPyUDF = makePyUDF(innerPyUDF)
       val outerTPUDF = makeTPUDF(outerPyUDF, Add(innerPyUDF, Literal(4L)))
-      val result = ConvertToCatalyst.applyExpr(outerTPUDF, parent_is_udf = true)
+      val result = ConvertToCatalyst.applyExpr(outerTPUDF, parentIsUdf = true)
       assert(result.isInstanceOf[PythonUDF])
       assert(!result.isInstanceOf[TranspiledPythonUDF])
     }
   }
 
-  test("do not prevent transpilation when input to pythonUDFExpr is a TranspiledPythonUDF") {
+  test("does not prevent transpilation when input to pythonUDFExpr is a TranspiledPythonUDF") {
     // When the input to a TPUDF is itself a TranspiledPythonUDF (has a Catalyst alternative),
     // hasOnlyPythonUDFInputs returns false so the outer TPUDF still transpiles.
     transpileOn {
@@ -98,7 +98,7 @@ class ConvertToCatalystSuite extends PlanTest {
       val innerTPUDF = makeTPUDF(innerPyUDF, catalystExpr)
       val outerPyUDF = makePyUDF(innerTPUDF)
       val outerTPUDF = makeTPUDF(outerPyUDF, Add(innerTPUDF, Literal(4L)))
-      val result = ConvertToCatalyst.applyExpr(outerTPUDF, parent_is_udf = true)
+      val result = ConvertToCatalyst.applyExpr(outerTPUDF, parentIsUdf = true)
       assert(!result.isInstanceOf[TranspiledPythonUDF])
       assert(!result.isInstanceOf[PythonUDF])
     }
@@ -123,7 +123,7 @@ class ConvertToCatalystSuite extends PlanTest {
   test("falls back to PythonUDF when ANSI is disabled") {
     ansiOff {
       val tpudf = makeTPUDF(makePyUDF(), catalystExpr)
-      val result = ConvertToCatalyst.applyExpr(tpudf, parent_is_udf = false)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(result.isInstanceOf[PythonUDF])
       assert(!result.isInstanceOf[TranspiledPythonUDF])
     }
@@ -132,7 +132,7 @@ class ConvertToCatalystSuite extends PlanTest {
   test("falls back to PythonUDF when transpilation is disabled") {
     transpileOff {
       val tpudf = makeTPUDF(makePyUDF(), catalystExpr)
-      val result = ConvertToCatalyst.applyExpr(tpudf, parent_is_udf = false)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(result.isInstanceOf[PythonUDF])
       assert(!result.isInstanceOf[TranspiledPythonUDF])
     }
@@ -142,7 +142,7 @@ class ConvertToCatalystSuite extends PlanTest {
     transpileOn {
       val pyUDF = makePyUDF()
       val tpudf = TranspiledPythonUDF("udf", pyUDF, List())
-      val result = ConvertToCatalyst.applyExpr(tpudf, parent_is_udf = false)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(result.isInstanceOf[PythonUDF])
       assert(!result.isInstanceOf[TranspiledPythonUDF])
     }
@@ -173,6 +173,10 @@ class ConvertToCatalystSuite extends PlanTest {
       }
       assert(leftover.isEmpty,
         s"TranspiledPythonUDF survived ConvertToCatalyst.apply: $rewritten")
+      // The Filter's condition must be the resolved Catalyst expression, not a fallback PythonUDF.
+      val filterCond = rewritten.asInstanceOf[Project].child.asInstanceOf[Filter].condition
+      assert(filterCond == GreaterThan(attrA, Literal(0L)),
+        s"Filter condition was not rewritten to GreaterThan: $filterCond")
     }
   }
 
@@ -185,7 +189,7 @@ class ConvertToCatalystSuite extends PlanTest {
     transpileOn {
       val preCoerced = Add(attrA, Cast(Literal(4, IntegerType), LongType))
       val tpudf = makeTPUDF(makePyUDF(), preCoerced)
-      val result = ConvertToCatalyst.applyExpr(tpudf, parent_is_udf = false)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(result == preCoerced,
         s"Expected pre-coerced expression unchanged, got: $result")
     }

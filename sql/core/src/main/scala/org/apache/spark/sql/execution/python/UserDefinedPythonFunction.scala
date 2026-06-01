@@ -107,8 +107,7 @@ case class UserDefinedPythonFunction(
                 s"Invalid UDF parameter placeholder: ${nameParts.head}")
             }
             if (index >= 0 && index < children.length) {
-              val result = children(index)
-              result
+              children(index)
             } else {
               throw new IllegalArgumentException(s"Invalid UDF parameter index: $index")
             }
