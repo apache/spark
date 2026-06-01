@@ -1977,6 +1977,37 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-57184: appendStruct(true) recurses into CalendarInterval child columns") {
+    // A struct column whose only field is a CalendarInterval. When the parent struct is
+    // appended as null, the recursion must also advance the interval child's grandchild
+    // columns (months / days / microseconds). Otherwise a subsequent non-null row's interval
+    // would be read from skewed grandchild slots.
+    val schema = new StructType()
+      .add("s", new StructType().add("cal", CalendarIntervalType))
+    val converter = new RowToColumnConverter(schema)
+    val columns = OnHeapColumnVector.allocateColumns(3, schema)
+    try {
+      // row 0: null parent struct.
+      converter.convert(new GenericInternalRow(Array[Any](null)), columns.toArray)
+      // row 1: non-null struct holding interval (1, 2, 3).
+      converter.convert(
+        new GenericInternalRow(Array[Any](
+          new GenericInternalRow(Array[Any](new CalendarInterval(1, 2, 3))))),
+        columns.toArray)
+      // row 2: non-null struct holding interval (4, 5, 6).
+      converter.convert(
+        new GenericInternalRow(Array[Any](
+          new GenericInternalRow(Array[Any](new CalendarInterval(4, 5, 6))))),
+        columns.toArray)
+
+      assert(columns(0).isNullAt(0))
+      assert(columns(0).getStruct(1).getInterval(0) === new CalendarInterval(1, 2, 3))
+      assert(columns(0).getStruct(2).getInterval(0) === new CalendarInterval(4, 5, 6))
+    } finally {
+      columns.foreach(_.close())
+    }
+  }
+
   testVector("Decimal API", 4, DecimalType.IntDecimal) {
     column =>
 
