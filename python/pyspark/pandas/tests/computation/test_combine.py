@@ -214,10 +214,14 @@ class FrameCombineMixin:
 
         check(lambda left, right: left.merge(right))
         check(lambda left, right: left.merge(right, on=[(10, "value")]))
-        check(lambda left, right: left.set_index((10, "lkey")).merge(right.set_index((10, "rkey"))))
         check(
-            lambda left, right: left.set_index((10, "lkey")).merge(
-                right.set_index((10, "rkey")), left_index=True, right_index=True
+            lambda left, right: (left.set_index((10, "lkey")).merge(right.set_index((10, "rkey"))))
+        )
+        check(
+            lambda left, right: (
+                left.set_index((10, "lkey")).merge(
+                    right.set_index((10, "rkey")), left_index=True, right_index=True
+                )
             )
         )
         # TODO: when both left_index=True and right_index=True with multi-index columns
@@ -235,10 +239,10 @@ class FrameCombineMixin:
 
         check(lambda left, right: left.merge(right))
         check(lambda left, right: left.merge(right, on=[100]))
-        check(lambda left, right: left.set_index(10).merge(right.set_index(20)))
+        check(lambda left, right: (left.set_index(10).merge(right.set_index(20))))
         check(
-            lambda left, right: left.set_index(10).merge(
-                right.set_index(20), left_index=True, right_index=True
+            lambda left, right: (
+                left.set_index(10).merge(right.set_index(20), left_index=True, right_index=True)
             )
         )
 
