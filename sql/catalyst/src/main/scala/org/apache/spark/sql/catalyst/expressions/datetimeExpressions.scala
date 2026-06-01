@@ -1324,18 +1324,20 @@ abstract class ToTimestamp
             null
           } else {
             val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
-            try {
-              if (forTimestampNTZ) {
-                formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
-              } else {
-                formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
+            val str = t.asInstanceOf[UTF8String].toString
+            if (failOnError) {
+              DateTimeExpressionUtils.parseToTimestampExact(
+                formatter, str, downScaleFactor, forTimestampNTZ, suggestedFuncOnFail)
+            } else {
+              try {
+                if (forTimestampNTZ) {
+                  formatter.parseWithoutTimeZone(str)
+                } else {
+                  formatter.parse(str) / downScaleFactor
+                }
+              } catch {
+                case e if isParseError(e) => null
               }
-            } catch {
-              case e: DateTimeException if failOnError =>
-                throw QueryExecutionErrors.ansiDateTimeParseError(e, suggestedFuncOnFail)
-              case e: ParseException if failOnError =>
-                throw QueryExecutionErrors.ansiDateTimeParseError(e, suggestedFuncOnFail)
-              case e if isParseError(e) => null
             }
           }
       }
@@ -1344,11 +1346,7 @@ abstract class ToTimestamp
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
-    val parseErrorBranch: String = if (failOnError) {
-      s"throw QueryExecutionErrors.ansiDateTimeParseError(e, \"${suggestedFuncOnFail}\");"
-    } else {
-      s"${ev.isNull} = true;"
-    }
+    val utils = classOf[DateTimeExpressionUtils].getName
     val parseMethod = if (forTimestampNTZ) {
       "parseWithoutTimeZone"
     } else {
@@ -1359,21 +1357,35 @@ abstract class ToTimestamp
     } else {
       s"/ $downScaleFactor"
     }
+    // Emits the string -> timestamp parse body. The ANSI (failOnError) branch
+    // delegates the parse and the parse-error -> ANSI error translation to
+    // DateTimeExpressionUtils.parseToTimestampExact, collapsing the inline
+    // try/catch to a single call. The non-ANSI branch keeps the inline
+    // try/catch that maps a parse failure to a null result.
+    def parseTimestampCode(formatterExpr: String, inputExpr: String): String = {
+      if (failOnError) {
+        s"""${ev.value} = $utils.parseToTimestampExact(
+           |    $formatterExpr, $inputExpr, ${downScaleFactor}L,
+           |    $forTimestampNTZ, "$suggestedFuncOnFail");""".stripMargin
+      } else {
+        s"""
+           |try {
+           |  ${ev.value} = $formatterExpr.$parseMethod($inputExpr) $downScaleCode;
+           |} catch (java.time.DateTimeException e) {
+           |  ${ev.isNull} = true;
+           |} catch (java.text.ParseException e) {
+           |  ${ev.isNull} = true;
+           |}
+           |""".stripMargin
+      }
+    }
 
     left.dataType match {
       case _: StringType => formatterOption.map { fmt =>
         val df = classOf[TimestampFormatter].getName
         val formatterName = ctx.addReferenceObj("formatter", fmt, df)
         nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
-          s"""
-             |try {
-             |  ${ev.value} = $formatterName.$parseMethod($datetimeStr.toString()) $downScaleCode;
-             |} catch (java.time.DateTimeException e) {
-             |  ${parseErrorBranch}
-             |} catch (java.text.ParseException e) {
-             |  ${parseErrorBranch}
-             |}
-             |""".stripMargin)
+          parseTimestampCode(formatterName, s"$datetimeStr.toString()"))
       }.getOrElse {
         val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
         val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
@@ -1386,13 +1398,7 @@ abstract class ToTimestamp
              |  $zid,
              |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
              |  true);
-             |try {
-             |  ${ev.value} = $timestampFormatter.$parseMethod($string.toString()) $downScaleCode;
-             |} catch (java.time.DateTimeException e) {
-             |    ${parseErrorBranch}
-             |} catch (java.text.ParseException e) {
-             |    ${parseErrorBranch}
-             |}
+             |${parseTimestampCode(timestampFormatter, s"$string.toString()")}
              |""".stripMargin)
       }
       case TimestampType | TimestampNTZType =>
