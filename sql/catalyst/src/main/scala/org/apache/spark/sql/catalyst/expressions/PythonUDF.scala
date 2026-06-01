@@ -111,8 +111,7 @@ case class TranspiledPythonUDF(
   def hasOnlyPythonUDFInputs: Boolean =
     pythonUDFExpr.children.nonEmpty &&
     pythonUDFExpr.children.forall {
-      case _: PythonUDF => true
-      case _            => false
+      _.isInstanceOf[PythonUDF]
     }
 }
 
