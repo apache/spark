@@ -653,6 +653,14 @@ trait DivModLike extends BinaryArithmetic {
     case _ => x => x == 0
   }
 
+  // Whether the divisor is a foldable, non-null and non-zero constant. When true, the
+  // divide-by-zero check is dead code (it can never trigger), so codegen skips emitting both the
+  // check and its otherwise-unreachable error-context reference.
+  private lazy val divisorIsNonZero: Boolean = right.foldable && {
+    val divisor = right.eval(EmptyRow)
+    divisor != null && !isZero(divisor)
+  }
+
   final override def eval(input: InternalRow): Any = {
     // evaluate right first as we have a chance to skip left if right is 0
     val input2 = right.eval(input)
@@ -705,7 +713,9 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContextCode = getContextOrNullCode(ctx, failOnError)
+    // Lazy so the error-context reference is only registered when actually emitted; a statically
+    // non-zero divisor (see divisorIsNonZero) skips the divide-by-zero check that would use it.
+    lazy val errorContextCode = getContextOrNullCode(ctx, failOnError)
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val castUtils = classOf[CastUtils].getName
@@ -741,25 +751,34 @@ trait DivModLike extends BinaryArithmetic {
 
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
-      val divByZero = if (failOnError) {
-        s"throw ${divideByZeroErrorCode(ctx)};"
+      val divisionBody =
+        s"""
+           |${eval1.code}
+           |$checkIntegralDivideOverflow
+           |$operation""".stripMargin
+      // A statically non-zero divisor makes the zero check dead code, so emit only the division.
+      val guardedBody = if (divisorIsNonZero) {
+        divisionBody
       } else {
-        s"${ev.isNull} = true;"
+        val divByZero = if (failOnError) {
+          s"throw ${divideByZeroErrorCode(ctx)};"
+        } else {
+          s"${ev.isNull} = true;"
+        }
+        s"""
+           |if ($isZero) {
+           |  $divByZero
+           |} else {$divisionBody
+           |}""".stripMargin
       }
       ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if ($isZero) {
-          $divByZero
-        } else {
-          ${eval1.code}
-          $checkIntegralDivideOverflow
-          $operation
-        }""")
+        $guardedBody""")
     } else {
-      val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
-      val failOnErrorBranch = if (failOnError) {
+      val nullOnErrorCondition = if (failOnError || divisorIsNonZero) "" else s" || $isZero"
+      val failOnErrorBranch = if (failOnError && !divisorIsNonZero) {
         s"if ($isZero) throw ${divideByZeroErrorCode(ctx)};"
       } else {
         ""
@@ -1079,6 +1098,13 @@ case class Pmod(
     case _ => x => x == 0
   }
 
+  // Whether the divisor is a foldable, non-null and non-zero constant. When true, the
+  // remainder-by-zero check is dead code, so codegen skips emitting it.
+  private lazy val divisorIsNonZero: Boolean = right.foldable && {
+    val divisor = right.eval(EmptyRow)
+    divisor != null && !isZero(divisor)
+  }
+
   private lazy val pmodFunc: (Any, Any) => Any = dataType match {
     case _: IntegerType => (l, r) => pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
     case _: LongType => (l, r) => pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
@@ -1119,7 +1145,9 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContext = getContextOrNullCode(ctx)
+    // Lazy so the error-context reference is only registered when actually emitted; a statically
+    // non-zero divisor (see divisorIsNonZero) skips the remainder-by-zero check that would use it.
+    lazy val errorContext = getContextOrNullCode(ctx)
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"
@@ -1158,24 +1186,33 @@ case class Pmod(
 
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
-      val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.remainderByZeroError($errorContext);"
+      val remainderBody =
+        s"""
+           |${eval1.code}
+           |$result""".stripMargin
+      // A statically non-zero divisor makes the zero check dead code, so emit only the remainder.
+      val guardedBody = if (divisorIsNonZero) {
+        remainderBody
       } else {
-        s"${ev.isNull} = true;"
+        val divByZero = if (failOnError) {
+          s"throw QueryExecutionErrors.remainderByZeroError($errorContext);"
+        } else {
+          s"${ev.isNull} = true;"
+        }
+        s"""
+           |if ($isZero) {
+           |  $divByZero
+           |} else {$remainderBody
+           |}""".stripMargin
       }
       ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if ($isZero) {
-          $divByZero
-        } else {
-          ${eval1.code}
-          $result
-        }""")
+        $guardedBody""")
     } else {
-      val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
-      val failOnErrorBranch = if (failOnError) {
+      val nullOnErrorCondition = if (failOnError || divisorIsNonZero) "" else s" || $isZero"
+      val failOnErrorBranch = if (failOnError && !divisorIsNonZero) {
         s"if ($isZero) throw QueryExecutionErrors.remainderByZeroError($errorContext);"
       } else {
         ""
