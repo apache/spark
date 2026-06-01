@@ -751,12 +751,13 @@ trait SparkDateTimeUtils {
   }
 
   /**
-   * Parses a UTF8 timestamp string into the [[Instant]] it denotes, shared by the LTZ entry points
-   * `stringToTimestamp` (micros) and `stringToTimestampLTZNanos` (nanos). The full fractional part
-   * (including sub-microsecond digits) is carried in the [[Instant]]; each caller then narrows to
-   * its own precision (`instantToMicros` floors the sub-micro digits, `instantToTimestampNanos`
-   * truncates to the requested precision), so this helper is behavior-preserving for the micro
-   * path. Callers are expected to wrap the call in a `try`/`catch` that maps `NonFatal` to `None`.
+   * Parses a UTF8 timestamp string into the [[Instant]] it denotes, shared by the LTZ entry
+   * points `stringToTimestamp` (micros) and `stringToTimestampLTZNanos` (nanos). The full
+   * fractional part (including sub-microsecond digits) is carried in the [[Instant]]; each caller
+   * then narrows to its own precision (`instantToMicros` floors the sub-micro digits,
+   * `instantToTimestampNanos` truncates to the requested precision), so this helper is
+   * behavior-preserving for the micro path. Callers are expected to wrap the call in a
+   * `try`/`catch` that maps `NonFatal` to `None`.
    *
    * Returns `null` (rather than [[Option]]) when the string is unparseable. The `null` sentinel
    * keeps these cast hot paths allocation-free: no intermediate `Option`/closure is materialized,
@@ -827,12 +828,13 @@ trait SparkDateTimeUtils {
    * is carried in the [[LocalDateTime]]; each caller then narrows to its own precision
    * (`localDateTimeToMicros` floors the sub-micro digits, `localDateTimeToTimestampNanos`
    * truncates to the requested precision), so this helper is behavior-preserving for the micro
-   * path. Callers are expected to wrap the call in a `try`/`catch` that maps `NonFatal` to `None`.
+   * path. Callers are expected to wrap the call in a `try`/`catch` that maps `NonFatal` to
+   * `None`.
    *
    * Returns `null` (rather than [[Option]]) when the string is unparseable, contains only a time
-   * part, or carries a time zone while `allowTimeZone` is `false`. The `null` sentinel keeps these
-   * cast hot paths allocation-free: no intermediate `Option`/closure is materialized, and the
-   * small body inlines into the caller. Callers must null-check the result.
+   * part, or carries a time zone while `allowTimeZone` is `false`. The `null` sentinel keeps
+   * these cast hot paths allocation-free: no intermediate `Option`/closure is materialized, and
+   * the small body inlines into the caller. Callers must null-check the result.
    */
   private def parseTimestampToLocalDateTime(
       s: UTF8String,
