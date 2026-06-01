@@ -196,6 +196,22 @@ case class Scd2BatchProcessor(
  * public contract.
  *
  * -------------
+ * Concept: decomposition tail.
+ *
+ * A transient and synthetic row produced by the batch processor during reconciliation (not
+ * from the CDC source) when a previously-closed historical row [START_AT=X, END_AT=Y] is
+ * bisected by a late-arriving event. The bisected row is split into a head
+ * [START_AT=X, END_AT=null] - inheriting the original row's data and `__RECORD_START_AT` -
+ * and a tail [START_AT=null, END_AT=Y, `__RECORD_START_AT`=null] that carries the original
+ * row's right boundary. The tail typically becomes the closing END_AT of a bisecting upsert,
+ * giving it a valid right boundary in the target-table history.
+ *
+ * Decomposition tails are uniquely identified by `__RECORD_START_AT` = null - the only row
+ * category with that property - and are never persisted in their tail form: each is either
+ * absorbed by the next event in the affected window (dropped as redundant) or promoted to a
+ * tombstone in the aux table if it survives reconciliation unmatched.
+ *
+ * -------------
  * Concept: same-sequence tie-break between an upsert and a delete.
  *
  * When an upsert event and a delete event share the same `__RECORD_START_AT`, the delete wins:
