@@ -3030,8 +3030,13 @@ class SparkConnectPlanner(
     }
 
     // Block unsupported SQL commands if the request comes from Spark Declarative Pipelines.
+    // The guard must inspect every component that the normal handler would execute
+    // (the root SQL plus each reference's input) without itself triggering execution.
+    // For a valid SQL-with-references WITH_RELATIONS, transformRelation would route
+    // through executeSQLWithRefs and eagerly run the root SQL as a side effect, producing
+    // a CommandResult that bypasses the blocklist.
     if (PipelineAnalysisContextUtils.hasPipelineAnalysisContext(userContext)) {
-      PipelinesHandler.blockUnsupportedSqlCommand(queryPlan = transformRelation(relation))
+      blockUnsupportedSqlCommandIn(relation)
     }
 
     // If the spark.sql() is called inside a pipeline flow function, we don't need to execute
@@ -3131,6 +3136,29 @@ class SparkConnectPlanner(
           .setServerSideSessionId(sessionHolder.serverSessionId)
           .setMetrics(metrics.build)
           .build)
+    }
+  }
+
+  /**
+   * Walks the relation tree and applies [[PipelinesHandler.blockUnsupportedSqlCommand]] to every
+   * component that would be executed by [[executeSQLWithRefs]] or [[executeSQL]] at the normal
+   * path. For a valid SQL-with-references [[proto.WithRelations]], the root SQL is parsed
+   * (without execution) and each reference's input is inspected recursively so nested
+   * [[proto.WithRelations]] cannot re-trigger the executing transformation chain. For other
+   * relation types, [[transformRelation]] produces an unresolved plan without side effects and
+   * is forwarded directly to the blocklist.
+   */
+  private def blockUnsupportedSqlCommandIn(rel: proto.Relation): Unit = {
+    rel.getRelTypeCase match {
+      case proto.Relation.RelTypeCase.WITH_RELATIONS
+          if isValidSQLWithRefs(rel.getWithRelations) =>
+        val withRel = rel.getWithRelations
+        PipelinesHandler.blockUnsupportedSqlCommand(transformSql(withRel.getRoot.getSql))
+        withRel.getReferencesList.asScala.foreach { ref =>
+          blockUnsupportedSqlCommandIn(ref.getSubqueryAlias.getInput)
+        }
+      case _ =>
+        PipelinesHandler.blockUnsupportedSqlCommand(transformRelation(rel))
     }
   }
 

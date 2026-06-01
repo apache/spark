@@ -944,4 +944,125 @@ class SparkDeclarativePipelinesServerSuite
           relation.getCommand.getSqlCommand.getInput)
     }
   }
+
+  // Helper to build a SqlCommand ExecutePlanRequest with PipelineAnalysisContext.
+  private def buildSqlCommandRequestWithPipelineContext(
+      graphId: String,
+      input: proto.Relation): proto.ExecutePlanRequest = {
+    val context = proto.PipelineAnalysisContext
+      .newBuilder()
+      .setDataflowGraphId(graphId)
+      .build()
+    val userContext = proto.UserContext
+      .newBuilder()
+      .addExtensions(com.google.protobuf.Any.pack(context))
+      .setUserId("test_user")
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setCommand(
+        proto.Command
+          .newBuilder()
+          .setSqlCommand(proto.SqlCommand.newBuilder().setInput(input).build())
+          .build())
+      .build()
+    proto.ExecutePlanRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setPlan(plan)
+      .setSessionId(UUID.randomUUID().toString)
+      .build()
+  }
+
+  // Helper to build a SQL Relation.
+  private def sqlRelation(query: String): proto.Relation =
+    proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery(query))
+      .build()
+
+  // Helper to build a WITH_RELATIONS Relation with the given root SQL and reference SQLs.
+  private def withRelationsRelation(
+      rootSql: String,
+      refs: Seq[(String, String)]): proto.Relation = {
+    val withRelationsBuilder = proto.WithRelations.newBuilder().setRoot(sqlRelation(rootSql))
+    refs.foreach { case (alias, refSql) =>
+      withRelationsBuilder.addReferences(
+        proto.Relation
+          .newBuilder()
+          .setSubqueryAlias(
+            proto.SubqueryAlias
+              .newBuilder()
+              .setAlias(alias)
+              .setInput(sqlRelation(refSql))
+              .build())
+          .build())
+    }
+    proto.Relation.newBuilder().setWithRelations(withRelationsBuilder.build()).build()
+  }
+
+  test(
+    "SPARK-57189: blockUnsupportedSqlCommand catches Command at root of WITH_RELATIONS " +
+      "without executing it") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val tableName = "spark_catalog.default.test_with_relations_root_table"
+      try {
+        sql(s"DROP TABLE IF EXISTS $tableName")
+        val request = buildSqlCommandRequestWithPipelineContext(
+          graphId,
+          withRelationsRelation(
+            rootSql = s"CREATE TABLE $tableName (id INT) USING parquet",
+            refs = Seq("ref0" -> "SELECT 1 AS id")))
+        val ex = intercept[RuntimeException] {
+          stub.executePlan(request).next()
+        }
+        assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+        // Verify the guard caught the Command before any side effect could materialize.
+        assert(!spark.catalog.tableExists(tableName))
+      } finally {
+        sql(s"DROP TABLE IF EXISTS $tableName")
+      }
+    }
+  }
+
+  test(
+    "SPARK-57189: blockUnsupportedSqlCommand catches Command inside reference of " +
+      "WITH_RELATIONS without executing it") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val tableName = "spark_catalog.default.test_with_relations_ref_table"
+      try {
+        sql(s"DROP TABLE IF EXISTS $tableName")
+        val request = buildSqlCommandRequestWithPipelineContext(
+          graphId,
+          withRelationsRelation(
+            rootSql = "SELECT * FROM ref0",
+            refs = Seq("ref0" -> s"CREATE TABLE $tableName (id INT) USING parquet")))
+        val ex = intercept[RuntimeException] {
+          stub.executePlan(request).next()
+        }
+        assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+        // Verify the Command in the reference did not execute as a side effect.
+        assert(!spark.catalog.tableExists(tableName))
+      } finally {
+        sql(s"DROP TABLE IF EXISTS $tableName")
+      }
+    }
+  }
+
+  test(
+    "SPARK-57189: blockUnsupportedSqlCommand allows valid SELECT WITH_RELATIONS in pipeline " +
+      "analysis context") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val request = buildSqlCommandRequestWithPipelineContext(
+        graphId,
+        withRelationsRelation(
+          rootSql = "SELECT * FROM ref0",
+          refs = Seq("ref0" -> "SELECT 1 AS id")))
+      val response = stub.executePlan(request).next()
+      assert(response.hasSqlCommandResult)
+    }
+  }
 }
