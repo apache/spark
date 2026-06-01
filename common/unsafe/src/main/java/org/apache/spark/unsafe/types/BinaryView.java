@@ -143,22 +143,32 @@ public final class BinaryView implements Comparable<BinaryView>, Externalizable,
   // ---------- materialization and slicing ----------
 
   /**
+   * Returns true iff this view owns a tight, on-heap {@code byte[]}: the offset is exactly
+   * {@code BYTE_ARRAY_OFFSET} and the array length equals {@link #numBytes()}. In that case
+   * {@link #getBytes()} returns the live backing array, so mutating it writes through to this
+   * view; otherwise {@code getBytes()} returns a fresh copy. Sliced, sub-range, and off-heap
+   * views are never tight on-heap arrays.
+   */
+  public boolean hasTightOnHeapArray() {
+    return offset == BYTE_ARRAY_OFFSET
+        && base instanceof byte[] bytes
+        && bytes.length == numBytes;
+  }
+
+  /**
    * Returns the bytes of this view as a {@code byte[]}.
    * <p>
    * Mirrors {@link UTF8String#getBytes()}: if this view already owns a tight, on-heap byte
-   * array (offset is exactly {@code BYTE_ARRAY_OFFSET} and length equals the array length),
-   * the backing array is returned directly without copying. Otherwise a fresh array is
-   * allocated and the bytes are copied into it.
+   * array (see {@link #hasTightOnHeapArray()}), the backing array is returned directly
+   * without copying. Otherwise a fresh array is allocated and the bytes are copied into it.
    * <p>
    * The caller must not mutate the returned array, since when this view owns a tight array
    * it is shared with the view itself. Use {@link #copy()} to obtain an independent owned
    * value.
    */
   public byte[] getBytes() {
-    if (offset == BYTE_ARRAY_OFFSET
-        && base instanceof byte[] bytes
-        && bytes.length == numBytes) {
-      return bytes;
+    if (hasTightOnHeapArray()) {
+      return (byte[]) base;
     }
     byte[] out = new byte[numBytes];
     Platform.copyMemory(base, offset, out, BYTE_ARRAY_OFFSET, numBytes);
@@ -244,9 +254,8 @@ public final class BinaryView implements Comparable<BinaryView>, Externalizable,
   public void writeExternal(ObjectOutput out) throws IOException {
     out.writeInt(numBytes);
     if (numBytes > 0) {
-      if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[] bytes
-          && bytes.length == numBytes) {
-        out.write(bytes);
+      if (hasTightOnHeapArray()) {
+        out.write((byte[]) base);
       } else {
         out.write(copyToNewArray());
       }
@@ -267,9 +276,8 @@ public final class BinaryView implements Comparable<BinaryView>, Externalizable,
   public void write(Kryo kryo, Output out) {
     out.writeInt(numBytes);
     if (numBytes > 0) {
-      if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[] bytes
-          && bytes.length == numBytes) {
-        out.write(bytes);
+      if (hasTightOnHeapArray()) {
+        out.write((byte[]) base);
       } else {
         out.write(copyToNewArray());
       }

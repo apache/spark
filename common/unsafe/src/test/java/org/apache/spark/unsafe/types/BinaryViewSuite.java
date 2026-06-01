@@ -75,6 +75,29 @@ public class BinaryViewSuite {
   }
 
   @Test
+  public void hasTightOnHeapArray() {
+    // A view that owns the whole array is a tight on-heap owner.
+    assertTrue(BinaryView.fromBytes(DATA).hasTightOnHeapArray());
+    // A sub-range view is not, even when on-heap.
+    assertFalse(BinaryView.fromBytes(DATA, 2, 4).hasTightOnHeapArray());
+    assertFalse(BinaryView.fromBytes(DATA).slice(0, DATA.length - 1).hasTightOnHeapArray());
+    // copy() always produces a tight on-heap owner.
+    assertTrue(BinaryView.fromBytes(DATA, 2, 4).copy().hasTightOnHeapArray());
+
+    MemoryBlock block = MemoryAllocator.UNSAFE.allocate(DATA.length);
+    try {
+      Platform.copyMemory(DATA, Platform.BYTE_ARRAY_OFFSET,
+        null, block.getBaseOffset(), DATA.length);
+      BinaryView offHeap = BinaryView.fromAddress(null, block.getBaseOffset(), DATA.length);
+      // An off-heap view is never a tight on-heap owner.
+      assertFalse(offHeap.hasTightOnHeapArray());
+      assertTrue(offHeap.copy().hasTightOnHeapArray());
+    } finally {
+      MemoryAllocator.UNSAFE.free(block);
+    }
+  }
+
+  @Test
   public void primitiveReaders() {
     byte[] bytes = new byte[16];
     Platform.putInt(bytes, Platform.BYTE_ARRAY_OFFSET, 0xCAFEBABE);
