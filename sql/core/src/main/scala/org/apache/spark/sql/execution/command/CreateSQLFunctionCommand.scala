@@ -109,11 +109,18 @@ case class CreateSQLFunctionCommand(
         // Qualify the input parameters with the function name so that attributes referencing
         // the function input parameters can be resolved correctly.
         val qualifier = Seq(name.funcName)
-        // Mark the parameter aliases as function input so name resolution can give a
-        // parameterless built-in function precedence over a same-named UDF parameter.
-        val funcInputMetadata = new MetadataBuilder()
-          .putBoolean(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY, true)
-          .build()
+        // Mark scalar UDF parameter aliases as function input so name resolution can give a
+        // parameterless built-in function precedence over a same-named UDF parameter. Table UDF
+        // bodies reference parameters as outer references, where a parameterless function already
+        // wins via the pre-existing "function beats outer reference" precedence, so the marker is
+        // not applied (and would not be consumed) there.
+        val funcInputMetadata = if (isTableFunc) {
+          None
+        } else {
+          Some(new MetadataBuilder()
+            .putBoolean(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY, true)
+            .build())
+        }
         val input = param.map(p => Alias(
           {
             val defaultExpr = p.getDefault()
@@ -136,7 +143,7 @@ case class CreateSQLFunctionCommand(
               }
               Cast(defaultPlan, p.dataType)
             }
-          }, p.name)(qualifier = qualifier, explicitMetadata = Some(funcInputMetadata)))
+          }, p.name)(qualifier = qualifier, explicitMetadata = funcInputMetadata))
         Project(input, OneRowRelation())
       } else {
         OneRowRelation()

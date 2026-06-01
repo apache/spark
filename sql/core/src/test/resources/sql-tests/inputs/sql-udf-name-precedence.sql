@@ -74,8 +74,10 @@ SELECT outer_fn(42);
 CREATE OR REPLACE TEMPORARY FUNCTION tvf_paramless_vs_param(current_user STRING)
 RETURNS TABLE(c STRING) RETURN SELECT current_user AS c;
 
--- Parameterless function wins over TVF parameter (same rule must apply on the
--- makeSQLTableFunctionPlan path).
+-- Parameterless function wins over a same-named table UDF parameter. Note this is NOT the
+-- SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY rule: a table UDF body references its parameter as
+-- an outer reference, so the function already wins via the pre-existing "function beats outer
+-- reference" precedence (the legacy flag does not change this). Kept as a regression guard.
 SELECT c = current_user() AS function_won FROM tvf_paramless_vs_param('should_be_ignored');
 
 DROP TEMPORARY VARIABLE x;
