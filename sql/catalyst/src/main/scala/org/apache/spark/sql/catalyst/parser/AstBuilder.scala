@@ -1883,10 +1883,9 @@ class AstBuilder extends DataTypeAstBuilder
       entry("TOK_TABLEROWFORMATNULL", ctx.nullDefinedAs) ++
       Option(ctx.linesSeparatedBy).toSeq.map { stringLitCtx =>
         val value = string(visitStringLit(stringLitCtx))
-        validate(
-          value == "\n",
-          s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
-          ctx)
+        if (value != "\n") {
+          throw QueryParsingErrors.unsupportedRowFormatLinesTerminatedByError(value, ctx)
+        }
         "TOK_TABLEROWFORMATLINES" -> value
       }
 
@@ -2513,9 +2512,9 @@ class AstBuilder extends DataTypeAstBuilder
       // function takes X PERCENT as the input and the range of X is [0, 100], we need to
       // adjust the fraction.
       val eps = RandomSampler.roundingEpsilon
-      validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
-        s"Sampling fraction ($fraction) must be on interval [0, 1]",
-        ctx)
+      if (fraction < 0.0 - eps || fraction > 1.0 + eps) {
+        throw QueryParsingErrors.invalidTableSampleFractionError(fraction, ctx)
+      }
       val method = if (isSystem) SampleMethod.System else SampleMethod.Bernoulli
       Sample(0.0, fraction, withReplacement = false, seed, query, method)
     }
@@ -2791,30 +2790,17 @@ class AstBuilder extends DataTypeAstBuilder
       }
       partitionByExpressions = p.partition.asScala.map(expression).toSeq
       orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
-      def invalidPartitionOrOrderingExpression(clause: String): String = {
-        "The table function call includes a table argument with an invalid " +
-          s"partitioning/ordering specification: the $clause clause included multiple " +
-          "expressions without parentheses surrounding them; please add parentheses around " +
-          "these expressions and then retry the query again"
+      Option(p.invalidMultiPartitionExpression).foreach { invalidCtx =>
+        throw QueryParsingErrors.invalidTableFunctionTableArgumentPartitioningError(
+          "PARTITION BY",
+          invalidCtx)
       }
-      validate(
-        Option(p.invalidMultiPartitionExpression).isEmpty,
-        message = invalidPartitionOrOrderingExpression("PARTITION BY"),
-        ctx = p.invalidMultiPartitionExpression)
-      validate(
-        Option(p.invalidMultiSortItem).isEmpty,
-        message = invalidPartitionOrOrderingExpression("ORDER BY"),
-        ctx = p.invalidMultiSortItem)
+      Option(p.invalidMultiSortItem).foreach { invalidCtx =>
+        throw QueryParsingErrors.invalidTableFunctionTableArgumentPartitioningError(
+          "ORDER BY",
+          invalidCtx)
+      }
     }
-    validate(
-      !(withSinglePartition && partitionByExpressions.nonEmpty),
-      message = "WITH SINGLE PARTITION cannot be specified if PARTITION BY is also present",
-      ctx = ctx.tableArgumentPartitioning)
-    validate(
-      !(orderByExpressions.nonEmpty && partitionByExpressions.isEmpty && !withSinglePartition),
-      message = "ORDER BY cannot be specified unless either " +
-        "PARTITION BY or WITH SINGLE PARTITION is also present",
-      ctx = ctx.tableArgumentPartitioning)
     FunctionTableSubqueryArgumentExpression(
       plan = p,
       partitionByExpressions = partitionByExpressions,
@@ -3415,7 +3401,9 @@ class AstBuilder extends DataTypeAstBuilder
       case SqlBaseParser.LIKE | SqlBaseParser.ILIKE =>
         Option(ctx.quantifier).map(_.getType) match {
           case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
-            validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
+            if (ctx.expression.isEmpty) {
+              throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
+            }
             val expressions = expressionList(ctx.expression)
             if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
               // If there are many pattern expressions, will throw StackOverflowError.
@@ -3431,7 +3419,9 @@ class AstBuilder extends DataTypeAstBuilder
                 .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or)
             }
           case Some(SqlBaseParser.ALL) =>
-            validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
+            if (ctx.expression.isEmpty) {
+              throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
+            }
             val expressions = expressionList(ctx.expression)
             if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
               // If there are many pattern expressions, will throw StackOverflowError.
@@ -3856,9 +3846,9 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitFrameBound(ctx: FrameBoundContext): Expression = withOrigin(ctx) {
     def value: Expression = {
       val e = expression(ctx.expression)
-      validate(
-        e.resolved && e.foldable || e.isInstanceOf[Parameter],
-        "Frame bound value must be a literal.", ctx)
+      if (!(e.resolved && e.foldable || e.isInstanceOf[Parameter])) {
+        throw QueryParsingErrors.invalidWindowFrameBoundError(ctx)
+      }
       e
     }
 
@@ -5452,10 +5442,9 @@ class AstBuilder extends DataTypeAstBuilder
           entry("mapkey.delim", ctx.keysTerminatedBy) ++
           Option(ctx.linesSeparatedBy).toSeq.map { token =>
             val value = string(visitStringLit(token))
-            validate(
-              value == "\n",
-              s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
-              ctx)
+            if (value != "\n") {
+              throw QueryParsingErrors.unsupportedRowFormatLinesTerminatedByError(value, ctx)
+            }
             "line.delim" -> value
           }
     SerdeInfo(serdeProperties = entries.toMap)
