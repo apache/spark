@@ -168,10 +168,10 @@ class SortMergeAsOfJoinSuite extends QueryTest
         joinType = "inner", tolerance = null,
         allowExactMatches = false, direction = "backward"),
       Seq(
-        // left.a=1: no right row with a < 1 → no match
-        // left.a=5: right.a=3 (3 < 5) → match
+        // left.a=1: no right row with a < 1 -> no match
+        // left.a=5: right.a=3 (3 < 5) -> match
         Row(5, "y", "b", 3, "x", 3),
-        // left.a=10: right.a=7 (7 < 10) → match
+        // left.a=10: right.a=7 (7 < 10) -> match
         Row(10, "z", "c", 7, "z", 7)
       )
     )
@@ -558,6 +558,83 @@ class SortMergeAsOfJoinSuite extends QueryTest
         allowExactMatches = false, direction = "nearest"),
       // distance to 11 is 1, distance to 1 is 9. Correct answer is 11.
       Seq(Row(10, "a", 11, "z"))
+    )
+  }
+
+  test("null equi-keys with EqualTo condition") {
+    // NULL = NULL -> NULL under EqualTo semantics, so null-keyed rows
+    // should NOT match each other.
+    val schema1 = StructType(
+      StructField("grp", IntegerType, nullable = true) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val schema2 = StructType(
+      StructField("grp", IntegerType, nullable = true) ::
+        StructField("ts", IntegerType) ::
+        StructField("val", StringType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row(null, 5, "a"), Row(1, 5, "b"), Row(null, 10, "c")).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(Row(null, 3, "x"), Row(1, 4, "y"), Row(null, 8, "z")).asJava, schema2)
+    // Inner join: null equi-keys should produce no match
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq("grp"),
+        joinType = "inner", tolerance = null,
+        allowExactMatches = true, direction = "backward"),
+      Seq(
+        // grp=1, left.ts=5: right.ts=4 (4 <= 5) -> match
+        Row(1, 5, "b", 1, 4, "y")
+        // grp=null rows: no match (EqualTo semantics)
+      )
+    )
+    // Left outer: null equi-keys should emit null right
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"), usingColumns = Seq("grp"),
+        joinType = "leftouter", tolerance = null,
+        allowExactMatches = true, direction = "backward"),
+      Seq(
+        Row(null, 5, "a", null, null, null),
+        Row(1, 5, "b", 1, 4, "y"),
+        Row(null, 10, "c", null, null, null)
+      )
+    )
+  }
+
+  test("residual condition") {
+    // Test that a post-join filter (simulating a residual predicate)
+    // works correctly with the sort-merge AS-OF join operator.
+    val schema1 = StructType(
+      StructField("grp", StringType) ::
+        StructField("ts", IntegerType) ::
+        StructField("amount", IntegerType) :: Nil)
+    val schema2 = StructType(
+      StructField("grp", StringType) ::
+        StructField("ts", IntegerType) ::
+        StructField("threshold", IntegerType) :: Nil)
+    val df1 = spark.createDataFrame(
+      List(Row("A", 10, 50), Row("A", 20, 30)).asJava, schema1)
+    val df2 = spark.createDataFrame(
+      List(
+        Row("A", 5, 40), Row("A", 8, 60), Row("A", 15, 25)
+      ).asJava, schema2)
+    // Backward join picks nearest right.ts <= left.ts per group:
+    //   left(A,10,50) -> right(A,8,60) (nearest ts<=10)
+    //   left(A,20,30) -> right(A,15,25) (nearest ts<=20)
+    // Post-filter left.amount > right.threshold:
+    //   50 > 60? No -> filtered out
+    //   30 > 25? Yes -> kept
+    checkAnswer(
+      df1.joinAsOf(
+        df2, df1.col("ts"), df2.col("ts"),
+        usingColumns = Seq("grp"),
+        joinType = "inner", tolerance = null,
+        allowExactMatches = true, direction = "backward")
+        .where(df1.col("amount") > df2.col("threshold")),
+      Seq(
+        Row("A", 20, 30, "A", 15, 25)
+      )
     )
   }
 }

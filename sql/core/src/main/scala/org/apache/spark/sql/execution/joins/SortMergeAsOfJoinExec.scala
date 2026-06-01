@@ -245,22 +245,32 @@ private[joins] class SortMergeAsOfJoinScanner(
         val leftRow = leftIterBuffered.next()
         val leftKey = leftKeyProj(leftRow).copy()
 
-        // Advance right side to the matching equi-key group
-        advanceRightTo(leftKey)
+        // Skip left rows with null equi-keys (EqualTo semantics:
+        // NULL = NULL -> NULL, i.e. no match)
+        if (leftKeys.nonEmpty && leftKey.anyNull) {
+          if (joinType == LeftOuter) {
+            numOutputRows += 1
+            joinedRow.withLeft(leftRow).withRight(nullRightRow)
+            return resultProjection(joinedRow).copy()
+          }
+        } else {
+          // Advance right side to the matching equi-key group
+          advanceRightTo(leftKey)
 
-        // Search for best match exploiting sort order
-        val bestMatch = findBestInGroup(leftRow)
+          // Search for best match exploiting sort order
+          val bestMatch = findBestInGroup(leftRow)
 
-        if (bestMatch != null) {
-          numOutputRows += 1
-          joinedRow.withLeft(leftRow).withRight(bestMatch)
-          return resultProjection(joinedRow).copy()
-        } else if (joinType == LeftOuter) {
-          numOutputRows += 1
-          joinedRow.withLeft(leftRow).withRight(nullRightRow)
-          return resultProjection(joinedRow).copy()
+          if (bestMatch != null) {
+            numOutputRows += 1
+            joinedRow.withLeft(leftRow).withRight(bestMatch)
+            return resultProjection(joinedRow).copy()
+          } else if (joinType == LeftOuter) {
+            numOutputRows += 1
+            joinedRow.withLeft(leftRow).withRight(nullRightRow)
+            return resultProjection(joinedRow).copy()
+          }
+          // Inner join: no match, skip
         }
-        // Inner join: no match, skip
       }
       null
     }

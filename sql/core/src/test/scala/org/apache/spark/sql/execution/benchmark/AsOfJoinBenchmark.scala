@@ -123,7 +123,7 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("AS-OF Join Benchmark") {
-      // 10K left x 10K right, 100 groups — both paths feasible
+      // 10K left x 10K right, 100 groups - both paths feasible
       asOfJoinBenchmark(leftRows = 10000, rightRows = 10000, numGroups = 100)
       // No equi-key: 10K x 10K
       asOfJoinNoEquiKeyBenchmark(leftRows = 10000, rightRows = 10000)
