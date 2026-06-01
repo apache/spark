@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.functions._
@@ -652,6 +654,54 @@ class UnionCodegenSuite extends SharedSparkSession {
     val df = a.union(b).filter(col("id") > 0)
     df.collect()
     assertFlagParity(() => a.union(b).orderBy("id"))
+  }
+
+  test("SPARK-57196: concurrent codegen of a shared UnionExec stage is thread-safe") {
+    // A single `UnionExec` instance can have its whole-stage codegen driven by
+    // more than one thread at a time: a reused exchange/subquery is generated
+    // concurrently with the main plan, and async subquery/DPP execution can
+    // overlap a driver-side `doCodeGen`. The fusion path kept per-emission state
+    // (`currentEmittingChild`) in a mutable field on the shared instance, so a
+    // racing `doProduce` could reset it to -1 while another thread was still in
+    // `doConsume`, tripping the "UnionExec.doConsume invoked outside doProduce
+    // emission window" requirement. Generating the same fused stage from many
+    // threads reproduces the race.
+    val df = rangeDF(100).union(rangeDF(100)).filter(col("id") > 0)
+    assert(unionInsideWSCG(df))
+    val wscg = df.queryExecution.executedPlan.collectFirst {
+      case w: WholeStageCodegenExec if w.find(_.isInstanceOf[UnionExec]).isDefined => w
+    }.getOrElse(fail("expected a fused UnionExec stage"))
+
+    val numThreads = 8
+    val iterations = 200
+    val pool = Executors.newFixedThreadPool(numThreads)
+    val errors = java.util.Collections.synchronizedList(new java.util.ArrayList[Throwable]())
+    try {
+      val startLatch = new CountDownLatch(1)
+      val futures = (0 until numThreads).map { _ =>
+        pool.submit(new Runnable {
+          override def run(): Unit = {
+            startLatch.await()
+            var n = 0
+            while (n < iterations) {
+              try {
+                wscg.doCodeGen()
+              } catch {
+                case t: Throwable => errors.add(t)
+              }
+              n += 1
+            }
+          }
+        })
+      }
+      startLatch.countDown()
+      futures.foreach(_.get(60, TimeUnit.SECONDS))
+    } finally {
+      pool.shutdownNow()
+    }
+    assert(errors.isEmpty,
+      "concurrent doCodeGen on a shared UnionExec stage raced:\n" +
+        errors.toArray.map(_.toString).mkString("\n"))
   }
 }
 
