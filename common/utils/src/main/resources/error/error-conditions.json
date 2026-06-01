@@ -191,6 +191,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies both `column_list` and `except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
   "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
@@ -202,6 +208,34 @@
       "AutoCDC requires at least one key column to identify rows, but received an empty key set."
     ],
     "sqlState" : "22023"
+  },
+  "AUTOCDC_INVALID_STATE" : {
+    "message" : [
+      "AutoCDC flow <flowName> detected an invalid state:"
+    ],
+    "subClass" : {
+      "AUXILIARY_TABLE_KEY_COLUMN_MISSING" : {
+        "message" : [
+          "The auxiliary table <auxTableName> is missing key column <keyColumnName> that is recorded in its <propertyName> table property. The auxiliary table schema may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "AUXILIARY_TABLE_PROPERTY_MALFORMED" : {
+        "message" : [
+          "The auxiliary table <auxTableName> has a malformed <propertyName> property with raw value '<rawValue>'. The property must be a JSON array of strings (e.g. '[\"id\",\"region\"]'). The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "AUXILIARY_TABLE_PROPERTY_MISSING" : {
+        "message" : [
+          "The auxiliary table <auxTableName> is missing the required <propertyName> table property; cannot validate AutoCDC key columns. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "KEY_SCHEMA_DRIFT" : {
+        "message" : [
+          "The AutoCDC flow's current key columns <expectedKeySchema> do not match the keys recorded in the auxiliary table <auxTableName> (recorded keys <recordedKeySchema>). AutoCDC does not support changing key columns or their types across incremental pipeline runs. To change keys, perform a full refresh of the target table."
+        ]
+      }
+    },
+    "sqlState" : "42000"
   },
   "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
     "message" : [
@@ -232,17 +266,35 @@
     },
     "sqlState" : "22000"
   },
+  "AUTOCDC_MISSING_SEQUENCE_BY" : {
+    "message" : [
+      "AutoCDC flow is missing a required `sequence_by` expression. Specify a `sequence_by` column or expression that orders incoming change events."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MISSING_SOURCE" : {
+    "message" : [
+      "AutoCDC flow is missing a required `source` table name. Specify the name of the streaming source table the flow should read from."
+    ],
+    "sqlState" : "22023"
+  },
   "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
     "message" : [
       "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
     ],
-    "sqlState" : "42703"
+    "sqlState" : "22023"
   },
   "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET" : {
     "message" : [
       "Invalid AutoCDC destination <tableName> with multiple flows: <flows>. An AutoCDC target table must have exactly one flow writing to it."
     ],
     "sqlState" : "42000"
+  },
+  "AUTOCDC_NON_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a column identifier; got the non-attribute expression `<expression>`. AutoCDC keys, sequence_by, column_list, and except_column_list must reference unqualified column names."
+    ],
+    "sqlState" : "22023"
   },
   "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
     "message" : [
@@ -253,6 +305,12 @@
   "AUTOCDC_SCD2_NOT_SUPPORTED" : {
     "message" : [
       "AutoCDC flows do not currently support SCD Type 2 transformations."
+    ],
+    "sqlState" : "0A000"
+  },
+  "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE" : {
+    "message" : [
+      "Cannot start AutoCDC flow: the target table <tableName> (format: <format>) does not support row-level operations. AutoCDC requires a target backed by a connector that supports MERGE."
     ],
     "sqlState" : "0A000"
   },
@@ -3699,6 +3757,12 @@
     ],
     "sqlState" : "42K0N"
   },
+  "INVALID_EXTERNAL_VALUE" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
+    ],
+    "sqlState" : "42K0N"
+  },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
       "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
@@ -5459,11 +5523,6 @@
           "Nearest-by join is implemented as a bounded cross-product internally and is therefore rejected when `spark.sql.crossJoin.enabled = false`. Set `spark.sql.crossJoin.enabled = true` to permit it, or rewrite the query without nearest-by."
         ]
       },
-      "EXACT_WITH_NONDETERMINISTIC_EXPRESSION" : {
-        "message" : [
-          "EXACT nearest-by join is incompatible with the nondeterministic ranking expression <expression>. Use APPROX, or replace the expression with a deterministic one."
-        ]
-      },
       "NON_ORDERABLE_RANKING_EXPRESSION" : {
         "message" : [
           "The ranking expression <expression> of type <type> is not orderable. Provide an expression that returns an orderable type, such as a numeric distance like abs(a.col - b.col) or a numeric similarity score."
@@ -7034,6 +7093,11 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "CANNOT_ENABLE_ON_EXISTING_CHECKPOINT" : {
+        "message" : [
+          "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
+        ]
+      },
       "DUPLICATE_SOURCE_NAMES" : {
         "message" : [
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
@@ -8911,6 +8975,12 @@
       "<rowTag> option is required for reading/writing files in XML format."
     ],
     "sqlState" : "42KDF"
+  },
+  "ZIP_PLANS_NOT_MERGEABLE" : {
+    "message" : [
+      "The two DataFrames in zip() cannot be merged. They must produce the same canonicalized plan after stripping outer Project chains, and must not contain non-scalar Python UDFs."
+    ],
+    "sqlState" : "42K03"
   },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
@@ -11460,11 +11530,6 @@
   "_LEGACY_ERROR_TEMP_3218" : {
     "message" : [
       "Must be 2 children: <others>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3219" : {
-    "message" : [
-      "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
     ]
   },
   "_LEGACY_ERROR_TEMP_3220" : {

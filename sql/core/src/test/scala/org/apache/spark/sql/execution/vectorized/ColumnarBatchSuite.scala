@@ -45,7 +45,7 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnarBatchRow, ColumnVector}
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -1694,6 +1694,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
         StructField("binary", BinaryType) ::
         StructField("ts_ntz", TimestampNTZType) ::
         StructField("variant", VariantType) ::
+        StructField("ts_ntz_nanos", TimestampNTZNanosType(9)) ::
+        StructField("ts_ltz_nanos", TimestampLTZNanosType(9)) ::
         Nil)
     var mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
     mapBuilder.put(1, 10)
@@ -1710,6 +1712,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
     val variantVal1 = new VariantVal(Array[Byte](1, 2, 3), Array[Byte](4, 5))
     val variantVal2 = new VariantVal(Array[Byte](6), Array[Byte](7, 8))
+    val tsNTZNanos1 = TimestampNanosVal.fromParts(1_000_000L, 123.toShort)
+    val tsNTZNanos2 = TimestampNanosVal.fromParts(-500L, 999.toShort)
+    val tsLTZNanos1 = TimestampNanosVal.fromParts(2_000_000L, 42.toShort)
+    val tsLTZNanos2 = TimestampNanosVal.fromParts(0L, 0.toShort)
 
     val row1 = new GenericInternalRow(Array[Any](
       UTF8String.fromString("a string"),
@@ -1729,7 +1735,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       mapBuilder.build(),
       "Spark SQL".getBytes(),
       tsNTZ1,
-      variantVal1
+      variantVal1,
+      tsNTZNanos1,
+      tsLTZNanos1
     ))
 
     mapBuilder = new ArrayBasedMapBuilder(IntegerType, IntegerType)
@@ -1753,10 +1761,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
       mapBuilder.build(),
       "Parquet".getBytes(),
       tsNTZ2,
-      variantVal2
+      variantVal2,
+      tsNTZNanos2,
+      tsLTZNanos2
     ))
 
     val row3 = new GenericInternalRow(Array[Any](
+      null,
+      null,
       null,
       null,
       null,
@@ -1909,6 +1921,20 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(17).isNullAt(2))
       assert(columns(17).getChild(0).isNullAt(2))
       assert(columns(17).getChild(1).isNullAt(2))
+
+      assert(columns(18).dataType() == TimestampNTZNanosType(9))
+      assert(columns(18).getTimestampNTZNanos(0) == tsNTZNanos1)
+      assert(columns(18).getTimestampNTZNanos(1) == tsNTZNanos2)
+      assert(columns(18).isNullAt(2))
+      assert(columns(18).getChild(0).isNullAt(2))
+      assert(columns(18).getChild(1).isNullAt(2))
+
+      assert(columns(19).dataType() == TimestampLTZNanosType(9))
+      assert(columns(19).getTimestampLTZNanos(0) == tsLTZNanos1)
+      assert(columns(19).getTimestampLTZNanos(1) == tsLTZNanos2)
+      assert(columns(19).isNullAt(2))
+      assert(columns(19).getChild(0).isNullAt(2))
+      assert(columns(19).getChild(1).isNullAt(2))
     } finally {
       batch.close()
     }

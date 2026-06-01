@@ -1531,6 +1531,7 @@ object CodeGenerator extends Logging {
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
+      classOf[org.apache.spark.unsafe.types.TimestampNanosVal].getName,
       classOf[VariantVal].getName,
       classOf[ArrayData].getName,
       classOf[UnsafeArrayData].getName,
@@ -1695,6 +1696,8 @@ object CodeGenerator extends Logging {
         case _: PhysicalGeographyType => s"$input.getGeography($ordinal)"
         case _: PhysicalGeometryType => s"$input.getGeometry($ordinal)"
         case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
+        case PhysicalTimestampNTZNanosType => s"$input.getTimestampNTZNanos($ordinal)"
+        case PhysicalTimestampLTZNanosType => s"$input.getTimestampLTZNanos($ordinal)"
         case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
         case _: PhysicalMapType => s"$input.getMap($ordinal)"
         case PhysicalNullType => "null"
@@ -1768,6 +1771,8 @@ object CodeGenerator extends Logging {
     dataType match {
       case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
       case CalendarIntervalType => s"$row.setInterval($ordinal, $value)"
+      case _: TimestampNTZNanosType => s"$row.setTimestampNTZNanos($ordinal, $value)"
+      case _: TimestampLTZNanosType => s"$row.setTimestampLTZNanos($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
       // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
@@ -1983,6 +1988,8 @@ object CodeGenerator extends Logging {
       case PhysicalBooleanType => JAVA_BOOLEAN
       case PhysicalByteType => JAVA_BYTE
       case PhysicalCalendarIntervalType => "CalendarInterval"
+      case PhysicalTimestampNTZNanosType => "TimestampNanosVal"
+      case PhysicalTimestampLTZNanosType => "TimestampNanosVal"
       case PhysicalIntegerType => JAVA_INT
       case _: PhysicalDecimalType => "Decimal"
       case PhysicalDoubleType => JAVA_DOUBLE
@@ -2015,6 +2022,8 @@ object CodeGenerator extends Logging {
     case _: GeometryType => classOf[GeometryVal]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+      classOf[org.apache.spark.unsafe.types.TimestampNanosVal]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]
     case _: MapType => classOf[MapData]

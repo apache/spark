@@ -172,8 +172,18 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
   /**
    * Constructs the table sample clause that following dialect's SQL syntax.
    */
+  @deprecated("Use withTableSampleClause(String) instead", "4.2.0")
   def withTableSample(sample: TableSampleInfo): JdbcSQLQueryBuilder = {
     tableSampleClause = dialect.getTableSample(sample)
+
+    this
+  }
+
+  /**
+   * Sets a pre-compiled table sample clause directly.
+   */
+  def withTableSampleClause(clause: String): JdbcSQLQueryBuilder = {
+    tableSampleClause = clause
 
     this
   }

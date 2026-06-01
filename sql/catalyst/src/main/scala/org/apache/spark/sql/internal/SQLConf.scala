@@ -647,15 +647,19 @@ object SQLConf {
   val TIMESTAMP_NANOS_TYPES_ENABLED =
     buildConf("spark.sql.timestampNanosTypes.enabled")
       .internal()
-      .doc("When true, the parameterized nanosecond-precision timestamp types " +
-        "TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p) for p in [7, 9] are recognized as " +
-        "Spark SQL data types at user-facing entry points. Default is false because " +
-        "downstream execution paths (Cast, PhysicalDataType, AnyTimestampType, encoders, " +
-        "Connect proto) are not yet wired for these types. See SPARK-56822.")
-      .version("4.2.0")
+      .doc("When true, allows nanosecond-capable timestamp types TIMESTAMP_NTZ(p) and " +
+        "TIMESTAMP_LTZ(p) with fractional seconds precision p in [7, 9] at user-facing " +
+        "entry points, including the SQL parser, schemas, and analyzed plans. This is a " +
+        "preview feature under SPARK-56822 and may change in future releases. The default is " +
+        "false in production; tests enable it by default via Utils.isTesting. " +
+        "Unparameterized TIMESTAMP, TIMESTAMP_NTZ, and TIMESTAMP_LTZ remain microsecond " +
+        "types. Enabling this flag does not guarantee full SQL support: casts, Parquet read, " +
+        "typed literals, and other operations may still fail until their respective features " +
+        "are implemented.")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(Utils.isTesting)
 
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +
@@ -3437,6 +3441,24 @@ object SQLConf {
         "partitioning, and set to false for existing streaming queries to not break queries " +
         "which are restored from existing checkpoints. Please refer SPARK-38204 for details.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT =
+    buildConf("spark.sql.streaming.statefulOperator.alwaysNullableOutput.enabled")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .doc("When true, every streaming stateful operator reports its output schema with " +
+        "nullable=true on all columns (including nested struct fields, array elements, and " +
+        "map values), and the state schema is widened at every construction site, so the " +
+        "existing state schema " +
+        "compatibility check trivially passes regardless of input nullability. " +
+        "This prevents query-optimizer decisions (e.g., PropagateEmptyRelation dropping a " +
+        "Union branch) from flipping the state schema nullability across microbatches or " +
+        "restarts. The effective value is pinned per query via the offset log at batch 0, " +
+        "so pre-existing queries keep their original behavior; only newly started queries " +
+        "pick this up.")
+      .version("4.3.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -8635,8 +8657,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   /**
    * Orders the given catalog path entries by [[sessionFunctionResolutionOrder]], inserting
-   * system.session and system.builtin. Used by both the legacy single-schema resolution and
-   * by SET PATH's DEFAULT_PATH / SYSTEM_PATH expansion to keep ordering in sync.
+   * system.session and system.builtin. Used by the legacy single-schema resolution and by
+   * SET PATH's DEFAULT_PATH expansion (when `spark.sql.defaultPath` is empty) to keep
+   * ordering in sync. SYSTEM_PATH no longer flows through here -- see [[systemPathOrder]].
    *
    * @param catalogEntries persistent catalog path entries (may be empty).
    */
@@ -8657,8 +8680,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
-  /** System-only path (builtin + session) ordered by [[sessionFunctionResolutionOrder]]. */
-  def systemPathOrder: Seq[Seq[String]] = defaultPathOrder(Seq.empty)
+  /**
+   * System-only path used by `SET PATH = SYSTEM_PATH`. Contains the system-managed namespaces
+   * under the `system` catalog whose contents are wholly defined by Spark itself; today that
+   * is only `system.builtin`, but the shortcut is reserved for future system-managed schemas
+   * (e.g. AI, geospatial, ML).
+   */
+  def systemPathOrder: Seq[Seq[String]] = Seq(Seq("system", "builtin"))
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)

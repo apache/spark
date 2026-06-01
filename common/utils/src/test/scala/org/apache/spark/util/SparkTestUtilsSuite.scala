@@ -15,19 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.pipelines
+package org.apache.spark.util
 
-/** Represents a warning generated as part of graph analysis. */
-sealed trait AnalysisWarning
+import org.scalatest.funsuite.AnyFunSuite // scalastyle:ignore funsuite
 
-object AnalysisWarning {
+class SparkTestUtilsSuite extends AnyFunSuite with SparkTestUtils { // scalastyle:ignore funsuite
 
-  /**
-   * Warning that some streaming reader options are being dropped
-   *
-   * @param sourceName Source for which reader options are being dropped.
-   * @param droppedOptions Set of reader options that are being dropped for a specific source.
-   */
-  case class StreamingReaderOptionsDropped(sourceName: String, droppedOptions: Seq[String])
-      extends AnalysisWarning
+  test("SPARK-57081: createCompiledClass with spaces in classpath") {
+    val dir = SparkFileUtils.createTempDir(namePrefix = "path with spaces")
+    val sourceFile = new JavaSourceFromString("Hello", "public class Hello {}")
+    val result = createCompiledClass("Hello", dir, sourceFile, Seq(dir.toURI.toURL))
+    assert(result.exists(), s"Compiled class file should exist at ${result.getPath}")
+  }
 }

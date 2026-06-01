@@ -29,6 +29,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.GeographyVal;
 import org.apache.spark.unsafe.types.GeometryVal;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -98,6 +99,10 @@ public final class MutableColumnarRow extends InternalRow {
           row.update(i, getMap(i).copy());
         } else if (dt instanceof VariantType) {
           row.update(i, getVariant(i));
+        } else if (dt instanceof TimestampNTZNanosType) {
+          row.update(i, getTimestampNTZNanos(i));
+        } else if (dt instanceof TimestampLTZNanosType) {
+          row.update(i, getTimestampLTZNanos(i));
         } else {
           throw new RuntimeException("Not implemented. " + dt);
         }
@@ -166,6 +171,16 @@ public final class MutableColumnarRow extends InternalRow {
   }
 
   @Override
+  public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampNTZNanos(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int ordinal) {
+    return columns[ordinal].getTimestampLTZNanos(rowId);
+  }
+
+  @Override
   public VariantVal getVariant(int ordinal) {
     return columns[ordinal].getVariant(rowId);
   }
@@ -221,6 +236,10 @@ public final class MutableColumnarRow extends InternalRow {
       return getMap(ordinal);
     } else if (dataType instanceof VariantType) {
       return getVariant(ordinal);
+    } else if (dataType instanceof TimestampNTZNanosType) {
+      return getTimestampNTZNanos(ordinal);
+    } else if (dataType instanceof TimestampLTZNanosType) {
+      return getTimestampLTZNanos(ordinal);
     } else {
       throw new SparkUnsupportedOperationException(
         "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dataType.toString()));
@@ -250,6 +269,10 @@ public final class MutableColumnarRow extends InternalRow {
         setDecimal(ordinal, d, t.precision());
       } else if (dt instanceof CalendarIntervalType) {
         setInterval(ordinal, (CalendarInterval) value);
+      } else if (dt instanceof TimestampNTZNanosType) {
+        setTimestampNTZNanos(ordinal, (TimestampNanosVal) value);
+      } else if (dt instanceof TimestampLTZNanosType) {
+        setTimestampLTZNanos(ordinal, (TimestampNanosVal) value);
       } else {
         throw new SparkUnsupportedOperationException(
           "_LEGACY_ERROR_TEMP_3192", Map.of("dt", dt.toString()));
@@ -314,5 +337,15 @@ public final class MutableColumnarRow extends InternalRow {
   public void setInterval(int ordinal, CalendarInterval value) {
     columns[ordinal].putNotNull(rowId);
     columns[ordinal].putInterval(rowId, value);
+  }
+
+  public void setTimestampNTZNanos(int ordinal, TimestampNanosVal value) {
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putTimestampNTZNanos(rowId, value);
+  }
+
+  public void setTimestampLTZNanos(int ordinal, TimestampNanosVal value) {
+    columns[ordinal].putNotNull(rowId);
+    columns[ordinal].putTimestampLTZNanos(rowId, value);
   }
 }

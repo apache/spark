@@ -347,6 +347,11 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  def zip(other: sql.Dataset[_]): DataFrame = {
+    throw new UnsupportedOperationException("zip is not supported in Spark Connect")
+  }
+
+  /** @inheritdoc */
   def joinWith[U](other: sql.Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     val joinTypeValue = toJoinType(joinType, skipSemiAnti = true)
     val (leftNullable, rightNullable) = joinTypeValue match {

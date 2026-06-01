@@ -23,6 +23,7 @@ import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.UserDefinedType;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 import org.apache.spark.unsafe.types.GeographyVal;
@@ -324,6 +325,30 @@ public abstract class ColumnVector implements AutoCloseable {
     final int days = getChild(1).getInt(rowId);
     final long microseconds = getChild(2).getLong(rowId);
     return new CalendarInterval(months, days, microseconds);
+  }
+
+  /**
+   * Returns the nanosecond NTZ timestamp value for {@code rowId}, or null if the slot is null.
+   * <p>
+   * To support this type, implementations must implement {@link #getChild(int)} and define 2 child
+   * vectors: child 0 is a long vector holding {@code epochMicros}; child 1 is a short vector
+   * holding {@code nanosWithinMicro} (values in [0, 999]).
+   */
+  public TimestampNanosVal getTimestampNTZNanos(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return TimestampNanosVal.fromTrustedRowBytes(
+      getChild(0).getLong(rowId), getChild(1).getShort(rowId));
+  }
+
+  /**
+   * Returns the nanosecond LTZ timestamp value for {@code rowId}, or null if the slot is null.
+   * <p>
+   * Storage layout is identical to {@link #getTimestampNTZNanos(int)}.
+   */
+  public TimestampNanosVal getTimestampLTZNanos(int rowId) {
+    if (isNullAt(rowId)) return null;
+    return TimestampNanosVal.fromTrustedRowBytes(
+      getChild(0).getLong(rowId), getChild(1).getShort(rowId));
   }
 
   /**

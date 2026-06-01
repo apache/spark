@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.StreamingJoinHelper
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JoinedRow, Literal, Predicate, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -231,13 +232,16 @@ case class StreamingSymmetricHashJoinExec(
     StatefulOpClusteredDistribution(leftKeys, getStateInfo.numPartitions) ::
       StatefulOpClusteredDistribution(rightKeys, getStateInfo.numPartitions) :: Nil
 
-  override def output: Seq[Attribute] = joinType match {
-    case _: InnerLike => left.output ++ right.output
-    case LeftOuter => left.output ++ right.output.map(_.withNullability(true))
-    case RightOuter => left.output.map(_.withNullability(true)) ++ right.output
-    case FullOuter => (left.output ++ right.output).map(_.withNullability(true))
-    case LeftSemi => left.output
-    case _ => throwBadJoinTypeException()
+  override def output: Seq[Attribute] = {
+    val base = joinType match {
+      case _: InnerLike => left.output ++ right.output
+      case LeftOuter => left.output ++ right.output.map(_.withNullability(true))
+      case RightOuter => left.output.map(_.withNullability(true)) ++ right.output
+      case FullOuter => (left.output ++ right.output).map(_.withNullability(true))
+      case LeftSemi => left.output
+      case _ => throwBadJoinTypeException()
+    }
+    WidenStatefulOpNullability.widenOutputForStatefulOp(base)
   }
 
   override def outputPartitioning: Partitioning = joinType match {
@@ -279,11 +283,16 @@ case class StreamingSymmetricHashJoinExec(
   override def getColFamilySchemas(
       shouldBeNullable: Boolean): Map[String, StateStoreColFamilySchema] = {
     assert(useVirtualColumnFamilies)
-    // We only have one state store for the join, but there are four distinct schemas
-    SymmetricHashJoinStateManager
+    val raw = SymmetricHashJoinStateManager
       .getSchemasForStateStoreWithColFamily(LeftSide, left.output, leftKeys, stateFormatVersion) ++
-    SymmetricHashJoinStateManager
-      .getSchemasForStateStoreWithColFamily(RightSide, right.output, rightKeys, stateFormatVersion)
+      SymmetricHashJoinStateManager
+        .getSchemasForStateStoreWithColFamily(
+          RightSide, right.output, rightKeys, stateFormatVersion)
+    raw.map { case (name, cf) =>
+      name -> cf.copy(
+        keySchema = WidenStatefulOpNullability.widenStateSchema(cf.keySchema),
+        valueSchema = WidenStatefulOpNullability.widenStateSchema(cf.valueSchema))
+    }
   }
 
   override def shouldRunAnotherBatch(newInputWatermark: Long): Boolean = {
@@ -328,7 +337,8 @@ case class StreamingSymmetricHashJoinExec(
         // we have to add the default column family schema because the RocksDBStateEncoder
         // expects this entry to be present in the stateSchemaProvider.
         val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-          keySchema, 0, valueSchema))
+          WidenStatefulOpNullability.widenStateSchema(keySchema), 0,
+          WidenStatefulOpNullability.widenStateSchema(valueSchema)))
         StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
           newStateSchema, session.sessionState, stateSchemaVersion, storeName = stateStoreName)
       }.toList

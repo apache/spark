@@ -105,6 +105,14 @@ case class ProjectingInternalRow(schema: StructType,
     row.getInterval(colOrdinals(ordinal))
   }
 
+  override def getTimestampNTZNanos(ordinal: Int): TimestampNanosVal = {
+    row.getTimestampNTZNanos(colOrdinals(ordinal))
+  }
+
+  override def getTimestampLTZNanos(ordinal: Int): TimestampNanosVal = {
+    row.getTimestampLTZNanos(colOrdinals(ordinal))
+  }
+
   override def getVariant(ordinal: Int): VariantVal = {
     row.getVariant(colOrdinals(ordinal))
   }

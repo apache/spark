@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros, rebaseJulianToGregorianDays, rebaseJulianToGregorianMicros}
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.{DateType, TimestampType, TimeType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.SparkClassUtils
 
 trait SparkDateTimeUtils {
@@ -206,6 +206,82 @@ trait SparkDateTimeUtils {
 
   def localDateTimeToMicros(localDateTime: LocalDateTime): Long = {
     instantToMicros(localDateTime.toInstant(ZoneOffset.UTC))
+  }
+
+  /**
+   * Truncates the sub-microsecond nanosecond part to the given timestamp precision `p` in [7, 9].
+   * Precision 9 keeps all three digits, 8 zeros the last digit, 7 zeros the last two.
+   *
+   * The input is the already-extracted `nanosWithinMicro` component (`0..999`), so truncation is
+   * independent of the epoch sign of the original timestamp value.
+   *
+   * Precisions outside `[7, 9]` are passed through unchanged because the surrounding timestamp
+   * nanos types validate the bound.
+   */
+  private def truncateNanosWithinMicroToPrecision(nanosWithinMicro: Int, precision: Int): Int = {
+    precision match {
+      case 7 => (nanosWithinMicro / 100) * 100
+      case 8 => (nanosWithinMicro / 10) * 10
+      case _ => nanosWithinMicro
+    }
+  }
+
+  /**
+   * Converts a `java.time.LocalDateTime` into the composite `(epochMicros, nanosWithinMicro)`
+   * pair used by `TimestampNTZNanosType(precision)` (interpreted at UTC). `epochMicros` comes
+   * from [[localDateTimeToMicros]] (which is floor toward `-inf` for the integral micro part);
+   * the last three decimal digits of `localDateTime.getNano` (`[0, 999]`) become
+   * `nanosWithinMicro` after dropping `(9 - precision)` low digits.
+   *
+   * Combined, the result is the floor toward `-inf` of the original nanosecond value rounded down
+   * to the precision step (10^(9 - precision) ns). At `precision = 9` the conversion is lossless
+   * within the valid range; at 7 / 8 the lowest 2 / 1 sub-micro digits are dropped. The same
+   * flooring will be the basis of the future `CAST(... AS TIMESTAMP_NTZ(precision))` rule.
+   */
+  def localDateTimeToTimestampNanos(
+      localDateTime: LocalDateTime,
+      precision: Int): TimestampNanosVal = {
+    val epochMicros = localDateTimeToMicros(localDateTime)
+    val rawNanosWithinMicro = localDateTime.getNano % NANOS_PER_MICROS.toInt
+    val nanosWithinMicro = truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+  }
+
+  /**
+   * Reverse of [[localDateTimeToTimestampNanos]]: rebuilds a `java.time.LocalDateTime` (at UTC)
+   * from a `TimestampNanosVal`. `nanosWithinMicro` is in `[0, 999]` so `plusNanos` never crosses
+   * the second boundary.
+   */
+  def timestampNanosToLocalDateTime(v: TimestampNanosVal): LocalDateTime = {
+    microsToLocalDateTime(v.epochMicros).plusNanos(v.nanosWithinMicro.toLong)
+  }
+
+  /**
+   * Converts a `java.time.Instant` into the composite `(epochMicros, nanosWithinMicro)` pair used
+   * by `TimestampLTZNanosType(precision)`. `epochMicros` comes from [[instantToMicros]] (floor
+   * toward `-inf` for the integral micro part); the last three decimal digits of
+   * `instant.getNano` (`[0, 999]`) become `nanosWithinMicro` after dropping `(9 - precision)` low
+   * digits.
+   *
+   * Combined, the result is the floor toward `-inf` of the original nanosecond value rounded down
+   * to the precision step (10^(9 - precision) ns). At `precision = 9` the conversion is lossless
+   * within the valid range; at 7 / 8 the lowest 2 / 1 sub-micro digits are dropped. The same
+   * flooring will be the basis of the future `CAST(... AS TIMESTAMP_LTZ(precision))` rule.
+   */
+  def instantToTimestampNanos(instant: Instant, precision: Int): TimestampNanosVal = {
+    val epochMicros = instantToMicros(instant)
+    val rawNanosWithinMicro = instant.getNano % NANOS_PER_MICROS.toInt
+    val nanosWithinMicro = truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+  }
+
+  /**
+   * Reverse of [[instantToTimestampNanos]]: rebuilds a `java.time.Instant` from a
+   * `TimestampNanosVal`. `nanosWithinMicro` is in `[0, 999]` so `plusNanos` never crosses the
+   * second boundary.
+   */
+  def timestampNanosToInstant(v: TimestampNanosVal): Instant = {
+    microsToInstant(v.epochMicros).plusNanos(v.nanosWithinMicro.toLong)
   }
 
   /**

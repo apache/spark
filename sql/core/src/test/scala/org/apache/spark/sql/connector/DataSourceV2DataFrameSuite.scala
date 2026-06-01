@@ -28,7 +28,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkS
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -47,7 +47,10 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
-  with DSv2TempViewWithStoredPlanTests {
+  with DSv2TempViewWithStoredPlanTests
+  with DSv2RepeatedTableAccessTests
+  with DSv2IncrementallyConstructedQueryTests
+  with DSv2CacheTableReadTests {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
@@ -65,6 +68,9 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.nullcolidcat",
       classOf[NullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullbothidscat",
+      classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
     .set("spark.sql.catalog.resetidcat",
       classOf[TypeChangeResetsColIdTableCatalog].getName)
     .set("spark.sql.catalog.resetidcat.copyOnLoad", "true")
@@ -90,6 +96,7 @@ class DataSourceV2DataFrameSuite
 
   // DSv2ExternalMutationTestBase implementations for classic mode
   override protected def testPrefix: String = ""
+  override protected def isConnect: Boolean = false
 
   override protected def withTestSession(fn: SparkSession => Unit): Unit = fn(spark)
 
@@ -2628,7 +2635,8 @@ class DataSourceV2DataFrameSuite
 
   // Column ID tests: Null column ID connector
 
-  // When a connector does not support column IDs, validation is skipped.
+  // When a connector does not support column IDs, validation is skipped, but version
+  // tracking still detects the schema change and refreshes the table reference.
   test("connector with null column IDs: drop+re-add column not detected") {
     val t = "nullcolidcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -2644,8 +2652,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // succeeds because column ID validation is skipped when IDs are null
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because IDs are null. The table version changed, so
+      // [[V2TableRefreshUtil]] reloads it and the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2693,8 +2702,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() == null, "salary should have a null ID after re-add")
 
-      // succeeds because current column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because current ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2723,8 +2733,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() != null, "salary should have a non-null ID after re-add")
 
-      // succeeds because original column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because original ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 

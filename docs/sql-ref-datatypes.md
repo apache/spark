@@ -54,6 +54,7 @@ Spark SQL and DataFrames support the following data types:
   - `TimestampNTZType`: Timestamp without time zone(TIMESTAMP_NTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second. All operations are performed without taking any time zone into account.
     - Note: TIMESTAMP in Spark is a user-specified alias associated with one of the TIMESTAMP_LTZ and TIMESTAMP_NTZ variations.  Users can set the default timestamp type as `TIMESTAMP_LTZ`(default value) or `TIMESTAMP_NTZ` via the configuration `spark.sql.timestampType`.
+  - `TimestampNTZNanosType(precision)` / `TimestampLTZNanosType(precision)`: Preview nanosecond-capable variants of `TIMESTAMP_NTZ` and `TIMESTAMP_LTZ` with fractional seconds precision `precision` in `[7, 9]`. Unparameterized `TIMESTAMP`, `TIMESTAMP_NTZ`, and `TIMESTAMP_LTZ` remain microsecond types. In schema-driven Dataset/DataFrame conversion, Spark maps `TimestampNTZNanosType` to `java.time.LocalDateTime` and `TimestampLTZNanosType` to `java.time.Instant`; values with more sub-micro digits than declared by `precision` are floor-truncated to that precision. Enable the preview feature with `SET spark.sql.timestampNanosTypes.enabled=true;` before using these types in schemas or SQL.
 
 * Interval types
   - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:

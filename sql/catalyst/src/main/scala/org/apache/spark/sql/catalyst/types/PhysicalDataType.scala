@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, Int
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{ByteArray, GeographyVal, GeometryVal, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
 sealed abstract class PhysicalDataType {
@@ -55,6 +55,8 @@ object PhysicalDataType {
     case TimestampType => PhysicalLongType
     case TimestampNTZType => PhysicalLongType
     case CalendarIntervalType => PhysicalCalendarIntervalType
+    case _: TimestampNTZNanosType => PhysicalTimestampNTZNanosType
+    case _: TimestampLTZNanosType => PhysicalTimestampLTZNanosType
     case DayTimeIntervalType(_, _) => PhysicalLongType
     case YearMonthIntervalType(_, _) => PhysicalIntegerType
     case DateType => PhysicalIntegerType
@@ -165,6 +167,46 @@ class PhysicalCalendarIntervalType() extends PhysicalDataType {
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }
 case object PhysicalCalendarIntervalType extends PhysicalCalendarIntervalType
+
+/**
+ * Physical type for [[org.apache.spark.sql.types.TimestampNTZNanosType]]. Internal values are
+ * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * 16-byte variable-length payload; see
+ * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Storage layout is identical to [[PhysicalTimestampLTZNanosType]]; both types exist so the
+ * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
+ *
+ * Ordering, compare, and hash are not implemented yet and will be added in a follow-up issue.
+ */
+class PhysicalTimestampNTZNanosType() extends PhysicalDataType {
+  override private[sql] def ordering =
+    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
+      "PhysicalTimestampNTZNanosType")
+  override private[sql] type InternalType = TimestampNanosVal
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+}
+case object PhysicalTimestampNTZNanosType extends PhysicalTimestampNTZNanosType
+
+/**
+ * Physical type for [[org.apache.spark.sql.types.TimestampLTZNanosType]]. Internal values are
+ * [[TimestampNanosVal]] (epoch micros + nanos within the micro). Stored in [[UnsafeRow]] via a
+ * 16-byte variable-length payload; see
+ * [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
+ *
+ * Storage layout is identical to [[PhysicalTimestampNTZNanosType]]; both types exist so the
+ * NTZ/LTZ distinction propagates through the physical-type system to consumers that need it.
+ *
+ * Ordering, compare, and hash are not implemented yet and will be added in a follow-up issue.
+ */
+class PhysicalTimestampLTZNanosType() extends PhysicalDataType {
+  override private[sql] def ordering =
+    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
+      "PhysicalTimestampLTZNanosType")
+  override private[sql] type InternalType = TimestampNanosVal
+  @transient private[sql] lazy val tag = typeTag[InternalType]
+}
+case object PhysicalTimestampLTZNanosType extends PhysicalTimestampLTZNanosType
 
 case class PhysicalDecimalType(precision: Int, scale: Int) extends PhysicalFractionalType {
   private[sql] type InternalType = Decimal

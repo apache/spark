@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, Python 3.12, Pandas 3)"
+name: "Build / Python-only (Python 3.12, Pandas 3)"
 
 on:
   schedule:

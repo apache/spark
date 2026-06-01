@@ -26,12 +26,13 @@ import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SampleMethod}
 import org.apache.spark.sql.connector.catalog.{FunctionCatalog, Identifier}
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{BucketTransform, Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, IdentityTransform, Literal => V2Literal, NamedReference, NamedTransform, NullOrdering => V2NullOrdering, SortDirection => V2SortDirection, SortOrder => V2SortOrder, SortValue, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
+import org.apache.spark.sql.connector.read.{SampleMethod => V2SampleMethod}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.PartitionPredicateImpl
@@ -166,6 +167,11 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
   private def toCatalyst(nullOrdering: V2NullOrdering): NullOrdering = nullOrdering match {
     case V2NullOrdering.NULLS_FIRST => NullsFirst
     case V2NullOrdering.NULLS_LAST => NullsLast
+  }
+
+  def toCatalyst(sampleMethod: V2SampleMethod): SampleMethod = sampleMethod match {
+    case V2SampleMethod.BERNOULLI => SampleMethod.Bernoulli
+    case V2SampleMethod.SYSTEM => SampleMethod.System
   }
 
   def resolveScalarFunction(

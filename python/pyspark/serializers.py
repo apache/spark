@@ -63,6 +63,7 @@ import collections
 import zlib
 import itertools
 import pickle
+import codecs
 
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
@@ -84,6 +85,7 @@ class SpecialLengths:
     END_OF_STREAM = -4
     NULL = -5
     START_ARROW_STREAM = -6
+    START_OF_INIT_MESSAGE = -8
 
 
 class Serializer:
@@ -539,7 +541,7 @@ class UTF8Deserializer(Serializer):
         elif length == SpecialLengths.NULL:
             return None
         s = stream.read(length)
-        return s.decode("utf-8") if self.use_unicode else s
+        return codecs.decode(s, "utf-8") if self.use_unicode else s
 
     def load_stream(self, stream):
         try:

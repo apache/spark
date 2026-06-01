@@ -556,6 +556,11 @@ def create_auto_cdc_flow(
     Note that for keys, sequence_by, column_list, and except_column_list the arguments have to
     be column identifiers without qualifiers, e.g. they cannot be col("sourceTable.keyId").
 
+    The set and types of `keys` are part of the Auto CDC flow's persisted state. Changing keys
+    across incremental runs (renaming, swapping, growing, shrinking, or changing the type of a
+    key column) is not supported and will produce undefined behavior. To change the key set,
+    fully refresh the target table.
+
     :param target: The name of the target table that receives the Auto CDC flow.
     :param source: The name of the CDC source to stream from.
     :param keys: The column or combination of columns that uniquely identify a row in the source \
