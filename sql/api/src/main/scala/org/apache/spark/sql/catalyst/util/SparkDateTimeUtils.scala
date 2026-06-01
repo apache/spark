@@ -751,28 +751,48 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Parses a UTF8 timestamp string into the [[Instant]] it denotes, shared by the LTZ entry points
+   * `stringToTimestamp` (micros) and `stringToTimestampLTZNanos` (nanos). The full fractional part
+   * (including sub-microsecond digits) is carried in the [[Instant]]; each caller then narrows to
+   * its own precision (`instantToMicros` floors the sub-micro digits, `instantToTimestampNanos`
+   * truncates to the requested precision), so this helper is behavior-preserving for the micro
+   * path. Callers are expected to wrap the call in a `try`/`catch` that maps `NonFatal` to `None`.
+   *
+   * Returns `null` (rather than [[Option]]) when the string is unparseable. The `null` sentinel
+   * keeps these cast hot paths allocation-free: no intermediate `Option`/closure is materialized,
+   * and the small body inlines into the caller. Callers must null-check the result.
+   */
+  private def parseTimestampToInstant(s: UTF8String, timeZoneId: ZoneId): Instant = {
+    val (segments, parsedZoneId, justTime) = parseTimestampString(s)
+    if (segments.isEmpty) {
+      return null
+    }
+    val zoneId = parsedZoneId.getOrElse(timeZoneId)
+    // Combine the microsecond part (digits 1-6) and the sub-microsecond remainder (digits 7-9)
+    // into a full nano-of-second. This is harmless for the micro path because `instantToMicros`
+    // floors the sub-microsecond digits away.
+    val nanoOfSecond = (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt
+    val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoOfSecond)
+    val localDate = if (justTime) {
+      LocalDate.now(zoneId)
+    } else {
+      LocalDate.of(segments(0), segments(1), segments(2))
+    }
+    val localDateTime = LocalDateTime.of(localDate, localTime)
+    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+    Instant.from(zonedDateTime)
+  }
+
+  /**
    * Trims and parses a given UTF8 timestamp string to the corresponding a corresponding [[Long]]
    * value. The return type is [[Option]] in order to distinguish between 0L and null. Please
    * refer to `parseTimestampString` for the allowed formats
    */
   def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
     try {
-      val (segments, parsedZoneId, justTime) = parseTimestampString(s)
-      if (segments.isEmpty) {
-        return None
-      }
-      val zoneId = parsedZoneId.getOrElse(timeZoneId)
-      val nanoseconds = MICROSECONDS.toNanos(segments(6))
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-      val localDate = if (justTime) {
-        LocalDate.now(zoneId)
-      } else {
-        LocalDate.of(segments(0), segments(1), segments(2))
-      }
-      val localDateTime = LocalDateTime.of(localDate, localTime)
-      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-      val instant = Instant.from(zonedDateTime)
-      Some(instantToMicros(instant))
+      // `null` here means the string was unparseable (see `parseTimestampToInstant`).
+      val instant = parseTimestampToInstant(s, timeZoneId)
+      if (instant == null) None else Some(instantToMicros(instant))
     } catch {
       case NonFatal(_) => None
     }
@@ -799,19 +819,44 @@ trait SparkDateTimeUtils {
    * The return type is [[Option]] in order to distinguish between 0L and null. Please refer to
    * `parseTimestampString` for the allowed formats.
    */
+  /**
+   * Parses a UTF8 timestamp string into the zone-independent [[LocalDateTime]] it denotes, shared
+   * by the NTZ entry points `stringToTimestampWithoutTimeZone` (micros) and
+   * `stringToTimestampNTZNanos` (nanos). A time zone component is discarded when `allowTimeZone`
+   * is `true` and rejected otherwise. The full fractional part (including sub-microsecond digits)
+   * is carried in the [[LocalDateTime]]; each caller then narrows to its own precision
+   * (`localDateTimeToMicros` floors the sub-micro digits, `localDateTimeToTimestampNanos`
+   * truncates to the requested precision), so this helper is behavior-preserving for the micro
+   * path. Callers are expected to wrap the call in a `try`/`catch` that maps `NonFatal` to `None`.
+   *
+   * Returns `null` (rather than [[Option]]) when the string is unparseable, contains only a time
+   * part, or carries a time zone while `allowTimeZone` is `false`. The `null` sentinel keeps these
+   * cast hot paths allocation-free: no intermediate `Option`/closure is materialized, and the
+   * small body inlines into the caller. Callers must null-check the result.
+   */
+  private def parseTimestampToLocalDateTime(
+      s: UTF8String,
+      allowTimeZone: Boolean): LocalDateTime = {
+    val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
+    // If the input string can't be parsed as a timestamp without time zone, or it contains only
+    // the time part of a timestamp and we can't determine its date, signal failure with `null`.
+    if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
+      return null
+    }
+    // Combine the microsecond part (digits 1-6) and the sub-microsecond remainder (digits 7-9)
+    // into a full nano-of-second. This is harmless for the micro path because
+    // `localDateTimeToMicros` floors the sub-microsecond digits away.
+    val nanoOfSecond = (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt
+    val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoOfSecond)
+    val localDate = LocalDate.of(segments(0), segments(1), segments(2))
+    LocalDateTime.of(localDate, localTime)
+  }
+
   def stringToTimestampWithoutTimeZone(s: UTF8String, allowTimeZone: Boolean): Option[Long] = {
     try {
-      val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
-      // If the input string can't be parsed as a timestamp without time zone, or it contains only
-      // the time part of a timestamp and we can't determine its date, return None.
-      if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
-        return None
-      }
-      val nanoseconds = MICROSECONDS.toNanos(segments(6))
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-      val localDateTime = LocalDateTime.of(localDate, localTime)
-      Some(localDateTimeToMicros(localDateTime))
+      // `null` here means the string was unparseable (see `parseTimestampToLocalDateTime`).
+      val localDateTime = parseTimestampToLocalDateTime(s, allowTimeZone)
+      if (localDateTime == null) None else Some(localDateTimeToMicros(localDateTime))
     } catch {
       case NonFatal(_) => None
     }
@@ -833,26 +878,11 @@ trait SparkDateTimeUtils {
         s"stringToTimestampLTZNanos: precision $precision is out of range [7, 9]")
     }
     try {
-      val (segments, parsedZoneId, justTime) = parseTimestampString(s)
-      if (segments.isEmpty) {
-        return None
-      }
-      val zoneId = parsedZoneId.getOrElse(timeZoneId)
-      // Combine the microsecond part (digits 1-6) and the sub-microsecond remainder (digits 7-9)
-      // into a full nano-of-second so the java.time value carries the complete fraction; the
-      // shared `instantToTimestampNanos` then splits it back into (epochMicros, nanosWithinMicro)
-      // and applies the `precision` truncation.
-      val nanoOfSecond = (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoOfSecond)
-      val localDate = if (justTime) {
-        LocalDate.now(zoneId)
-      } else {
-        LocalDate.of(segments(0), segments(1), segments(2))
-      }
-      val localDateTime = LocalDateTime.of(localDate, localTime)
-      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-      val instant = Instant.from(zonedDateTime)
-      Some(instantToTimestampNanos(instant, precision))
+      // `null` here means the string was unparseable (see `parseTimestampToInstant`). The shared
+      // helper carries the full fraction in the `Instant`; `instantToTimestampNanos` then splits
+      // it into (epochMicros, nanosWithinMicro) and applies the `precision` truncation.
+      val instant = parseTimestampToInstant(s, timeZoneId)
+      if (instant == null) None else Some(instantToTimestampNanos(instant, precision))
     } catch {
       case NonFatal(_) => None
     }
@@ -888,19 +918,16 @@ trait SparkDateTimeUtils {
         s"stringToTimestampNTZNanos: precision $precision is out of range [7, 9]")
     }
     try {
-      val (segments, zoneIdOpt, justTime) = parseTimestampString(s)
-      if (segments.isEmpty || justTime || !allowTimeZone && zoneIdOpt.isDefined) {
-        return None
+      // `null` here means the string was unparseable (see `parseTimestampToLocalDateTime`). The
+      // shared helper carries the full fraction in the `LocalDateTime`;
+      // `localDateTimeToTimestampNanos` then splits it into (epochMicros, nanosWithinMicro) and
+      // applies the `precision` truncation.
+      val localDateTime = parseTimestampToLocalDateTime(s, allowTimeZone)
+      if (localDateTime == null) {
+        None
+      } else {
+        Some(localDateTimeToTimestampNanos(localDateTime, precision))
       }
-      // Combine the microsecond part (digits 1-6) and the sub-microsecond remainder (digits 7-9)
-      // into a full nano-of-second so the java.time value carries the complete fraction; the
-      // shared `localDateTimeToTimestampNanos` then splits it back into
-      // (epochMicros, nanosWithinMicro) and applies the `precision` truncation.
-      val nanoOfSecond = (MICROSECONDS.toNanos(segments(6)) + segments(9)).toInt
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoOfSecond)
-      val localDate = LocalDate.of(segments(0), segments(1), segments(2))
-      val localDateTime = LocalDateTime.of(localDate, localTime)
-      Some(localDateTimeToTimestampNanos(localDateTime, precision))
     } catch {
       case NonFatal(_) => None
     }
