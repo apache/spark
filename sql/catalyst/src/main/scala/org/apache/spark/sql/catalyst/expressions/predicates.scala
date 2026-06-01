@@ -557,16 +557,34 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       val valueArg = ctx.freshName("valueArg")
       // All the blocks are meant to be inside a do { ... } while (false); loop.
       // The evaluation of variables can be stopped when we find a matching value.
-      val listCode = listGen.map(x =>
-        s"""
-           |${x.code}
-           |if (${x.isNull}) {
-           |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
-           |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
-           |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
-           |  continue;
-           |}
-         """.stripMargin)
+      val listCode = listGen.map { x =>
+        if (x.isNull == FalseLiteral) {
+          // The list element is statically non-null, so the HAS_NULL branch is dead code.
+          s"""
+             |${x.code}
+             |if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
+             |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
+             |  continue;
+             |}
+           """.stripMargin
+        } else if (x.isNull == TrueLiteral) {
+          // The list element is statically null, so it can only contribute HAS_NULL.
+          s"""
+             |${x.code}
+             |$tmpResult = $HAS_NULL; // ${ev.isNull} = true;
+           """.stripMargin
+        } else {
+          s"""
+             |${x.code}
+             |if (${x.isNull}) {
+             |  $tmpResult = $HAS_NULL; // ${ev.isNull} = true;
+             |} else if (${ctx.genEqual(value.dataType, valueArg, x.value)}) {
+             |  $tmpResult = $MATCHED; // ${ev.isNull} = false; ${ev.value} = true;
+             |  continue;
+             |}
+           """.stripMargin
+        }
+      }
 
       val codes = ctx.splitExpressionsWithCurrentInputs(
         expressions = listCode,
