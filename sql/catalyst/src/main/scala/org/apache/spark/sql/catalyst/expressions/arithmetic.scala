@@ -278,19 +278,21 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      val errorContextCode = getContextOrNullCode(ctx, failOnError)
-      val updateIsNull = if (failOnError) {
-        ""
+      val castUtils = classOf[CastUtils].getName
+      if (failOnError) {
+        val errorContextCode = getContextOrNullCode(ctx)
+        defineCodeGen(ctx, ev, (eval1, eval2) =>
+          s"$castUtils.changePrecisionExact(" +
+            s"$eval1.$decimalMethod($eval2), $precision, $scale, $errorContextCode)")
       } else {
-        s"${ev.isNull} = ${ev.value} == null;"
+        nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+          s"""
+             |${ev.value} = $castUtils.changePrecisionOrNull(
+             |  $eval1.$decimalMethod($eval2), $precision, $scale);
+             |${ev.isNull} = ${ev.value} == null;
+           """.stripMargin
+        })
       }
-      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        s"""
-           |${ev.value} = $eval1.$decimalMethod($eval2).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
-           |$updateIsNull
-       """.stripMargin
-      })
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
@@ -706,16 +708,26 @@ trait DivModLike extends BinaryArithmetic {
     val errorContextCode = getContextOrNullCode(ctx, failOnError)
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
+        val castUtils = classOf[CastUtils].getName
         val decimalValue = ctx.freshName("decimalValue")
-        s"""
-           |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
-           |if ($decimalValue != null) {
-           |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
-           |} else {
-           |  ${ev.isNull} = true;
-           |}
-           |""".stripMargin
+        if (failOnError) {
+          s"""
+             |Decimal $decimalValue = $castUtils.changePrecisionExact(
+             |  ${eval1.value}.$decimalMethod(${eval2.value}), $precision, $scale,
+             |  $errorContextCode);
+             |${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+             |""".stripMargin
+        } else {
+          s"""
+             |Decimal $decimalValue = $castUtils.changePrecisionOrNull(
+             |  ${eval1.value}.$decimalMethod(${eval2.value}), $precision, $scale);
+             |if ($decimalValue != null) {
+             |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+             |} else {
+             |  ${ev.isNull} = true;
+             |}
+             |""".stripMargin
+        }
       case _ => s"${ev.value} = ($javaType)(${eval1.value} $symbol ${eval2.value});"
     }
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {

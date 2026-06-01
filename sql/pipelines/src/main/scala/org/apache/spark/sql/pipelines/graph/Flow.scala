@@ -19,19 +19,19 @@ package org.apache.spark.sql.pipelines.graph
 
 import scala.util.Try
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{functions => F, AnalysisException, Column}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.pipelines.AnalysisWarning
 import org.apache.spark.sql.pipelines.autocdc.{
+  AutoCdcReservedNames,
   CaseSensitivityLabels,
   ChangeArgs,
   ColumnSelection,
   Scd1BatchProcessor,
   ScdType
 }
-import org.apache.spark.sql.pipelines.util.InputReadOptions
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 
 /**
@@ -107,8 +107,7 @@ case class FlowFunctionResult(
     streamingInputs: Set[ResolvedInput],
     usedExternalInputs: Set[TableIdentifier],
     dataFrame: Try[DataFrame],
-    sqlConf: Map[String, String],
-    analysisWarnings: Seq[AnalysisWarning] = Nil) {
+    sqlConf: Map[String, String]) {
 
   /**
    * Returns the names of all of the [[Input]]s used when resolving this [[Flow]]. If the
@@ -216,7 +215,8 @@ trait ResolvedFlow extends ResolutionCompletedFlow with Input {
 
   /** Returns the schema of the output of this [[Flow]]. */
   def schema: StructType = df.schema
-  override def load(readOptions: InputReadOptions): DataFrame = df
+  override def load(asStreaming: Boolean): DataFrame = df
+
   def inputs: Set[TableIdentifier] = funcResult.inputs
 }
 
@@ -271,7 +271,7 @@ class AutoCdcMergeFlow(
   }
 
   /** The DataType of the sequencing expression, derived once from the source change feed. */
-  private val sequencingType: DataType =
+  private[graph] val sequencingType: DataType =
     df.select(changeArgs.sequencing).schema.head.dataType
 
   /**
@@ -302,31 +302,48 @@ class AutoCdcMergeFlow(
   }
 
   /**
-   * Returns an empty dataframe whose schema matches [[AutoCdcMergeFlow.schema]].
+   * Returns an empty dataframe whose schema matches [[AutoCdcMergeFlow.schema]]. By construction,
+   * the returned dataframe will be a streaming dataframe.
    *
-   * Today, [[AutoCdcMergeFlow.load]] is not actually ever called during graph analysis or
-   * execution. An AutoCdcMergeFlow can only be an input to a streaming table (not an MV or
-   * persisted/temp view), and streaming tables take a [[VirtualTableInput]] as input, not
-   * the producing [[Flow]] directly. [[VirtualTableInput]] overrides its own [[load]] to do
-   * schema inference on its input flows, rather than a transitive [[Flow.load]].
+   * In practice, [[AutoCdcMergeFlow.load]] is not invoked during graph analysis or execution.
+   * An AutoCdcMergeFlow can only be an input to a streaming table (not an MV or
+   * persisted/temp view), and streaming tables consume a [[VirtualTableInput]] rather than the
+   * producing [[Flow]] directly. [[VirtualTableInput]] overrides its own [[load]] to do schema
+   * inference on its input flows, rather than a transitive [[Flow.load]].
    *
-   * The [[AutoCdcMergeFlow.load]] implementation exists solely for API consistency.
+   * The implementation exists for API consistency and throws an internal error if invoked with
+   * `asStreaming = false`, or if the underlying source dataframe is not streaming, to surface
+   * a misuse loudly rather than silently producing a non-streaming dataframe.
    */
-  override def load(readOptions: InputReadOptions): DataFrame = changeArgs.storedAsScdType match {
-    case ScdType.Type1 =>
-      val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
-      val emptyCdcMetadataCol: Column = Scd1BatchProcessor.constructCdcMetadataCol(
-        deleteSequence = F.lit(null),
-        upsertSequence = F.lit(null),
-        sequencingType = sequencingType
-      ).as(Scd1BatchProcessor.cdcMetadataColName)
-
-      df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
-    case ScdType.Type2 =>
-      throw new AnalysisException(
-        errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
-        messageParameters = Map.empty
+  override def load(asStreaming: Boolean): DataFrame = {
+    if (!asStreaming) {
+      throw SparkException.internalError(
+        "Attempted to load AutoCDC flow as a batch flow. AutoCDC flows are strictly streaming " +
+        "flows, and must be loaded as such."
       )
+    }
+    if (!df.isStreaming) {
+      throw SparkException.internalError(
+        "AutoCDC source dataframe is not streaming. AutoCDC flows are strictly streaming flows, " +
+        "and must be backed by a streaming source."
+      )
+    }
+    changeArgs.storedAsScdType match {
+      case ScdType.Type1 =>
+        val userSelectedCols: Seq[Column] = userSelectedSchema.fieldNames.toSeq.map(F.col)
+        val emptyCdcMetadataCol: Column = Scd1BatchProcessor.constructCdcMetadataCol(
+          deleteSequence = F.lit(null),
+          upsertSequence = F.lit(null),
+          sequencingType = sequencingType
+        ).as(Scd1BatchProcessor.cdcMetadataColName)
+
+        df.select(userSelectedCols :+ emptyCdcMetadataCol: _*)
+      case ScdType.Type2 =>
+        throw new AnalysisException(
+          errorClass = "AUTOCDC_SCD2_NOT_SUPPORTED",
+          messageParameters = Map.empty
+        )
+    }
   }
 
   /**
@@ -335,7 +352,7 @@ class AutoCdcMergeFlow(
    */
   private def requireReservedPrefixAbsentInSourceColumns(): Unit = {
     val resolver = spark.sessionState.conf.resolver
-    val reservedPrefix = Scd1BatchProcessor.reservedColumnNamePrefix
+    val reservedPrefix = AutoCdcReservedNames.prefix
 
     def nameContainsReservedPrefix(name: String): Boolean = {
       name.length >= reservedPrefix.length && resolver(

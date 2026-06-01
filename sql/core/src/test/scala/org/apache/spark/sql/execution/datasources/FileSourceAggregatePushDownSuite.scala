@@ -21,6 +21,8 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, ExplainSuiteHelper, Row}
+import org.apache.spark.sql.catalyst.optimizer.CollapseGroupedSumOfCount
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.datasources.orc.OrcTest
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -258,6 +260,67 @@ trait FileSourceAggregatePushDownSuite
             checkAnswer(df, expected)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-57043: preserve pushed count before collapsing its grouped rollup") {
+    withTempPath { dir =>
+      Seq((10, 1, 2), (2, 1, 2), (3, 2, 1), (4, 2, 1), (5, 2, 2))
+        .toDF("value", "p1", "p2")
+        .write
+        .partitionBy("p1", "p2")
+        .format(format)
+        .save(dir.getCanonicalPath)
+
+      withTempView("tmp") {
+        spark.read.format(format).load(dir.getCanonicalPath).createOrReplaceTempView("tmp")
+        val query =
+          """
+            |SELECT p1, SUM(cnt)
+            |FROM (SELECT p1, p2, COUNT(*) AS cnt FROM tmp GROUP BY p1, p2)
+            |GROUP BY p1
+            |""".stripMargin
+        var expected = Array.empty[Row]
+        withSQLConf(aggPushDownEnabledKey -> "false") {
+          expected = sql(query).collect()
+        }
+        withSQLConf(aggPushDownEnabledKey -> "true") {
+          val df = sql(query)
+          checkPushedInfo(
+            df,
+            "PushedAggregation: [COUNT(*)], PushedFilters: [], PushedGroupBy: [p1, p2]")
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57043: collapse grouped count rollup after rejected scan push down") {
+    val data = Seq((1, 1), (1, 1), (1, 2), (2, 1), (2, 2))
+    withDataSourceTable(data, "t") {
+      withSQLConf(aggPushDownEnabledKey -> "true") {
+        val df = sql(
+          """
+            |SELECT _1, SUM(cnt)
+            |FROM (SELECT _1, _2, COUNT(*) AS cnt FROM t GROUP BY _1, _2)
+            |GROUP BY _1
+            |""".stripMargin)
+        checkPushedInfo(df, "PushedAggregation: []")
+        assert(df.queryExecution.optimizedPlan.collect { case _: Aggregate => true }.size == 1)
+        checkAnswer(df, Seq(Row(1, 3L), Row(2, 2L)))
+      }
+      withSQLConf(
+          aggPushDownEnabledKey -> "true",
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> CollapseGroupedSumOfCount.ruleName) {
+        val df = sql(
+          """
+            |SELECT _1, SUM(cnt)
+            |FROM (SELECT _1, _2, COUNT(*) AS cnt FROM t GROUP BY _1, _2)
+            |GROUP BY _1
+            |""".stripMargin)
+        assert(df.queryExecution.optimizedPlan.collect { case _: Aggregate => true }.size == 2)
+        checkAnswer(df, Seq(Row(1, 3L), Row(2, 2L)))
       }
     }
   }

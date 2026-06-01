@@ -326,7 +326,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
         UnqualifiedColumnName("a.b")
       },
       condition = "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER",
-      sqlState = "42703",
+      sqlState = "22023",
       parameters = Map(
         "columnName" -> "a.b",
         "nameParts" -> "a, b"
@@ -340,7 +340,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
         UnqualifiedColumnName("src.x")
       },
       condition = "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER",
-      sqlState = "42703",
+      sqlState = "22023",
       parameters = Map(
         "columnName" -> "src.x",
         "nameParts" -> "src, x"
@@ -354,7 +354,7 @@ class ChangeArgsSuite extends SparkFunSuite with SharedSparkSession {
         UnqualifiedColumnName("a.b.c")
       },
       condition = "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER",
-      sqlState = "42703",
+      sqlState = "22023",
       parameters = Map(
         "columnName" -> "a.b.c",
         "nameParts" -> "a, b, c"

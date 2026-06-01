@@ -367,19 +367,29 @@ case class Scd1BatchProcessor(
     val incomingWinsDelete = microbatchDeleteVersionField.isNotNull &&
       microbatchDeleteVersionField > destinationUpsertVersionField
 
-    // When the incoming upsert wins against an existing record, the entire row (all columns)
-    // will be overwritten, including the CDC metadata column. We only exclude keys because
-    // most merge implementations require that join columns are not being mutated, even if
-    // the mutation is a no-op.
     val resolver = microbatchDf.sparkSession.sessionState.conf.resolver
     val keyNames = changeArgs.keys.map(_.name)
+
+    def constructTargetColumnAssignmentsFromMicrobatch(columnName: String): (String, Column) = {
+      // Map a column in the target table to its direct equivalent in the microbatch. Note that
+      // because of target-table schema evolution during SDP dataset materialization, the
+      // microbatch's columns are always a subset of (or equal to) the target's columns.
+      val quotedCol = QuotingUtils.quoteIdentifier(columnName)
+      s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
+    }
+
+    // Most merge implementations require that join columns are not mutated, even when the
+    // mutation would be a no-op. The remaining microbatch columns (including the CDC metadata
+    // column) are overwritten outright when the incoming upsert wins.
     val columnsToUpdateWhenIncomingWinsUpsert: Map[String, Column] =
       microbatchDf.columns
         .filterNot(c => keyNames.exists(resolver(_, c)))
-        .map { c =>
-          val quotedCol = QuotingUtils.quoteIdentifier(c)
-          s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
-        }
+        .map(constructTargetColumnAssignmentsFromMicrobatch)
+        .toMap
+
+    val columnsToInsertOnNewKey: Map[String, Column] =
+      microbatchDf.columns
+        .map(constructTargetColumnAssignmentsFromMicrobatch)
         .toMap
 
     microbatchDf
@@ -391,7 +401,12 @@ case class Scd1BatchProcessor(
       // New key: only insert upserts; deletes for absent keys are no-ops for the target table
       // merge, and instead would have been inserted as tombstones into the auxiliary table.
       .whenNotMatched(microbatchDeleteVersionField.isNull)
-      .insertAll()
+      // When inserting a brand new row for a new key, construct column mappings from microbatch.
+      // The microbatch's columns may be a strict subset of the target's columns -- e.g. the user
+      // narrowed `column_list` between runs, or the source DF dropped a column. The target's
+      // columns can never be a strict subset of the microbatch's, however, because SDP's schema
+      // evolution always unions old and new schemas onto the target.
+      .insert(columnsToInsertOnNewKey)
       .merge()
   }
 
@@ -417,17 +432,15 @@ case class Scd1BatchProcessor(
 
 object Scd1BatchProcessor {
   /**
-   * Reserved column-name prefix for internal SDP AutoCDC processing. Source change-data-feed
-   * dataframes must not contain any columns starting with this prefix; the invariant is
+   * Internal columns inserted by AutoCDC reconciliation. Source change-data-feed dataframes must
+   * not contain any columns starting with [[AutoCdcReservedNames.prefix]]; the invariant is
    * enforced at [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction.
    */
-  private[pipelines] val reservedColumnNamePrefix: String = "__spark_autocdc_"
+  private[autocdc] val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
+  private[pipelines] val cdcMetadataColName: String = s"${AutoCdcReservedNames.prefix}metadata"
 
-  private[autocdc] val winningRowColName: String = s"${reservedColumnNamePrefix}winning_row"
-  private[pipelines] val cdcMetadataColName: String = s"${reservedColumnNamePrefix}metadata"
-
-  private[autocdc] val cdcDeleteSequenceFieldName: String = "deleteSequence"
-  private[autocdc] val cdcUpsertSequenceFieldName: String = "upsertSequence"
+  private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
+  private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"
 
   /** Project the delete sequence out of the CDC metadata column. */
   private[autocdc] def deleteSequenceOf(cdcMetadataCol: Column): Column =

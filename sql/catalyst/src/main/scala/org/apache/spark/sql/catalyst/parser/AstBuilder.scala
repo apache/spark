@@ -2753,15 +2753,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def resolveChangelogOptions(
       options: CaseInsensitiveStringMap): (ChangelogContext.DeduplicationMode, Boolean) = {
-    val deduplicationModeStr = Option(options.get("deduplicationMode"))
-      .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
-    val deduplicationMode = deduplicationModeStr match {
-      case "none" => ChangelogContext.DeduplicationMode.NONE
-      case "dropcarryovers" => ChangelogContext.DeduplicationMode.DROP_CARRYOVERS
-      case "netchanges" => ChangelogContext.DeduplicationMode.NET_CHANGES
-      case other =>
-        throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
-    }
+    val deduplicationMode = ChangelogContextUtils.parseDeduplicationMode(options)
     val computeUpdates = options.getBoolean("computeUpdates", false)
     (deduplicationMode, computeUpdates)
   }
@@ -3594,8 +3586,10 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCollate(ctx: CollateContext): Expression = withOrigin(ctx) {
     val collationName = visitCollateClause(ctx.collateClause())
-
-    Collate(expression(ctx.primaryExpression), UnresolvedCollation(collationName))
+    val unresolvedCollation = withOrigin(ctx.collateClause().collationName) {
+      UnresolvedCollation(collationName)
+    }
+    Collate(expression(ctx.primaryExpression), unresolvedCollation)
   }
 
   override def visitCollateClause(ctx: CollateClauseContext): Seq[String] = withOrigin(ctx) {

@@ -18,7 +18,6 @@ package org.apache.spark.sql.vectorized;
 
 import scala.PartialFunction;
 
-import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
@@ -327,12 +326,28 @@ public abstract class ColumnVector implements AutoCloseable {
     return new CalendarInterval(months, days, microseconds);
   }
 
+  /**
+   * Returns the nanosecond NTZ timestamp value for {@code rowId}, or null if the slot is null.
+   * <p>
+   * To support this type, implementations must implement {@link #getChild(int)} and define 2 child
+   * vectors: child 0 is a long vector holding {@code epochMicros}; child 1 is a short vector
+   * holding {@code nanosWithinMicro} (values in [0, 999]).
+   */
   public TimestampNanosVal getTimestampNTZNanos(int rowId) {
-    throw SparkUnsupportedOperationException.apply();
+    if (isNullAt(rowId)) return null;
+    return TimestampNanosVal.fromTrustedRowBytes(
+      getChild(0).getLong(rowId), getChild(1).getShort(rowId));
   }
 
+  /**
+   * Returns the nanosecond LTZ timestamp value for {@code rowId}, or null if the slot is null.
+   * <p>
+   * Storage layout is identical to {@link #getTimestampNTZNanos(int)}.
+   */
   public TimestampNanosVal getTimestampLTZNanos(int rowId) {
-    throw SparkUnsupportedOperationException.apply();
+    if (isNullAt(rowId)) return null;
+    return TimestampNanosVal.fromTrustedRowBytes(
+      getChild(0).getLong(rowId), getChild(1).getShort(rowId));
   }
 
   /**

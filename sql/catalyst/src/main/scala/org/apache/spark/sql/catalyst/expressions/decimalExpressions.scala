@@ -163,45 +163,22 @@ case class CheckOverflowInSum(
 
   override def nullable: Boolean = true
 
-  override def eval(input: InternalRow): Any = {
-    val value = child.eval(input)
-    if (value == null) {
-      if (nullOnOverflow) null
-      else {
-        throw QueryExecutionErrors.overflowInSumOfDecimalError(context, suggestedFunc = "try_sum")
-      }
-    } else {
-      value.asInstanceOf[Decimal].toPrecision(
-        dataType.precision,
-        dataType.scale,
-        Decimal.ROUND_HALF_UP,
-        nullOnOverflow,
-        context)
-    }
-  }
+  override def eval(input: InternalRow): Any = DecimalExpressionUtils.checkOverflowInSum(
+    child.eval(input).asInstanceOf[Decimal],
+    dataType.precision, dataType.scale, nullOnOverflow, context)
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childGen = child.genCode(ctx)
     val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
-    val nullHandling = if (nullOnOverflow) {
-      ""
-    } else {
-      s"""throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode, "try_sum");"""
-    }
-    // scalastyle:off line.size.limit
+    val helper = classOf[DecimalExpressionUtils].getName
+    val input = ctx.freshName("input")
     val code = code"""
        |${childGen.code}
-       |boolean ${ev.isNull} = ${childGen.isNull};
-       |Decimal ${ev.value} = null;
-       |if (${childGen.isNull}) {
-       |  $nullHandling
-       |} else {
-       |  ${ev.value} = ${childGen.value}.toPrecision(
-       |    ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-       |  ${ev.isNull} = ${ev.value} == null;
-       |}
+       |Decimal $input = ${childGen.isNull} ? null : ${childGen.value};
+       |Decimal ${ev.value} = $helper.checkOverflowInSum(
+       |  $input, ${dataType.precision}, ${dataType.scale}, $nullOnOverflow, $errorContextCode);
+       |boolean ${ev.isNull} = ${ev.value} == null;
        |""".stripMargin
-    // scalastyle:on line.size.limit
 
     ev.copy(code = code)
   }

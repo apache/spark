@@ -34,6 +34,7 @@ import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.BinaryView;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -494,6 +495,16 @@ public abstract class WritableColumnVector extends ColumnVector {
     getChild(2).putLong(rowId, value.microseconds);
   }
 
+  public void putTimestampNTZNanos(int rowId, TimestampNanosVal value) {
+    getChild(0).putLong(rowId, value.epochMicros);
+    getChild(1).putShort(rowId, value.nanosWithinMicro);
+  }
+
+  public void putTimestampLTZNanos(int rowId, TimestampNanosVal value) {
+    getChild(0).putLong(rowId, value.epochMicros);
+    getChild(1).putShort(rowId, value.nanosWithinMicro);
+  }
+
   @Override
   public UTF8String getUTF8String(int rowId) {
     if (isNullAt(rowId)) return null;
@@ -770,7 +781,9 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType || c.type instanceof VariantType) {
+        if (c.type instanceof StructType || c.type instanceof VariantType
+            || c.type instanceof TimestampNTZNanosType
+            || c.type instanceof TimestampLTZNanosType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -1075,6 +1088,11 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+    } else if (type instanceof TimestampNTZNanosType || type instanceof TimestampLTZNanosType) {
+      // Two columns. EpochMicros as Long. NanosWithinMicro as Short.
+      this.childColumns = new WritableColumnVector[2];
+      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.ShortType);
     } else if (type instanceof VariantType) {
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.BinaryType);
