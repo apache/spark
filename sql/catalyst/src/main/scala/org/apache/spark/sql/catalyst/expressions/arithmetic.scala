@@ -653,12 +653,13 @@ trait DivModLike extends BinaryArithmetic {
     case _ => x => x == 0
   }
 
-  // Whether the divisor is a foldable, non-null and non-zero constant. When true, the
-  // divide-by-zero check is dead code (it can never trigger), so codegen skips emitting both the
-  // check and its otherwise-unreachable error-context reference.
-  private lazy val divisorIsNonZero: Boolean = right.foldable && {
-    val divisor = right.eval(EmptyRow)
-    divisor != null && !isZero(divisor)
+  // Whether the divisor is a non-null and non-zero literal (foldable divisors are already folded
+  // to a literal before codegen). When true, the divide-by-zero check is dead code (it can never
+  // trigger), so codegen skips emitting both the check and its otherwise-unreachable error-context
+  // reference.
+  private lazy val divisorIsNonZero: Boolean = right match {
+    case Literal(divisor, _) => divisor != null && !isZero(divisor)
+    case _ => false
   }
 
   final override def eval(input: InternalRow): Any = {
@@ -1098,11 +1099,12 @@ case class Pmod(
     case _ => x => x == 0
   }
 
-  // Whether the divisor is a foldable, non-null and non-zero constant. When true, the
-  // remainder-by-zero check is dead code, so codegen skips emitting it.
-  private lazy val divisorIsNonZero: Boolean = right.foldable && {
-    val divisor = right.eval(EmptyRow)
-    divisor != null && !isZero(divisor)
+  // Whether the divisor is a non-null and non-zero literal (foldable divisors are already folded
+  // to a literal before codegen). When true, the remainder-by-zero check is dead code, so codegen
+  // skips emitting it.
+  private lazy val divisorIsNonZero: Boolean = right match {
+    case Literal(divisor, _) => divisor != null && !isZero(divisor)
+    case _ => false
   }
 
   private lazy val pmodFunc: (Any, Any) => Any = dataType match {
