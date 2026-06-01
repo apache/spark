@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{functions => F, AnalysisException}
+import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -130,9 +130,6 @@ case class Scd1BatchProcessor(
    */
   private[autocdc] def extendMicrobatchRowsWithCdcMetadata(
       validatedMicrobatch: DataFrame): DataFrame = {
-    // Proactively validate the reserved CDC metadata column does not exist in the microbatch.
-    validateCdcMetadataColumnNotPresent(validatedMicrobatch)
-
     val rowDeleteSequence: Column = changeArgs.deleteCondition match {
       case Some(deleteCondition) =>
         F.when(deleteCondition, changeArgs.sequencing).otherwise(F.lit(null))
@@ -408,25 +405,6 @@ case class Scd1BatchProcessor(
       // evolution always unions old and new schemas onto the target.
       .insert(columnsToInsertOnNewKey)
       .merge()
-  }
-
-  private def validateCdcMetadataColumnNotPresent(microbatch: DataFrame): Unit = {
-    val microbatchSqlConf = microbatch.sparkSession.sessionState.conf
-    val resolver = microbatchSqlConf.resolver
-
-    microbatch.schema.fieldNames
-      .find(resolver(_, Scd1BatchProcessor.cdcMetadataColName))
-      .foreach { conflictingColumnName =>
-        throw new AnalysisException(
-          errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
-          messageParameters = Map(
-            "caseSensitivity" -> CaseSensitivityLabels.of(microbatchSqlConf.caseSensitiveAnalysis),
-            "columnName" -> conflictingColumnName,
-            "schemaName" -> "microbatch",
-            "reservedColumnName" -> Scd1BatchProcessor.cdcMetadataColName
-          )
-        )
-      }
   }
 }
 
