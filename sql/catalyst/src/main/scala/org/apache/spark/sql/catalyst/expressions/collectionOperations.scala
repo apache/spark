@@ -2308,9 +2308,16 @@ case class ArrayJoin(
         }
       }
     } else {
+      // When array and delimiter are both non-nullable, neither nullSafeExec wrapper above runs,
+      // so reset ev.isNull here. doGenCode initializes ev.isNull to true whenever the expression
+      // is nullable (e.g. a nullable nullReplacement), and without this reset the computed result
+      // would be discarded as NULL. When the expression is non-nullable, ev.isNull is a literal
+      // false and must not be assigned.
+      val resetIsNull = if (nullable) s"${ev.isNull} = false;" else ""
       s"""
          |${arrayGen.code}
          |${delimiterGen.code}
+         |$resetIsNull
          |$resultCode""".stripMargin
     }
   }
