@@ -19790,7 +19790,8 @@ def array_remove(col: "ColumnOrName", element: Any) -> Column:
 @_try_remote_functions
 def array_distinct(col: "ColumnOrName") -> Column:
     """
-    Array function: removes duplicate values from the array.
+    Array function: removes duplicate values from the array, preserving the order of
+    first occurrence.
 
     .. versionadded:: 2.4.0
 
@@ -19970,7 +19971,7 @@ def array_insert(arr: "ColumnOrName", pos: Union["ColumnOrName", int], value: An
 def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Array function: returns a new array containing the intersection of elements in col1 and col2,
-    without duplicates.
+    without duplicates, preserving the order of elements from col1.
 
     .. versionadded:: 2.4.0
 
@@ -20063,7 +20064,7 @@ def array_intersect(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Array function: returns a new array containing the union of elements in col1 and col2,
-    without duplicates.
+    without duplicates, preserving the order from col1 followed by elements in col2 not in col1.
 
     .. versionadded:: 2.4.0
 
@@ -20156,7 +20157,7 @@ def array_union(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
 def array_except(col1: "ColumnOrName", col2: "ColumnOrName") -> Column:
     """
     Array function: returns a new array containing the elements present in col1 but not in col2,
-    without duplicates.
+    without duplicates, preserving the order of elements from col1.
 
     .. versionadded:: 2.4.0
 
