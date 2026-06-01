@@ -1013,14 +1013,15 @@ object LimitPushDown extends Rule[LogicalPlan] {
  * Attempt to convert UDFS to Catalyst expressions.
  */
 object ConvertToCatalyst extends Rule[LogicalPlan] {
-  // TODO: Can we remove?
-  val UDFTypeCoercesExpressionTypes = new resolver.UDFTypeCoercesExpressionTypes()
   def apply(plan: LogicalPlan): LogicalPlan = {
     // Short circuit if there are no Transpiled Python UDFs in the plan.
     if (!plan.containsPattern(TRANSPILED_PYTHON_UDF)) {
       return plan
     }
-    plan.mapExpressions(applyExpr(_, false))
+    plan.transformAllExpressionsWithPruning(
+      _.containsPattern(TRANSPILED_PYTHON_UDF), ruleId) {
+      case s: TranspiledPythonUDF => applyExpr(s, parent_is_udf = false)
+    }
   }
 
   def applyExpr(expression: Expression, parent_is_udf: Boolean = false): Expression = {
@@ -1056,11 +1057,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
               // Recursively apply to the children first because we may use them as inputs in parent
               val withTranspiledChildren = catalystExpr.mapChildren(
                 applyExpr(_, parent_is_udf = false))
-              // Upgrade the types here since Python duck typing means that
-              // in Python the types get automatically upgraded (e.g. 4 -> 4L or 4.0 automatically).
-              val catalystExprUpgraded = UDFTypeCoercesExpressionTypes.runCoercionTransformations(
-                withTranspiledChildren, true)
-              catalystExprUpgraded
+              withTranspiledChildren
           }
         } else {
           // We should avoid converting a UDF node where that could break pipelining.

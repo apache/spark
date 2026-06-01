@@ -21,8 +21,9 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Project}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType}
 
 /**
  * Unit tests for the ConvertToCatalyst optimizer rule, which rewrites
@@ -144,6 +145,49 @@ class ConvertToCatalystSuite extends PlanTest {
       val result = ConvertToCatalyst.applyExpr(tpudf, parent_is_udf = false)
       assert(result.isInstanceOf[PythonUDF])
       assert(!result.isInstanceOf[TranspiledPythonUDF])
+    }
+  }
+
+  test("apply(plan) reaches TranspiledPythonUDF nodes below the root") {
+    // Regression test for the traversal bug where ``plan.mapExpressions`` only
+    // walks expressions on the root plan node. With that bug, a TPUDF inside a
+    // Filter (or any non-root node) would survive the optimizer rule as an
+    // ``Unevaluable`` expression and crash at execution. The fix uses
+    // ``transformAllExpressionsWithPruning`` which descends through child
+    // plans; this test pins that contract.
+    transpileOn {
+      val attrB = $"b".long
+      val relation = LocalRelation(attrA, attrB)
+      // The TPUDF lives in the Filter's condition (boolean), not at the root.
+      val booleanTPUDF = TranspiledPythonUDF(
+        "udf",
+        PythonUDF("udf", null, BooleanType, Seq(attrA),
+          PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true),
+        List(GreaterThan(attrA, Literal(0L))))
+      val plan = Project(Seq(attrB), Filter(booleanTPUDF, relation))
+      val rewritten = ConvertToCatalyst.apply(plan)
+      // No TranspiledPythonUDF should remain anywhere in the rewritten plan.
+      val leftover = rewritten.collect {
+        case p if p.expressions.exists(_.find(_.isInstanceOf[TranspiledPythonUDF]).isDefined) =>
+          p
+      }
+      assert(leftover.isEmpty,
+        s"TranspiledPythonUDF survived ConvertToCatalyst.apply: $rewritten")
+    }
+  }
+
+  test("uses pre-coerced transpiledOptions as-is (analysis is responsible for coercion)") {
+    // The Analyzer coerces transpiledOptions before the optimizer runs, because
+    // TranspiledPythonUDF.children exposes them to the resolver's generic coercion pass.
+    // ConvertToCatalyst must not re-run coercion; it simply selects the first non-null option.
+    // This test simulates what analysis would produce for `def f(x: Long): return x + 4`
+    // where the integer literal has already been cast to LongType.
+    transpileOn {
+      val preCoerced = Add(attrA, Cast(Literal(4, IntegerType), LongType))
+      val tpudf = makeTPUDF(makePyUDF(), preCoerced)
+      val result = ConvertToCatalyst.applyExpr(tpudf, parent_is_udf = false)
+      assert(result == preCoerced,
+        s"Expected pre-coerced expression unchanged, got: $result")
     }
   }
 }
