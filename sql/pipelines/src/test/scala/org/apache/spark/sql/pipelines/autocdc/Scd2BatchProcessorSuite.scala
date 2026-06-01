@@ -129,6 +129,43 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("preprocessMicrobatch preserves byte-identical full-event duplicates") {
+    val schema = new StructType()
+      .add("id", IntegerType)
+      .add("seq", LongType)
+      .add("value", StringType)
+      .add("is_delete", BooleanType)
+
+    // Two byte-identical events for the same key: same key, same sequencing, same data, same
+    // delete flag. SCD2 preprocessing intentionally preserves every event verbatim, including
+    // full-event duplicates. Cross-event redundancy elimination (collapsing duplicates before
+    // they could reconcile to a zero-width visible row) is the responsibility of downstream
+    // reconciliation, not preprocessing.
+    val batch = microbatchOf(schema)(
+      Row(1, 10L, "alice", false),
+      Row(1, 10L, "alice", false)
+    )
+
+    val processor = Scd2BatchProcessor(
+      changeArgs = ChangeArgs(
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("seq"),
+        storedAsScdType = ScdType.Type2,
+        deleteCondition = Some(F.col("is_delete"))
+      ),
+      resolvedSequencingType = LongType
+    )
+
+    // Both rows must survive verbatim.
+    checkAnswer(
+      df = processor.preprocessMicrobatch(batch),
+      expectedAnswer = Seq(
+        Row(1, 10L, "alice", false, 10L, null, Row(10L)),
+        Row(1, 10L, "alice", false, 10L, null, Row(10L))
+      )
+    )
+  }
+
   test("preprocessMicrobatch leaves __END_AT null on every row when deleteCondition is None") {
     val schema = new StructType()
       .add("id", IntegerType)

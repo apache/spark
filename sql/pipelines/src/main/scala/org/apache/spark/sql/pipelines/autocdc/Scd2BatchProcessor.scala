@@ -41,13 +41,24 @@ case class Scd2BatchProcessor(
    *
    * Step ordering is load-bearing: the row-extension steps reference user data columns that
    * target-column selection is allowed to drop, so selection runs last. Unlike SCD1, no per-key
-   * deduplication step is needed - SCD2 preserves every event as part of the row's history.
+   * deduplication step is performed here - SCD2 preserves every event as part of the row's
+   * history, including byte-identical full-event duplicates.
    *
-   * Requires the microbatch to have been validated upstream so that the sequencing column is
-   * non-null and orderable.
+   * Duplicate event elimination (e.g., collapsing two identical events at the same sequence),
+   * whether across microbatches or within the same microbatch, is the responsibility of
+   * downstream reconciliation - not preprocessing.
+   *
+   * Produces a dataframe that retains every input row 1:1 - no rows added, dropped, reordered,
+   * or merged - with the following schema, in column order:
+   *   1. The user columns of `microbatchDf` that survive [[ChangeArgs.columnSelection]], in the
+   *      order they appeared in the input.
+   *   2. `__START_AT` column, populated with the sequence value of the row.
+   *   3. `__END_AT` column, populated with the sequence value of the row IFF it's a delete event,
+   *      null otherwise.
+   *   4. `__spark_autocdc_metadata` column.
    */
-  private[autocdc] def preprocessMicrobatch(validatedBatchDf: DataFrame): DataFrame = {
-    validatedBatchDf
+  private[autocdc] def preprocessMicrobatch(microbatchDf: DataFrame): DataFrame = {
+    microbatchDf
       .transform(extendMicrobatchRowsWithStartAt)
       .transform(extendMicrobatchRowsWithEndAt)
       .transform(extendMicrobatchRowsWithCdcMetadata)
