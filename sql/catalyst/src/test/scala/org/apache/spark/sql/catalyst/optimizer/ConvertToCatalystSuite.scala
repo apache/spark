@@ -77,7 +77,7 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("guard prevents transpilation when parent_is_udf=true and inputs are plain PythonUDFs") {
+  test("prevents transpilation when parent_is_udf=true and inputs are plain PythonUDFs") {
     // PythonUDF -> TranspiledPythonUDF -> PythonUDF: the middle node should NOT be
     // transpiled when called from an outer UDF context, to preserve the batch pipeline.
     transpileOn {
@@ -90,7 +90,7 @@ class ConvertToCatalystSuite extends PlanTest {
     }
   }
 
-  test("guard does not prevent transpilation when input to pythonUDFExpr is a TranspiledPythonUDF") {
+  test("do not prevent transpilation when input to pythonUDFExpr is a TranspiledPythonUDF") {
     // When the input to a TPUDF is itself a TranspiledPythonUDF (has a Catalyst alternative),
     // hasOnlyPythonUDFInputs returns false so the outer TPUDF still transpiles.
     transpileOn {
