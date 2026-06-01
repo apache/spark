@@ -1594,17 +1594,16 @@ case class NextDay(
   override def nullable: Boolean = true
 
   override def nullSafeEval(start: Any, dayOfW: Any): Any = {
-    try {
-      val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
-      val sd = start.asInstanceOf[Int]
-      DateTimeUtils.getNextDateForDayOfWeek(sd, dow)
-    } catch {
-      case e: SparkIllegalArgumentException =>
-        if (failOnError) {
-          throw e
-        } else {
-          null
-        }
+    if (failOnError) {
+      DateTimeExpressionUtils.getNextDateExact(
+        start.asInstanceOf[Int], dayOfW.asInstanceOf[UTF8String])
+    } else {
+      try {
+        val dow = DateTimeUtils.getDayOfWeekFromString(dayOfW.asInstanceOf[UTF8String])
+        DateTimeUtils.getNextDateForDayOfWeek(start.asInstanceOf[Int], dow)
+      } catch {
+        case _: SparkIllegalArgumentException => null
+      }
     }
   }
 
@@ -1615,19 +1614,22 @@ case class NextDay(
       dayOfWeekTerm: String,
       sd: String,
       dowS: String): String = {
-    val failOnErrorBranch = if (failOnError) {
-      "throw e;"
+    if (failOnError) {
+      // In ANSI mode the only exception (SparkIllegalArgumentException for an
+      // invalid day-of-week) must propagate, so the previous catch merely
+      // rethrew it. Delegate to the helper and drop the no-op try/catch.
+      val utils = classOf[DateTimeExpressionUtils].getName
+      s"${ev.value} = $utils.getNextDateExact($sd, $dowS);"
     } else {
-      s"${ev.isNull} = true;"
+      s"""
+       |try {
+       |  int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
+       |  ${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
+       |} catch (org.apache.spark.SparkIllegalArgumentException e) {
+       |  ${ev.isNull} = true;
+       |}
+       |""".stripMargin
     }
-    s"""
-     |try {
-     |  int $dayOfWeekTerm = $dateTimeUtilClass.getDayOfWeekFromString($dowS);
-     |  ${ev.value} = $dateTimeUtilClass.getNextDateForDayOfWeek($sd, $dayOfWeekTerm);
-     |} catch (org.apache.spark.SparkIllegalArgumentException e) {
-     |  $failOnErrorBranch
-     |}
-     |""".stripMargin
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

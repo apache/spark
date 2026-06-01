@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.TimestampFormatter;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Static helpers shared by date/time/interval expression {@code doGenCode}
@@ -164,5 +165,18 @@ public final class DateTimeExpressionUtils {
     } catch (DateTimeException | ParseException e) {
       throw QueryExecutionErrors.ansiDateTimeParseError(e, suggestedFuncOnFail);
     }
+  }
+
+  /**
+   * Computes the first date after {@code startDate} that falls on the weekday
+   * named by {@code dayOfWeek} for {@code NextDay} (next_day) in ANSI mode
+   * ({@code failOnError = true}). The {@code SparkIllegalArgumentException}
+   * thrown by {@code DateTimeUtils.getDayOfWeekFromString} for an invalid
+   * day-of-week string propagates to the caller unchanged (in ANSI mode the
+   * caller wants exactly that exception), so no try/catch wrapper is emitted.
+   */
+  public static int getNextDateExact(int startDate, UTF8String dayOfWeek) {
+    int dow = DateTimeUtils.getDayOfWeekFromString(dayOfWeek);
+    return DateTimeUtils.getNextDateForDayOfWeek(startDate, dow);
   }
 }
