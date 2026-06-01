@@ -1168,16 +1168,14 @@ case class Cast(
   private[this] def castToDouble(from: DataType): Any => Any = from match {
     case _: StringType =>
       buildCast[UTF8String](_, s => {
-        val doubleStr = s.toString
-        try doubleStr.toDouble catch {
-          case _: NumberFormatException =>
-            val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
-            if (ansiEnabled && d == null) {
-              throw QueryExecutionErrors.invalidInputInCastToNumberError(
-                DoubleType, s, getContextOrNull())
-            } else {
-              d
-            }
+        if (ansiEnabled) {
+          CastUtils.stringToDoubleExact(s, getContextOrNull())
+        } else {
+          val doubleStr = s.toString
+          try doubleStr.toDouble catch {
+            case _: NumberFormatException =>
+              Cast.processFloatingPointSpecialLiterals(doubleStr, false)
+          }
         }
       })
     case BooleanType =>
@@ -1195,16 +1193,14 @@ case class Cast(
   private[this] def castToFloat(from: DataType): Any => Any = from match {
     case _: StringType =>
       buildCast[UTF8String](_, s => {
-        val floatStr = s.toString
-        try floatStr.toFloat catch {
-          case _: NumberFormatException =>
-            val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
-            if (ansiEnabled && f == null) {
-              throw QueryExecutionErrors.invalidInputInCastToNumberError(
-                FloatType, s, getContextOrNull())
-            } else {
-              f
-            }
+        if (ansiEnabled) {
+          CastUtils.stringToFloatExact(s, getContextOrNull())
+        } else {
+          val floatStr = s.toString
+          try floatStr.toFloat catch {
+            case _: NumberFormatException =>
+              Cast.processFloatingPointSpecialLiterals(floatStr, true)
+          }
         }
       })
     case BooleanType =>
@@ -2208,28 +2204,27 @@ case class Cast(
   private[this] def castToFloatCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case _: StringType =>
-        val floatStr = ctx.freshVariable("floatStr", StringType)
         (c, evPrim, evNull) =>
-          val handleNull = if (ansiEnabled) {
+          if (ansiEnabled) {
+            val castUtils = classOf[CastUtils].getName
             val errorContext = getContextOrNullCode(ctx)
-            "throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
-              s"org.apache.spark.sql.types.FloatType$$.MODULE$$,$c, $errorContext);"
+            code"$evPrim = $castUtils.stringToFloatExact($c, $errorContext);"
           } else {
-            s"$evNull = true;"
-          }
-          code"""
-          final String $floatStr = $c.toString();
-          try {
-            $evPrim = Float.valueOf($floatStr);
-          } catch (java.lang.NumberFormatException e) {
-            final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
-            if (f == null) {
-              $handleNull
-            } else {
-              $evPrim = f.floatValue();
+            val floatStr = ctx.freshVariable("floatStr", StringType)
+            code"""
+            final String $floatStr = $c.toString();
+            try {
+              $evPrim = Float.valueOf($floatStr);
+            } catch (java.lang.NumberFormatException e) {
+              final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
+              if (f == null) {
+                $evNull = true;
+              } else {
+                $evPrim = f.floatValue();
+              }
             }
+          """
           }
-        """
       case BooleanType =>
         (c, evPrim, evNull) => code"$evPrim = $c ? 1.0f : 0.0f;"
       case DateType =>
@@ -2246,28 +2241,27 @@ case class Cast(
   private[this] def castToDoubleCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case _: StringType =>
-        val doubleStr = ctx.freshVariable("doubleStr", StringType)
         (c, evPrim, evNull) =>
-          val handleNull = if (ansiEnabled) {
+          if (ansiEnabled) {
+            val castUtils = classOf[CastUtils].getName
             val errorContext = getContextOrNullCode(ctx)
-            "throw QueryExecutionErrors.invalidInputInCastToNumberError(" +
-              s"org.apache.spark.sql.types.DoubleType$$.MODULE$$, $c, $errorContext);"
+            code"$evPrim = $castUtils.stringToDoubleExact($c, $errorContext);"
           } else {
-            s"$evNull = true;"
-          }
-          code"""
-          final String $doubleStr = $c.toString();
-          try {
-            $evPrim = Double.valueOf($doubleStr);
-          } catch (java.lang.NumberFormatException e) {
-            final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
-            if (d == null) {
-              $handleNull
-            } else {
-              $evPrim = d.doubleValue();
+            val doubleStr = ctx.freshVariable("doubleStr", StringType)
+            code"""
+            final String $doubleStr = $c.toString();
+            try {
+              $evPrim = Double.valueOf($doubleStr);
+            } catch (java.lang.NumberFormatException e) {
+              final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
+              if (d == null) {
+                $evNull = true;
+              } else {
+                $evPrim = d.doubleValue();
+              }
             }
+          """
           }
-        """
       case BooleanType =>
         (c, evPrim, evNull) => code"$evPrim = $c ? 1.0d : 0.0d;"
       case DateType =>
