@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow, ExprId, Expression, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow, Expression, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{BinBy, LogicalPlan, UnresolvedBinBy}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_BIN_BY
