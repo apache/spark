@@ -1291,24 +1291,6 @@ class QueryExecutionErrorsSuite
       parameters = Map("dataType" -> "PhysicalCalendarIntervalType"))
   }
 
-  test("SPARK-57058: ordering is unsupported for GEOMETRY and GEOGRAPHY") {
-    import org.apache.spark.sql.catalyst.types.PhysicalDataType
-    import org.apache.spark.sql.types.{GeographyType, GeometryType}
-
-    // GeometryType / GeographyType pass analysis-time orderability checks (AtomicType),
-    // so the "no ordering" contract is enforced at execution by PhysicalBinaryViewType.
-    // BinaryView.compareTo itself is unsigned-lex and intentionally unguarded so future
-    // opaque-bytes carriers can reuse it. Mirrors the SPARK-42841 pattern above.
-    Seq(GeometryType(0), GeographyType(4326)).foreach { dt =>
-      checkError(
-        exception = intercept[SparkIllegalArgumentException] {
-          PhysicalDataType.ordering(dt)
-        },
-        condition = "DATATYPE_CANNOT_ORDER",
-        parameters = Map("dataType" -> "PhysicalBinaryViewType"))
-    }
-  }
-
 }
 
 class FakeFileSystemSetPermission extends LocalFileSystem {

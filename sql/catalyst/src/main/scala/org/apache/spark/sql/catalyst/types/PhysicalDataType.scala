@@ -465,16 +465,13 @@ object UninitializedPhysicalType extends PhysicalDataType {
 // BinaryView into the row backing buffer. Today GEOMETRY and GEOGRAPHY share this physical
 // type; future opaque-bytes logical types can plug into it as well.
 //
-// Ordering is intentionally unsupported: BinaryView has a meaningful unsigned lexicographic
-// compareTo, but the opaque-bytes logical types that map to this physical type (GEOMETRY,
-// GEOGRAPHY) do not have a defined ORDER BY semantics. Preserving the prior behavior
-// (GeometryVal / GeographyVal both threw UnsupportedOperationException from compareTo) keeps
-// `ORDER BY <geom_col>` failing at execution time with a clear error rather than silently
-// producing a byte-order result.
+// The physical type defines the natural ordering of its storage: BinaryView has a meaningful
+// unsigned lexicographic compareTo, so we expose it here. Whether a logical type backed by this
+// physical type can actually be ordered is a separate, logical-level decision made by
+// `OrderUtils.isOrderable`, which rejects GEOMETRY / GEOGRAPHY so `ORDER BY <geo_col>` fails at
+// analysis time rather than silently producing a byte-order result.
 class PhysicalBinaryViewType extends PhysicalDataType {
-  override private[sql] def ordering =
-    throw QueryExecutionErrors.orderedOperationUnsupportedByDataTypeError(
-      "PhysicalBinaryViewType")
+  private[sql] val ordering = (x: BinaryView, y: BinaryView) => x.compareTo(y)
   private[sql] type InternalType = BinaryView
   @transient private[sql] lazy val tag = typeTag[InternalType]
 }

@@ -189,23 +189,22 @@ class GeographyDataFrameSuite extends SharedSparkSession {
     checkAnswer(df, Seq(Row(expectedGeog)))
   }
 
-  test("SPARK-57058: ORDER BY on a Geography column fails with DATATYPE_CANNOT_ORDER") {
+  test("SPARK-57058: ORDER BY on a Geography column fails with INVALID_ORDERING_TYPE") {
     val rdd = sparkContext.parallelize(Seq(
       Row(Geography.fromWKB(point1, 4326)),
       Row(Geography.fromWKB(point2, 4326))))
     val schema = StructType(Seq(StructField("g", GeographyType(4326), nullable = false)))
     spark.createDataFrame(rdd, schema).createOrReplaceTempView("geog_t")
-    val ex = intercept[Exception] {
-      spark.sql("SELECT g FROM geog_t ORDER BY g").collect()
-    }
-    val cause = Iterator.iterate[Throwable](ex)(_.getCause).takeWhile(_ != null)
-      .collectFirst { case e: SparkIllegalArgumentException => e }
-    assert(cause.isDefined,
-      s"expected SparkIllegalArgumentException in cause chain, got: $ex")
     checkError(
-      exception = cause.get,
-      condition = "DATATYPE_CANNOT_ORDER",
-      parameters = Map("dataType" -> "PhysicalBinaryViewType"))
+      exception = intercept[AnalysisException] {
+        spark.sql("SELECT g FROM geog_t ORDER BY g").collect()
+      },
+      condition = "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE",
+      parameters = Map(
+        "functionName" -> "`sortorder`",
+        "dataType" -> "\"GEOGRAPHY(4326)\"",
+        "sqlExpr" -> "\"g ASC NULLS FIRST\""),
+      queryContext = Array(ExpectedContext("g", 30, 30)))
   }
 
   test("geospatial feature disabled") {
