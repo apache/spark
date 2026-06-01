@@ -192,9 +192,7 @@ public final class Geometry implements Geo {
     // getWrapper()) returns a throwaway copy and the write would be silently lost, so fail
     // loudly and direct the caller to copy() first.
     if (!value.hasTightOnHeapArray()) {
-      throw new IllegalStateException(
-        "setSrid requires a Geometry that owns its backing buffer; call copy() before mutating "
-          + "a value read directly from an UnsafeRow / ColumnVector buffer.");
+      throw QueryExecutionErrors.cannotMutateReadOnlyGeoValueError();
     }
     getWrapper().putInt(SRID_OFFSET, srid);
   }

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.SparkIllegalArgumentException;
+import org.apache.spark.SparkRuntimeException;
 import org.apache.spark.unsafe.types.BinaryView;
 import org.junit.jupiter.api.Test;
 
@@ -269,7 +270,9 @@ class GeographyExecutionSuite {
       BinaryView.fromBytes(padded, 4, testGeographyVal.length));
     // Reads still work (they copy out), and the original SRID is intact.
     assertEquals(4326, geography.srid());
-    assertThrows(IllegalStateException.class, () -> geography.setSrid(4269));
+    SparkRuntimeException e = assertThrows(
+      SparkRuntimeException.class, () -> geography.setSrid(4269));
+    assertEquals("INTERNAL_ERROR", e.getCondition());
     // After copy() the value owns a tight array, so setSrid succeeds and writes through.
     Geography owned = geography.copy();
     owned.setSrid(4269);
