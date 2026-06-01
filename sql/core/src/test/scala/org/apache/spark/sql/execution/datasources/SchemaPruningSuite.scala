@@ -544,6 +544,25 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
+  testSchemaPruning("select nested field returned by array functions under null checks") {
+    val expressions = Seq(
+      org.apache.spark.sql.functions.filter(
+        col("friends"), friend => friend.getField("last") === "Smith")
+        .getField("first").isNotNull,
+      array_sort(col("friends"), (left, right) =>
+        when(left.getField("last") < right.getField("last"), -1)
+          .when(left.getField("last") > right.getField("last"), 1)
+          .otherwise(0)).getField("first").isNull)
+
+    expressions.foreach { expression =>
+      val query = spark.table("contacts")
+        .where("p = 1")
+        .select(expression)
+
+      checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+    }
+  }
+
   testSchemaPruning("select nested field returned by ArraySort") {
     val query = spark.table("contacts")
       .where("p = 1")

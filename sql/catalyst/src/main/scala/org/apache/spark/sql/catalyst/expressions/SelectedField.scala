@@ -174,7 +174,15 @@ object SelectedField {
       case Slice(x, start, length) if start.foldable && length.foldable =>
         selectField(x, dataTypeOpt)
       case KnownNotContainsNull(child) =>
-        selectField(child, dataTypeOpt)
+        val ArrayType(_, containsNull) = child.dataType
+        val opt = dataTypeOpt.map {
+          case ArrayType(dataType, _) => ArrayType(dataType, containsNull)
+          case x =>
+            // This should not happen.
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(
+              x, "KnownNotContainsNull")
+        }
+        selectField(child, opt)
       case _ =>
         None
     }

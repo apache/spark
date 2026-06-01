@@ -156,9 +156,11 @@ object SchemaPruning extends SQLConfHelper {
       // don't actually use any nested fields. These root field accesses might be excluded later
       // if there are any nested fields accesses in the query plan.
       case IsNotNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
+        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
+          getArrayReturningHigherOrderFunctionRootFields(expr)
       case IsNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
+        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
+          getArrayReturningHigherOrderFunctionRootFields(expr)
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
       case s: SubqueryExpression =>

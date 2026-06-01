@@ -280,4 +280,30 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
         StructField("event", eventType, nullable = true),
         derivedFromAtt = false)))
   }
+
+  test("retain input array nullability when pruning through KnownNotContainsNull") {
+    val elementType = StructType.fromDDL("a int, b int")
+    val eventType = StructType(Seq(
+      StructField("rules", ArrayType(elementType, containsNull = true))))
+    val event = AttributeReference("event", eventType)()
+    val element = NamedLambdaVariable("x", elementType, nullable = true)
+    val compacted = KnownNotContainsNull(ArrayFilter(
+      GetStructField(event, 0, Some("rules")),
+      LambdaFunction(IsNotNull(element), Seq(element))))
+    val selected = GetArrayStructFields(
+      compacted,
+      elementType(0),
+      ordinal = 0,
+      numFields = elementType.length,
+      containsNull = false)
+
+    val rootFields = SchemaPruning.getRootFields(selected)
+    val prunedSchema = SchemaPruning.pruneSchema(
+      StructType(Seq(StructField("event", eventType))),
+      rootFields)
+    val prunedEventType = prunedSchema("event").dataType.asInstanceOf[StructType]
+
+    assert(prunedEventType("rules").dataType ===
+      ArrayType(StructType.fromDDL("a int"), containsNull = true))
+  }
 }
