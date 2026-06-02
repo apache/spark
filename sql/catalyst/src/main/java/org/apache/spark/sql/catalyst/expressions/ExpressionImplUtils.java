@@ -354,4 +354,19 @@ public class ExpressionImplUtils {
     checksum.update(bytes, 0, bytes.length);
     return checksum.getValue();
   }
+
+  /**
+   * Returns the numeric value of the first character of the input string, or 0 if it is empty.
+   * Shared by the Ascii expression's eval and codegen paths so the generated Java is a single
+   * call rather than an inline substring/if-else block.
+   */
+  public static int ascii(UTF8String str) {
+    // only pick the first character to reduce the `toString` cost
+    UTF8String firstCharStr = str.substring(0, 1);
+    if (firstCharStr.numChars() > 0) {
+      return firstCharStr.toString().codePointAt(0);
+    } else {
+      return 0;
+    }
+  }
 }
