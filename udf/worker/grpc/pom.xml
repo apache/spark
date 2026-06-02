@@ -41,8 +41,19 @@
     Home for the gRPC-based UDF worker transport. The gRPC service stubs are
     generated here (from the proto module's service definitions) and the gRPC
     runtime is confined to this module, so spark-udf-worker-proto / -core and
-    their consumers (core, catalyst, sql/core) stay free of any gRPC / protobuf
-    transitive dependency.
+    their consumers (core, catalyst, sql/core) stay free of any gRPC
+    transitive dependency. (protobuf-java remains a transitive dependency of
+    those modules via the proto messages, as it was before; only gRPC is
+    removed from their classpath.)
+
+    Note: gRPC is kept off every shared classpath by the dependency graph
+    alone -- nothing on the runtime/assembly classpath depends on this module
+    yet. The gRPC runtime here is NOT shaded. Once the gRPC transport is wired
+    up and a runtime module depends on this one, the io.grpc / protobuf
+    classes should be relocated (mirroring the
+    org.sparkproject.spark_udf_worker.protobuf relocation in the proto module)
+    to avoid version clashes with Spark Connect's gRPC. That shading is
+    deferred to a follow-up.
   -->
   <dependencies>
     <dependency>
