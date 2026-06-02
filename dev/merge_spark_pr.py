@@ -433,7 +433,7 @@ def run_cmd(cmd):
 
 
 def continue_maybe(prompt, cherry=False):
-    if get_input(f"{prompt} (y/N): ", {"y": "y", "N": ["N", ""]}) != "y":
+    if get_input(f"{prompt} (y/N): ", ["y", "n", ""]) != "y":
         if cherry:
             try:
                 run_cmd("git cherry-pick --abort")
@@ -664,12 +664,7 @@ def get_jira_issue(prompt, default_jira_id=""):
         if status == "Resolved" or status == "Closed":
             print("JIRA issue %s already has status '%s'" % (jira_id, status))
             return None
-        if (
-            get_input(
-                "Check if the JIRA information is as expected (y/N): ", {"y": "y", "N": ["N", ""]}
-            )
-            == "y"
-        ):
+        if get_input("Check if the JIRA information is as expected (y/N): ", ["y", "n", ""]) == "y":
             return issue
         else:
             return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
@@ -1237,12 +1232,7 @@ def main():
         print(modified_body)
         print("=" * 80)
         print("I've removed the comments from PR template like the above:")
-        if (
-            get_input(
-                "Would you like to use the modified body? (y/N): ", {"y": "y", "N": ["N", ""]}
-            )
-            == "y"
-        ):
+        if get_input("Would you like to use the modified body? (y/N): ", ["y", "n", ""]) == "y":
             body = modified_body
             print("Using modified body:")
         else:
@@ -1368,7 +1358,7 @@ def main():
     # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
     remaining_branches = [b for b in branch_names if b != target_ref]
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
-    while get_input(f"\n{pick_prompt} (y/N): ", {"y": "y", "N": ["N", ""]}) == "y":
+    while get_input(f"\n{pick_prompt} (y/N): ", ["y", "n", ""]) == "y":
         default = remaining_branches[0] if remaining_branches else branch_names[0]
         picked = cherry_pick(
             pr_num,
