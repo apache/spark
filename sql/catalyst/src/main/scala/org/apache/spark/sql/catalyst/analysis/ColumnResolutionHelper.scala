@@ -182,7 +182,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           if (newChild.resolved) {
             // applyOrNull propagates NULL when the base is NullType instead of throwing
             // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
-            ExtractValue.applyOrNull(child = newChild, extraction = resolvedField, resolver = resolver)
+            ExtractValue.applyOrNull(
+              child = newChild, extraction = resolvedField, resolver = resolver)
           } else {
             u.copy(child = newChild, extraction = resolvedField)
           }
