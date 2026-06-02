@@ -79,6 +79,14 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(NaNvl(Literal.create(null, DoubleType), Literal(Double.NaN)), null)
     checkEvaluation(NaNvl(Literal(Double.NaN), Literal(5.0)), 5.0)
     checkEvaluation(NaNvl(Literal(Double.NaN), Literal.create(null, DoubleType)), null)
+    // Both children nullable: exercises the codegen path that keeps both null-check
+    // branches (each literal case above has a non-nullable child and takes a skip path).
+    val d0 = BoundReference(0, DoubleType, nullable = true)
+    val d1 = BoundReference(1, DoubleType, nullable = true)
+    checkEvaluation(NaNvl(d0, d1), 3.0, create_row(3.0, 5.0))
+    checkEvaluation(NaNvl(d0, d1), 5.0, create_row(Double.NaN, 5.0))
+    checkEvaluation(NaNvl(d0, d1), null, create_row(null, 5.0))
+    checkEvaluation(NaNvl(d0, d1), null, create_row(Double.NaN, null))
     assert(NaNvl(Literal(Double.NaN), Literal(Double.NaN)).
       eval(EmptyRow).asInstanceOf[Double].isNaN)
   }

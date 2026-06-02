@@ -384,24 +384,42 @@ case class NaNvl(left: Expression, right: Expression)
     val rightGen = right.genCode(ctx)
     left.dataType match {
       case DoubleType | FloatType =>
+        // Fall back to the right child when the left child is NaN. The null check
+        // is dropped for a non-nullable child, whose isNull is statically false.
+        val useRight = if (right.nullable) {
+          code"""
+            ${rightGen.code}
+            if (${rightGen.isNull}) {
+              ${ev.isNull} = true;
+            } else {
+              ${ev.value} = ${rightGen.value};
+            }"""
+        } else {
+          code"""
+            ${rightGen.code}
+            ${ev.value} = ${rightGen.value};"""
+        }
+        val notNaN = code"""
+          if (!Double.isNaN(${leftGen.value})) {
+            ${ev.value} = ${leftGen.value};
+          } else {
+            $useRight
+          }"""
+        val computeValue = if (left.nullable) {
+          code"""
+            if (${leftGen.isNull}) {
+              ${ev.isNull} = true;
+            } else {
+              $notNaN
+            }"""
+        } else {
+          notNaN
+        }
         ev.copy(code = code"""
           ${leftGen.code}
           boolean ${ev.isNull} = false;
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-          if (${leftGen.isNull}) {
-            ${ev.isNull} = true;
-          } else {
-            if (!Double.isNaN(${leftGen.value})) {
-              ${ev.value} = ${leftGen.value};
-            } else {
-              ${rightGen.code}
-              if (${rightGen.isNull}) {
-                ${ev.isNull} = true;
-              } else {
-                ${ev.value} = ${rightGen.value};
-              }
-            }
-          }""")
+          $computeValue""")
     }
   }
 
