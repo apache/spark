@@ -173,13 +173,15 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("format and toSQLValue throw an internal error (formatting not yet implemented)") {
+  test("format and toSQLValue follow the legacy CAST-to-string behavior") {
     allCases.foreach { case (dt, _, value) =>
       val ops = TypeApiOps(dt).get
-      val fe = intercept[org.apache.spark.SparkException](ops.format(value))
-      assert(fe.getMessage.contains("not yet implemented"))
-      val te = intercept[org.apache.spark.SparkException](ops.toSQLValue(value))
-      assert(te.getMessage.contains("not yet implemented"))
+      assert(ops.format(value) === value.toString, s"format for $dt")
+      val prefix = dt match {
+        case _: TimestampNTZNanosType => "TIMESTAMP_NTZ"
+        case _: TimestampLTZNanosType => "TIMESTAMP_LTZ"
+      }
+      assert(ops.toSQLValue(value) === s"$prefix '${value.toString}'", s"toSQLValue for $dt")
     }
   }
 
