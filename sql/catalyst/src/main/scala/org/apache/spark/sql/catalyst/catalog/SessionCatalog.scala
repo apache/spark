@@ -61,6 +61,13 @@ object SessionCatalog {
   val DEFAULT_DATABASE = "default"
 
   /**
+   * Metadata key marking an Alias / Attribute as originating from a SQL UDF input parameter.
+   * Consumed by name resolution: a parameterless built-in function takes precedence over a
+   * tagged alias of the same name.
+   */
+  val SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY: String = "__funcInputAlias"
+
+  /**
    * Kind of session-scoped function namespace for lookup/resolve.
    * Used by the kind-based API to avoid separate methods per
    * (builtin/temp) x (lookup/resolve) x (scalar/table).
@@ -1880,11 +1887,6 @@ class SessionCatalog(
       name: String,
       function: SQLFunction,
       input: Seq[Expression]): LogicalPlan = {
-    def metaForFuncInputAlias = {
-      new MetadataBuilder()
-        .putString("__funcInputAlias", "true")
-        .build()
-    }
     assert(!function.isTableFunc,
       "Function '" + function.name + "' is a table function. " +
       "Use makeSQLTableFunctionPlan() instead of makeSQLFunctionPlan().")
@@ -1941,6 +1943,9 @@ class SessionCatalog(
             }
           }
 
+        val funcInputMetadata = new MetadataBuilder()
+          .putBoolean(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY, true)
+          .build()
         paddedInput.zip(param.fields).map {
           case (expr, param) =>
             // Add outer references to all resolved attributes and outer references in the function
@@ -1950,10 +1955,11 @@ class SessionCatalog(
               case a: Attribute if a.resolved => OuterReference(a)
               case o: OuterReference => OuterReference(o)
             }
+            // Mark the alias as function input so name resolution can give a parameterless
+            // built-in function precedence over a same-named UDF parameter.
             Alias(Cast(outer, param.dataType), param.name)(
               qualifier = qualifier,
-              // mark the alias as function input
-              explicitMetadata = Some(metaForFuncInputAlias))
+              explicitMetadata = Some(funcInputMetadata))
         }
       }.getOrElse(Nil)
 
@@ -2046,6 +2052,10 @@ class SessionCatalog(
           val outer = expr.transform {
             case a: Attribute => OuterReference(a)
           }
+          // No SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY marker here: a table UDF body references
+          // its parameter as an outer reference (the param lives in the lateral join's left
+          // child), so resolveColumnByName returns None and a parameterless built-in function
+          // already wins via the pre-existing "function beats outer reference" precedence.
           Alias(Cast(outer, param.dataType), param.name)(qualifier = qualifier)
       }
       val inputPlan = Project(inputCast, OneRowRelation())
