@@ -278,6 +278,12 @@
     ],
     "sqlState" : "42804"
   },
+  "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN" : {
+    "message" : [
+      "BIN BY requires a top-level column, but <columnName> is a nested or computed field. Alias it to a top-level column in a select before BIN BY."
+    ],
+    "sqlState" : "42K09"
+  },
   "CALL_ON_STREAMING_DATASET_UNSUPPORTED" : {
     "message" : [
       "The method <methodName> can not be called on streaming Dataset/DataFrame."

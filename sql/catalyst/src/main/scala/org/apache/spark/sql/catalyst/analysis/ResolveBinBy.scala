@@ -150,7 +150,7 @@ object ResolveBinBy extends Rule[LogicalPlan] {
         case Some(_) =>
           // Resolved to a NamedExpression that is not a top-level Attribute (e.g.,
           // `RANGE struct_col.field TO ...` resolves to an Alias wrapping GetStructField).
-          throw QueryCompilationErrors.binByColumnNotFoundError(u.name)
+          throw QueryCompilationErrors.binByRequiresTopLevelColumnError(u.name)
         case None => throw QueryCompilationErrors.binByColumnNotFoundError(u.name)
       }
     case a: Attribute => a
