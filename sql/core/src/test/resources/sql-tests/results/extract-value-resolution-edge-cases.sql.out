@@ -50,7 +50,7 @@ NULL
 -- !query
 SELECT col[0] FROM (SELECT null AS col) t
 -- !query schema
-struct<NULL:void>
+struct<col[0]:void>
 -- !query output
 NULL
 
@@ -58,6 +58,6 @@ NULL
 -- !query
 SELECT col['key'] FROM (SELECT null AS col) t
 -- !query schema
-struct<NULL:void>
+struct<col[key]:void>
 -- !query output
 NULL

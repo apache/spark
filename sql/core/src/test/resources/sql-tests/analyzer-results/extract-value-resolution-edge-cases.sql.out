@@ -52,7 +52,7 @@ Project [null AS a#x]
 -- !query
 SELECT col[0] FROM (SELECT null AS col) t
 -- !query analysis
-Project [null AS NULL#x]
+Project [null AS col[0]#x]
 +- SubqueryAlias t
    +- Project [null AS col#x]
       +- OneRowRelation
@@ -61,7 +61,7 @@ Project [null AS NULL#x]
 -- !query
 SELECT col['key'] FROM (SELECT null AS col) t
 -- !query analysis
-Project [null AS NULL#x]
+Project [null AS col[key]#x]
 +- SubqueryAlias t
    +- Project [null AS col#x]
       +- OneRowRelation
