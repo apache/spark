@@ -329,7 +329,7 @@ def get_input(prompt, options, bold=True, ignore_case=True):
     Args:
         prompt: The prompt to display to the user.
         options:
-            * A dictionary of option: accepted answer to choose from.
+            * A dictionary of "option: accepted answer" to choose from.
             * A list of options.
             * A regex pattern.
         bold: Whether to use bold formatting for the prompt.
@@ -345,14 +345,12 @@ def get_input(prompt, options, bold=True, ignore_case=True):
 
     # Normalize options
     if isinstance(options, (list, tuple)):
-        options = {option: option for option in options}
+        options = {option: [option] for option in options}
 
     if isinstance(options, dict):
         for option, acceptable_answer in options.items():
-            if isinstance(acceptable_answer, str):
-                options[option] = [acceptable_answer]
             if ignore_case:
-                options[option] = [answer.lower() for answer in options[option]]
+                options[option] = [answer.lower() for answer in acceptable_answer]
 
     while True:
         if bold:
