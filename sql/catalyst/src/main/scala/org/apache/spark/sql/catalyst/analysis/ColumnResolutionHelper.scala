@@ -28,9 +28,9 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.NullType
 
