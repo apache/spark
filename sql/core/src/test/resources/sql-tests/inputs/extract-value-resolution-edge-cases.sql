@@ -9,11 +9,12 @@ SELECT split(col1, '-')[1] AS a FROM VALUES('a-b') ORDER BY split(col1, '-')[1];
 
 DROP TABLE t1;
 
--- SPARK-57186: dotted multipart field access on a NullType base returns NULL instead of throwing
--- INVALID_EXTRACT_BASE_FIELD_TYPE (NULL propagation; a NullType column can arise e.g. from schema
--- evolution with missing columns). The fix is scoped to multipart name resolution (`col.a`); the
--- `col['key']` and `col[0]` forms go through UnresolvedExtractValue and still throw, so the
--- shared ExtractValue utility and the single-pass resolver are unaffected.
+-- SPARK-57186: extracting a field/element/key from a NullType base returns NULL instead of
+-- throwing INVALID_EXTRACT_BASE_FIELD_TYPE (SQL NULL propagation; a NullType column can arise e.g.
+-- from schema evolution with missing columns). This applies uniformly to dotted field access
+-- (`col.a`) and the subscript forms (`col[0]`, `col['key']`), and is implemented at the
+-- user-facing resolution sites (ExtractValue.applyOrNull) without changing the shared
+-- ExtractValue.extractValue utility.
 SELECT col.a FROM (SELECT null AS col) t;
 SELECT col[0] FROM (SELECT null AS col) t;
 SELECT col['key'] FROM (SELECT null AS col) t;

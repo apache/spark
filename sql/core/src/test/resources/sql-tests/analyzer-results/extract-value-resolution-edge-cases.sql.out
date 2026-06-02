@@ -52,26 +52,16 @@ Project [null AS a#x]
 -- !query
 SELECT col[0] FROM (SELECT null AS col) t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "base" : "\"col\"",
-    "other" : "\"VOID\""
-  }
-}
+Project [null AS NULL#x]
++- SubqueryAlias t
+   +- Project [null AS col#x]
+      +- OneRowRelation
 
 
 -- !query
 SELECT col['key'] FROM (SELECT null AS col) t
 -- !query analysis
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "base" : "\"col\"",
-    "other" : "\"VOID\""
-  }
-}
+Project [null AS NULL#x]
++- SubqueryAlias t
+   +- Project [null AS col#x]
+      +- OneRowRelation

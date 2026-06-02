@@ -50,30 +50,14 @@ NULL
 -- !query
 SELECT col[0] FROM (SELECT null AS col) t
 -- !query schema
-struct<>
+struct<NULL:void>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "base" : "\"col\"",
-    "other" : "\"VOID\""
-  }
-}
+NULL
 
 
 -- !query
 SELECT col['key'] FROM (SELECT null AS col) t
 -- !query schema
-struct<>
+struct<NULL:void>
 -- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
-  "sqlState" : "42000",
-  "messageParameters" : {
-    "base" : "\"col\"",
-    "other" : "\"VOID\""
-  }
-}
+NULL
