@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, Literal}
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -253,5 +254,22 @@ class ResolveBinBySuite extends AnalysisTest {
     assertAnalysisSuccess(unresolved())
     assertAnalysisSuccess(
       unresolved(aliases = BinByOutputAliases(Some("ws"), Some("we"), Some("frac"))))
+  }
+
+  test("self-join over a shared BinBy subtree is deduplicated") {
+    // Reference the same resolved BinBy subtree on both sides of a join: the appended
+    // bin_start/bin_end/bin_distribute_ratio attributes start with identical exprIds.
+    val binBy = ResolveBinBy.apply(unresolved()).asInstanceOf[BinBy]
+    val selfJoin = Join(binBy, binBy, Inner, None, JoinHint.NONE)
+
+    // DeduplicateRelations must renew the right side's appended attributes; without the
+    // BinBy cases in both dedup phases the conflicting exprIds make analysis fail.
+    val analyzed = getAnalyzer.executeAndCheck(selfJoin, new QueryPlanningTracker)
+
+    val binBys = analyzed.collect { case b: BinBy => b }
+    assert(binBys.size == 2, s"expected two BinBy nodes, got ${binBys.size}")
+    val appendedExprIds = binBys.flatMap(_.appendedAttributes.map(_.exprId))
+    assert(appendedExprIds.distinct.size == appendedExprIds.size,
+      "appended BinBy attributes must have distinct exprIds across the two join sides")
   }
 }
