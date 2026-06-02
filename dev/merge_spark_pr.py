@@ -322,6 +322,63 @@ def bold_input(prompt) -> str:
     return input("\033[1m%s\033[0m" % prompt)
 
 
+def get_input(prompt, options, bold=True, ignore_case=True):
+    """
+    Get input from the user until a valid answer is provided.
+
+    Args:
+        prompt: The prompt to display to the user.
+        options:
+            * A dictionary of option: accepted answer to choose from.
+            * A list of options.
+            * A regex pattern.
+        bold: Whether to use bold formatting for the prompt.
+        ignore_case: Whether to ignore case when comparing the answer to the options.
+
+    Returns:
+        If options is provided - the valid answer from the user.
+        If regex is provided
+            * If no group is specified - the whole matched string.
+            * If one group is specified - the first group.
+            * If multiple groups are specified - a tuple of the groups.
+    """
+
+    # Normalize options
+    if isinstance(options, (list, tuple)):
+        options = {option: option for option in options}
+
+    if isinstance(options, dict):
+        for option, acceptable_answer in options.items():
+            if isinstance(acceptable_answer, str):
+                options[option] = [acceptable_answer]
+            if ignore_case:
+                options[option] = [answer.lower() for answer in options[option]]
+
+    while True:
+        if bold:
+            answer = bold_input(prompt)
+        else:
+            answer = input(prompt)
+
+        answer = answer.strip()
+        if ignore_case:
+            answer = answer.lower()
+
+        if isinstance(options, str):
+            if (m := re.match(options, answer)) is not None:
+                groups = m.groups()
+                if len(groups) == 0:
+                    return m.group(0)
+                if len(groups) == 1:
+                    return groups[0]
+                else:
+                    return groups
+        else:
+            for option, acceptable_answer in options.items():
+                if answer in acceptable_answer:
+                    return option
+
+
 def get_json(url):
     try:
         request = Request(url)
@@ -376,8 +433,7 @@ def run_cmd(cmd):
 
 
 def continue_maybe(prompt, cherry=False):
-    result = bold_input("%s (y/N): " % prompt)
-    if result.lower() != "y":
+    if get_input(f"{prompt} (y/N): ", {"y": "y", "N": ["N", ""]}) != "y":
         if cherry:
             try:
                 run_cmd("git cherry-pick --abort")
@@ -560,21 +616,17 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
         )
         print("Otherwise, pick both (%s first, then %s)." % (sibling_x, pick_ref))
         print("=" * 80)
-        choice = (
-            bold_input(
-                "Pick into [b]oth %s + %s / [o]nly %s / [a]bort (default: both): "
-                % (sibling_x, pick_ref, pick_ref)
-            )
-            .strip()
-            .lower()
+        choice = get_input(
+            f"Pick into [b]oth {sibling_x} + {pick_ref} / [o]nly {pick_ref} / [a]bort (default: both): ",
+            {"b": ["b", "both", ""], "o": ["o", "only"], "a": ["a", "abort"]},
         )
-        if choice in ("", "b", "both"):
+        if choice == "b":
             picked_x = _do_cherry_pick(pr_num, merge_hash, sibling_x)
             picked_n = _do_cherry_pick(pr_num, merge_hash, pick_ref)
             return [picked_x, picked_n]
-        elif choice in ("o", "only"):
+        elif choice == "o":
             return [_do_cherry_pick(pr_num, merge_hash, pick_ref)]
-        elif choice in ("a", "abort"):
+        elif choice == "a":
             fail("Aborted by user at Upstream-First policy prompt.")
         else:
             fail("Unrecognized choice %r; aborting." % choice)
@@ -612,7 +664,12 @@ def get_jira_issue(prompt, default_jira_id=""):
         if status == "Resolved" or status == "Closed":
             print("JIRA issue %s already has status '%s'" % (jira_id, status))
             return None
-        if bold_input("Check if the JIRA information is as expected (y/N): ").lower() == "y":
+        if (
+            get_input(
+                "Check if the JIRA information is as expected (y/N): ", {"y": "y", "N": ["N", ""]}
+            )
+            == "y"
+        ):
             return issue
         else:
             return get_jira_issue("Enter the revised JIRA ID again or leave blank to skip")
@@ -1106,7 +1163,7 @@ def main():
     branch_names = sorted(branch_names, key=semver_branch_rank, reverse=True)
 
     if len(sys.argv) == 1:
-        pr_num = bold_input("Which pull request would you like to merge? (e.g. 34): ")
+        pr_num = get_input("Which pull request would you like to merge? (e.g. 34): ", r"^\d+$")
     else:
         pr_num = sys.argv[1]
         print("Start to merge pull request #%s" % (pr_num))
@@ -1180,8 +1237,12 @@ def main():
         print(modified_body)
         print("=" * 80)
         print("I've removed the comments from PR template like the above:")
-        result = bold_input("Would you like to use the modified body? (y/N): ")
-        if result.lower() == "y":
+        if (
+            get_input(
+                "Would you like to use the modified body? (y/N): ", {"y": "y", "N": ["N", ""]}
+            )
+            == "y"
+        ):
             body = modified_body
             print("Using modified body:")
         else:
@@ -1307,7 +1368,7 @@ def main():
     # target_ref (the merge sink, never to be re-picked) and grows with every cherry-pick.
     remaining_branches = [b for b in branch_names if b != target_ref]
     pick_prompt = "Would you like to pick %s into another branch?" % merge_hash
-    while bold_input("\n%s (y/N): " % pick_prompt).lower() == "y":
+    while get_input(f"\n{pick_prompt} (y/N): ", {"y": "y", "N": ["N", ""]}) == "y":
         default = remaining_branches[0] if remaining_branches else branch_names[0]
         picked = cherry_pick(
             pr_num,
