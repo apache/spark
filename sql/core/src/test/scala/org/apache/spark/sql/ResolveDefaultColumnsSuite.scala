@@ -18,7 +18,13 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -307,5 +313,115 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
       sql(s"INSERT INTO $tableName (i) VALUES ((0))")
       checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(0, user)))
     }
+  }
+
+  test("SPARK-57187: current_user() as default for CHAR column should not throw INTERNAL_ERROR") {
+    val tableName = "test_current_user_char"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s CHAR(100) DEFAULT current_user()) USING parquet")
+      sql(s"INSERT INTO $tableName (i) VALUES (1)")
+      val result = sql(s"SELECT i, TRIM(s) FROM $tableName").collect()
+      assert(result.length == 1)
+      assert(result.head.getInt(0) == 1)
+      assert(result.head.getString(1) == user)
+    }
+  }
+
+  test("SPARK-57187: current_user() as default for VARCHAR column") {
+    val tableName = "test_current_user_varchar"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(i int, s VARCHAR(100) DEFAULT current_user()) USING parquet")
+      sql(s"INSERT INTO $tableName (i) VALUES (1)")
+      checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row(1, user)))
+    }
+  }
+
+  test("SPARK-57187: ALTER TABLE with current_user() default for CHAR column") {
+    val tableName = "test_current_user_char_alter"
+    val user = spark.sparkContext.sparkUser
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(id INT, created_by CHAR(100)) USING parquet")
+      sql(s"ALTER TABLE $tableName ALTER COLUMN created_by SET DEFAULT current_user()")
+      sql(s"INSERT INTO $tableName (id) VALUES (1)")
+      val result = sql(s"SELECT id, TRIM(created_by) FROM $tableName").collect()
+      assert(result.length == 1)
+      assert(result.head.getInt(0) == 1)
+      assert(result.head.getString(1) == user)
+    }
+  }
+
+  test("SPARK-57187: foldable default exceeding CHAR/VARCHAR length fails at DDL time") {
+    // Foldable expressions are still validated eagerly at DDL time (existing behavior)
+    Seq("CHAR", "VARCHAR").foreach { typeName =>
+      checkError(
+        exception = intercept[SparkRuntimeException](
+          sql(s"CREATE TABLE t(c $typeName(3) DEFAULT 'toolong') USING parquet")),
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+    }
+  }
+
+  test("SPARK-57187: non-foldable default exceeding CHAR/VARCHAR length fails at INSERT time " +
+      "(implicit default)") {
+    // current_user() exceeds CHAR(1)/VARCHAR(1) -- DDL succeeds because the expression is
+    // non-foldable, but INSERT should fail at runtime with EXCEED_LIMIT_LENGTH.
+    Seq("CHAR", "VARCHAR").foreach { typeName =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(i INT, s $typeName(1) DEFAULT current_user()) USING parquet")
+        checkError(
+          exception = intercept[SparkRuntimeException](
+            sql("INSERT INTO t (i) VALUES (1)")),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "1"))
+      }
+    }
+  }
+
+  test("SPARK-57187: non-foldable default exceeding CHAR/VARCHAR length fails at INSERT time " +
+      "(explicit DEFAULT keyword)") {
+    // Using the explicit DEFAULT keyword in VALUES goes through the checkField path.
+    Seq("CHAR", "VARCHAR").foreach { typeName =>
+      withTable("t") {
+        sql(s"CREATE TABLE t(i INT, s $typeName(1) DEFAULT current_user()) USING parquet")
+        checkError(
+          exception = intercept[SparkRuntimeException](
+            sql("INSERT INTO t VALUES (1, DEFAULT)")),
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "1"))
+      }
+    }
+  }
+
+  test("SPARK-57187: by-position default fill applies the CHAR/VARCHAR length check") {
+    // The by-position fill path (resolveColumnsByPosition under RECURSE / V2 schema evolution)
+    // shares the same applyDefaultWithLengthCheck helper as the by-name path. This drives that
+    // path directly and asserts the trailing default column is wrapped with the write-side
+    // length check, so an oversized non-foldable default is caught at runtime there too.
+    // Expected schema: (i INT, s CHAR(100) DEFAULT current_user()). CHAR is stored as StringType
+    // plus the raw-type metadata, exactly as the catalog represents it. CHAR(100) is wide enough
+    // that the resolved default does not trip the eager DDL-time length check, so we observe the
+    // write-side runtime check that the by-position fill path now adds.
+    val charMeta = new MetadataBuilder()
+      .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "char(100)")
+      .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "current_user()")
+      .build()
+    val expected = Seq(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("s", StringType, nullable = true, metadata = charMeta)())
+    // A by-position INSERT that supplies only the leading column, omitting the trailing CHAR one.
+    val query = LocalRelation(AttributeReference("i", IntegerType)())
+
+    val resolved = TableOutputResolver.resolveOutputColumns(
+      "t", expected, query, byName = false, spark.sessionState.conf,
+      TableOutputResolver.DefaultValueFillMode.RECURSE)
+
+    val hasLengthCheck = resolved.expressions.exists(_.exists {
+      case s: StaticInvoke => s.functionName == "charTypeWriteSideCheck"
+      case _ => false
+    })
+    assert(hasLengthCheck,
+      "by-position default fill must apply the CHAR/VARCHAR write-side length check")
   }
 }
