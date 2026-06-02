@@ -500,3 +500,12 @@ Project [sum_val#x]
       +- Aggregate [col1#x], [(col1#x.nums[0] + col1#x.nums[1]) AS sum_val#x, col1#x]
          +- SubqueryAlias t
             +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT NAMED_STRUCT('a', 1) AS col1 FROM VALUES (NULL) t (col1) GROUP BY col1 HAVING col1.a == 1
+-- !query analysis
+Filter (cast(null as int) = 1)
++- Aggregate [col1#x], [named_struct(a, 1) AS col1#x]
+   +- SubqueryAlias t
+      +- LocalRelation [col1#x]
