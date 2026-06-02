@@ -1529,8 +1529,7 @@ object CodeGenerator extends Logging {
       classOf[Platform].getName,
       classOf[InternalRow].getName,
       classOf[UnsafeRow].getName,
-      classOf[GeographyVal].getName,
-      classOf[GeometryVal].getName,
+      classOf[BinaryView].getName,
       classOf[UTF8String].getName,
       classOf[Decimal].getName,
       classOf[CalendarInterval].getName,
@@ -1696,8 +1695,7 @@ object CodeGenerator extends Logging {
       case _ => PhysicalDataType(dataType) match {
         case _: PhysicalArrayType => s"$input.getArray($ordinal)"
         case PhysicalBinaryType => s"$input.getBinary($ordinal)"
-        case _: PhysicalGeographyType => s"$input.getGeography($ordinal)"
-        case _: PhysicalGeometryType => s"$input.getGeometry($ordinal)"
+        case _: PhysicalBinaryViewType => s"$input.getBinaryView($ordinal)"
         case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
         case PhysicalTimestampNTZNanosType => s"$input.getTimestampNTZNanos($ordinal)"
         case PhysicalTimestampLTZNanosType => s"$input.getTimestampLTZNanos($ordinal)"
@@ -1778,9 +1776,11 @@ object CodeGenerator extends Logging {
       case _: TimestampLTZNanosType => s"$row.setTimestampLTZNanos($ordinal, $value)"
       case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
-      // The UTF8String, InternalRow, ArrayData and MapData may came from UnsafeRow, we should copy
-      // it to avoid keeping a "pointer" to a memory region which may get updated afterwards.
-      case _: StringType | _: StructType | _: ArrayType | _: MapType =>
+      // The UTF8String, BinaryView, InternalRow, ArrayData and MapData may came from UnsafeRow, we
+      // should copy it to avoid keeping a "pointer" to a memory region which may get updated
+      // afterwards.
+      case _: StringType | _: GeometryType | _: GeographyType |
+           _: StructType | _: ArrayType | _: MapType =>
         s"$row.update($ordinal, $value.copy())"
       case _ => s"$row.update($ordinal, $value)"
     }
@@ -1980,8 +1980,7 @@ object CodeGenerator extends Logging {
    * Returns the Java type for a DataType.
    */
   def javaType(dt: DataType): String = dt match {
-    case _: GeographyType => "GeographyVal"
-    case _: GeometryType => "GeometryVal"
+    case _: GeographyType | _: GeometryType => "BinaryView"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
@@ -2021,8 +2020,7 @@ object CodeGenerator extends Logging {
     case DoubleType => java.lang.Double.TYPE
     case _: DecimalType => classOf[Decimal]
     case BinaryType => classOf[Array[Byte]]
-    case _: GeographyType => classOf[GeographyVal]
-    case _: GeometryType => classOf[GeometryVal]
+    case _: GeographyType | _: GeometryType => classOf[BinaryView]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
     case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>

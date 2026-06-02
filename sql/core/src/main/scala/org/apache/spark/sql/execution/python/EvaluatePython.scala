@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.ops.TypeApiOps
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 
 object EvaluatePython {
 
@@ -97,9 +97,9 @@ object EvaluatePython {
 
       case (s: UTF8String, _: StringType) => s.toString
 
-      case (g: GeometryVal, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
+      case (g: BinaryView, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
 
-      case (g: GeographyVal, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
+      case (g: BinaryView, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
 
       case (bytes: Array[Byte], BinaryType) =>
         if (binaryAsBytes) {
