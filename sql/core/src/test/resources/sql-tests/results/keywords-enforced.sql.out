@@ -7,6 +7,7 @@ struct<keyword:string,reserved:boolean>
 ADD	false
 AFTER	false
 AGGREGATE	false
+ALIGN	false
 ALL	true
 ALTER	false
 ALWAYS	false
@@ -28,8 +29,12 @@ BEGIN	false
 BERNOULLI	false
 BETWEEN	false
 BIGINT	false
+BIN	false
 BINARY	false
 BINDING	false
+BIN_DISTRIBUTE_RATIO	false
+BIN_END	false
+BIN_START	false
 BOOLEAN	false
 BOTH	true
 BUCKET	false
@@ -392,6 +397,7 @@ TYPE	false
 UNARCHIVE	false
 UNBOUNDED	false
 UNCACHE	false
+UNIFORM	false
 UNION	true
 UNIQUE	true
 UNKNOWN	true
@@ -419,6 +425,7 @@ WEEKS	false
 WHEN	true
 WHERE	true
 WHILE	false
+WIDTH	false
 WINDOW	false
 WITH	true
 WITHIN	true

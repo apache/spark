@@ -412,6 +412,7 @@ Below is a list of all the keywords in Spark SQL.
 |ADD|non-reserved|non-reserved|non-reserved|
 |AFTER|non-reserved|non-reserved|non-reserved|
 |AGGREGATE|non-reserved|non-reserved|non-reserved|
+|ALIGN|non-reserved|non-reserved|non-reserved|
 |ALL|reserved|non-reserved|reserved|
 |ALTER|non-reserved|non-reserved|reserved|
 |ALWAYS|non-reserved|non-reserved|non-reserved|
@@ -433,8 +434,12 @@ Below is a list of all the keywords in Spark SQL.
 |BERNOULLI|non-reserved|non-reserved|non-reserved|
 |BETWEEN|non-reserved|non-reserved|reserved|
 |BIGINT|non-reserved|non-reserved|reserved|
+|BIN|non-reserved|non-reserved|non-reserved|
 |BINARY|non-reserved|non-reserved|reserved|
 |BINDING|non-reserved|non-reserved|non-reserved|
+|BIN_DISTRIBUTE_RATIO|non-reserved|non-reserved|non-reserved|
+|BIN_END|non-reserved|non-reserved|non-reserved|
+|BIN_START|non-reserved|non-reserved|non-reserved|
 |BOOLEAN|non-reserved|non-reserved|reserved|
 |BOTH|reserved|non-reserved|reserved|
 |BUCKET|non-reserved|non-reserved|non-reserved|
@@ -801,6 +806,7 @@ Below is a list of all the keywords in Spark SQL.
 |UNARCHIVE|non-reserved|non-reserved|non-reserved|
 |UNBOUNDED|non-reserved|non-reserved|non-reserved|
 |UNCACHE|non-reserved|non-reserved|non-reserved|
+|UNIFORM|non-reserved|non-reserved|non-reserved|
 |UNION|reserved|strict-non-reserved|reserved|
 |UNIQUE|reserved|non-reserved|reserved|
 |UNKNOWN|reserved|non-reserved|reserved|
@@ -828,6 +834,7 @@ Below is a list of all the keywords in Spark SQL.
 |WHEN|reserved|non-reserved|reserved|
 |WHERE|reserved|non-reserved|reserved|
 |WHILE|non-reserved|non-reserved|non-reserved|
+|WIDTH|non-reserved|non-reserved|non-reserved|
 |WINDOW|non-reserved|non-reserved|reserved|
 |WITH|reserved|non-reserved|reserved|
 |WITHIN|reserved|non-reserved|reserved|
