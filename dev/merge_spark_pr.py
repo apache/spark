@@ -542,10 +542,21 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     BOTH (the policy-compliant default) or branch-M.N only (treated as a
     maintenance-only bugfix). Returns the list of refs actually picked into, so
     the main loop can advance its remaining-branches list correctly.
+
+    The branch prompt re-prompts on a typo: an entered name that is not one of
+    the known release branches (`branch_names`) is rejected with the list of
+    valid branches, rather than crashing later on a failed `git fetch`.
     """
-    pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
-    if pick_ref == "":
-        pick_ref = default_branch
+    while True:
+        pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
+        if pick_ref == "":
+            pick_ref = default_branch
+        if pick_ref in branch_names:
+            break
+        print_error(
+            "'%s' is not a known release branch. Valid branches: %s. Please try again."
+            % (pick_ref, ", ".join(branch_names))
+        )
 
     sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
     if sibling_x is not None:
