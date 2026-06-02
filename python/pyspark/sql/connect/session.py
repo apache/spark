@@ -800,7 +800,7 @@ class SparkSession:
     def sql(
         self,
         sqlQuery: str,
-        args: Optional[Union[Dict[str, Any], List]] = None,
+        args: Optional[Union[Dict[str, Any], List[Any]]] = None,
         **kwargs: Any,
     ) -> "ParentDataFrame":
         _args = []
