@@ -121,6 +121,99 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
   private val singleKeyUserSchema: StructType = singleKeyKeySchema
     .add("value", StringType)
 
+  // =============== orderChronologicallyPerKeyWindow tests ===============
+
+  test("orderChronologicallyPerKeyWindow sorts both decomposition tails and non-tails by " +
+    "effective recordStartAt ascending") {
+    val processor = processorWithKeys(Seq("id"))
+
+    // Three rows at distinct effective recordStartAts. The decomposition tail
+    // (recordStartAt = null, endAt = 10) takes its endAt as its effective ordering sequence,
+    // so the expected per-key window order is 5, tail(10), 15.
+    val df = targetTableOf(singleKeyUserSchema)(
+      Row(1, "v15",  15L,  null, Row(15L)),
+      Row(1, "tail", null, 10L,  Row(null)),
+      Row(1, "v5",   5L,   null, Row(5L))
+    )
+
+    val withRn = df.withColumn(
+      "rn", F.row_number().over(processor.orderChronologicallyPerKeyWindow)
+    )
+
+    checkAnswer(
+      df = withRn,
+      expectedAnswer = Seq(
+        Row(1, "v5",   5L,   null, Row(5L),    1),
+        Row(1, "tail", null, 10L,  Row(null),  2),
+        Row(1, "v15",  15L,  null, Row(15L),   3)
+      )
+    )
+  }
+
+  test("orderChronologicallyPerKeyWindow places tails before non-tails, then open intervals " +
+    "before closed intervals, when effective recordStartAt ties") {
+    val processor = processorWithKeys(Seq("id"))
+
+    // Three rows all at effective recordStartAt = 10:
+    //   - decomposition tail: recordStartAt = null, endAt = 10
+    //   - open upsert:        recordStartAt = 10,   endAt = null
+    //   - tombstone:          recordStartAt = 10,   endAt = 10
+    // Expected order:
+    //   1. tail (tail-first tiebreaker)
+    //   2. open upsert (open-before-closed tiebreaker among non-tails)
+    //   3. tombstone
+    val df = targetTableOf(singleKeyUserSchema)(
+      Row(1, "tomb", 10L,  10L,  Row(10L)),
+      Row(1, "tail", null, 10L,  Row(null)),
+      Row(1, "open", 10L,  null, Row(10L))
+    )
+
+    val withRn = df.withColumn(
+      "rn", F.row_number().over(processor.orderChronologicallyPerKeyWindow)
+    )
+
+    checkAnswer(
+      df = withRn,
+      expectedAnswer = Seq(
+        Row(1, "tail", null, 10L,  Row(null), 1),
+        Row(1, "open", 10L,  null, Row(10L),  2),
+        Row(1, "tomb", 10L,  10L,  Row(10L),  3)
+      )
+    )
+  }
+
+  test("orderChronologicallyPerKeyWindow orders rows independently per key") {
+    val processor = processorWithKeys(Seq("id"))
+
+    // Two keys with interleaved input order. Each key's window must be sorted independently
+    // by effective recordStartAt - rows from key 2 must not influence row_number positions
+    // of rows for key 1, and vice versa.
+    val df = targetTableOf(singleKeyUserSchema)(
+      Row(1, "k1-15", 15L, null, Row(15L)),
+      Row(2, "k2-7",  7L,  null, Row(7L)),
+      Row(1, "k1-5",  5L,  null, Row(5L)),
+      Row(2, "k2-3",  3L,  null, Row(3L)),
+      Row(1, "k1-10", 10L, null, Row(10L)),
+      Row(2, "k2-20", 20L, null, Row(20L))
+    )
+
+    val withRn = df.withColumn(
+      "rn", F.row_number().over(processor.orderChronologicallyPerKeyWindow)
+    )
+
+    checkAnswer(
+      df = withRn,
+      expectedAnswer = Seq(
+        Row(1, "k1-5",  5L,  null, Row(5L),  1),
+        Row(1, "k1-10", 10L, null, Row(10L), 2),
+        Row(1, "k1-15", 15L, null, Row(15L), 3),
+        Row(2, "k2-3",  3L,  null, Row(3L),  1),
+        Row(2, "k2-7",  7L,  null, Row(7L),  2),
+        Row(2, "k2-20", 20L, null, Row(20L), 3)
+      )
+    )
+  }
+
   // =============== preprocessMicrobatch tests ===============
 
   test("preprocessMicrobatch appends framework columns __START_AT, __END_AT, " +
