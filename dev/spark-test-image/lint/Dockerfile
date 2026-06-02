@@ -96,7 +96,7 @@ RUN python3.12 -m pip install \
     'numpy==2.4.1' \
     'numpydoc' \
     'pandas' \
-    'pandas-stubs' \
+    'pandas-stubs==3.0.0.260204' \
     'plotly>=4.8' \
     'pyarrow>=23.0.0' \
     'pytest-mypy-plugins==1.9.3' \
