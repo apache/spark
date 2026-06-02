@@ -43,21 +43,12 @@
       <artifactId>protobuf-java</artifactId>
       <scope>compile</scope>
     </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-api</artifactId>
-      <version>${io.grpc.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-protobuf</artifactId>
-      <version>${io.grpc.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>io.grpc</groupId>
-      <artifactId>grpc-stub</artifactId>
-      <version>${io.grpc.version}</version>
-    </dependency>
+    <!--
+      gRPC service stubs are generated in (and the gRPC runtime is confined to)
+      spark-udf-worker-grpc, so this module produces only protobuf-java message
+      classes and carries no gRPC dependency. This keeps gRPC off the classpath
+      of every consumer of this module (core, catalyst, sql/core, udf-worker-core).
+    -->
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-tags_${scala.binary.version}</artifactId>
@@ -92,15 +83,12 @@
         <version>0.6.1</version>
         <configuration>
           <protocArtifact>com.google.protobuf:protoc:${protobuf.version}:exe:${os.detected.classifier}</protocArtifact>
-          <pluginId>grpc-java</pluginId>
-          <pluginArtifact>io.grpc:protoc-gen-grpc-java:${io.grpc.version}:exe:${os.detected.classifier}</pluginArtifact>
           <protoSourceRoot>src/main/protobuf</protoSourceRoot>
         </configuration>
         <executions>
           <execution>
             <goals>
               <goal>compile</goal>
-              <goal>compile-custom</goal>
             </goals>
           </execution>
         </executions>

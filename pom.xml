@@ -113,6 +113,7 @@
     <module>connector/protobuf</module>
     <module>udf/worker/proto</module>
     <module>udf/worker/core</module>
+    <module>udf/worker/grpc</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
