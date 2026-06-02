@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.io.InterruptedIOException
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{FinalApplicationStatus, YarnApplicationState}
 
@@ -135,6 +136,10 @@ private[spark] class YarnClientSchedulerBackend(
       } catch {
         case _: InterruptedException | _: InterruptedIOException =>
           logInfo("Interrupting monitor thread")
+        case NonFatal(e) =>
+          logError("Unexpected error in YARN application state monitor thread.", e)
+          allowInterrupt = false
+          sc.stop()
       }
     }
 
