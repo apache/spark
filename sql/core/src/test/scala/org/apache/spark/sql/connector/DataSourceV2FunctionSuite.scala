@@ -728,13 +728,24 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
   }
 
   test("SPARK-55982: function should not resolve after namespace is dropped") {
-    val cat = catalog("testcat").asInstanceOf[InMemoryCatalog]
-    cat.createNamespace(Array("dropns"), new java.util.HashMap[String, String]())
-    addFunction(Identifier.of(Array("dropns"), "strlen"), SimpleStrLen)
-    checkAnswer(sql("SELECT testcat.dropns.strlen('abc')"), Row(3) :: Nil)
-    sql("DROP NAMESPACE testcat.dropns CASCADE")
-    intercept[Exception] {
-      sql("SELECT testcat.dropns.strlen('abc')").collect()
+    withNamespace("testcat.dropns") {
+      val cat = catalog("testcat").asInstanceOf[InMemoryCatalog]
+      cat.createNamespace(Array("dropns"), new java.util.HashMap[String, String]())
+      addFunction(Identifier.of(Array("dropns"), "strlen"), SimpleStrLen)
+      checkAnswer(sql("SELECT testcat.dropns.strlen('abc')"), Row(3) :: Nil)
+      sql("DROP NAMESPACE testcat.dropns CASCADE")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT testcat.dropns.strlen('abc')").collect()
+        },
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> "`testcat`.`dropns`.`strlen`",
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(
+          fragment = "testcat.dropns.strlen('abc')",
+          start = 7,
+          stop = 34))
     }
   }
 }

@@ -29,7 +29,9 @@ import org.apache.spark.sql.connector.catalog.procedures.UnboundProcedure
 class InMemoryCatalog extends InMemoryTableCatalog with FunctionCatalog with ProcedureCatalog {
   override def dropNamespace(namespace: Array[String], cascade: Boolean): Boolean = {
     if (cascade) {
-      // SPARK-55982: Remove functions in this namespace before dropping
+      // SPARK-55982: Remove functions in this namespace before dropping.
+      // Only needed for cascade=true because without cascade, super.dropNamespace
+      // will fail if the namespace still contains objects (tables/functions).
       listFunctions(namespace).foreach(ident => functions.remove(ident))
     }
     super.dropNamespace(namespace, cascade)
