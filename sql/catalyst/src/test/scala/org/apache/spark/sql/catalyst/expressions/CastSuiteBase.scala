@@ -22,7 +22,7 @@ import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
@@ -1021,6 +1022,52 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     // The input string can contain date only
     checkEvaluation(cast("2021-06-17", TimestampNTZType),
       LocalDateTime.of(2021, 6, 17, 0, 0))
+  }
+
+  test("SPARK-57211: cast string to timestamp_ltz with nanosecond precision") {
+    foreachNanosPrecision { precision =>
+      val truncate = nanoOfSecTruncator(precision)
+      outstandingZoneIds.foreach { zid =>
+        specialNanosTs.foreach { s =>
+          val ldt = parseSpecialNanosNTZ(s).withNano(truncate(parseSpecialNanosNTZ(s).getNano))
+          val expected = instantToNanosVal(ldt.atZone(zid).toInstant)
+          checkEvaluation(
+            cast(Literal(s), TimestampLTZNanosType(precision), Option(zid.getId)),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57211: cast string to timestamp_ntz with nanosecond precision") {
+    foreachNanosPrecision { precision =>
+      val truncate = nanoOfSecTruncator(precision)
+      specialNanosTs.foreach { s =>
+        val ldt = parseSpecialNanosNTZ(s).withNano(truncate(parseSpecialNanosNTZ(s).getNano))
+        val expected = localDateTimeToNanosVal(ldt)
+        // NTZ result is independent of the session time zone.
+        checkEvaluation(cast(Literal(s), TimestampNTZNanosType(precision)), expected)
+        // A zone suffix is discarded (allowTimeZone = true), mirroring micro TIMESTAMP_NTZ.
+        checkEvaluation(cast(Literal(s + "Z"), TimestampNTZNanosType(precision)), expected)
+      }
+    }
+  }
+
+  test("SPARK-57211: nanosecond timestamp cast requires the preview flag") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      val expectedParams = Map(
+        "featureName" -> "Nanosecond-precision timestamp types",
+        "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+        "configValue" -> "true")
+      Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { to =>
+        checkError(
+          exception = intercept[SparkException] {
+            cast(Literal("2020-01-01 00:00:00"), to, UTC_OPT).checkInputDataTypes()
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = expectedParams)
+      }
+    }
   }
 
   test("SPARK-35112: Cast string to day-time interval") {

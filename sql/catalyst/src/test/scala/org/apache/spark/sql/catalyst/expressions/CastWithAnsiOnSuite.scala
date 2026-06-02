@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -797,6 +798,23 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkCastWithParseError("2015-031-8")
       checkCastWithParseError("2015-03-18T12:03:17-0:70")
       checkCastWithParseError("abdef")
+    }
+  }
+
+  test("SPARK-57211: ANSI mode cast string to nanosecond timestamp with parse error") {
+    val invalidInputs = Seq(
+      "123", "2015-03-18 123142", "2015-03-18X", "2015/03/18", "abdef", "2015-031-8")
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      foreachNanosPrecision { precision =>
+        invalidInputs.foreach { str =>
+          checkExceptionInExpression[DateTimeException](
+            cast(Literal(str), TimestampLTZNanosType(precision), Option(zid.getId)),
+            castErrMsg(str, TimestampLTZNanosType(precision)))
+          checkExceptionInExpression[DateTimeException](
+            cast(Literal(str), TimestampNTZNanosType(precision)),
+            castErrMsg(str, TimestampNTZNanosType(precision)))
+        }
+      }
     }
   }
 

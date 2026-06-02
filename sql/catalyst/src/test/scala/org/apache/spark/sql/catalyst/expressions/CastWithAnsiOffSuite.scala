@@ -56,6 +56,18 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
     checkEvaluation(cast(123L, DecimalType(2, 0)), null)
   }
 
+  test("SPARK-57211: legacy mode cast malformed string to nanosecond timestamp returns null") {
+    Seq("123", "2015-03-18 123142", "2015-03-18X", "abdef").foreach { str =>
+      org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision {
+        precision =>
+          checkEvaluation(
+            cast(Literal(str), TimestampLTZNanosType(precision), UTC_OPT), null)
+          checkEvaluation(
+            cast(Literal(str), TimestampNTZNanosType(precision)), null)
+      }
+    }
+  }
+
   test("cast from int #2") {
     checkEvaluation(cast(cast(1000, TimestampType), LongType), 1000.toLong)
     checkEvaluation(cast(cast(-1200, TimestampType), LongType), -1200.toLong)

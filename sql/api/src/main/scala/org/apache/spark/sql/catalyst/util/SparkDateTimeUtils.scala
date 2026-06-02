@@ -946,9 +946,10 @@ trait SparkDateTimeUtils {
       s: UTF8String,
       precision: Int,
       context: QueryContext = null): TimestampNanosVal = {
-    // TODO(SPARK-57032): when this is wired to a user-facing CAST(... AS TIMESTAMP_NTZ(p)), the
-    // cast must decide `allowTimeZone` explicitly (per ANSI/legacy mode) instead of relying on
-    // the `true` default used here, which silently discards a zone suffix.
+    // CAST(... AS TIMESTAMP_NTZ(p)) intentionally uses `allowTimeZone = true` here, mirroring the
+    // micro `TIMESTAMP_NTZ` string cast (`stringToTimestampWithoutTimeZoneAnsi`): a zone suffix in
+    // the input is silently discarded rather than rejected. Callers that need strict NTZ rejection
+    // should call `stringToTimestampNTZNanos` directly with `allowTimeZone = false`.
     stringToTimestampNTZNanos(s, precision).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(
         s,
