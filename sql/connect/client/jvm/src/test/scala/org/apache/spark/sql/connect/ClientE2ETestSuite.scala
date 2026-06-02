@@ -978,22 +978,29 @@ class ClientE2ETestSuite
   }
 
   test("SPARK-56632: self-join reusing a DataFrame resolves columns from both sides") {
-    val session = spark
-    import session.implicits._
+    withTable("testcat.t") {
+      spark.sql("CREATE TABLE testcat.t (id INT, salary INT)")
 
-    // Two independently constructed DataFrames over the same data, so they have
-    // distinct plan ids, mirroring `val df1 = spark.table(t); val df2 = spark.table(t)`.
-    val df1 = Seq((1, 100), (2, 200)).toDF("id", "salary")
-    val df2 = Seq((1, 100), (2, 200)).toDF("id", "salary")
+      // Version X.
+      spark.sql("INSERT INTO testcat.t VALUES (1, 100)")
+      // Resolves to table version X (QueryExecution #1).
+      val df1 = spark.table("testcat.t")
 
-    // The query under test. Succeeds on master (post SPARK-56632); on 4.1 (has
-    // SPARK-55070 but missing the fix) this throws AMBIGUOUS_COLUMN_REFERENCE.
-    checkSameResult(
-      Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)),
-      df1
-        .join(df2, df1("id") === df2("id"))
-        .select(df1("id"), df1("salary"), df2("id"), df2("salary"))
-        .orderBy(df1("id")))
+      // External write produces version X + 1.
+      spark.sql("INSERT INTO testcat.t VALUES (2, 200)")
+      // Resolves to table version X + 1 (QueryExecution #2).
+      val df2 = spark.table("testcat.t")
+
+      // Self-join reusing the same table on both sides (QueryExecution #3).
+      // Succeeds on master (post SPARK-56632); on 4.1 (has SPARK-55070 but
+      // missing the fix) this throws AMBIGUOUS_COLUMN_REFERENCE.
+      checkSameResult(
+        Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)),
+        df1
+          .join(df2, df1("id") === df2("id"))
+          .select(df1("id"), df1("salary"), df2("id"), df2("salary"))
+          .orderBy(df1("id")))
+    }
   }
 
   test("broadcast join") {
