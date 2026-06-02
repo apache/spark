@@ -2283,8 +2283,15 @@ class SparkConnectClient(object):
             return []
 
     def _on_exit(self) -> None:
+        # If the client has already been explicitly closed, skip all cleanup RPCs.
+        # The server-side resources were released by close(); reissuing them here
+        # is wasted work and, if the server has since become unreachable, can
+        # block process exit on the gRPC call.
+        if self._closed:
+            return
+
         self._cleanup_ml_cache()
-        if self._release_session_on_exit and not self._closed:
+        if self._release_session_on_exit:
             try:
                 self.release_session()
             except Exception:

@@ -1362,6 +1362,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED =
+    buildConf("spark.sql.subexpressionElimination.filterExec.enabled")
+      .internal()
+      .doc("When true (and subexpression elimination is enabled), FilterExec whole-stage " +
+        "codegen eliminates common subexpressions shared across its predicates. When false, " +
+        "FilterExec falls back to the predicate codegen that loads input columns lazily and " +
+        "short-circuits, avoiding eager materialization of all predicate-referenced columns on " +
+        "every row. Only affects FilterExec; subexpression elimination elsewhere is unaffected.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -3648,6 +3661,19 @@ object SQLConf {
       .internal()
       .doc("When true, the SQL function 'count' is allowed to take no parameters.")
       .version("3.1.1")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ALLOW_UDF_PARAMETER_TO_SHADOW_PARAMETERLESS_FUNCTION =
+    buildConf("spark.sql.legacy.allowUdfParameterToShadowParameterlessFunction")
+      .internal()
+      .doc("When true (legacy behavior), a SQL UDF parameter alias shadows a parameterless " +
+        "built-in function (current_user, current_date, current_time, current_timestamp, " +
+        "user, session_user, grouping__id) of the same name. When false (the default), the " +
+        "parameterless built-in function takes precedence, matching the documented name " +
+        "resolution rules.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -8038,6 +8064,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def subexpressionEliminationSkipForShotcutExpr: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR)
+
+  def subexpressionEliminationFilterExecEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 

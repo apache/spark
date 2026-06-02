@@ -396,7 +396,9 @@ package object expressions  {
           // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
           // expression as "c".
           val fieldExprs = nestedFields.foldLeft(a: Expression) { (e, name) =>
-            ExtractValue(e, Literal(name), resolver)
+            // applyOrNull propagates NULL when the base is NullType (e.g. a NullType column from
+            // schema evolution) instead of throwing INVALID_EXTRACT_BASE_FIELD_TYPE.
+            ExtractValue.applyOrNull(e, Literal(name), resolver)
           }
           Seq(Alias(fieldExprs, nestedFields.last)())
 
