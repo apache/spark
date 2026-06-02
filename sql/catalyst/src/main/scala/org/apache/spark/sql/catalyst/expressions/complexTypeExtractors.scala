@@ -95,11 +95,6 @@ object ExtractValue {
 
       case (MapType(_, _, _), _) => Left(GetMapValue(child, extraction))
 
-      // Extracting from NULL should return NULL, not throw an error. This can happen when a
-      // column has NullType (e.g. from schema evolution with missing columns), and aligns with
-      // standard SQL semantics where any operation on NULL yields NULL.
-      case (NullType, _) => Left(Literal(null, NullType))
-
       case (otherType, _) => Right(
         QueryCompilationErrors.dataTypeUnsupportedByExtractValueError(
           child.dataType,

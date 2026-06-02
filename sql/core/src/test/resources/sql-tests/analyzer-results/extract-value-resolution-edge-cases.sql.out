@@ -38,3 +38,40 @@ DROP TABLE t1
 -- !query analysis
 DropTable false, false
 +- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t1
+
+
+-- !query
+SELECT col.a FROM (SELECT null AS col) t
+-- !query analysis
+Project [null AS a#x]
++- SubqueryAlias t
+   +- Project [null AS col#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT col[0] FROM (SELECT null AS col) t
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"col\"",
+    "other" : "\"VOID\""
+  }
+}
+
+
+-- !query
+SELECT col['key'] FROM (SELECT null AS col) t
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_EXTRACT_BASE_FIELD_TYPE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "base" : "\"col\"",
+    "other" : "\"VOID\""
+  }
+}

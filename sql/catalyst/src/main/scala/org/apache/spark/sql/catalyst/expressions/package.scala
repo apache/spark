@@ -24,7 +24,7 @@ import com.google.common.collect.Maps
 import org.apache.spark.sql.catalyst.analysis.{Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{NullType, StructField, StructType}
 
 /**
  * A set of classes that can be used to represent trees of relational expressions.  A key goal of
@@ -396,7 +396,13 @@ package object expressions  {
           // Then this will add ExtractValue("c", ExtractValue("b", a)), and alias the final
           // expression as "c".
           val fieldExprs = nestedFields.foldLeft(a: Expression) { (e, name) =>
-            ExtractValue(e, Literal(name), resolver)
+            // Extracting a field from a NULL (NullType) base yields NULL (SQL NULL propagation),
+            // rather than throwing INVALID_EXTRACT_BASE_FIELD_TYPE. A NullType column can arise
+            // e.g. from schema evolution with missing columns. This is scoped to dotted
+            // multipart field access (`col.a`); `col['key']`/`col[0]` go through
+            // UnresolvedExtractValue and still throw.
+            if (e.dataType == NullType) Literal(null, NullType)
+            else ExtractValue(e, Literal(name), resolver)
           }
           Seq(Alias(fieldExprs, nestedFields.last)())
 
