@@ -637,7 +637,8 @@ object SQLConf {
   val TYPES_FRAMEWORK_ENABLED =
     buildConf("spark.sql.types.framework.enabled")
       .internal()
-      .doc("When true, use the Types Framework for supported types (currently TimeType). " +
+      .doc("When true, use the Types Framework for supported types (currently TimeType and the " +
+        "nanosecond timestamp types TimestampNTZNanosType and TimestampLTZNanosType). " +
         "The framework centralizes type-specific operations in Ops classes instead of " +
         "scattered pattern matching. When false, use legacy scattered implementation.")
       .version("4.2.0")

@@ -21,7 +21,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{DataType, TimeType}
+import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -159,6 +159,8 @@ object TypeApiOps {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     dt match {
       case tt: TimeType => Some(new TimeTypeApiOps(tt))
+      case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeApiOps(t))
+      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t))
       // Add new types here - single registration point
       case _ => None
     }
