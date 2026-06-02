@@ -113,11 +113,14 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("toSQLValue uses the NTZ/LTZ literal prefix") {
-    val ntzOps = TypeApiOps(TimestampNTZNanosType(9)).get
-    assert(ntzOps.toSQLValue(ntzVal).startsWith("TIMESTAMP_NTZ '"))
-    val ltzOps = TypeApiOps(TimestampLTZNanosType(9)).get
-    assert(ltzOps.toSQLValue(ltzVal).startsWith("TIMESTAMP_LTZ '"))
+  test("format and toSQLValue throw an internal error (formatting not yet implemented)") {
+    allCases.foreach { case (dt, _, value) =>
+      val ops = TypeApiOps(dt).get
+      val fe = intercept[org.apache.spark.SparkException](ops.format(value))
+      assert(fe.getMessage.contains("not yet implemented"))
+      val te = intercept[org.apache.spark.SparkException](ops.toSQLValue(value))
+      assert(te.getMessage.contains("not yet implemented"))
+    }
   }
 
   test("framework disabled falls back to identical legacy behavior") {

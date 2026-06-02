@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.types.ops
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
-import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * Client-side (spark-api) operations shared by the nanosecond timestamp types
@@ -32,10 +32,11 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * prefix; storage and formatting are identical.
  *
  * SCOPE (SPARK-57207): this issue wires physical representation, literals, row accessors, and
- * codegen class selection. String formatting here is an interim implementation until dedicated
- * fractional-second formatters land in a follow-up issue; Dataset encoders are out of scope
- * (SPARK-57033 and related), so getEncoder reports the type as unsupported, matching the legacy
- * RowEncoder behavior.
+ * codegen class selection. String formatting is not yet implemented: format() throws an internal
+ * error so callers get a clear message rather than a debug string; dedicated fractional-second
+ * formatters land in a follow-up issue.
+ * Dataset encoders are out of scope (SPARK-57033 and related), so getEncoder reports the type as
+ * unsupported, matching the legacy RowEncoder behavior.
  *
  * @since 4.3.0
  */
@@ -44,9 +45,14 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
   /** SQL literal prefix for this type, e.g. "TIMESTAMP_NTZ" or "TIMESTAMP_LTZ". */
   protected def sqlTypeName: String
 
-  // ==================== String Formatting (interim) ====================
+  // ==================== String Formatting ====================
 
-  override def format(v: Any): String = v.asInstanceOf[TimestampNanosVal].toString
+  // String formatting of nanosecond timestamps is not yet implemented (follow-up after
+  // SPARK-57207). Throw an internal error so that callers see a clear message rather than a
+  // debug toString from TimestampNanosVal.
+  override def format(v: Any): String =
+    throw SparkException.internalError(
+      s"Formatting of ${dataType.typeName} is not yet implemented.")
 
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
 
