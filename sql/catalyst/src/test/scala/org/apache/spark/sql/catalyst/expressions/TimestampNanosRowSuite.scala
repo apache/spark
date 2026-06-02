@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -182,6 +182,18 @@ class TimestampNanosRowSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("null Literal of nanos timestamp type") {
     checkEvaluation(Literal.create(null, TimestampNTZNanosType(9)), null)
     checkEvaluation(Literal.create(null, TimestampLTZNanosType(7)), null)
+  }
+
+  // Fractional-second formatting is not implemented yet, so CAST(nanos AS STRING) raises an
+  // internal error. Both the interpreted (ToStringBase.castToString -> TypeApiOps.format) and
+  // codegen (ToStringBase.castToStringCode) paths must fail the same way (SPARK-57207).
+  test("CAST nanos timestamp to STRING raises an internal error in both eval modes") {
+    Seq(
+      Literal.create(ntzValue, TimestampNTZNanosType(9)),
+      Literal.create(ltzValue, TimestampLTZNanosType(7))).foreach { lit =>
+      checkExceptionInExpression[SparkException](
+        Cast(lit, StringType), "TimestampFormatter for the type")
+    }
   }
 
   testBothCodegenAndInterpreted("UnsafeRow handles extreme epoch micros for nanos") {

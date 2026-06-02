@@ -21,10 +21,11 @@ import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal, MutableTimestampNanos, MutableValue}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableTimestampNanos, MutableValue}
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampLTZNanosType, PhysicalTimestampNTZNanosType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
+import org.apache.spark.sql.types.{ObjectType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TimestampNTZNanosTypeApiOps}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
@@ -36,12 +37,14 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]] via a 16-byte variable-length payload;
  * see [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
  *
- * SCOPE (SPARK-57207): this issue covers physical representation, literals, row accessors, and
- * codegen class selection. External java.time conversion reuses the helpers added by SPARK-57033
- * so that the Types Framework path matches the legacy CatalystTypeConverters behavior rather than
- * regressing it: TimestampNTZNanosType maps to java.time.LocalDateTime and TimestampLTZNanosType
- * to java.time.Instant, with sub-micro digits truncated to the column precision. Concrete
- * subclasses supply the NTZ/LTZ-specific physical type, row accessors, and conversions.
+ * The Types Framework is the sole integration path for the nanosecond timestamp types: physical
+ * representation, literals, row accessors, codegen class selection, external java.time conversion,
+ * and serializer/deserializer expression building all flow through these Ops. When the framework is
+ * disabled the types are unsupported (the legacy fallbacks no longer special-case them). External
+ * java.time conversion uses the helpers added by SPARK-57033: TimestampNTZNanosType maps to
+ * java.time.LocalDateTime and TimestampLTZNanosType to java.time.Instant, with sub-micro digits
+ * truncated to the column precision. Concrete subclasses supply the NTZ/LTZ-specific physical type,
+ * row accessors, conversions, and serializer/deserializer expressions.
  *
  * @since 4.3.0
  */
@@ -102,6 +105,22 @@ case class TimestampNTZNanosTypeOps(override val t: TimestampNTZNanosType)
 
   override def toScalaImpl(row: InternalRow, column: Int): Any =
     DateTimeUtils.timestampNanosToLocalDateTime(row.getTimestampNTZNanos(column))
+
+  override def createSerializer(input: Expression): Option[Expression] =
+    Some(StaticInvoke(
+      DateTimeUtils.getClass,
+      t,
+      "localDateTimeToTimestampNanos",
+      input :: Literal(t.precision) :: Nil,
+      returnNullable = false))
+
+  override def createDeserializer(path: Expression): Option[Expression] =
+    Some(StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[LocalDateTime]),
+      "timestampNanosToLocalDateTime",
+      path :: Nil,
+      returnNullable = false))
 }
 
 /**
@@ -130,4 +149,20 @@ case class TimestampLTZNanosTypeOps(override val t: TimestampLTZNanosType)
 
   override def toScalaImpl(row: InternalRow, column: Int): Any =
     DateTimeUtils.timestampNanosToInstant(row.getTimestampLTZNanos(column))
+
+  override def createSerializer(input: Expression): Option[Expression] =
+    Some(StaticInvoke(
+      DateTimeUtils.getClass,
+      t,
+      "instantToTimestampNanos",
+      input :: Literal(t.precision) :: Nil,
+      returnNullable = false))
+
+  override def createDeserializer(path: Expression): Option[Expression] =
+    Some(StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[Instant]),
+      "timestampNanosToInstant",
+      path :: Nil,
+      returnNullable = false))
 }

@@ -36,9 +36,9 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * Tests for the Types Framework wiring of the nanosecond timestamp types (SPARK-57207).
  *
  * Verifies that TimestampNTZNanosType and TimestampLTZNanosType route physical representation,
- * literals, row accessors, mutable values, and codegen class selection through TypeOps/TypeApiOps
- * when spark.sql.types.framework.enabled is true, and that disabling the flag falls back to the
- * legacy paths with identical results.
+ * literals, row accessors, mutable values, codegen class selection, conversions, and encoders
+ * through TypeOps/TypeApiOps. The Types Framework is the sole integration path for these types, so
+ * the suite runs with spark.sql.types.framework.enabled = true (the default under tests).
  */
 class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
 
@@ -161,37 +161,23 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("framework on/off produce identical CatalystTypeConverters results") {
-    allCases.foreach { case (dt, _, _) =>
-      val external = externalValue(dt)
-      def convert(enabled: Boolean): (Any, Any) = withSQLConf(
-        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> enabled.toString) {
-        val catalyst = CatalystTypeConverters.createToCatalystConverter(dt)(external)
-        (catalyst, CatalystTypeConverters.createToScalaConverter(dt)(catalyst))
-      }
-      assert(convert(enabled = true) === convert(enabled = false), s"on/off parity for $dt")
-    }
-  }
-
-  test("format and toSQLValue follow the legacy CAST-to-string behavior") {
+  test("format and toSQLValue raise an internal error (formatting not implemented yet)") {
     allCases.foreach { case (dt, _, value) =>
       val ops = TypeApiOps(dt).get
-      assert(ops.format(value) === value.toString, s"format for $dt")
-      val prefix = dt match {
-        case _: TimestampNTZNanosType => "TIMESTAMP_NTZ"
-        case _: TimestampLTZNanosType => "TIMESTAMP_LTZ"
+      Seq[() => Any](() => ops.format(value), () => ops.toSQLValue(value)).foreach { call =>
+        val e = intercept[org.apache.spark.SparkException](call())
+        assert(e.getCondition === "INTERNAL_ERROR", s"condition for $dt")
+        assert(e.getMessage.contains("TimestampFormatter for the type"), s"message for $dt")
+        assert(e.getMessage.contains("is not implemented yet"), s"message for $dt")
       }
-      assert(ops.toSQLValue(value) === s"$prefix '${value.toString}'", s"toSQLValue for $dt")
     }
   }
 
-  test("framework disabled falls back to identical legacy behavior") {
+  test("framework disabled leaves the nanos types unsupported (no legacy fallback)") {
     withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
-      allCases.foreach { case (dt, physical, value) =>
+      allCases.foreach { case (dt, _, _) =>
         assert(TypeOps(dt).isEmpty, s"TypeOps should be empty for $dt when disabled")
         assert(TypeApiOps(dt).isEmpty, s"TypeApiOps should be empty for $dt when disabled")
-        checkPhysicalAndLiteralAndCodegen(dt, physical)
-        checkRowRoundtrip(dt, value)
       }
     }
   }

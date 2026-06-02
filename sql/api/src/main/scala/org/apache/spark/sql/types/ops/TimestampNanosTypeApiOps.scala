@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types.ops
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
 import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase}
@@ -31,10 +32,10 @@ import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
  * prefix; storage and formatting are identical.
  *
  * SCOPE (SPARK-57207): this issue wires physical representation, literals, row accessors, and
- * codegen class selection. Dedicated fractional-second string formatting is not yet implemented;
- * until it lands, format() follows the legacy CAST-to-string behavior and renders the internal
- * TimestampNanosVal via its toString, so enabling the Types Framework does not change
- * CAST-to-string / display output.
+ * codegen class selection. Dedicated fractional-second string formatting is not implemented yet:
+ * there is no TimestampFormatter for the nanos timestamp types. Until one lands, format() (and the
+ * toSQLValue() that delegates to it) raises an internal error rather than silently truncating to
+ * microsecond precision.
  *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
@@ -49,10 +50,13 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
 
   // ==================== String Formatting ====================
 
-  // Dedicated fractional-second formatting is not yet implemented (follow-up after SPARK-57207).
-  // Mirror the legacy ToStringBase fallback (UTF8String.fromString(value.toString)) so that
-  // CAST-to-string and display output are identical whether or not the Types Framework is enabled.
-  override def format(v: Any): String = v.toString
+  // Fractional-second (nanosecond) string formatting is not implemented yet: there is no
+  // TimestampFormatter for the nanos timestamp types. Until one lands, formatting (CAST to STRING,
+  // EXPLAIN / SHOW output, and SQL-literal rendering via toSQLValue) raises an internal error
+  // rather than silently truncating to microsecond precision.
+  override def format(v: Any): String =
+    throw SparkException.internalError(
+      s"TimestampFormatter for the type ${dataType.sql} is not implemented yet.")
 
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
 
