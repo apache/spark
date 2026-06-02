@@ -22,6 +22,7 @@ import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.expressions.{Window, WindowSpec}
 import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -48,6 +49,45 @@ case class Scd2BatchProcessor(
    * (e.g., DataFrame `.join(other, usingColumns)`), where backticks are NOT stripped.
    */
   private lazy val keysRaw: Seq[String] = changeArgs.keys.map(_.name)
+
+  /**
+    * WindowSpec that sorts CDC event rows in ascending order per key, by event origination
+    * sequence time (i.e, record start at).
+    */
+  private[autocdc] val orderChronologicallyPerKeyWindow: WindowSpec = {
+    val recordStartAtCol = Scd2BatchProcessor.recordStartAtOf(
+      F.col(AutoCdcReservedNames.cdcMetadataColName)
+    )
+    val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
+
+    // All rows except decomposition tails have a non-null recordStartAt. Tails use their
+    // logical endAt to order against other rows. That endAt comes from a real CDC event
+    // from some processed microbatch, so it is comparable to other rows' recordStartAt.
+    val sequencingIfDecompositionTail = endAtCol
+    val effectiveRecordStartAt = F.coalesce(recordStartAtCol, sequencingIfDecompositionTail).asc
+
+    val isDecompositionTail = recordStartAtCol.isNull
+    val orderDecompositionTailsFirst = isDecompositionTail.desc
+
+    val isClosedInterval = endAtCol.isNotNull
+    val orderOpenIntervalsFirst = isClosedInterval.asc
+
+    Window
+      .partitionBy(keysQuoted.map(F.col): _*)
+      .orderBy(
+        // recordStartAt is the source timeline for CDC events.
+        effectiveRecordStartAt,
+        // If a decomposition tail shares an effective recordStartAt with a non-tail, then its
+        // redundant - another delete/upsert event immediately overtakes the delete that this
+        // synthetic tail encodes. Intentionally order such redundant tails first, so that a
+        // decomposition tail can check its own redundancy by looking at its immediate next
+        // neighbor with LEAD(1).
+        orderDecompositionTailsFirst,
+        // Open intervals sort first so they can match a same-recordStartAt tombstone
+        // during LEAD(1) reconciliation. For decomposition tails this is a no-op.
+        orderOpenIntervalsFirst
+      )
+  }
 
   /**
    * Reconcile a CDC microbatch into the canonical form the auxiliary- and target-table merges
@@ -333,6 +373,132 @@ case class Scd2BatchProcessor(
 
     affectedRowsFromTargetTable
   }
+
+  /**
+   * For every closed non-tombstone row in the input dataframe whose immediate window-order
+   * successor (in the same per-key partition, per [[orderChronologicallyPerKeyWindow]])
+   * has `recordStartAt` strictly less than its `endAt` (in other words the row is being
+   * bisected by its neighbor), replace that row by a "head" + "tail" pair:
+   *   - head: copies the parent row exactly, except [[endAtColName]] is set to null.
+   *   - tail: copies the parent row exactly, except [[startAtColName]] is set to null and
+   *     [[recordStartAtFieldName]] inside [[cdcMetadataColName]] is set to null. All user
+   *     data columns are inherited from the parent as-is.
+   *
+   * Decomposition tails are uniquely identified by [[recordStartAtFieldName]] = null and
+   * are transient: downstream reconciliation drops them when a coincident non-tail row
+   * already represents the same closure, or promotes them to tombstones in the aux table
+   * otherwise.
+   *
+   * All other input rows pass through unchanged ("no-op decompose"). This includes:
+   *   1. Open rows ([[endAtColName]] = null): incoming upserts, no-op continuations, etc.
+   *   2. Tombstones ([[startAtColName]] = [[endAtColName]]): protected from decomposition
+   *      even though they qualify as "closed" in the broader sense, because their interval
+   *      is degenerate.
+   *   3. Closed non-tombstone rows whose successor's [[recordStartAtFieldName]] is `>=`
+   *      this row's [[endAtColName]]: the closing event already coincides with or follows
+   *      the run boundary, so there is nothing to bisect.
+   *
+   * Bisection detection is implemented via `LEAD(1)` over [[orderChronologicallyPerKeyWindow]]:
+   * because the window orders by effective recordStartAt ascending, examining only the
+   * immediate successor is sufficient to decide whether any other row in the partition has
+   * a recordStartAt within `[recordStartAt, endAt)`.
+   * 
+   * Decomposing closed rows that are being bisected gives us that chance to form new
+   * closed intervals using the incoming microbatch events, later in reconciliation.
+   *
+   * @param rowsToDecomposePerKey
+   *   a dataframe conforming to the canonical SCD2 row schema
+   *   `[user_cols..., __START_AT, __END_AT, _cdc_metadata]`, where `_cdc_metadata`
+   *   conforms to [[targetCdcMetadataColSchema]]. Decomposition tails (rows with
+   *   [[recordStartAtFieldName]] = null) MUST NOT be present on input - they are
+   *   produced exclusively by this function.
+   * @return
+   *   a dataframe with the same schema as the input. Every closed non-tombstone row that
+   *   was bisected has been replaced by its head + tail pair; every other row is carried
+   *   through as-is. Each output row can be classified as one of: {decomposition head,
+   *   decomposition tail, tombstone, open upsert, closed-and-unbisected row}.
+   */
+  private def decomposeOutOfOrderRows(rowsToDecomposePerKey: DataFrame): DataFrame = {
+    val recordStartAtField =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAtCol = rowsToDecomposePerKey.col(Scd2BatchProcessor.startAtColName)
+    val endAtCol = rowsToDecomposePerKey.col(Scd2BatchProcessor.endAtColName)
+
+    // Track the next row's recordStartAt in a temporary column. Spark does not allow a
+    // window expression directly inside the explode expression below.
+    val rowsToDecomposeWithWindowCols = rowsToDecomposePerKey.withColumn(
+      Scd2BatchProcessor.nextRecordStartAtColName,
+      F.lead(recordStartAtField, 1).over(orderChronologicallyPerKeyWindow)
+    )
+    val nextRecordStartAt = rowsToDecomposeWithWindowCols.col(
+      Scd2BatchProcessor.nextRecordStartAtColName
+    )
+
+    val isClosedNonTombstoneRow = RowClassifier.isClosedRow(
+      recordStartAt = recordStartAtField,
+      startAt = startAtCol,
+      endAt = endAtCol,
+      includeTombstones = false
+    )
+    val nextRowBisectsCurrentRow =
+      nextRecordStartAt.isNotNull && nextRecordStartAt < endAtCol
+    val isBisected = isClosedNonTombstoneRow && nextRowBisectsCurrentRow
+
+    val originalCols: Seq[String] = rowsToDecomposePerKey.columns.toSeq
+
+    // Constructs the head of a row post-decomposition. EA is opened (set to null); every other
+    // column is inherited from the original row.
+    def constructDecomposedRowHead: Column = {
+      val fields = originalCols.map {
+        case c if c == Scd2BatchProcessor.endAtColName =>
+          F.lit(null).cast(resolvedSequencingType).as(c)
+        case c =>
+          rowsToDecomposeWithWindowCols.col(c).as(c)
+      }
+      F.struct(fields: _*)
+    }
+
+    // Constructs the tail of a row post-decomposition.
+    def constructDecomposedRowTail: Column = {
+      val fields = originalCols.map {
+        case c if c == Scd2BatchProcessor.startAtColName =>
+          F.lit(null).cast(resolvedSequencingType).as(c)
+        case c if c == AutoCdcReservedNames.cdcMetadataColName =>
+          Scd2BatchProcessor
+            .constructTargetCdcMetadataCol(
+              recordStartAt = F.lit(null).cast(resolvedSequencingType),
+              sequencingType = resolvedSequencingType
+            )
+            .as(c)
+        case c =>
+          rowsToDecomposeWithWindowCols.col(c).as(c)
+      }
+      F.struct(fields: _*)
+    }
+
+    // No-op decomposition carries over the row as-is.
+    def constructNoopDecomposedRow: Column = {
+      val fields = originalCols.map(c => rowsToDecomposeWithWindowCols.col(c).as(c))
+      F.struct(fields: _*)
+    }
+
+    // If a row is bisected by the proceeding row, decompose it into a head + tail pair.
+    // Otherwise pass through as a single-element array so the explode below is uniform.
+    val perRowDecompositionResults = F
+      .when(
+        isBisected,
+        F.array(constructDecomposedRowHead, constructDecomposedRowTail)
+      )
+      .otherwise(F.array(constructNoopDecomposedRow))
+
+    rowsToDecomposeWithWindowCols
+      // The output schema matches the input schema exactly; no extra columns are projected.
+      .withColumn(
+        Scd2BatchProcessor.decompositionExplodedColName,
+        F.explode(perRowDecompositionResults)
+      )
+      .select(F.col(s"${Scd2BatchProcessor.decompositionExplodedColName}.*"))
+  }
 }
 
 /**
@@ -484,8 +650,27 @@ object Scd2BatchProcessor {
   /**
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
    * key within the microbatch.
+   * 
+   * Transient in that the column has no observable side affect or persistence across microbatches.
    */
   private[autocdc] val minSequenceColName: String = s"${AutoCdcReservedNames.prefix}min_sequence"
+
+  /**
+   * Name of temporary column projected onto intermediary dataframe during decomposition to track
+   * the next row's record start at when in sorted in chronological order as per
+   * [[orderChronologicallyPerKeyWindow]].
+   * 
+   * Transient in that the column has no observable side affect or persistence across microbatches.
+   */
+  private[autocdc] val nextRecordStartAtColName = s"${AutoCdcReservedNames.prefix}next_record_start_at"
+
+  /**
+   * Name of temporary column projected onto intermediary dataframe during decomposition that
+   * stores the child rows that result from decomposing a parent row.
+   * 
+   * Transient in that the column has no observable side affect or persistence across microbatches.
+   */
+  val decompositionExplodedColName = s"${{AutoCdcReservedNames.prefix}}decompose_output"
 
   /**
    * Name of temporary column projected used to identify the sequence associated with the anchor
@@ -576,4 +761,22 @@ object Scd2BatchProcessor {
     }
     F.struct(cdcMetadataFieldsInOrder.toImmutableArraySeq: _*)
   }
+}
+
+object RowClassifier {
+
+  /** Any row with a closed interval. When `includeTombstones` is true, this
+    * includes instantaneous delete boundaries; otherwise it only matches
+    * visible historical upsert rows.
+    */
+  def isClosedRow(
+      recordStartAt: Column,
+      startAt: Column,
+      endAt: Column,
+      includeTombstones: Boolean
+  ): Column =
+    recordStartAt.isNotNull &&
+      startAt.isNotNull &&
+      endAt.isNotNull &&
+      (if (includeTombstones) startAt <= endAt else startAt < endAt)
 }
