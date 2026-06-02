@@ -105,22 +105,31 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     val trueEval = trueValue.genCode(ctx)
     val falseEval = falseValue.genCode(ctx)
 
+    // A non-nullable branch's isNull is statically false, so its `ev.isNull = ...`
+    // assignment is dead (ev.isNull is initialized to false). When the whole If is
+    // non-nullable, the ev.isNull variable is dropped entirely (isNull = FalseLiteral).
+    val isNullDecl = if (nullable) code"boolean ${ev.isNull} = false;" else EmptyBlock
+    val setTrueIsNull =
+      if (trueValue.nullable) code"${ev.isNull} = ${trueEval.isNull};" else EmptyBlock
+    val setFalseIsNull =
+      if (falseValue.nullable) code"${ev.isNull} = ${falseEval.isNull};" else EmptyBlock
+
     val code =
       code"""
          |${condEval.code}
-         |boolean ${ev.isNull} = false;
+         |$isNullDecl
          |${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
          |if (!${condEval.isNull} && ${condEval.value}) {
          |  ${trueEval.code}
-         |  ${ev.isNull} = ${trueEval.isNull};
+         |  $setTrueIsNull
          |  ${ev.value} = ${trueEval.value};
          |} else {
          |  ${falseEval.code}
-         |  ${ev.isNull} = ${falseEval.isNull};
+         |  $setFalseIsNull
          |  ${ev.value} = ${falseEval.value};
          |}
        """.stripMargin
-    ev.copy(code = code)
+    ev.copy(code = code, isNull = if (nullable) ev.isNull else FalseLiteral)
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"

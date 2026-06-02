@@ -66,6 +66,18 @@ class ConditionalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper
 
     testIf(_.toString, StringType)
 
+    // Both branches nullable: exercises the codegen path that keeps the ev.isNull
+    // declaration and both branch assignments (each literal case above has a
+    // non-nullable branch and takes a dead-branch-skipping path instead).
+    val whenTrue = Literal.create(true, BooleanType)
+    val whenFalse = Literal.create(false, BooleanType)
+    val ref0 = BoundReference(0, IntegerType, nullable = true)
+    val ref1 = BoundReference(1, IntegerType, nullable = true)
+    checkEvaluation(If(whenTrue, ref0, ref1), 1, create_row(1, 2))
+    checkEvaluation(If(whenFalse, ref0, ref1), 2, create_row(1, 2))
+    checkEvaluation(If(whenTrue, ref0, ref1), null, create_row(null, 2))
+    checkEvaluation(If(whenFalse, ref0, ref1), null, create_row(1, null))
+
     DataTypeTestUtils.propertyCheckSupported.foreach { dt =>
       checkConsistencyBetweenInterpretedAndCodegen(If, BooleanType, dt, dt)
     }
