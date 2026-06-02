@@ -519,30 +519,33 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
     // all evals are meant to be inside a do { ... } while (false); loop
     val evals = children.map { e =>
       val eval = e.genCode(ctx)
-      e.dataType match {
+      // Condition under which the child counts as a non-null value, or None when
+      // it always counts. NaN never counts; the null check is dropped for a
+      // non-nullable child, whose isNull is statically false.
+      val countCond = e.dataType match {
         case DoubleType | FloatType =>
-          s"""
-             |if ($nonnull < $n) {
-             |  ${eval.code}
-             |  if (!${eval.isNull} && !Double.isNaN(${eval.value})) {
-             |    $nonnull += 1;
-             |  }
-             |} else {
-             |  continue;
-             |}
-           """.stripMargin
+          val notNaN = s"!Double.isNaN(${eval.value})"
+          Some(if (e.nullable) s"!${eval.isNull} && $notNaN" else notNaN)
         case _ =>
-          s"""
-             |if ($nonnull < $n) {
-             |  ${eval.code}
-             |  if (!${eval.isNull}) {
-             |    $nonnull += 1;
-             |  }
-             |} else {
-             |  continue;
-             |}
-           """.stripMargin
+          if (e.nullable) Some(s"!${eval.isNull}") else None
       }
+      val countCode = countCond match {
+        case Some(cond) =>
+          s"""
+             |if ($cond) {
+             |  $nonnull += 1;
+             |}""".stripMargin
+        case None =>
+          s"$nonnull += 1;"
+      }
+      s"""
+         |if ($nonnull < $n) {
+         |  ${eval.code}
+         |  $countCode
+         |} else {
+         |  continue;
+         |}
+       """.stripMargin
     }
 
     val codes = ctx.splitExpressionsWithCurrentInputs(
