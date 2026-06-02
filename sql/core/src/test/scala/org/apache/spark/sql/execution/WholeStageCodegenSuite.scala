@@ -1186,4 +1186,42 @@ class WholeStageCodegenSuite extends SharedSparkSession
       }
     }
   }
+
+  test("SPARK-56032: FilterExec skips CSE codegen when there is no common subexpression") {
+    // When otherPreds share no common subexpression, the CSE codegen path provides no benefit
+    // but would still eagerly evaluate every referenced input column at the top of the row loop
+    // (the inputVarsEvalCode prologue), defeating the lazy, short-circuiting column loads of the
+    // non-CSE path. Verify that with CSE enabled we fall back to the exact same generated code as
+    // with CSE disabled, so no column is decoded for rows an earlier predicate would reject.
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", IntegerType, nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(1, 5), Row(null, 3), Row(4, null), Row(5, 6), Row(7, 8), Row(2, 3)))
+    val expected = Seq(Row(5, 6), Row(7, 8))
+
+    def filterCode(cseEnabled: Boolean): String = {
+      withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = spark.createDataFrame(data, schema)
+        // `a > 4` and `b > 4` reference different columns and share no subexpression.
+        val filtered = df.where("a IS NOT NULL AND a > 4 AND b > 4")
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        checkAnswer(filtered, expected)
+        codegenString(plan)
+      }
+    }
+
+    // Each `createDataFrame` mints fresh attribute exprIds (e.g. `a#16`), which appear in the
+    // plan-tree header of the codegen dump but not in the generated Java. Normalize them away so
+    // the comparison reflects the generated code, not the id counter.
+    def normalize(code: String): String = code.replaceAll("#\\d+", "#")
+    assert(normalize(filterCode(cseEnabled = true)) == normalize(filterCode(cseEnabled = false)),
+      "With no common subexpression, CSE-enabled FilterExec codegen should be identical to " +
+        "CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting non-CSE path)")
+  }
 }
