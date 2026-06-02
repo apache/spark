@@ -263,7 +263,7 @@ class ConcurrentStageDAGScheduler(
   // enqueues any saved task completion event (if any).
   private def checkDependentStageTasks(stage: Stage): Unit = {
     val dependentStageInfo = dependentStageMap.getOrElse(
-      stage, throw new RuntimeException(s"Stage $stage is not in dependentStageMap")
+      stage, throw new IllegalStateException(s"Stage $stage is not in dependentStageMap")
     )
 
     if (dependentStageInfo.parents.isEmpty) {
