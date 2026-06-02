@@ -217,4 +217,16 @@ case class ParquetScan(
       Map("PushedGroupBy" -> pushedGroupByStr) ++
       Map("PushedVariantExtractions" -> variantExtractionStr)
   }
+
+  // SupportsScanMerging hooks (generic logic in FileScan): Parquet disables merging when an
+  // aggregate is pushed, and requires equal variant extractions to merge.
+  override protected def hasAggregatePushedDown: Boolean = pushedAggregate.nonEmpty
+
+  override protected def canMergeScanStateWith(other: FileScan): Boolean = other match {
+    case o: ParquetScan =>
+      java.util.Arrays.equals(
+        pushedVariantExtractions.asInstanceOf[Array[Object]],
+        o.pushedVariantExtractions.asInstanceOf[Array[Object]])
+    case _ => false
+  }
 }

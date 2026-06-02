@@ -1620,6 +1620,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val FILE_SCAN_MERGE_IGNORE_PUSHED_DATA_FILTERS =
+    buildConf("spark.sql.files.scanMerge.ignorePushedDataFilters")
+      .internal()
+      .doc("When true, allow file-source `Scan`s with different pushed data filters to be merged " +
+        "via the SupportsScanMerging connector API. The merged scan widens the filter to " +
+        "OR(f1, f2) and per-scan filters are reapplied at consumers (e.g. via aggregate FILTER " +
+        "clauses). When false, scans must have identical pushed data filters to merge.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_WRITE_LEGACY_FORMAT = buildConf("spark.sql.parquet.writeLegacyFormat")
     .doc("If true, data will be written in a way of Spark 1.4 and earlier. For example, decimal " +
       "values will be written in Apache Parquet's fixed-length byte array format, which other " +
@@ -7869,6 +7881,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD)
 
   def parquetAggregatePushDown: Boolean = getConf(PARQUET_AGGREGATE_PUSHDOWN_ENABLED)
+
+  def fileScanMergeIgnorePushedDataFilters: Boolean =
+    getConf(FILE_SCAN_MERGE_IGNORE_PUSHED_DATA_FILTERS)
 
   def orcFilterPushDown: Boolean = getConf(ORC_FILTER_PUSHDOWN_ENABLED)
 
