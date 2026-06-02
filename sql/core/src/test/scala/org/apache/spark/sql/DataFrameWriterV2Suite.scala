@@ -155,6 +155,26 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
       Seq())
   }
 
+  test("SPARK-57223: Append: extra column with special-char name is quoted correctly in error") {
+    for (colName <- Seq("job.title", "job title")) {
+      spark.sql("CREATE TABLE testcat.table_name (id bigint, data string) USING foo")
+      try {
+        checkError(
+          exception = intercept[AnalysisException] {
+            spark.table("source").withColumnRenamed("data", colName)
+              .writeTo("testcat.table_name").append()
+          },
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
+          parameters = Map(
+            "tableName" -> "`testcat`.`table_name`",
+            "extraColumns" -> s"`$colName`")
+        )
+      } finally {
+        spark.sql("DROP TABLE IF EXISTS testcat.table_name")
+      }
+    }
+  }
+
   test("Append: fail if table does not exist") {
     val exc = intercept[AnalysisException] {
       spark.table("source").writeTo("testcat.table_name").append()
