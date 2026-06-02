@@ -708,12 +708,15 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         // cast/parser support.
         val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
         val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
-        val e = intercept[AnalysisException] {
-          df.write.jdbc(url, "TEST.NANOSTYPES", new Properties())
-        }
-        assert(e.getCondition === "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE")
-        assert(e.getMessageParameters.get("columnName") === "`ts`")
-        assert(e.getMessageParameters.get("columnType") === s""""${nanosType.sql}"""")
+        checkErrorMatchPVals(
+          exception = intercept[AnalysisException] {
+            df.write.jdbc(url, "TEST.NANOSTYPES", new Properties())
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`ts`",
+            "columnType" -> java.util.regex.Pattern.quote(s""""${nanosType.sql}""""),
+            "format" -> ".*"))
       }
     }
   }
