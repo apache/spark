@@ -29,8 +29,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.sql.vectorized.ColumnarRow;
 import org.apache.spark.unsafe.types.CalendarInterval;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 
@@ -78,10 +77,8 @@ public final class MutableColumnarRow extends InternalRow {
           row.update(i, getUTF8String(i).copy());
         } else if (dt instanceof BinaryType) {
           row.update(i, getBinary(i));
-        } else if (dt instanceof GeographyType) {
-          row.update(i, getGeography(i));
-        } else if (dt instanceof GeometryType) {
-          row.update(i, getGeometry(i));
+        } else if (dt instanceof GeographyType || dt instanceof GeometryType) {
+          row.update(i, getBinaryView(i).copy());
         } else if (dt instanceof DecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
         } else if (dt instanceof DateType) {
@@ -151,13 +148,8 @@ public final class MutableColumnarRow extends InternalRow {
   }
 
   @Override
-  public GeographyVal getGeography(int ordinal) {
-    return columns[ordinal].getGeography(rowId);
-  }
-
-  @Override
-  public GeometryVal getGeometry(int ordinal) {
-    return columns[ordinal].getGeometry(rowId);
+  public BinaryView getBinaryView(int ordinal) {
+    return columns[ordinal].getBinaryView(rowId);
   }
 
   @Override

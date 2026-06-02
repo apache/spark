@@ -22,11 +22,10 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.UserDefinedType;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
 
 /**
  * An interface representing in-memory columnar data in Spark. This interface defines the main APIs
@@ -290,14 +289,14 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public abstract byte[] getBinary(int rowId);
 
-  public GeographyVal getGeography(int rowId) {
+  /**
+   * Returns the opaque-bytes physical value at {@code rowId} as a {@link BinaryView}. Used by
+   * logical types whose physical representation is "an opaque chunk of bytes" - currently
+   * GEOMETRY and GEOGRAPHY. Returns {@code null} if the slot is null.
+   */
+  public BinaryView getBinaryView(int rowId) {
     byte[] bytes = getBinary(rowId);
-    return (bytes == null) ? null : GeographyVal.fromBytes(bytes);
-  }
-
-  public GeometryVal getGeometry(int rowId) {
-    byte[] bytes = getBinary(rowId);
-    return (bytes == null) ? null : GeometryVal.fromBytes(bytes);
+    return (bytes == null) ? null : BinaryView.fromBytes(bytes);
   }
 
   /**

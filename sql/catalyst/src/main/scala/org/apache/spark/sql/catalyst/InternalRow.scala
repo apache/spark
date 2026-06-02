@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -119,6 +119,7 @@ object InternalRow {
    */
   def copyValue(value: Any): Any = value match {
     case v: UTF8String => v.copy()
+    case v: BinaryView => v.copy()
     case v: InternalRow => v.copy()
     case v: ArrayData => v.copy()
     case v: MapData => v.copy()
@@ -190,6 +191,8 @@ object InternalRow {
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
     case NullType => (input, _) => input.setNullAt(ordinal)
     case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+    case _: GeometryType | _: GeographyType =>
+      (input, v) => input.update(ordinal, v.asInstanceOf[BinaryView].copy())
     case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
     case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
     case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())

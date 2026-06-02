@@ -24,8 +24,7 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 
@@ -113,12 +112,8 @@ public abstract class UnsafeWriter {
     writeUnalignedBytes(ordinal, input.getBaseObject(), input.getBaseOffset(), input.numBytes());
   }
 
-  public final void write(int ordinal, GeographyVal input) {
-    write(ordinal, input.getBytes());
-  }
-
-  public final void write(int ordinal, GeometryVal input) {
-    write(ordinal, input.getBytes());
+  public final void write(int ordinal, BinaryView input) {
+    writeUnalignedBytes(ordinal, input.getBaseObject(), input.getBaseOffset(), input.numBytes());
   }
 
   public final void write(int ordinal, byte[] input) {

@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, 
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -1211,13 +1211,13 @@ case class Cast(
     case _: GeographyType =>
       identity
     case _: GeometryType =>
-      buildCast[GeometryVal](_, STUtils.geometryToGeography)
+      buildCast[BinaryView](_, STUtils.geometryToGeography)
   }
 
   // GeometryConverter
   private[this] def castToGeometry(from: DataType): Any => Any = from match {
     case _: GeographyType =>
-      buildCast[GeographyVal](_, STUtils.geographyToGeometry)
+      buildCast[BinaryView](_, STUtils.geographyToGeometry)
     case _: GeometryType =>
       identity
   }

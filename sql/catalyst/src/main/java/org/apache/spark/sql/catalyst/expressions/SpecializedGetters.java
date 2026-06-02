@@ -22,11 +22,10 @@ import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.catalyst.util.MapData;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
 
 public interface SpecializedGetters {
 
@@ -52,9 +51,14 @@ public interface SpecializedGetters {
 
   byte[] getBinary(int ordinal);
 
-  GeographyVal getGeography(int ordinal);
-
-  GeometryVal getGeometry(int ordinal);
+  /**
+   * Returns the opaque-bytes physical value at {@code ordinal} as a {@link BinaryView}. Used by
+   * logical types whose physical representation is "an opaque chunk of bytes" - currently
+   * GEOMETRY and GEOGRAPHY. Returns {@code null} if the slot is null. The returned view may
+   * alias the underlying buffer; callers that need to retain it past the source's lifetime
+   * must call {@link BinaryView#copy()}.
+   */
+  BinaryView getBinaryView(int ordinal);
 
   CalendarInterval getInterval(int ordinal);
 
