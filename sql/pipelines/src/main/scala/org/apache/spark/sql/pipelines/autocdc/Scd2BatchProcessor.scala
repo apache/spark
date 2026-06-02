@@ -267,14 +267,13 @@ case class Scd2BatchProcessor(
         F.max(auxTableRecordStartAtField).as(Scd2BatchProcessor.anchorSequenceColName)
       )
     val anchorSequenceCol = F.col(Scd2BatchProcessor.anchorSequenceColName)
+    val auxRowIsAnchorRow = auxTableRecordStartAtField === anchorSequenceCol
 
     // Now that we have the minimum sequence in the microbatch and the sequence of the anchor row,
     // we have enough information to compute the full set of auxiliary rows that affect or are
     // affected by the microbatch.
     val auxRowIsAfterMinSequenceInMicrobatch =
       auxTableRecordStartAtField >= perKeyMinimumSequenceInMicrobatchCol
-
-    val auxRowIsAnchorRow = auxTableRecordStartAtField === anchorSequenceCol
 
     val auxRowAffectsMicrobatch = auxRowIsAfterMinSequenceInMicrobatch || auxRowIsAnchorRow
 
