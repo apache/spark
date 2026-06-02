@@ -519,13 +519,20 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression with 
     val values = ctx.freshName("values")
     val valCodes = valExprs.zipWithIndex.map { case (e, i) =>
       val eval = e.genCode(ctx)
+      val assignment = if (!e.nullable) {
+        s"$values[$i] = ${eval.value};"
+      } else {
+        s"""
+           |if (${eval.isNull}) {
+           |  $values[$i] = null;
+           |} else {
+           |  $values[$i] = ${eval.value};
+           |}
+         """.stripMargin
+      }
       s"""
          |${eval.code}
-         |if (${eval.isNull}) {
-         |  $values[$i] = null;
-         |} else {
-         |  $values[$i] = ${eval.value};
-         |}
+         |$assignment
        """.stripMargin
     }
     val valuesCode = ctx.splitExpressionsWithCurrentInputs(
