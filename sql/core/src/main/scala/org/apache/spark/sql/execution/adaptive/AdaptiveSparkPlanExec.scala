@@ -86,6 +86,13 @@ case class AdaptiveSparkPlanExec(
   @transient private val optimizer = new AQEOptimizer(conf,
     context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
 
+  // The tracker to record physical preparation rules into. Only the outer (non-subquery)
+  // `AdaptiveSparkPlanExec` records into the shared `context.qe.tracker`; sub-AQE replanning
+  // happens on `SubqueryExec.executionContext` and writing to the outer tracker from there
+  // would break `QueryPlanningTracker`'s thread-local single-threaded contract.
+  @transient private val mainQueryTracker: Option[QueryPlanningTracker] =
+    if (isSubquery) None else Some(context.qe.tracker)
+
   // `EnsureRequirements` may remove user-specified repartition and assume the query plan won't
   // change its output partitioning. This assumption is not true in AQE. Here we check the
   // `inputPlan` which has not been processed by `EnsureRequirements` yet, to find out the
@@ -198,7 +205,7 @@ case class AdaptiveSparkPlanExec(
       plan,
       context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules,
       Some((planChangeLogger, "AQE Query Post Planner Strategy Rules")),
-      Some(context.qe.tracker)
+      mainQueryTracker
     )
   }
 
@@ -207,7 +214,7 @@ case class AdaptiveSparkPlanExec(
       applyQueryPostPlannerStrategyRules(inputPlan),
       queryStagePreparationRules,
       Some((planChangeLogger, "AQE Preparations")),
-      Some(context.qe.tracker))
+      mainQueryTracker)
   }
 
   @volatile private var currentPhysicalPlan = initialPlan
@@ -671,7 +678,7 @@ case class AdaptiveSparkPlanExec(
       optimizeQueryStage(plan, isFinalStage = true),
       postStageCreationRules(supportsColumnar),
       Some((planChangeLogger, "AQE Post Stage Creation")),
-      Some(context.qe.tracker))
+      mainQueryTracker)
     val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(resultStage, plan)
@@ -686,7 +693,7 @@ case class AdaptiveSparkPlanExec(
           optimized,
           postStageCreationRules(outputsColumnar = plan.supportsColumnar),
           Some((planChangeLogger, "AQE Post Stage Creation")),
-          Some(context.qe.tracker))
+          mainQueryTracker)
         if (e.isInstanceOf[ShuffleExchangeLike]) {
           if (!newPlan.isInstanceOf[ShuffleExchangeLike]) {
             throw SparkException.internalError(
@@ -810,13 +817,16 @@ case class AdaptiveSparkPlanExec(
   private def reOptimize(logicalPlan: LogicalPlan): Option[(SparkPlan, LogicalPlan)] = {
     try {
       logicalPlan.invalidateStatsCache()
-      val optimized = optimizer.executeAndTrack(logicalPlan, context.qe.tracker)
+      val optimized = mainQueryTracker match {
+        case Some(t) => optimizer.executeAndTrack(logicalPlan, t)
+        case None => optimizer.execute(logicalPlan)
+      }
       val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
       val newPlan = applyPhysicalRules(
         applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,
         Some((planChangeLogger, "AQE Replanning")),
-        Some(context.qe.tracker))
+        mainQueryTracker)
 
       // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
       // add the `BroadcastExchangeExec` node manually in the DPP subquery,

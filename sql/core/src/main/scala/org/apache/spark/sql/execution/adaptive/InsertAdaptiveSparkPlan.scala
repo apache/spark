@@ -81,7 +81,7 @@ case class InsertAdaptiveSparkPlan(
           val newPlan = AdaptiveSparkPlanExec.applyPhysicalRules(
             plan,
             preprocessingRules,
-            tracker = Some(adaptiveExecutionContext.qe.tracker))
+            tracker = if (isSubquery) None else Some(adaptiveExecutionContext.qe.tracker))
           logDebug(s"Adaptive execution enabled for plan: $plan")
           AdaptiveSparkPlanExec(newPlan, adaptiveExecutionContext, preprocessingRules, isSubquery)
         } catch {
