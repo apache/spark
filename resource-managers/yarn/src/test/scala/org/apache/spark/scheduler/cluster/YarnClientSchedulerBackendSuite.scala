@@ -55,7 +55,16 @@ class YarnClientSchedulerBackendSuite extends SparkFunSuite with LocalSparkConte
 
     val monitorMethod = backend.getClass.getDeclaredMethod("asyncMonitorApplication")
     monitorMethod.setAccessible(true)
-    monitorMethod.invoke(backend).asInstanceOf[Thread].start()
+    val monitorThread = monitorMethod.invoke(backend).asInstanceOf[Thread]
+
+    // Assign to backend.monitorThread so the full shutdown path is exercised:
+    // sc.stop() -> YarnClientSchedulerBackend.stop() -> monitorThread.stopMonitor()
+    val monitorField = backend.getClass.getDeclaredFields
+      .find(_.getName.endsWith("monitorThread")).get
+    monitorField.setAccessible(true)
+    monitorField.set(backend, monitorThread)
+
+    monitorThread.start()
 
     assert(stopCalled.await(10, TimeUnit.SECONDS),
       "sc.stop() was not called after MonitorThread hit an unexpected exception")
