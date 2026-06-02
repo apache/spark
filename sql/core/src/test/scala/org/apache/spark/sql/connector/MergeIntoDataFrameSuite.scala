@@ -1234,12 +1234,8 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
-  // The DataFrame cache is bypassed during a transaction unless the connector approves the cached
-  // scans via Transaction#registerScans. The next two tests exercise that path against the merge
-  // source, a common case where users cache an expensive source DataFrame before running MERGE.
-  // The test connector's registerScans accepts when the cached scan's table version matches the
-  // current version (no intervening writes) and refuses otherwise.
-
+  // Cache-substitution tests for the txn path: connector approves stale-free cached scans via
+  // Transaction.registerScans (returns true iff cached version == current).
   test("cached merge source is reused when the table is unchanged since caching") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -1249,14 +1245,11 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
 
     val tableVersionBeforeCache = table.version()
 
-    // Cache a derived view of the target table. The InMemoryBatchScan stamps the current table
-    // version at build time; that version is what the connector compares against later.
     val sourceDF = spark.table(tableNameAsString).where("salary < 250").as("source")
     sourceDF.cache()
     sourceDF.count()
 
-    assert(table.version() == tableVersionBeforeCache,
-      "sanity: caching a read should not bump the table version")
+    assert(table.version() == tableVersionBeforeCache, "sanity: caching does not bump version")
 
     val (txn, txnTables) = executeTransaction {
       sourceDF
@@ -1267,19 +1260,10 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
+    assert(txn.registeredScans.nonEmpty, "registerScans should have accepted the cached scan")
 
-    // Cached scan's version == current version -> registerScans accepted -> cache substituted.
-    // The non-empty registeredScans buffer is the witness that the connector ran the
-    // cache-acceptance path (not a fresh scan-builder path).
-    assert(txn.registeredScans.nonEmpty,
-      "registerScans should have been called and accepted (no writes since cache)")
-
-    // Even though the cache was used, registerScans recorded the read on the target's TxnTable
-    // so that scanEvents uniformly captures cached and fresh reads. The MERGE plan references
-    // the source twice (matched and not-matched branches), so the source filter appears twice
-    // in scanEvents, whether contributed by registerScans (cache path) or by fresh scans
-    // (rescan path). The `registeredScans` non-empty assertion above is what distinguishes
-    // the two cases.
+    // MERGE references the source twice (matched + not-matched branches), so the filter
+    // appears twice in scanEvents whether contributed by registerScans or fresh scans.
     val targetTxnTable = txnTables(tableNameAsString)
     val sourceFilterScans = targetTxnTable.scanEvents.flatten.count {
       case sources.LessThan("salary", 250) => true
@@ -1304,28 +1288,13 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 3, "salary": 300, "dep": "hr" }
         |""".stripMargin)
 
-    // Cache the source at the table's current version.
     val sourceDF = spark.table(tableNameAsString).where("salary < 250").as("source")
     sourceDF.cache()
     sourceDF.count()
     val versionAtCache = table.version()
 
-    // Simulate an external committer bumping the table version between caching and the MERGE.
-    // A write done through Spark (e.g. another `append`) would also bump the version, but it
-    // would additionally trigger CacheManager.refreshCache, which re-materializes our cached
-    // InMemoryRelation against the new snapshot, defeating the test. The `registerScans`
-    // path is meant to defend against writes Spark didn't observe (other clusters, other
-    // sessions, direct table mutations), so we bump the version directly.
-    //
-    // NOTE on fidelity: the in-memory test catalog does not separate "metastore version" from
-    // "loaded snapshot version",`InMemoryBaseTable.tableVersion` is shared mutable state, so
-    // a scan's `currentTableVersion` immediately reflects this bump. A real DSv2 Delta
-    // connector holds a Table loaded at V1 and would not observe an external bump to V2 unless
-    // it explicitly refreshed from the metastore (per go/spark-refresh design doc, Section 5
-    // Scenario 1). The test therefore exercises a stricter connector policy than Delta's
-    // default, namely one that polices version drift on every registerScans call. A more
-    // faithful model would capture the txn's pinned snapshot in TxnTable at txn-begin and
-    // compare scan.builtAt against that pinned value; see follow-up notes in memory.
+    // Bump the version directly to simulate an out-of-band committer. A Spark-side write would
+    // also bump the version but would trigger CacheManager.refreshCache and defeat the test.
     table.increaseVersion()
     assert(table.version() != versionAtCache, "sanity: bump should change the version")
 
@@ -1338,13 +1307,8 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
-    // Cached scan's builtAtTableVersion != currentTableVersion -> registerScans refused; nothing
-    // recorded.
-    assert(txn.registeredScans.isEmpty,
-      "registerScans should have refused the stale cached scan")
+    assert(txn.registeredScans.isEmpty, "registerScans should refuse the stale cached scan")
 
-    // The cached source was not substituted, so the source's salary<250 filter was re-evaluated
-    // through the txn catalog and shows up as a scan event on the target's TxnTable.
     val targetTxnTable = txnTables(tableNameAsString)
     val sourceFilterScanned = targetTxnTable.scanEvents.flatten.exists {
       case sources.LessThan("salary", 250) => true
@@ -1368,9 +1332,8 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin)
 
-    // Build the source from spark.range, no DataSourceV2Relation, no catalog reference at all.
-    // Inside the txn, validateCachedEntryForTransaction's txnTables set is empty for this cached
-    // entry, so the short-circuit accepts the cache without ever consulting registerScans.
+    // Source has no DataSourceV2Relation, so validateCachedEntryForTransaction's txnTables set
+    // is empty and the cache is accepted without consulting registerScans.
     val sourceDF = spark.range(2)
       .select(
         (col("id") + 1).cast(IntegerType).as("pk"),
@@ -1406,11 +1369,8 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         |{ "pk": 3, "salary": 300, "dep": "hr" }
         |""".stripMargin)
 
-    // Create + populate a lookup table in the same txn catalog. We cache a DataFrame against
-    // this lookup, then drive a MERGE whose source filters by an IN-subquery against the
-    // cached lookup. The cache substitution can only happen via useCachedData's recursive
-    // descent into SubqueryExpression, transformDown alone would not find the cached subtree
-    // hidden inside the IN expression.
+    // The cached entry sits inside an IN-subquery, so substitution requires useCachedData's
+    // recursion into SubqueryExpression - transformDown alone wouldn't reach it.
     val lookupName = "cat.ns1.cache_lookup"
     withTable(lookupName) {
       sql(s"CREATE TABLE $lookupName (pk INT) USING foo")
@@ -1434,9 +1394,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
       }
 
       assert(txn.currentState == Committed)
-      // The lookup is the only cached entry in this plan, and it sits inside an IN-subquery ,
-      // so the only way the registered scans can include it is via useCachedData's recursive
-      // descent into SubqueryExpression. Every registered scan must point at the lookup.
+      // Every registered scan must point at the lookup (the only cached subtree in this plan).
       val lookupTable = catalog.loadTable(Identifier.of(Array("ns1"), "cache_lookup"))
       assert(txn.registeredScans.flatten.collect {
         case s: InMemoryBaseTable#InMemoryBatchScan => s.table
@@ -1462,8 +1420,8 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     sourceDF.cache()
     sourceDF.count()
 
-    // Force the next transaction to use the default Transaction.registerScans behavior, which
-    // returns false unconditionally. Spark must then bypass the cached source entirely.
+    // Force the default Transaction.registerScans (returns false unconditionally) so Spark
+    // must bypass the cache.
     catalog.nextTxnUsesDefaultRegisterScans = true
 
     val (txn, txnTables) = executeTransaction {
@@ -1475,13 +1433,8 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
-    // The default-impl refusal is observable: registerScans was called but accepted nothing,
-    // so the buffer stays empty.
-    assert(txn.registeredScans.isEmpty,
-      "default registerScans should refuse the cache")
+    assert(txn.registeredScans.isEmpty, "default registerScans should refuse the cache")
 
-    // Cache bypass means the source's filter is re-evaluated through the txn catalog, leaving
-    // a scan event on the target's TxnTable.
     val targetTxnTable = txnTables(tableNameAsString)
     assert(targetTxnTable.scanEvents.flatten.exists {
       case sources.LessThan("salary", 250) => true
