@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.util.STUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal}
+import org.apache.spark.unsafe.types.BinaryView
 
 class EvaluatePythonSuite extends SparkFunSuite {
 
@@ -43,8 +43,8 @@ class EvaluatePythonSuite extends SparkFunSuite {
     Seq(4267, 4269, 4326, 4612, 37001, 104030).foreach { srid =>
       val convert = EvaluatePython.makeFromJava(GeographyType(srid))
       val result = convert(pyGeo(srid, pointWkb))
-      assert(result.isInstanceOf[GeographyVal])
-      assert(STUtils.stSrid(result.asInstanceOf[GeographyVal]) === srid)
+      assert(result.isInstanceOf[BinaryView])
+      assert(STUtils.stGeogSrid(result.asInstanceOf[BinaryView]) === srid)
     }
   }
 
@@ -52,8 +52,8 @@ class EvaluatePythonSuite extends SparkFunSuite {
     val convert = EvaluatePython.makeFromJava(GeographyType("ANY"))
     Seq(4267, 4269, 4326).foreach { srid =>
       val result = convert(pyGeo(srid, pointWkb))
-      assert(result.isInstanceOf[GeographyVal])
-      assert(STUtils.stSrid(result.asInstanceOf[GeographyVal]) === srid)
+      assert(result.isInstanceOf[BinaryView])
+      assert(STUtils.stGeogSrid(result.asInstanceOf[BinaryView]) === srid)
     }
   }
 
@@ -97,8 +97,8 @@ class EvaluatePythonSuite extends SparkFunSuite {
     Seq(0, 3857, 4267, 4269, 4326, 32601, 102964).foreach { srid =>
       val convert = EvaluatePython.makeFromJava(GeometryType(srid))
       val result = convert(pyGeo(srid, pointWkb))
-      assert(result.isInstanceOf[GeometryVal])
-      assert(STUtils.stSrid(result.asInstanceOf[GeometryVal]) === srid)
+      assert(result.isInstanceOf[BinaryView])
+      assert(STUtils.stGeomSrid(result.asInstanceOf[BinaryView]) === srid)
     }
   }
 
@@ -106,8 +106,8 @@ class EvaluatePythonSuite extends SparkFunSuite {
     val convert = EvaluatePython.makeFromJava(GeometryType("ANY"))
     Seq(0, 3857, 4267, 4269, 4326).foreach { srid =>
       val result = convert(pyGeo(srid, pointWkb))
-      assert(result.isInstanceOf[GeometryVal])
-      assert(STUtils.stSrid(result.asInstanceOf[GeometryVal]) === srid)
+      assert(result.isInstanceOf[BinaryView])
+      assert(STUtils.stGeomSrid(result.asInstanceOf[BinaryView]) === srid)
     }
   }
 

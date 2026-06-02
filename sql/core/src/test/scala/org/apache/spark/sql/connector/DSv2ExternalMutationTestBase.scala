@@ -35,7 +35,7 @@ import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Iden
  *
  * Concrete suites override the abstract methods and mix in a test trait such as
  * [[DSv2TempViewWithStoredPlanTests]], [[DSv2RepeatedTableAccessTests]],
- * or [[DSv2CacheTableReadTests]].
+ * [[DSv2IncrementallyConstructedQueryTests]], or [[DSv2CacheTableReadTests]].
  */
 trait DSv2ExternalMutationTestBase extends QueryTest {
 
@@ -50,6 +50,9 @@ trait DSv2ExternalMutationTestBase extends QueryTest {
 
   /** Prefix for test names, e.g. "" or "[connect] ". */
   protected def testPrefix: String
+
+  /** Whether this suite runs under Spark Connect. */
+  protected def isConnect: Boolean
 
   /** Execute a test body with a session. */
   protected def withTestSession(fn: SparkSession => Unit): Unit

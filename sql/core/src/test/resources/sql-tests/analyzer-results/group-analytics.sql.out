@@ -748,3 +748,1812 @@ Aggregate [a#x, b#x, spark_grouping_id#xL, _gen_grouping_pos#x], [a#x, b#x, coun
                +- Project [a#x, b#x]
                   +- SubqueryAlias testData
                      +- LocalRelation [a#x, b#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW gidSrc AS SELECT * FROM VALUES
+  (1, 10), (2, 20), (1, 30)
+  AS gidSrc(col1, col2)
+-- !query analysis
+CreateViewCommand `gidSrc`, SELECT * FROM VALUES
+  (1, 10), (2, 20), (1, 30)
+  AS gidSrc(col1, col2), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x]
+      +- SubqueryAlias gidSrc
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW aggSrc AS SELECT * FROM VALUES
+  (1, 10), (2, 20), (1, 30), (2, 40)
+  AS aggSrc(a, b)
+-- !query analysis
+CreateViewCommand `aggSrc`, SELECT * FROM VALUES
+  (1, 10), (2, 20), (1, 30), (2, 40)
+  AS aggSrc(a, b), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [a#x, b#x]
+      +- SubqueryAlias aggSrc
+         +- LocalRelation [a#x, b#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW pairAb AS SELECT * FROM VALUES
+  (1, 10), (2, 20)
+  AS pairAb(a, b)
+-- !query analysis
+CreateViewCommand `pairAb`, SELECT * FROM VALUES
+  (1, 10), (2, 20)
+  AS pairAb(a, b), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [a#x, b#x]
+      +- SubqueryAlias pairAb
+         +- LocalRelation [a#x, b#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW qualSrc AS SELECT * FROM VALUES
+  (1, 2)
+  AS qualSrc(c1, c2)
+-- !query analysis
+CreateViewCommand `qualSrc`, SELECT * FROM VALUES
+  (1, 2)
+  AS qualSrc(c1, c2), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [c1#x, c2#x]
+      +- SubqueryAlias qualSrc
+         +- LocalRelation [c1#x, c2#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW triStr AS SELECT * FROM VALUES
+  (1, 'a', 10), (1, 'b', 20), (2, 'a', 30)
+  AS triStr(col1, col2, col3)
+-- !query analysis
+CreateViewCommand `triStr`, SELECT * FROM VALUES
+  (1, 'a', 10), (1, 'b', 20), (2, 'a', 30)
+  AS triStr(col1, col2, col3), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x, col3#x]
+      +- SubqueryAlias triStr
+         +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW subOuter3 AS SELECT * FROM VALUES
+  (1, 10), (1, 20), (2, 30)
+  AS subOuter3(col1, col2)
+-- !query analysis
+CreateViewCommand `subOuter3`, SELECT * FROM VALUES
+  (1, 10), (1, 20), (2, 30)
+  AS subOuter3(col1, col2), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x]
+      +- SubqueryAlias subOuter3
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW subOuter4 AS SELECT * FROM VALUES
+  (1, 10), (1, 20), (2, 30), (3, 40)
+  AS subOuter4(col1, col2)
+-- !query analysis
+CreateViewCommand `subOuter4`, SELECT * FROM VALUES
+  (1, 10), (1, 20), (2, 30), (3, 40)
+  AS subOuter4(col1, col2), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x]
+      +- SubqueryAlias subOuter4
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW notInOuter AS SELECT * FROM VALUES
+  (1, 10), (2, 20), (3, 30)
+  AS notInOuter(col1, col2)
+-- !query analysis
+CreateViewCommand `notInOuter`, SELECT * FROM VALUES
+  (1, 10), (2, 20), (3, 30)
+  AS notInOuter(col1, col2), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x]
+      +- SubqueryAlias notInOuter
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW exprOuter AS SELECT * FROM VALUES
+  (1, 10, 100), (1, 10, 200), (2, 30, 300)
+  AS exprOuter(col1, col2, col3)
+-- !query analysis
+CreateViewCommand `exprOuter`, SELECT * FROM VALUES
+  (1, 10, 100), (1, 10, 200), (2, 30, 300)
+  AS exprOuter(col1, col2, col3), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x, col3#x]
+      +- SubqueryAlias exprOuter
+         +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW cubeStr AS SELECT * FROM VALUES
+  (1, 'a', 10), (2, 'b', 20)
+  AS cubeStr(col1, col2, col3)
+-- !query analysis
+CreateViewCommand `cubeStr`, SELECT * FROM VALUES
+  (1, 'a', 10), (2, 'b', 20)
+  AS cubeStr(col1, col2, col3), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x, col3#x]
+      +- SubqueryAlias cubeStr
+         +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW localOuter AS SELECT * FROM VALUES (10), (20) AS localOuter(col2)
+-- !query analysis
+CreateViewCommand `localOuter`, SELECT * FROM VALUES (10), (20) AS localOuter(col2), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col2#x]
+      +- SubqueryAlias localOuter
+         +- LocalRelation [col2#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW sub12 AS SELECT * FROM VALUES (1), (2) AS sub12(x)
+-- !query analysis
+CreateViewCommand `sub12`, SELECT * FROM VALUES (1), (2) AS sub12(x), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x]
+      +- SubqueryAlias sub12
+         +- LocalRelation [x#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW sub13 AS SELECT * FROM VALUES (1), (3) AS sub13(x)
+-- !query analysis
+CreateViewCommand `sub13`, SELECT * FROM VALUES (1), (3) AS sub13(x), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x]
+      +- SubqueryAlias sub13
+         +- LocalRelation [x#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW sub1132 AS SELECT * FROM VALUES (11), (32) AS sub1132(x)
+-- !query analysis
+CreateViewCommand `sub1132`, SELECT * FROM VALUES (11), (32) AS sub1132(x), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x]
+      +- SubqueryAlias sub1132
+         +- LocalRelation [x#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW one3 AS SELECT * FROM VALUES (3) AS one3(x)
+-- !query analysis
+CreateViewCommand `one3`, SELECT * FROM VALUES (3) AS one3(x), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x]
+      +- SubqueryAlias one3
+         +- LocalRelation [x#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW maxW AS SELECT * FROM VALUES (10), (20) AS maxW(y)
+-- !query analysis
+CreateViewCommand `maxW`, SELECT * FROM VALUES (10), (20) AS maxW(y), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [y#x]
+      +- SubqueryAlias maxW
+         +- LocalRelation [y#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW zeroDummy AS SELECT * FROM VALUES (0) AS zeroDummy(dummy)
+-- !query analysis
+CreateViewCommand `zeroDummy`, SELECT * FROM VALUES (0) AS zeroDummy(dummy), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [dummy#x]
+      +- SubqueryAlias zeroDummy
+         +- LocalRelation [dummy#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW nums3 AS SELECT * FROM VALUES (1), (2), (3) AS nums3(x)
+-- !query analysis
+CreateViewCommand `nums3`, SELECT * FROM VALUES (1), (2), (3) AS nums3(x), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [x#x]
+      +- SubqueryAlias nums3
+         +- LocalRelation [x#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW wide34 AS SELECT * FROM VALUES
+  (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34)
+  AS wide34(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,
+            c21,c22,c23,c24,c25,c26,c27,c28,c29,c30,c31,c32,c33,c34)
+-- !query analysis
+CreateViewCommand `wide34`, SELECT * FROM VALUES
+  (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34)
+  AS wide34(c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,c18,c19,c20,
+            c21,c22,c23,c24,c25,c26,c27,c28,c29,c30,c31,c32,c33,c34), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x]
+      +- SubqueryAlias wide34
+         +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW structThree AS SELECT * FROM VALUES
+  ('a', 'b', named_struct('val', CAST(1 AS BIGINT)), named_struct('val', 1.0), named_struct('val', 2.0))
+  AS structThree(col1, col2, s1, s2, s3)
+-- !query analysis
+CreateViewCommand `structThree`, SELECT * FROM VALUES
+  ('a', 'b', named_struct('val', CAST(1 AS BIGINT)), named_struct('val', 1.0), named_struct('val', 2.0))
+  AS structThree(col1, col2, s1, s2, s3), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x, s1#x, s2#x, s3#x]
+      +- SubqueryAlias structThree
+         +- LocalRelation [col1#x, col2#x, s1#x, s2#x, s3#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW structOne AS SELECT * FROM VALUES
+  ('a', 'b', named_struct('val', CAST(1 AS BIGINT)))
+  AS structOne(col1, col2, s1)
+-- !query analysis
+CreateViewCommand `structOne`, SELECT * FROM VALUES
+  ('a', 'b', named_struct('val', CAST(1 AS BIGINT)))
+  AS structOne(col1, col2, s1), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x, s1#x]
+      +- SubqueryAlias structOne
+         +- LocalRelation [col1#x, col2#x, s1#x]
+
+
+-- !query
+CREATE TEMPORARY VIEW structNested AS SELECT * FROM VALUES
+  ('a', named_struct('inner', named_struct('val', CAST(1 AS BIGINT))))
+  AS structNested(col1, s1)
+-- !query analysis
+CreateViewCommand `structNested`, SELECT * FROM VALUES
+  ('a', named_struct('inner', named_struct('val', CAST(1 AS BIGINT))))
+  AS structNested(col1, s1), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, s1#x]
+      +- SubqueryAlias structNested
+         +- LocalRelation [col1#x, s1#x]
+
+
+-- !query
+SELECT col1, grouping_id()
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, spark_grouping_id#xL AS grouping_id()#xL]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias gidsrc
+            +- View (`gidSrc`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias gidSrc
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, col2, grouping_id()
+FROM gidSrc
+GROUP BY GROUPING SETS ((col1, col2), (col1), ())
+ORDER BY col1, col2
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST, col2#x ASC NULLS FIRST], true
++- Aggregate [col1#x, col2#x, spark_grouping_id#xL], [col1#x, col2#x, spark_grouping_id#xL AS grouping_id()#xL]
+   +- Expand [[col1#x, col2#x, col1#x, col2#x, 0], [col1#x, col2#x, col1#x, null, 1], [col1#x, col2#x, null, null, 3]], [col1#x, col2#x, col1#x, col2#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x, col2#x AS col2#x]
+         +- SubqueryAlias gidsrc
+            +- View (`gidSrc`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias gidSrc
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, grouping_id() AS gid, gid + 1 AS gid_plus
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Project [col1#x, gid#xL, (gid#xL + cast(1 as bigint)) AS gid_plus#xL]
+   +- Project [col1#x, spark_grouping_id#xL, spark_grouping_id#xL AS gid#xL]
+      +- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, spark_grouping_id#xL]
+         +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+            +- Project [col1#x, col2#x, col1#x AS col1#x]
+               +- SubqueryAlias gidsrc
+                  +- View (`gidSrc`, [col1#x, col2#x])
+                     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                        +- Project [col1#x, col2#x]
+                           +- SubqueryAlias gidSrc
+                              +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, grouping(col1) AS g, g + 1 AS g_plus
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Project [col1#x, g#x, (cast(g#x as int) + 1) AS g_plus#x]
+   +- Project [col1#x, spark_grouping_id#xL, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS g#x]
+      +- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, spark_grouping_id#xL]
+         +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+            +- Project [col1#x, col2#x, col1#x AS col1#x]
+               +- SubqueryAlias gidsrc
+                  +- View (`gidSrc`, [col1#x, col2#x])
+                     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                        +- Project [col1#x, col2#x]
+                           +- SubqueryAlias gidSrc
+                              +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, grouping_id() AS gid, CASE WHEN gid = 0 THEN 'detail' ELSE 'total' END AS level
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Project [col1#x, gid#xL, CASE WHEN (gid#xL = cast(0 as bigint)) THEN detail ELSE total END AS level#x]
+   +- Project [col1#x, spark_grouping_id#xL, spark_grouping_id#xL AS gid#xL]
+      +- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, spark_grouping_id#xL]
+         +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+            +- Project [col1#x, col2#x, col1#x AS col1#x]
+               +- SubqueryAlias gidsrc
+                  +- View (`gidSrc`, [col1#x, col2#x])
+                     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                        +- Project [col1#x, col2#x]
+                           +- SubqueryAlias gidSrc
+                              +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT grouping_id() AS gid, SUM(col2) AS s, gid + s AS combined
+FROM gidSrc
+GROUP BY col1 WITH ROLLUP
+ORDER BY col1
+-- !query analysis
+Project [gid#xL, s#xL, combined#xL]
++- Sort [col1#x ASC NULLS FIRST], true
+   +- Project [gid#xL, s#xL, (gid#xL + s#xL) AS combined#xL, col1#x]
+      +- Project [spark_grouping_id#xL, sum(col2)#xL, col1#x, spark_grouping_id#xL AS gid#xL, sum(col2)#xL AS s#xL]
+         +- Aggregate [col1#x, spark_grouping_id#xL], [spark_grouping_id#xL, sum(col2#x) AS sum(col2)#xL, col1#x]
+            +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+               +- Project [col1#x, col2#x, col1#x AS col1#x]
+                  +- SubqueryAlias gidsrc
+                     +- View (`gidSrc`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- SubqueryAlias gidSrc
+                                 +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT count(*)
+FROM wide34
+GROUP BY GROUPING SETS ((c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12,c13,c14,c15,c16,c17,
+                         c18,c19,c20,c21,c22,c23,c24,c25,c26,c27,c28,c29,c30,c31,c32,c33,c34))
+-- !query analysis
+Aggregate [c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x, spark_grouping_id#xL], [count(1) AS count(1)#xL]
++- Expand [[c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x, c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x, 0]], [c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x, c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x, spark_grouping_id#xL]
+   +- Project [c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x, c1#x AS c1#x, c2#x AS c2#x, c3#x AS c3#x, c4#x AS c4#x, c5#x AS c5#x, c6#x AS c6#x, c7#x AS c7#x, c8#x AS c8#x, c9#x AS c9#x, c10#x AS c10#x, c11#x AS c11#x, c12#x AS c12#x, c13#x AS c13#x, c14#x AS c14#x, c15#x AS c15#x, c16#x AS c16#x, c17#x AS c17#x, c18#x AS c18#x, c19#x AS c19#x, c20#x AS c20#x, c21#x AS c21#x, c22#x AS c22#x, c23#x AS c23#x, c24#x AS c24#x, c25#x AS c25#x, c26#x AS c26#x, c27#x AS c27#x, c28#x AS c28#x, c29#x AS c29#x, c30#x AS c30#x, c31#x AS c31#x, c32#x AS c32#x, c33#x AS c33#x, c34#x AS c34#x]
+      +- SubqueryAlias wide34
+         +- View (`wide34`, [c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x])
+            +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x, cast(c3#x as int) AS c3#x, cast(c4#x as int) AS c4#x, cast(c5#x as int) AS c5#x, cast(c6#x as int) AS c6#x, cast(c7#x as int) AS c7#x, cast(c8#x as int) AS c8#x, cast(c9#x as int) AS c9#x, cast(c10#x as int) AS c10#x, cast(c11#x as int) AS c11#x, cast(c12#x as int) AS c12#x, cast(c13#x as int) AS c13#x, cast(c14#x as int) AS c14#x, cast(c15#x as int) AS c15#x, cast(c16#x as int) AS c16#x, cast(c17#x as int) AS c17#x, cast(c18#x as int) AS c18#x, cast(c19#x as int) AS c19#x, cast(c20#x as int) AS c20#x, cast(c21#x as int) AS c21#x, cast(c22#x as int) AS c22#x, cast(c23#x as int) AS c23#x, cast(c24#x as int) AS c24#x, cast(c25#x as int) AS c25#x, cast(c26#x as int) AS c26#x, cast(c27#x as int) AS c27#x, cast(c28#x as int) AS c28#x, cast(c29#x as int) AS c29#x, cast(c30#x as int) AS c30#x, cast(c31#x as int) AS c31#x, cast(c32#x as int) AS c32#x, cast(c33#x as int) AS c33#x, cast(c34#x as int) AS c34#x]
+               +- Project [c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x]
+                  +- SubqueryAlias wide34
+                     +- LocalRelation [c1#x, c2#x, c3#x, c4#x, c5#x, c6#x, c7#x, c8#x, c9#x, c10#x, c11#x, c12#x, c13#x, c14#x, c15#x, c16#x, c17#x, c18#x, c19#x, c20#x, c21#x, c22#x, c23#x, c24#x, c25#x, c26#x, c27#x, c28#x, c29#x, c30#x, c31#x, c32#x, c33#x, c34#x]
+
+
+-- !query
+SELECT col1, col2, SUM(col3)
+FROM triStr
+GROUP BY ROLLUP(1, 2)
+ORDER BY col1 NULLS LAST, col2 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST, col2#x ASC NULLS LAST], true
++- Aggregate [col1#x, col2#x, spark_grouping_id#xL], [col1#x, col2#x, sum(col3#x) AS sum(col3)#xL]
+   +- Expand [[col1#x, col2#x, col3#x, col1#x, col2#x, 0], [col1#x, col2#x, col3#x, col1#x, null, 1], [col1#x, col2#x, col3#x, null, null, 3]], [col1#x, col2#x, col3#x, col1#x, col2#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col3#x, col1#x AS col1#x, col2#x AS col2#x]
+         +- SubqueryAlias tristr
+            +- View (`triStr`, [col1#x, col2#x, col3#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [col1#x, col2#x, col3#x]
+                     +- SubqueryAlias triStr
+                        +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT a, b, count(1)
+FROM pairAb
+GROUP BY GROUPING SETS ((1, a), (b))
+ORDER BY a, b
+-- !query analysis
+Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, count(1) AS count(1)#xL]
+   +- Expand [[a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+         +- SubqueryAlias pairab
+            +- View (`pairAb`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias pairAb
+                        +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY GROUPING SETS ((a, b), (a))
+HAVING SUM(b) > 15
+ORDER BY a, b
+-- !query analysis
+Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Filter (sb#xL > cast(15 as bigint))
+   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL]
+      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY CUBE(a, b)
+HAVING SUM(b) > 15
+ORDER BY a, b
+-- !query analysis
+Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Filter (sb#xL > cast(15 as bigint))
+   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL]
+      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY ROLLUP(a, b)
+HAVING SUM(b) > 15
+ORDER BY a, b
+-- !query analysis
+Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Filter (sb#xL > cast(15 as bigint))
+   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL]
+      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY GROUPING SETS ((a, b), (a))
+HAVING COUNT(b) > 1
+ORDER BY a, b
+-- !query analysis
+Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Project [a#x, b#x, sb#xL]
+   +- Filter (count(b)#xL > cast(1 as bigint))
+      +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL, count(b#x) AS count(b)#xL]
+         +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+            +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+               +- SubqueryAlias aggsrc
+                  +- View (`aggSrc`, [a#x, b#x])
+                     +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                        +- Project [a#x, b#x]
+                           +- SubqueryAlias aggSrc
+                              +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a + 1 AS ak, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY GROUPING SETS ((a + 1, b), (a + 1))
+HAVING SUM(b) > 15
+ORDER BY ak, b
+-- !query analysis
+Sort [ak#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Filter (sb#xL > cast(15 as bigint))
+   +- Aggregate [(a + 1)#x, b#x, spark_grouping_id#xL], [(a + 1)#x AS ak#x, b#x, sum(b#x) AS sb#xL]
+      +- Expand [[a#x, b#x, (a + 1)#x, b#x, 0], [a#x, b#x, (a + 1)#x, null, 1]], [a#x, b#x, (a + 1)#x, b#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, (a#x + 1) AS (a + 1)#x, b#x AS b#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(a + b) AS s
+FROM aggSrc
+GROUP BY GROUPING SETS ((a, b), (a))
+HAVING SUM(a + b) > 20
+ORDER BY a, b
+-- !query analysis
+Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Filter (s#xL > cast(20 as bigint))
+   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum((a#x + b#x)) AS s#xL]
+      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT c1
+FROM qualSrc
+GROUP BY ROLLUP(qualSrc.c1)
+HAVING qualSrc.c1 = 1
+-- !query analysis
+Filter (c1#x = 1)
++- Aggregate [c1#x, spark_grouping_id#xL], [c1#x]
+   +- Expand [[c1#x, c2#x, c1#x, 0], [c1#x, c2#x, null, 1]], [c1#x, c2#x, c1#x, spark_grouping_id#xL]
+      +- Project [c1#x, c2#x, c1#x AS c1#x]
+         +- SubqueryAlias qualsrc
+            +- View (`qualSrc`, [c1#x, c2#x])
+               +- Project [cast(c1#x as int) AS c1#x, cast(c2#x as int) AS c2#x]
+                  +- Project [c1#x, c2#x]
+                     +- SubqueryAlias qualSrc
+                        +- LocalRelation [c1#x, c2#x]
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY GROUPING SETS ((a, b), (a))
+ORDER BY SUM(b)
+-- !query analysis
+Project [a#x, b#x, sb#xL]
++- Sort [sum(b)#xL ASC NULLS FIRST], true
+   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL, sum(b#x) AS sum(b)#xL]
+      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY CUBE(a, b)
+ORDER BY SUM(b)
+-- !query analysis
+Project [a#x, b#x, sb#xL]
++- Sort [sum(b)#xL ASC NULLS FIRST], true
+   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL, sum(b#x) AS sum(b)#xL]
+      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) AS sb
+FROM aggSrc
+GROUP BY ROLLUP(a, b)
+ORDER BY SUM(b)
+-- !query analysis
+Project [a#x, b#x, sb#xL]
++- Sort [sum(b)#xL ASC NULLS FIRST], true
+   +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL, sum(b#x) AS sum(b)#xL]
+      +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT col1, col2, SUM(s1.val) AS sum1, SUM(s2.val) AS sum2, SUM(s3.val) AS sum3
+FROM structThree
+GROUP BY GROUPING SETS ((col1, col2), ())
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Aggregate [col1#x, col2#x, spark_grouping_id#xL], [col1#x, col2#x, sum(s1#x.val) AS sum1#xL, sum(s2#x.val) AS sum2#x, sum(s3#x.val) AS sum3#x]
+   +- Expand [[col1#x, col2#x, s1#x, s2#x, s3#x, col1#x, col2#x, 0], [col1#x, col2#x, s1#x, s2#x, s3#x, null, null, 3]], [col1#x, col2#x, s1#x, s2#x, s3#x, col1#x, col2#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, s1#x, s2#x, s3#x, col1#x AS col1#x, col2#x AS col2#x]
+         +- SubqueryAlias structthree
+            +- View (`structThree`, [col1#x, col2#x, s1#x, s2#x, s3#x])
+               +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(s1#x as struct<val:bigint>) AS s1#x, cast(s2#x as struct<val:decimal(2,1)>) AS s2#x, cast(s3#x as struct<val:decimal(2,1)>) AS s3#x]
+                  +- Project [col1#x, col2#x, s1#x, s2#x, s3#x]
+                     +- SubqueryAlias structThree
+                        +- LocalRelation [col1#x, col2#x, s1#x, s2#x, s3#x]
+
+
+-- !query
+SELECT col1, col2, SUM(s1.val) AS sum1
+FROM structOne
+GROUP BY ROLLUP (col1, col2)
+ORDER BY col1, col2
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST, col2#x ASC NULLS FIRST], true
++- Aggregate [col1#x, col2#x, spark_grouping_id#xL], [col1#x, col2#x, sum(s1#x.val) AS sum1#xL]
+   +- Expand [[col1#x, col2#x, s1#x, col1#x, col2#x, 0], [col1#x, col2#x, s1#x, col1#x, null, 1], [col1#x, col2#x, s1#x, null, null, 3]], [col1#x, col2#x, s1#x, col1#x, col2#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, s1#x, col1#x AS col1#x, col2#x AS col2#x]
+         +- SubqueryAlias structone
+            +- View (`structOne`, [col1#x, col2#x, s1#x])
+               +- Project [cast(col1#x as string) AS col1#x, cast(col2#x as string) AS col2#x, cast(s1#x as struct<val:bigint>) AS s1#x]
+                  +- Project [col1#x, col2#x, s1#x]
+                     +- SubqueryAlias structOne
+                        +- LocalRelation [col1#x, col2#x, s1#x]
+
+
+-- !query
+SELECT col1, SUM(s1.inner.val) AS sum1
+FROM structNested
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY col1
+-- !query analysis
+Sort [col1#x ASC NULLS FIRST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(s1#x.inner.val) AS sum1#xL]
+   +- Expand [[col1#x, s1#x, col1#x, 0], [col1#x, s1#x, null, 1]], [col1#x, s1#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, s1#x, col1#x AS col1#x]
+         +- SubqueryAlias structnested
+            +- View (`structNested`, [col1#x, s1#x])
+               +- Project [cast(col1#x as string) AS col1#x, cast(s1#x as struct<inner:struct<val:bigint>>) AS s1#x]
+                  +- Project [col1#x, s1#x]
+                     +- SubqueryAlias structNested
+                        +- LocalRelation [col1#x, s1#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM nums3) AS const_cnt
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, scalar-subquery#x [] AS const_cnt#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- SubqueryAlias nums3
+   :        +- View (`nums3`, [x#x])
+   :           +- Project [cast(x#x as int) AS x#x]
+   :              +- Project [x#x]
+   :                 +- SubqueryAlias nums3
+   :                    +- LocalRelation [x#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM nums3) AS const_cnt
+FROM subOuter3
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, scalar-subquery#x [] AS const_cnt#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- SubqueryAlias nums3
+   :        +- View (`nums3`, [x#x])
+   :           +- Project [cast(x#x as int) AS x#x]
+   :              +- Project [x#x]
+   :                 +- SubqueryAlias nums3
+   :                    +- LocalRelation [x#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, col2, SUM(col3) AS s,
+       (SELECT COUNT(*) FROM sub12) AS const_cnt
+FROM cubeStr
+GROUP BY CUBE(col1, col2)
+ORDER BY col1 NULLS LAST, col2 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST, col2#x ASC NULLS LAST], true
++- Aggregate [col1#x, col2#x, spark_grouping_id#xL], [col1#x, col2#x, sum(col3#x) AS s#xL, scalar-subquery#x [] AS const_cnt#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- SubqueryAlias sub12
+   :        +- View (`sub12`, [x#x])
+   :           +- Project [cast(x#x as int) AS x#x]
+   :              +- Project [x#x]
+   :                 +- SubqueryAlias sub12
+   :                    +- LocalRelation [x#x]
+   +- Expand [[col1#x, col2#x, col3#x, col1#x, col2#x, 0], [col1#x, col2#x, col3#x, col1#x, null, 1], [col1#x, col2#x, col3#x, null, col2#x, 2], [col1#x, col2#x, col3#x, null, null, 3]], [col1#x, col2#x, col3#x, col1#x, col2#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col3#x, col1#x AS col1#x, col2#x AS col2#x]
+         +- SubqueryAlias cubestr
+            +- View (`cubeStr`, [col1#x, col2#x, col3#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [col1#x, col2#x, col3#x]
+                     +- SubqueryAlias cubeStr
+                        +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM sub12) AS cnt,
+       (SELECT MAX(y) FROM maxW) AS max_val
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, scalar-subquery#x [] AS cnt#xL, scalar-subquery#x [] AS max_val#x]
+   :  :- Aggregate [count(1) AS count(1)#xL]
+   :  :  +- SubqueryAlias sub12
+   :  :     +- View (`sub12`, [x#x])
+   :  :        +- Project [cast(x#x as int) AS x#x]
+   :  :           +- Project [x#x]
+   :  :              +- SubqueryAlias sub12
+   :  :                 +- LocalRelation [x#x]
+   :  +- Aggregate [max(y#x) AS max(y)#x]
+   :     +- SubqueryAlias maxw
+   :        +- View (`maxW`, [y#x])
+   :           +- Project [cast(y#x as int) AS y#x]
+   :              +- Project [y#x]
+   :                 +- SubqueryAlias maxW
+   :                    +- LocalRelation [y#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT 1 + 1 AS gkey, SUM(col2) AS s,
+       (SELECT 1 + 1 FROM zeroDummy) AS local_expr
+FROM localOuter
+GROUP BY ROLLUP(1 + 1)
+ORDER BY gkey NULLS LAST
+-- !query analysis
+Sort [gkey#x ASC NULLS LAST], true
++- Aggregate [(1 + 1)#x, spark_grouping_id#xL], [(1 + 1)#x AS gkey#x, sum(col2#x) AS s#xL, scalar-subquery#x [] AS local_expr#x]
+   :  +- Project [(1 + 1) AS (1 + 1)#x]
+   :     +- SubqueryAlias zerodummy
+   :        +- View (`zeroDummy`, [dummy#x])
+   :           +- Project [cast(dummy#x as int) AS dummy#x]
+   :              +- Project [dummy#x]
+   :                 +- SubqueryAlias zeroDummy
+   :                    +- LocalRelation [dummy#x]
+   +- Expand [[col2#x, (1 + 1)#x, 0], [col2#x, null, 1]], [col2#x, (1 + 1)#x, spark_grouping_id#xL]
+      +- Project [col2#x, (1 + 1) AS (1 + 1)#x]
+         +- SubqueryAlias localouter
+            +- View (`localOuter`, [col2#x])
+               +- Project [cast(col2#x as int) AS col2#x]
+                  +- Project [col2#x]
+                     +- SubqueryAlias localOuter
+                        +- LocalRelation [col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE col1 IN (SELECT x FROM sub12)
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- Filter col1#x IN (list#x [])
+            :  +- Project [x#x]
+            :     +- SubqueryAlias sub12
+            :        +- View (`sub12`, [x#x])
+            :           +- Project [cast(x#x as int) AS x#x]
+            :              +- Project [x#x]
+            :                 +- SubqueryAlias sub12
+            :                    +- LocalRelation [x#x]
+            +- SubqueryAlias subouter4
+               +- View (`subOuter4`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias subOuter4
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE EXISTS (SELECT 1 FROM sub12 WHERE sub12.x = subOuter4.col1)
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- Filter exists#x [col1#x]
+            :  +- Project [1 AS 1#x]
+            :     +- Filter (x#x = outer(col1#x))
+            :        +- SubqueryAlias sub12
+            :           +- View (`sub12`, [x#x])
+            :              +- Project [cast(x#x as int) AS x#x]
+            :                 +- Project [x#x]
+            :                    +- SubqueryAlias sub12
+            :                       +- LocalRelation [x#x]
+            +- SubqueryAlias subouter4
+               +- View (`subOuter4`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias subOuter4
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM notInOuter
+WHERE col1 NOT IN (SELECT x FROM one3)
+GROUP BY GROUPING SETS((col1), ())
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- Filter NOT col1#x IN (list#x [])
+            :  +- Project [x#x]
+            :     +- SubqueryAlias one3
+            :        +- View (`one3`, [x#x])
+            :           +- Project [cast(x#x as int) AS x#x]
+            :              +- Project [x#x]
+            :                 +- SubqueryAlias one3
+            :                    +- LocalRelation [x#x]
+            +- SubqueryAlias notinouter
+               +- View (`notInOuter`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias notInOuter
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       EXISTS (SELECT 1 FROM sub12 WHERE sub12.x = col1) AS has_match
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, exists#x [col1#x] AS has_match#x]
+   :  +- Project [1 AS 1#x]
+   :     +- Filter (x#x = outer(col1#x))
+   :        +- SubqueryAlias sub12
+   :           +- View (`sub12`, [x#x])
+   :              +- Project [cast(x#x as int) AS x#x]
+   :                 +- Project [x#x]
+   :                    +- SubqueryAlias sub12
+   :                       +- LocalRelation [x#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       col1 IN (SELECT x FROM sub13) AS in_result
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, col1#x IN (list#x []) AS in_result#x]
+   :  +- Project [x#x]
+   :     +- SubqueryAlias sub13
+   :        +- View (`sub13`, [x#x])
+   :           +- Project [cast(x#x as int) AS x#x]
+   :              +- Project [x#x]
+   :                 +- SubqueryAlias sub13
+   :                    +- LocalRelation [x#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 + col2 AS gkey, SUM(col3) AS s,
+       (col1 + col2) IN (SELECT x FROM sub1132) AS in_result
+FROM exprOuter
+GROUP BY ROLLUP(col1 + col2)
+ORDER BY gkey NULLS LAST
+-- !query analysis
+Sort [gkey#x ASC NULLS LAST], true
++- Aggregate [(col1 + col2)#x, spark_grouping_id#xL], [(col1 + col2)#x AS gkey#x, sum(col3#x) AS s#xL, (col1 + col2)#x IN (list#x []) AS in_result#x]
+   :  +- Project [x#x]
+   :     +- SubqueryAlias sub1132
+   :        +- View (`sub1132`, [x#x])
+   :           +- Project [cast(x#x as int) AS x#x]
+   :              +- Project [x#x]
+   :                 +- SubqueryAlias sub1132
+   :                    +- LocalRelation [x#x]
+   +- Expand [[col1#x, col2#x, col3#x, (col1 + col2)#x, 0], [col1#x, col2#x, col3#x, null, 1]], [col1#x, col2#x, col3#x, (col1 + col2)#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col3#x, (col1#x + col2#x) AS (col1 + col2)#x]
+         +- SubqueryAlias exprouter
+            +- View (`exprOuter`, [col1#x, col2#x, col3#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x, cast(col3#x as int) AS col3#x]
+                  +- Project [col1#x, col2#x, col3#x]
+                     +- SubqueryAlias exprOuter
+                        +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT GROUPING(col2)
+FROM gidSrc
+GROUP BY ROLLUP(col1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_COLUMN_MISMATCH",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "grouping" : "col2#x",
+    "groupingColumns" : "col1#x"
+  }
+}
+
+
+-- !query
+SELECT GROUPING_ID(col1, col2)
+FROM gidSrc
+GROUP BY ROLLUP(col1)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUPING_ID_COLUMN_MISMATCH",
+  "sqlState" : "42803",
+  "messageParameters" : {
+    "groupByColumns" : "col1#x",
+    "groupingIdColumn" : "col1#x,col2#x"
+  }
+}
+
+
+-- !query
+SELECT SUM(a)
+FROM (SELECT 1 AS a) t
+GROUP BY ROW_NUMBER() OVER (ORDER BY a)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 38,
+    "stopIndex" : 76,
+    "fragment" : "GROUP BY ROW_NUMBER() OVER (ORDER BY a)"
+  } ]
+}
+
+
+-- !query
+CREATE TEMPORARY VIEW distSrc AS SELECT * FROM VALUES
+  (1, 10), (1, 10), (1, 20), (2, 30), (2, 30)
+  AS distSrc(a, b)
+-- !query analysis
+CreateViewCommand `distSrc`, SELECT * FROM VALUES
+  (1, 10), (1, 10), (1, 20), (2, 30), (2, 30)
+  AS distSrc(a, b), false, false, LocalTempView, UNSUPPORTED, true
+   +- Project [a#x, b#x]
+      +- SubqueryAlias distSrc
+         +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, COUNT(DISTINCT b) AS dcnt, SUM(DISTINCT b) AS dsum
+FROM distSrc
+GROUP BY ROLLUP(a)
+ORDER BY a NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST], true
++- Aggregate [a#x, spark_grouping_id#xL], [a#x, count(distinct b#x) AS dcnt#xL, sum(distinct b#x) AS dsum#xL]
+   +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x]
+         +- SubqueryAlias distsrc
+            +- View (`distSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias distSrc
+                        +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, COUNT(DISTINCT b) AS dcnt
+FROM distSrc
+GROUP BY CUBE(a)
+ORDER BY a NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST], true
++- Aggregate [a#x, spark_grouping_id#xL], [a#x, count(distinct b#x) AS dcnt#xL]
+   +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x]
+         +- SubqueryAlias distsrc
+            +- View (`distSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias distSrc
+                        +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, SUM(b) AS s
+FROM distSrc
+GROUP BY ROLLUP(a)
+HAVING COUNT(DISTINCT b) > 1
+ORDER BY a NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST], true
++- Project [a#x, s#xL]
+   +- Filter (count(DISTINCT b)#xL > cast(1 as bigint))
+      +- Aggregate [a#x, spark_grouping_id#xL], [a#x, sum(b#x) AS s#xL, count(distinct b#x) AS count(DISTINCT b)#xL]
+         +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+            +- Project [a#x, b#x, a#x AS a#x]
+               +- SubqueryAlias distsrc
+                  +- View (`distSrc`, [a#x, b#x])
+                     +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                        +- Project [a#x, b#x]
+                           +- SubqueryAlias distSrc
+                              +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) FILTER (WHERE b > 15) AS sfilt
+FROM aggSrc
+GROUP BY CUBE(a, b)
+ORDER BY a NULLS LAST, b NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST, b#x ASC NULLS LAST], true
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) FILTER (WHERE (b#x > 15)) AS sfilt#xL]
+   +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+         +- SubqueryAlias aggsrc
+            +- View (`aggSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias aggSrc
+                        +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, COUNT(*) FILTER (WHERE b > 15) AS cfilt
+FROM aggSrc
+GROUP BY ROLLUP(a)
+ORDER BY a NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST], true
++- Aggregate [a#x, spark_grouping_id#xL], [a#x, count(1) FILTER (WHERE (b#x > 15)) AS cfilt#xL]
+   +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x]
+         +- SubqueryAlias aggsrc
+            +- View (`aggSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias aggSrc
+                        +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) AS s
+FROM aggSrc
+GROUP BY CUBE(a, b)
+HAVING GROUPING_ID(a, b) = 0 AND SUM(b) > 15
+ORDER BY a, b
+-- !query analysis
+Sort [a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Project [a#x, b#x, s#xL]
+   +- Filter ((spark_grouping_id#xL = cast(0 as bigint)) AND (s#xL > cast(15 as bigint)))
+      +- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS s#xL, spark_grouping_id#xL]
+         +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+            +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+               +- SubqueryAlias aggsrc
+                  +- View (`aggSrc`, [a#x, b#x])
+                     +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                        +- Project [a#x, b#x]
+                           +- SubqueryAlias aggSrc
+                              +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, SUM(b) AS s, GROUPING(a) AS ga
+FROM aggSrc
+GROUP BY ROLLUP(a)
+HAVING SUM(b) > 30
+ORDER BY a NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST], true
++- Filter (s#xL > cast(30 as bigint))
+   +- Aggregate [a#x, spark_grouping_id#xL], [a#x, sum(b#x) AS s#xL, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS ga#x]
+      +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT SUM(b) AS s
+FROM aggSrc
+GROUP BY GROUPING SETS (())
+-- !query analysis
+Aggregate [spark_grouping_id#xL], [sum(b#x) AS s#xL]
++- Expand [[a#x, b#x, 0]], [a#x, b#x, spark_grouping_id#xL]
+   +- Project [a#x, b#x]
+      +- SubqueryAlias aggsrc
+         +- View (`aggSrc`, [a#x, b#x])
+            +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+               +- Project [a#x, b#x]
+                  +- SubqueryAlias aggSrc
+                     +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM nums3 WHERE x < (SELECT MAX(y) FROM maxW)) AS nested_cnt
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, scalar-subquery#x [] AS nested_cnt#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- Filter (x#x < scalar-subquery#x [])
+   :        :  +- Aggregate [max(y#x) AS max(y)#x]
+   :        :     +- SubqueryAlias maxw
+   :        :        +- View (`maxW`, [y#x])
+   :        :           +- Project [cast(y#x as int) AS y#x]
+   :        :              +- Project [y#x]
+   :        :                 +- SubqueryAlias maxW
+   :        :                    +- LocalRelation [y#x]
+   :        +- SubqueryAlias nums3
+   :           +- View (`nums3`, [x#x])
+   :              +- Project [cast(x#x as int) AS x#x]
+   :                 +- Project [x#x]
+   :                    +- SubqueryAlias nums3
+   :                       +- LocalRelation [x#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM (SELECT a FROM aggSrc GROUP BY CUBE(a))) AS cube_rows
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, scalar-subquery#x [] AS cube_rows#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [a#x, spark_grouping_id#xL], [a#x]
+   :           +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+   :              +- Project [a#x, b#x, a#x AS a#x]
+   :                 +- SubqueryAlias aggsrc
+   :                    +- View (`aggSrc`, [a#x, b#x])
+   :                       +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+   :                          +- Project [a#x, b#x]
+   :                             +- SubqueryAlias aggSrc
+   :                                +- LocalRelation [a#x, b#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM (SELECT a FROM aggSrc GROUP BY a)) AS distinct_a
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, scalar-subquery#x [] AS distinct_a#xL]
+   :  +- Aggregate [count(1) AS count(1)#xL]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Aggregate [a#x], [a#x]
+   :           +- SubqueryAlias aggsrc
+   :              +- View (`aggSrc`, [a#x, b#x])
+   :                 +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+   :                    +- Project [a#x, b#x]
+   :                       +- SubqueryAlias aggSrc
+   :                          +- LocalRelation [a#x, b#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, col2, COUNT(*) AS cnt
+FROM cubeStr
+WHERE col1 IN (SELECT a FROM aggSrc GROUP BY ROLLUP(a) HAVING a IS NOT NULL)
+GROUP BY CUBE(col1, col2)
+ORDER BY col1 NULLS LAST, col2 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST, col2#x ASC NULLS LAST], true
++- Aggregate [col1#x, col2#x, spark_grouping_id#xL], [col1#x, col2#x, count(1) AS cnt#xL]
+   +- Expand [[col1#x, col2#x, col3#x, col1#x, col2#x, 0], [col1#x, col2#x, col3#x, col1#x, null, 1], [col1#x, col2#x, col3#x, null, col2#x, 2], [col1#x, col2#x, col3#x, null, null, 3]], [col1#x, col2#x, col3#x, col1#x, col2#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col3#x, col1#x AS col1#x, col2#x AS col2#x]
+         +- Filter col1#x IN (list#x [])
+            :  +- Filter isnotnull(a#x)
+            :     +- Aggregate [a#x, spark_grouping_id#xL], [a#x]
+            :        +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+            :           +- Project [a#x, b#x, a#x AS a#x]
+            :              +- SubqueryAlias aggsrc
+            :                 +- View (`aggSrc`, [a#x, b#x])
+            :                    +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            :                       +- Project [a#x, b#x]
+            :                          +- SubqueryAlias aggSrc
+            :                             +- LocalRelation [a#x, b#x]
+            +- SubqueryAlias cubestr
+               +- View (`cubeStr`, [col1#x, col2#x, col3#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as int) AS col3#x]
+                     +- Project [col1#x, col2#x, col3#x]
+                        +- SubqueryAlias cubeStr
+                           +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE col1 IN (SELECT x FROM sub13 WHERE x IN (SELECT a FROM aggSrc))
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- Filter col1#x IN (list#x [])
+            :  +- Project [x#x]
+            :     +- Filter x#x IN (list#x [])
+            :        :  +- Project [a#x]
+            :        :     +- SubqueryAlias aggsrc
+            :        :        +- View (`aggSrc`, [a#x, b#x])
+            :        :           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            :        :              +- Project [a#x, b#x]
+            :        :                 +- SubqueryAlias aggSrc
+            :        :                    +- LocalRelation [a#x, b#x]
+            :        +- SubqueryAlias sub13
+            :           +- View (`sub13`, [x#x])
+            :              +- Project [cast(x#x as int) AS x#x]
+            :                 +- Project [x#x]
+            :                    +- SubqueryAlias sub13
+            :                       +- LocalRelation [x#x]
+            +- SubqueryAlias subouter4
+               +- View (`subOuter4`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias subOuter4
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE EXISTS (
+  SELECT 1 FROM sub12
+  WHERE sub12.x = subOuter4.col1 AND sub12.x IN (SELECT a FROM aggSrc)
+)
+GROUP BY GROUPING SETS((col1), ())
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- Filter exists#x [col1#x]
+            :  +- Project [1 AS 1#x]
+            :     +- Filter ((x#x = outer(col1#x)) AND x#x IN (list#x []))
+            :        :  +- Project [a#x]
+            :        :     +- SubqueryAlias aggsrc
+            :        :        +- View (`aggSrc`, [a#x, b#x])
+            :        :           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            :        :              +- Project [a#x, b#x]
+            :        :                 +- SubqueryAlias aggSrc
+            :        :                    +- LocalRelation [a#x, b#x]
+            :        +- SubqueryAlias sub12
+            :           +- View (`sub12`, [x#x])
+            :              +- Project [cast(x#x as int) AS x#x]
+            :                 +- Project [x#x]
+            :                    +- SubqueryAlias sub12
+            :                       +- LocalRelation [x#x]
+            +- SubqueryAlias subouter4
+               +- View (`subOuter4`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias subOuter4
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT a, SUM(b) AS s
+FROM aggSrc
+GROUP BY ROLLUP(a)
+HAVING SUM(b) > (SELECT AVG(y) FROM maxW)
+ORDER BY a NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST], true
++- Filter (cast(s#xL as double) > scalar-subquery#x [])
+   :  +- Aggregate [avg(y#x) AS avg(y)#x]
+   :     +- SubqueryAlias maxw
+   :        +- View (`maxW`, [y#x])
+   :           +- Project [cast(y#x as int) AS y#x]
+   :              +- Project [y#x]
+   :                 +- SubqueryAlias maxW
+   :                    +- LocalRelation [y#x]
+   +- Aggregate [a#x, spark_grouping_id#xL], [a#x, sum(b#x) AS s#xL]
+      +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+         +- Project [a#x, b#x, a#x AS a#x]
+            +- SubqueryAlias aggsrc
+               +- View (`aggSrc`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias aggSrc
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, SUM(b) AS s
+FROM aggSrc
+GROUP BY ROLLUP(a)
+HAVING SUM(b) > (SELECT MIN(y) FROM maxW) AND COUNT(*) >= (SELECT COUNT(*) FROM sub12) - 2
+ORDER BY a NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST], true
++- Project [a#x, s#xL]
+   +- Filter ((s#xL > cast(scalar-subquery#x [] as bigint)) AND (count(1)#xL >= (scalar-subquery#x [] - cast(2 as bigint))))
+      :  :- Aggregate [min(y#x) AS min(y)#x]
+      :  :  +- SubqueryAlias maxw
+      :  :     +- View (`maxW`, [y#x])
+      :  :        +- Project [cast(y#x as int) AS y#x]
+      :  :           +- Project [y#x]
+      :  :              +- SubqueryAlias maxW
+      :  :                 +- LocalRelation [y#x]
+      :  +- Aggregate [count(1) AS count(1)#xL]
+      :     +- SubqueryAlias sub12
+      :        +- View (`sub12`, [x#x])
+      :           +- Project [cast(x#x as int) AS x#x]
+      :              +- Project [x#x]
+      :                 +- SubqueryAlias sub12
+      :                    +- LocalRelation [x#x]
+      +- Aggregate [a#x, spark_grouping_id#xL], [a#x, sum(b#x) AS s#xL, count(1) AS count(1)#xL]
+         +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+            +- Project [a#x, b#x, a#x AS a#x]
+               +- SubqueryAlias aggsrc
+                  +- View (`aggSrc`, [a#x, b#x])
+                     +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                        +- Project [a#x, b#x]
+                           +- SubqueryAlias aggSrc
+                              +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, SUM(b) AS s
+FROM aggSrc
+GROUP BY CUBE(a)
+ORDER BY SUM(b) + (SELECT MAX(y) FROM maxW), a NULLS LAST
+-- !query analysis
+Sort [(s#xL + cast(scalar-subquery#x [] as bigint)) ASC NULLS FIRST, a#x ASC NULLS LAST], true
+:  +- Aggregate [max(y#x) AS max(y)#x]
+:     +- SubqueryAlias maxw
+:        +- View (`maxW`, [y#x])
+:           +- Project [cast(y#x as int) AS y#x]
+:              +- Project [y#x]
+:                 +- SubqueryAlias maxW
+:                    +- LocalRelation [y#x]
++- Aggregate [a#x, spark_grouping_id#xL], [a#x, sum(b#x) AS s#xL]
+   +- Expand [[a#x, b#x, a#x, 0], [a#x, b#x, null, 1]], [a#x, b#x, a#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x]
+         +- SubqueryAlias aggsrc
+            +- View (`aggSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias aggSrc
+                        +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT a, b, SUM(b) + (SELECT MAX(y) FROM maxW) AS s_plus
+FROM aggSrc
+GROUP BY CUBE(a, b)
+ORDER BY a NULLS LAST, b NULLS LAST
+-- !query analysis
+Sort [a#x ASC NULLS LAST, b#x ASC NULLS LAST], true
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, (sum(b#x) + cast(scalar-subquery#x [] as bigint)) AS s_plus#xL]
+   :  +- Aggregate [max(y#x) AS max(y)#x]
+   :     +- SubqueryAlias maxw
+   :        +- View (`maxW`, [y#x])
+   :           +- Project [cast(y#x as int) AS y#x]
+   :              +- Project [y#x]
+   :                 +- SubqueryAlias maxW
+   :                    +- LocalRelation [y#x]
+   +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1], [a#x, b#x, null, b#x, 2], [a#x, b#x, null, null, 3]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+         +- SubqueryAlias aggsrc
+            +- View (`aggSrc`, [a#x, b#x])
+               +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                  +- Project [a#x, b#x]
+                     +- SubqueryAlias aggSrc
+                        +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       (SELECT COUNT(*) FROM nums3) AS n
+FROM subOuter4
+WHERE col1 IN (SELECT x FROM sub12)
+GROUP BY ROLLUP(col1)
+HAVING SUM(col2) > (SELECT MIN(y) FROM maxW)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Filter (s#xL > cast(scalar-subquery#x [] as bigint))
+   :  +- Aggregate [min(y#x) AS min(y)#x]
+   :     +- SubqueryAlias maxw
+   :        +- View (`maxW`, [y#x])
+   :           +- Project [cast(y#x as int) AS y#x]
+   :              +- Project [y#x]
+   :                 +- SubqueryAlias maxW
+   :                    +- LocalRelation [y#x]
+   +- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, scalar-subquery#x [] AS n#xL]
+      :  +- Aggregate [count(1) AS count(1)#xL]
+      :     +- SubqueryAlias nums3
+      :        +- View (`nums3`, [x#x])
+      :           +- Project [cast(x#x as int) AS x#x]
+      :              +- Project [x#x]
+      :                 +- SubqueryAlias nums3
+      :                    +- LocalRelation [x#x]
+      +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+         +- Project [col1#x, col2#x, col1#x AS col1#x]
+            +- Filter col1#x IN (list#x [])
+               :  +- Project [x#x]
+               :     +- SubqueryAlias sub12
+               :        +- View (`sub12`, [x#x])
+               :           +- Project [cast(x#x as int) AS x#x]
+               :              +- Project [x#x]
+               :                 +- SubqueryAlias sub12
+               :                    +- LocalRelation [x#x]
+               +- SubqueryAlias subouter4
+                  +- View (`subOuter4`, [col1#x, col2#x])
+                     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                        +- Project [col1#x, col2#x]
+                           +- SubqueryAlias subOuter4
+                              +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, col2, COUNT(*) AS cnt, (SELECT SUM(y) FROM maxW) AS total
+FROM cubeStr
+WHERE col1 IN (SELECT a FROM aggSrc)
+GROUP BY CUBE(col1, col2)
+ORDER BY col1 NULLS LAST, col2 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST, col2#x ASC NULLS LAST], true
++- Aggregate [col1#x, col2#x, spark_grouping_id#xL], [col1#x, col2#x, count(1) AS cnt#xL, scalar-subquery#x [] AS total#xL]
+   :  +- Aggregate [sum(y#x) AS sum(y)#xL]
+   :     +- SubqueryAlias maxw
+   :        +- View (`maxW`, [y#x])
+   :           +- Project [cast(y#x as int) AS y#x]
+   :              +- Project [y#x]
+   :                 +- SubqueryAlias maxW
+   :                    +- LocalRelation [y#x]
+   +- Expand [[col1#x, col2#x, col3#x, col1#x, col2#x, 0], [col1#x, col2#x, col3#x, col1#x, null, 1], [col1#x, col2#x, col3#x, null, col2#x, 2], [col1#x, col2#x, col3#x, null, null, 3]], [col1#x, col2#x, col3#x, col1#x, col2#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col3#x, col1#x AS col1#x, col2#x AS col2#x]
+         +- Filter col1#x IN (list#x [])
+            :  +- Project [a#x]
+            :     +- SubqueryAlias aggsrc
+            :        +- View (`aggSrc`, [a#x, b#x])
+            :           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            :              +- Project [a#x, b#x]
+            :                 +- SubqueryAlias aggSrc
+            :                    +- LocalRelation [a#x, b#x]
+            +- SubqueryAlias cubestr
+               +- View (`cubeStr`, [col1#x, col2#x, col3#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as string) AS col2#x, cast(col3#x as int) AS col3#x]
+                     +- Project [col1#x, col2#x, col3#x]
+                        +- SubqueryAlias cubeStr
+                           +- LocalRelation [col1#x, col2#x, col3#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE col1 NOT IN (SELECT x FROM sub12 WHERE x > 1)
+GROUP BY GROUPING SETS((col1), ())
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- Filter NOT col1#x IN (list#x [])
+            :  +- Project [x#x]
+            :     +- Filter (x#x > 1)
+            :        +- SubqueryAlias sub12
+            :           +- View (`sub12`, [x#x])
+            :              +- Project [cast(x#x as int) AS x#x]
+            :                 +- Project [x#x]
+            :                    +- SubqueryAlias sub12
+            :                       +- LocalRelation [x#x]
+            +- SubqueryAlias subouter4
+               +- View (`subOuter4`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias subOuter4
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s,
+       col1 IN (SELECT MAX(a) FROM aggSrc) AS is_max_a
+FROM subOuter3
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL, col1#x IN (list#x []) AS is_max_a#x]
+   :  +- Aggregate [max(a#x) AS max(a)#x]
+   :     +- SubqueryAlias aggsrc
+   :        +- View (`aggSrc`, [a#x, b#x])
+   :           +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+   :              +- Project [a#x, b#x]
+   :                 +- SubqueryAlias aggSrc
+   :                    +- LocalRelation [a#x, b#x]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- SubqueryAlias subouter3
+            +- View (`subOuter3`, [col1#x, col2#x])
+               +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                  +- Project [col1#x, col2#x]
+                     +- SubqueryAlias subOuter3
+                        +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, SUM(col2) AS s
+FROM subOuter4
+WHERE col2 > (SELECT AVG(x) FROM sub12 WHERE x <= subOuter4.col1)
+GROUP BY ROLLUP(col1)
+ORDER BY col1 NULLS LAST
+-- !query analysis
+Sort [col1#x ASC NULLS LAST], true
++- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, sum(col2#x) AS s#xL]
+   +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+      +- Project [col1#x, col2#x, col1#x AS col1#x]
+         +- Filter (cast(col2#x as double) > scalar-subquery#x [col1#x])
+            :  +- Aggregate [avg(x#x) AS avg(x)#x]
+            :     +- Filter (x#x <= outer(col1#x))
+            :        +- SubqueryAlias sub12
+            :           +- View (`sub12`, [x#x])
+            :              +- Project [cast(x#x as int) AS x#x]
+            :                 +- Project [x#x]
+            :                    +- SubqueryAlias sub12
+            :                       +- LocalRelation [x#x]
+            +- SubqueryAlias subouter4
+               +- View (`subOuter4`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias subOuter4
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP VIEW testData
+-- !query analysis
+DropTempViewCommand testData, false
+
+
+-- !query
+DROP VIEW courseSales
+-- !query analysis
+DropTempViewCommand courseSales, false
+
+
+-- !query
+DROP VIEW gidSrc
+-- !query analysis
+DropTempViewCommand gidSrc, false
+
+
+-- !query
+DROP VIEW aggSrc
+-- !query analysis
+DropTempViewCommand aggSrc, false
+
+
+-- !query
+DROP VIEW pairAb
+-- !query analysis
+DropTempViewCommand pairAb, false
+
+
+-- !query
+DROP VIEW qualSrc
+-- !query analysis
+DropTempViewCommand qualSrc, false
+
+
+-- !query
+DROP VIEW triStr
+-- !query analysis
+DropTempViewCommand triStr, false
+
+
+-- !query
+DROP VIEW subOuter3
+-- !query analysis
+DropTempViewCommand subOuter3, false
+
+
+-- !query
+DROP VIEW subOuter4
+-- !query analysis
+DropTempViewCommand subOuter4, false
+
+
+-- !query
+DROP VIEW notInOuter
+-- !query analysis
+DropTempViewCommand notInOuter, false
+
+
+-- !query
+DROP VIEW exprOuter
+-- !query analysis
+DropTempViewCommand exprOuter, false
+
+
+-- !query
+DROP VIEW cubeStr
+-- !query analysis
+DropTempViewCommand cubeStr, false
+
+
+-- !query
+DROP VIEW localOuter
+-- !query analysis
+DropTempViewCommand localOuter, false
+
+
+-- !query
+DROP VIEW sub12
+-- !query analysis
+DropTempViewCommand sub12, false
+
+
+-- !query
+DROP VIEW sub13
+-- !query analysis
+DropTempViewCommand sub13, false
+
+
+-- !query
+DROP VIEW sub1132
+-- !query analysis
+DropTempViewCommand sub1132, false
+
+
+-- !query
+DROP VIEW one3
+-- !query analysis
+DropTempViewCommand one3, false
+
+
+-- !query
+DROP VIEW maxW
+-- !query analysis
+DropTempViewCommand maxW, false
+
+
+-- !query
+DROP VIEW zeroDummy
+-- !query analysis
+DropTempViewCommand zeroDummy, false
+
+
+-- !query
+DROP VIEW nums3
+-- !query analysis
+DropTempViewCommand nums3, false
+
+
+-- !query
+DROP VIEW wide34
+-- !query analysis
+DropTempViewCommand wide34, false
+
+
+-- !query
+DROP VIEW structThree
+-- !query analysis
+DropTempViewCommand structThree, false
+
+
+-- !query
+DROP VIEW structOne
+-- !query analysis
+DropTempViewCommand structOne, false
+
+
+-- !query
+DROP VIEW structNested
+-- !query analysis
+DropTempViewCommand structNested, false
+
+
+-- !query
+DROP VIEW distSrc
+-- !query analysis
+DropTempViewCommand distSrc, false

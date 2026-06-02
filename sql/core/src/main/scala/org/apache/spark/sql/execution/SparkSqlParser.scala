@@ -432,15 +432,13 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   private def extractUnquotedResourcePath(ctx: RefreshResourceContext): String = withOrigin(ctx) {
     val unquotedPath = remainder(ctx.REFRESH.getSymbol).trim
-    validate(
-      unquotedPath != null && !unquotedPath.isEmpty,
-      "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
-      ctx)
+    if (unquotedPath == null || unquotedPath.isEmpty) {
+      throw QueryParsingErrors.emptyRefreshResourcePathError(ctx)
+    }
     val forbiddenSymbols = Seq(" ", "\n", "\r", "\t")
-    validate(
-      !forbiddenSymbols.exists(unquotedPath.contains(_)),
-      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths",
-      ctx)
+    if (forbiddenSymbols.exists(unquotedPath.contains(_))) {
+      throw QueryParsingErrors.invalidRefreshResourcePathError(ctx)
+    }
     unquotedPath
   }
 
