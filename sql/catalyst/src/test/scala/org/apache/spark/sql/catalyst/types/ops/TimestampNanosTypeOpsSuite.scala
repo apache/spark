@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import java.time.{Instant, LocalDateTime}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal, MutableTimestampNanos, SpecificInternalRow}
@@ -179,6 +179,22 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
         assert(TypeOps(dt).isEmpty, s"TypeOps should be empty for $dt when disabled")
         assert(TypeApiOps(dt).isEmpty, s"TypeApiOps should be empty for $dt when disabled")
       }
+    }
+  }
+
+  test("enabling the nanos types requires the Types Framework to be enabled") {
+    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkIllegalArgumentException] {
+          SQLConf.get.setConfString(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key, "true")
+        },
+        condition = "INVALID_CONF_VALUE.REQUIREMENT",
+        parameters = Map(
+          "confName" -> SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key,
+          "confValue" -> "true",
+          "confRequirement" ->
+            (s"'${SQLConf.TYPES_FRAMEWORK_ENABLED.key}' must be true to enable the nanosecond " +
+              "timestamp types.")))
     }
   }
 }
