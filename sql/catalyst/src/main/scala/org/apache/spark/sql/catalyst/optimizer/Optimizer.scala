@@ -228,6 +228,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions),
+    Batch("Early Operator Optimization", Once,
+      earlyOperatorOptimizationRules: _*),
     operatorOptimizationBatch,
     Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo),
     // This batch rewrites plans after the operator optimization and
@@ -506,6 +508,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * Override to provide additional rules for the operator optimization batch.
    */
   def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Override to provide additional rules that run in a single pass before the main
+   * operator optimization fixed-point batch. Use this for rules that must observe the
+   * pre-optimization plan shape (e.g., before FoldablePropagation rewrites predicates).
+   */
+  def earlyOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Override to provide additional rules for early projection and filter pushdown to scans.

@@ -309,6 +309,22 @@ class SparkSessionExtensions {
     optimizerRules += builder
   }
 
+  private[this] val earlyOptimizerRules = mutable.Buffer.empty[RuleBuilder]
+
+  private[sql] def buildEarlyOptimizerRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    earlyOptimizerRules.map(_.apply(session)).toSeq
+  }
+
+  /**
+   * Inject an optimizer `Rule` builder into the [[SparkSession]]. The injected rules will be
+   * executed in a single pass (Once) before the main operator optimization fixed-point batch.
+   * Use this for rules that must observe the pre-optimization plan shape before built-in rules
+   * like FoldablePropagation or ConstantFolding transform it.
+   */
+  def injectEarlyOptimizerRule(builder: RuleBuilder): Unit = {
+    earlyOptimizerRules += builder
+  }
+
   private[this] val preCBORules = mutable.Buffer.empty[RuleBuilder]
 
   private[sql] def buildPreCBORules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
