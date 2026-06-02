@@ -17,9 +17,13 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
+import java.time.{Instant, LocalDateTime}
+
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal, MutableTimestampNanos, MutableValue}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampLTZNanosType, PhysicalTimestampNTZNanosType}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TimestampNTZNanosTypeApiOps}
 import org.apache.spark.unsafe.types.TimestampNanosVal
@@ -33,10 +37,11 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * see [[org.apache.spark.sql.catalyst.expressions.TimestampNanosRowValues]].
  *
  * SCOPE (SPARK-57207): this issue covers physical representation, literals, row accessors, and
- * codegen class selection. java.time conversion is out of scope (SPARK-57033), so the external
- * conversion methods are identity over [[TimestampNanosVal]], matching the legacy identity
- * converter behavior. Concrete subclasses supply the NTZ/LTZ-specific physical type and row
- * accessors.
+ * codegen class selection. External java.time conversion reuses the helpers added by SPARK-57033
+ * so that the Types Framework path matches the legacy CatalystTypeConverters behavior rather than
+ * regressing it: TimestampNTZNanosType maps to java.time.LocalDateTime and TimestampLTZNanosType
+ * to java.time.Instant, with sub-micro digits truncated to the column precision. Concrete
+ * subclasses supply the NTZ/LTZ-specific physical type, row accessors, and conversions.
  *
  * @since 4.3.0
  */
@@ -60,11 +65,15 @@ trait TimestampNanosTypeOps extends TypeOps {
 
   // ==================== External Type Conversion ====================
 
-  // java.time conversion is handled in a follow-up issue (SPARK-57033); until then values pass
-  // through unchanged as TimestampNanosVal, matching the legacy identity converter.
-  override def toCatalystImpl(scalaValue: Any): Any = scalaValue
-
-  override def toScala(catalystValue: Any): Any = catalystValue
+  // Raises the same error as the legacy CatalystTypeConverters (SPARK-57033) when an external
+  // value of an unexpected type is supplied for a nanosecond timestamp column.
+  protected def invalidExternalValue(other: Any): Nothing =
+    throw new SparkIllegalArgumentException(
+      errorClass = "INVALID_EXTERNAL_VALUE",
+      messageParameters = Map(
+        "other" -> other.toString,
+        "otherClass" -> other.getClass.getCanonicalName,
+        "dataType" -> dataType.sql))
 }
 
 /**
@@ -82,8 +91,17 @@ case class TimestampNTZNanosTypeOps(override val t: TimestampNTZNanosType)
   override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =
     (input, v) => input.setTimestampNTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
 
+  override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
+    case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l, t.precision)
+    case other => invalidExternalValue(other)
+  }
+
+  override def toScala(catalystValue: Any): Any =
+    if (catalystValue == null) null
+    else DateTimeUtils.timestampNanosToLocalDateTime(catalystValue.asInstanceOf[TimestampNanosVal])
+
   override def toScalaImpl(row: InternalRow, column: Int): Any =
-    row.getTimestampNTZNanos(column)
+    DateTimeUtils.timestampNanosToLocalDateTime(row.getTimestampNTZNanos(column))
 }
 
 /**
@@ -101,6 +119,15 @@ case class TimestampLTZNanosTypeOps(override val t: TimestampLTZNanosType)
   override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =
     (input, v) => input.setTimestampLTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
 
+  override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
+    case i: Instant => DateTimeUtils.instantToTimestampNanos(i, t.precision)
+    case other => invalidExternalValue(other)
+  }
+
+  override def toScala(catalystValue: Any): Any =
+    if (catalystValue == null) null
+    else DateTimeUtils.timestampNanosToInstant(catalystValue.asInstanceOf[TimestampNanosVal])
+
   override def toScalaImpl(row: InternalRow, column: Int): Any =
-    row.getTimestampLTZNanos(column)
+    DateTimeUtils.timestampNanosToInstant(row.getTimestampLTZNanos(column))
 }

@@ -17,13 +17,16 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
+import java.time.{Instant, LocalDateTime}
+
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal, MutableTimestampNanos, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampLTZNanosType, PhysicalTimestampNTZNanosType}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.sql.types.ops.TypeApiOps
@@ -106,10 +109,67 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("getEncoder is unsupported until encoders are wired (SPARK-57033)") {
+  test("getEncoder returns the SPARK-57033 nanos encoder (matches the legacy RowEncoder path)") {
+    precisions.foreach { p =>
+      assert(TypeApiOps(TimestampNTZNanosType(p)).get.getEncoder === LocalDateTimeNanosEncoder(p))
+      assert(TypeApiOps(TimestampLTZNanosType(p)).get.getEncoder === InstantNanosEncoder(p))
+    }
+  }
+
+  test("getEncoder honors the timestampNanosTypes.enabled gate") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      allCases.foreach { case (dt, _, _) =>
+        val e = intercept[org.apache.spark.SparkException](TypeApiOps(dt).get.getEncoder)
+        assert(e.getCondition === "FEATURE_NOT_ENABLED")
+      }
+    }
+  }
+
+  // A sample with sub-micro digits so precision truncation is exercised.
+  private val sampleLocalDateTime = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+  private val sampleInstant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+
+  private def externalValue(dt: DataType): Any = dt match {
+    case _: TimestampNTZNanosType => sampleLocalDateTime
+    case _: TimestampLTZNanosType => sampleInstant
+  }
+
+  test("CatalystTypeConverters convert java.time values (matches the legacy converter path)") {
     allCases.foreach { case (dt, _, _) =>
-      val e = intercept[AnalysisException](TypeApiOps(dt).get.getEncoder)
-      assert(e.getCondition === "UNSUPPORTED_DATA_TYPE_FOR_ENCODER")
+      val external = externalValue(dt)
+      val expectedCatalyst = dt match {
+        case t: TimestampNTZNanosType =>
+          DateTimeUtils.localDateTimeToTimestampNanos(sampleLocalDateTime, t.precision)
+        case t: TimestampLTZNanosType =>
+          DateTimeUtils.instantToTimestampNanos(sampleInstant, t.precision)
+      }
+
+      // toScala over the truncated catalyst value, i.e. what a lossless roundtrip yields.
+      val expectedScala = dt match {
+        case _: TimestampNTZNanosType =>
+          DateTimeUtils.timestampNanosToLocalDateTime(expectedCatalyst)
+        case _: TimestampLTZNanosType =>
+          DateTimeUtils.timestampNanosToInstant(expectedCatalyst)
+      }
+
+      val catalyst = CatalystTypeConverters.createToCatalystConverter(dt)(external)
+      assert(catalyst === expectedCatalyst, s"toCatalyst for $dt")
+      assert(catalyst.isInstanceOf[TimestampNanosVal], s"toCatalyst must not be identity for $dt")
+
+      val scala = CatalystTypeConverters.createToScalaConverter(dt)(catalyst)
+      assert(scala === expectedScala, s"toScala roundtrip for $dt")
+    }
+  }
+
+  test("framework on/off produce identical CatalystTypeConverters results") {
+    allCases.foreach { case (dt, _, _) =>
+      val external = externalValue(dt)
+      def convert(enabled: Boolean): (Any, Any) = withSQLConf(
+        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> enabled.toString) {
+        val catalyst = CatalystTypeConverters.createToCatalystConverter(dt)(external)
+        (catalyst, CatalystTypeConverters.createToScalaConverter(dt)(catalyst))
+      }
+      assert(convert(enabled = true) === convert(enabled = false), s"on/off parity for $dt")
     }
   }
 

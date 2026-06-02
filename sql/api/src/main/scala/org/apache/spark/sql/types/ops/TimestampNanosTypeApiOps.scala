@@ -18,9 +18,9 @@
 package org.apache.spark.sql.types.ops
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.errors.DataTypeErrorsBase
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
+import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase}
 import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 
 /**
@@ -35,8 +35,10 @@ import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
  * codegen class selection. String formatting is not yet implemented: format() throws an internal
  * error so callers get a clear message rather than a debug string; dedicated fractional-second
  * formatters land in a follow-up issue.
- * Dataset encoders are out of scope (SPARK-57033 and related), so getEncoder reports the type as
- * unsupported, matching the legacy RowEncoder behavior.
+ *
+ * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
+ * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
+ * matches the legacy RowEncoder.encoderForDataTypeDefault behavior rather than regressing it.
  *
  * @since 4.3.0
  */
@@ -58,12 +60,16 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
 
   // ==================== Row Encoding ====================
 
-  // Encoders are handled in a follow-up issue (SPARK-57033). Until then, report the type as
-  // unsupported with the same error as the legacy RowEncoder fallback to preserve parity.
-  override def getEncoder: AgnosticEncoder[_] =
-    throw new AnalysisException(
-      errorClass = "UNSUPPORTED_DATA_TYPE_FOR_ENCODER",
-      messageParameters = Map("dataType" -> toSQLType(dataType)))
+  // Honor the spark.sql.timestampNanosTypes.enabled gate just like the legacy
+  // RowEncoder.encoderForDataTypeDefault path, so enabling the Types Framework does not bypass
+  // the feature flag.
+  final override def getEncoder: AgnosticEncoder[_] = {
+    DataTypeErrors.checkTimestampNanosTypesEnabled()
+    nanosEncoder
+  }
+
+  /** The precision-aware encoder for this type (SPARK-57033). */
+  protected def nanosEncoder: AgnosticEncoder[_]
 }
 
 /**
@@ -76,6 +82,10 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
 class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends TimestampNanosTypeApiOps {
   override def dataType: TimestampNTZNanosType = t
   override protected def sqlTypeName: String = "TIMESTAMP_NTZ"
+
+  // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampNTZNanosType (SPARK-57033):
+  // maps to java.time.LocalDateTime with the column precision.
+  override protected def nanosEncoder: AgnosticEncoder[_] = LocalDateTimeNanosEncoder(t.precision)
 }
 
 /**
@@ -88,4 +98,8 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
 class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType) extends TimestampNanosTypeApiOps {
   override def dataType: TimestampLTZNanosType = t
   override protected def sqlTypeName: String = "TIMESTAMP_LTZ"
+
+  // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampLTZNanosType (SPARK-57033):
+  // maps to java.time.Instant with the column precision.
+  override protected def nanosEncoder: AgnosticEncoder[_] = InstantNanosEncoder(t.precision)
 }
