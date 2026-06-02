@@ -35,34 +35,22 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
    * Each input [[Row]] carries the user columns followed by:
    *   - the row's `__START_AT` value
    *   - the row's `__END_AT` value (null for non-tombstone rows)
-   *   - the row's `__RECORD_START_AT` value (projected into the CDC metadata struct)
-   *   - the row's `__DELETED_BY_BATCH_ID` value (null when the row is still live)
-   *
-   * Built via [[Scd2BatchProcessor.constructAuxCdcMetadataCol]] so the test data tracks the
-   * production schema 1:1.
+   *   - the row's `_cdc_metadata` struct as a [[Row]]
+   *     (e.g., `Row(recordStartAt, deletedByBatchId)`)
    */
   private def auxTableOf(
       userSchema: StructType,
       sequencingType: DataType = LongType
   )(rows: Row*): DataFrame = {
-    val rawRecordStartAtColName = "__raw_record_start_at"
-    val rawDeletedByBatchIdColName = "__raw_deleted_by_batch_id"
-    val rawSchema = userSchema
+    val schema = userSchema
       .add(Scd2BatchProcessor.startAtColName, sequencingType, nullable = true)
       .add(Scd2BatchProcessor.endAtColName, sequencingType, nullable = true)
-      .add(rawRecordStartAtColName, sequencingType, nullable = true)
-      .add(rawDeletedByBatchIdColName, LongType, nullable = true)
-    spark
-      .createDataFrame(spark.sparkContext.parallelize(rows), rawSchema)
-      .withColumn(
+      .add(
         AutoCdcReservedNames.cdcMetadataColName,
-        Scd2BatchProcessor.constructAuxCdcMetadataCol(
-          recordStartAt = F.col(rawRecordStartAtColName),
-          deletedByBatchId = F.col(rawDeletedByBatchIdColName),
-          sequencingType = sequencingType
-        )
+        Scd2BatchProcessor.auxCdcMetadataColSchema(sequencingType),
+        nullable = false
       )
-      .drop(rawRecordStartAtColName, rawDeletedByBatchIdColName)
+    spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
   }
 
   /**
@@ -125,14 +113,13 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       resolvedSequencingType = LongType
     )
 
-  /** User schema for single-key `findAffected*` tests: `id`, `value`. */
-  private val singleKeyUserSchema: StructType = new StructType()
-    .add("id", IntegerType)
-    .add("value", StringType)
-
   /** Key-only schema for single-key `findAffected*` tests' minSeq dataframes. */
   private val singleKeyKeySchema: StructType = new StructType()
     .add("id", IntegerType)
+
+  /** User schema for single-key `findAffected*` tests: the key column plus a `value` column. */
+  private val singleKeyUserSchema: StructType = singleKeyKeySchema
+    .add("value", StringType)
 
   // =============== preprocessMicrobatch tests ===============
 
@@ -749,7 +736,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Two keys to demonstrate per-key anchor isolation.
     //
     // Input row shape per `auxTableOf`:
-    //   (id, value, __START_AT, __END_AT, __RECORD_START_AT, __DELETED_BY_BATCH_ID)
+    //   (id, value, __START_AT, __END_AT, Row(recordStartAt, deletedByBatchId))
     //
     // Key 1: aux rows at recordStartAt 3, 5, 10. minSeq = 10.
     //   - 3  -> older than the anchor; dropped.
@@ -758,10 +745,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Key 2: only one aux row at 7, minSeq = 7.
     //   - 7  -> at minSeq; included via >= branch. No anchor (no rows < 7 for this key).
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, "v1.3",  3L,  null, 3L,  null),
-      Row(1, "v1.5",  5L,  null, 5L,  null),
-      Row(1, "v1.10", 10L, null, 10L, null),
-      Row(2, "v2.7",  7L,  null, 7L,  null)
+      Row(1, "v1.3",  3L,  null, Row(3L,  null)),
+      Row(1, "v1.5",  5L,  null, Row(5L,  null)),
+      Row(1, "v1.10", 10L, null, Row(10L, null)),
+      Row(2, "v2.7",  7L,  null, Row(7L,  null))
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(
       Row(1, 10L),
@@ -795,14 +782,14 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val aux = auxTableOf(singleKeyUserSchema)(
       // Tombstone at recordStartAt = 3 (deleted at sequence 3): startAt = endAt = 3.
       // Older than the anchor; dropped.
-      Row(1, null,    3L, 3L,   3L,  null),
+      Row(1, null,    3L, 3L,   Row(3L,  null)),
       // No-op upsert continuation at recordStartAt = 7: startAt inherits its run head's
       // recordStartAt, endAt is null. Anchor for minSeq=10 (max < 10).
-      Row(1, "alice", 5L, null, 7L,  null),
+      Row(1, "alice", 5L, null, Row(7L,  null)),
       // Tombstone at recordStartAt = 12: at-or-after minSeq, included via >= branch.
-      Row(1, null,    12L, 12L, 12L, null),
+      Row(1, null,    12L, 12L, Row(12L, null)),
       // No-op upsert continuation at recordStartAt = 15: included via >= branch.
-      Row(1, "bob",   13L, null, 15L, null)
+      Row(1, "bob",   13L, null, Row(15L, null))
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
@@ -839,9 +826,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // the previously-no-op continuations become honest history with non-trivial
     // [startAt, endAt] boundaries.
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, "alice", 2L, null, 3L,  null),  // older continuation; dropped (< anchor)
-      Row(1, "alice", 2L, null, 8L,  null),  // anchor: max recordStartAt strictly < 10
-      Row(1, "alice", 2L, null, 12L, null)   // included via >= branch (>= minSeq=10)
+      Row(1, "alice", 2L, null, Row(3L,  null)),  // older continuation; dropped (< anchor)
+      Row(1, "alice", 2L, null, Row(8L,  null)),  // anchor: max recordStartAt strictly < 10
+      Row(1, "alice", 2L, null, Row(12L, null))   // included via >= branch (>= minSeq=10)
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
@@ -878,10 +865,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // starts a fresh run, not a continuation), while the right-side tombstones bound the
     // visible interval of any new upsert run against subsequent deletes.
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, null, 3L,  3L,  3L,  null),
-      Row(1, null, 7L,  7L,  7L,  null),
-      Row(1, null, 12L, 12L, 12L, null),
-      Row(1, null, 18L, 18L, 18L, null)
+      Row(1, null, 3L,  3L,  Row(3L,  null)),
+      Row(1, null, 7L,  7L,  Row(7L,  null)),
+      Row(1, null, 12L, 12L, Row(12L, null)),
+      Row(1, null, 18L, 18L, Row(18L, null))
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
@@ -911,9 +898,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // All three rows would be eligible by recordStartAt alone (>= minSeq=10), but the
     // idempotency filter drops the one logically deleted by a different batch.
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, "live",    10L, null, 10L, null),               // not deleted -> kept
-      Row(1, "retried", 11L, null, 11L, currentBatchId),     // deleted by current -> kept
-      Row(1, "ignored", 12L, null, 12L, differentBatchId)    // deleted by another -> dropped
+      Row(1, "live",    10L, null, Row(10L, null)),             // not deleted -> kept
+      Row(1, "retried", 11L, null, Row(11L, currentBatchId)),   // deleted by current -> kept
+      Row(1, "ignored", 12L, null, Row(12L, differentBatchId))  // deleted by another -> dropped
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
@@ -945,7 +932,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // the *current* behavior so the contract change is intentional rather than accidental.
     val currentBatchId = 100L
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, "anchor", 5L, null, 5L, currentBatchId)
+      Row(1, "anchor", 5L, null, Row(5L, currentBatchId))
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
@@ -968,7 +955,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Pre-condition: aux's `_cdc_metadata` carries __RECORD_START_AT and __DELETED_BY_BATCH_ID.
     // The find function must strip the aux-only field so the result is union-compatible
     // with target-table rows and preprocessed-microbatch rows downstream.
-    val aux = auxTableOf(singleKeyUserSchema)(Row(1, "v", 5L, null, 5L, null))
+    val aux = auxTableOf(singleKeyUserSchema)(Row(1, "v", 5L, null, Row(5L, null)))
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
@@ -992,12 +979,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // and would fail to find a column named `a.b`, while passing raw names to F.col
     // would parse the dot as struct-field access and also fail.
     val processor = processorWithKeys(Seq("`a.b`"))
-    val userSchema = new StructType()
-      .add("a.b", IntegerType)
-      .add("value", StringType)
     val keySchema = new StructType().add("a.b", IntegerType)
+    val userSchema = keySchema.add("value", StringType)
 
-    val aux = auxTableOf(userSchema)(Row(1, "v", 5L, null, 5L, null))
+    val aux = auxTableOf(userSchema)(Row(1, "v", 5L, null, Row(5L, null)))
     val minSeq = minSeqOf(keySchema)(Row(1, 10L))
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
@@ -1015,13 +1000,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
   test("findAffectedRowsFromAuxiliaryTable respects all key columns when computing " +
     "per-key anchors with a composite key") {
-    val userSchema = new StructType()
-      .add("region", StringType)
-      .add("customer_id", IntegerType)
-      .add("name", StringType)
     val keySchema = new StructType()
       .add("region", StringType)
       .add("customer_id", IntegerType)
+    val userSchema = keySchema.add("name", StringType)
 
     val processor = processorWithKeys(Seq("region", "customer_id"))
 
@@ -1030,9 +1012,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     //   (EU, 1): anchor at 4; no rows at or after 12 -> only the anchor.
     //   (US, 2): no aux rows -> contributes nothing.
     val aux = auxTableOf(userSchema)(
-      Row("US", 1, "us1.3",  3L,  null, 3L,  null),
-      Row("US", 1, "us1.10", 10L, null, 10L, null),
-      Row("EU", 1, "eu1.4",  4L,  null, 4L,  null)
+      Row("US", 1, "us1.3",  3L,  null, Row(3L,  null)),
+      Row("US", 1, "us1.10", 10L, null, Row(10L, null)),
+      Row("EU", 1, "eu1.4",  4L,  null, Row(4L,  null))
     )
     val minSeq = minSeqOf(keySchema)(
       Row("US", 1, 10L),
@@ -1076,7 +1058,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val processor = processorWithKeys(Seq("id"))
 
     // Aux only has rows for key=1. Microbatch only sees key=2.
-    val aux = auxTableOf(singleKeyUserSchema)(Row(1, "v", 5L, null, 5L, null))
+    val aux = auxTableOf(singleKeyUserSchema)(Row(1, "v", 5L, null, Row(5L, null)))
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(2, 10L))
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
@@ -1094,8 +1076,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Aux has rows for keys 1 and 2. Microbatch only mentions key=1, so key=2's aux rows
     // must be dropped (the inner join with minSeq strips them).
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, "v1", 5L, null, 5L, null),
-      Row(2, "v2", 7L, null, 7L, null)
+      Row(1, "v1", 5L, null, Row(5L, null)),
+      Row(2, "v2", 7L, null, Row(7L, null))
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
@@ -1182,13 +1164,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
   }
 
   test("findAffectedRowsFromTargetTable respects all key columns with a composite key") {
-    val userSchema = new StructType()
-      .add("region", StringType)
-      .add("customer_id", IntegerType)
-      .add("name", StringType)
     val keySchema = new StructType()
       .add("region", StringType)
       .add("customer_id", IntegerType)
+    val userSchema = keySchema.add("name", StringType)
 
     val processor = processorWithKeys(Seq("region", "customer_id"))
 
