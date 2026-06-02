@@ -109,6 +109,9 @@ private[sql] object AvroUtils extends Logging {
 
     case _: GeometryType | _: GeographyType => false
 
+    // Nanosecond-capable timestamps are not yet supported by this datasource.
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }

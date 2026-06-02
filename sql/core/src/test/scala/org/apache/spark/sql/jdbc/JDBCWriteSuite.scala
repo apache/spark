@@ -28,12 +28,15 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode}
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -696,5 +699,22 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
     // -8 hour difference since Instant was GMT and Timestamp is America/Los_Angeles
     assert(rows(0).getAs[java.sql.Timestamp](1)
       === java.sql.Timestamp.valueOf("2020-02-02 04:13:14.56789"))
+  }
+
+  test("SPARK-57166: nanosecond timestamp types are not supported in JDBC write") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { nanosType =>
+        // The nanos literal is built directly from its internal value to avoid relying on
+        // cast/parser support.
+        val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
+        val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
+        val e = intercept[AnalysisException] {
+          df.write.jdbc(url, "TEST.NANOSTYPES", new Properties())
+        }
+        assert(e.getCondition === "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE")
+        assert(e.getMessageParameters.get("columnName") === "`ts`")
+        assert(e.getMessageParameters.get("columnType") === s""""${nanosType.sql}"""")
+      }
+    }
   }
 }
