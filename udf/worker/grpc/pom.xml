@@ -47,10 +47,10 @@
     removed from their classpath.)
 
     Note: gRPC is kept off every shared classpath by the dependency graph
-    alone -- nothing on the runtime/assembly classpath depends on this module
-    yet. The gRPC runtime here is NOT shaded. Once the gRPC transport is wired
-    up and a runtime module depends on this one, the io.grpc / protobuf
-    classes should be relocated (mirroring the
+    alone, since nothing on the runtime/assembly classpath depends on this
+    module yet. The gRPC runtime here is NOT shaded. Once the gRPC transport
+    is wired up and a runtime module depends on this one, the io.grpc and
+    protobuf classes should be relocated (mirroring the
     org.sparkproject.spark_udf_worker.protobuf relocation in the proto module)
     to avoid version clashes with Spark Connect's gRPC. That shading is
     deferred to a follow-up.
