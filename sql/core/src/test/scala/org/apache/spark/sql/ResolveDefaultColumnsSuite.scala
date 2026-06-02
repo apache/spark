@@ -18,7 +18,13 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -386,5 +392,36 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
           parameters = Map("limit" -> "1"))
       }
     }
+  }
+
+  test("SPARK-57187: by-position default fill applies the CHAR/VARCHAR length check") {
+    // The by-position fill path (resolveColumnsByPosition under RECURSE / V2 schema evolution)
+    // shares the same applyDefaultWithLengthCheck helper as the by-name path. This drives that
+    // path directly and asserts the trailing default column is wrapped with the write-side
+    // length check, so an oversized non-foldable default is caught at runtime there too.
+    // Expected schema: (i INT, s CHAR(100) DEFAULT current_user()). CHAR is stored as StringType
+    // plus the raw-type metadata, exactly as the catalog represents it. CHAR(100) is wide enough
+    // that the resolved default does not trip the eager DDL-time length check, so we observe the
+    // write-side runtime check that the by-position fill path now adds.
+    val charMeta = new MetadataBuilder()
+      .putString(CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY, "char(100)")
+      .putString(ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY, "current_user()")
+      .build()
+    val expected = Seq(
+      AttributeReference("i", IntegerType)(),
+      AttributeReference("s", StringType, nullable = true, metadata = charMeta)())
+    // A by-position INSERT that supplies only the leading column, omitting the trailing CHAR one.
+    val query = LocalRelation(AttributeReference("i", IntegerType)())
+
+    val resolved = TableOutputResolver.resolveOutputColumns(
+      "t", expected, query, byName = false, spark.sessionState.conf,
+      TableOutputResolver.DefaultValueFillMode.RECURSE)
+
+    val hasLengthCheck = resolved.expressions.exists(_.exists {
+      case s: StaticInvoke => s.functionName == "charTypeWriteSideCheck"
+      case _ => false
+    })
+    assert(hasLengthCheck,
+      "by-position default fill must apply the CHAR/VARCHAR write-side length check")
   }
 }

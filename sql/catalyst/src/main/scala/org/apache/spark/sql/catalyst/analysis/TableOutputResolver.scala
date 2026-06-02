@@ -284,6 +284,31 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
   }
 
+  /**
+   * Builds the [[NamedExpression]] for a missing column filled with its default value, applying a
+   * write-side CHAR/VARCHAR length check so that non-foldable defaults (e.g. `current_user()`)
+   * that exceed the column length are caught at runtime. Uses `getRawType` so it works for both
+   * V1 and V2 tables. Shared by the by-name and by-position default-fill paths.
+   *
+   * `applyColumnMetadata` strips the default's outer alias and re-wraps it with the required
+   * metadata, so the length check is applied to the default value itself (the alias child).
+   */
+  private def applyDefaultWithLengthCheck(
+      defaultExpr: Expression,
+      expectedCol: Attribute,
+      conf: SQLConf): NamedExpression = {
+    val rawType = CharVarcharUtils.getRawType(expectedCol.metadata).getOrElse(expectedCol.dataType)
+    val checked = if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(rawType)) {
+      val value = defaultExpr match {
+        case a: Alias => a.child
+        case other => other
+      }
+      CharVarcharUtils.stringLengthCheck(value, rawType)
+    } else {
+      defaultExpr
+    }
+    applyColumnMetadata(checked, expectedCol)
+  }
 
   private def canWrite(
       tableName: String,
@@ -327,25 +352,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
             tableName, newColPath.quoted
           )
         }
-        // Apply CHAR/VARCHAR length check to the default expression so that non-foldable
-        // defaults (e.g. current_user()) that exceed the column length are caught at runtime.
-        // Uses getRawType so it works for both V1 and V2 tables.
-        val checkedExpr = defaultExpr.map { expr =>
-          val rawType = CharVarcharUtils.getRawType(expectedCol.metadata)
-            .getOrElse(expectedCol.dataType)
-          if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(rawType)) {
-            expr match {
-              case a: Alias =>
-                a.copy(child = CharVarcharUtils.stringLengthCheck(a.child, rawType))(
-                  a.exprId, a.qualifier, a.explicitMetadata, a.nonInheritableMetadataKeys)
-              case other =>
-                Alias(CharVarcharUtils.stringLengthCheck(other, rawType), expectedCol.name)()
-            }
-          } else {
-            expr
-          }
-        }
-        Some(applyColumnMetadata(checkedExpr.get, expectedCol))
+        Some(applyDefaultWithLengthCheck(defaultExpr.get, expectedCol, conf))
       } else if (matched.length > 1) {
         throw QueryCompilationErrors.incompatibleDataToTableAmbiguousColumnNameError(
           tableName, newColPath.quoted
@@ -466,7 +473,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
           throw QueryCompilationErrors.incompatibleDataToTableCannotFindDataError(
             tableName, (colPath :+ expectedCol.name).quoted)
         }
-        applyColumnMetadata(defaultExpr.get, expectedCol)
+        applyDefaultWithLengthCheck(defaultExpr.get, expectedCol, conf)
       }
     } else {
       Nil
