@@ -2009,7 +2009,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       spark.catalog.cacheTable("array_join_codegen")
 
       val query =
-        "SELECT array_join(arr, ',', repl_col) FROM array_join_codegen " +
+        "SELECT array_join(arr, delim_col, repl_col) FROM array_join_codegen " +
           "WHERE arr IS NOT NULL AND delim_col IS NOT NULL"
 
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
@@ -2017,13 +2017,13 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         assert(
           df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]),
           "expected the array_join query to run inside whole-stage codegen")
-        checkAnswer(df, Seq(Row("a,NR,b"), Row(null), Row("x,y")))
+        checkAnswer(df, Seq(Row("a,NR,b"), Row(null), Row("x-y")))
       }
 
       withSQLConf(
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
           SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
-        checkAnswer(sql(query), Seq(Row("a,NR,b"), Row(null), Row("x,y")))
+        checkAnswer(sql(query), Seq(Row("a,NR,b"), Row(null), Row("x-y")))
       }
     }
   }
