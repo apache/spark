@@ -88,52 +88,53 @@ case "$1" in
       --deploy-mode client
       "$@"
     )
-    # On non-zero exit, write the last 4KB of driver stderr to the Kubernetes
-    # termination log so kubectl describe pod surfaces the error message.
-    # awk ring buffer streams stderr to kubectl logs in real-time via a named
-    # pipe while keeping only the last 4KB in memory (no unbounded /tmp growth).
+    # Activate termination log capture only when running in Kubernetes, where
+    # /dev/termination-log is mounted. In client mode or local runs the file is
+    # absent and we fall through to the original exec /usr/bin/tini behaviour.
     TERMINATION_LOG="${TERMINATION_LOG:-/dev/termination-log}"
-    STDERR_PIPE=/tmp/driver_stderr_pipe
-    STDERR_BUF=/tmp/driver_stderr_last4k
-    # Remove stale pipe from a prior SIGKILL'd container restart (emptyDir /tmp).
-    rm -f "$STDERR_PIPE"
-    mkfifo "$STDERR_PIPE"
-    trap 'rm -f "$STDERR_PIPE" "$STDERR_BUF"' EXIT
-    # awk ring buffer: clamp each line to 4096 bytes at insertion so that even
-    # a single oversized line never overflows the K8s termination log limit.
-    awk -v out="$STDERR_BUF" '
-      BEGIN { start = 1; bytes = 0 }
-      {
-        line = (length($0) > 4096) ? substr($0, length($0) - 4095) : $0
-        print line > "/dev/stderr"
-        buf[NR] = line
-        bytes += length(line) + 1
-        while (bytes > 4096 && start < NR) {
-          bytes -= length(buf[start]) + 1
-          delete buf[start++]
+    if [ -e "$TERMINATION_LOG" ]; then
+      STDERR_PIPE=/tmp/driver_stderr_pipe
+      STDERR_BUF=/tmp/driver_stderr_last4k
+      # Remove stale pipe from a prior SIGKILL'd container restart (emptyDir /tmp).
+      rm -f "$STDERR_PIPE"
+      mkfifo "$STDERR_PIPE"
+      trap 'rm -f "$STDERR_PIPE" "$STDERR_BUF"' EXIT
+      # awk ring buffer: clamp each line to 4096 bytes at insertion so that even
+      # a single oversized line never overflows the K8s termination log limit.
+      awk -v out="$STDERR_BUF" '
+        BEGIN { start = 1; bytes = 0 }
+        {
+          line = (length($0) > 4096) ? substr($0, length($0) - 4095) : $0
+          print line > "/dev/stderr"
+          buf[NR] = line
+          bytes += length(line) + 1
+          while (bytes > 4096 && start < NR) {
+            bytes -= length(buf[start]) + 1
+            delete buf[start++]
+          }
         }
-      }
-      END { for (i = start; i <= NR; i++) print buf[i] > out }
-    ' < "$STDERR_PIPE" &
-    AWK_PID=$!
-    # Run tini as a background child (not exec) so we can write the termination
-    # log on exit. Forward SIGTERM so Kubernetes graceful shutdown still reaches
-    # tini and the Spark driver (without this, bash as PID 1 ignores SIGTERM).
-    set +e  # wait returns tini's exit code; set -e would abort before EXIT_CODE=$? captures it
-    /usr/bin/tini -s -- "${CMD[@]}" 2>"$STDERR_PIPE" &
-    TINI_PID=$!
-    trap 'kill -TERM "$TINI_PID" 2>/dev/null' TERM INT
-    wait "$TINI_PID"
-    EXIT_CODE=$?
-    trap - TERM INT
-    rm -f "$STDERR_PIPE"
-    wait "$AWK_PID"
-    set -e
-    if [ $EXIT_CODE -ne 0 ]; then
-      cat "$STDERR_BUF" > "$TERMINATION_LOG" 2>/dev/null || true
+        END { for (i = start; i <= NR; i++) print buf[i] > out }
+      ' < "$STDERR_PIPE" &
+      AWK_PID=$!
+      # Run tini as a background child (not exec) so we can write the termination
+      # log on exit. Forward SIGTERM so Kubernetes graceful shutdown still reaches
+      # tini and the Spark driver (without this, bash as PID 1 ignores SIGTERM).
+      set +e  # wait returns tini's exit code; set -e would abort before EXIT_CODE=$? captures it
+      /usr/bin/tini -s -- "${CMD[@]}" 2>"$STDERR_PIPE" &
+      TINI_PID=$!
+      trap 'kill -TERM "$TINI_PID" 2>/dev/null' TERM INT
+      wait "$TINI_PID"
+      EXIT_CODE=$?
+      trap - TERM INT
+      rm -f "$STDERR_PIPE"
+      wait "$AWK_PID"
+      set -e
+      if [ $EXIT_CODE -ne 0 ]; then
+        cat "$STDERR_BUF" > "$TERMINATION_LOG" 2>/dev/null || true
+      fi
+      rm -f "$STDERR_BUF"
+      exit $EXIT_CODE
     fi
-    rm -f "$STDERR_BUF"
-    exit $EXIT_CODE
     ;;
   executor)
     shift 1
