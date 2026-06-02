@@ -141,18 +141,11 @@ object SchemaPruning extends SQLConfHelper {
   private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case ArrayTransform(argument, lambda: LambdaFunction) =>
-        // Field accesses through the lambda variable are not directly rooted at the input
-        // attribute. Convert them into a projected type for the transform argument so that
-        // physical nested column pruning can see them.
-        val nestedRootFields = lambda.arguments.headOption.collect {
-          case elementVar: NamedLambdaVariable =>
-            getArrayTransformRootField(argument, lambda.function, elementVar)
-        }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
-        if (nestedRootFields.nonEmpty) {
-          nestedRootFields ++ getRootFields(lambda.function)
-        } else {
-          expr.children.flatMap(getRootFields)
-        }
+        getArrayHigherOrderFunctionRootFields(expr, argument, lambda)
+      case ArrayExists(argument, lambda: LambdaFunction, _) =>
+        getArrayHigherOrderFunctionRootFields(expr, argument, lambda)
+      case ArrayForAll(argument, lambda: LambdaFunction) =>
+        getArrayHigherOrderFunctionRootFields(expr, argument, lambda)
       case att: Attribute =>
         RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
           derivedFromAtt = true) :: Nil
@@ -175,7 +168,25 @@ object SchemaPruning extends SQLConfHelper {
     }
   }
 
-  private def getArrayTransformRootField(
+  private def getArrayHigherOrderFunctionRootFields(
+      expr: Expression,
+      argument: Expression,
+      lambda: LambdaFunction): Seq[RootField] = {
+    // Field accesses through the lambda variable are not directly rooted at the input
+    // attribute. Convert them into a projected type for the array argument so that
+    // physical nested column pruning can see them.
+    val nestedRootFields = lambda.arguments.headOption.collect {
+      case elementVar: NamedLambdaVariable =>
+        getArrayHigherOrderFunctionRootField(argument, lambda.function, elementVar)
+    }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
+    if (nestedRootFields.nonEmpty) {
+      nestedRootFields ++ getRootFields(lambda.function)
+    } else {
+      expr.children.flatMap(getRootFields)
+    }
+  }
+
+  private def getArrayHigherOrderFunctionRootField(
       argument: Expression,
       function: Expression,
       elementVar: NamedLambdaVariable): Option[StructField] = {
