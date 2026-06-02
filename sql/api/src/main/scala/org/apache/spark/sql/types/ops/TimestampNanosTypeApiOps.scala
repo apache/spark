@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.types.ops
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
 import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase}
@@ -34,7 +33,8 @@ import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
  * SCOPE (SPARK-57207): this issue wires physical representation, literals, row accessors, and
  * codegen class selection. Dedicated fractional-second string formatting is not implemented yet:
  * there is no TimestampFormatter for the nanos timestamp types. Until one lands, format() (and the
- * toSQLValue() that delegates to it) raises an internal error rather than silently truncating to
+ * toSQLValue() that delegates to it) raises the user-facing
+ * UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error rather than silently truncating to
  * microsecond precision.
  *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
@@ -52,11 +52,10 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
 
   // Fractional-second (nanosecond) string formatting is not implemented yet: there is no
   // TimestampFormatter for the nanos timestamp types. Until one lands, formatting (CAST to STRING,
-  // EXPLAIN / SHOW output, and SQL-literal rendering via toSQLValue) raises an internal error
-  // rather than silently truncating to microsecond precision.
+  // EXPLAIN / SHOW output, and SQL-literal rendering via toSQLValue) raises a user-facing
+  // unsupported-feature error rather than silently truncating to microsecond precision.
   override def format(v: Any): String =
-    throw SparkException.internalError(
-      s"TimestampFormatter for the type ${dataType.sql} is not implemented yet.")
+    throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
 
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
 

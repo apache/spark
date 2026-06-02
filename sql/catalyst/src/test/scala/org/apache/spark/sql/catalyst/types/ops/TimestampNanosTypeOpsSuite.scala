@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import java.time.{Instant, LocalDateTime}
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal, MutableTimestampNanos, SpecificInternalRow}
@@ -161,14 +161,14 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("format and toSQLValue raise an internal error (formatting not implemented yet)") {
+  test("format and toSQLValue raise UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING") {
     allCases.foreach { case (dt, _, value) =>
       val ops = TypeApiOps(dt).get
       Seq[() => Any](() => ops.format(value), () => ops.toSQLValue(value)).foreach { call =>
-        val e = intercept[org.apache.spark.SparkException](call())
-        assert(e.getCondition === "INTERNAL_ERROR", s"condition for $dt")
-        assert(e.getMessage.contains("TimestampFormatter for the type"), s"message for $dt")
-        assert(e.getMessage.contains("is not implemented yet"), s"message for $dt")
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException](call()),
+          condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING",
+          parameters = Map("dataType" -> ("\"" + dt.sql + "\"")))
       }
     }
   }
