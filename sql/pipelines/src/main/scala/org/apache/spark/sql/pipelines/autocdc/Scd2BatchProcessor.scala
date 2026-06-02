@@ -69,10 +69,10 @@ case class Scd2BatchProcessor(
    *   merged - with the following schema, in column order:
    *     1. The user columns of `microbatchDf` that survive [[ChangeArgs.columnSelection]], in
    *        the order they appeared in the input.
-   *     2. `__START_AT` column, populated with the sequence value of the row.
-   *     3. `__END_AT` column, populated with the sequence value of the row IFF it's a delete
+   *     2. [[startAtColName]], populated with the sequence value of the row.
+   *     3. [[endAtColName]], populated with the sequence value of the row IFF it's a delete
    *        event, null otherwise.
-   *     4. `__spark_autocdc_metadata` column, conforming to [[targetCdcMetadataColSchema]].
+   *     4. [[cdcMetadataColName]], conforming to [[targetCdcMetadataColSchema]].
    */
   private[autocdc] def preprocessMicrobatch(microbatchDf: DataFrame): DataFrame = {
     microbatchDf
@@ -166,16 +166,16 @@ case class Scd2BatchProcessor(
   }
 
   /**
-   * For each key in the preprocessed microbatch, compute the earliest `__RECORD_START_AT`
+   * For each key in the preprocessed microbatch, compute the earliest [[recordStartAtFieldName]]
    * across the key's events.
    *
    * @param preprocessedBatchDf
    *   a validated and preprocessed microbatch as produced by [[preprocessMicrobatch]] - in
-   *   particular, non-null key columns and a non-null `__RECORD_START_AT` on every row.
+   *   particular, non-null key columns and a non-null [[recordStartAtFieldName]] on every row.
    * @return
    *   a dataframe containing one row per distinct key. Schema, in column order:
    *     1. The key columns ([[ChangeArgs.keys]]), in their declared order.
-   *     2. `__spark_autocdc_min_sequencing` column, carrying the min `__RECORD_START_AT`
+   *     2. [[minSequenceColName]], carrying the min [[recordStartAtFieldName]]
    *        across all records within the microbatch for that key.
    */
   private[autocdc] def computeMinimumSequencePerKey(preprocessedBatchDf: DataFrame): DataFrame = {
@@ -183,7 +183,7 @@ case class Scd2BatchProcessor(
       Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
     preprocessedBatchDf
       .groupBy(keysQuoted.map(F.col): _*)
-      .agg(F.min(recordStartAt).alias(Scd2BatchProcessor.minSequencingColName))
+      .agg(F.min(recordStartAt).alias(Scd2BatchProcessor.minSequenceColName))
   }
 
   /**
@@ -191,8 +191,8 @@ case class Scd2BatchProcessor(
    *
    * @param rawAuxiliaryTableDf
    *   the auxiliary table in its native schema, whose CDC metadata column carries an extra
-   *   `__DELETED_BY_BATCH_ID` field on top of the target/microbatch schema.
-   * @param minimumSequencePerKeyInMicrobatchDf
+   *   [[deletedByBatchIdFieldName]] on top of the target/microbatch schema.
+   * @param perKeyMinimumSequenceInMicrobatch
    *   one row per distinct key as produced by [[computeMinimumSequencePerKey]], representing
    *   the minimum sequence for that key in the microbatch.
    * @param batchId
@@ -204,7 +204,7 @@ case class Scd2BatchProcessor(
    */
   private[autocdc] def findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf: DataFrame,
-      minimumSequencePerKeyInMicrobatchDf: DataFrame,
+      perKeyMinimumSequenceInMicrobatch: DataFrame,
       batchId: Long
   ): DataFrame = {
     val auxTableRecordStartAtField = Scd2BatchProcessor.recordStartAtOf(
@@ -223,7 +223,7 @@ case class Scd2BatchProcessor(
           auxTableDeletedByBatchIdField === F.lit(batchId)
       )
       // The aux table's CDC metadata column is a superset of the target's: it carries the
-      // additional `__DELETED_BY_BATCH_ID` field. Since we eventually union aux rows with
+      // additional [[deletedByBatchIdFieldName]]. Since we eventually union aux rows with
       // target and microbatch rows (which use the target's narrower CDC metadata schema), strip
       // the aux-only subfields here so all three sources share an identical CDC metadata column
       // schema, and replace the existing CDC metadata column with it.
@@ -235,54 +235,62 @@ case class Scd2BatchProcessor(
         )
       )
 
-    val minSequencePerKeyInMicrobatchCol = F.col(Scd2BatchProcessor.minSequencingColName)
+    val perKeyMinimumSequenceInMicrobatchCol = F.col(Scd2BatchProcessor.minSequenceColName)
 
     // Per key, identify the sequence value associated with the anchor row in the aux table.
     //
-    // The anchor row is the aux row with the largest `recordStartAt` strictly less than the
-    // min sequence in the incoming microbatch for that key. It is the immediate "left
-    // context" the reconciler needs to correctly attribute incoming events to a run: without
-    // the anchor, a no-op upsert of an existing run would look like a brand-new run head.
+    // The anchor row is the aux row with the largest [[recordStartAtFieldName]] strictly less
+    // than the min sequence in the incoming microbatch for that key. The reconciler needs this
+    // "left context" in two cases:
+    //   (1) Incoming no-op upsert: without the anchor, it would look like a new run head, when in
+    //       reality it's a part of an existing no-op run/head.
+    //   (2) Incoming state-changing upsert that bisects two aux no-ops: the anchor surfaces
+    //       the before-half so both halves can be promoted to target. (The after-half is
+    //       picked up by the >= minSeq branch.)
+    //
+    // Because no-op upserts are stored only in the aux table, the anchor concept only exists when
+    // pulling in rows from the aux table, and is not relevant for the target table.
     //
     // Keys with no aux row strictly before the min sequence have no anchor; their affected set
     // reduces to "all aux rows at or after the min sequence."
     //
-    // The shape of this DataFrame is: [key1, key2, ... keyN, anchorRowSequenceForCompositeKey]
-    val anchorOrderingPerKey: DataFrame = reducedAuxiliaryTableDf
-      // The number of rows in [[minimumSequencePerKeyInMicrobatchDf]] is bounded by the
+    // The shape of this DataFrame is: [key1, key2, ... keyN, anchorSequence]
+    val perKeyAnchorSequence: DataFrame = reducedAuxiliaryTableDf
+      // The number of rows in [[perKeyMinimumSequenceInMicrobatch]] is bounded by the
       // number of unique keys in the microbatch, which should typically be small. The
       // auxiliary table should generally also be small, containing only no-op upsert runs
       // and tombstones per key. Therefore this join should be cheap, and broadcast joinable.
-      .join(minimumSequencePerKeyInMicrobatchDf, keysRaw)
-      .filter(auxTableRecordStartAtField < minSequencePerKeyInMicrobatchCol)
+      .join(perKeyMinimumSequenceInMicrobatch, keysRaw)
+      .filter(auxTableRecordStartAtField < perKeyMinimumSequenceInMicrobatchCol)
       .groupBy(keysQuoted.map(F.col): _*)
       .agg(
-        F.max(auxTableRecordStartAtField).as(Scd2BatchProcessor.anchorOrderingColName)
+        F.max(auxTableRecordStartAtField).as(Scd2BatchProcessor.anchorSequenceColName)
       )
-    val anchorOrderingCol = F.col(Scd2BatchProcessor.anchorOrderingColName)
+    val anchorSequenceCol = F.col(Scd2BatchProcessor.anchorSequenceColName)
 
     // Now that we have the minimum sequence in the microbatch and the sequence of the anchor row,
     // we have enough information to compute the full set of auxiliary rows that affect or are
     // affected by the microbatch.
     val auxRowIsAfterMinSequenceInMicrobatch =
-      auxTableRecordStartAtField >= minSequencePerKeyInMicrobatchCol
+      auxTableRecordStartAtField >= perKeyMinimumSequenceInMicrobatchCol
 
-    val auxRowIsAnchorRow = auxTableRecordStartAtField === anchorOrderingCol
+    val auxRowIsAnchorRow = auxTableRecordStartAtField === anchorSequenceCol
 
     val auxRowAffectsMicrobatch = auxRowIsAfterMinSequenceInMicrobatch || auxRowIsAnchorRow
 
     val affectedRowsFromAuxiliaryTable = reducedAuxiliaryTableDf
-      // Per row, join/project the minimum microbatch sequence and anchor sequencing for
-      // that row's key set.
-      .join(minimumSequencePerKeyInMicrobatchDf, keysRaw)
+      // Per row, join/project the minimum microbatch sequence and anchor sequence for that row's
+      // key set. This join is relatively cheap, because the size of the dataframes being joined is
+      // bound by the number of unique keys in the microbatch.
+      .join(perKeyMinimumSequenceInMicrobatch, keysRaw)
       .join(
-        anchorOrderingPerKey,
+        perKeyAnchorSequence,
         keysRaw,
         joinType = "left"
       )
       // Using the joined information, determine if the row is affected by the microbatch.
       .filter(auxRowAffectsMicrobatch)
-      .drop(minSequencePerKeyInMicrobatchCol, anchorOrderingCol)
+      .drop(perKeyMinimumSequenceInMicrobatchCol, anchorSequenceCol)
 
     affectedRowsFromAuxiliaryTable
   }
@@ -292,7 +300,7 @@ case class Scd2BatchProcessor(
    *
    * @param targetTableDf
    *   the target table in its native schema.
-   * @param minimumSequencePerKeyInMicrobatchDf
+   * @param perKeyMinimumSequenceInMicrobatch
    *   one row per distinct key as produced by [[computeMinimumSequencePerKey]], representing
    *   the minimum sequence for that key in the microbatch.
    * @return
@@ -300,29 +308,29 @@ case class Scd2BatchProcessor(
    */
   private[autocdc] def findAffectedRowsFromTargetTable(
       targetTableDf: DataFrame,
-      minimumSequencePerKeyInMicrobatchDf: DataFrame
+      perKeyMinimumSequenceInMicrobatch: DataFrame
   ): DataFrame = {
     val targetEndAtCol = F.col(Scd2BatchProcessor.endAtColName)
-    val minSequencePerKeyInMicrobatchCol = F.col(Scd2BatchProcessor.minSequencingColName)
+    val perKeyMinimumSequenceInMicrobatchCol = F.col(Scd2BatchProcessor.minSequenceColName)
 
     // Per key, identify all the rows in the target table that may be affected by the
     // incoming microbatch.
     //
     // Unlike the auxiliary table, the target table holds visible rows only: no hidden open
     // no-op upsert rows, no tombstones. Visible rows for a given key form a non-overlapping
-    // interval partition over the sequencing axis, and at most one row has a null __END_AT
+    // interval partition over the sequencing axis, and at most one row has a null [[endAtColName]]
     // (the currently active row per key).
     //
     // Hence we can simply grab all rows that were active at some point after the min sequencing
-    // per key, which can be determined entirely by the row's `__END_AT`.
+    // per key, which can be determined entirely by the row's [[endAtColName]].
     val isCurrentlyActiveRow = targetEndAtCol.isNull
-    val rowEndsAfterMinimumSequence = targetEndAtCol >= minSequencePerKeyInMicrobatchCol
+    val rowEndsAfterMinimumSequence = targetEndAtCol >= perKeyMinimumSequenceInMicrobatchCol
     val rowMayBeAffected = isCurrentlyActiveRow || rowEndsAfterMinimumSequence
 
     val affectedRowsFromTargetTable = targetTableDf
-      .join(minimumSequencePerKeyInMicrobatchDf, keysRaw)
+      .join(perKeyMinimumSequenceInMicrobatch, keysRaw)
       .filter(rowMayBeAffected)
-      .drop(minSequencePerKeyInMicrobatchCol)
+      .drop(perKeyMinimumSequenceInMicrobatchCol)
 
     affectedRowsFromTargetTable
   }
@@ -478,8 +486,7 @@ object Scd2BatchProcessor {
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
    * key within the microbatch.
    */
-  private[autocdc] val minSequencingColName: String =
-    s"${AutoCdcReservedNames.prefix}min_sequencing"
+  private[autocdc] val minSequenceColName: String = s"${AutoCdcReservedNames.prefix}min_sequence"
 
   /**
    * Name of temporary column projected used to identify the sequence associated with the anchor
@@ -487,21 +494,18 @@ object Scd2BatchProcessor {
    * amongst all rows for a key (or risk undefined behavior), this sequence value uniquely
    * identifies an exact row in the aux.
    */
-  private val anchorOrderingColName: String = s"${AutoCdcReservedNames.prefix}anchor_ordering"
+  private val anchorSequenceColName: String = s"${AutoCdcReservedNames.prefix}anchor_sequence"
 
-  /** Project the `__RECORD_START_AT` field out of an SCD2 CDC metadata column. */
+  /** Project the [[recordStartAtFieldName]] out of an SCD2 CDC metadata column. */
   private def recordStartAtOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(recordStartAtFieldName)
 
-  /** Project the `__DELETED_BY_BATCH_ID` field out of an SCD2 CDC metadata column. */
+  /** Project the [[deletedByBatchIdFieldName]] out of an SCD2 CDC metadata column. */
   private def deletedByBatchIdOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(deletedByBatchIdFieldName)
 
   /**
    * Schema of the CDC metadata struct column for SCD2 target table rows.
-   *
-   * Note that the aux table's CDC metadata column is a strict superset of this schema (it carries
-   * an additional `__DELETED_BY_BATCH_ID` field).
    */
   private[pipelines] def targetCdcMetadataColSchema(sequencingType: DataType): StructType =
     StructType(
@@ -537,8 +541,8 @@ object Scd2BatchProcessor {
 
   /**
    * Schema of the CDC metadata struct column for SCD2 aux-table rows. Strict superset of
-   * [[targetCdcMetadataColSchema]]: extends it with the aux-only `__DELETED_BY_BATCH_ID`
-   * field used for SCD2 idempotency.
+   * [[targetCdcMetadataColSchema]]: extends it with the aux-only [[deletedByBatchIdFieldName]]
+   * used for SCD2 idempotency.
    */
   private[pipelines] def auxCdcMetadataColSchema(sequencingType: DataType): StructType =
     StructType(

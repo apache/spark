@@ -86,7 +86,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       sequencingType: DataType = LongType
   )(rows: Row*): DataFrame = {
     val schema = keySchema.add(
-      Scd2BatchProcessor.minSequencingColName,
+      Scd2BatchProcessor.minSequenceColName,
       sequencingType,
       nullable = false
     )
@@ -607,8 +607,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
   // =============== computeMinimumSequencePerKey tests ===============
 
-  test("computeMinimumSequencePerKey returns one row per distinct key with the per-key " +
-    "minimum __RECORD_START_AT, aggregating across both upsert and delete events") {
+  test("computeMinimumSequencePerKey returns one row per distinct key and aggregates across " +
+    "both upsert and delete events") {
     val schema = new StructType()
       .add("id", IntegerType)
       .add("seq", LongType)
@@ -637,7 +637,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
-      "id", Scd2BatchProcessor.minSequencingColName
+      "id", Scd2BatchProcessor.minSequenceColName
     ))
     checkAnswer(
       df = result,
@@ -648,8 +648,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("computeMinimumSequencePerKey computes the minimum per composite-key tuple, " +
-    "not per single key column") {
+  test("computeMinimumSequencePerKey is compatible with composite keys") {
     val schema = new StructType()
       .add("region", StringType)
       .add("customer_id", IntegerType)
@@ -672,7 +671,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
-      "region", "customer_id", Scd2BatchProcessor.minSequencingColName
+      "region", "customer_id", Scd2BatchProcessor.minSequenceColName
     ))
     checkAnswer(
       df = result,
@@ -684,8 +683,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("computeMinimumSequencePerKey returns an empty result for an empty preprocessed " +
-    "microbatch") {
+  test("computeMinimumSequencePerKey returns an empty result for an empty microbatch") {
     val schema = new StructType()
       .add("id", IntegerType)
       .add("seq", LongType)
@@ -718,7 +716,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val result = processor.computeMinimumSequencePerKey(preprocessed)
 
     assert(result.schema.fieldNames.toSeq == Seq(
-      "a.b", Scd2BatchProcessor.minSequencingColName
+      "a.b", Scd2BatchProcessor.minSequenceColName
     ))
     checkAnswer(
       df = result,
@@ -728,9 +726,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
   // =============== findAffectedRowsFromAuxiliaryTable tests ===============
 
-  test("findAffectedRowsFromAuxiliaryTable selects per-key anchor (max recordStartAt " +
-    "strictly less than minSeq), preserves rows at or after minSeq, and drops older " +
-    "anchor candidates") {
+  test("findAffectedRowsFromAuxiliaryTable returns the anchor row per key") {
     val processor = processorWithKeys(Seq("id"))
 
     // Two keys to demonstrate per-key anchor isolation.
@@ -757,7 +753,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
@@ -771,8 +767,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("findAffectedRowsFromAuxiliaryTable selects the anchor regardless of row kind " +
-    "(tombstone vs no-op upsert continuation) and preserves both kinds in the affected set") {
+  test("findAffectedRowsFromAuxiliaryTable pulls in both tombstone and no-op upsert rows") {
     val processor = processorWithKeys(Seq("id"))
 
     // Aux carries a mix of row kinds for one key. The find function does NOT distinguish
@@ -795,7 +790,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
@@ -809,147 +804,102 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("findAffectedRowsFromAuxiliaryTable pulls in both no-op upsert continuations " +
-    "when the microbatch's minSeq strictly bisects them (so reconciliation can promote " +
-    "them to visible target rows if the bisecting event makes them no-longer no-ops)") {
+  test("findAffectedRowsFromAuxiliaryTable pulls in both consecutive no-op upsert events " +
+    "being interleaved by incoming microbatch row") {
     val processor = processorWithKeys(Seq("id"))
 
-    // Three no-op upsert continuations of a single run for key=1 (run head was at
-    // sequence 2 - that head lives in the target table, not the aux). Each continuation
-    // has startAt=2 (the head's recordStartAt) and endAt=null, and they all carry the
-    // same user data ("alice"), which is what made them no-ops when observed.
-    //
-    // The incoming microbatch's minSeq for key=1 is 10, which strictly bisects the
-    // continuations at recordStartAt=8 and recordStartAt=12. Both must surface in the
-    // affected set so a later reconciliation stage can decide whether to promote them
-    // to visible target rows - e.g., if the bisecting event carries different user data,
-    // the previously-no-op continuations become honest history with non-trivial
-    // [startAt, endAt] boundaries.
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, "alice", 2L, null, Row(3L,  null)),  // older continuation; dropped (< anchor)
-      Row(1, "alice", 2L, null, Row(8L,  null)),  // anchor: max recordStartAt strictly < 10
-      Row(1, "alice", 2L, null, Row(12L, null))   // included via >= branch (>= minSeq=10)
+      Row(1, "alice", 2L, null, Row(8L,  null)),
+      Row(1, "alice", 2L, null, Row(12L, null))
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 2L, null, Row(8L)),    // anchor - left context for the run
-        Row(1, "alice", 2L, null, Row(12L))    // bisected by microbatch event at seq 10
+        // Row with record start at of 8 gets pulled in as an anchor,
+        Row(1, "alice", 2L, null, Row(8L)),
+        // Row with record start at of 12 gets pulled in as a regular affected row.
+        Row(1, "alice", 2L, null, Row(12L))
       )
     )
   }
 
-  test("findAffectedRowsFromAuxiliaryTable pulls in tombstones on both sides of minSeq, " +
-    "including a tombstone-as-anchor and multiple tombstones at-or-after minSeq") {
+  test("findAffectedRowsFromAuxiliaryTable selects tombstones as anchor if applicable") {
     val processor = processorWithKeys(Seq("id"))
 
-    // Four tombstones for key=1 at recordStartAt = 3, 7, 12, 18 (delete events).
-    // Tombstones obey: startAt = endAt = recordStartAt and carry no user data.
-    //
-    // The microbatch's minSeq for key=1 is 10. Expected:
-    //   - Tombstone at 3:  older than the anchor; dropped.
-    //   - Tombstone at 7:  anchor (max recordStartAt strictly < 10); included.
-    //   - Tombstone at 12: at-or-after minSeq; included via the >= branch.
-    //   - Tombstone at 18: at-or-after minSeq; included via the >= branch.
-    //
-    // Why both sides matter for downstream reconciliation: the left-side tombstone tells
-    // reconciliation the prior run was already closed by a delete (so an incoming upsert
-    // starts a fresh run, not a continuation), while the right-side tombstones bound the
-    // visible interval of any new upsert run against subsequent deletes.
+    // Tombstone-as-anchor is incidental: the find function selects the anchor purely on
+    // `max recordStartAt < minSeq`, so a tombstone qualifies just like any other row kind.
+    // Downstream reconciliation does not actually rely on the anchor when it is a
+    // tombstone (a delete already closed the prior run, so any subsequent incoming event
+    // is necessarily a fresh run head regardless of whether the anchor is surfaced). We
+    // still pull it in as a harmless side effect of the range filter, and this behavior is
+    // documented via test.
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, null, 3L,  3L,  Row(3L,  null)),
       Row(1, null, 7L,  7L,  Row(7L,  null)),
-      Row(1, null, 12L, 12L, Row(12L, null)),
-      Row(1, null, 18L, 18L, Row(18L, null))
+      Row(1, null, 12L, 12L, Row(12L, null))
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, null, 7L,  7L,  Row(7L)),    // anchor - last delete before minSeq
-        Row(1, null, 12L, 12L, Row(12L)),   // delete at seq 12
-        Row(1, null, 18L, 18L, Row(18L))    // delete at seq 18
+        // Pulled in as anchor.
+        Row(1, null, 7L,  7L,  Row(7L)),
+        // Pulled in as regular affected row.
+        Row(1, null, 12L, 12L, Row(12L))
       )
     )
   }
 
-  test("findAffectedRowsFromAuxiliaryTable filters logically-deleted aux rows by " +
-    "__DELETED_BY_BATCH_ID: keeps null and current-batch, drops different-batch") {
+  test("findAffectedRowsFromAuxiliaryTable filters logically-deleted aux rows") {
     val processor = processorWithKeys(Seq("id"))
 
     val currentBatchId = 100L
     val differentBatchId = 99L
 
-    // All three rows would be eligible by recordStartAt alone (>= minSeq=10), but the
-    // idempotency filter drops the one logically deleted by a different batch.
+    // The idempotency filter retains rows deleted by `currentBatchId` (so a mid-flight
+    // retry sees its own prior writes) and drops rows deleted by any other batch. This
+    // applies uniformly to both the anchor and non-anchor affected rows.
     val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, "live",    10L, null, Row(10L, null)),             // not deleted -> kept
-      Row(1, "retried", 11L, null, Row(11L, currentBatchId)),   // deleted by current -> kept
-      Row(1, "ignored", 12L, null, Row(12L, differentBatchId))  // deleted by another -> dropped
+      // Anchor candidate (recordStartAt < minSeq):
+      Row(1, "anchor",  5L,  null, Row(5L,  currentBatchId)),    // deleted by current -> kept
+      // At-or-after minSeq:
+      Row(1, "live",    10L, null, Row(10L, null)),              // not deleted -> kept
+      Row(1, "retried", 11L, null, Row(11L, currentBatchId)),    // deleted by current -> kept
+      Row(1, "ignored", 12L, null, Row(12L, differentBatchId))   // deleted by another -> dropped
     )
     val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = currentBatchId
     )
 
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
+        Row(1, "anchor",  5L,  null, Row(5L)),
         Row(1, "live",    10L, null, Row(10L)),
         Row(1, "retried", 11L, null, Row(11L))
       )
     )
   }
 
-  test("findAffectedRowsFromAuxiliaryTable still selects the anchor when that anchor row " +
-    "was logically deleted by the current batch (idempotent retry)") {
-    val processor = processorWithKeys(Seq("id"))
-
-    // Models an idempotent retry: a previous attempt of this same batch already logically
-    // deleted the anchor row in the aux table, but mid-retry we still need to treat it as
-    // the left context. The idempotency filter retains rows deleted by `currentBatchId`,
-    // and anchor selection ignores `__DELETED_BY_BATCH_ID` entirely.
-    //
-    // Strict-sequence-uniqueness is not a public guarantee of AutoCDC, but this test pins
-    // the *current* behavior so the contract change is intentional rather than accidental.
-    val currentBatchId = 100L
-    val aux = auxTableOf(singleKeyUserSchema)(
-      Row(1, "anchor", 5L, null, Row(5L, currentBatchId))
-    )
-    val minSeq = minSeqOf(singleKeyKeySchema)(Row(1, 10L))
-
-    val result = processor.findAffectedRowsFromAuxiliaryTable(
-      rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
-      batchId = currentBatchId
-    )
-
-    checkAnswer(
-      df = result,
-      expectedAnswer = Seq(Row(1, "anchor", 5L, null, Row(5L)))
-    )
-  }
-
-  test("findAffectedRowsFromAuxiliaryTable narrows the CDC metadata column from the aux " +
-    "schema to the target schema (drops __DELETED_BY_BATCH_ID)") {
+  test("findAffectedRowsFromAuxiliaryTable narrows CDC metadata column to match target's") {
     val processor = processorWithKeys(Seq("id"))
 
     // Pre-condition: aux's `_cdc_metadata` carries __RECORD_START_AT and __DELETED_BY_BATCH_ID.
@@ -960,7 +910,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
@@ -969,15 +919,6 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
   }
 
   test("findAffectedRowsFromAuxiliaryTable resolves key columns containing a literal dot") {
-    // Backticks tell the SQL parser that "a.b" is a single identifier literally named
-    // "a.b" (rather than struct-field access). The schema field, the join key (via
-    // `keysRaw`), and the F.col reference (via `keysQuoted`) must all consistently
-    // resolve to the literal "a.b" column for the find-* path to work end-to-end.
-    //
-    // This is the regression guard for the `keysRaw` vs `keysQuoted` split: passing
-    // backtick-quoted names to `.join(_, usingColumns)` matches schema fields literally
-    // and would fail to find a column named `a.b`, while passing raw names to F.col
-    // would parse the dot as struct-field access and also fail.
     val processor = processorWithKeys(Seq("`a.b`"))
     val keySchema = new StructType().add("a.b", IntegerType)
     val userSchema = keySchema.add("value", StringType)
@@ -987,7 +928,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
@@ -998,8 +939,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("findAffectedRowsFromAuxiliaryTable respects all key columns when computing " +
-    "per-key anchors with a composite key") {
+  test("findAffectedRowsFromAuxiliaryTable respects composite keys") {
     val keySchema = new StructType()
       .add("region", StringType)
       .add("customer_id", IntegerType)
@@ -1024,7 +964,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
@@ -1046,7 +986,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
@@ -1063,7 +1003,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
@@ -1083,7 +1023,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      minimumSequencePerKeyInMicrobatchDf = minSeq,
+      perKeyMinimumSequenceInMicrobatch = minSeq,
       batchId = 100L
     )
 
@@ -1095,16 +1035,14 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
   // =============== findAffectedRowsFromTargetTable tests ===============
 
-  test("findAffectedRowsFromTargetTable includes the currently active row and any closed " +
-    "row whose __END_AT is at or after minSeq; older closed rows are excluded") {
+  test("findAffectedRowsFromTargetTable includes both closed and active affected rows") {
     val processor = processorWithKeys(Seq("id"))
 
-    // Single key with four target rows. Schema for input: (id, value, __START_AT, __END_AT,
-    // _cdc_metadata{__RECORD_START_AT}).
-    //   - closed at endAt=5  -> < minSeq=10 -> excluded
-    //   - closed at endAt=10 -> = minSeq=10 -> included (>=)
-    //   - closed at endAt=15 -> > minSeq=10 -> included
-    //   - active (endAt=null)              -> always included
+    // Single key with four target rows:
+    //   - row closed at endAt=5  -> < minSeq=10 -> excluded
+    //   - row closed at endAt=10 -> = minSeq=10 -> included (>=)
+    //   - row closed at endAt=15 -> > minSeq=10 -> included
+    //   - row active (endAt=null)              -> always included
     val target = targetTableOf(singleKeyUserSchema)(
       Row(1, "old",    1L,  5L,   Row(1L)),
       Row(1, "edge",   5L,  10L,  Row(5L)),
@@ -1115,7 +1053,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      minimumSequencePerKeyInMicrobatchDf = minSeq
+      perKeyMinimumSequenceInMicrobatch = minSeq
     )
 
     checkAnswer(
@@ -1150,7 +1088,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      minimumSequencePerKeyInMicrobatchDf = minSeq
+      perKeyMinimumSequenceInMicrobatch = minSeq
     )
 
     checkAnswer(
@@ -1163,7 +1101,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("findAffectedRowsFromTargetTable respects all key columns with a composite key") {
+  test("findAffectedRowsFromTargetTable respects composite keys") {
     val keySchema = new StructType()
       .add("region", StringType)
       .add("customer_id", IntegerType)
@@ -1187,7 +1125,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      minimumSequencePerKeyInMicrobatchDf = minSeq
+      perKeyMinimumSequenceInMicrobatch = minSeq
     )
 
     checkAnswer(
@@ -1207,7 +1145,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      minimumSequencePerKeyInMicrobatchDf = minSeq
+      perKeyMinimumSequenceInMicrobatch = minSeq
     )
 
     assert(result.collect().isEmpty)
@@ -1223,7 +1161,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      minimumSequencePerKeyInMicrobatchDf = minSeq
+      perKeyMinimumSequenceInMicrobatch = minSeq
     )
 
     assert(result.collect().isEmpty)
