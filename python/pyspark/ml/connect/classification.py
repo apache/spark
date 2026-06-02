@@ -43,8 +43,12 @@ from pyspark.ml.connect.base import Predictor, PredictionModel
 from pyspark.ml.connect.io_utils import ParamsReadWrite, CoreModelReadWrite
 from pyspark.sql.functions import lit, count, countDistinct
 
-import torch
-import torch.nn as torch_nn
+try:
+    import torch
+    import torch.nn as torch_nn
+except ImportError:
+    torch = None  # type: ignore[assignment]
+    torch_nn = None  # type: ignore[assignment]
 
 
 class _LogisticRegressionParams(

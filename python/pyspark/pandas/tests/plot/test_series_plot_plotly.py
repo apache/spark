@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import unittest
 import pprint
 
@@ -139,6 +140,7 @@ class SeriesPlotPlotlyTestsMixin:
         #     psdf["a"].plot(kind="pie"), express.pie(pdf, values=pdf.columns[0], names=pdf.index),
         # )
 
+    @unittest.skipIf(sys.version_info < (3, 9), "Plotly float precision differs on Python 3.8")
     def test_hist_plot(self):
         def check_hist_plot(psser):
             bins = np.array([1.0, 5.9, 10.8, 15.7, 20.6, 25.5, 30.4, 35.3, 40.2, 45.1, 50.0])
@@ -213,6 +215,7 @@ class SeriesPlotPlotlyTestsMixin:
             self.psdf1.a.plot.box(notched=True)
         self.psdf1.a.plot.box(hovertext="abc")  # other arguments should not throw an exception
 
+    @unittest.skipIf(sys.version_info < (3, 9), "Plotly float precision differs on Python 3.8")
     def test_kde_plot(self):
         psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5]})
         pdf = pd.DataFrame(

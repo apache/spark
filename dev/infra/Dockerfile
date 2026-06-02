@@ -19,9 +19,8 @@
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:jammy
 
+ENV FULL_REFRESH_DATE 20260514
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-ENV FULL_REFRESH_DATE 20260420
 
 ENV DEBIAN_FRONTEND noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN true
@@ -32,15 +31,15 @@ ENV PATH "$PATH:/usr/local/bin"
 
 RUN timeout 5 bash -c 'exec 3<>/dev/tcp/archive.ubuntu.com/80 && printf "HEAD /ubuntu/ HTTP/1.1\r\nHost: archive.ubuntu.com\r\nConnection: close\r\n\r\n" >&3 && IFS= read -r s <&3 && [[ "$s" =~ ^HTTP/.*[[:space:]](2|3)[0-9][0-9] ]]' || find /etc/apt -type f \( -name '*.list' -o -name '*.sources' \) -exec sed -i.bak -e 's|archive\.ubuntu\.com|mirror.fcix.net|g' -e 's|security\.ubuntu\.com|mirror.fcix.net|g' {} +
 RUN apt-get clean && apt-get update
-RUN PKGS="software-properties-common git libxml2-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common gcc g++ make libc6-dev libffi-dev libcurl4-openssl-dev libssl-dev openssl zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev tk-dev uuid-dev pandoc libuv1-dev libuv1"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
-RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/java
+RUN PKGS="software-properties-common git libxml2-dev libxslt-dev pkg-config curl wget openjdk-8-jdk libpython3-dev python3-pip python3-setuptools build-essential gfortran libopenblas-dev liblapack-dev gpg gpg-agent software-properties-common gcc g++ make libc6-dev libffi-dev libcurl4-openssl-dev libssl-dev openssl zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev tk-dev uuid-dev pandoc libuv1-dev libuv1"; $APT_INSTALL $PKGS || (apt-get update && $APT_INSTALL $PKGS)
+RUN update-alternatives --set java /usr/lib/jvm/java-8-openjdk-$(dpkg --print-architecture)/jre/bin/java
 
 # We also want Python 3.8 since that's the oldest supported version for Spark 3.5
 # Also ubuntu is under a DDoS so retry adding, and finally fallback to python.org 3.8 release
 RUN ( \
     (add-apt-repository -y ppa:deadsnakes/ppa || add-apt-repository -y ppa:deadsnakes/ppa) && \
     (apt-get update || apt-get update) && \
-    PKGS="python3.8 python3.9 python3.9-venv python3.8-venv"; ($APT_INSTALL $PKGS || apt-get update && $APT_INSTALL $PKGS) \
+    PKGS="python3.8 python3.8-dev python3.9 python3.9-venv python3.8-venv"; ($APT_INSTALL $PKGS || apt-get update && $APT_INSTALL $PKGS) \
     ) || \
     (PYTHON_VERSION=3.8.20; \
     curl -O https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz && \
@@ -83,12 +82,8 @@ RUN Rscript -e " \
     "
 
 # See more in SPARK-39959, roxygen2 < 7.2.1
-RUN Rscript -e "remotes::install_version('pkgload',  version = '1.3.2', repos = 'https://cloud.r-project.org'); \
-    remotes::install_version('pkgbuild', version = '1.4.0', repos = 'https://cloud.r-project.org'); \
-    remotes::install_version('desc',     version = '1.4.2', repos = 'https://cloud.r-project.org'); \
-    remotes::install_version('rlang',    version = '1.1.1', repos = 'https://cloud.r-project.org'); \
-    remotes::install_version('cli',      version = '3.6.1', repos = 'https://cloud.r-project.org'); \
-    remotes::install_version('purrr',    version = '1.0.1', repos = 'https://cloud.r-project.org')"
+# Let roxygen2's deps float to current so they compile against R 4.6; pin only roxygen2 itself.
+RUN Rscript -e "install.packages(c('pkgload', 'pkgbuild', 'desc', 'rlang', 'cli', 'purrr'), repos='https://cloud.r-project.org/')"
 RUN Rscript -e "remotes::install_version('roxygen2', version='7.2.0', repos='https://cloud.r-project.org')"
 
 # Sanity check the R install
@@ -106,15 +101,12 @@ ENV R_LIBS_SITE "/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library
 RUN python3.8 -m pip install setuptools virtualenv
 RUN python3.9 -m pip install setuptools virtualenv
 
-RUN python3.8 -m pip  install --only-binary=pandas numpy pandas 'scipy<1.9' coverage 'matplotlib==3.7.2' 'mypy==0.982'
-RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' 'scipy<=1.10' unittest-xml-reporting 'plotly>=4.8' 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' 'blinker==1.4' 'mypy==0.982'
+RUN python3.9 -m pip install 'numpy==1.25.1' 'pyarrow==12.0.1' 'pandas<=2.0.3' scipy unittest-xml-reporting 'plotly<6.0' 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' 'Flask==1.1.2' 'Werkzeug==2.1.2'
+RUN python3.8 -m pip install 'numpy' 'pyarrow==12.0.1' 'pandas<=2.0.3' 'scipy<=1.10' unittest-xml-reporting 'plotly>=4.8' 'mlflow>=2.3.1' coverage 'matplotlib==3.7.2' openpyxl 'memory-profiler==0.60.0' 'scikit-learn==1.1.*' 'blinker==1.4' 'mypy==0.982' 'beniget==0.4.1' 'pyproject-metadata==0.8.1'
 
 # Add Python deps for Spark Connect.
 RUN python3.9 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
+RUN python3.8 -m pip install 'grpcio>=1.48,<1.57' 'grpcio-status>=1.48,<1.57' 'protobuf==3.20.3' 'googleapis-common-protos==1.56.4'
 
 # Add torch as a testing dependency for TorchDistributor
 RUN python3.9 -m pip install 'torch==2.0.1' 'torchvision==0.15.2' torcheval
-
-# pyarrow
-RUN python3.9 -m pip install 'pyarrow<13.0.0'
-RUN python3.8 -m pip install 'pyarrow<13.0.0'

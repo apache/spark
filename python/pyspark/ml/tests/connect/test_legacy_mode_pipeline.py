@@ -43,6 +43,7 @@ class PipelineTestsMixin:
                 rtol=1e-1,
             )
 
+    @unittest.skipIf(not have_torch, "torch is required")
     def test_pipeline(self):
         train_dataset = self.spark.createDataFrame(
             [
@@ -164,6 +165,7 @@ class PipelineTestsMixin:
         assert lorv2.getOrDefault(lorv2.maxIter) == 200
 
 
+@unittest.skipIf(not have_torch, "torch is required")
 class PipelineTests(PipelineTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

@@ -253,8 +253,9 @@ class FrameApplyFunctionMixin:
         actual.columns = ["a", "b"]
         self.assert_eq(actual, pdf)
 
-        # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.8+
-        if sys.version_info >= (3, 8) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
+        # For NumPy typing, NumPy version should be 1.21+ and Python version should be 3.9+
+        # (types.GenericAlias, used by ntp.NDArray, was added in Python 3.9)
+        if sys.version_info >= (3, 9) and LooseVersion(np.__version__) >= LooseVersion("1.21"):
             import numpy.typing as ntp
 
             psdf = ps.from_pandas(pdf)

@@ -272,6 +272,7 @@ class CrossValidatorTestsMixin:
         cv.fit(train_dataset)
 
 
+@unittest.skipIf(not have_torch, "torch is required")
 class CrossValidatorTests(CrossValidatorTestsMixin, unittest.TestCase):
     def setUp(self) -> None:
         self.spark = SparkSession.builder.master("local[2]").getOrCreate()

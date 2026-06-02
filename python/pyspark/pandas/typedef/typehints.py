@@ -794,8 +794,21 @@ def _new_type_holders(
         for param in params
     )
     if sys.version_info < (3, 11):
+        # types.GenericAlias (e.g. numpy.ndarray[Any, dtype[int]]) is iterable but is a
+        # valid type hint. Use getattr so this still imports cleanly on Python 3.8 where
+        # types.GenericAlias doesn't exist.
+        import types as _types_mod
+
+        _builtin_generic_alias: type = getattr(_types_mod, "GenericAlias", type(None))
+        _typing_private_generic_alias: type = getattr(typing, "_GenericAlias", type(None))
         is_unnamed_params = all(
-            not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
+            not isinstance(param, slice)
+            and (
+                not isinstance(param, Iterable)
+                or isinstance(param, _builtin_generic_alias)
+                or isinstance(param, _typing_private_generic_alias)
+            )
+            for param in params
         )
     else:
         # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11.

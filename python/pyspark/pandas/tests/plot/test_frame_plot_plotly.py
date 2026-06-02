@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import sys
 import unittest
 import pprint
 
@@ -193,6 +194,7 @@ class DataFramePlotPlotlyTestsMixin:
         self.assertEqual(plt.layout.title.text, "Title")
         self.assertFalse(hasattr(plt.layout, "foo"))
 
+    @unittest.skipIf(sys.version_info < (3, 9), "Plotly float precision differs on Python 3.8")
     def test_hist_plot(self):
         def check_hist_plot(psdf):
             bins = np.array([1.0, 5.9, 10.8, 15.7, 20.6, 25.5, 30.4, 35.3, 40.2, 45.1, 50.0])
@@ -240,6 +242,7 @@ class DataFramePlotPlotlyTestsMixin:
         psdf1.columns = columns
         check_hist_plot(psdf1)
 
+    @unittest.skipIf(sys.version_info < (3, 9), "Plotly float precision differs on Python 3.8")
     def test_kde_plot(self):
         psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5], "b": [1, 3, 5, 7, 9], "c": [2, 4, 6, 8, 10]})
 

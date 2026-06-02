@@ -546,6 +546,11 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
                        error = function(e) { FALSE })) {
             obj <- get(nodeChar, envir = func.env, inherits = FALSE)
             if (is.function(obj)) {
+              if (is.primitive(obj)) {
+                # Primitive functions have no closure to clean.
+                assign(nodeChar, obj, envir = newEnv)
+                break
+              }
               # If the node is a function call.
               funcList <- mget(nodeChar, envir = checkedFuncs, inherits = F,
                                ifnotfound = list(list(NULL)))[[1]]
