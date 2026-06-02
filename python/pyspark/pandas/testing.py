@@ -143,7 +143,7 @@ def assert_frame_equal(
     if isinstance(right, ps.DataFrame):
         right = right.to_pandas()
 
-    pd.testing.assert_frame_equal(
+    pd.testing.assert_frame_equal(  # type: ignore[call-arg]
         left,
         right,
         check_dtype=check_dtype,

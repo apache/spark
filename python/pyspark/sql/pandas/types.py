@@ -994,34 +994,34 @@ def _create_converter_to_pandas(
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if pser.isnull().any():
-                    return pser.astype(nullable_type, copy=False)  # type: ignore[arg-type]
+                    return pser.astype(nullable_type, copy=False)  # type: ignore[call-overload]
                 else:
-                    return pser.astype(pandas_type, copy=False)
+                    return pser.astype(pandas_type, copy=False)  # type: ignore[call-overload]
 
         elif isinstance(data_type, BooleanType) and nullable:
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if pser.isnull().any():
-                    return pser.astype(object, copy=False)
+                    return pser.astype(object, copy=False)  # type: ignore[call-overload]
                 else:
-                    return pser.astype(pandas_type, copy=False)
+                    return pser.astype(pandas_type, copy=False)  # type: ignore[call-overload]
 
         elif isinstance(data_type, TimestampType):
             assert timezone is not None
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
                 if not isinstance(pser.dtype, pd.DatetimeTZDtype):
-                    pser = pser.astype(pandas_type, copy=False)
+                    pser = pser.astype(pandas_type, copy=False)  # type: ignore[call-overload]
                 pser = _check_series_convert_timestamps_local_tz(pser, timezone=timezone)
                 if LooseVersion(pd.__version__) < "3.0.0":
                     return pser
                 else:
-                    return pser.astype(pandas_type, copy=False)
+                    return pser.astype(pandas_type, copy=False)  # type: ignore[call-overload]
 
         else:
 
             def correct_dtype(pser: pd.Series) -> pd.Series:
-                return pser.astype(pandas_type, copy=False)
+                return pser.astype(pandas_type, copy=False)  # type: ignore[call-overload]
 
         return correct_dtype
 
