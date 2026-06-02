@@ -397,7 +397,7 @@ class QueryExecution(
     val plan = executePhase(QueryPlanningTracker.PLANNING) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+      QueryExecution.prepareForExecution(preparations, sparkPlan.clone(), Some(tracker))
     }
     // Note: For eagerly executed command it might have already been called in
     // `eagerlyExecutedCommand` and is a noop here.
@@ -827,10 +827,15 @@ object QueryExecution {
    */
   private[execution] def prepareForExecution(
       preparations: Seq[Rule[SparkPlan]],
-      plan: SparkPlan): SparkPlan = {
+      plan: SparkPlan,
+      tracker: Option[QueryPlanningTracker] = None): SparkPlan = {
     val planChangeLogger = new PlanChangeLogger[SparkPlan]()
     val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
+      val startTime = System.nanoTime()
       val result = rule.apply(sp)
+      val runTime = System.nanoTime() - startTime
+      val effective = !result.fastEquals(sp)
+      tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
       planChangeLogger.logRule(rule.ruleName, sp, result)
       result
     }

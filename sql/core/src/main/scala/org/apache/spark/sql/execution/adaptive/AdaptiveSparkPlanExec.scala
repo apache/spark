@@ -32,6 +32,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.internal.MessageWithContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
 import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
@@ -196,7 +197,8 @@ case class AdaptiveSparkPlanExec(
     applyPhysicalRules(
       plan,
       context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules,
-      Some((planChangeLogger, "AQE Query Post Planner Strategy Rules"))
+      Some((planChangeLogger, "AQE Query Post Planner Strategy Rules")),
+      Some(context.qe.tracker)
     )
   }
 
@@ -204,7 +206,8 @@ case class AdaptiveSparkPlanExec(
     applyPhysicalRules(
       applyQueryPostPlannerStrategyRules(inputPlan),
       queryStagePreparationRules,
-      Some((planChangeLogger, "AQE Preparations")))
+      Some((planChangeLogger, "AQE Preparations")),
+      Some(context.qe.tracker))
   }
 
   @volatile private var currentPhysicalPlan = initialPlan
@@ -667,7 +670,8 @@ case class AdaptiveSparkPlanExec(
     val optimizedRootPlan = applyPhysicalRules(
       optimizeQueryStage(plan, isFinalStage = true),
       postStageCreationRules(supportsColumnar),
-      Some((planChangeLogger, "AQE Post Stage Creation")))
+      Some((planChangeLogger, "AQE Post Stage Creation")),
+      Some(context.qe.tracker))
     val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(resultStage, plan)
@@ -681,7 +685,8 @@ case class AdaptiveSparkPlanExec(
         val newPlan = applyPhysicalRules(
           optimized,
           postStageCreationRules(outputsColumnar = plan.supportsColumnar),
-          Some((planChangeLogger, "AQE Post Stage Creation")))
+          Some((planChangeLogger, "AQE Post Stage Creation")),
+          Some(context.qe.tracker))
         if (e.isInstanceOf[ShuffleExchangeLike]) {
           if (!newPlan.isInstanceOf[ShuffleExchangeLike]) {
             throw SparkException.internalError(
@@ -805,12 +810,13 @@ case class AdaptiveSparkPlanExec(
   private def reOptimize(logicalPlan: LogicalPlan): Option[(SparkPlan, LogicalPlan)] = {
     try {
       logicalPlan.invalidateStatsCache()
-      val optimized = optimizer.execute(logicalPlan)
+      val optimized = optimizer.executeAndTrack(logicalPlan, context.qe.tracker)
       val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
       val newPlan = applyPhysicalRules(
         applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,
-        Some((planChangeLogger, "AQE Replanning")))
+        Some((planChangeLogger, "AQE Replanning")),
+        Some(context.qe.tracker))
 
       // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
       // add the `BroadcastExchangeExec` node manually in the DPP subquery,
@@ -939,19 +945,23 @@ object AdaptiveSparkPlanExec {
   def applyPhysicalRules(
       plan: SparkPlan,
       rules: Seq[Rule[SparkPlan]],
-      loggerAndBatchName: Option[(PlanChangeLogger[SparkPlan], String)] = None): SparkPlan = {
-    if (loggerAndBatchName.isEmpty) {
-      rules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
-    } else {
-      val (logger, batchName) = loggerAndBatchName.get
-      val newPlan = rules.foldLeft(plan) { case (sp, rule) =>
-        val result = rule.apply(sp)
+      loggerAndBatchName: Option[(PlanChangeLogger[SparkPlan], String)] = None,
+      tracker: Option[QueryPlanningTracker] = None): SparkPlan = {
+    val newPlan = rules.foldLeft(plan) { case (sp, rule) =>
+      val startTime = System.nanoTime()
+      val result = rule.apply(sp)
+      val runTime = System.nanoTime() - startTime
+      val effective = !result.fastEquals(sp)
+      tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
+      loggerAndBatchName.foreach { case (logger, _) =>
         logger.logRule(rule.ruleName, sp, result)
-        result
       }
-      logger.logBatch(batchName, plan, newPlan)
-      newPlan
+      result
     }
+    loggerAndBatchName.foreach { case (logger, batchName) =>
+      logger.logBatch(batchName, plan, newPlan)
+    }
+    newPlan
   }
 }
 
