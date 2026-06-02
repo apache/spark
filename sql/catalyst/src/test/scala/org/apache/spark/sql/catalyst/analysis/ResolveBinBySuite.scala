@@ -214,8 +214,11 @@ class ResolveBinBySuite extends AnalysisTest {
       unresolved(rangeStart = UnresolvedAttribute("nonexistent")), "BIN_BY_COLUMN_NOT_FOUND")
     expectError(
       unresolved(distribute = Seq(UnresolvedAttribute("nonexistent"))), "BIN_BY_COLUMN_NOT_FOUND")
-    // A struct-field access resolves to a non-Attribute; reject it rather than crash with
-    // INTERNAL_ERROR.
+  }
+
+  test("rejects nested/computed column references with BIN_BY_REQUIRES_TOP_LEVEL_COLUMN") {
+    // A struct-field access resolves to a non-Attribute (Alias(GetStructField)). The column
+    // exists, so this is distinct from BIN_BY_COLUMN_NOT_FOUND.
     val structField = AttributeReference(
       "outer",
       StructType(Seq(
@@ -232,7 +235,7 @@ class ResolveBinBySuite extends AnalysisTest {
         distributeColumns = Seq(numeric),
         outputAliases = BinByOutputAliases.empty,
         child = LocalRelation(structField, numeric)),
-      "BIN_BY_COLUMN_NOT_FOUND")
+      "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN")
   }
 
   test("rejects non-timestamp or mismatched RANGE columns") {
