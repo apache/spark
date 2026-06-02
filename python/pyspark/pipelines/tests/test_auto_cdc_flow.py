@@ -18,7 +18,7 @@
 import unittest
 from typing import cast
 
-from pyspark.errors import PySparkTypeError
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError
 from pyspark.sql import Column
 from pyspark.testing.connectutils import (
     should_test_connect,
@@ -34,7 +34,7 @@ if should_test_connect:
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
-class AutoCdcFlowTest(unittest.TestCase):
+class AutoCdcFlowConstructionTest(unittest.TestCase):
     def test_create_auto_cdc_flow(self):
         registry = LocalGraphElementRegistry()
         with graph_element_registration_context(registry):
@@ -175,6 +175,20 @@ class AutoCdcFlowTest(unittest.TestCase):
                     sequence_by=expr("ts"),
                 )
             self.assertEqual(ctx.exception.getCondition(), "NOT_EXPECTED_TYPE")
+
+    def test_create_auto_cdc_flow_without_registry(self):
+        with self.assertRaises(PySparkRuntimeError) as context:
+            dp.create_auto_cdc_flow(
+                target="t",
+                source="s",
+                keys=["k"],
+                sequence_by="seq",
+            )
+
+        self.assertEqual(
+            context.exception.getCondition(),
+            "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE",
+        )
 
 
 if __name__ == "__main__":

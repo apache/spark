@@ -129,19 +129,6 @@ class GraphElementRegistryTest(unittest.TestCase):
             "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE",
         )
 
-        with self.assertRaises(PySparkException) as context:
-            dp.create_auto_cdc_flow(
-                target="t",
-                source="s",
-                keys=["k"],
-                sequence_by="seq",
-            )
-
-        self.assertEqual(
-            context.exception.getCondition(),
-            "GRAPH_ELEMENT_DEFINED_OUTSIDE_OF_DECLARATIVE_PIPELINE",
-        )
-
 
 if __name__ == "__main__":
     from pyspark.testing import main
