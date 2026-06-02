@@ -187,6 +187,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
                     if curmode == SaveMode.Overwrite &&
                        !df.sparkSession.sessionState.conf.getConf(
                          SQLConf.LEGACY_DF_WRITER_OVERWRITE_MISSING_TABLE_THROWS) =>
+                  assertSchemaEvolutionNotEnabledForCreateTableWrite()
                   return createTableAsSelectForCatalogOptions(
                     catalog, ident, finalOptions, ignoreIfExists = false)
               }
@@ -216,6 +217,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
         case createMode =>
           provider match {
             case supportsExtract: SupportsCatalogOptions =>
+              assertSchemaEvolutionNotEnabledForCreateTableWrite()
               val ident = supportsExtract.extractIdentifier(dsOptions)
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
@@ -247,9 +249,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
       ident: Identifier,
       finalOptions: Map[String, String],
       ignoreIfExists: Boolean): LogicalPlan = {
-    if (_withSchemaEvolution) {
-      throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
-    }
     val tableSpec = UnresolvedTableSpec(
       properties = Map.empty,
       provider = Some(source),
@@ -273,6 +272,12 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
   private def assertSchemaEvolutionNotEnabledForV1Write(): Unit = {
     if (_withSchemaEvolution) {
       throw QueryCompilationErrors.schemaEvolutionNotSupportedForV1TableWriteError()
+    }
+  }
+
+  private def assertSchemaEvolutionNotEnabledForCreateTableWrite(): Unit = {
+    if (_withSchemaEvolution) {
+      throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
     }
   }
 

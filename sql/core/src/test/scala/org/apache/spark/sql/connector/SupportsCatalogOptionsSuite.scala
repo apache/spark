@@ -202,19 +202,19 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
 
   // SPARK-57068: SaveMode.Overwrite against a missing table now creates it,
   // matching the long-standing V1 source behavior (parquet/JSON/ORC).
-  test(s"save works with Overwrite - no table, no partitioning, session catalog") {
+  test("save works with Overwrite - no table, no partitioning, session catalog") {
     testCreateAndRead(SaveMode.Overwrite, None, Nil)
   }
 
-  test(s"save works with Overwrite - no table, with partitioning, session catalog") {
+  test("save works with Overwrite - no table, with partitioning, session catalog") {
     testCreateAndRead(SaveMode.Overwrite, None, Seq("part"))
   }
 
-  test(s"save works with Overwrite - no table, no partitioning, testcat catalog") {
+  test("save works with Overwrite - no table, no partitioning, testcat catalog") {
     testCreateAndRead(SaveMode.Overwrite, Some(catalogName), Nil)
   }
 
-  test(s"save works with Overwrite - no table, with partitioning, testcat catalog") {
+  test("save works with Overwrite - no table, with partitioning, testcat catalog") {
     testCreateAndRead(SaveMode.Overwrite, Some(catalogName), Seq("part"))
   }
 
@@ -242,6 +242,23 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
     }
   }
 
+  // SPARK-57068: the legacy flag only gates the missing-table fallback (it is read
+  // inside the NoSuchTableException catch). Overwrite of an existing table never hits
+  // that catch, so the flag must leave the existing-table truncate+write path untouched.
+  test("SPARK-57068: legacy flag does not affect Overwrite of an existing table") {
+    withSQLConf(SQLConf.LEGACY_DF_WRITER_OVERWRITE_MISSING_TABLE_THROWS.key -> "true") {
+      sql(s"create table $catalogName.t1 (id bigint) using $format")
+      spark.range(10).write.format(format).option("name", "t1")
+        .option("catalog", catalogName).mode(SaveMode.Append).save()
+      checkAnswer(load("t1", Some(catalogName)), spark.range(10).toDF())
+
+      val df2 = spark.range(10, 20)
+      df2.write.format(format).option("name", "t1").option("catalog", catalogName)
+        .mode(SaveMode.Overwrite).save()
+      checkAnswer(load("t1", Some(catalogName)), df2.toDF())
+    }
+  }
+
   // SPARK-57068: Overwrite-on-missing routes to CreateTableAsSelect, which does
   // not support schema evolution. Verify the gate fires with a clear error
   // rather than silently dropping the withSchemaEvolution() request.
@@ -254,6 +271,21 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
       },
       condition = "UNSUPPORTED_SCHEMA_EVOLUTION.CREATE_TABLE",
       parameters = Map.empty)
+  }
+
+  // SPARK-57068: with the legacy flag on, Overwrite-on-missing throws NoSuchTableException
+  // before the CreateTableAsSelect fallback (and thus before its schema-evolution gate) is
+  // reached. Pin that the legacy throw wins over the schema-evolution error, faithfully
+  // restoring the pre-fix behavior even when withSchemaEvolution() is set.
+  test("SPARK-57068: legacy flag throw takes precedence over schema evolution on missing table") {
+    withSQLConf(SQLConf.LEGACY_DF_WRITER_OVERWRITE_MISSING_TABLE_THROWS.key -> "true") {
+      val e = intercept[NoSuchTableException] {
+        spark.range(10).write.format(format).option("name", "t1")
+          .option("catalog", catalogName)
+          .mode(SaveMode.Overwrite).withSchemaEvolution().save()
+      }
+      checkErrorTableNotFound(e, "`t1`")
+    }
   }
 
   test("fail on user specified schema when reading - session catalog") {
