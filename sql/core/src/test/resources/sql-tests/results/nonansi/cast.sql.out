@@ -585,6 +585,38 @@ NULL
 
 
 -- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ntz(9)))
+-- !query schema
+struct<typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ltz(7)))
+-- !query schema
+struct<typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7))):string>
+-- !query output
+timestamp_ltz(7)
+
+
+-- !query
+select cast('a' as timestamp_ntz(9))
+-- !query schema
+struct<CAST(a AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+NULL
+
+
+-- !query
+select cast('a' as timestamp_ltz(9))
+-- !query schema
+struct<CAST(a AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
 select cast(cast('inf' as double) as timestamp)
 -- !query schema
 struct<CAST(CAST(inf AS DOUBLE) AS TIMESTAMP):timestamp>

@@ -642,6 +642,34 @@ Project [cast(a as timestamp_ntz) AS CAST(a AS TIMESTAMP_NTZ)#x]
 
 
 -- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ntz(9)))
+-- !query analysis
+Project [typeof(cast(2022-01-01 00:00:00.123456789 as timestamp_ntz(9))) AS typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ltz(7)))
+-- !query analysis
+Project [typeof(cast(2022-01-01 00:00:00.123456789 as timestamp_ltz(7))) AS typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+select cast('a' as timestamp_ntz(9))
+-- !query analysis
+Project [cast(a as timestamp_ntz(9)) AS CAST(a AS TIMESTAMP_NTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+select cast('a' as timestamp_ltz(9))
+-- !query analysis
+Project [cast(a as timestamp_ltz(9)) AS CAST(a AS TIMESTAMP_LTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
 select cast(cast('inf' as double) as timestamp)
 -- !query analysis
 Project [cast(cast(inf as double) as timestamp) AS CAST(CAST(inf AS DOUBLE) AS TIMESTAMP)#x]

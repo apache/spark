@@ -102,6 +102,14 @@ select cast('a' as timestamp);
 select cast('2022-01-01 00:00:00' as timestamp_ntz);
 select cast('a' as timestamp_ntz);
 
+-- SPARK-57211: cast string to nanosecond-precision timestamps TIMESTAMP_NTZ(p)/TIMESTAMP_LTZ(p).
+-- The reverse direction (nanos -> string) is not wired yet, so positive cases assert the result
+-- type via typeof; negative cases exercise the ANSI parse-error path.
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ntz(9)));
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ltz(7)));
+select cast('a' as timestamp_ntz(9));
+select cast('a' as timestamp_ltz(9));
+
 select cast(cast('inf' as double) as timestamp);
 select cast(cast('inf' as float) as timestamp);
 

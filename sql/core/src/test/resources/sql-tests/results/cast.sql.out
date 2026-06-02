@@ -1289,6 +1289,72 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ntz(9)))
+-- !query schema
+struct<typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ltz(7)))
+-- !query schema
+struct<typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7))):string>
+-- !query output
+timestamp_ltz(7)
+
+
+-- !query
+select cast('a' as timestamp_ntz(9))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP_NTZ(9)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "cast('a' as timestamp_ntz(9))"
+  } ]
+}
+
+
+-- !query
+select cast('a' as timestamp_ltz(9))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'a'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"TIMESTAMP_LTZ(9)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "cast('a' as timestamp_ltz(9))"
+  } ]
+}
+
+
+-- !query
 select cast(cast('inf' as double) as timestamp)
 -- !query schema
 struct<>
