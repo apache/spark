@@ -22,7 +22,7 @@ import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -37,8 +37,17 @@ case class Scd2BatchProcessor(
     changeArgs: ChangeArgs,
     resolvedSequencingType: DataType) {
 
-  /** Backtick-quoted key column names. */
+  /**
+   * Backtick-quoted key column names. Use when the name flows through an expression parser
+   * (e.g., [[F.col]]), which interprets dotted names as struct-field accesses.
+   */
   private lazy val keysQuoted: Seq[String] = changeArgs.keys.map(_.quoted)
+
+  /**
+   * Raw key column names. Use when the name is matched literally against a schema field
+   * (e.g., DataFrame `.join(other, usingColumns)`), where backticks are NOT stripped.
+   */
+  private lazy val keysRaw: Seq[String] = changeArgs.keys.map(_.name)
 
   /**
    * Reconcile a CDC microbatch into the canonical form the auxiliary- and target-table merges
@@ -169,7 +178,7 @@ case class Scd2BatchProcessor(
    *     2. `__spark_autocdc_min_sequencing` column, carrying the min `__RECORD_START_AT`
    *        across all records within the microbatch for that key.
    */
-  private def computeMinimumSequencePerKey(preprocessedBatchDf: DataFrame): DataFrame = {
+  private[autocdc] def computeMinimumSequencePerKey(preprocessedBatchDf: DataFrame): DataFrame = {
     val recordStartAt =
       Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
     preprocessedBatchDf
@@ -189,21 +198,16 @@ case class Scd2BatchProcessor(
    * @param batchId
    *   the underlying Spark streaming query's batchId, which serves as the idempotency key.
    * @return
-   *   a dataframe containing the affected aux rows, with the CDC metadata column narrowed
+   *   a dataframe containing all the affected aux rows, but with the CDC metadata column narrowed
    *   to the target/microbatch schema (aux-only subfields stripped) so the result is
    *   union-compatible with preprocessed microbatch rows and target-table rows downstream.
-   *   Schema, in column order:
-   *     1. The user columns of the aux table.
-   *     2. `__START_AT` column.
-   *     3. `__END_AT` column.
-   *     4. `__spark_autocdc_metadata` column, conforming to [[targetCdcMetadataColSchema]].
    */
-  private def findAffectedRowsFromAuxiliaryTable(
+  private[autocdc] def findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf: DataFrame,
       minimumSequencePerKeyInMicrobatchDf: DataFrame,
       batchId: Long
   ): DataFrame = {
-    val rawAuxTableRecordStartAtField = Scd2BatchProcessor.recordStartAtOf(
+    val auxTableRecordStartAtField = Scd2BatchProcessor.recordStartAtOf(
       F.col(AutoCdcReservedNames.cdcMetadataColName)
     )
     val auxTableDeletedByBatchIdField = Scd2BatchProcessor.deletedByBatchIdOf(
@@ -226,13 +230,10 @@ case class Scd2BatchProcessor(
       .withColumn(
         AutoCdcReservedNames.cdcMetadataColName,
         Scd2BatchProcessor.constructTargetCdcMetadataCol(
-          recordStartAt = rawAuxTableRecordStartAtField,
+          recordStartAt = auxTableRecordStartAtField,
           sequencingType = resolvedSequencingType
         )
       )
-    
-    val auxTableRecordStartAtField =
-      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
 
     val minSequencePerKeyInMicrobatchCol = F.col(Scd2BatchProcessor.minSequencingColName)
 
@@ -252,7 +253,7 @@ case class Scd2BatchProcessor(
       // number of unique keys in the microbatch, which should typically be small. The
       // auxiliary table should generally also be small, containing only no-op upsert runs
       // and tombstones per key. Therefore this join should be cheap, and broadcast joinable.
-      .join(minimumSequencePerKeyInMicrobatchDf, keysQuoted)
+      .join(minimumSequencePerKeyInMicrobatchDf, keysRaw)
       .filter(auxTableRecordStartAtField < minSequencePerKeyInMicrobatchCol)
       .groupBy(keysQuoted.map(F.col): _*)
       .agg(
@@ -273,10 +274,10 @@ case class Scd2BatchProcessor(
     val affectedRowsFromAuxiliaryTable = reducedAuxiliaryTableDf
       // Per row, join/project the minimum microbatch sequence and anchor sequencing for
       // that row's key set.
-      .join(minimumSequencePerKeyInMicrobatchDf, keysQuoted)
+      .join(minimumSequencePerKeyInMicrobatchDf, keysRaw)
       .join(
         anchorOrderingPerKey,
-        keysQuoted,
+        keysRaw,
         joinType = "left"
       )
       // Using the joined information, determine if the row is affected by the microbatch.
@@ -295,13 +296,9 @@ case class Scd2BatchProcessor(
    *   one row per distinct key as produced by [[computeMinimumSequencePerKey]], representing
    *   the minimum sequence for that key in the microbatch.
    * @return
-   *   a dataframe containing the affected target rows. Schema, in column order:
-   *     1. The user columns of the target table.
-   *     2. `__START_AT` column.
-   *     3. `__END_AT` column.
-   *     4. `__spark_autocdc_metadata` column, conforming to [[targetCdcMetadataColSchema]].
+   *   a dataframe containing the affected target rows, exactly as-is from the target table.
    */
-  private def findAffectedRowsFromTargetTable(
+  private[autocdc] def findAffectedRowsFromTargetTable(
       targetTableDf: DataFrame,
       minimumSequencePerKeyInMicrobatchDf: DataFrame
   ): DataFrame = {
@@ -323,7 +320,7 @@ case class Scd2BatchProcessor(
     val rowMayBeAffected = isCurrentlyActiveRow || rowEndsAfterMinimumSequence
 
     val affectedRowsFromTargetTable = targetTableDf
-      .join(minimumSequencePerKeyInMicrobatchDf, keysQuoted)
+      .join(minimumSequencePerKeyInMicrobatchDf, keysRaw)
       .filter(rowMayBeAffected)
       .drop(minSequencePerKeyInMicrobatchCol)
 
@@ -422,7 +419,7 @@ object Scd2BatchProcessor {
    * produced this row. Null only for synthetic decomposition tails.
    */
   private[autocdc] val recordStartAtFieldName: String = "__RECORD_START_AT"
-  
+
   /**
    * CDC metadata column field that represents the microbatch id a particular row was considered
    * logically deleted by. Any future microbatches should consider that row as deleted.
@@ -477,27 +474,32 @@ object Scd2BatchProcessor {
       AutoCdcReservedNames.cdcMetadataColName
   )
 
-  /** 
-   * Name of temporary column projected onto microbatch to compute the min sequencing value within
-   * the microbatch.
-   */
-  private val minSequencingColName: String = s"${AutoCdcReservedNames.prefix}min_sequencing"
   /**
-   * Name of temporary column projected 
+   * Name of temporary column projected onto microbatch to compute the min sequencing value per
+   * key within the microbatch.
+   */
+  private[autocdc] val minSequencingColName: String =
+    s"${AutoCdcReservedNames.prefix}min_sequencing"
+
+  /**
+   * Name of temporary column projected used to identify the sequence associated with the anchor
+   * row found in the auxiliary table for the incoming microbatch. Since sequences must be unique
+   * amongst all rows for a key (or risk undefined behavior), this sequence value uniquely
+   * identifies an exact row in the aux.
    */
   private val anchorOrderingColName: String = s"${AutoCdcReservedNames.prefix}anchor_ordering"
 
-  /** Project the `__RECORD_START_AT` field out of a CDC metadata column. */
+  /** Project the `__RECORD_START_AT` field out of an SCD2 CDC metadata column. */
   private def recordStartAtOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(recordStartAtFieldName)
 
-  /** Project the `__DELETED_BY_BATCH_ID` field out of any `_cdc_metadata` column. */
+  /** Project the `__DELETED_BY_BATCH_ID` field out of an SCD2 CDC metadata column. */
   private def deletedByBatchIdOf(cdcMetadataCol: Column): Column =
     cdcMetadataCol.getField(deletedByBatchIdFieldName)
 
   /**
-   * Schema of the CDC metadata struct column for SCD2 target table rows. 
-   * 
+   * Schema of the CDC metadata struct column for SCD2 target table rows.
+   *
    * Note that the aux table's CDC metadata column is a strict superset of this schema (it carries
    * an additional `__DELETED_BY_BATCH_ID` field).
    */
@@ -524,7 +526,47 @@ object Scd2BatchProcessor {
         case `recordStartAtFieldName` => recordStartAt
         case other =>
           throw SparkException.internalError(
-            s"Unable to construct SCD2 CDC metadata column due to unknown `${other}` field."
+            s"Unable to construct SCD2 target CDC metadata column due to unknown " +
+              s"`${other}` field."
+          )
+      }
+      value.cast(field.dataType).as(field.name)
+    }
+    F.struct(cdcMetadataFieldsInOrder.toImmutableArraySeq: _*)
+  }
+
+  /**
+   * Schema of the CDC metadata struct column for SCD2 aux-table rows. Strict superset of
+   * [[targetCdcMetadataColSchema]]: extends it with the aux-only `__DELETED_BY_BATCH_ID`
+   * field used for SCD2 idempotency.
+   */
+  private[pipelines] def auxCdcMetadataColSchema(sequencingType: DataType): StructType =
+    StructType(
+      targetCdcMetadataColSchema(sequencingType).fields.toImmutableArraySeq ++
+        Seq(
+          // The microbatch id by which this aux row was logically deleted, or null if the
+          // row is still live.
+          StructField(deletedByBatchIdFieldName, LongType, nullable = true)
+        )
+    )
+
+  /**
+   * Construct the CDC metadata struct column for SCD2 aux-table rows, following the exact
+   * schema and field ordering defined by [[auxCdcMetadataColSchema]].
+   */
+  private[autocdc] def constructAuxCdcMetadataCol(
+      recordStartAt: Column,
+      deletedByBatchId: Column,
+      sequencingType: DataType
+  ): Column = {
+    val cdcMetadataFieldsInOrder = auxCdcMetadataColSchema(sequencingType).fields.map { field =>
+      val value = field.name match {
+        case `recordStartAtFieldName` => recordStartAt
+        case `deletedByBatchIdFieldName` => deletedByBatchId
+        case other =>
+          throw SparkException.internalError(
+            s"Unable to construct SCD2 aux CDC metadata column due to unknown " +
+              s"`${other}` field."
           )
       }
       value.cast(field.dataType).as(field.name)
