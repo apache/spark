@@ -1013,6 +1013,25 @@ class ClientE2ETestSuite
       df1.join(df1_filter).join(df2, df1_filter("i") === 1).select(df1_filter("j")))
   }
 
+  test("SPARK-56632: self-join reusing a DataFrame resolves columns from both sides") {
+    val session = spark
+    import session.implicits._
+
+    // Two independently constructed DataFrames over the same data, so they have
+    // distinct plan ids, mirroring `val df1 = spark.table(t); val df2 = spark.table(t)`.
+    val df1 = Seq((1, 100), (2, 200)).toDF("id", "salary")
+    val df2 = Seq((1, 100), (2, 200)).toDF("id", "salary")
+
+    // The query under test. Succeeds on master (post SPARK-56632); on 4.1 (has
+    // SPARK-55070 but missing the fix) this throws AMBIGUOUS_COLUMN_REFERENCE.
+    checkSameResult(
+      Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)),
+      df1
+        .join(df2, df1("id") === df2("id"))
+        .select(df1("id"), df1("salary"), df2("id"), df2("salary"))
+        .orderBy(df1("id")))
+  }
+
   test("broadcast join") {
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "-1") {
       val left = spark.range(100).select(col("id"), rand(10).as("a"))
