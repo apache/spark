@@ -1371,6 +1371,7 @@ object SQLConf {
         "short-circuits, avoiding eager materialization of all predicate-referenced columns on " +
         "every row. Only affects FilterExec; subexpression elimination elsewhere is unaffected.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
