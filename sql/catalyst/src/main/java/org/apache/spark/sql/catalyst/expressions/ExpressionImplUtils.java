@@ -25,6 +25,7 @@ import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.zip.CRC32;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
@@ -365,5 +366,16 @@ public class ExpressionImplUtils {
       w = StrictMath.log1p(ax + t / (1.0 + Math.sqrt(1.0 + t)));
     }
     return Math.copySign(w, x);
+  }
+
+  /**
+   * Computes the CRC32 checksum of {@code bytes} for the {@code crc32} expression.
+   * Shared by the eval and codegen paths so the per-stage generated Java is a
+   * single call rather than an inline allocate / update / getValue sequence.
+   */
+  public static long crc32(byte[] bytes) {
+    CRC32 checksum = new CRC32();
+    checksum.update(bytes, 0, bytes.length);
+    return checksum.getValue();
   }
 }
