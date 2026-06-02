@@ -248,7 +248,7 @@ class ResolveBinBySuite extends AnalysisTest {
     expectError(unresolved(distribute = Seq(value, value)), "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN")
   }
 
-  test("BinBy survives the full Analyzer + CheckAnalysis (regression test for producedAttributes)") {
+  test("BinBy survives full Analyzer + CheckAnalysis (regression for producedAttributes)") {
     // Without BinBy.producedAttributes, CheckAnalysis would flag MISSING_ATTRIBUTES.
     assertAnalysisSuccess(unresolved())
     assertAnalysisSuccess(
