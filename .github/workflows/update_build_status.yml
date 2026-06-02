@@ -53,17 +53,37 @@ jobs:
                 console.log('SHA: ' + pr.head.sha)
                 console.log('  Mergeable status: ' + pr.mergeable_state)
                 if (pr.mergeable_state == null || maybeReady.includes(pr.mergeable_state)) {
-                  const checkRuns = await github.request('GET /repos/{owner}/{repo}/commits/{ref}/check-runs', {
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    ref: pr.head.sha
-                  })
+                  // Paginate with per_page=100 to match notify_test_workflow.yml. The default
+                  // page size is 30, and a SHA can accumulate more check-runs than that (CI
+                  // matrix, external checks, duplicate Build checks from reopened PRs), which
+                  // could push the target Build check off the first page and leave the PR
+                  // stuck in 'queued' forever.
+                  const checkRuns = await github.paginate(
+                    'GET /repos/{owner}/{repo}/commits/{ref}/check-runs',
+                    {
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      ref: pr.head.sha,
+                      per_page: 100
+                    }
+                  )
 
                   // Iterator GitHub Checks in the PR
-                  for await (const cr of checkRuns.data.check_runs) {
+                  for await (const cr of checkRuns) {
                     if (cr.name == 'Build' && cr.conclusion != "action_required") {
-                      // text contains parameters to make request in JSON.
-                      const params = JSON.parse(cr.output.text)
+                      // text contains parameters to make request in JSON. A Build check
+                      // created by something other than notify_test_workflow.yml (an older
+                      // version, a manual run, or another app) may have empty or malformed
+                      // output text; skip it instead of aborting the whole scheduled run,
+                      // which would block updates for every PR queued behind it.
+                      let params
+                      try {
+                        params = JSON.parse(cr.output.text)
+                      } catch (error) {
+                        console.error('Skipping Build check ' + cr.id + ' with unparseable output text')
+                        console.error(error)
+                        continue
+                      }
 
                       // Get the workflow run in the forked repository
                       let run
