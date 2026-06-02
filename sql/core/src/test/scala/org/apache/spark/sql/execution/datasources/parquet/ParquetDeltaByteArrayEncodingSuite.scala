@@ -125,13 +125,13 @@ class ParquetDeltaByteArrayEncodingSuite extends ParquetCompatibilityTest with S
 
     for (i <- 0 until length) {
       val actualWkb = if (isGeometry) {
-        val geom = writableColumnVector.getGeometry(i)
-        assert(srid === STUtils.stSrid(geom))
-        STUtils.stAsBinary(geom)
+        val geom = writableColumnVector.getBinaryView(i)
+        assert(srid === STUtils.stGeomSrid(geom))
+        STUtils.stGeomAsBinary(geom)
       } else {
-        val geog = writableColumnVector.getGeography(i)
-        assert(srid === STUtils.stSrid(geog))
-        STUtils.stAsBinary(geog)
+        val geog = writableColumnVector.getBinaryView(i)
+        assert(srid === STUtils.stGeogSrid(geog))
+        STUtils.stGeogAsBinary(geog)
       }
       assert(wkbValues(i) sameElements actualWkb)
     }

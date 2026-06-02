@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import java.text.ParseException;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -26,9 +27,11 @@ import org.apache.spark.SparkDateTimeException;
 import org.apache.spark.sql.catalyst.util.DateTimeConstants;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.IntervalUtils;
+import org.apache.spark.sql.catalyst.util.TimestampFormatter;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.UTF8String;
 
 /**
  * Static helpers shared by date/time/interval expression {@code doGenCode}
@@ -134,5 +137,46 @@ public final class DateTimeExpressionUtils {
     } catch (DateTimeException e) {
       throw QueryExecutionErrors.ansiDateTimeArgumentOutOfRange(e);
     }
+  }
+
+  /**
+   * Parses {@code input} to a timestamp for {@code ToTimestamp} expressions
+   * (e.g. {@code to_timestamp}) in ANSI mode ({@code failOnError = true}).
+   * For a TIMESTAMP_NTZ result the formatter's {@code parseWithoutTimeZone} is
+   * used and {@code downScaleFactor} is not applied; otherwise the parsed micros
+   * are divided by {@code downScaleFactor}. A {@link DateTimeException} (which
+   * also covers {@code DateTimeParseException}) or a {@link ParseException} is
+   * translated to {@code ansiDateTimeParseError} carrying the suggested
+   * fall-back function; any other exception (e.g. {@code IllegalStateException})
+   * propagates unchanged.
+   */
+  public static long parseToTimestampExact(
+      TimestampFormatter formatter,
+      String input,
+      long downScaleFactor,
+      boolean forTimestampNTZ,
+      String suggestedFuncOnFail) {
+    try {
+      if (forTimestampNTZ) {
+        return formatter.parseWithoutTimeZone(input);
+      } else {
+        return formatter.parse(input) / downScaleFactor;
+      }
+    } catch (DateTimeException | ParseException e) {
+      throw QueryExecutionErrors.ansiDateTimeParseError(e, suggestedFuncOnFail);
+    }
+  }
+
+  /**
+   * Computes the first date after {@code startDate} that falls on the weekday
+   * named by {@code dayOfWeek} for {@code NextDay} (next_day) in ANSI mode
+   * ({@code failOnError = true}). The {@code SparkIllegalArgumentException}
+   * thrown by {@code DateTimeUtils.getDayOfWeekFromString} for an invalid
+   * day-of-week string propagates to the caller unchanged (in ANSI mode the
+   * caller wants exactly that exception), so no try/catch wrapper is emitted.
+   */
+  public static int getNextDateExact(int startDate, UTF8String dayOfWeek) {
+    int dow = DateTimeUtils.getDayOfWeekFromString(dayOfWeek);
+    return DateTimeUtils.getNextDateForDayOfWeek(startDate, dow);
   }
 }

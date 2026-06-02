@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, NullType, StructType, UserDefinedType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, GeographyType, GeometryType, NullType, StructType, UserDefinedType, VariantType}
 
 object OrderUtils {
 
@@ -26,6 +26,10 @@ object OrderUtils {
   def isOrderable(dataType: DataType): Boolean = dataType match {
     case NullType => true
     case VariantType => false
+    // GEOMETRY and GEOGRAPHY are atomic types backed by opaque BinaryView bytes that have no
+    // meaningful ordering, so reject them before the AtomicType case below.
+    case _: GeometryType => false
+    case _: GeographyType => false
     case dt: AtomicType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)

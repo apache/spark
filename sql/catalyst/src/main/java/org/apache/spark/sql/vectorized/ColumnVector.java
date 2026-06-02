@@ -18,17 +18,15 @@ package org.apache.spark.sql.vectorized;
 
 import scala.PartialFunction;
 
-import org.apache.spark.SparkUnsupportedOperationException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.Decimal;
 import org.apache.spark.sql.types.UserDefinedType;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
 
 /**
  * An interface representing in-memory columnar data in Spark. This interface defines the main APIs
@@ -292,14 +290,14 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public abstract byte[] getBinary(int rowId);
 
-  public GeographyVal getGeography(int rowId) {
+  /**
+   * Returns the opaque-bytes physical value at {@code rowId} as a {@link BinaryView}. Used by
+   * logical types whose physical representation is "an opaque chunk of bytes" - currently
+   * GEOMETRY and GEOGRAPHY. Returns {@code null} if the slot is null.
+   */
+  public BinaryView getBinaryView(int rowId) {
     byte[] bytes = getBinary(rowId);
-    return (bytes == null) ? null : GeographyVal.fromBytes(bytes);
-  }
-
-  public GeometryVal getGeometry(int rowId) {
-    byte[] bytes = getBinary(rowId);
-    return (bytes == null) ? null : GeometryVal.fromBytes(bytes);
+    return (bytes == null) ? null : BinaryView.fromBytes(bytes);
   }
 
   /**
@@ -328,12 +326,28 @@ public abstract class ColumnVector implements AutoCloseable {
     return new CalendarInterval(months, days, microseconds);
   }
 
+  /**
+   * Returns the nanosecond NTZ timestamp value for {@code rowId}, or null if the slot is null.
+   * <p>
+   * To support this type, implementations must implement {@link #getChild(int)} and define 2 child
+   * vectors: child 0 is a long vector holding {@code epochMicros}; child 1 is a short vector
+   * holding {@code nanosWithinMicro} (values in [0, 999]).
+   */
   public TimestampNanosVal getTimestampNTZNanos(int rowId) {
-    throw SparkUnsupportedOperationException.apply();
+    if (isNullAt(rowId)) return null;
+    return TimestampNanosVal.fromTrustedRowBytes(
+      getChild(0).getLong(rowId), getChild(1).getShort(rowId));
   }
 
+  /**
+   * Returns the nanosecond LTZ timestamp value for {@code rowId}, or null if the slot is null.
+   * <p>
+   * Storage layout is identical to {@link #getTimestampNTZNanos(int)}.
+   */
   public TimestampNanosVal getTimestampLTZNanos(int rowId) {
-    throw SparkUnsupportedOperationException.apply();
+    if (isNullAt(rowId)) return null;
+    return TimestampNanosVal.fromTrustedRowBytes(
+      getChild(0).getLong(rowId), getChild(1).getShort(rowId));
   }
 
   /**

@@ -473,7 +473,7 @@ private[arrow] class GeographyWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeog(input.getGeography(ordinal), dt)
+    val geom = STUtils.deserializeGeog(input.getBinaryView(ordinal), dt)
     val bytes = geom.getBytes
     val srid = geom.getSrid
 
@@ -491,7 +491,7 @@ private[arrow] class GeometryWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeom(input.getGeometry(ordinal), dt)
+    val geom = STUtils.deserializeGeom(input.getBinaryView(ordinal), dt)
     val bytes = geom.getBytes
     val srid = geom.getSrid
 
