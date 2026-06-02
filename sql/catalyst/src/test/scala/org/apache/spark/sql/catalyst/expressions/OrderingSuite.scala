@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering, LazilyGeneratedOrdering}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 
 class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -131,6 +132,47 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // SPARK-57179: when the order keys are statically non-nullable, GenerateOrdering skips the
+  // dead null-handling branches. Mirror the test above with non-nullable keys (and a mix of
+  // ascending/descending so both the `comp` and `-comp` emissions are covered) to exercise
+  // that code path and the per-comparison `comp` scoping when multiple keys are concatenated.
+  {
+    val structType =
+      new StructType()
+        .add("f1", FloatType, nullable = true)
+        .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true)
+    val arrayOfStructType = ArrayType(structType)
+    val complexTypes = ArrayType(IntegerType) :: structType :: arrayOfStructType :: Nil
+    (DataTypeTestUtils.atomicTypes ++ complexTypes).foreach { dataType =>
+      test(s"GenerateOrdering with non-nullable keys: $dataType") {
+        val sortOrders =
+          BoundReference(0, dataType, nullable = false).asc ::
+            BoundReference(1, dataType, nullable = false).desc :: Nil
+        val rowOrdering = new InterpretedOrdering(sortOrders)
+        val genOrdering = GenerateOrdering.generate(sortOrders)
+        val rowType = StructType(
+          StructField("a", dataType, nullable = false) ::
+            StructField("b", dataType, nullable = false) :: Nil)
+        val maybeDataGenerator = RandomDataGenerator.forType(rowType, nullable = false)
+        assert(maybeDataGenerator.isDefined)
+        val randGenerator = maybeDataGenerator.get
+        val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
+        for (_ <- 1 to 50) {
+          val a = toCatalyst(randGenerator()).asInstanceOf[InternalRow]
+          val b = toCatalyst(randGenerator()).asInstanceOf[InternalRow]
+          withClue(s"a = $a, b = $b") {
+            assert(genOrdering.compare(a, a) === 0)
+            assert(genOrdering.compare(b, b) === 0)
+            assert(signum(genOrdering.compare(a, b)) === -1 * signum(genOrdering.compare(b, a)))
+            assert(
+              signum(rowOrdering.compare(a, b)) === signum(genOrdering.compare(a, b)),
+              "Generated and non-generated orderings should agree")
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KiB") {
     val sortOrder = Literal("abc").asc
 
@@ -140,6 +182,68 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     // verify that we can support up to 5000 ordering comparisons, which should be sufficient
     GenerateOrdering.generate(Array.fill(5000)(sortOrder).toImmutableArraySeq)
   }
+
+  // SPARK-57103: ordering for nanosecond timestamp types. Not driven by the generic
+  // `atomicTypes` loop above because `RandomDataGenerator` does not yet support the new
+  // types (tracked separately in SPARK-57034); we hand-roll edge cases here instead.
+  private def compareNanos(
+      dataType: AtomicType,
+      a: TimestampNanosVal,
+      b: TimestampNanosVal,
+      expected: Int): Unit = {
+    test(s"compare two $dataType values: a = $a, b = $b") {
+      val rowA = InternalRow(a)
+      val rowB = InternalRow(b)
+      Seq(Ascending, Descending).foreach { direction =>
+        val sortOrder = direction match {
+          case Ascending => BoundReference(0, dataType, nullable = true).asc
+          case Descending => BoundReference(0, dataType, nullable = true).desc
+        }
+        val expectedCompareResult = direction match {
+          case Ascending => signum(expected)
+          case Descending => -1 * signum(expected)
+        }
+        val intOrdering = new InterpretedOrdering(sortOrder :: Nil)
+        val genOrdering = new LazilyGeneratedOrdering(sortOrder :: Nil)
+        Seq(intOrdering, genOrdering).foreach { ordering =>
+          assert(ordering.compare(rowA, rowA) === 0)
+          assert(ordering.compare(rowB, rowB) === 0)
+          assert(signum(ordering.compare(rowA, rowB)) === expectedCompareResult)
+          assert(signum(ordering.compare(rowB, rowA)) === -1 * expectedCompareResult)
+        }
+      }
+    }
+  }
+
+  Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { dt =>
+    // equal values
+    compareNanos(dt,
+      TimestampNanosVal.fromParts(1000L, 100.toShort),
+      TimestampNanosVal.fromParts(1000L, 100.toShort), 0)
+    // primary key (epochMicros) decides
+    compareNanos(dt,
+      TimestampNanosVal.fromParts(1000L, 999.toShort),
+      TimestampNanosVal.fromParts(1001L, 0.toShort), -1)
+    // tie-breaker (nanosWithinMicro) within the same micro
+    compareNanos(dt,
+      TimestampNanosVal.fromParts(1000L, 100.toShort),
+      TimestampNanosVal.fromParts(1000L, 101.toShort), -1)
+    // Long boundary: plain subtraction would overflow; Ordering must use Long.compare.
+    compareNanos(dt,
+      TimestampNanosVal.fromParts(Long.MinValue, 0.toShort),
+      TimestampNanosVal.fromParts(Long.MaxValue, 0.toShort), -1)
+    // pre-epoch sorts before epoch regardless of nanos
+    compareNanos(dt,
+      TimestampNanosVal.fromParts(-1L, 999.toShort),
+      TimestampNanosVal.fromParts(0L, 0.toShort), -1)
+    // null sorts before any value under default NullsFirst semantics
+    compareNanos(dt, null, TimestampNanosVal.fromParts(0L, 0.toShort), -1)
+  }
+
+  // Ordering is precision-independent. One case at p = 7 documents that intent.
+  compareNanos(TimestampNTZNanosType(7),
+    TimestampNanosVal.fromParts(0L, 0.toShort),
+    TimestampNanosVal.fromParts(0L, 1.toShort), -1)
 
   test("SPARK-21344: BinaryType comparison does signed byte array comparison") {
     val data = Seq(

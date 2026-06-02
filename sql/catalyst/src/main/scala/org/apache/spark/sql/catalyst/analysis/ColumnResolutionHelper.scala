@@ -23,14 +23,17 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.NullType
 
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
@@ -147,8 +150,20 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // When strict DataFrame column resolution is disabled, we also allow name-based
           // resolution as a fallback for tagged attributes.
           val result = withPosition(u) {
-            resolveColumnByName(nameParts)
-              .orElse(LiteralFunctionResolution.resolve(nameParts))
+            // A parameterless built-in function takes precedence over a SQL UDF parameter
+            // that happens to share its name (per the documented SQL name resolution rules).
+            // Real columns from relations -- which don't carry the
+            // SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY -- continue to win as before.
+            // Gated by a legacy kill-switch conf so the pre-fix behavior can be restored.
+            val column = resolveColumnByName(nameParts)
+            val resolved = column match {
+              case Some(c) if isSQLFunctionParameterAlias(c) && !conf.getConf(
+                  SQLConf.LEGACY_ALLOW_UDF_PARAMETER_TO_SHADOW_PARAMETERLESS_FUNCTION) =>
+                LiteralFunctionResolution.resolve(nameParts).orElse(column)
+              case Some(_) => column
+              case None => LiteralFunctionResolution.resolve(nameParts)
+            }
+            resolved
               .map {
                 // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
                 // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
@@ -180,7 +195,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             field
           }
           if (newChild.resolved) {
-            ExtractValue(child = newChild, extraction = resolvedField, resolver = resolver)
+            // applyOrNull propagates NULL when the base is NullType instead of throwing
+            // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
+            val extracted = ExtractValue.applyOrNull(
+              child = newChild, extraction = resolvedField, resolver = resolver)
+            // A NullType base yields a bare NULL literal, which would otherwise produce an output
+            // column named `NULL`. Alias it with the extraction's text (e.g. `col[0]`) to keep a
+            // stable column name; CleanupAliases later trims this alias where it's not a top-level
+            // projection output.
+            if (newChild.dataType == NullType) {
+              Alias(extracted, toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
+            } else {
+              extracted
+            }
           } else {
             u.copy(child = newChild, extraction = resolvedField)
           }
@@ -696,4 +723,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
        r.expressions.forall(_.references.subsetOf(outputSet))
      }
    }
+
+  /**
+   * True if `e` originates from a SQL UDF input parameter alias, as marked by
+   * `SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY` at parameter-alias
+   * construction sites. Unwraps `OuterReference` so callers that pass post-outer-resolution
+   * expressions still get a correct answer; the metadata lives on the underlying named
+   * expression.
+   */
+  private def isSQLFunctionParameterAlias(e: Expression): Boolean = e match {
+    case OuterReference(inner) => isSQLFunctionParameterAlias(inner)
+    case n: NamedExpression =>
+      n.metadata.contains(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY)
+    case _ => false
+  }
 }

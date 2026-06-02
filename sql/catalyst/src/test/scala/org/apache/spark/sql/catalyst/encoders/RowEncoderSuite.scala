@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.mutable
 import scala.util.Random
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
@@ -379,6 +379,76 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(row.getLong(0) === DateTimeUtils.localDateTimeToMicros(localDateTime))
     val readback = fromRow(encoder, row)
     assert(readback.get(0) === localDateTime)
+  }
+
+  test("SPARK-57033: encoding/decoding TimestampNTZNanosType to/from java.time.LocalDateTime") {
+    val inputs = Seq(
+      java.time.LocalDateTime.parse("2019-02-26T16:56:00.123456789"),
+      java.time.LocalDateTime.parse("1969-12-31T23:59:59.123456789"))
+    for (localDateTime <- inputs) {
+      for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+        val schema = new StructType().add("t", TimestampNTZNanosType(p))
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(localDateTime))
+        val expected = DateTimeUtils.localDateTimeToTimestampNanos(localDateTime, p)
+        assert(row.getTimestampNTZNanos(0) === expected)
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === DateTimeUtils.timestampNanosToLocalDateTime(expected))
+      }
+    }
+  }
+
+  test("SPARK-57033: encoding/decoding TimestampLTZNanosType to/from java.time.Instant") {
+    val inputs = Seq(
+      java.time.Instant.parse("2019-02-26T16:56:00.123456789Z"),
+      java.time.Instant.parse("1969-12-31T23:59:59.123456789Z"))
+    for (instant <- inputs) {
+      for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
+        val schema = new StructType().add("t", TimestampLTZNanosType(p))
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(instant))
+        val expected = DateTimeUtils.instantToTimestampNanos(instant, p)
+        assert(row.getTimestampLTZNanos(0) === expected)
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === DateTimeUtils.timestampNanosToInstant(expected))
+      }
+    }
+  }
+
+  test("SPARK-57033: encoding/decoding TimestampLTZNanosType ignores java8 API flag") {
+    val instant = java.time.Instant.parse("2019-02-26T16:56:00.123456789Z")
+    val schema = new StructType().add("t", TimestampLTZNanosType())
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> flag) {
+        val encoder = ExpressionEncoder(schema).resolveAndBind()
+        val row = toRow(encoder, Row(instant))
+        assert(row.getTimestampLTZNanos(0) ===
+          DateTimeUtils.instantToTimestampNanos(instant, precision = 9))
+        val readback = fromRow(encoder, row)
+        assert(readback.get(0) === instant)
+      }
+    }
+  }
+
+  test("SPARK-57033: RowEncoder rejects nanos timestamp types when feature flag is off") {
+    Seq(
+      new StructType().add("t", TimestampNTZNanosType()),
+      new StructType().add("t", TimestampLTZNanosType())
+    ).foreach { schema =>
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+        checkError(
+          exception = intercept[SparkException] {
+            ExpressionEncoder(schema)
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"
+          )
+        )
+      }
+    }
   }
 
   test("encoding/decoding DateType to/from java.time.LocalDate") {

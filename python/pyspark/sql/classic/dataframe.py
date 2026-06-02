@@ -776,6 +776,9 @@ class DataFrame(ParentDataFrame, PandasMapOpsMixin, PandasConversionMixin):
         jdf = self._jdf.crossJoin(other._jdf)
         return DataFrame(jdf, self.sparkSession)
 
+    def zip(self, other: ParentDataFrame) -> ParentDataFrame:
+        return DataFrame(self._jdf.zip(other._jdf), self.sparkSession)
+
     def join(
         self,
         other: ParentDataFrame,
