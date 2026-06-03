@@ -738,6 +738,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     simple.withMetadata("id", builder.build())
   }
 
+  test("zip") {
+    left.select("id").zip(left.select("a"))
+  }
+
   test("zipWithIndex") {
     simple.zipWithIndex()
   }
