@@ -1787,6 +1787,7 @@ case class BRound(
 }
 
 object WidthBucket {
+  /** Shared by interpreted eval and generated Java code; must stay public for codegen. */
   def computeBucketNumber(value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     if (isNull(value, min, max, numBucket)) {
       null
@@ -1795,8 +1796,7 @@ object WidthBucket {
     }
   }
 
-  /** This function is called by generated Java code, so it needs to be public. */
-  def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
+  private def isNull(value: Double, min: Double, max: Double, numBucket: Long): Boolean = {
     numBucket <= 0 ||
       numBucket == Long.MaxValue ||
       jl.Double.isNaN(value) ||
@@ -1805,8 +1805,7 @@ object WidthBucket {
       jl.Double.isNaN(max) || jl.Double.isInfinite(max)
   }
 
-  /** This function is called by generated Java code, so it needs to be public. */
-  def computeBucketNumberNotNull(
+  private def computeBucketNumberNotNull(
       value: Double, min: Double, max: Double, numBucket: Long): jl.Long = {
     val lower = Math.min(min, max)
     val upper = Math.max(min, max)
@@ -1921,11 +1920,13 @@ case class WidthBucket(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (input, min, max, numBucket) => {
-      s"""${ev.isNull} = org.apache.spark.sql.catalyst.expressions.WidthBucket
-         |  .isNull($input, $min, $max, $numBucket);
+      val bucket = ctx.freshName("bucket")
+      val boxedLong = CodeGenerator.boxedType(dataType)
+      s"""$boxedLong $bucket = org.apache.spark.sql.catalyst.expressions.WidthBucket
+         |  .computeBucketNumber($input, $min, $max, $numBucket);
+         |${ev.isNull} = $bucket == null;
          |if (!${ev.isNull}) {
-         |  ${ev.value} = org.apache.spark.sql.catalyst.expressions.WidthBucket
-         |    .computeBucketNumberNotNull($input, $min, $max, $numBucket);
+         |  ${ev.value} = $bucket;
          |}""".stripMargin
     })
   }
