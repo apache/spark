@@ -137,9 +137,14 @@ private[spark] class YarnClientSchedulerBackend(
         case _: InterruptedException | _: InterruptedIOException =>
           logInfo("Interrupting monitor thread")
         case NonFatal(e) =>
-          logError("Unexpected error in YARN application state monitor thread.", e)
+          logError(log"Unexpected error in YARN application state monitor thread.", e)
           allowInterrupt = false
           sc.stop()
+          if (conf.get(AM_CLIENT_MODE_EXIT_ON_ERROR)) {
+            logWarning(log"SparkContext stopped due to unexpected error, " +
+              log"exiting with code 1.")
+            System.exit(1)
+          }
       }
     }
 

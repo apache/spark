@@ -38,7 +38,8 @@ class YarnClientSchedulerBackendSuite extends SparkFunSuite with LocalSparkConte
     val backend = new YarnClientSchedulerBackend(
       sc.taskScheduler.asInstanceOf[TaskSchedulerImpl], sc)
 
-    // Simulate MonitorThread hitting a fatal error (e.g., credential expiry, network failure)
+    // Simulate MonitorThread hitting an unexpected non-fatal error
+    // (e.g., credential expiry, network failure)
     val mockClient = mock(classOf[Client])
     when(mockClient.monitorApplication(anyBoolean(), anyBoolean(), anyLong()))
       .thenThrow(new RuntimeException("Simulated failure"))
