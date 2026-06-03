@@ -273,11 +273,16 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
   }
 
   test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down and runs on H2") {
-   val df = sql("SELECT name FROM h2.test.employee WHERE (salary = bonus) IS NOT NULL")
-    checkFiltersRemoved(df)
-    checkPushedInfo(df, "PushedFilters: [SALARY IS NOT NULL, BONUS IS NOT NULL, " +
+    val df1 = sql("SELECT name FROM h2.test.employee WHERE (salary = bonus) IS NOT NULL")
+    checkFiltersRemoved(df1)
+    checkPushedInfo(df1, "PushedFilters: [SALARY IS NOT NULL, BONUS IS NOT NULL, " +
       "(CAST(SALARY AS double) = BONUS) IS NOT NULL]")
-    checkAnswer(df, Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+    checkAnswer(df1, Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+
+    val df2 = sql("SELECT name FROM h2.test.employee WHERE (salary = bonus) IS NULL")
+    checkFiltersRemoved(df2)
+    checkPushedInfo(df2, "PushedFilters: [(CAST(SALARY AS double) = BONUS) IS NULL]")
+    checkAnswer(df2, Seq.empty)
   }
 
   // TABLESAMPLE ({integer_expression | decimal_expression} PERCENT) and
