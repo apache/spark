@@ -300,6 +300,10 @@ case class DecimalDivideWithOverflowCheck(
     } else {
       s"""throw QueryExecutionErrors.overflowInSumOfDecimalError($errorContextCode, "try_avg");"""
     }
+    // Only the nullOnOverflow path can produce a null result; otherwise toPrecision throws on
+    // overflow and never returns null. ev.isNull is already initialized from eval1.isNull (false
+    // on this branch), so the result null check is dead when nullOnOverflow is false.
+    val setNull = if (nullOnOverflow) s"${ev.isNull} = ${ev.value} == null;" else ""
 
     val eval1 = left.genCode(ctx)
     val eval2 = right.genCode(ctx)
@@ -316,7 +320,7 @@ case class DecimalDivideWithOverflowCheck(
          |} else {
          |  ${ev.value} = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
          |      ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-         |  ${ev.isNull} = ${ev.value} == null;
+         |  $setNull
          |}
       """.stripMargin
     // scalastyle:on line.size.limit

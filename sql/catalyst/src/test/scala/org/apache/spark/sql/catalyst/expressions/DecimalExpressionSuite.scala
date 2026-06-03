@@ -78,6 +78,33 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, DecimalType(2, 1)), DecimalType(3, 2), false), null)
   }
 
+  test("DecimalDivideWithOverflowCheck") {
+    val sum = Literal(Decimal(10))
+    val count = Literal(Decimal(2))
+    // nullOnOverflow = false with no overflow returns a non-null value; the result null check is
+    // omitted in this path.
+    checkEvaluation(
+      DecimalDivideWithOverflowCheck(sum, count, DecimalType(10, 1), null, false), Decimal("5.0"))
+    // nullOnOverflow = true keeps the result null check (no overflow here, so the result is
+    // non-null).
+    checkEvaluation(
+      DecimalDivideWithOverflowCheck(sum, count, DecimalType(10, 1), null, true), Decimal("5.0"))
+    // nullOnOverflow = true with an overflowing result returns null (the kept result null check).
+    checkEvaluation(
+      DecimalDivideWithOverflowCheck(Literal(Decimal(100)), Literal(Decimal(1)),
+        DecimalType(2, 0), null, true), null)
+    // nullOnOverflow = false with an overflowing result throws.
+    intercept[ArithmeticException](checkEvaluationWithMutableProjection(
+      DecimalDivideWithOverflowCheck(Literal(Decimal(100)), Literal(Decimal(1)),
+        DecimalType(2, 0), null, false), null))
+    // A null left operand is treated as overflow: null when nullOnOverflow, otherwise an error.
+    val nullSum = Literal.create(null, DecimalType(10, 0))
+    checkEvaluation(
+      DecimalDivideWithOverflowCheck(nullSum, count, DecimalType(10, 1), null, true), null)
+    intercept[ArithmeticException](checkEvaluationWithMutableProjection(
+      DecimalDivideWithOverflowCheck(nullSum, count, DecimalType(10, 1), null, false), null))
+  }
+
   test("SPARK-39208: CheckOverflow & CheckOverflowInSum support query context in runtime errors") {
     val d = Decimal(101, 3, 1)
     val query = "select cast(d as decimal(4, 3)) from t"
