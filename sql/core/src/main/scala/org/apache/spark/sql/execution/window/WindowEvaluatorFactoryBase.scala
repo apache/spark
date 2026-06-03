@@ -281,11 +281,43 @@ trait WindowEvaluatorFactoryBase {
 
           // Shrinking Frame.
           case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
-            target: InternalRow => {
-              new UnboundedFollowingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone))
+            if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
+              val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
+              val cacheHint = estimateMaxCachedBlocks(
+                lower, UnboundedFollowing, frameType, blockSize)
+              target: InternalRow => {
+                val tc = TaskContext.get()
+                if (tc == null) {
+                  throw SparkException.internalError(
+                    "WindowEvaluatorFactoryBase.shrinkingSegTreeFrameFactory requires " +
+                      "an active TaskContext")
+                }
+                val tmm = tc.taskMemoryManager()
+                val lb = createBoundOrdering(frameType, lower, timeZone)
+                new SegmentTreeWindowFunctionFrame(
+                  target,
+                  processor,
+                  segFns,
+                  childOutput,
+                  frameType,
+                  lb,
+                  ubound = None,
+                  fallbackFactory = () =>
+                    new UnboundedFollowingWindowFunctionFrame(target, processor, lb),
+                  (e, s) => MutableProjection.create(e, s),
+                  conf,
+                  cacheHint,
+                  tmm,
+                  numSegmentTreeFrames,
+                  numSegmentTreeFallbackFrames)
+              }
+            } else {
+              target: InternalRow => {
+                new UnboundedFollowingWindowFunctionFrame(
+                  target,
+                  processor,
+                  createBoundOrdering(frameType, lower, timeZone))
+              }
             }
 
           // Moving Frame.
@@ -305,14 +337,18 @@ trait WindowEvaluatorFactoryBase {
                       "an active TaskContext")
                 }
                 val tmm = tc.taskMemoryManager()
+                val lb = createBoundOrdering(frameType, lower, timeZone)
+                val ub = createBoundOrdering(frameType, upper, timeZone)
                 new SegmentTreeWindowFunctionFrame(
                   target,
                   processor,
                   segFns,
                   childOutput,
                   frameType,
-                  createBoundOrdering(frameType, lower, timeZone),
-                  createBoundOrdering(frameType, upper, timeZone),
+                  lb,
+                  ubound = Some(ub),
+                  fallbackFactory = () =>
+                    new SlidingWindowFunctionFrame(target, processor, lb, ub),
                   (e, s) => MutableProjection.create(e, s),
                   conf,
                   cacheHint,

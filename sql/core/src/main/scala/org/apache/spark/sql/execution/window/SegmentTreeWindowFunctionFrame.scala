@@ -27,14 +27,21 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Moving-frame window function frame backed by [[WindowSegmentTree]]. Produces
- * the same outputs as [[SlidingWindowFunctionFrame]] for RowFrame or
- * single-column RangeFrame moving frames whose aggregates are all
- * [[DeclarativeAggregate]] with no FILTER/DISTINCT. For partitions below
- * `spark.sql.window.segmentTree.minPartitionRows`, delegates to a wrapped
- * [[SlidingWindowFunctionFrame]]. Under RANGE, two forward-only cursors
- * (`lowerIter` / `upperIter`) advance the bounds in O(n) total; the segtree
- * answers `[lowerBound, upperBound)` in O(log n).
+ * Window function frame backed by [[WindowSegmentTree]]. Handles two frame
+ * shapes:
+ *  - **Sliding** (`ubound = Some(...)`): both edges move; mirrors
+ *    [[SlidingWindowFunctionFrame]]. O(N log W) total.
+ *  - **Shrinking** (`ubound = None`): upper edge pinned to partition end
+ *    (`BETWEEN <lower> AND UNBOUNDED FOLLOWING`); replaces
+ *    [[UnboundedFollowingWindowFunctionFrame]]'s O(N^2) full recompute with
+ *    O(N log N).
+ *
+ * Eligibility, build, spill, and memory accounting are identical for both
+ * shapes; only the per-row cursor logic differs (admit+drop for sliding,
+ * drop-only for shrinking).
+ *
+ * For partitions below `spark.sql.window.segmentTree.minPartitionRows`,
+ * delegates to a frame produced by `fallbackFactory`.
  *
  * @note Not thread-safe.
  */
@@ -45,7 +52,8 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     inputSchema: Seq[Attribute],
     frameType: FrameType,
     lbound: BoundOrdering,
-    ubound: BoundOrdering,
+    ubound: Option[BoundOrdering],
+    fallbackFactory: () => WindowFunctionFrame,
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     conf: SQLConf,
     maxCachedBlocks: Option[Int],
@@ -57,16 +65,18 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   require(frameType == RowFrame || frameType == RangeFrame,
     s"SegmentTreeWindowFunctionFrame supports RowFrame or RangeFrame, got $frameType")
 
-  private[this] var fallback: SlidingWindowFunctionFrame = _
+  // True when this is a shrinking-frame (UnboundedFollowing) instance.
+  // Shorthand to avoid repeated `ubound.isEmpty` reads in hot loops.
+  private[this] val shrinking: Boolean = ubound.isEmpty
+
+  private[this] var fallback: WindowFunctionFrame = _
   private[this] var tree: WindowSegmentTree = _
 
   /**
-   * Allocate a fresh fallback sliding-window frame. Called lazily from
-   * `prepare()` on the small-partition path. Factored out for testability
-   * (subclasses can inject a throwing fallback for prepare-failure tests).
+   * Allocate a fresh fallback frame via `fallbackFactory`. Called lazily
+   * from `prepare()` on the small-partition path.
    */
-  private[window] def newFallback(): SlidingWindowFunctionFrame =
-    new SlidingWindowFunctionFrame(target, processor, lbound, ubound)
+  private[window] def newFallback(): WindowFunctionFrame = fallbackFactory()
 
   /** Test hook: whether the fallback frame has been lazily allocated. */
   private[window] def fallbackAllocated: Boolean = fallback != null
@@ -100,8 +110,11 @@ private[window] final class SegmentTreeWindowFunctionFrame(
 
   /**
    * Runtime dispatch flag: when `true`, `write()`, `currentLowerBound()`, and
-   * `currentUpperBound()` delegate to the wrapped [[SlidingWindowFunctionFrame]]
-   * (small-partition path). Set by `prepare()` based on partition size vs.
+   * `currentUpperBound()` delegate to the wrapped fallback frame produced by
+   * `fallbackFactory` (small-partition path). The fallback type is sliding-
+   * dependent: [[SlidingWindowFunctionFrame]] for moving frames and
+   * [[UnboundedFollowingWindowFunctionFrame]] for shrinking frames. Set by
+   * `prepare()` based on partition size vs.
    * `spark.sql.window.segmentTree.minPartitionRows`.
    */
   private[window] var fallbackUsed: Boolean = false
@@ -155,19 +168,31 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     // Count only on the successful segtree path: if `tree.build` throws,
     // the counter is not bumped.
     numSegmentTreeFrames.foreach(_ += 1)
-    frameType match {
-      case RowFrame =>
-        boundIter = rows.generateIterator()
-        nextRow = WindowFunctionFrame.getNextOrNull(boundIter)
-      case RangeFrame =>
-        lowerIter = rows.generateIterator()
-        upperIter = rows.generateIterator()
-        // Pre-seed cursor heads so `RangeBoundOrdering.compare` never
-        // dereferences null on round 0. Either may be null if `rows` is
-        // empty; the advance loops' `!= null` / `< upperBound` guards
-        // handle that.
-        lowerRow = WindowFunctionFrame.getNextOrNull(lowerIter)
-        upperRow = WindowFunctionFrame.getNextOrNull(upperIter)
+    if (shrinking) {
+      // Upper bound pinned to partition end; never moves.
+      upperBound = tree.size
+      frameType match {
+        case RowFrame =>
+          // RowFrame lower-bound advance is pure index arithmetic; no iterator.
+        case RangeFrame =>
+          lowerIter = rows.generateIterator()
+          lowerRow = WindowFunctionFrame.getNextOrNull(lowerIter)
+      }
+    } else {
+      frameType match {
+        case RowFrame =>
+          boundIter = rows.generateIterator()
+          nextRow = WindowFunctionFrame.getNextOrNull(boundIter)
+        case RangeFrame =>
+          lowerIter = rows.generateIterator()
+          upperIter = rows.generateIterator()
+          // Pre-seed cursor heads so `RangeBoundOrdering.compare` never
+          // dereferences null on round 0. Either may be null if `rows` is
+          // empty; the advance loops' `!= null` / `< upperBound` guards
+          // handle that.
+          lowerRow = WindowFunctionFrame.getNextOrNull(lowerIter)
+          upperRow = WindowFunctionFrame.getNextOrNull(upperIter)
+      }
     }
   }
 
@@ -206,17 +231,20 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   private def writeRow(index: Int, current: InternalRow): Unit = {
     var boundsChanged = index == 0
 
-    // admit loop: extend upperBound; if a candidate is already below the
-    // lower bound, advance lowerBound in lock-step to preserve invariant
-    // (0 <= lowerBound <= upperBound <= tree.size).
-    while (nextRow != null &&
-        ubound.compare(nextRow, upperBound, current, index) <= 0) {
-      if (lbound.compare(nextRow, lowerBound, current, index) < 0) {
-        lowerBound += 1
+    if (!shrinking) {
+      val ub = ubound.get
+      // admit loop: extend upperBound; if a candidate is already below the
+      // lower bound, advance lowerBound in lock-step to preserve invariant
+      // (0 <= lowerBound <= upperBound <= tree.size).
+      while (nextRow != null &&
+          ub.compare(nextRow, upperBound, current, index) <= 0) {
+        if (lbound.compare(nextRow, lowerBound, current, index) < 0) {
+          lowerBound += 1
+        }
+        nextRow = WindowFunctionFrame.getNextOrNull(boundIter)
+        upperBound += 1
+        boundsChanged = true
       }
-      nextRow = WindowFunctionFrame.getNextOrNull(boundIter)
-      upperBound += 1
-      boundsChanged = true
     }
     // drop loop: advance lowerBound to the frame's left edge. RowFrame's
     // `lbound.compare` is pure index arithmetic so the input row is unread;
@@ -235,13 +263,16 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   private def writeRange(index: Int, current: InternalRow): Unit = {
     var boundsChanged = index == 0
 
-    // admit loop (upper edge). `RangeBoundOrdering.compare` ignores its index
-    // arguments; we pass `upperBound` for API symmetry with RowBoundOrdering.
-    while (upperRow != null &&
-        ubound.compare(upperRow, upperBound, current, index) <= 0) {
-      upperBound += 1
-      upperRow = WindowFunctionFrame.getNextOrNull(upperIter)
-      boundsChanged = true
+    if (!shrinking) {
+      val ub = ubound.get
+      // admit loop (upper edge). `RangeBoundOrdering.compare` ignores its index
+      // arguments; we pass `upperBound` for API symmetry with RowBoundOrdering.
+      while (upperRow != null &&
+          ub.compare(upperRow, upperBound, current, index) <= 0) {
+        upperBound += 1
+        upperRow = WindowFunctionFrame.getNextOrNull(upperIter)
+        boundsChanged = true
+      }
     }
 
     // drop loop (lower edge): strict `< 0`, guarded by
