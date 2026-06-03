@@ -45,7 +45,8 @@ sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to microseconds.
    *
-   * @param s String with timestamp to parse
+   * @param s
+   *   \- string with timestamp to parse
    * @return
    *   microseconds since epoch.
    * @throws ParseException
@@ -63,7 +64,8 @@ sealed trait TimestampFormatter extends Serializable {
   /**
    * Parses a timestamp in a string and converts it to an optional number of microseconds.
    *
-   * @param s String with timestamp to parse
+   * @param s
+   *   \- string with timestamp to parse
    * @return
    *   An optional number of microseconds since epoch. The result is None on invalid input.
    * @throws ParseException
@@ -87,8 +89,10 @@ sealed trait TimestampFormatter extends Serializable {
    * Parses a timestamp in a string and converts it to microseconds since Unix Epoch in local
    * time.
    *
-   * @param s String with timestamp to parse
-   * @param allowTimeZone Indicates strict parsing of timezone
+   * @param s
+   *   \- string with timestamp to parse
+   * @param allowTimeZone
+   *   \- indicates strict parsing of timezone
    * @return
    *   microseconds since epoch.
    * @throws ParseException
@@ -114,8 +118,10 @@ sealed trait TimestampFormatter extends Serializable {
    * Parses a timestamp in a string and converts it to an optional number of microseconds since
    * Unix Epoch in local time.
    *
-   * @param s String with timestamp to parse
-   * @param allowTimeZone Indicates strict parsing of timezone
+   * @param s
+   *   \- string with timestamp to parse
+   * @param allowTimeZone
+   *   \- indicates strict parsing of timezone
    * @return
    *   An optional number of microseconds since epoch. The result is None on invalid input.
    * @throws ParseException
@@ -158,8 +164,10 @@ sealed trait TimestampFormatter extends Serializable {
    * digits beyond `precision` are truncated (floored), matching the cast/parse rule used by the
    * microsecond path and `SparkDateTimeUtils`.
    *
-   * @param s String with timestamp to parse
-   * @param precision The target fractional-second precision in `[7, 9]`
+   * @param s
+   *   \- string with timestamp to parse
+   * @param precision
+   *   \- the target fractional-second precision in `[7, 9]`
    * @return
    *   the parsed value as a [[TimestampNanosVal]].
    */
@@ -184,9 +192,12 @@ sealed trait TimestampFormatter extends Serializable {
    * discarded when `allowTimeZone` is `true` and rejected otherwise. Fractional digits beyond
    * `precision` are truncated (floored).
    *
-   * @param s String with timestamp to parse
-   * @param precision The target fractional-second precision in `[7, 9]`
-   * @param allowTimeZone Indicates strict parsing of timezone
+   * @param s
+   *   \- string with timestamp to parse
+   * @param precision
+   *   \- the target fractional-second precision in `[7, 9]`
+   * @param allowTimeZone
+   *   \- indicates strict parsing of timezone
    * @throws IllegalStateException
    *   The formatter for timestamp without time zone should always implement this method. The
    *   exception should never be hit.
@@ -252,7 +263,7 @@ sealed trait TimestampFormatter extends Serializable {
   /**
    * Validates the pattern string.
    * @param checkLegacy
-   *   If true and the pattern is invalid, check whether the pattern is valid for legacy
+   *   if true and the pattern is invalid, check whether the pattern is valid for legacy
    *   formatters and show hints for using legacy formatter. Otherwise, simply check the pattern
    *   string.
    */
@@ -469,10 +480,14 @@ class Iso8601TimestampFormatter(
  * formatting, it uses the default pattern [[TimestampFormatter.defaultPattern()]]. In parsing, it
  * follows the CAST logic in conversion of strings to Catalyst's TimestampType.
  *
- * @param zoneId The time zone ID in which timestamps should be formatted or parsed.
- * @param locale The locale overrides the system locale and is used in formatting.
- * @param legacyFormat Defines the formatter used for legacy timestamps.
- * @param isParsing Whether the formatter is used for parsing (`true`) or for formatting (`false`).
+ * @param zoneId
+ *   The time zone ID in which timestamps should be formatted or parsed.
+ * @param locale
+ *   The locale overrides the system locale and is used in formatting.
+ * @param legacyFormat
+ *   Defines the formatter used for legacy timestamps.
+ * @param isParsing
+ *   Whether the formatter is used for parsing (`true`) or for formatting (`false`).
  */
 class DefaultTimestampFormatter(
     zoneId: ZoneId,
@@ -549,7 +564,8 @@ class DefaultTimestampFormatter(
  * formatter does not output trailing zeros in the fraction. For example, the timestamp
  * `2019-03-05 15:00:01.123400` is formatted as the string `2019-03-05 15:00:01.1234`.
  *
- * @param zoneId The time zone identifier in which the formatter parses or format timestamps
+ * @param zoneId
+ *   the time zone identifier in which the formatter parses or format timestamps
  */
 class FractionTimestampFormatter(zoneId: ZoneId)
     extends Iso8601TimestampFormatter(
