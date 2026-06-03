@@ -4083,6 +4083,8 @@ class AstBuilder extends DataTypeAstBuilder
         None
       } else {
         val p = fractionalSecondsDigits(value)
+        // With the flag off, >9 fractional digits silently truncate to microseconds via
+        // the fall-through path. Strict validation is intentionally flag-gated.
         if (p > TimestampNTZNanosType.MAX_PRECISION) {
           throw QueryParsingErrors.timestampLiteralPrecisionExceedsMaxError(value, ctx)
         } else if (p >= TimestampNTZNanosType.MIN_PRECISION) {
