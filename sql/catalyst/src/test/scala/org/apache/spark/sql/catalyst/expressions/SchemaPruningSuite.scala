@@ -222,9 +222,11 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     val left = NamedLambdaVariable("left", elementType, nullable = true)
     val right = NamedLambdaVariable("right", elementType, nullable = true)
     val comparator = LambdaFunction(
-      Subtract(
-        GetStructField(left, 2, Some("c")),
-        GetStructField(right, 2, Some("c"))),
+      Coalesce(Seq(
+        Subtract(
+          GetStructField(left, 2, Some("c")),
+          GetStructField(right, 2, Some("c"))),
+        Literal(0))),
       Seq(left, right))
 
     Seq(ArrayFilter(argument, predicate), ArraySort(argument, comparator)).foreach { function =>
@@ -279,6 +281,31 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
       SchemaPruning.RootField(
         StructField("event", eventType, nullable = true),
         derivedFromAtt = false)))
+  }
+
+  test("do not prune strict ArraySort when the comparator can return null") {
+    val elementType = StructType.fromDDL("a int, b int")
+    val eventType = StructType(Seq(
+      StructField("rules", ArrayType(elementType, containsNull = true))))
+    val event = AttributeReference("event", eventType)()
+    val argument = GetStructField(event, 0, Some("rules"))
+    val left = NamedLambdaVariable("left", elementType, nullable = true)
+    val right = NamedLambdaVariable("right", elementType, nullable = true)
+    val comparator = LambdaFunction(Literal.create(null, IntegerType), Seq(left, right))
+    val sorted = ArraySort(argument, comparator, allowNullComparisonResult = false)
+    val selected = GetArrayStructFields(
+      sorted,
+      elementType(0),
+      ordinal = 0,
+      numFields = elementType.length,
+      containsNull = true)
+
+    val rootFields = SchemaPruning.getRootFields(selected)
+    val prunedSchema = SchemaPruning.pruneSchema(
+      StructType(Seq(StructField("event", eventType))),
+      rootFields)
+
+    assert(prunedSchema === StructType(Seq(StructField("event", eventType))))
   }
 
   test("retain input array nullability when pruning through KnownNotContainsNull") {

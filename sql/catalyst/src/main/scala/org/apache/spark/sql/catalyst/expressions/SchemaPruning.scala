@@ -217,6 +217,11 @@ object SchemaPruning extends SQLConfHelper {
     expr match {
       case ArrayFilter(argument, lambda: LambdaFunction) =>
         getArrayReturningHigherOrderFunctionRootFields(argument, lambda, numElementVariables = 1)
+      case ArraySort(argument, lambda: LambdaFunction, allowNullComparisonResult)
+          if !allowNullComparisonResult && lambda.function.nullable =>
+        // The strict null-comparator error includes the compared values, so pruning their
+        // element fields would change the observable error parameters.
+        getRootFields(argument) ++ getRootFields(lambda.function)
       case ArraySort(argument, lambda: LambdaFunction, _) =>
         getArrayReturningHigherOrderFunctionRootFields(argument, lambda, numElementVariables = 2)
       case _ =>
