@@ -287,6 +287,10 @@ object Scd2BatchProcessor {
    * Column names reserved by AutoCDC, that will be projected onto the microbatch and target
    * tables. If the user's source dataframe contains any of these columns, SCD2 reconciliation
    * will fail.
+   *
+   * TODO(SPARK-57251): validate at [[AutoCdcMergeFlow]] construction time that the source
+   *   schema and column selection do not collide with these reserved names, so we fail fast
+   *   with a user-actionable error instead of silently overwriting them at preprocess time.
    */
   private val reservedFrameworkColNames: Set[String] = Set(
     startAtColName,
