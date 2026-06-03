@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
@@ -758,13 +758,11 @@ object TimestampFormatter {
    * The legacy formatters (`FastDateFormat` / `SimpleDateFormat`) cap at millisecond/microsecond
    * resolution and cannot represent the sub-microsecond remainder of a [[TimestampNanosVal]].
    * Nanosecond-capable timestamp types are therefore unsupported under the `LEGACY` time parser
-   * policy; callers gate the nanos path behind the corresponding config, so reaching this is a
-   * misconfiguration.
+   * policy. This is a user-facing error (not an internal error) because the `LEGACY` policy is
+   * user-configurable and a caller may legitimately combine it with nanosecond timestamps.
    */
-  def legacyNanosUnsupported(): SparkException =
-    SparkException.internalError(
-      "Nanosecond-precision timestamp parsing/formatting is not supported under the LEGACY " +
-        "time parser policy. Set spark.sql.legacy.timeParserPolicy to CORRECTED.")
+  def legacyNanosUnsupported(): SparkUnsupportedOperationException =
+    ExecutionErrors.nanosTimestampUnsupportedWithLegacyParserError()
 
   private def getFormatter(
       format: Option[String],

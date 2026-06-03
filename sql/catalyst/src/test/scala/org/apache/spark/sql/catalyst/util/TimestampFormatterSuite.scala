@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.time.{DateTimeException, Instant, LocalDateTime, ZoneId}
 import java.util.Locale
 
-import org.apache.spark.{SparkException, SparkUpgradeException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT
@@ -693,13 +693,21 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       "yyyy-MM-dd HH:mm:ss.SSSSSS",
       zoneId = UTC,
       locale = DateFormatter.defaultLocale)
+    val expectedParameters = Map(
+      "config" -> ("\"" + SQLConf.LEGACY_TIME_PARSER_POLICY.key + "\""))
     Seq[TimestampFormatter](fast, simple).foreach { formatter =>
-      intercept[SparkException] {
-        formatter.parseNanos("2020-01-01 00:00:00.123456789", 9)
-      }
-      intercept[SparkException] {
-        formatter.formatNanos(nanosVal(0L, 1), 9)
-      }
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.parseNanos("2020-01-01 00:00:00.123456789", 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.formatNanos(nanosVal(0L, 1), 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
     }
   }
 }
