@@ -1568,8 +1568,13 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     // Precision 6 maps to the GA types regardless of the preview flag.
     Seq("true", "false").foreach { flag =>
       withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> flag) {
+        // Compact form and whitespace-tolerant forms (mirrors the nanos-type test pattern).
         assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ltz( 6)\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ltz(6 )\"") === TimestampType)
         assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
+        assert(DataType.fromJson("\"timestamp_ntz( 6)\"") === TimestampNTZType)
+        assert(DataType.fromJson("\"timestamp_ntz(6 )\"") === TimestampNTZType)
         assert(DataType.fromDDL("ts timestamp_ntz(6)") ===
           StructType(Seq(StructField("ts", TimestampNTZType))))
         assert(DataType.fromDDL("ts timestamp_ltz(6)") ===
