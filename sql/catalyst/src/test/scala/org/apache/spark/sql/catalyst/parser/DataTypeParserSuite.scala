@@ -326,7 +326,8 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       Seq("TIMESTAMP_NTZ" -> "TIMESTAMP_NTZ", "TIMESTAMP_LTZ" -> "TIMESTAMP_LTZ").foreach {
         case (spelling, errorType) =>
           // Precision 6 is valid (maps to the GA type); only [0, 5] and [10, ...] are invalid.
-          Seq(0, 1, 10, 99).foreach { p =>
+          // Precision 5 is included to pin the lower boundary of the p=6 carve-out.
+          Seq(0, 1, 5, 10, 99).foreach { p =>
             checkError(
               exception = intercept[SparkException] {
                 CatalystSqlParser.parseDataType(s"$spelling($p)")

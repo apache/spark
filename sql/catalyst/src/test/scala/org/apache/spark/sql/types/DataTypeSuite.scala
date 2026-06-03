@@ -1518,10 +1518,10 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
         }
 
         // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION. Precision 6 is
-        // valid (maps to the GA type) and is covered separately. The overflowing case
-        // verifies the original digit string is preserved instead of leaking
-        // NumberFormatException.
-        Seq("0", "10", overflowing).foreach { p =>
+        // valid (maps to the GA type) and is covered separately. Precision 5 is included
+        // to pin the lower boundary of the p=6 carve-out. The overflowing case verifies
+        // the original digit string is preserved instead of leaking NumberFormatException.
+        Seq("0", "5", "10", overflowing).foreach { p =>
           checkError(
             exception = intercept[SparkException] {
               DataType.fromJson(s"""\"$name($p)\"""")
