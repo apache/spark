@@ -701,6 +701,21 @@ private[v2] trait V2JDBCTest
     assert(rows12(5).getString(0) === "special_character_underscorenot_present")
   }
 
+  test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
+    // salary never equals bonus and both are non-null, so IS NOT NULL matches all rows and
+    // IS NULL matches none. The composite operand must be parenthesized in the pushed SQL.
+    val df1 = sql(s"SELECT name FROM $catalogAndNamespace.${caseConvert("employee")} " +
+      "WHERE (salary = bonus) IS NOT NULL")
+    checkFilterPushed(df1)
+    assert(df1.collect().map(_.getString(0)).sorted ===
+      Array("alex", "amy", "cathy", "david", "jen"))
+
+    val df2 = sql(s"SELECT name FROM $catalogAndNamespace.${caseConvert("employee")} " +
+      "WHERE (salary = bonus) IS NULL")
+    checkFilterPushed(df2)
+    assert(df2.collect().isEmpty)
+  }
+
   test("SPARK-57040: TABLESAMPLE with replacement is not pushed down") {
     withTable(s"$catalogName.new_table") {
       sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
