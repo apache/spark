@@ -258,7 +258,7 @@ object SchemaPruning extends SQLConfHelper {
           getRootFields(argument).map(_.field)
         }
       case _ =>
-        Seq.empty
+        getRootFields(argument).map(_.field)
     }
     nestedRootFields.map(field => RootField(field, derivedFromAtt = false)) ++
       getRootFields(lambda.function) ++

@@ -304,6 +304,59 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     assert(evaluateSelectedFields(selectFirstField(sort)) === Seq(2, 1))
   }
 
+  test("retain full nested array elements for array-returning higher-order functions") {
+    val structType = StructType.fromDDL("a int, c int")
+    val arrayType = ArrayType(structType, containsNull = true)
+    val nestedArrayType = ArrayType(arrayType, containsNull = true)
+    val sourceSchema = StructType(Seq(StructField("rules", nestedArrayType)))
+    val rules = AttributeReference("rules", nestedArrayType)()
+
+    def selectFirstField(function: Expression): GetArrayStructFields = {
+      GetArrayStructFields(
+        GetArrayItem(function, Literal(0)),
+        structType(0),
+        ordinal = 0,
+        numFields = structType.length,
+        containsNull = true)
+    }
+
+    val element = NamedLambdaVariable("x", arrayType, nullable = true)
+    val elementC = GetArrayStructFields(
+      element,
+      structType(1),
+      ordinal = 1,
+      numFields = structType.length,
+      containsNull = true)
+    val filter = ArrayFilter(
+      rules,
+      LambdaFunction(GreaterThan(GetArrayItem(elementC, Literal(0)), Literal(0)), Seq(element)))
+
+    val left = NamedLambdaVariable("left", arrayType, nullable = true)
+    val right = NamedLambdaVariable("right", arrayType, nullable = true)
+    def firstC(variable: NamedLambdaVariable): Expression = {
+      GetArrayItem(
+        GetArrayStructFields(
+          variable,
+          structType(1),
+          ordinal = 1,
+          numFields = structType.length,
+          containsNull = true),
+        Literal(0))
+    }
+    val sort = ArraySort(
+      rules,
+      LambdaFunction(
+        Coalesce(Seq(Subtract(firstC(left), firstC(right)), Literal(0))),
+        Seq(left, right)),
+      allowNullComparisonResult = false)
+
+    Seq(filter, sort).foreach { function =>
+      val selected = Alias(selectFirstField(function), "out")()
+      val rootFields = SchemaPruning.identifyRootFields(Seq(selected), Seq.empty)
+      assert(SchemaPruning.pruneSchema(sourceSchema, rootFields) === sourceSchema)
+    }
+  }
+
   test("do not collect ArrayExists and ArrayForAll lambda fields when the whole element is used") {
     val elementType = StructType.fromDDL("a int, b int")
     val eventType = StructType(Seq(
