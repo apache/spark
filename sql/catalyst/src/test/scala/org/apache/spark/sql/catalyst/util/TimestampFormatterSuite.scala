@@ -708,6 +708,12 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         },
         condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
         parameters = expectedParameters)
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.parseWithoutTimeZoneNanos("2020-01-01 00:00:00.123456789", 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
     }
   }
 }

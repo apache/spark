@@ -688,6 +688,12 @@ class LegacyFastTimestampFormatter(pattern: String, zoneId: ZoneId, locale: Loca
   override def parseNanos(s: String, precision: Int): TimestampNanosVal =
     throw TimestampFormatter.legacyNanosUnsupported()
 
+  override def parseWithoutTimeZoneNanos(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): TimestampNanosVal =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
   override def formatNanos(v: TimestampNanosVal, precision: Int): String =
     throw TimestampFormatter.legacyNanosUnsupported()
 
@@ -733,6 +739,12 @@ class LegacySimpleTimestampFormatter(
   }
 
   override def parseNanos(s: String, precision: Int): TimestampNanosVal =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def parseWithoutTimeZoneNanos(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): TimestampNanosVal =
     throw TimestampFormatter.legacyNanosUnsupported()
 
   override def formatNanos(v: TimestampNanosVal, precision: Int): String =
