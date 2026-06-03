@@ -252,7 +252,7 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       c.copy(
         tableDesc = existingTable,
         query = Some(TableOutputResolver.resolveOutputColumns(
-          tableDesc.qualifiedName, toAttributes(existingTable.schema), newQuery,
+          toSQLId(tableDesc.identifier.nameParts), toAttributes(existingTable.schema), newQuery,
           byName = true, conf)))
 
     // Here we normalize partition, bucket and sort column names, w.r.t. the case sensitivity

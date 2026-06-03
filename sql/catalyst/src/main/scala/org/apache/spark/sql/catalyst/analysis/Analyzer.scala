@@ -3835,8 +3835,14 @@ class Analyzer(
         val defaultValueFillMode =
           if (conf.coerceInsertNestedTypes && v2Write.schemaEvolutionEnabled) RECURSE
           else FILL
+        val tableDisplayName = v2Write.table match {
+          case r: DataSourceV2Relation if r.catalog.isDefined && r.identifier.isDefined =>
+            val id = r.identifier.get
+            toSQLId(r.catalog.get.name +: id.namespace().toSeq :+ id.name())
+          case other => toSQLId(Seq(other.name))
+        }
         val projection = TableOutputResolver.resolveOutputColumns(
-          v2Write.table.name, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
+          tableDisplayName, v2Write.table.output, v2Write.query, v2Write.isByName, conf,
           defaultValueFillMode)
         if (projection != v2Write.query) {
           val cleanedTable = v2Write.table match {

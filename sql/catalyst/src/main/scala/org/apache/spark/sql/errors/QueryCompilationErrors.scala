@@ -725,7 +725,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def generatorNotExpectedError(name: FunctionIdentifier, classCanonicalName: String): Throwable = {
     new AnalysisException(errorClass = "UNSUPPORTED_GENERATOR.NOT_GENERATOR",
       messageParameters = Map(
-        "functionName" -> toSQLId(name.toString),
+        "functionName" -> toSQLId(name.nameParts),
         "classCanonicalName" -> classCanonicalName))
   }
 
@@ -1315,7 +1315,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "CANNOT_LOAD_FUNCTION_CLASS",
       messageParameters = Map(
         "className" -> className,
-        "functionName" -> toSQLId(func.toString)))
+        "functionName" -> toSQLId(func.nameParts)))
   }
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
@@ -2634,7 +2634,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
+        "tableName" -> tableName,
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
         "dataColumns" -> queryOutput.map(c => toSQLId(c.name)).mkString(", ")))
   }
@@ -2646,7 +2646,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
+        "tableName" -> tableName,
         "tableColumns" -> expected.map(c => toSQLId(c)).mkString(", "),
         "dataColumns" -> queryOutput.map(c => toSQLId(c.name)).mkString(", ")))
   }
@@ -2656,8 +2656,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_FIND_DATA",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName)
+        "tableName" -> tableName,
+        "colName" -> colName
       )
     )
   }
@@ -2667,8 +2667,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.AMBIGUOUS_COLUMN_NAME",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName)
+        "tableName" -> tableName,
+        "colName" -> colName
       )
     )
   }
@@ -2678,7 +2678,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
+        "tableName" -> tableName,
         "extraColumns" -> extraColumns
       )
     )
@@ -2689,8 +2689,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_STRUCT_FIELDS",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName),
+        "tableName" -> tableName,
+        "colName" -> colName,
         "extraFields" -> extraFields
       )
     )
@@ -2701,8 +2701,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName)
+        "tableName" -> tableName,
+        "colName" -> colName
       )
     )
   }
@@ -2712,8 +2712,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName)
+        "tableName" -> tableName,
+        "colName" -> colName
       )
     )
   }
@@ -2723,8 +2723,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName)
+        "tableName" -> tableName,
+        "colName" -> colName
       )
     )
   }
@@ -2734,8 +2734,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName),
+        "tableName" -> tableName,
+        "colName" -> colName,
         "srcType" -> toSQLType(srcType),
         "targetType" -> toSQLType(targetType)
       )
@@ -2747,8 +2747,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.STRUCT_MISSING_FIELDS",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName),
+        "tableName" -> tableName,
+        "colName" -> colName,
         "missingFields" -> missingFields
       )
     )
@@ -2763,8 +2763,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
       messageParameters = Map(
-        "tableName" -> toSQLId(tableName),
-        "colName" -> toSQLId(colName),
+        "tableName" -> tableName,
+        "colName" -> colName,
         "order" -> order.toString,
         "expected" -> toSQLId(expected),
         "found" -> toSQLId(found)
@@ -2979,7 +2979,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(
       errorClass = "UNSUPPORTED_FEATURE.ANALYZE_UNCACHED_TEMP_VIEW",
-      messageParameters = Map("viewName" -> toSQLId(tableIdent.toString)))
+      messageParameters = Map("viewName" -> toSQLId(tableIdent.nameParts)))
   }
 
   def columnTypeNotSupportStatisticsCollectionError(
@@ -2991,7 +2991,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map(
         "columnType" -> toSQLType(dataType),
         "columnName" -> toSQLId(name),
-        "tableName" -> toSQLId(tableIdent.toString)))
+        "tableName" -> toSQLId(tableIdent.nameParts)))
   }
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {

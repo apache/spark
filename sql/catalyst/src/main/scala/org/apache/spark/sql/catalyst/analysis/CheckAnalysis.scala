@@ -438,12 +438,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               if (t.partitionSchema.isEmpty) {
                 r.failAnalysis(
                   errorClass = "INVALID_PARTITION_OPERATION.PARTITION_SCHEMA_IS_EMPTY",
-                  messageParameters = Map("name" -> toSQLId(r.name)))
+                  messageParameters = Map("name" -> r.name))
               }
             case _ =>
               r.failAnalysis(
                 errorClass = "INVALID_PARTITION_OPERATION.PARTITION_MANAGEMENT_IS_UNSUPPORTED",
-                messageParameters = Map("name" -> toSQLId(r.name)))
+                messageParameters = Map("name" -> r.name))
           }
           case _ =>
         }
@@ -872,7 +872,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 case Some(_) =>
                   None
                 case _ =>
-                  Some(column.quoted)
+                  Some(column.toImmutableArraySeq)
               }
             }
 
@@ -1210,7 +1210,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             alter.failAnalysis(
               errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
               messageParameters = Map(
-                "table" -> toSQLId(table.name),
+                "table" -> table.name,
                 "fieldName" -> toSQLId(name)))
         }
         groupedColumns.keys.foreach { name =>
@@ -1218,13 +1218,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             alter.failAnalysis(
               errorClass = "NOT_SUPPORTED_CHANGE_SAME_COLUMN",
               messageParameters = Map(
-                "table" -> toSQLId(table.name),
+                "table" -> table.name,
                 "fieldName" -> toSQLId(name)))
           }
         }
         specs.foreach {
           case AlterColumnSpec(col: ResolvedFieldName, dataType, nullable, _, _, _, _) =>
-            val fieldName = col.name.quoted
+            val fieldName = col.name
             if (dataType.isDefined) {
               val field = CharVarcharUtils.getRawType(col.field.metadata)
                 .map(dt => col.field.copy(dataType = dt))
@@ -1233,22 +1233,22 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               newDataType match {
                 case _: StructType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.STRUCT_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                  Map("table" -> table.name, "fieldName" -> toSQLId(fieldName)))
                 case _: MapType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.MAP_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                  Map("table" -> table.name, "fieldName" -> toSQLId(fieldName)))
                 case _: ArrayType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.ARRAY_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                  Map("table" -> table.name, "fieldName" -> toSQLId(fieldName)))
                 case u: UserDefinedType[_] => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.USER_DEFINED_TYPE",
                   Map(
-                    "table" -> toSQLId(table.name),
+                    "table" -> table.name,
                     "fieldName" -> toSQLId(fieldName),
                     "udtSql" -> toSQLType(u)))
                 case _: CalendarIntervalType | _: AnsiIntervalType => alter.failAnalysis(
                   "CANNOT_UPDATE_FIELD.INTERVAL_TYPE",
-                  Map("table" -> toSQLId(table.name), "fieldName" -> toSQLId(fieldName)))
+                  Map("table" -> table.name, "fieldName" -> toSQLId(fieldName)))
                 case _ => // update is okay
               }
 
@@ -1263,7 +1263,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 alter.failAnalysis(
                   errorClass = "NOT_SUPPORTED_CHANGE_COLUMN",
                   messageParameters = Map(
-                    "table" -> toSQLId(table.name),
+                    "table" -> table.name,
                     "originName" -> toSQLId(fieldName),
                     "originType" -> toSQLType(field.dataType),
                     "newName" -> toSQLId(fieldName),
@@ -1274,7 +1274,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               if (!nullable.get && col.field.nullable) {
                 alter.failAnalysis(
                   errorClass = "_LEGACY_ERROR_TEMP_2330",
-                  messageParameters = Map("fieldName" -> fieldName))
+                  messageParameters = Map("fieldName" -> fieldName.quoted))
               }
             }
           case _ =>

@@ -19,13 +19,13 @@ package org.apache.spark.sql.errors
 import java.util.Locale
 
 import org.apache.spark.QueryContext
-import org.apache.spark.sql.catalyst.util.{AttributeNameParser, QuotingUtils}
+import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 private[sql] trait DataTypeErrorsBase {
   def toSQLId(parts: String): String = {
-    toSQLId(AttributeNameParser.parseAttributeName(parts))
+    toSQLId(Seq(parts))
   }
 
   def toSQLId(parts: Seq[String]): String = {

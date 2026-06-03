@@ -81,7 +81,7 @@ case class JDBCTable(
         messageParameters = Map(
           "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
-          "tableName" -> toSQLId(name)),
+          "tableName" -> toSQLId(ident.namespace().toSeq :+ ident.name())),
         dialect = JdbcDialects.get(jdbcOptions.url),
         description = s"Failed to create index $indexName in ${name()}",
         isRuntime = false) {
@@ -104,7 +104,7 @@ case class JDBCTable(
         messageParameters = Map(
           "url" -> jdbcOptions.getRedactUrl(),
           "indexName" -> toSQLId(indexName),
-          "tableName" -> toSQLId(name)),
+          "tableName" -> toSQLId(ident.namespace().toSeq :+ ident.name())),
         dialect = JdbcDialects.get(jdbcOptions.url),
         description = s"Failed to drop index $indexName in ${name()}",
         isRuntime = false) {
