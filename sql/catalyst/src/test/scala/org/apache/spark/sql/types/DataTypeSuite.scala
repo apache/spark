@@ -426,6 +426,15 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION), 10)
   checkDefaultSize(TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION), 10)
 
+  test("PhysicalDataType for nanosecond timestamp types") {
+    for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+      assert(PhysicalDataType(TimestampNTZNanosType(p)) != UninitializedPhysicalType)
+    }
+    for (p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION) {
+      assert(PhysicalDataType(TimestampLTZNanosType(p)) != UninitializedPhysicalType)
+    }
+  }
+
   def checkEqualsIgnoreCompatibleNullability(
       from: DataType,
       to: DataType,
@@ -1555,19 +1564,21 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
   }
 
   test("SPARK-56965: JSON parser rejects nanos timestamp types when preview flag is off") {
-    Seq(
-      "\"timestamp_ltz(7)\"" -> "Nanosecond-precision timestamp types",
-      "\"timestamp_ntz(9)\"" -> "Nanosecond-precision timestamp types").foreach {
-      case (json, featureName) =>
-        checkError(
-          exception = intercept[SparkException] {
-            DataType.fromJson(json)
-          },
-          condition = "FEATURE_NOT_ENABLED",
-          parameters = Map(
-            "featureName" -> featureName,
-            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
-            "configValue" -> "true"))
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq(
+        "\"timestamp_ltz(7)\"" -> "Nanosecond-precision timestamp types",
+        "\"timestamp_ntz(9)\"" -> "Nanosecond-precision timestamp types").foreach {
+        case (json, featureName) =>
+          checkError(
+            exception = intercept[SparkException] {
+              DataType.fromJson(json)
+            },
+            condition = "FEATURE_NOT_ENABLED",
+            parameters = Map(
+              "featureName" -> featureName,
+              "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+              "configValue" -> "true"))
+      }
     }
   }
 

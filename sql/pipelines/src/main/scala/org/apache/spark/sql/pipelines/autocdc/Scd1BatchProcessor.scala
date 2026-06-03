@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{functions => F, AnalysisException}
+import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -130,9 +130,6 @@ case class Scd1BatchProcessor(
    */
   private[autocdc] def extendMicrobatchRowsWithCdcMetadata(
       validatedMicrobatch: DataFrame): DataFrame = {
-    // Proactively validate the reserved CDC metadata column does not exist in the microbatch.
-    validateCdcMetadataColumnNotPresent(validatedMicrobatch)
-
     val rowDeleteSequence: Column = changeArgs.deleteCondition match {
       case Some(deleteCondition) =>
         F.when(deleteCondition, changeArgs.sequencing).otherwise(F.lit(null))
@@ -367,19 +364,29 @@ case class Scd1BatchProcessor(
     val incomingWinsDelete = microbatchDeleteVersionField.isNotNull &&
       microbatchDeleteVersionField > destinationUpsertVersionField
 
-    // When the incoming upsert wins against an existing record, the entire row (all columns)
-    // will be overwritten, including the CDC metadata column. We only exclude keys because
-    // most merge implementations require that join columns are not being mutated, even if
-    // the mutation is a no-op.
     val resolver = microbatchDf.sparkSession.sessionState.conf.resolver
     val keyNames = changeArgs.keys.map(_.name)
+
+    def constructTargetColumnAssignmentsFromMicrobatch(columnName: String): (String, Column) = {
+      // Map a column in the target table to its direct equivalent in the microbatch. Note that
+      // because of target-table schema evolution during SDP dataset materialization, the
+      // microbatch's columns are always a subset of (or equal to) the target's columns.
+      val quotedCol = QuotingUtils.quoteIdentifier(columnName)
+      s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
+    }
+
+    // Most merge implementations require that join columns are not mutated, even when the
+    // mutation would be a no-op. The remaining microbatch columns (including the CDC metadata
+    // column) are overwritten outright when the incoming upsert wins.
     val columnsToUpdateWhenIncomingWinsUpsert: Map[String, Column] =
       microbatchDf.columns
         .filterNot(c => keyNames.exists(resolver(_, c)))
-        .map { c =>
-          val quotedCol = QuotingUtils.quoteIdentifier(c)
-          s"$destinationTableStr.$quotedCol" -> F.col(s"microbatch.$quotedCol")
-        }
+        .map(constructTargetColumnAssignmentsFromMicrobatch)
+        .toMap
+
+    val columnsToInsertOnNewKey: Map[String, Column] =
+      microbatchDf.columns
+        .map(constructTargetColumnAssignmentsFromMicrobatch)
         .toMap
 
     microbatchDf
@@ -391,37 +398,27 @@ case class Scd1BatchProcessor(
       // New key: only insert upserts; deletes for absent keys are no-ops for the target table
       // merge, and instead would have been inserted as tombstones into the auxiliary table.
       .whenNotMatched(microbatchDeleteVersionField.isNull)
-      .insertAll()
+      // When inserting a brand new row for a new key, construct column mappings from microbatch.
+      // The microbatch's columns may be a strict subset of the target's columns -- e.g. the user
+      // narrowed `column_list` between runs, or the source DF dropped a column. The target's
+      // columns can never be a strict subset of the microbatch's, however, because SDP's schema
+      // evolution always unions old and new schemas onto the target.
+      .insert(columnsToInsertOnNewKey)
       .merge()
-  }
-
-  private def validateCdcMetadataColumnNotPresent(microbatch: DataFrame): Unit = {
-    val microbatchSqlConf = microbatch.sparkSession.sessionState.conf
-    val resolver = microbatchSqlConf.resolver
-
-    microbatch.schema.fieldNames
-      .find(resolver(_, Scd1BatchProcessor.cdcMetadataColName))
-      .foreach { conflictingColumnName =>
-        throw new AnalysisException(
-          errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
-          messageParameters = Map(
-            "caseSensitivity" -> CaseSensitivityLabels.of(microbatchSqlConf.caseSensitiveAnalysis),
-            "columnName" -> conflictingColumnName,
-            "schemaName" -> "microbatch",
-            "reservedColumnName" -> Scd1BatchProcessor.cdcMetadataColName
-          )
-        )
-      }
   }
 }
 
 object Scd1BatchProcessor {
-  // Columns prefixed with `__spark_autocdc_` are reserved for internal SDP AutoCDC processing.
-  private[autocdc] val winningRowColName: String = "__spark_autocdc_winning_row"
-  private[autocdc] val cdcMetadataColName: String = "__spark_autocdc_metadata"
+  /**
+   * Internal columns inserted by AutoCDC reconciliation. Source change-data-feed dataframes must
+   * not contain any columns starting with [[AutoCdcReservedNames.prefix]]; the invariant is
+   * enforced at [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction.
+   */
+  private[autocdc] val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
+  private[pipelines] val cdcMetadataColName: String = s"${AutoCdcReservedNames.prefix}metadata"
 
-  private[autocdc] val cdcDeleteSequenceFieldName: String = "deleteSequence"
-  private[autocdc] val cdcUpsertSequenceFieldName: String = "upsertSequence"
+  private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
+  private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"
 
   /** Project the delete sequence out of the CDC metadata column. */
   private[autocdc] def deleteSequenceOf(cdcMetadataCol: Column): Column =
@@ -434,7 +431,7 @@ object Scd1BatchProcessor {
   /**
    * Schema of the CDC metadata struct column for SCD1.
    */
-  private def cdcMetadataColSchema(sequencingType: DataType): StructType =
+  private[pipelines] def cdcMetadataColSchema(sequencingType: DataType): StructType =
     StructType(
       Seq(
         // The sequencing of the event if it represents a delete, null otherwise.
@@ -448,7 +445,7 @@ object Scd1BatchProcessor {
    * Construct the CDC metadata struct column for SCD1, following the exact schema and field
    * ordering defined by [[cdcMetadataColSchema]].
    */
-  private[autocdc] def constructCdcMetadataCol(
+  private[pipelines] def constructCdcMetadataCol(
       deleteSequence: Column,
       upsertSequence: Column,
       sequencingType: DataType): Column = {

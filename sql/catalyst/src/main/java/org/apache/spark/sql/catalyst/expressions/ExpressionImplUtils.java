@@ -25,6 +25,9 @@ import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.zip.CRC32;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
@@ -341,5 +344,48 @@ public class ExpressionImplUtils {
 
     String sp = str.toString().replaceAll(qtChar, qtCharRep);
     return UTF8String.fromString(qtChar + sp + qtChar);
+  }
+
+  /**
+   * Returns the single-character string for the {@code chr} expression: the
+   * ASCII/Latin-1 character for {@code longVal & 0xFF}. A negative argument
+   * yields the empty string. Shared by the eval and codegen paths so the
+   * generated Java is a single call rather than an inline if/else chain.
+   */
+  public static UTF8String chr(long longVal) {
+    if (longVal < 0) {
+      return UTF8String.EMPTY_UTF8;
+    } else if ((longVal & 0xFF) == 0) {
+      return UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
+    } else {
+      char c = (char) (longVal & 0xFF);
+      return UTF8String.fromString(String.valueOf(c));
+    }
+  }
+
+  /**
+   * Compiles {@code regex} with the given {@code flags} for the regexp expression
+   * family, translating a {@link PatternSyntaxException} into the user-facing
+   * INVALID_PARAMETER_VALUE.PATTERN error. Shared by the regexp eval and codegen
+   * paths so the generated Java is a single call instead of an inline try/catch
+   * around {@code Pattern.compile}.
+   */
+  public static Pattern compileRegexPattern(String regex, int flags, String funcName) {
+    try {
+      return Pattern.compile(regex, flags);
+    } catch (PatternSyntaxException e) {
+      throw QueryExecutionErrors.invalidPatternError(funcName, e.getPattern(), e);
+    }
+  }
+
+  /**
+   * Computes the CRC32 checksum of {@code bytes} for the {@code crc32} expression.
+   * Shared by the eval and codegen paths so the per-stage generated Java is a
+   * single call rather than an inline allocate / update / getValue sequence.
+   */
+  public static long crc32(byte[] bytes) {
+    CRC32 checksum = new CRC32();
+    checksum.update(bytes, 0, bytes.length);
+    return checksum.getValue();
   }
 }

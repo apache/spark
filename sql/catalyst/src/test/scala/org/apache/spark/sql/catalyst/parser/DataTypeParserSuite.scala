@@ -211,29 +211,31 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("nanos timestamp parser surface is gated by SQL conf, disabled by default") {
+  test("nanos timestamp parser surface is gated by SQL conf when disabled") {
     val gatedSpellings = Seq(
       "TIMESTAMP_NTZ(7)",
       "TIMESTAMP_LTZ(9)",
       "TIMESTAMP(9) WITHOUT TIME ZONE",
       "TIMESTAMP(9) WITH LOCAL TIME ZONE",
       "TIMESTAMP(9)")
-    gatedSpellings.foreach { spelling =>
-      checkError(
-        exception = intercept[SparkException] {
-          CatalystSqlParser.parseDataType(spelling)
-        },
-        condition = "FEATURE_NOT_ENABLED",
-        parameters = Map(
-          "featureName" -> "Nanosecond-precision timestamp types",
-          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
-          "configValue" -> "true"))
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      gatedSpellings.foreach { spelling =>
+        checkError(
+          exception = intercept[SparkException] {
+            CatalystSqlParser.parseDataType(spelling)
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+      // Bare unparameterized forms remain accepted even with the gate off.
+      assert(parse("TIMESTAMP_NTZ") === TimestampNTZType)
+      assert(parse("TIMESTAMP_LTZ") === TimestampType)
+      assert(parse("TIMESTAMP WITHOUT TIME ZONE") === TimestampNTZType)
+      assert(parse("TIMESTAMP WITH LOCAL TIME ZONE") === TimestampType)
     }
-    // Bare unparameterized forms remain accepted even with the gate off.
-    assert(parse("TIMESTAMP_NTZ") === TimestampNTZType)
-    assert(parse("TIMESTAMP_LTZ") === TimestampType)
-    assert(parse("TIMESTAMP WITHOUT TIME ZONE") === TimestampNTZType)
-    assert(parse("TIMESTAMP WITH LOCAL TIME ZONE") === TimestampType)
   }
 
   // DataType parser accepts certain reserved keywords.

@@ -191,6 +191,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST" : {
+    "message" : [
+      "AutoCDC flow specifies both `column_list` and `except_column_list`; at most one may be provided."
+    ],
+    "sqlState" : "42613"
+  },
   "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."
@@ -200,6 +206,40 @@
   "AUTOCDC_EMPTY_KEYS" : {
     "message" : [
       "AutoCDC requires at least one key column to identify rows, but received an empty key set."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_INVALID_STATE" : {
+    "message" : [
+      "AutoCDC flow <flowName> detected an invalid state:"
+    ],
+    "subClass" : {
+      "AUXILIARY_TABLE_KEY_COLUMN_MISSING" : {
+        "message" : [
+          "The auxiliary table <auxTableName> is missing key column <keyColumnName> that is recorded in its <propertyName> table property. The auxiliary table schema may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "AUXILIARY_TABLE_PROPERTY_MALFORMED" : {
+        "message" : [
+          "The auxiliary table <auxTableName> has a malformed <propertyName> property with raw value '<rawValue>'. The property must be a JSON array of strings (e.g. '[\"id\",\"region\"]'). The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "AUXILIARY_TABLE_PROPERTY_MISSING" : {
+        "message" : [
+          "The auxiliary table <auxTableName> is missing the required <propertyName> table property; cannot validate AutoCDC key columns. The auxiliary table metadata may be corrupted or have been modified externally. Perform a full refresh of the target table to recreate the auxiliary table."
+        ]
+      },
+      "KEY_SCHEMA_DRIFT" : {
+        "message" : [
+          "The AutoCDC flow's current key columns <expectedKeySchema> do not match the keys recorded in the auxiliary table <auxTableName> (recorded keys <recordedKeySchema>). AutoCDC does not support changing key columns or their types across incremental pipeline runs. To change keys, perform a full refresh of the target table."
+        ]
+      }
+    },
+    "sqlState" : "42000"
+  },
+  "AUTOCDC_KEY_NOT_IN_SELECTED_SCHEMA" : {
+    "message" : [
+      "Using <caseSensitivity> column name comparison, the AutoCDC key column `<keyColumnName>` is not present in the flow's selected source schema. AutoCDC requires every key column to be present in the source change-data feed and retained by any configured column selection."
     ],
     "sqlState" : "22023"
   },
@@ -226,17 +266,53 @@
     },
     "sqlState" : "22000"
   },
+  "AUTOCDC_MISSING_SEQUENCE_BY" : {
+    "message" : [
+      "AutoCDC flow is missing a required `sequence_by` expression. Specify a `sequence_by` column or expression that orders incoming change events."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_MISSING_SOURCE" : {
+    "message" : [
+      "AutoCDC flow is missing a required `source` table name. Specify the name of the streaming source table the flow should read from."
+    ],
+    "sqlState" : "22023"
+  },
   "AUTOCDC_MULTIPART_COLUMN_IDENTIFIER" : {
     "message" : [
       "Expected a single column identifier; got the multi-part identifier <columnName> (parts: <nameParts>)."
     ],
-    "sqlState" : "42703"
+    "sqlState" : "22023"
   },
-  "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT" : {
+  "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET" : {
     "message" : [
-      "Using <caseSensitivity> column name comparison, the column `<columnName>` in the <schemaName> schema conflicts with the reserved AutoCDC column name `<reservedColumnName>`. Rename or remove the column."
+      "Invalid AutoCDC destination <tableName> with multiple flows: <flows>. An AutoCDC target table must have exactly one flow writing to it."
+    ],
+    "sqlState" : "42000"
+  },
+  "AUTOCDC_NON_COLUMN_IDENTIFIER" : {
+    "message" : [
+      "Expected a column identifier; got the non-attribute expression `<expression>`. AutoCDC keys, sequence_by, column_list, and except_column_list must reference unqualified column names."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_RESERVED_COLUMN_NAME_PREFIX_CONFLICT" : {
+    "message" : [
+      "The column `<columnName>` in the <schemaName> schema collides with the reserved AutoCDC column name prefix `<reservedColumnNamePrefix>` (using <caseSensitivity> column name comparison). Rename or remove the column."
     ],
     "sqlState" : "42710"
+  },
+  "AUTOCDC_SCD2_NOT_SUPPORTED" : {
+    "message" : [
+      "AutoCDC flows do not currently support SCD Type 2 transformations."
+    ],
+    "sqlState" : "0A000"
+  },
+  "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE" : {
+    "message" : [
+      "Cannot start AutoCDC flow: the target table <tableName> (format: <format>) does not support row-level operations. AutoCDC requires a target backed by a connector that supports MERGE."
+    ],
+    "sqlState" : "0A000"
   },
   "AVRO_CANNOT_WRITE_NULL_FIELD" : {
     "message" : [
@@ -3681,6 +3757,12 @@
     ],
     "sqlState" : "42K0N"
   },
+  "INVALID_EXTERNAL_VALUE" : {
+    "message" : [
+      "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
+    ],
+    "sqlState" : "42K0N"
+  },
   "INVALID_EXTRACT_BASE_FIELD_TYPE" : {
     "message" : [
       "Can't extract a value from <base>. Need a complex type [STRUCT, ARRAY, MAP] but got <other>."
@@ -3710,6 +3792,11 @@
       "Flow <flowIdentifier> returns an invalid relation type."
     ],
     "subClass" : {
+      "AUTOCDC_RELATION_FOR_TEMPORARY_VIEW" : {
+        "message" : [
+          "AutoCDC flows must target a streaming table because their reconciliation semantics require a streaming-table sink, but the flow <flowIdentifier> attempts to write an AutoCDC relation to the temporary view <viewIdentifier>."
+        ]
+      },
       "BATCH_RELATION_FOR_STREAMING_TABLE" : {
         "message" : [
           "Streaming tables may only be defined by streaming relations, but the flow <flowIdentifier> attempts to write a batch relation to the streaming table <tableIdentifier>. Consider using the STREAM operator in Spark-SQL to convert the batch relation into a streaming relation, or populating the streaming table with an append once-flow instead."
@@ -4689,6 +4776,16 @@
           "Partition key <partKey> must set value."
         ]
       },
+      "EMPTY_QUANTIFIED_PATTERN" : {
+        "message" : [
+          "Expected something between '(' and ')'."
+        ]
+      },
+      "EMPTY_REFRESH_RESOURCE_PATH" : {
+        "message" : [
+          "Resource paths cannot be empty in REFRESH statements. Use / to match everything."
+        ]
+      },
       "FUNCTION_WITH_UNSUPPORTED_SYNTAX" : {
         "message" : [
           "The function <prettyName> does not support <syntax>."
@@ -4699,14 +4796,29 @@
           "Expected a column reference for transform <transform>: <expr>."
         ]
       },
+      "INVALID_REFRESH_RESOURCE_PATH" : {
+        "message" : [
+          "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths."
+        ]
+      },
       "INVALID_TABLE_FUNCTION_IDENTIFIER_ARGUMENT_MISSING_PARENTHESES" : {
         "message" : [
           "Syntax error: call to table-valued function is invalid because parentheses are missing around the provided TABLE argument <argumentName>; please surround this with parentheses and try again."
         ]
       },
+      "INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING" : {
+        "message" : [
+          "The table function call includes a table argument with an invalid partitioning/ordering specification: the <clause> clause included multiple expressions without parentheses surrounding them; please add parentheses around these expressions and then retry the query again."
+        ]
+      },
       "INVALID_TABLE_VALUED_FUNC_NAME" : {
         "message" : [
           "Table valued function cannot specify database name: <funcName>."
+        ]
+      },
+      "INVALID_WINDOW_FRAME_BOUND" : {
+        "message" : [
+          "Frame bound value must be a literal."
         ]
       },
       "INVALID_WINDOW_REFERENCE" : {
@@ -4759,6 +4871,11 @@
           "Unsupported function name <funcName>."
         ]
       },
+      "UNSUPPORTED_ROW_FORMAT_LINES_TERMINATED_BY" : {
+        "message" : [
+          "LINES TERMINATED BY only supports newline '\\n' right now: <value>."
+        ]
+      },
       "UNSUPPORTED_SQL_STATEMENT" : {
         "message" : [
           "Unsupported SQL statement: <sqlText>."
@@ -4808,6 +4925,12 @@
       }
     },
     "sqlState" : "42823"
+  },
+  "INVALID_TABLESAMPLE_FRACTION" : {
+    "message" : [
+      "Sampling fraction (<fraction>) must be on interval [0, 1]."
+    ],
+    "sqlState" : "22023"
   },
   "INVALID_TEMP_OBJ_QUALIFIER" : {
     "message" : [
@@ -5434,11 +5557,6 @@
       "CROSS_JOIN_NOT_ENABLED" : {
         "message" : [
           "Nearest-by join is implemented as a bounded cross-product internally and is therefore rejected when `spark.sql.crossJoin.enabled = false`. Set `spark.sql.crossJoin.enabled = true` to permit it, or rewrite the query without nearest-by."
-        ]
-      },
-      "EXACT_WITH_NONDETERMINISTIC_EXPRESSION" : {
-        "message" : [
-          "EXACT nearest-by join is incompatible with the nondeterministic ranking expression <expression>. Use APPROX, or replace the expression with a deterministic one."
         ]
       },
       "NON_ORDERABLE_RANKING_EXPRESSION" : {
@@ -7011,6 +7129,11 @@
       "Streaming query evolution error:"
     ],
     "subClass" : {
+      "CANNOT_ENABLE_ON_EXISTING_CHECKPOINT" : {
+        "message" : [
+          "Cannot enable streaming source evolution on a checkpoint that was created without it. The existing checkpoint uses offset log format version <existingVersion>, which does not support the named source tracking required by streaming source evolution. To use source evolution, start the query with a fresh checkpoint."
+        ]
+      },
       "DUPLICATE_SOURCE_NAMES" : {
         "message" : [
           "Duplicate streaming source names detected: <names>. Each streaming source must have a unique name."
@@ -8889,6 +9012,12 @@
     ],
     "sqlState" : "42KDF"
   },
+  "ZIP_PLANS_NOT_MERGEABLE" : {
+    "message" : [
+      "The two DataFrames in zip() cannot be merged. They must produce the same canonicalized plan after stripping outer Project chains, and must not contain non-scalar Python UDFs."
+    ],
+    "sqlState" : "42K03"
+  },
   "_LEGACY_ERROR_TEMP_0001" : {
     "message" : [
       "Invalid InsertIntoContext."
@@ -9025,11 +9154,6 @@
     ]
   },
   "_LEGACY_ERROR_TEMP_0063" : {
-    "message" : [
-      "<msg>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_0064" : {
     "message" : [
       "<msg>."
     ]
@@ -11437,11 +11561,6 @@
   "_LEGACY_ERROR_TEMP_3218" : {
     "message" : [
       "Must be 2 children: <others>"
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_3219" : {
-    "message" : [
-      "The value (<other>) of the type (<otherClass>) cannot be converted to the <dataType> type."
     ]
   },
   "_LEGACY_ERROR_TEMP_3220" : {

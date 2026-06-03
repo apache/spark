@@ -38,6 +38,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
   /** Returns true iff we support this data type. */
   def canSupport(dataType: DataType): Boolean = UserDefinedType.sqlType(dataType) match {
     case NullType => true
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
     case _: AtomicType => true
     case _: CalendarIntervalType => true
     case t: StructType => t.forall(field => canSupport(field.dataType))
@@ -112,6 +113,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             // Can't call setNullAt() for DecimalType with precision larger than 18.
             s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
           case CalendarIntervalType => s"$rowWriter.write($index, (CalendarInterval) null);"
+          case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+            s"$rowWriter.write($index, (TimestampNanosVal) null);"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
@@ -176,10 +179,19 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
     val element = CodeGenerator.getValue(tmpInput, et, index)
 
+    val setNullElement = et match {
+      case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
+        s"$arrayWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
+      case CalendarIntervalType => s"$arrayWriter.write($index, (CalendarInterval) null);"
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        s"$arrayWriter.write($index, (TimestampNanosVal) null);"
+      case _ => s"$arrayWriter.setNull${elementOrOffsetSize}Bytes($index);"
+    }
+
     val elementAssignment = if (containsNull) {
       s"""
          |if ($tmpInput.isNullAt($index)) {
-         |  $arrayWriter.setNull${elementOrOffsetSize}Bytes($index);
+         |  $setNullElement
          |} else {
          |  ${writeElement(ctx, element, index, et, arrayWriter)}
          |}

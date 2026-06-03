@@ -60,17 +60,20 @@ public final class SpecializedGettersReader {
     if (physicalDataType instanceof PhysicalStringType) {
       return obj.getUTF8String(ordinal);
     }
-    if (physicalDataType instanceof PhysicalGeographyType) {
-      return obj.getGeography(ordinal);
-    }
-    if (physicalDataType instanceof PhysicalGeometryType) {
-      return obj.getGeometry(ordinal);
+    if (physicalDataType instanceof PhysicalBinaryViewType) {
+      return obj.getBinaryView(ordinal);
     }
     if (physicalDataType instanceof PhysicalDecimalType dt) {
       return obj.getDecimal(ordinal, dt.precision(), dt.scale());
     }
     if (physicalDataType instanceof PhysicalCalendarIntervalType) {
       return obj.getInterval(ordinal);
+    }
+    if (physicalDataType instanceof PhysicalTimestampNTZNanosType) {
+      return obj.getTimestampNTZNanos(ordinal);
+    }
+    if (physicalDataType instanceof PhysicalTimestampLTZNanosType) {
+      return obj.getTimestampLTZNanos(ordinal);
     }
     if (physicalDataType instanceof PhysicalBinaryType) {
       return obj.getBinary(ordinal);

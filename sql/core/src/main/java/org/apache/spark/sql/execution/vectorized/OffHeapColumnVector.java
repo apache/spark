@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -33,11 +34,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
-  // Below this count, byte-fill methods (putBytes / putBooleans) write bytes in an inline
-  // loop. At or above this count, they call Platform.setMemory which lowers to a native
-  // memset. The JNI fixed cost of setMemory dominates for very short fills; on the
-  // benchmarked hardware (Apple M4 Max + OpenJDK 21) the crossover sits between 64 and
-  // 512, so 128 is a conservative choice that avoids regression at small counts while
+  // Below this count, byte-fill methods (putBytes / putBooleans / putNulls / putNotNulls)
+  // write bytes in an inline loop. At or above this count, they call Platform.setMemory
+  // which lowers to a native memset. The JNI fixed cost of setMemory dominates for very
+  // short fills; on the benchmarked hardware (Apple M4 Max + OpenJDK 21) the crossover
+  // sits between 64 and 512, so 128 is a conservative choice that avoids regression at
+  // small counts (common for random null patterns where RLE runs are short) while
   // retaining the bulk of the asymptotic gain.
   private static final int SET_MEMORY_THRESHOLD = 128;
 
@@ -127,9 +129,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNulls(int rowId, int count) {
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
-    long offset = nulls + rowId;
-    for (int i = 0; i < count; ++i, ++offset) {
-      Platform.putByte(null, offset, (byte) 1);
+    if (count < SET_MEMORY_THRESHOLD) {
+      long offset = nulls + rowId;
+      for (int i = 0; i < count; ++i, ++offset) {
+        Platform.putByte(null, offset, (byte) 1);
+      }
+    } else {
+      Platform.setMemory(nulls + rowId, (byte) 1, count);
     }
     numNulls += count;
   }
@@ -137,9 +143,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNotNulls(int rowId, int count) {
     if (!hasNull()) return;
-    long offset = nulls + rowId;
-    for (int i = 0; i < count; ++i, ++offset) {
-      Platform.putByte(null, offset, (byte) 0);
+    if (count < SET_MEMORY_THRESHOLD) {
+      long offset = nulls + rowId;
+      for (int i = 0; i < count; ++i, ++offset) {
+        Platform.putByte(null, offset, (byte) 0);
+      }
+    } else {
+      Platform.setMemory(nulls + rowId, (byte) 0, count);
     }
   }
 
@@ -262,6 +272,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
     return UTF8String.fromAddress(null, data + rowId, count);
+  }
+
+  @Override
+  protected BinaryView getBytesAsBinaryView(int rowId, int count) {
+    return BinaryView.fromAddress(null, data + rowId, count);
   }
 
   @Override

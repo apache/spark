@@ -128,7 +128,7 @@ jobs:
           fi
           ls -lh compile-target.tar.gz compile-m2-spark.tar.gz
       - name: Upload compile artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: spark-maven-compile-${{ inputs.branch }}-java${{ inputs.java }}-${{ github.run_id }}
           path: |
@@ -275,7 +275,7 @@ jobs:
         id: download-precompiled
         if: needs.precompile-maven.result == 'success'
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: spark-maven-compile-${{ inputs.branch }}-java${{ matrix.java }}-${{ github.run_id }}
       - name: Extract precompiled artifact
@@ -359,7 +359,7 @@ jobs:
           rm -rf ~/.m2/repository/org/apache/spark
       - name: Upload test results to report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: |
@@ -367,7 +367,7 @@ jobs:
             **/target/surefire-reports/*.xml
       - name: Upload unit tests log files
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: "**/target/unit-tests.log"

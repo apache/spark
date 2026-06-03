@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -62,6 +62,18 @@ abstract class InternalRow extends SpecializedGetters with Serializable {
   def setDecimal(i: Int, value: Decimal, precision: Int): Unit = update(i, value)
 
   def setInterval(i: Int, value: CalendarInterval): Unit = update(i, value)
+
+  /**
+   * Sets a nanosecond NTZ timestamp. On [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]],
+   * use this instead of [[setNullAt]] for null so the variable-length offset is preserved.
+   */
+  def setTimestampNTZNanos(i: Int, value: TimestampNanosVal): Unit = update(i, value)
+
+  /**
+   * Sets a nanosecond LTZ timestamp. On [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]],
+   * use this instead of [[setNullAt]] for null so the variable-length offset is preserved.
+   */
+  def setTimestampLTZNanos(i: Int, value: TimestampNanosVal): Unit = update(i, value)
 
   /**
    * Make a copy of the current [[InternalRow]] object.
@@ -119,6 +131,7 @@ object InternalRow {
    */
   def copyValue(value: Any): Any = value match {
     case v: UTF8String => v.copy()
+    case v: BinaryView => v.copy()
     case v: InternalRow => v.copy()
     case v: ArrayData => v.copy()
     case v: MapData => v.copy()
@@ -144,6 +157,10 @@ object InternalRow {
         case _: PhysicalStringType => (input, ordinal) => input.getUTF8String(ordinal)
         case PhysicalBinaryType => (input, ordinal) => input.getBinary(ordinal)
         case PhysicalCalendarIntervalType => (input, ordinal) => input.getInterval(ordinal)
+        case PhysicalTimestampNTZNanosType => (input, ordinal) =>
+          input.getTimestampNTZNanos(ordinal)
+        case PhysicalTimestampLTZNanosType => (input, ordinal) =>
+          input.getTimestampLTZNanos(ordinal)
         case t: PhysicalDecimalType => (input, ordinal) =>
           input.getDecimal(ordinal, t.precision, t.scale)
         case t: PhysicalStructType => (input, ordinal) => input.getStruct(ordinal, t.fields.length)
@@ -185,11 +202,17 @@ object InternalRow {
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
     case CalendarIntervalType =>
       (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
+    case _: TimestampNTZNanosType =>
+      (input, v) => input.setTimestampNTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
+    case _: TimestampLTZNanosType =>
+      (input, v) => input.setTimestampLTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
     case NullType => (input, _) => input.setNullAt(ordinal)
     case StringType => (input, v) => input.update(ordinal, v.asInstanceOf[UTF8String].copy())
+    case _: GeometryType | _: GeographyType =>
+      (input, v) => input.update(ordinal, v.asInstanceOf[BinaryView].copy())
     case _: StructType => (input, v) => input.update(ordinal, v.asInstanceOf[InternalRow].copy())
     case _: ArrayType => (input, v) => input.update(ordinal, v.asInstanceOf[ArrayData].copy())
     case _: MapType => (input, v) => input.update(ordinal, v.asInstanceOf[MapData].copy())

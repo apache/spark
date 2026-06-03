@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.Union
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -406,7 +407,7 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
       mem.addData(1, 2)
       registerPersistedView("complete-view", query = dfFlowFunc(Seq(1, 2).toDF("x")))
       registerPersistedView("incremental-view", query = dfFlowFunc(mem.toDF()))
-      registerTable("`complete-table`", query = Option(readFlowFunc("complete-view")))
+      registerTable("`complete-table`", query = Option(readFlowFunc("`complete-view`")))
       registerTable("`incremental-table`")
       registerFlow(
         "`incremental-table`",
@@ -507,6 +508,38 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     val sink = g.sink(TableIdentifier("sink_a"))
     assert(sink.format == "memory")
     assert(g.flow(TableIdentifier("sink_flow")).isInstanceOf[StreamingFlow])
+  }
+
+  test("AutoCdcFlow registers and resolves to AutoCdcMergeFlow") {
+    val session = spark
+    import session.implicits._
+
+    val P = new TestGraphRegistrationContext(spark) {
+      val mem = MemoryStream[Int]
+      val cdcEvents = mem.toDF().select($"value" as "id", $"value" as "seq")
+      registerTable("target")
+      registerFlow(
+        AutoCdcFlow(
+          identifier = fullyQualifiedIdentifier("auto_cdc_flow"),
+          destinationIdentifier = fullyQualifiedIdentifier("target"),
+          func = dfFlowFunc(cdcEvents),
+          queryContext = QueryContext(
+            currentCatalog = Some(TestGraphRegistrationContext.DEFAULT_CATALOG),
+            currentDatabase = Some(TestGraphRegistrationContext.DEFAULT_DATABASE)
+          ),
+          origin = QueryOrigin.empty,
+          changeArgs = ChangeArgs(
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = $"seq",
+            storedAsScdType = ScdType.Type1
+          )
+        )
+      )
+    }
+    val g = P.resolveToDataflowGraph()
+    assert(
+      g.flow(fullyQualifiedIdentifier("auto_cdc_flow")).isInstanceOf[AutoCdcMergeFlow]
+    )
   }
 
   /** Verifies the [[DataflowGraph]] has the specified [[Flow]] with the specified schema. */

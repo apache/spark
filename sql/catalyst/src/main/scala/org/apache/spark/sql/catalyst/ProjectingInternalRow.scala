@@ -93,16 +93,20 @@ case class ProjectingInternalRow(schema: StructType,
     row.getBinary(colOrdinals(ordinal))
   }
 
-  override def getGeography(ordinal: Int): GeographyVal = {
-    row.getGeography(colOrdinals(ordinal))
-  }
-
-  override def getGeometry(ordinal: Int): GeometryVal = {
-    row.getGeometry(colOrdinals(ordinal))
+  override def getBinaryView(ordinal: Int): BinaryView = {
+    row.getBinaryView(colOrdinals(ordinal))
   }
 
   override def getInterval(ordinal: Int): CalendarInterval = {
     row.getInterval(colOrdinals(ordinal))
+  }
+
+  override def getTimestampNTZNanos(ordinal: Int): TimestampNanosVal = {
+    row.getTimestampNTZNanos(colOrdinals(ordinal))
+  }
+
+  override def getTimestampLTZNanos(ordinal: Int): TimestampNanosVal = {
+    row.getTimestampLTZNanos(colOrdinals(ordinal))
   }
 
   override def getVariant(ordinal: Int): VariantVal = {

@@ -2587,6 +2587,49 @@ class DataFrame:
         ...
 
     @dispatch_df_method
+    def zip(self, other: "DataFrame") -> "DataFrame":
+        """Combines the columns of this :class:`DataFrame` with another :class:`DataFrame`
+        side-by-side, preserving row alignment between the two inputs.
+
+        Both DataFrames must produce the same canonicalized plan after stripping outer
+        ``Project`` chains. In practice this means they derive from a common source through
+        chains of projection-only operations (:meth:`select`, :meth:`withColumn`,
+        :meth:`withColumnRenamed`, etc.); the chains may differ between the two sides, but
+        anything below them, including any :meth:`filter`, :meth:`orderBy`, :meth:`join`,
+        or aggregation, must be identical on both sides so the two sides stay row-aligned.
+        Non-scalar Python UDFs (e.g., ``GROUPED_MAP``) are not allowed on either side. An
+        :class:`AnalysisException` is thrown when the two DataFrames cannot be aligned.
+
+        .. versionadded:: 4.3.0
+
+        Parameters
+        ----------
+        other : :class:`DataFrame`
+            The DataFrame to combine with, which must derive from the same source as this
+            DataFrame.
+
+        Returns
+        -------
+        :class:`DataFrame`
+            A new DataFrame containing the columns of this DataFrame followed by the columns
+            of `other`.
+
+        Examples
+        --------
+        >>> df = spark.createDataFrame([(1, 2, 3), (4, 5, 6)], ["a", "b", "c"])
+        >>> left = df.select("a")
+        >>> right = df.select("b")
+        >>> left.zip(right).show()
+        +---+---+
+        |  a|  b|
+        +---+---+
+        |  1|  2|
+        |  4|  5|
+        +---+---+
+        """
+        ...
+
+    @dispatch_df_method
     def join(
         self,
         other: "DataFrame",
@@ -6499,12 +6542,12 @@ class DataFrame:
             Use barrier mode execution, ensuring that all Python workers in the stage will be
             launched concurrently.
 
-            .. versionadded: 3.5.0
+            .. versionadded:: 3.5.0
 
         profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
             to be used for mapInPandas.
 
-            .. versionadded: 4.0.0
+            .. versionadded:: 4.0.0
 
 
         Examples
@@ -6601,12 +6644,12 @@ class DataFrame:
             Use barrier mode execution, ensuring that all Python workers in the stage will be
             launched concurrently.
 
-            .. versionadded: 3.5.0
+            .. versionadded:: 3.5.0
 
         profile : :class:`pyspark.resource.ResourceProfile`. The optional ResourceProfile
             to be used for mapInArrow.
 
-            .. versionadded: 4.0.0
+            .. versionadded:: 4.0.0
 
         Examples
         --------

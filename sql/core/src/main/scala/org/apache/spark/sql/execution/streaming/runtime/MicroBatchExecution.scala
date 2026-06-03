@@ -39,13 +39,14 @@ import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability, TransactionalCatalogPlugin}
+import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsRealTimeMode, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, RealTimeStreamScanExec, StreamingDataSourceV2Relation, StreamingDataSourceV2ScanRelation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
 import org.apache.spark.sql.execution.streaming.{AvailableNowTrigger, Offset, OneTimeTrigger, ProcessingTimeTrigger, RealTimeModeAllowlist, RealTimeTrigger, Sink, Source, StreamingQueryPlanTraverseHelper}
-import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CommitMetadata, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2}
+import org.apache.spark.sql.execution.streaming.checkpointing.{CheckpointFileManager, CheckpointVersionManager, CommitMetadata, OffsetLogType, OffsetSeqBase, OffsetSeqLog, OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, StateStoreWriter}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingCheckpointConstants.{DIR_NAME_COMMITS, DIR_NAME_OFFSETS, DIR_NAME_STATE}
 import org.apache.spark.sql.execution.streaming.sources.{ForeachBatchSink, WriteToMicroBatchDataSource, WriteToMicroBatchDataSourceV1}
@@ -250,7 +251,15 @@ class MicroBatchExecution(
               log"from DataSourceV2 named '${MDC(LogKeys.STREAMING_DATA_SOURCE_NAME, srcName)}' " +
               log"${MDC(LogKeys.STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
             // TODO: operator pushdown.
-            val scan = table.newScanBuilder(options).build()
+            // Passes the full output schema (not a pruned subset) so that connectors
+            // implementing SupportsMetadataColumns can include metadata columns in readSchema().
+            val scanBuilder = table.newScanBuilder(options)
+            scanBuilder match {
+              case r: SupportsPushDownRequiredColumns =>
+                r.pruneColumns(output.toStructType)
+              case _ =>
+            }
+            val scan = scanBuilder.build()
             val stream = scan.toMicroBatchStream(metadataPath)
             val relation = StreamingDataSourceV2Relation(
                 table,
@@ -496,20 +505,21 @@ class MicroBatchExecution(
       sourceIdMap
     )
 
-    // Read the offset log format version from the last written offset log entry. If no entries
-    // are found, use the set/default value from the config.
-    val offsetLogFormatVersion = if (latestStartedBatch.isDefined) {
-      latestStartedBatch.get._2.version
-    } else {
+    // For existing queries, the offset log format version is read from the last written offset log
+    // entry; for new queries, it is resolved from the session config (honoring any feature-driven
+    // minimums). Restarting with an incompatible feature set on an existing checkpoint is rejected
+    // inside the manager.
+    if (latestStartedBatch.isEmpty) {
       // If no offset log entries are found, assert that the query does not have any committed
       // batches to be extra safe.
       assert(lastCommittedBatchId == -1L)
-      sparkSessionForStream.conf.get(SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION)
     }
+    val offsetLogFormatVersion = CheckpointVersionManager.resolveOffsetLogVersion(
+      sparkSessionForStream, latestStartedBatch)
 
-    // Set the offset log format version in the sparkSessionForStream conf
-    sparkSessionForStream.conf.set(
-      SQLConf.STREAMING_OFFSET_LOG_FORMAT_VERSION.key, offsetLogFormatVersion)
+    // Persist the resolved offset log format version on the streaming session.
+    CheckpointVersionManager.setFormatVersion(
+      sparkSessionForStream, OffsetLogType, offsetLogFormatVersion)
 
     val execCtx = new MicroBatchExecutionContext(id, runId, name, triggerClock, sources, sink,
       progressReporter, -1, sparkSession,

@@ -87,9 +87,10 @@ object AlwaysNull extends InternalRow {
   override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = notSupported
   override def getUTF8String(ordinal: Int): UTF8String = notSupported
   override def getBinary(ordinal: Int): Array[Byte] = notSupported
-  override def getGeography(ordinal: Int): GeographyVal = notSupported
-  override def getGeometry(ordinal: Int): GeometryVal = notSupported
+  override def getBinaryView(ordinal: Int): BinaryView = notSupported
   override def getInterval(ordinal: Int): CalendarInterval = notSupported
+  override def getTimestampNTZNanos(ordinal: Int): TimestampNanosVal = notSupported
+  override def getTimestampLTZNanos(ordinal: Int): TimestampNanosVal = notSupported
   override def getVariant(ordinal: Int): VariantVal = notSupported
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = notSupported
   override def getArray(ordinal: Int): ArrayData = notSupported
@@ -119,9 +120,10 @@ object AlwaysNonNull extends InternalRow {
   override def getDecimal(ordinal: Int, precision: Int, scale: Int): Decimal = notSupported
   override def getUTF8String(ordinal: Int): UTF8String = UTF8String.fromString("test")
   override def getBinary(ordinal: Int): Array[Byte] = notSupported
-  override def getGeography(ordinal: Int): GeographyVal = notSupported
-  override def getGeometry(ordinal: Int): GeometryVal = notSupported
+  override def getBinaryView(ordinal: Int): BinaryView = notSupported
   override def getInterval(ordinal: Int): CalendarInterval = notSupported
+  override def getTimestampNTZNanos(ordinal: Int): TimestampNanosVal = notSupported
+  override def getTimestampLTZNanos(ordinal: Int): TimestampNanosVal = notSupported
   override def getVariant(ordinal: Int): VariantVal = notSupported
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = notSupported
   override def getArray(ordinal: Int): ArrayData = stringToUTF8Array(Array("1", "2", "3"))

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1991,6 +1992,40 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       ),
       queryContext = Array(ExpectedContext("", "", 0, 21, "array_join(x, ', ', 1)"))
     )
+  }
+
+  test("array_join with nullable nullReplacement under whole-stage codegen") {
+    // With a nullable nullReplacement column and an upstream IsNotNull
+    // filter that tightens the array (and delimiter) to non-nullable, whole-stage codegen used to
+    // build the joined string but leave ev.isNull = true, discarding every row as NULL. The result
+    // must match interpreted eval(). The source is materialized via a cached temp view (an
+    // InMemoryRelation), so the plan is not folded to interpreted eval by ConvertToLocalRelation.
+    withTempView("array_join_codegen") {
+      Seq(
+        (Seq[String]("a", null, "b"), ",", "NR"),
+        (Seq[String]("a", null, "b"), ",", null),
+        (Seq[String]("x", "y"), "-", "NR")
+      ).toDF("arr", "delim_col", "repl_col").createOrReplaceTempView("array_join_codegen")
+      spark.catalog.cacheTable("array_join_codegen")
+
+      val query =
+        "SELECT array_join(arr, delim_col, repl_col) FROM array_join_codegen " +
+          "WHERE arr IS NOT NULL AND delim_col IS NOT NULL"
+
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+        val df = sql(query)
+        assert(
+          df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "expected the array_join query to run inside whole-stage codegen")
+        checkAnswer(df, Seq(Row("a,NR,b"), Row(null), Row("x-y")))
+      }
+
+      withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+        checkAnswer(sql(query), Seq(Row("a,NR,b"), Row(null), Row("x-y")))
+      }
+    }
   }
 
   test("array_min function") {
@@ -6348,7 +6383,159 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
           call_function("spark_catalog.default.custom_sum", $"a")),
         Row(12.0, 12.0, 12.0))
     }
+  }
 
+  private def isPositiveZero(d: Double): Boolean =
+    java.lang.Double.doubleToRawLongBits(d) == 0L
+
+  test("SPARK-54918: array set ops normalize -0.0 and NaN via VALUES inline table") {
+    val r = sql("""
+      SELECT
+        array_distinct(a) AS d,
+        array_union(a, b) AS u,
+        array_intersect(a, b) AS i,
+        array_except(a, b) AS e,
+        arrays_overlap(a, b) AS o
+      FROM VALUES (array(-0.0d, 0.0d, double('NaN')), array(0.0d, double('NaN')))
+      AS t(a, b)
+    """).head()
+
+    val distinct = r.getSeq[Double](0)
+    assert(distinct.length == 2)
+    assert(distinct.exists(isPositiveZero))
+    assert(distinct.exists(_.isNaN))
+
+    val union = r.getSeq[Double](1)
+    assert(union.length == 2)
+    assert(union.exists(isPositiveZero))
+    assert(union.exists(_.isNaN))
+
+    val intersect = r.getSeq[Double](2)
+    assert(intersect.length == 2)
+    assert(intersect.exists(isPositiveZero))
+    assert(intersect.exists(_.isNaN))
+
+    val except = r.getSeq[Double](3)
+    assert(except.isEmpty)
+
+    assert(r.getBoolean(4))
+  }
+
+  test("SPARK-54918: array_distinct normalizes -0.0 to +0.0 - literals") {
+    val r1 = Seq(1).toDF()
+      .select(array_distinct(typedLit(Array(-0.0d, 0.0d)))).head().getSeq[Double](0)
+
+    assert(r1.length == 1)
+    assert(isPositiveZero(r1.head))
+
+    val r2 = Seq(1).toDF()
+      .select(array_distinct(
+        typedLit(Array(Double.NaN, 0.0d, -0.0d, Double.NaN)))
+      ).head().getSeq[Double](0)
+
+    assert(r2.length == 2)
+    assert(r2.exists(_.isNaN))
+    assert(r2.exists(isPositiveZero))
+  }
+
+  test("SPARK-54918: array_distinct normalizes -0.0 to +0.0") {
+    val r1 = Seq(Array(-0.0d, 0.0d)).toDF("a")
+      .select(array_distinct($"a")).head().getSeq[Double](0)
+
+    assert(r1.length == 1)
+    assert(isPositiveZero(r1.head))
+
+    val r2 = Seq(Array(Double.NaN, 0.0d, -0.0d, Double.NaN)).toDF("a")
+      .select(array_distinct($"a")).head().getSeq[Double](0)
+
+    assert(r2.length == 2)
+    assert(r2.exists(_.isNaN))
+    assert(r2.exists(isPositiveZero))
+  }
+
+  test("SPARK-54918: array_union normalizes -0.0 to +0.0 - literals") {
+    val r = Seq(1).toDF()
+      .select(array_union(
+        typedLit(Array(-0.0d)),
+        typedLit(Array(0.0d)))
+      ).head().getSeq[Double](0)
+
+    assert(r.length == 1)
+    assert(isPositiveZero(r.head))
+  }
+
+  test("SPARK-54918: array_union normalizes -0.0 to +0.0") {
+    val r = Seq((Array(-0.0d), Array(0.0d))).toDF("a", "b")
+      .select(array_union($"a", $"b")).head().getSeq[Double](0)
+
+    assert(r.length == 1)
+    assert(isPositiveZero(r.head))
+  }
+
+  test("SPARK-54918: array_intersect normalizes -0.0 to +0.0 - literals") {
+    val r = Seq(1).toDF()
+      .select(array_intersect(
+        typedLit(Array(-0.0d)),
+        typedLit(Array(0.0d)))
+      ).head().getSeq[Double](0)
+
+    assert(r.length == 1)
+    assert(isPositiveZero(r.head))
+  }
+
+  test("SPARK-54918: array_intersect normalizes -0.0 to +0.0") {
+    val r = Seq((Array(-0.0d), Array(0.0d))).toDF("a", "b")
+      .select(array_intersect($"a", $"b")).head().getSeq[Double](0)
+
+    assert(r.length == 1)
+    assert(isPositiveZero(r.head))
+  }
+
+  test("SPARK-54918: array_except normalizes -0.0 to +0.0 - literals") {
+    val r1 = Seq(1).toDF()
+      .select(array_except(
+        typedLit(Array(-0.0d)),
+        typedLit(Array(0.0d)))
+      ).head().getSeq[Double](0)
+
+    assert(r1.isEmpty)
+
+    val r2 = Seq(1).toDF()
+      .select(array_except(
+        typedLit(Array(0.0d)),
+        typedLit(Array(-0.0d)))
+      ).head().getSeq[Double](0)
+
+    assert(r2.isEmpty)
+  }
+
+  test("SPARK-54918: array_except normalizes -0.0 to +0.0") {
+    val r1 = Seq((Array(-0.0d), Array(0.0d))).toDF("a", "b")
+      .select(array_except($"a", $"b")).head().getSeq[Double](0)
+
+    assert(r1.isEmpty)
+
+    val r2 = Seq((Array(0.0d), Array(-0.0d))).toDF("a", "b")
+      .select(array_except($"a", $"b")).head().getSeq[Double](0)
+
+    assert(r2.isEmpty)
+  }
+
+  test("SPARK-54918: arrays_overlap normalizes -0.0 to +0.0 - literals") {
+    val r = Seq(1).toDF()
+      .select(arrays_overlap(
+        typedLit(Array(-0.0d)),
+        typedLit(Array(0.0d)))
+      ).head().getBoolean(0)
+
+    assert(r)
+  }
+
+  test("SPARK-54918: arrays_overlap normalizes -0.0 to +0.0") {
+    val r = Seq((Array(-0.0d), Array(0.0d))).toDF("a", "b")
+      .select(arrays_overlap($"a", $"b")).head().getBoolean(0)
+
+    assert(r)
   }
 }
 

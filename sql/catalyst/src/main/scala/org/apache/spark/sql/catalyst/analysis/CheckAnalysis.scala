@@ -701,11 +701,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "expression" -> toSQLExpr(rankingExpression),
                 "type" -> toSQLType(rankingExpression.dataType)))
 
-          case j @ NearestByJoin(_, _, _, false, _, rankingExpression, _)
-              if !rankingExpression.deterministic =>
-            j.failAnalysis(
-              errorClass = "NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
-              messageParameters = Map("expression" -> toSQLExpr(rankingExpression)))
+          case z: Zip =>
+            // ResolveZip succeeded for all valid inputs, so a surviving Zip means the two
+            // sides either don't share a base or contain a non-scalar Python UDF. Either way
+            // we surface ZIP_PLANS_NOT_MERGEABLE -- without this we'd fall through to the
+            // generic unresolved-operator INTERNAL_ERROR catch-all.
+            z.failAnalysis(
+              errorClass = "ZIP_PLANS_NOT_MERGEABLE",
+              messageParameters = Map.empty)
 
           case a: Aggregate =>
             a.groupingExpressions.foreach(

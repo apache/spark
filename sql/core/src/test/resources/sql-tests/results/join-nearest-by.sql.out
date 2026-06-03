@@ -228,27 +228,16 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  EXACT NEAREST 1 BY SIMILARITY rand() + p.pscore
+SELECT COUNT(*) AS num_rows
+FROM (
+  SELECT u.user_id, p.product
+  FROM users u JOIN products p
+    EXACT NEAREST 1 BY SIMILARITY rand() + p.pscore
+)
 -- !query schema
-struct<>
+struct<num_rows:bigint>
 -- !query output
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
-  "sqlState" : "42604",
-  "messageParameters" : {
-    "expression" : "\"(rand() + pscore)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 42,
-    "stopIndex" : 106,
-    "fragment" : "JOIN products p\n  EXACT NEAREST 1 BY SIMILARITY rand() + p.pscore"
-  } ]
-}
+3
 
 
 -- !query

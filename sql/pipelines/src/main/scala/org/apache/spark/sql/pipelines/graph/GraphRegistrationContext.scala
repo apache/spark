@@ -59,7 +59,7 @@ class GraphRegistrationContext(
   }
 
   def registerFlow(flowDef: UnresolvedFlow): Unit = {
-    flows += flowDef.copy(sqlConf = defaultSqlConf ++ flowDef.sqlConf)
+    flows += flowDef.withSqlConf(defaultSqlConf ++ flowDef.sqlConf)
   }
 
   private def isEmpty: Boolean = {

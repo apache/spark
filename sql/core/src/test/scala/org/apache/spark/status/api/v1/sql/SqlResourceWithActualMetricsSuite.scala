@@ -180,10 +180,16 @@ class SqlResourceWithActualMetricsSuite
       val recordsTotal = (json \ "recordsTotal").extract[Long]
       val recordsFiltered = (json \ "recordsFiltered").extract[Long]
       val aaData = (json \ "aaData").children
+      val summary = json \ "summary"
       assert(draw === 1, "draw should be echoed back")
       assert(recordsTotal > 0, "should have some executions")
       assert(recordsFiltered === recordsTotal, "no filter applied")
       assert(aaData.size <= 5, "should respect page length")
+      assert((summary \ "totalQueries").extract[Long] === recordsTotal)
+      assert((summary \ "averageDuration").extract[Long] >= 0)
+      assert((summary \ "runningQueries").extract[Long] >= 0)
+      assert((summary \ "failedQueries").extract[Long] >= 0)
+      assert((summary \ "failureRate").extract[Double] >= 0.0)
 
       // Verify row data fields
       val firstRow = aaData.head
@@ -237,11 +243,14 @@ class SqlResourceWithActualMetricsSuite
         val groupedJson = JsonMethods.parse(groupedOpt.get)
         val groupedRecordsTotal = (groupedJson \ "recordsTotal").extract[Long]
         val groupedRecordsFiltered = (groupedJson \ "recordsFiltered").extract[Long]
+        val groupedSummary = groupedJson \ "summary"
         val groupedRows = (groupedJson \ "aaData").children
         assert(groupedRecordsTotal === groupedRows.size,
           "with no filter, recordsTotal should match returned root count")
         assert(groupedRecordsFiltered === groupedRows.size,
           "with no filter, recordsFiltered should match returned root count")
+        assert((groupedSummary \ "totalQueries").extract[Long] === groupedRecordsFiltered,
+          "grouped summary should count root rows only")
         // Every row in grouped mode is either a true root (id == rootExecutionId)
         // or an orphan sub whose real parent is absent from the result set.
         val visibleIds = groupedRows.map(r => (r \ "id").extract[Long]).toSet
@@ -272,9 +281,13 @@ class SqlResourceWithActualMetricsSuite
         val (flatCode, flatOpt, _) = getContentAndCode(flatUrl)
         assert(flatCode === HttpServletResponse.SC_OK)
         val flatJson = JsonMethods.parse(flatOpt.get)
+        val flatRecordsFiltered = (flatJson \ "recordsFiltered").extract[Long]
+        val flatSummary = flatJson \ "summary"
         val flatRows = (flatJson \ "aaData").children
         assert(flatRows.size > groupedRows.size,
           "flat listing should contain at least one extra sub-execution row")
+        assert((flatSummary \ "totalQueries").extract[Long] === flatRecordsFiltered,
+          "flat summary should count all execution rows")
         val embeddedSubs = groupedRows.map(r => (r \ "subExecutions").children.size).sum
         assert(flatRows.size === groupedRows.size + embeddedSubs,
           "flat size should equal grouped roots plus embedded sub rows")

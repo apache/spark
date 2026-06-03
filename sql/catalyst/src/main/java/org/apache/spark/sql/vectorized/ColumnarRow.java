@@ -23,10 +23,10 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.BinaryView;
 
 /**
  * Row abstraction in {@link ColumnVector}.
@@ -79,10 +79,8 @@ public final class ColumnarRow extends InternalRow {
           row.update(i, getUTF8String(i).copy());
         } else if (pdt instanceof PhysicalBinaryType) {
           row.update(i, getBinary(i));
-        } else if (pdt instanceof PhysicalGeographyType) {
-          row.update(i, getGeography(i));
-        } else if (pdt instanceof PhysicalGeometryType) {
-          row.update(i, getGeometry(i));
+        } else if (pdt instanceof PhysicalBinaryViewType) {
+          row.update(i, getBinaryView(i).copy());
         } else if (pdt instanceof PhysicalDecimalType t) {
           row.setDecimal(i, getDecimal(i, t.precision(), t.scale()), t.precision());
         } else if (pdt instanceof PhysicalStructType t) {
@@ -146,18 +144,23 @@ public final class ColumnarRow extends InternalRow {
   }
 
   @Override
-  public GeographyVal getGeography(int ordinal) {
-    return data.getChild(ordinal).getGeography(rowId);
-  }
-
-  @Override
-  public GeometryVal getGeometry(int ordinal) {
-    return data.getChild(ordinal).getGeometry(rowId);
+  public BinaryView getBinaryView(int ordinal) {
+    return data.getChild(ordinal).getBinaryView(rowId);
   }
 
   @Override
   public CalendarInterval getInterval(int ordinal) {
     return data.getChild(ordinal).getInterval(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
+    return data.getChild(ordinal).getTimestampNTZNanos(rowId);
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int ordinal) {
+    return data.getChild(ordinal).getTimestampLTZNanos(rowId);
   }
 
   @Override

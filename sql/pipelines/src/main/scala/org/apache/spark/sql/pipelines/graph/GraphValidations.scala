@@ -34,6 +34,25 @@ trait GraphValidations extends Logging {
    */
   protected[pipelines] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
     val multiQueryTables = flowsTo.filter(_._2.size > 1)
+
+    // A multiflow table may not have an AutoCDC flow; AutoCDC targets must have exactly one
+    // input flow.
+    multiQueryTables
+      .find { case (_, flows) => flows.exists(isAutoCdcFlow) }
+      .foreach {
+        case (dest, flows) =>
+          throw new AnalysisException(
+            "AUTOCDC_MULTIPLE_FLOWS_TO_TARGET",
+            Map(
+              "tableName" -> dest.unquotedString,
+              "flows" -> flows
+                .map(_.displayName)
+                .sorted
+                .mkString(", ")
+            )
+          )
+      }
+
     // Non-streaming tables do not support multiflow.
     multiQueryTables
       .find {
@@ -56,6 +75,12 @@ trait GraphValidations extends Logging {
       }
 
     multiQueryTables
+  }
+
+  /** Returns true iff the given flow is an [[AutoCdcFlow]] (resolved or not). */
+  private def isAutoCdcFlow(f: Flow): Boolean = f match {
+    case _: AutoCdcFlow | _: AutoCdcMergeFlow => true
+    case _ => false
   }
 
   /**
@@ -126,8 +151,21 @@ trait GraphValidations extends Logging {
                 )
               }
             case _: TemporaryView =>
-              // Temporary views' flows are allowed to be either streaming or batch, so no
-              // validation needs to be done for them
+              // Temporary views' flows are generally allowed to be either streaming or batch.
+              resolvedFlow match {
+                case _: AutoCdcMergeFlow =>
+                  // The exception is AutoCDC flows, which require a streaming-table sink to
+                  // immediately execute MERGE against.
+                  throw new AnalysisException(
+                    errorClass =
+                      "INVALID_FLOW_QUERY_TYPE.AUTOCDC_RELATION_FOR_TEMPORARY_VIEW",
+                    messageParameters = Map(
+                      "flowIdentifier" -> resolvedFlow.identifier.quotedString,
+                      "viewIdentifier" -> destTableIdentifier.quotedString
+                    )
+                  )
+                case _ => // OK: any other flow is permitted to target a temporary view.
+              }
           }
         }
       }
@@ -215,7 +253,7 @@ trait GraphValidations extends Logging {
   }
 
   protected def validateUserSpecifiedSchemas(): Unit = {
-    flows.flatMap(f => table.get(f.identifier)).foreach { t: TableInput =>
+    flows.flatMap(f => table.get(f.identifier)).foreach { t: TableElement =>
       // The output inferred schema of a table is the declared schema merged with the
       // schema of all incoming flows. This must be equivalent to the declared schema.
       val inferredSchema = SchemaInferenceUtils
