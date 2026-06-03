@@ -688,6 +688,8 @@ class LegacyFastTimestampFormatter(pattern: String, zoneId: ZoneId, locale: Loca
   override def parseNanos(s: String, precision: Int): TimestampNanosVal =
     throw TimestampFormatter.legacyNanosUnsupported()
 
+  // Without this override the trait default throws SparkException.internalError instead of the
+  // user-facing legacyNanosUnsupported error.
   override def parseWithoutTimeZoneNanos(
       s: String,
       precision: Int,
@@ -741,6 +743,8 @@ class LegacySimpleTimestampFormatter(
   override def parseNanos(s: String, precision: Int): TimestampNanosVal =
     throw TimestampFormatter.legacyNanosUnsupported()
 
+  // Without this override the trait default throws SparkException.internalError instead of the
+  // user-facing legacyNanosUnsupported error.
   override def parseWithoutTimeZoneNanos(
       s: String,
       precision: Int,
