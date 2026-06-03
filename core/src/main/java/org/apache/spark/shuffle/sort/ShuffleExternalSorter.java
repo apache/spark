@@ -304,7 +304,8 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     }
 
     writeSortedFile(false);
-    final long spillSize = freeMemory();
+    final long spillSize = getMemoryUsage();
+    freeMemory();
     inMemSorter.reset();
     // Reset the in-memory sorter's pointer array only after freeing up the memory pages holding the
     // records. Otherwise, if the task is over allocated memory, then without freeing the memory
@@ -376,7 +377,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   private void growPointerArrayIfNecessary() throws IOException {
     assert(inMemSorter != null);
     if (!inMemSorter.hasSpaceForAnotherRecord()) {
-      if (inMemSorter.numRecords() == 0) {
+      if (!inMemSorter.hasPointerArray()) {
         allocateInitialPointerArray();
         return;
       }
@@ -391,13 +392,13 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
         spill();
       } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
-        if (inMemSorter.numRecords() > 0) {
+        if (inMemSorter.hasPointerArray()) {
           logger.error("Unable to grow the pointer array");
           throw e;
         }
       }
       // check if spilling is triggered or not
-      if (inMemSorter.numRecords() == 0) {
+      if (!inMemSorter.hasPointerArray()) {
         // A spill reset the pointer array while allocateArray() was in progress. Drop the stale
         // growth allocation and restore the initial array outside the spill callback.
         if (array != null) {

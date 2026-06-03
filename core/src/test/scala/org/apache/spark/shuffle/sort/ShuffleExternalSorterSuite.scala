@@ -24,8 +24,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
-import org.apache.spark.internal.config.MEMORY_FRACTION
-import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
+import org.apache.spark.internal.config.{MEMORY_FRACTION, MEMORY_OFFHEAP_ENABLED, SHUFFLE_SORT_USE_RADIXSORT}
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory._
 import org.apache.spark.unsafe.{Platform, UnsafeAlignedOffset}
@@ -154,6 +153,69 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       "spill should leave the pointer array unallocated until the next insert")
 
     sorter.cleanupResources()
+  }
+
+  test("spill should report all released memory") {
+    val conf = new SparkConf()
+      .setMaster("local[1]")
+      .setAppName("ShuffleExternalSorterSuite")
+      .set(IS_TESTING, true)
+      .set(TEST_MEMORY, 10L * 1024 * 1024)
+      .set(MEMORY_FRACTION, 0.9999)
+
+    sc = new SparkContext(conf)
+    val memoryManager = UnifiedMemoryManager(conf, 1)
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+    val taskContext = mock[TaskContext]
+    val taskMetrics = new TaskMetrics
+    when(taskContext.taskMetrics()).thenReturn(taskMetrics)
+    val sorter = new ShuffleExternalSorter(
+      taskMemoryManager,
+      sc.env.blockManager,
+      taskContext,
+      100,
+      1,
+      conf,
+      new ShuffleWriteMetrics)
+
+    sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    val usedBeforeSpill = sorter.getUsed
+    val spillSize = sorter.spill(Long.MaxValue, sorter)
+
+    assert(spillSize === usedBeforeSpill - sorter.getUsed)
+    assert(taskMetrics.memoryBytesSpilled === spillSize)
+    sorter.cleanupResources()
+  }
+
+  test("minimum pointer array should grow before the first insert") {
+    val conf = new SparkConf()
+      .setMaster("local[1]")
+      .setAppName("ShuffleExternalSorterSuite")
+      .set(IS_TESTING, true)
+      .set(TEST_MEMORY, 10L * 1024 * 1024)
+      .set(MEMORY_FRACTION, 0.9999)
+
+    sc = new SparkContext(conf)
+    val memoryManager = UnifiedMemoryManager(conf, 1)
+
+    Seq(false, true).foreach { useRadixSort =>
+      conf.set(SHUFFLE_SORT_USE_RADIXSORT, useRadixSort)
+      val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+      val taskContext = mock[TaskContext]
+      when(taskContext.taskMetrics()).thenReturn(new TaskMetrics)
+      val sorter = new ShuffleExternalSorter(
+        taskMemoryManager,
+        sc.env.blockManager,
+        taskContext,
+        1,
+        1,
+        conf,
+        new ShuffleWriteMetrics)
+
+      sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+      assert(sorter.closeAndGetSpills().length === 1)
+      sorter.cleanupResources()
+    }
   }
 
   test("data page allocation spill should restore the pointer array") {

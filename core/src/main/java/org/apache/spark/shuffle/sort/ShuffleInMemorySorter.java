@@ -96,6 +96,10 @@ final class ShuffleInMemorySorter {
     return initialSize;
   }
 
+  public boolean hasPointerArray() {
+    return array != null;
+  }
+
   public void reset() {
     pos = 0;
     if (consumer != null) {
