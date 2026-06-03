@@ -186,4 +186,43 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
         StructField("event", eventType, nullable = true),
         derivedFromAtt = false)))
   }
+
+  test("collect nested fields used by ArrayExists and ArrayForAll lambdas") {
+    val elementType = StructType.fromDDL("a int, b int, c int")
+    val eventType = StructType(Seq(
+      StructField("rules", ArrayType(elementType, containsNull = true))))
+    val event = AttributeReference("event", eventType)()
+    val argument = GetStructField(event, 0, Some("rules"))
+    val element = NamedLambdaVariable("x", elementType, nullable = true)
+    val predicate = LambdaFunction(
+      GreaterThan(GetStructField(element, 2, Some("c")), Literal(0)),
+      Seq(element))
+
+    Seq(ArrayExists(argument, predicate), ArrayForAll(argument, predicate)).foreach { function =>
+      val rootFields = SchemaPruning.getRootFields(function)
+      val prunedSchema = SchemaPruning.pruneSchema(
+        StructType(Seq(StructField("event", eventType))),
+        rootFields)
+
+      assert(prunedSchema === StructType.fromDDL(
+        "event struct<rules:array<struct<c:int>>>"))
+    }
+  }
+
+  test("do not collect ArrayExists and ArrayForAll lambda fields when the whole element is used") {
+    val elementType = StructType.fromDDL("a int, b int")
+    val eventType = StructType(Seq(
+      StructField("rules", ArrayType(elementType, containsNull = true))))
+    val event = AttributeReference("event", eventType)()
+    val argument = GetStructField(event, 0, Some("rules"))
+    val element = NamedLambdaVariable("x", elementType, nullable = true)
+    val predicate = LambdaFunction(IsNotNull(element), Seq(element))
+
+    Seq(ArrayExists(argument, predicate), ArrayForAll(argument, predicate)).foreach { function =>
+      assert(SchemaPruning.getRootFields(function) === Seq(
+        SchemaPruning.RootField(
+          StructField("event", eventType, nullable = true),
+          derivedFromAtt = false)))
+    }
+  }
 }
