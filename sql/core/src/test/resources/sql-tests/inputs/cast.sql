@@ -104,11 +104,12 @@ select cast('a' as timestamp_ntz);
 
 -- SPARK-57211: cast string to nanosecond-precision timestamps TIMESTAMP_NTZ(p)/TIMESTAMP_LTZ(p).
 -- The reverse direction (nanos -> string) is not wired yet, so positive cases assert the result
--- type via typeof; negative cases exercise the ANSI parse-error path.
+-- type via typeof. Negative cases exercise the ANSI parse-error path and use IS NULL so the result
+-- column stays non-nanos (a bare nanos result column is not yet serializable by JDBC/thrift).
 select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ntz(9)));
 select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ltz(7)));
-select cast('a' as timestamp_ntz(9));
-select cast('a' as timestamp_ltz(9));
+select cast('a' as timestamp_ntz(9)) is null;
+select cast('a' as timestamp_ltz(9)) is null;
 
 select cast(cast('inf' as double) as timestamp);
 select cast(cast('inf' as float) as timestamp);

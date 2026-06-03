@@ -520,16 +520,16 @@ Project [typeof(cast(2022-01-01 00:00:00.123456789 as timestamp_ltz(7))) AS type
 
 
 -- !query
-select cast('a' as timestamp_ntz(9))
+select cast('a' as timestamp_ntz(9)) is null
 -- !query analysis
-Project [cast(a as timestamp_ntz(9)) AS CAST(a AS TIMESTAMP_NTZ(9))#x]
+Project [isnull(cast(a as timestamp_ntz(9))) AS (CAST(a AS TIMESTAMP_NTZ(9)) IS NULL)#x]
 +- OneRowRelation
 
 
 -- !query
-select cast('a' as timestamp_ltz(9))
+select cast('a' as timestamp_ltz(9)) is null
 -- !query analysis
-Project [cast(a as timestamp_ltz(9)) AS CAST(a AS TIMESTAMP_LTZ(9))#x]
+Project [isnull(cast(a as timestamp_ltz(9))) AS (CAST(a AS TIMESTAMP_LTZ(9)) IS NULL)#x]
 +- OneRowRelation
 
 

@@ -1305,7 +1305,7 @@ timestamp_ltz(7)
 
 
 -- !query
-select cast('a' as timestamp_ntz(9))
+select cast('a' as timestamp_ntz(9)) is null
 -- !query schema
 struct<>
 -- !query output
@@ -1330,7 +1330,7 @@ org.apache.spark.SparkDateTimeException
 
 
 -- !query
-select cast('a' as timestamp_ltz(9))
+select cast('a' as timestamp_ltz(9)) is null
 -- !query schema
 struct<>
 -- !query output
