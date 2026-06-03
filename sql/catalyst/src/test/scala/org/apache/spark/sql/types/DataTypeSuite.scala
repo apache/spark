@@ -1517,10 +1517,11 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
           assert(DataType.fromJson(s"""\"$name($n )\"""") === factory(n))
         }
 
-        // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION. The overflowing
-        // case verifies the original digit string is preserved instead of leaking
+        // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION. Precision 6 is
+        // valid (maps to the GA type) and is covered separately. The overflowing case
+        // verifies the original digit string is preserved instead of leaking
         // NumberFormatException.
-        Seq("0", "6", "10", overflowing).foreach { p =>
+        Seq("0", "10", overflowing).foreach { p =>
           checkError(
             exception = intercept[SparkException] {
               DataType.fromJson(s"""\"$name($p)\"""")
@@ -1563,6 +1564,20 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
     assert(DataType.fromJson("\"timestamp_ntz\"") === TimestampNTZType)
   }
 
+  test("SPARK-57163: parse timestamp_*(6) as the GA microsecond types") {
+    // Precision 6 maps to the GA types regardless of the preview flag.
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> flag) {
+        assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
+        assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
+        assert(DataType.fromDDL("ts timestamp_ntz(6)") ===
+          StructType(Seq(StructField("ts", TimestampNTZType))))
+        assert(DataType.fromDDL("ts timestamp_ltz(6)") ===
+          StructType(Seq(StructField("ts", TimestampType))))
+      }
+    }
+  }
+
   test("SPARK-56965: JSON parser rejects nanos timestamp types when preview flag is off") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
       Seq(
@@ -1579,6 +1594,9 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
               "configKey" -> "spark.sql.timestampNanosTypes.enabled",
               "configValue" -> "true"))
       }
+      // Precision 6 maps to the GA types and stays accepted with the gate off.
+      assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
+      assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
     }
   }
 

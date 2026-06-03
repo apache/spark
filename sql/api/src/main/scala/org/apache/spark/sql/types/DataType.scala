@@ -236,18 +236,34 @@ object DataType {
       // For backwards compatibility, previously the type name of NullType is "null"
       case "null" => NullType
       case TIMESTAMP_LTZ_NANOS_TYPE(precision) =>
-        DataTypeErrors.checkTimestampNanosTypesEnabled()
-        try TimestampLTZNanosType(precision.toInt)
-        catch {
-          case _: NumberFormatException =>
-            throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
+        val p =
+          try precision.toInt
+          catch {
+            case _: NumberFormatException =>
+              throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
+          }
+        // Precision 6 (microseconds) maps to the GA type and is accepted regardless of the
+        // nanos timestamp types preview flag.
+        if (p == 6) {
+          TimestampType
+        } else {
+          DataTypeErrors.checkTimestampNanosTypesEnabled()
+          TimestampLTZNanosType(p)
         }
       case TIMESTAMP_NTZ_NANOS_TYPE(precision) =>
-        DataTypeErrors.checkTimestampNanosTypesEnabled()
-        try TimestampNTZNanosType(precision.toInt)
-        catch {
-          case _: NumberFormatException =>
-            throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
+        val p =
+          try precision.toInt
+          catch {
+            case _: NumberFormatException =>
+              throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
+          }
+        // Precision 6 (microseconds) maps to the GA type and is accepted regardless of the
+        // nanos timestamp types preview flag.
+        if (p == 6) {
+          TimestampNTZType
+        } else {
+          DataTypeErrors.checkTimestampNanosTypesEnabled()
+          TimestampNTZNanosType(p)
         }
       case "timestamp_ltz" => TimestampType
       case other =>

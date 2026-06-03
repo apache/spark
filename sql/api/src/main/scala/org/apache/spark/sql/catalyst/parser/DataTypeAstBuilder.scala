@@ -477,22 +477,32 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
     }
   }
 
-  private def parseTimestampLtzNanosPrecision(precision: String): TimestampLTZNanosType = {
+  private def parseTimestampLtzNanosPrecision(precision: String): DataType = {
+    val p =
+      try precision.toInt
+      catch {
+        case _: NumberFormatException =>
+          throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
+      }
+    // Precision 6 (microseconds) maps to the GA type and is accepted regardless of the
+    // nanos timestamp types preview flag.
+    if (p == 6) return TimestampType
     DataTypeErrors.checkTimestampNanosTypesEnabled()
-    try TimestampLTZNanosType(precision.toInt)
-    catch {
-      case _: NumberFormatException =>
-        throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
-    }
+    TimestampLTZNanosType(p)
   }
 
-  private def parseTimestampNtzNanosPrecision(precision: String): TimestampNTZNanosType = {
+  private def parseTimestampNtzNanosPrecision(precision: String): DataType = {
+    val p =
+      try precision.toInt
+      catch {
+        case _: NumberFormatException =>
+          throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
+      }
+    // Precision 6 (microseconds) maps to the GA type and is accepted regardless of the
+    // nanos timestamp types preview flag.
+    if (p == 6) return TimestampNTZType
     DataTypeErrors.checkTimestampNanosTypesEnabled()
-    try TimestampNTZNanosType(precision.toInt)
-    catch {
-      case _: NumberFormatException =>
-        throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
-    }
+    TimestampNTZNanosType(p)
   }
 
   /**
