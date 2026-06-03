@@ -273,6 +273,8 @@ object SchemaPruning extends SQLConfHelper {
    * means the full element is required somewhere (for example, `x => struct(x.a, x)`), so it is
    * not safe to prune the element struct.
    *
+   * Bound lambda references are matched by exprId because they may be instantiated separately.
+   *
    * Currently only `GetStructField` chains rooted at `elementVar` are collected; array or map
    * traversal within the lambda conservatively requires the full element. Keep this set of
    * supported paths in sync with `ProjectionOverLambdaVariable` in `ProjectionOverSchema`.
@@ -281,13 +283,13 @@ object SchemaPruning extends SQLConfHelper {
       expr: Expression,
       elementVar: NamedLambdaVariable): Option[Seq[StructField]] = {
     expr match {
-      case LambdaVariableField(field, variable) if variable.semanticEquals(elementVar) =>
+      case LambdaVariableField(field, variable) if variable.exprId == elementVar.exprId =>
         Some(field :: Nil)
-      case IsNotNull(variable: NamedLambdaVariable) if variable.semanticEquals(elementVar) =>
+      case IsNotNull(variable: NamedLambdaVariable) if variable.exprId == elementVar.exprId =>
         Some(Seq.empty)
-      case IsNull(variable: NamedLambdaVariable) if variable.semanticEquals(elementVar) =>
+      case IsNull(variable: NamedLambdaVariable) if variable.exprId == elementVar.exprId =>
         Some(Seq.empty)
-      case variable: NamedLambdaVariable if variable.semanticEquals(elementVar) =>
+      case variable: NamedLambdaVariable if variable.exprId == elementVar.exprId =>
         None
       case _ =>
         expr.children.foldLeft(Option(Seq.empty[StructField])) {

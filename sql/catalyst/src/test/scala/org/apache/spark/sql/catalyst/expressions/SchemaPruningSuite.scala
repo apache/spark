@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.concurrent.atomic.AtomicReference
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.types._
 
@@ -244,6 +248,60 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
       assert(prunedSchema === StructType.fromDDL(
         "event struct<rules:array<struct<a:int,c:int>>>"))
     }
+  }
+
+  test("match separately instantiated array lambda variables by exprId") {
+    val elementType = StructType.fromDDL("a int, b int, c int")
+    val sourceSchema = StructType(Seq(
+      StructField("rules", ArrayType(elementType, containsNull = true))))
+    val rules = AttributeReference("rules", ArrayType(elementType, containsNull = true))()
+
+    def selectFirstField(function: Expression): GetArrayStructFields = {
+      GetArrayStructFields(
+        function,
+        elementType(0),
+        ordinal = 0,
+        numFields = elementType.length,
+        containsNull = true)
+    }
+
+    def evaluateSelectedFields(selected: GetArrayStructFields): Seq[Int] = {
+      val rootFields = SchemaPruning.identifyRootFields(Seq(Alias(selected, "out")()), Seq.empty)
+      val prunedSchema = SchemaPruning.pruneSchema(sourceSchema, rootFields)
+      assert(prunedSchema === StructType.fromDDL("rules array<struct<a:int,c:int>>"))
+
+      val projected = ProjectionOverSchema(prunedSchema, AttributeSet(Seq(rules)))
+        .unapply(selected).get
+      val bound = BindReferences.bindReference(projected, Seq(rules))
+      val array = new GenericArrayData(Array[Any](InternalRow(1, 3), InternalRow(2, -1)))
+      val result = bound.eval(InternalRow(array)).asInstanceOf[ArrayData]
+      (0 until result.numElements()).map(result.getInt)
+    }
+
+    val filterArgument = NamedLambdaVariable("x", elementType, nullable = true)
+    val filterReference = filterArgument.copy(value = new AtomicReference[Any]())
+    val filter = ArrayFilter(
+      rules,
+      LambdaFunction(
+        GreaterThan(GetStructField(filterReference, 2, Some("c")), Literal(0)),
+        Seq(filterArgument)))
+    assert(evaluateSelectedFields(selectFirstField(filter)) === Seq(1))
+
+    val leftArgument = NamedLambdaVariable("left", elementType, nullable = true)
+    val rightArgument = NamedLambdaVariable("right", elementType, nullable = true)
+    val leftReference = leftArgument.copy(value = new AtomicReference[Any]())
+    val rightReference = rightArgument.copy(value = new AtomicReference[Any]())
+    val sort = ArraySort(
+      rules,
+      LambdaFunction(
+        Coalesce(Seq(
+          Subtract(
+            GetStructField(leftReference, 2, Some("c")),
+            GetStructField(rightReference, 2, Some("c"))),
+          Literal(0))),
+        Seq(leftArgument, rightArgument)),
+      allowNullComparisonResult = false)
+    assert(evaluateSelectedFields(selectFirstField(sort)) === Seq(2, 1))
   }
 
   test("do not collect ArrayExists and ArrayForAll lambda fields when the whole element is used") {

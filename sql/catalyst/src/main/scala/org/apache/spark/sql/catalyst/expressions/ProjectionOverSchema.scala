@@ -159,6 +159,7 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
   /**
    * Rewrites references rooted at one bound lambda element to use its projected type and
    * recomputes nested field ordinals against each projected struct in the access path.
+   * Bound lambda references are matched by exprId because they may be instantiated separately.
    * This must support the same access paths collected by `SchemaPruning` for lambda variables;
    * currently both sides support only `GetStructField` chains.
    */
@@ -168,7 +169,7 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
     def unapply(expr: Expression): Option[Expression] = project(expr)
 
     private def project(expr: Expression): Option[Expression] = expr match {
-      case variable: NamedLambdaVariable if variable.semanticEquals(original) =>
+      case variable: NamedLambdaVariable if variable.exprId == original.exprId =>
         Some(projected)
       case GetStructFieldObject(child, field: StructField) =>
         project(child).map { projection =>
