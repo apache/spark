@@ -684,6 +684,21 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     }
   }
 
+  test("SPARK-57162: DefaultTimestampFormatter.formatNanos uses the default pattern (no fracs)") {
+    // DefaultTimestampFormatter inherits Iso8601TimestampFormatter.formatNanos, which renders via
+    // the default pattern "yyyy-MM-dd HH:mm:ss". That pattern has no S fields, so sub-second
+    // digits are not emitted. This is expected behaviour: DefaultTimestampFormatter is
+    // parse-oriented and callers that need fractional output should use FractionTimestampFormatter.
+    val formatter = new DefaultTimestampFormatter(
+      UTC,
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = false)
+    val value = nanosVal(123456L, 789) // 1970-01-01 00:00:00.123456789 UTC
+    assert(formatter.formatNanos(value, 9) === "1970-01-01 00:00:00")
+    assert(formatter.formatNanos(value, 7) === "1970-01-01 00:00:00")
+  }
+
   test("SPARK-57162: legacy formatters reject nanosecond precision") {
     val fast = new LegacyFastTimestampFormatter(
       "yyyy-MM-dd HH:mm:ss.SSSSSS",
