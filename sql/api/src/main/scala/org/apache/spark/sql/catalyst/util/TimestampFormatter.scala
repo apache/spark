@@ -178,13 +178,13 @@ sealed trait TimestampFormatter extends Serializable {
 
   /**
    * Optional counterpart of [[parseNanos]]. The result is `None` on invalid input.
+   *
+   * Intentionally abstract (unlike the microsecond [[parseOptional]]): a swallowing `try`/`catch`
+   * default would also mask the user-facing `TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER` error that
+   * the legacy formatters raise from [[parseNanos]], silently returning `None`. Each formatter
+   * must decide explicitly.
    */
-  def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal] =
-    try {
-      Some(parseNanos(s, precision))
-    } catch {
-      case _: Exception => None
-    }
+  def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal]
 
   /**
    * Parses a timestamp in a string and converts it to a [[TimestampNanosVal]] for
@@ -216,6 +216,9 @@ sealed trait TimestampFormatter extends Serializable {
 
   /**
    * Optional counterpart of [[parseWithoutTimeZoneNanos]]. The result is `None` on invalid input.
+   *
+   * Intentionally abstract for the same reason as [[parseNanosOptional]]: a swallowing default
+   * would mask the legacy formatters' `TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER` error.
    */
   @throws(classOf[ParseException])
   @throws(classOf[DateTimeParseException])
@@ -224,12 +227,7 @@ sealed trait TimestampFormatter extends Serializable {
   def parseWithoutTimeZoneNanosOptional(
       s: String,
       precision: Int,
-      allowTimeZone: Boolean): Option[TimestampNanosVal] =
-    try {
-      Some(parseWithoutTimeZoneNanos(s, precision, allowTimeZone))
-    } catch {
-      case _: Exception => None
-    }
+      allowTimeZone: Boolean): Option[TimestampNanosVal]
 
   /**
    * Parses a timestamp in a string to a [[TimestampNanosVal]] for `TIMESTAMP_NTZ(precision)`.
@@ -734,12 +732,24 @@ class LegacyFastTimestampFormatter(pattern: String, zoneId: ZoneId, locale: Loca
   override def parseNanos(s: String, precision: Int): TimestampNanosVal =
     throw TimestampFormatter.legacyNanosUnsupported()
 
+  // The `*Optional` nanos methods are abstract in the trait (no swallowing default), so the legacy
+  // formatters must implement them. They throw rather than return `None` so the unsupported-feature
+  // error is surfaced instead of being silently masked under the LEGACY time parser policy.
+  override def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal] =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
   // Without this override the trait default throws SparkException.internalError instead of the
   // user-facing legacyNanosUnsupported error.
   override def parseWithoutTimeZoneNanos(
       s: String,
       precision: Int,
       allowTimeZone: Boolean): TimestampNanosVal =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def parseWithoutTimeZoneNanosOptional(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): Option[TimestampNanosVal] =
     throw TimestampFormatter.legacyNanosUnsupported()
 
   override def formatNanos(v: TimestampNanosVal, precision: Int): String =
@@ -792,12 +802,24 @@ class LegacySimpleTimestampFormatter(
   override def parseNanos(s: String, precision: Int): TimestampNanosVal =
     throw TimestampFormatter.legacyNanosUnsupported()
 
+  // The `*Optional` nanos methods are abstract in the trait (no swallowing default), so the legacy
+  // formatters must implement them. They throw rather than return `None` so the unsupported-feature
+  // error is surfaced instead of being silently masked under the LEGACY time parser policy.
+  override def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal] =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
   // Without this override the trait default throws SparkException.internalError instead of the
   // user-facing legacyNanosUnsupported error.
   override def parseWithoutTimeZoneNanos(
       s: String,
       precision: Int,
       allowTimeZone: Boolean): TimestampNanosVal =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def parseWithoutTimeZoneNanosOptional(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): Option[TimestampNanosVal] =
     throw TimestampFormatter.legacyNanosUnsupported()
 
   override def formatNanos(v: TimestampNanosVal, precision: Int): String =

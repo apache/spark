@@ -739,6 +739,14 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         },
         condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
         parameters = expectedParameters)
+      // The optional variants must surface the unsupported-feature error too, not swallow it and
+      // return None. Their counterparts are abstract in the trait specifically to force this.
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.parseNanosOptional("2020-01-01 00:00:00.123456789", 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
       checkError(
         exception = intercept[SparkUnsupportedOperationException] {
           formatter.formatNanos(nanosVal(0L, 1), 9)
@@ -748,6 +756,15 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       checkError(
         exception = intercept[SparkUnsupportedOperationException] {
           formatter.parseWithoutTimeZoneNanos("2020-01-01 00:00:00.123456789", 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.parseWithoutTimeZoneNanosOptional(
+            "2020-01-01 00:00:00.123456789",
+            9,
+            allowTimeZone = true)
         },
         condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
         parameters = expectedParameters)
