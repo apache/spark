@@ -22,6 +22,7 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 import java.text.BreakIterator;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -402,5 +403,23 @@ public class ExpressionImplUtils {
     } else {
       return 0;
     }
+  }
+
+  /**
+   * Builds the number pattern for the given scale (the default grouping pattern followed by
+   * {@code scale} decimal places) and applies it to the given {@link DecimalFormat}. Shared by the
+   * FormatNumber expression's eval and codegen paths so the generated Java is a single call and
+   * the pattern buffer does not need to be threaded through mutable state.
+   */
+  public static void applyNumberFormatScale(
+      DecimalFormat numberFormat, String defaultFormat, int scale) {
+    StringBuilder pattern = new StringBuilder(defaultFormat);
+    if (scale > 0) {
+      pattern.append('.');
+      for (int i = 0; i < scale; i++) {
+        pattern.append('0');
+      }
+    }
+    numberFormat.applyLocalizedPattern(pattern.toString());
   }
 }
