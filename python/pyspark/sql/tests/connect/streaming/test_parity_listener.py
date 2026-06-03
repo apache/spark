@@ -262,7 +262,7 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
                         table = self.spark.read.table(table_name).collect()
                     except AnalysisException as e:
                         # It's possible that the table has not been created yet
-                        if "TABLE_OR_VIEW_NOT_FOUND" in str(e):
+                        if e.getCondition() == "TABLE_OR_VIEW_NOT_FOUND":
                             return False
                         raise e
                     if len(table) == 0:
