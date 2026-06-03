@@ -98,8 +98,8 @@ public class V2ExpressionSQLBuilder {
           List<String> children = expressionsToStringList(expressions, 1, expressions.length - 1);
           yield visitIn(build(expressions[0]), children);
         }
-        case "IS_NULL" -> visitIsNull(build(e.children()[0]));
-        case "IS_NOT_NULL" -> visitIsNotNull(build(e.children()[0]));
+        case "IS_NULL" -> visitIsNull(inputToSQL(e.children()[0]));
+        case "IS_NOT_NULL" -> visitIsNotNull(inputToSQL(e.children()[0]));
         case "STARTS_WITH" -> visitStartsWith(build(e.children()[0]), build(e.children()[1]));
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));

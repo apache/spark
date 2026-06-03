@@ -272,6 +272,14 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-XXXXX: IS [NOT] NULL over a composite operand is pushed down and runs on H2") {
+   val df = sql("SELECT name FROM h2.test.employee WHERE (salary = bonus) IS NOT NULL")
+    checkFiltersRemoved(df)
+    checkPushedInfo(df, "PushedFilters: [SALARY IS NOT NULL, BONUS IS NOT NULL, " +
+      "(CAST(SALARY AS double) = BONUS) IS NOT NULL]")
+    checkAnswer(df, Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+  }
+
   // TABLESAMPLE ({integer_expression | decimal_expression} PERCENT) and
   // TABLESAMPLE (BUCKET integer_expression OUT OF integer_expression)
   // are tested in JDBC dialect tests because TABLESAMPLE is not supported by all the DBMS
