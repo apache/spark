@@ -1571,4 +1571,204 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       assert(in.metadata == out.metadata)
     }
   }
+
+  // =============== dropRedundantRowsPostDecomposition tests ===============
+
+  test("dropRedundantRowsPostDecomposition passes through events with distinct sequences") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Distinct effective recordStartAts within the dataframe, so no redundancies - identity
+    // transformation expected.
+    val df = targetTableOf(userSchema)(
+      Row(1, "v5",  5L,  null, Row(5L)),
+      Row(1, "v10", 10L, null, Row(10L)),
+      Row(1, "v15", 15L, 20L,  Row(15L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "v5",  5L,  null, Row(5L)),
+        Row(1, "v10", 10L, null, Row(10L)),
+        Row(1, "v15", 15L, 20L,  Row(15L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition drops a same-event duplicate") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two open upserts with identical sequencing dimensions
+    // (effectiveRecordStartAt=10, startAt=10, endAt=null). The chronologically-leading
+    // copy is dropped by Rule 1; exactly one copy survives. We do not assert which user-data
+    // variant survives because the window's tiebreaker among truly-identical rows is
+    // intentionally undefined.
+    val df = targetTableOf(userSchema)(
+      Row(1, "first",  10L, null, Row(10L)),
+      Row(1, "second", 10L, null, Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+    val survivors = result.collect()
+
+    assert(survivors.length == 1)
+    assert(Set("first", "second").contains(survivors.head.getString(1)))
+  }
+
+  test("dropRedundantRowsPostDecomposition drops an open upsert overtaken at the same instant") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Open upsert at recordStartAt=10 followed by a tombstone at the same instant
+    // (effectiveRecordStartAt=10). The upsert opens at an instant the tombstone already
+    // overtakes, leaving it 0-width: Rule 2 drops it. The tombstone (last in partition)
+    // survives.
+    val df = targetTableOf(userSchema)(
+      Row(1, "open", 10L, null, Row(10L)),
+      Row(1, "tomb", 10L, 10L,  Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "tomb", 10L, 10L, Row(10L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition drops a decomposition tail coincident with " +
+    "an incoming event") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Decomposition tail closing at endAt=30 followed by a non-tail event at
+    // recordStartAt=30. The synthetic delete the tail encodes is already represented by
+    // the coincident event, so Rule 3 drops the tail. The event survives.
+    val df = targetTableOf(userSchema)(
+      Row(1, "tail",  null, 30L,  Row(null)),
+      Row(1, "event", 30L,  null, Row(30L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "event", 30L, null, Row(30L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition preserves rows when the next event arrives at " +
+    "a strictly later instant") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Open upsert at recordStartAt=10 and decomposition tail closing at endAt=30 are each
+    // followed by a row at a strictly later effective sequence. None of Rule 2 or Rule 3
+    // fires (their equality conditions don't hold), and Rule 1 doesn't fire (sequencing
+    // dimensions differ). Every row survives.
+    val df = targetTableOf(userSchema)(
+      Row(1, "open",  10L,  null, Row(10L)),
+      Row(1, "next1", 15L,  null, Row(15L)),
+      Row(1, "tail",  null, 30L,  Row(null)),
+      Row(1, "next2", 35L,  null, Row(35L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "open",  10L,  null, Row(10L)),
+        Row(1, "next1", 15L,  null, Row(15L)),
+        Row(1, "tail",  null, 30L,  Row(null)),
+        Row(1, "next2", 35L,  null, Row(35L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition preserves the last row in every per-key partition") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Each key has a single row; LEAD(1) is null at the end of every partition and all
+    // three rules are vacuous. If per-key isolation were broken, key 1's row would see
+    // key 2's row as its successor and trigger Rule 1 (the rows are identical on
+    // sequencing dimensions); proper partitioning preserves both.
+    val df = targetTableOf(userSchema)(
+      Row(1, "v10", 10L, null, Row(10L)),
+      Row(2, "v10", 10L, null, Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "v10", 10L, null, Row(10L)),
+        Row(2, "v10", 10L, null, Row(10L))
+      )
+    )
+  }
+
+  test("dropRedundantRowsPostDecomposition cascades across consecutive duplicate rows") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Three identical open upserts followed by a distinct event. Each adjacent same-event
+    // pair triggers Rule 1: the chronologically-leading two copies are dropped, leaving
+    // exactly one duplicate plus the distinct event. We don't assert which user-data
+    // variant of the duplicate survives.
+    val df = targetTableOf(userSchema)(
+      Row(1, "dup1",     5L,  null, Row(5L)),
+      Row(1, "dup2",     5L,  null, Row(5L)),
+      Row(1, "dup3",     5L,  null, Row(5L)),
+      Row(1, "different", 10L, null, Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+    val survivors = result.collect()
+
+    assert(survivors.length == 2)
+    val dupSurvivor = survivors.find(_.getLong(2) == 5L)
+    assert(dupSurvivor.isDefined)
+    assert(Set("dup1", "dup2", "dup3").contains(dupSurvivor.get.getString(1)))
+    assert(survivors.exists(r => r.getString(1) == "different"))
+  }
+
+  test("dropRedundantRowsPostDecomposition applies different rules to different rows " +
+    "in one partition") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // All three rows tie at effectiveRecordStartAt=10. Window tiebreakers order them as:
+    //   1. tail (tails-first)
+    //   2. open upsert (open-before-closed among non-tails)
+    //   3. tombstone
+    // Then:
+    //   - tail.endAt=10 == next.effective=10 -> Rule 3 drops the tail
+    //   - open is an open upsert with effective=next.effective -> Rule 2 drops the upsert
+    //   - tombstone is the last row in the partition -> survives
+    val df = targetTableOf(userSchema)(
+      Row(1, "tail", null, 10L,  Row(null)),
+      Row(1, "open", 10L,  null, Row(10L)),
+      Row(1, "tomb", 10L,  10L,  Row(10L))
+    )
+
+    val result = processor.dropRedundantRowsPostDecomposition(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "tomb", 10L, 10L, Row(10L))
+      )
+    )
+  }
 }
