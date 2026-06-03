@@ -245,11 +245,10 @@ sealed trait TimestampFormatter extends Serializable {
   /**
    * Formats a [[TimestampNanosVal]] to a string at the target fractional-second `precision` in
    * `[7, 9]` for `TIMESTAMP_LTZ(precision)`. The value is rendered in the formatter's `zoneId`
-   * (it goes through the `format(instant: Instant)` path), so it must not be used for NTZ
-   * values; use [[formatWithoutTimeZoneNanos]] for those. Sub-`precision` digits are truncated
-   * (floored) before rendering; the number of fractional digits actually emitted follows the
-   * formatter pattern (e.g. the count of `S` letters), consistent with the microsecond `format`
-   * overloads.
+   * (it goes through the `format(instant: Instant)` path), so it must not be used for NTZ values;
+   * use [[formatWithoutTimeZoneNanos]] for those. Sub-`precision` digits are truncated (floored)
+   * before rendering; the number of fractional digits actually emitted follows the formatter
+   * pattern (e.g. the count of `S` letters), consistent with the microsecond `format` overloads.
    */
   def formatNanos(v: TimestampNanosVal, precision: Int): String
 
@@ -552,7 +551,10 @@ class DefaultTimestampFormatter(
 
   override def parseNanos(s: String, precision: Int): TimestampNanosVal = {
     try {
-      SparkDateTimeUtils.stringToTimestampLTZNanosAnsi(UTF8String.fromString(s), precision, zoneId)
+      SparkDateTimeUtils.stringToTimestampLTZNanosAnsi(
+        UTF8String.fromString(s),
+        precision,
+        zoneId)
     } catch checkParsedDiff(s, legacyNanosParse)
   }
 
@@ -565,12 +567,14 @@ class DefaultTimestampFormatter(
       allowTimeZone: Boolean): TimestampNanosVal = {
     try {
       val utf8Value = UTF8String.fromString(s)
-      SparkDateTimeUtils.stringToTimestampNTZNanos(utf8Value, precision, allowTimeZone).getOrElse {
-        throw ExecutionErrors.cannotParseStringAsDataTypeError(
-          TimestampFormatter.defaultPattern(),
-          s,
-          TimestampNTZType)
-      }
+      SparkDateTimeUtils
+        .stringToTimestampNTZNanos(utf8Value, precision, allowTimeZone)
+        .getOrElse {
+          throw ExecutionErrors.cannotParseStringAsDataTypeError(
+            TimestampFormatter.defaultPattern(),
+            s,
+            TimestampNTZType)
+        }
     } catch checkParsedDiff(s, legacyNanosParse)
   }
 
@@ -578,7 +582,10 @@ class DefaultTimestampFormatter(
       s: String,
       precision: Int,
       allowTimeZone: Boolean): Option[TimestampNanosVal] =
-    SparkDateTimeUtils.stringToTimestampNTZNanos(UTF8String.fromString(s), precision, allowTimeZone)
+    SparkDateTimeUtils.stringToTimestampNTZNanos(
+      UTF8String.fromString(s),
+      precision,
+      allowTimeZone)
 }
 
 /**
