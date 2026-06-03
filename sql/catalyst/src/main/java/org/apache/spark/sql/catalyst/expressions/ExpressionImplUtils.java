@@ -25,6 +25,8 @@ import java.text.BreakIterator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.zip.CRC32;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
@@ -362,6 +364,21 @@ public class ExpressionImplUtils {
     } else {
       double t = x - 1.0;
       return StrictMath.log1p(t + Math.sqrt(2.0 * t + t * t));
+    }
+  }
+
+  /**
+   * Compiles {@code regex} with the given {@code flags} for the regexp expression
+   * family, translating a {@link PatternSyntaxException} into the user-facing
+   * INVALID_PARAMETER_VALUE.PATTERN error. Shared by the regexp eval and codegen
+   * paths so the generated Java is a single call instead of an inline try/catch
+   * around {@code Pattern.compile}.
+   */
+  public static Pattern compileRegexPattern(String regex, int flags, String funcName) {
+    try {
+      return Pattern.compile(regex, flags);
+    } catch (PatternSyntaxException e) {
+      throw QueryExecutionErrors.invalidPatternError(funcName, e.getPattern(), e);
     }
   }
 
