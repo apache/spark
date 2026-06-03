@@ -141,7 +141,7 @@ def load_model(
     >>> import mlflow.sklearn
     >>> from tempfile import mkdtemp
     >>> d = mkdtemp("pandas_on_spark_mlflow")
-    >>> set_tracking_uri("file:%s"%d)
+    >>> set_tracking_uri(f"sqlite:///{d}/mlflow.db")
     >>> client = MlflowClient()
     >>> exp_id = mlflow.create_experiment("my_experiment")
     >>> exp = mlflow.set_experiment("my_experiment")
