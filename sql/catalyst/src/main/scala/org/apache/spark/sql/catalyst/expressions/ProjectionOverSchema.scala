@@ -69,29 +69,16 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
       case GetMapValue(child, key) =>
         getProjection(child).map { projection => GetMapValue(projection, key) }
       case transform @ ArrayTransform(argument, lambda: LambdaFunction) =>
-        getProjection(argument).map {
-          case projection @ ArrayTypeProjection(projectedElementSchema) =>
-            lambda.arguments.headOption match {
-              case Some(elementVar: NamedLambdaVariable) =>
-                // Pruning fields changes the physical ordinal layout of the element struct.
-                // For example, pruning struct<a, b, c> to struct<a, c> moves c from ordinal 2
-                // to ordinal 1, so rewrite both the variable type and its field accesses.
-                val projectedElementVar = elementVar.copy(dataType = projectedElementSchema)
-                val lambdaProjection =
-                  ProjectionOverLambdaVariable(elementVar, projectedElementVar)
-                val projectedBody = lambda.function.transformDown {
-                  case lambdaProjection(expr) => expr
-                }
-                transform.copy(
-                  argument = projection,
-                  function = lambda.copy(
-                    function = projectedBody,
-                    arguments = projectedElementVar +: lambda.arguments.tail))
-              case _ =>
-                transform.copy(argument = projection)
-            }
-          case projection =>
-            transform.copy(argument = projection)
+        projectArrayHigherOrderFunction(argument, lambda) { (projection, projectedLambda) =>
+          transform.copy(argument = projection, function = projectedLambda)
+        }
+      case exists @ ArrayExists(argument, lambda: LambdaFunction, _) =>
+        projectArrayHigherOrderFunction(argument, lambda) { (projection, projectedLambda) =>
+          exists.copy(argument = projection, function = projectedLambda)
+        }
+      case forall @ ArrayForAll(argument, lambda: LambdaFunction) =>
+        projectArrayHigherOrderFunction(argument, lambda) { (projection, projectedLambda) =>
+          forall.copy(argument = projection, function = projectedLambda)
         }
       case GetStructFieldObject(child, field: StructField) =>
         getProjection(child).map(p => (p, p.dataType)).map {
@@ -107,6 +94,36 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
       case _ =>
         None
     }
+
+  private def projectArrayHigherOrderFunction(
+      argument: Expression,
+      lambda: LambdaFunction)(
+      rebuild: (Expression, LambdaFunction) => Expression): Option[Expression] = {
+    getProjection(argument).map {
+      case projection @ ArrayTypeProjection(projectedElementSchema) =>
+        lambda.arguments.headOption match {
+          case Some(elementVar: NamedLambdaVariable) =>
+            // Pruning fields changes the physical ordinal layout of the element struct.
+            // For example, pruning struct<a, b, c> to struct<a, c> moves c from ordinal 2
+            // to ordinal 1, so rewrite both the variable type and its field accesses.
+            val projectedElementVar = elementVar.copy(dataType = projectedElementSchema)
+            val lambdaProjection =
+              ProjectionOverLambdaVariable(elementVar, projectedElementVar)
+            val projectedBody = lambda.function.transformDown {
+              case lambdaProjection(expr) => expr
+            }
+            rebuild(
+              projection,
+              lambda.copy(
+                function = projectedBody,
+                arguments = projectedElementVar +: lambda.arguments.tail))
+          case _ =>
+            rebuild(projection, lambda)
+        }
+      case projection =>
+        rebuild(projection, lambda)
+    }
+  }
 
   private object ArrayTypeProjection {
     def unapply(expr: Expression): Option[StructType] = expr.dataType match {

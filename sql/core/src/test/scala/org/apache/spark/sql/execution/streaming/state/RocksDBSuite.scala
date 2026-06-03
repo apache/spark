@@ -3276,6 +3276,49 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  Seq(true, false).foreach { boundedMemoryUsage =>
+    testWithColumnFamilies(
+      s"SPARK-57183: LRUCache is handled correctly on RocksDB.close() " +
+        s"with boundedMemoryUsage=$boundedMemoryUsage",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      withTempDir { dir =>
+        try {
+          val sqlConf = new SQLConf
+          sqlConf.setConfString(
+            RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
+              RocksDBConf.BOUNDED_MEMORY_USAGE_CONF_KEY, boundedMemoryUsage.toString)
+          if (boundedMemoryUsage) {
+            sqlConf.setConfString(
+              RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
+                RocksDBConf.MAX_MEMORY_USAGE_MB_CONF_KEY, "128")
+          }
+          val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+
+          val (_, cache) = withDB(dir.getCanonicalPath, conf = dbConf,
+            useColumnFamilies = colFamiliesEnabled) { db =>
+            db.load(0)
+            db.put("k", "v")
+            db.commit()
+            db.getWriteBufferManagerAndCache()
+          }
+          if (boundedMemoryUsage) {
+            // Shared singleton -- must remain open after a single instance closes
+            assert(cache.isOwningHandle,
+              "Shared LRUCache handle must not be released after a single RocksDB.close() " +
+                "in bounded mode")
+          } else {
+            // Per-instance cache -- must be released deterministically on close()
+            assert(!cache.isOwningHandle,
+              "LRUCache native handle should be released after RocksDB.close() " +
+                "in unbounded mode")
+          }
+        } finally {
+          RocksDBMemoryManager.resetWriteBufferManagerAndCache
+        }
+      }
+    }
+  }
+
   Seq("100", "1000", "100000").foreach { totalMemorySizeMB =>
     testWithColumnFamilies(s"Memory mgmt - valid config " +
       s"with totalMemorySizeMB=$totalMemorySizeMB",
