@@ -76,6 +76,16 @@ public class ShuffleInMemorySorterSuite {
   }
 
   @Test
+  public void testInitialSizeWithUsableCapacity() {
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(
+      consumer, 1, shouldUseRadixSort());
+
+    Assertions.assertEquals(1, sorter.getInitialSize());
+    Assertions.assertEquals(2, sorter.getInitialSizeWithUsableCapacity());
+    sorter.free();
+  }
+
+  @Test
   public void testBasicSorting() {
     final String[] dataToSort = new String[] {
       "Boba",

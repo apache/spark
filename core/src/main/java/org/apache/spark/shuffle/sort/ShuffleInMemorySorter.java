@@ -76,9 +76,13 @@ final class ShuffleInMemorySorter {
   }
 
   private int getUsableCapacity() {
+    return getUsableCapacity(array.size());
+  }
+
+  private int getUsableCapacity(long size) {
     // Radix sort requires same amount of used memory as buffer, Tim sort requires
     // half of the used memory as buffer.
-    return (int) (array.size() / (useRadixSort ? 2 : 1.5));
+    return (int) (size / (useRadixSort ? 2 : 1.5));
   }
 
   public void free() {
@@ -94,6 +98,14 @@ final class ShuffleInMemorySorter {
 
   public int getInitialSize() {
     return initialSize;
+  }
+
+  public long getInitialSizeWithUsableCapacity() {
+    long size = initialSize;
+    while (getUsableCapacity(size) == 0) {
+      size = Math.multiplyExact(size, 2L);
+    }
+    return size;
   }
 
   public boolean hasPointerArray() {

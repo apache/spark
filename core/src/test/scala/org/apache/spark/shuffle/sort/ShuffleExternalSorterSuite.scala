@@ -218,6 +218,63 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
     }
   }
 
+  test("successful growth allocation should be reused when initial array has no capacity") {
+    val conf = new SparkConf()
+      .setMaster("local[1]")
+      .setAppName("ShuffleExternalSorterSuite")
+      .set(IS_TESTING, true)
+      .set(TEST_MEMORY, 10L * 1024 * 1024)
+      .set(MEMORY_FRACTION, 0.9999)
+
+    sc = new SparkContext(conf)
+    val memoryManager = UnifiedMemoryManager(conf, 1)
+
+    Seq(false, true).foreach { useRadixSort =>
+      conf.set(SHUFFLE_SORT_USE_RADIXSORT, useRadixSort)
+      val initialSize = 1
+      val initialArrayBytes = initialSize * 8L
+      var spillOnGrowthAllocation = false
+      var rejectInitialAllocationAfterSpill = false
+      val taskMemoryManager = new TaskMemoryManager(memoryManager, 0) {
+        override def allocatePage(size: Long, consumer: MemoryConsumer): MemoryBlock = {
+          if (spillOnGrowthAllocation) {
+            spillOnGrowthAllocation = false
+            assert(size > initialArrayBytes)
+            consumer.spill(size, consumer)
+            val page = super.allocatePage(size, consumer)
+            rejectInitialAllocationAfterSpill = true
+            page
+          } else if (rejectInitialAllocationAfterSpill && size == initialArrayBytes) {
+            rejectInitialAllocationAfterSpill = false
+            null
+          } else {
+            super.allocatePage(size, consumer)
+          }
+        }
+      }
+      val taskContext = mock[TaskContext]
+      when(taskContext.taskMetrics()).thenReturn(new TaskMetrics)
+      val sorter = new ShuffleExternalSorter(
+        taskMemoryManager,
+        sc.env.blockManager,
+        taskContext,
+        initialSize,
+        1,
+        conf,
+        new ShuffleWriteMetrics)
+
+      sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+      spillOnGrowthAllocation = true
+      sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+
+      assert(
+        rejectInitialAllocationAfterSpill,
+        "the successful growth allocation should be reused")
+      assert(sorter.closeAndGetSpills().length === 2)
+      sorter.cleanupResources()
+    }
+  }
+
   test("data page allocation spill should restore the pointer array") {
     val conf = new SparkConf()
       .setMaster("local[1]")

@@ -365,7 +365,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
   }
 
   private void allocateInitialPointerArray() {
-    LongArray array = allocateArray(inMemSorter.getInitialSize());
+    LongArray array = allocateArray(inMemSorter.getInitialSizeWithUsableCapacity());
     inMemSorter.expandPointerArray(array);
   }
 
@@ -399,12 +399,18 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
       }
       // check if spilling is triggered or not
       if (!inMemSorter.hasPointerArray()) {
-        // A spill reset the pointer array while allocateArray() was in progress. Drop the stale
-        // growth allocation and restore the initial array outside the spill callback.
-        if (array != null) {
-          freeArray(array);
+        // A spill reset the pointer array while allocateArray() was in progress. Prefer restoring
+        // the smaller initial array to shed memory, unless it cannot hold any records. In that
+        // case, retain a successful growth allocation so the next insert can make progress.
+        if (array != null && inMemSorter.getInitialSizeWithUsableCapacity() >
+            inMemSorter.getInitialSize()) {
+          inMemSorter.expandPointerArray(array);
+        } else {
+          if (array != null) {
+            freeArray(array);
+          }
+          allocateInitialPointerArray();
         }
-        allocateInitialPointerArray();
         return;
       }
       inMemSorter.expandPointerArray(array);
