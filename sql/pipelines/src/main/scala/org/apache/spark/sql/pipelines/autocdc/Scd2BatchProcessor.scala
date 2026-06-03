@@ -425,7 +425,9 @@ case class Scd2BatchProcessor(
    *   a dataframe with the same schema as the input. Every closed non-tombstone row that
    *   was bisected has been replaced by its head + tail pair; every other row is carried
    *   through as-is. Each output row can be classified as one of: {decomposition head,
-   *   decomposition tail, tombstone, open upsert, closed-and-unbisected row}.
+   *   decomposition tail, tombstone, open upsert, closed-and-unbisected row}. It's possible
+   *   that some of the returned decomposition tails are logically redundant, as deletion
+   *   markers that are immediately overtaken by a succeeding row.
    */
   private[autocdc] def decomposeOutOfOrderRows(rowsToDecomposePerKey: DataFrame): DataFrame = {
     val recordStartAtField =
@@ -433,8 +435,7 @@ case class Scd2BatchProcessor(
     val startAtCol = rowsToDecomposePerKey.col(Scd2BatchProcessor.startAtColName)
     val endAtCol = rowsToDecomposePerKey.col(Scd2BatchProcessor.endAtColName)
 
-    // Track the next row's recordStartAt in a temporary column. Spark does not allow a
-    // window expression directly inside the explode expression below.
+    // Track the next (in sorted order) row's recordStartAt in a temporary column.
     val rowsToDecomposeWithWindowCols = rowsToDecomposePerKey.withColumn(
       Scd2BatchProcessor.nextRecordStartAtColName,
       F.lead(recordStartAtField, 1).over(orderChronologicallyPerKeyWindow)
@@ -451,15 +452,16 @@ case class Scd2BatchProcessor(
     )
     val nextRowBisectsCurrentRow =
       nextRecordStartAt.isNotNull && nextRecordStartAt < endAtCol
-    val isBisected = isClosedNonTombstoneRow && nextRowBisectsCurrentRow
+    val rowShouldDecompose = isClosedNonTombstoneRow && nextRowBisectsCurrentRow
 
     val originalCols: Seq[String] = rowsToDecomposePerKey.columns.toSeq
 
-    // Constructs the head of a row post-decomposition. EA is opened (set to null); every other
-    // column is inherited from the original row.
+    // Constructs the head of a row post-decomposition.
     def constructDecomposedRowHead: Column = {
       val fields = originalCols.map {
         case c if c == Scd2BatchProcessor.endAtColName =>
+          // End-at is opened (set to null); every other column is inherited as-is from the
+          // original parent row.
           F.lit(null).cast(resolvedSequencingType).as(c)
         case c =>
           rowsToDecomposeWithWindowCols.col(c).as(c)
@@ -471,6 +473,8 @@ case class Scd2BatchProcessor(
     def constructDecomposedRowTail: Column = {
       val fields = originalCols.map {
         case c if c == Scd2BatchProcessor.startAtColName =>
+          // Start-at is opened (set to null), every other column is inherited as-is from the
+          // original parent row.
           F.lit(null).cast(resolvedSequencingType).as(c)
         case c if c == AutoCdcReservedNames.cdcMetadataColName =>
           Scd2BatchProcessor
@@ -485,7 +489,7 @@ case class Scd2BatchProcessor(
       F.struct(fields: _*)
     }
 
-    // No-op decomposition carries over the row as-is.
+    // No-op decomposition carries over the row exactly as-is.
     def constructNoopDecomposedRow: Column = {
       val fields = originalCols.map(c => rowsToDecomposeWithWindowCols.col(c).as(c))
       F.struct(fields: _*)
@@ -495,7 +499,7 @@ case class Scd2BatchProcessor(
     // Otherwise pass through as a single-element array so the explode below is uniform.
     val perRowDecompositionResults = F
       .when(
-        isBisected,
+        rowShouldDecompose,
         F.array(constructDecomposedRowHead, constructDecomposedRowTail)
       )
       .otherwise(F.array(constructNoopDecomposedRow))
