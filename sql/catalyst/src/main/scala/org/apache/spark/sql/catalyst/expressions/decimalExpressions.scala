@@ -129,12 +129,16 @@ case class CheckOverflow(
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
+    // Only the nullOnOverflow path can produce a null result; otherwise toPrecision throws on
+    // overflow and never returns null. nullSafeCodeGen already initializes ev.isNull from the
+    // child's nullness, so the result null check is only needed when nullOnOverflow is set.
+    val setNull = if (nullOnOverflow) s"${ev.isNull} = ${ev.value} == null;" else ""
     nullSafeCodeGen(ctx, ev, eval => {
       // scalastyle:off line.size.limit
       s"""
          |${ev.value} = $eval.toPrecision(
          |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-         |${ev.isNull} = ${ev.value} == null;
+         |$setNull
        """.stripMargin
       // scalastyle:on line.size.limit
     })
