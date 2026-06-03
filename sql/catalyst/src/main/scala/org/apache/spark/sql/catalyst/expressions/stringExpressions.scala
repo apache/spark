@@ -2822,31 +2822,14 @@ case class Chr(child: Expression)
   override def inputTypes: Seq[DataType] = Seq(LongType)
 
   protected override def nullSafeEval(lon: Any): Any = {
-    val longVal = lon.asInstanceOf[Long]
-    if (longVal < 0) {
-      UTF8String.EMPTY_UTF8
-    } else if ((longVal & 0xFF) == 0) {
-      UTF8String.fromString(Character.MIN_VALUE.toString)
-    } else {
-      UTF8String.fromString((longVal & 0xFF).toChar.toString)
-    }
+    ExpressionImplUtils.chr(lon.asInstanceOf[Long])
   }
 
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, lon => {
-      s"""
-        if ($lon < 0) {
-          ${ev.value} = UTF8String.EMPTY_UTF8;
-        } else if (($lon & 0xFF) == 0) {
-          ${ev.value} = UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
-        } else {
-          char c = (char)($lon & 0xFF);
-          ${ev.value} = UTF8String.fromString(String.valueOf(c));
-        }
-      """
-    })
+    val utils = classOf[ExpressionImplUtils].getName
+    nullSafeCodeGen(ctx, ev, lon => s"${ev.value} = $utils.chr($lon);")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Chr = copy(child = newChild)
