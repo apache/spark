@@ -242,6 +242,22 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   // The columns that will filtered out by `IsNotNull` could be considered as not nullable.
   private val notNullAttributes = notNullPreds.flatMap(_.references).distinct.map(_.exprId)
 
+  // `otherPreds` bound against this operator's `output`, shared between the CSE gate in
+  // `doConsume` and the CSE codegen itself. Codegen-only derived state, so `@transient`: it is
+  // computed on the driver during code generation and never accessed on executors.
+  @transient private lazy val boundOtherPreds: Seq[Expression] =
+    otherPreds.map(BindReferences.bindReference(_, output))
+
+  // CSE analysis of `boundOtherPreds`, built once and reused. `doConsume` consults it to decide
+  // whether any common subexpression is worth eliminating; when one is, the same analysis is
+  // handed to `subexpressionEliminationForWholeStageCodegen` rather than rebuilt. `@transient`
+  // because `EquivalentExpressions` is not serializable (and this is driver-only codegen state).
+  @transient private lazy val otherPredsEquivalentExpressions: EquivalentExpressions = {
+    val equivalentExpressions = new EquivalentExpressions
+    boundOtherPreds.foreach(equivalentExpressions.addExprTree(_))
+    equivalentExpressions
+  }
+
   // Mark this as empty. We'll evaluate the input during doConsume(). We don't want to evaluate
   // all the variables at the beginning to take advantage of short circuiting.
   override def usedInputs: AttributeSet = AttributeSet.empty
@@ -291,8 +307,21 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     //       without consulting `isNull_X`. The (b) interleaving gives us that ordering
     //       for free, since the IsNotNull check fires before the CSE precompute keyed
     //       off the same reference.
+    // Only take the CSE path when there is actually a common subexpression to eliminate. That
+    // path emits the `inputVarsEvalCode` prologue below, which eagerly evaluates every
+    // `otherPreds` input column at the top of the row loop -- required so eliminated
+    // subexpressions can be materialized into shared variables, but it defeats the
+    // short-circuiting the non-CSE path gets from loading columns lazily, just before the
+    // predicate that needs them. With no common subexpression the prologue is pure overhead
+    // (e.g. decoding a decimal column for rows a cheaper earlier predicate would reject), so we
+    // fall back to `generatePredicateCode`.
+    //
+    // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
+    // turned off independently of subexpression elimination elsewhere.
     val (prologueCode, predicateCode) =
-      if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty) {
+      if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
+          otherPreds.nonEmpty &&
+          otherPredsEquivalentExpressions.getCommonSubexpressions.nonEmpty) {
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
         // fails when otherPreds reference the same input columns that CSE already
@@ -301,8 +330,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         val inputVarsEvalCode = evaluateRequiredVariables(
           child.output, input, otherPredInputAttrs)
 
-        val boundOtherPreds = otherPreds.map(BindReferences.bindReference(_, output))
-        val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundOtherPreds)
+        val subExprs =
+          ctx.subexpressionEliminationForWholeStageCodegen(otherPredsEquivalentExpressions)
 
         // Group CSE states by the index of the first otherPred that references them.
         // `evaluateSubExprEliminationState` recursively emits each state's children

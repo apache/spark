@@ -614,6 +614,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_serde",
         "pyspark.sql.tests.test_session",
         "pyspark.sql.tests.test_nearest_by_join",
+        "pyspark.sql.tests.test_zip",
         "pyspark.sql.tests.test_subquery",
         "pyspark.sql.tests.test_types",
         "pyspark.sql.tests.test_geographytype",
@@ -1178,6 +1179,7 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_repartition",
         "pyspark.sql.tests.connect.test_parity_stat",
         "pyspark.sql.tests.connect.test_parity_nearest_by_join",
+        "pyspark.sql.tests.connect.test_parity_zip",
         "pyspark.sql.tests.connect.test_parity_subquery",
         "pyspark.sql.tests.connect.test_parity_types",
         "pyspark.sql.tests.connect.test_parity_column",
@@ -1588,6 +1590,7 @@ pyspark_pipelines = Module(
     source_file_regexes=["python/pyspark/pipelines"],
     python_test_goals=[
         "pyspark.pipelines.tests.test_add_pipeline_analysis_context",
+        "pyspark.pipelines.tests.test_auto_cdc_flow",
         "pyspark.pipelines.tests.test_block_session_mutations",
         "pyspark.pipelines.tests.test_cli",
         "pyspark.pipelines.tests.test_decorators",

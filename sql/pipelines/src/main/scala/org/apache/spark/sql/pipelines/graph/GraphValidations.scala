@@ -35,7 +35,8 @@ trait GraphValidations extends Logging {
   protected[pipelines] def validateMultiQueryTables(): Map[TableIdentifier, Seq[Flow]] = {
     val multiQueryTables = flowsTo.filter(_._2.size > 1)
 
-    // A multiflow table may not have an AutoCDC flow; AutoCDC flow targets must be single query.
+    // A multiflow table may not have an AutoCDC flow; AutoCDC targets must have exactly one
+    // input flow.
     multiQueryTables
       .find { case (_, flows) => flows.exists(isAutoCdcFlow) }
       .foreach {
@@ -252,7 +253,7 @@ trait GraphValidations extends Logging {
   }
 
   protected def validateUserSpecifiedSchemas(): Unit = {
-    flows.flatMap(f => table.get(f.identifier)).foreach { t: TableInput =>
+    flows.flatMap(f => table.get(f.identifier)).foreach { t: TableElement =>
       // The output inferred schema of a table is the declared schema merged with the
       // schema of all incoming flows. This must be equivalent to the declared schema.
       val inferredSchema = SchemaInferenceUtils

@@ -1362,6 +1362,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED =
+    buildConf("spark.sql.subexpressionElimination.filterExec.enabled")
+      .internal()
+      .doc("When true (and subexpression elimination is enabled), FilterExec whole-stage " +
+        "codegen eliminates common subexpressions shared across its predicates. When false, " +
+        "FilterExec falls back to the predicate codegen that loads input columns lazily and " +
+        "short-circuits, avoiding eager materialization of all predicate-referenced columns on " +
+        "every row. Only affects FilterExec; subexpression elimination elsewhere is unaffected.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -3660,6 +3673,19 @@ object SQLConf {
       .internal()
       .doc("When true, the SQL function 'count' is allowed to take no parameters.")
       .version("3.1.1")
+      .booleanConf
+      .createWithDefault(false)
+
+  val LEGACY_ALLOW_UDF_PARAMETER_TO_SHADOW_PARAMETERLESS_FUNCTION =
+    buildConf("spark.sql.legacy.allowUdfParameterToShadowParameterlessFunction")
+      .internal()
+      .doc("When true (legacy behavior), a SQL UDF parameter alias shadows a parameterless " +
+        "built-in function (current_user, current_date, current_time, current_timestamp, " +
+        "user, session_user, grouping__id) of the same name. When false (the default), the " +
+        "parameterless built-in function takes precedence, matching the documented name " +
+        "resolution rules.")
+      .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
@@ -8054,6 +8080,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def subexpressionEliminationSkipForShotcutExpr: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_SKIP_FOR_SHORTCUT_EXPR)
 
+  def subexpressionEliminationFilterExecEnabled: Boolean =
+    getConf(SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED)
+
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
@@ -8672,8 +8701,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   /**
    * Orders the given catalog path entries by [[sessionFunctionResolutionOrder]], inserting
-   * system.session and system.builtin. Used by both the legacy single-schema resolution and
-   * by SET PATH's DEFAULT_PATH / SYSTEM_PATH expansion to keep ordering in sync.
+   * system.session and system.builtin. Used by the legacy single-schema resolution and by
+   * SET PATH's DEFAULT_PATH expansion (when `spark.sql.defaultPath` is empty) to keep
+   * ordering in sync. SYSTEM_PATH no longer flows through here -- see [[systemPathOrder]].
    *
    * @param catalogEntries persistent catalog path entries (may be empty).
    */
@@ -8694,8 +8724,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     }
   }
 
-  /** System-only path (builtin + session) ordered by [[sessionFunctionResolutionOrder]]. */
-  def systemPathOrder: Seq[Seq[String]] = defaultPathOrder(Seq.empty)
+  /**
+   * System-only path used by `SET PATH = SYSTEM_PATH`. Contains the system-managed namespaces
+   * under the `system` catalog whose contents are wholly defined by Spark itself; today that
+   * is only `system.builtin`, but the shortcut is reserved for future system-managed schemas
+   * (e.g. AI, geospatial, ML).
+   */
+  def systemPathOrder: Seq[Seq[String]] = Seq(Seq("system", "builtin"))
 
   override def legacyParameterSubstitutionConstantsOnly: Boolean =
     getConf(SQLConf.LEGACY_PARAMETER_SUBSTITUTION_CONSTANTS_ONLY)

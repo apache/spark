@@ -45,6 +45,7 @@ jobs:
       jobs: >-
         {
           "build": "true",
+          "build-core-utils": "false",
           "docs": "true",
           "pyspark": "true",
           "pyspark-pandas": "true",

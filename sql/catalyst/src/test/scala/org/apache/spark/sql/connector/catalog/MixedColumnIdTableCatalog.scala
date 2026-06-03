@@ -50,6 +50,7 @@ class MixedColumnIdTableCatalog extends InMemoryTableCatalog {
       id = table.id,
       nullIdNames = snapshot)
     mixedTable.alterTableWithData(table.data, table.schema)
+    mixedTable.setVersionAndValidatedVersionFrom(table)
     mixedTable
   }
 
@@ -120,6 +121,7 @@ class MixedColumnIdInMemoryTable(
     dataMap.synchronized {
       copiedTable.alterTableWithData(data, schema)
     }
+    copiedTable.setVersionAndValidatedVersionFrom(this)
     copiedTable
   }
 }

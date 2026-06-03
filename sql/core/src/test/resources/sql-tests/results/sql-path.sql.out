@@ -92,7 +92,39 @@ SELECT current_path()
 -- !query schema
 struct<current_path():string>
 -- !query output
-system.builtin,system.session
+system.builtin
+
+
+-- !query
+USE spark_catalog.default
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SET PATH = SYSTEM_PATH, CURRENT_SCHEMA
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT current_path()
+-- !query schema
+struct<current_path():string>
+-- !query output
+system.builtin,spark_catalog.default
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query schema
+struct<>
+-- !query output
+
 
 
 -- !query

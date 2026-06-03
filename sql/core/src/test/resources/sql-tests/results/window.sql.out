@@ -504,10 +504,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
-  "messageParameters" : {
-    "msg" : "Frame bound value must be a literal."
-  },
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
