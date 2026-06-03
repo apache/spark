@@ -1156,8 +1156,13 @@ def check_script_up_to_date():
         "in your local history. Update it before merging, e.g.:\n"
         "    git fetch %s master && git checkout %s/master -- %s\n"
         "then re-run. Set SKIP_VERSION_CHECK=1 to bypass (e.g. when changing this script itself)."
-        % (MERGE_SCRIPT_REPO_PATH, latest_sha[:12], PUSH_REMOTE_NAME, PUSH_REMOTE_NAME,
-           MERGE_SCRIPT_REPO_PATH)
+        % (
+            MERGE_SCRIPT_REPO_PATH,
+            latest_sha[:12],
+            PUSH_REMOTE_NAME,
+            PUSH_REMOTE_NAME,
+            MERGE_SCRIPT_REPO_PATH,
+        )
     )
 
 
