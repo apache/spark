@@ -417,9 +417,9 @@ case class Scd2BatchProcessor(
    *
    * @param rowsToDecomposePerKey
    *   a dataframe conforming to the canonical SCD2 row schema
-   *   `[user_cols..., __START_AT, __END_AT, _cdc_metadata]`, where `_cdc_metadata`
-   *   conforms to [[targetCdcMetadataColSchema]]. Decomposition tails (rows with
-   *   [[recordStartAtFieldName]] = null) MUST NOT be present on input - they are
+   *   `[user_cols..., [[startAtColName]], [[endAtColName]], [[cdcMetadataColName]]]`, where
+   *   [[cdcMetadataColName]] conforms to [[targetCdcMetadataColSchema]]. Decomposition tails
+   *   (rows with [[recordStartAtFieldName]] = null) MUST NOT be present on input - they are
    *   produced exclusively by this function.
    * @return
    *   a dataframe with the same schema as the input. Every closed non-tombstone row that
@@ -427,7 +427,7 @@ case class Scd2BatchProcessor(
    *   through as-is. Each output row can be classified as one of: {decomposition head,
    *   decomposition tail, tombstone, open upsert, closed-and-unbisected row}.
    */
-  private def decomposeOutOfOrderRows(rowsToDecomposePerKey: DataFrame): DataFrame = {
+  private[autocdc] def decomposeOutOfOrderRows(rowsToDecomposePerKey: DataFrame): DataFrame = {
     val recordStartAtField =
       Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
     val startAtCol = rowsToDecomposePerKey.col(Scd2BatchProcessor.startAtColName)

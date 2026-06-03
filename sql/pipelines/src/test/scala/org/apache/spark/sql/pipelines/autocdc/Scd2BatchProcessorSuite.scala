@@ -1280,4 +1280,250 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     assert(result.collect().isEmpty)
   }
+
+  // =============== decomposeOutOfOrderRows tests ===============
+
+  test("decomposeOutOfOrderRows passes through open rows, tombstones, and " +
+    "last-in-partition closed rows") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // None of these rows is eligible for decomposition:
+    //   - "open":  endAt is null, so it is not a closed row
+    //   - "tomb":  startAt == endAt, so it is excluded by the strict `<` closed check
+    //   - "last":  closed, but is the last row in its window partition (no successor)
+    val df = targetTableOf(userSchema)(
+      Row(1, "open", 100, 5L,  null, Row(5L)),
+      Row(1, "tomb", 200, 10L, 10L,  Row(10L)),
+      Row(1, "last", 300, 15L, 25L,  Row(15L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "open", 100, 5L,  null, Row(5L)),
+        Row(1, "tomb", 200, 10L, 10L,  Row(10L)),
+        Row(1, "last", 300, 15L, 25L,  Row(15L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows leaves a closed row alone when the next event arrives at " +
+    "exactly its endAt") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Closed [5, 10] would decompose if the successor's recordStartAt were strictly less
+    // than 10. Here the successor lands at exactly 10, which means it doesn't actually
+    // bisect the closed row and therefore shouldn't decompose it.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 42, 5L,  10L,  Row(5L)),
+      Row(1, "bob",   99, 10L, null, Row(10L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 42, 5L,  10L,  Row(5L)),
+        Row(1, "bob",   99, 10L, null, Row(10L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows splits a bisected row into head + tail, " +
+    "both inheriting parent data") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Closed [5, 30] is bisected by a successor at recordStartAt = 15 (15 < 30). Expected:
+    //   - head: parent with endAt set to null
+    //   - tail: parent with startAt set to null and recordStartAt (in cdcMetadata) set to null
+    //   - successor: passes through
+    // Both head and tail must carry the parent's data columns (value="alice", amount=42)
+    // identically.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 42, 5L,  30L,  Row(5L)),
+      Row(1, "bob",   99, 15L, null, Row(15L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 42, 5L,   null, Row(5L)),    // head
+        Row(1, "alice", 42, null, 30L,  Row(null)),  // tail
+        Row(1, "bob",   99, 15L,  null, Row(15L))    // bisecting successor
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows triggers on any kind of bisecting successor") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Three independent keys, each with a closed parent [5, 50] bisected by a successor
+    // of a different kind. All three parents must decompose, regardless of the successor's
+    // own row kind (the bisection check looks only at recordStartAt < parent.endAt).
+    val df = targetTableOf(userSchema)(
+      // Key 1: bisected by an open upsert.
+      Row(1, "alice", 1, 5L,  50L,  Row(5L)),
+      Row(1, "bob",   2, 10L, null, Row(10L)),
+
+      // Key 2: bisected by a tombstone.
+      Row(2, "carol", 3, 5L,  50L, Row(5L)),
+      Row(2, "dave",  4, 20L, 20L, Row(20L)),
+
+      // Key 3: bisected by another closed non-tombstone.
+      Row(3, "eve",   5, 5L,  50L, Row(5L)),
+      Row(3, "frank", 6, 30L, 40L, Row(30L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        // Key 1.
+        Row(1, "alice", 1, 5L,   null, Row(5L)),
+        Row(1, "alice", 1, null, 50L,  Row(null)),
+        Row(1, "bob",   2, 10L,  null, Row(10L)),
+        // Key 2.
+        Row(2, "carol", 3, 5L,   null, Row(5L)),
+        Row(2, "carol", 3, null, 50L,  Row(null)),
+        Row(2, "dave",  4, 20L,  20L,  Row(20L)),
+        // Key 3.
+        Row(3, "eve",   5, 5L,   null, Row(5L)),
+        Row(3, "eve",   5, null, 50L,  Row(null)),
+        Row(3, "frank", 6, 30L,  40L,  Row(30L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows uses chronological window order, not input order") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Same data as the basic split test but with the input rows shuffled into a
+    // non-chronological order. The window orders rows by effective recordStartAt, so the
+    // result must still recognize that [5, 30] is bisected by the row at recordStartAt = 15.
+    val df = targetTableOf(userSchema)(
+      Row(1, "bob",   99, 15L, null, Row(15L)),  // appears first in input
+      Row(1, "alice", 42, 5L,  30L,  Row(5L))    // appears last in input but lower in window
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 42, 5L,   null, Row(5L)),
+        Row(1, "alice", 42, null, 30L,  Row(null)),
+        Row(1, "bob",   99, 15L,  null, Row(15L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows isolates per-key partitions") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // Key 1 has a bisecting pair. Key 2 only contains a single closed row whose recordStartAt
+    // happens to coincide with key 1's parent. The window partitions by key, so key 1's
+    // bisecting successor must NOT bleed into key 2's partition.
+    val df = targetTableOf(userSchema)(
+      // Key 1: closed [5, 30] bisected by recordStartAt = 15.
+      Row(1, "alice", 42, 5L,  30L,  Row(5L)),
+      Row(1, "bob",   99, 15L, null, Row(15L)),
+
+      // Key 2: a single closed [5, 30] with no successor in its own partition.
+      Row(2, "carol", 7, 5L, 30L, Row(5L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        // Key 1 decomposes.
+        Row(1, "alice", 42, 5L,   null, Row(5L)),
+        Row(1, "alice", 42, null, 30L,  Row(null)),
+        Row(1, "bob",   99, 15L,  null, Row(15L)),
+        // Key 2 passes through.
+        Row(2, "carol", 7, 5L, 30L, Row(5L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows handles a cascade of consecutive bisected rows") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    // A nested cascade: each closed row (except the innermost) is bisected by the next.
+    // Decomposition decisions are independent and based on each row's immediate successor:
+    //   [5, 30]  bisected by [10, 25]   -> decomposes
+    //   [10, 25] bisected by [15, 20]   -> decomposes
+    //   [15, 20] is the last row        -> passes through
+    val df = targetTableOf(userSchema)(
+      Row(1, "outer",  1, 5L,  30L, Row(5L)),
+      Row(1, "middle", 2, 10L, 25L, Row(10L)),
+      Row(1, "inner",  3, 15L, 20L, Row(15L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        // outer decomposes.
+        Row(1, "outer",  1, 5L,   null, Row(5L)),
+        Row(1, "outer",  1, null, 30L,  Row(null)),
+        // middle decomposes.
+        Row(1, "middle", 2, 10L,  null, Row(10L)),
+        Row(1, "middle", 2, null, 25L,  Row(null)),
+        // inner passes through.
+        Row(1, "inner",  3, 15L,  20L,  Row(15L))
+      )
+    )
+  }
+
+  test("decomposeOutOfOrderRows returns empty for empty input") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("value", StringType)
+      .add("amount", IntegerType)
+
+    val df = targetTableOf(userSchema)()
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    assert(result.collect().isEmpty)
+    assert(result.columns.toSeq == df.columns.toSeq)
+  }
 }
