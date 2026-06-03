@@ -85,7 +85,10 @@ case class MakeDecimal(
       } else {
         "set"
       }
-      val setNull = if (nullable) {
+      // Only `setOrNull` (the nullOnOverflow path) can produce a null result; `set` throws on
+      // overflow and never returns null. So the result null check is needed only when
+      // nullOnOverflow is set (a null child is already handled by nullSafeCodeGen).
+      val setNull = if (nullOnOverflow) {
         s"${ev.isNull} = ${ev.value} == null;"
       } else {
         ""

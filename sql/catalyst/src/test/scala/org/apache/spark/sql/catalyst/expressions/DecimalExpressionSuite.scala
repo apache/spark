@@ -46,6 +46,10 @@ class DecimalExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       checkEvaluation(MakeDecimal(Literal(101L), 3, 1), Decimal("10.1"))
       checkEvaluation(MakeDecimal(Literal.create(null, LongType), 3, 1), null)
+      // A nullable child with a non-null value still yields a non-null result in the non-overflow
+      // (`set`) path, where the result null check is omitted.
+      checkEvaluation(MakeDecimal(BoundReference(0, LongType, nullable = true), 3, 1),
+        Decimal("10.1"), create_row(101L))
       val overflowExpr = MakeDecimal(Literal.create(1000L, LongType), 3, 1)
       intercept[ArithmeticException](checkEvaluationWithMutableProjection(overflowExpr, null))
       intercept[ArithmeticException](evaluateWithoutCodegen(overflowExpr, null))
