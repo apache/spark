@@ -18,27 +18,33 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, Expression, UnaryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, PLAN_EXPRESSION, TreePattern}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.GenerationExpression
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * A wrapper expression to hold the generation expression and its original SQL text.
- * The child expression is resolved by the normal analyzer rules through the expression tree.
  */
 case class GeneratedColumnExpression(
     child: Expression,
-    originalSQL: String)
-  extends UnaryExpression with Unevaluable {
+    originalSQL: String,
+    analyzedChild: Option[Expression] = None)
+  extends UnaryExpression
+  with Unevaluable
+  with AnalysisAwareExpression[GeneratedColumnExpression] {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ANALYSIS_AWARE_EXPRESSION)
 
   override def dataType: DataType = child.dataType
 
   override def stringArgs: Iterator[Any] = Iterator(child, originalSQL)
+
+  override def markAsAnalyzed(): GeneratedColumnExpression =
+    copy(analyzedChild = Some(child))
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
     copy(child = newChild)
@@ -107,9 +113,13 @@ case class GeneratedColumnExpression(
     }
   }
 
-  // Convert the generation expression to V2 GenerationExpression
+  // Convert the generation expression to V2 GenerationExpression. The V2 expression is built from
+  // the analyzed (pre-optimization) child so that context-dependent functions such as
+  // CURRENT_TIMESTAMP are not frozen into definition-time literals. When the analyzed child cannot
+  // be represented as a V2 expression (e.g. CURRENT_TIMESTAMP), the V2 expression is null and the
+  // connector falls back to the SQL-string form.
   def toV2: GenerationExpression = {
-    val v2Expr: V2Expression = new V2ExpressionBuilder(child).build().orNull
+    val v2Expr = analyzedChild.flatMap(new V2ExpressionBuilder(_).build()).orNull
     new GenerationExpression(originalSQL, v2Expr)
   }
 }

@@ -21,19 +21,14 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
- * A class that represents default values.
+ * A class that represents default value expressions.
  * <p>
- * Connectors can define default values using either a SQL string or a connector
- * {@link Expression expression}. If both are provided, Spark first attempts to convert the given
- * expression to its internal representation. If the expression cannot be converted, and a SQL
- * string is provided, Spark will fall back to parsing the SQL string.
+ * Connectors can define default values using either a SQL string (Spark SQL dialect) or a more
+ * portable connector {@link Expression expression}, whose semantics follow the ANSI SQL standard.
  * <p>
- * The SQL string form is provided mainly for backward compatibility. It is parsed and analyzed
- * lazily, so its meaning can depend on the session configuration in effect at that time (for
- * example, ANSI mode or the session time zone) and may therefore be semantically ambiguous. The
- * {@link Expression} form captures the semantics fully and unambiguously (similar to how a view
- * captures the configs it was created with), and is the recommended way to define a default value
- * when it can be represented as a supported connector expression.
+ * If both the SQL string and the expression are provided, Spark first attempts to convert the
+ * given expression to its internal representation. If the expression cannot be converted, and a
+ * SQL string is provided, Spark will fall back to parsing the SQL string.
  *
  * @since 4.1.0
  */

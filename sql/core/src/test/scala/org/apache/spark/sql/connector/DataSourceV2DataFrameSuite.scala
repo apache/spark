@@ -1508,21 +1508,26 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("generation expression with current_time and different column name should work") {
+  test("generation expression with current_timestamp and different column name should work") {
     val tableName = "testcat.ns1.ns2.tbl"
     withTable(tableName) {
-      // When the column name is different, CURRENT_TIME is resolved as the function
-      // and folded to a literal by the optimizer, so it should succeed
+      // When the column name is different, CURRENT_TIMESTAMP is resolved as the function.
       val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
         sql(
           s"""CREATE TABLE $tableName (
-             |  c1 TIME GENERATED ALWAYS AS (CURRENT_TIME)
+             |  c1 TIMESTAMP GENERATED ALWAYS AS (CURRENT_TIMESTAMP)
              |) USING foo""".stripMargin)
       }
 
       assert(createExec.columns.length == 1)
-      assert(createExec.columns(0).columnGenerationExpression() != null)
-      assert(createExec.columns(0).columnGenerationExpression().getSql == "CURRENT_TIME")
+      val genExpr = createExec.columns(0).columnGenerationExpression()
+      assert(genExpr != null)
+      // The SQL form is preserved so the connector can re-evaluate it.
+      assert(genExpr.getSql == "CURRENT_TIMESTAMP")
+      // The V2 expression is built from the analyzed (pre-optimization) child, so CURRENT_TIMESTAMP
+      // is not frozen into a definition-time literal. Since CURRENT_TIMESTAMP has no V2
+      // representation yet, the V2 expression is null and the connector falls back to the SQL form.
+      assert(genExpr.getExpression == null)
     }
   }
 

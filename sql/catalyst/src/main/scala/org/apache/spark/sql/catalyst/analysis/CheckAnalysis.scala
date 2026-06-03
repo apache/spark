@@ -584,7 +584,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           case s: SubqueryExpression =>
             // A subquery inside a generation expression is unsupported. Surface a
             // generated-column-specific error here, before the generic subquery validation below
-            // reports a less helpful message. GeneratedColumnExpression.validate also rejects it.
+            // reports a less helpful message.
             operator match {
               case create: V2CreateTablePlan =>
                 create.columns.find { col =>
