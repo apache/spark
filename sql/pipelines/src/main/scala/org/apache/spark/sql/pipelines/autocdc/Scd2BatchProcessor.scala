@@ -455,16 +455,21 @@ case class Scd2BatchProcessor(
     val rowShouldDecompose = isClosedNonTombstoneRow && nextRowBisectsCurrentRow
 
     val originalCols: Seq[String] = rowsToDecomposePerKey.columns.toSeq
+    val originalSchema: StructType = rowsToDecomposePerKey.schema
+    def withOriginalSchemaPreserved(fieldName: String, expr: Column): Column = {
+      val f = originalSchema(fieldName)
+      expr.cast(f.dataType).as(f.name, f.metadata)
+    }
 
     // Constructs the head of a row post-decomposition.
     def constructDecomposedRowHead: Column = {
       val fields = originalCols.map {
-        case c if c == Scd2BatchProcessor.endAtColName =>
+        case colName if colName == Scd2BatchProcessor.endAtColName =>
           // End-at is opened (set to null); every other column is inherited as-is from the
           // original parent row.
-          F.lit(null).cast(resolvedSequencingType).as(c)
-        case c =>
-          rowsToDecomposeWithWindowCols.col(c).as(c)
+          withOriginalSchemaPreserved(colName, F.lit(null))
+        case colName =>
+          withOriginalSchemaPreserved(colName, rowsToDecomposeWithWindowCols.col(colName))
       }
       F.struct(fields: _*)
     }
@@ -472,26 +477,29 @@ case class Scd2BatchProcessor(
     // Constructs the tail of a row post-decomposition.
     def constructDecomposedRowTail: Column = {
       val fields = originalCols.map {
-        case c if c == Scd2BatchProcessor.startAtColName =>
+        case colName if colName == Scd2BatchProcessor.startAtColName =>
           // Start-at is opened (set to null), every other column is inherited as-is from the
           // original parent row.
-          F.lit(null).cast(resolvedSequencingType).as(c)
-        case c if c == AutoCdcReservedNames.cdcMetadataColName =>
-          Scd2BatchProcessor
-            .constructTargetCdcMetadataCol(
+          withOriginalSchemaPreserved(colName, F.lit(null))
+        case colName if colName == AutoCdcReservedNames.cdcMetadataColName =>
+          withOriginalSchemaPreserved(
+            colName,
+            Scd2BatchProcessor.constructTargetCdcMetadataCol(
               recordStartAt = F.lit(null).cast(resolvedSequencingType),
               sequencingType = resolvedSequencingType
             )
-            .as(c)
-        case c =>
-          rowsToDecomposeWithWindowCols.col(c).as(c)
+          )
+        case colName =>
+          withOriginalSchemaPreserved(colName, rowsToDecomposeWithWindowCols.col(colName))
       }
       F.struct(fields: _*)
     }
 
     // No-op decomposition carries over the row exactly as-is.
     def constructNoopDecomposedRow: Column = {
-      val fields = originalCols.map(c => rowsToDecomposeWithWindowCols.col(c).as(c))
+      val fields = originalCols.map(colName =>
+        withOriginalSchemaPreserved(colName, rowsToDecomposeWithWindowCols.col(colName))
+      )
       F.struct(fields: _*)
     }
 

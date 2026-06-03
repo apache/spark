@@ -1526,4 +1526,49 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     assert(result.collect().isEmpty)
     assert(result.columns.toSeq == df.columns.toSeq)
   }
+
+  test("decomposeOutOfOrderRows preserves per-column schema attributes through " +
+    "head + tail decomposition") {
+    val processor = processorWithKeys(Seq("id"))
+
+    def commentMetadata(comment: String): Metadata =
+      new MetadataBuilder().putString("comment", comment).build()
+    
+    val cdcMetadataInnerSchema = new StructType().add(
+      Scd2BatchProcessor.recordStartAtFieldName,
+      LongType,
+      nullable = true,
+      metadata = commentMetadata("inner __RECORD_START_AT")
+    )
+    
+    val schema = new StructType()
+      .add("id", IntegerType, nullable = false, metadata = commentMetadata("user key"))
+      .add("value", StringType, nullable = true, metadata = commentMetadata("user data"))
+      .add(
+        Scd2BatchProcessor.startAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __START_AT"))
+      .add(
+        Scd2BatchProcessor.endAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __END_AT"))
+      .add(
+        AutoCdcReservedNames.cdcMetadataColName, cdcMetadataInnerSchema, nullable = false,
+        metadata = commentMetadata("framework _cdc_metadata"))
+
+    // Closed [5, 30] bisected by recordStartAt = 15.
+    val df = microbatchOf(schema)(
+      Row(1, "alice", 5L,  30L,  Row(5L)),
+      Row(1, "bob",   15L, null, Row(15L))
+    )
+
+    val result = processor.decomposeOutOfOrderRows(df)
+
+    // Output schema must match the input field-for-field on name, dataType (which carries
+    // inner-struct field metadata), nullable, and outer metadata.
+    schema.fields.zip(result.schema.fields).foreach { case (in, out) =>
+      assert(in.name == out.name)
+      assert(in.dataType == out.dataType)
+      assert(in.nullable == out.nullable)
+      assert(in.metadata == out.metadata)
+    }
+  }
 }
