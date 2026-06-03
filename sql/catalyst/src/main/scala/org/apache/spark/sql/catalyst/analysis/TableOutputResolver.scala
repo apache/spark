@@ -290,8 +290,9 @@ object TableOutputResolver extends SQLConfHelper with Logging {
    * that exceed the column length are caught at runtime. Uses `getRawType` so it works for both
    * V1 and V2 tables. Shared by the by-name and by-position default-fill paths.
    *
-   * `applyColumnMetadata` strips the default's outer alias and re-wraps it with the required
-   * metadata, so the length check is applied to the default value itself (the alias child).
+   * We unwrap the default's outer alias before the length check so the check wraps the
+   * default value itself, not the alias; `applyColumnMetadata` then re-adds the required
+   * alias and metadata afterward.
    */
   private def applyDefaultWithLengthCheck(
       defaultExpr: Expression,

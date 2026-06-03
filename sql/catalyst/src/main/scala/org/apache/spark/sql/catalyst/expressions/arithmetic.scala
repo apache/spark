@@ -1080,12 +1080,12 @@ case class Pmod(
   }
 
   private lazy val pmodFunc: (Any, Any) => Any = dataType match {
-    case _: IntegerType => (l, r) => pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
-    case _: LongType => (l, r) => pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
-    case _: ShortType => (l, r) => pmod(l.asInstanceOf[Short], r.asInstanceOf[Short])
-    case _: ByteType => (l, r) => pmod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
-    case _: FloatType => (l, r) => pmod(l.asInstanceOf[Float], r.asInstanceOf[Float])
-    case _: DoubleType => (l, r) => pmod(l.asInstanceOf[Double], r.asInstanceOf[Double])
+    case _: IntegerType => (l, r) => MathUtils.pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
+    case _: LongType => (l, r) => MathUtils.pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
+    case _: ShortType => (l, r) => MathUtils.pmod(l.asInstanceOf[Short], r.asInstanceOf[Short])
+    case _: ByteType => (l, r) => MathUtils.pmod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
+    case _: FloatType => (l, r) => MathUtils.pmod(l.asInstanceOf[Float], r.asInstanceOf[Float])
+    case _: DoubleType => (l, r) => MathUtils.pmod(l.asInstanceOf[Double], r.asInstanceOf[Double])
     case DecimalType.Fixed(precision, scale) => (l, r) => checkDecimalOverflow(
       pmod(l.asInstanceOf[Decimal], r.asInstanceOf[Decimal]), precision, scale)
   }
@@ -1120,6 +1120,7 @@ case class Pmod(
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
     val errorContext = getContextOrNullCode(ctx)
+    val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"
@@ -1135,25 +1136,12 @@ case class Pmod(
            |${ev.isNull} = ${ev.value} == null;
            |""".stripMargin
 
-      // byte and short are casted into int when add, minus, times or divide
-      case ByteType | ShortType =>
-        s"""
-          $javaType $remainder = ($javaType)(${eval1.value} % ${eval2.value});
-          if ($remainder < 0) {
-            ${ev.value}=($javaType)(($remainder + ${eval2.value}) % ${eval2.value});
-          } else {
-            ${ev.value}=$remainder;
-          }
-        """
+      // The positive-modulo arithmetic is the same fixed algorithm for every primitive numeric
+      // type, so delegate to the shared MathUtils.pmod helper (also used by the eval path) instead
+      // of emitting the remainder/adjust block inline. byte/short are widened to int by `%`, and
+      // the matching MathUtils.pmod overload narrows the result back.
       case _ =>
-        s"""
-          $javaType $remainder = ${eval1.value} % ${eval2.value};
-          if ($remainder < 0) {
-            ${ev.value}=($remainder + ${eval2.value}) % ${eval2.value};
-          } else {
-            ${ev.value}=$remainder;
-          }
-        """
+        s"${ev.value} = $mathUtils.pmod(${eval1.value}, ${eval2.value});"
     }
 
     // evaluate right first as we have a chance to skip left if right is 0
@@ -1196,36 +1184,6 @@ case class Pmod(
           }
         }""")
     }
-  }
-
-  private def pmod(a: Int, n: Int): Int = {
-    val r = a % n
-    if (r < 0) {(r + n) % n} else r
-  }
-
-  private def pmod(a: Long, n: Long): Long = {
-    val r = a % n
-    if (r < 0) {(r + n) % n} else r
-  }
-
-  private def pmod(a: Byte, n: Byte): Byte = {
-    val r = a % n
-    if (r < 0) {((r + n) % n).toByte} else r.toByte
-  }
-
-  private def pmod(a: Double, n: Double): Double = {
-    val r = a % n
-    if (r < 0) {(r + n) % n} else r
-  }
-
-  private def pmod(a: Short, n: Short): Short = {
-    val r = a % n
-    if (r < 0) {((r + n) % n).toShort} else r.toShort
-  }
-
-  private def pmod(a: Float, n: Float): Float = {
-    val r = a % n
-    if (r < 0) {(r + n) % n} else r
   }
 
   private def pmod(a: Decimal, n: Decimal): Decimal = {

@@ -543,9 +543,17 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     maintenance-only bugfix). Returns the list of refs actually picked into, so
     the main loop can advance its remaining-branches list correctly.
     """
-    pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
-    if pick_ref == "":
-        pick_ref = default_branch
+    while True:
+        pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
+        if pick_ref == "":
+            pick_ref = default_branch
+        if pick_ref in branch_names:
+            break
+        valid_branches = ", ".join(branch_names)
+        print_error(
+            f"'{pick_ref}' is not a known release branch. "
+            f"Valid branches: {valid_branches}. Please try again."
+        )
 
     sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
     if sibling_x is not None:
