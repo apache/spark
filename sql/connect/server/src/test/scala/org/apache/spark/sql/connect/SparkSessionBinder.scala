@@ -46,7 +46,7 @@ trait SparkSessionBinder extends sql.SparkSessionBinder with QueryTest {
   protected override def spark: SparkSession = _connectSpark
 
   /** The underlying classic session used by the in-process server. */
-  private def classicSpark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
+  protected def classicSpark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 
   override def beforeAll(): Unit = {
     super.beforeAll()

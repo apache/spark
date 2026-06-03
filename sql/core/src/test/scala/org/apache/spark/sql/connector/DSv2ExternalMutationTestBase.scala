@@ -51,29 +51,12 @@ trait DSv2ExternalMutationTestBase extends QueryTest {
   /** Prefix for test names, e.g. "" or "[connect] ". */
   protected def testPrefix: String
 
-  /** Whether this suite runs under Spark Connect. */
-  protected def isConnect: Boolean
-
-  /** Execute a test body with a session. */
-  protected def withTestSession(fn: SparkSession => Unit): Unit
-
-  /**
-   * Assert that a DataFrame's rows match the expected rows (order-agnostic).
-   */
-  protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit
-
   /**
    * Get a [[TableCatalog]] by name from the underlying session.
    */
   protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
       catalogName: String): C
-
-  /** Cleanup wrapper: drop views and the table after the test body, even on failure. */
-  protected def withTestTableAndViews(
-      session: SparkSession,
-      table: String,
-      views: Seq[String] = Seq.empty)(fn: => Unit): Unit
 
   /** Appends a row to a DSv2 table via the catalog API, bypassing the session. */
   protected def externalAppend(

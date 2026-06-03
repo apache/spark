@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, InMemoryTableCatalog, TableChange, TableInfo}
 import org.apache.spark.sql.types.IntegerType
@@ -49,35 +49,33 @@ import org.apache.spark.sql.types.IntegerType
  * (via the CacheManager), making a session drop+recreate scenario trivially different from
  * the external variant.
  *
- * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
+ * NOTE: All `spark.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on
  * DDL / DML is a no-op (these execute eagerly), so this is harmless.
  */
 trait DSv2CacheTableReadTests extends DSv2ExternalMutationTestBase {
 
-  private def assertTableCached(session: SparkSession, tableName: String): Unit =
-    assert(session.catalog.isCached(tableName))
+  private def assertTableCached(tableName: String): Unit =
+    assert(spark.catalog.isCached(tableName))
 
   test(s"${testPrefix}SPARK-54022: cached table pinned against external data write") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+    withTable(testTable) {
+      spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+      spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        session.table(testTable).cache()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      spark.table(testTable).cache()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
-        externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
+      val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
+      externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100)))
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100)))
 
-        session.sql(s"REFRESH TABLE $testTable").collect()
-        assertTableCached(session, testTable)
-        checkRows(session.table(testTable), Seq(Row(1, 100), Row(2, 200)))
-      }
+      spark.sql(s"REFRESH TABLE $testTable").collect()
+      assertTableCached(testTable)
+      checkAnswer(spark.table(testTable), Seq(Row(1, 100), Row(2, 200)))
     }
   }
 

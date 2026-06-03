@@ -99,11 +99,6 @@ class DataSourceV2DataFrameSuite
   override protected def testPrefix: String = ""
   override protected def isConnect: Boolean = false
 
-  override protected def withTestSession(fn: SparkSession => Unit): Unit = fn(spark)
-
-  override protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit =
-    checkAnswer(df, expected)
-
   override protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
       catalogName: String): C = {
@@ -113,16 +108,6 @@ class DataSourceV2DataFrameSuite
       ct.runtimeClass.isInstance(c),
       s"Expected ${ct.runtimeClass.getName} but got ${c.getClass.getName}")
     c.asInstanceOf[C]
-  }
-
-  override protected def withTestTableAndViews(
-      session: SparkSession,
-      table: String,
-      views: Seq[String] = Seq.empty)(fn: => Unit): Unit = {
-    withTable(table) {
-      try { fn }
-      finally { views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v")) }
-    }
   }
 
   override def verifyTable(tableName: String, expected: DataFrame): Unit = {
