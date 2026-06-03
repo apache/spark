@@ -119,10 +119,18 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
 
         val writeField = writeElement(ctx, input.value, index.toString, dt, rowWriter)
-        if (!nullable) {
+        if (!nullable || input.isNull == FalseLiteral) {
+          // The value is statically known to be non-null, so skip the null check and the
+          // (dead) setNull branch and just write the value.
           s"""
              |${input.code}
              |${writeField.trim}
+           """.stripMargin
+        } else if (input.isNull == TrueLiteral) {
+          // The value is statically known to be null, so only set the null bit.
+          s"""
+             |${input.code}
+             |${setNull.trim}
            """.stripMargin
         } else {
           s"""
