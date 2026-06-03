@@ -2721,6 +2721,52 @@ case class Levenshtein(
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str1, str2) - Returns the Jaro-Winkler similarity between the two given strings. The result is a double between 0 and 1, where 1 means identical.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('MARTHA', 'MARHTA');
+       0.9611111111111111
+      > SELECT _FUNC_('kitten', 'sitting');
+       0.746031746031746
+      > SELECT _FUNC_('ABC', 'XYZ');
+       0.0
+  """,
+  since = "4.3.0",
+  group = "string_funcs")
+// scalastyle:on line.size.limit
+case class JaroWinkler(left: Expression, right: Expression)
+  extends BinaryExpression
+  with ImplicitCastInputTypes {
+
+  override def nullIntolerant: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(
+    StringTypeWithCollation(supportsTrimCollation = true),
+    StringTypeWithCollation(supportsTrimCollation = true))
+
+  override def dataType: DataType = DoubleType
+
+  override def prettyName: String = "jaro_winkler_similarity"
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): JaroWinkler =
+    copy(left = newLeft, right = newRight)
+
+  // Note: This implementation uses String.charAt() which operates on UTF-16 code units.
+  // Strings containing supplementary characters (surrogate pairs) may produce
+  // inaccurate results, consistent with the existing levenshtein() implementation.
+  override def nullSafeEval(input1: Any, input2: Any): Any = {
+    input1.asInstanceOf[UTF8String].jaroWinklerSimilarity(
+      input2.asInstanceOf[UTF8String])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, (l, r) => s"$l.jaroWinklerSimilarity($r)")
+  }
+}
+
 /**
  * A function that return Soundex code of the given string expression.
  */
