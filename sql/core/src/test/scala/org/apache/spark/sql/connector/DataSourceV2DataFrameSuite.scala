@@ -1531,6 +1531,70 @@ class DataSourceV2DataFrameSuite
     }
   }
 
+  // enforceReservedKeywords is only effective when ANSI is enabled, but with the conf off it is
+  // disabled in both ANSI modes, so the column-priority behavior should hold regardless of ANSI.
+  Seq("true", "false").foreach { ansiEnabled =>
+    test("generation expression resolves a reserved keyword to the column when " +
+      s"enforceReservedKeywords is disabled (ansi=$ansiEnabled)") {
+      val tableName = "testcat.ns1.ns2.tbl"
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled,
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+        withTable(tableName) {
+          // With reserved keyword enforcement off (the default), the unquoted `current_date` in the
+          // generation expression binds to the same-named column rather than the CURRENT_DATE
+          // function, so it is passed to the connector as a field reference.
+          val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+            sql(
+              s"""CREATE TABLE $tableName (
+                 |  `current_date` DATE,
+                 |  c2 DATE GENERATED ALWAYS AS (current_date)
+                 |) USING foo""".stripMargin)
+          }
+          val genExpr = createExec.columns.find(_.name == "c2").get.columnGenerationExpression()
+          assert(genExpr != null)
+          assert(genExpr.getSql == "current_date")
+          // The column reference is representable in V2 as a field reference, proving the column
+          // takes priority over the CURRENT_DATE function.
+          genExpr.getExpression match {
+            case ref: FieldReference => assert(ref.fieldNames().toSeq == Seq("current_date"))
+            case other => fail(s"Expected a FieldReference to current_date but got: $other")
+          }
+        }
+      }
+    }
+  }
+
+  // Unlike the disabled case above, this behavior is not parameterized over ANSI: reserved keyword
+  // enforcement (enforceReservedKeywords = ansiEnabled && ENFORCE_RESERVED_KEYWORDS) can only be on
+  // when ANSI is enabled. With ANSI disabled the conf is a no-op.
+  test("generation expression resolves a reserved keyword to the function when " +
+    "enforceReservedKeywords is enabled") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      withTable(tableName) {
+        // With reserved keyword enforcement on, the unquoted `current_date` in the generation
+        // expression binds to the built-in CURRENT_DATE function rather than the same-named
+        // column. This matches the SQL standard.
+        val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+          sql(
+            s"""CREATE TABLE $tableName (
+               |  `current_date` DATE,
+               |  c2 DATE GENERATED ALWAYS AS (current_date)
+               |) USING foo""".stripMargin)
+        }
+        val genExpr = createExec.columns.find(_.name == "c2").get.columnGenerationExpression()
+        assert(genExpr != null)
+        assert(genExpr.getSql == "current_date")
+        // CURRENT_DATE has no V2 representation, so the connector falls back to the SQL form. A
+        // non-null field reference here would mean the column incorrectly took priority.
+        assert(genExpr.getExpression == null)
+      }
+    }
+  }
+
   private def executeAndKeepPhysicalPlan[T <: SparkPlan](func: => Unit): T = {
     val qe = withQueryExecutionsCaptured(spark) {
       func
