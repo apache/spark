@@ -347,6 +347,30 @@ public class ExpressionImplUtils {
   }
 
   /**
+   * Inverse hyperbolic sine for the {@code asinh} expression, using the fdlibm
+   * {@code s_asinh.c} algorithm (odd function, so the sign of {@code x} is
+   * preserved). Shared by the eval and codegen paths so the generated Java is a
+   * single call rather than an inline five-branch if/else.
+   */
+  public static double asinh(double x) {
+    double ax = Math.abs(x);
+    double w;
+    if (Double.isInfinite(ax) || Double.isNaN(ax)) {
+      w = ax;
+    } else if (ax < 1.0 / (1 << 28)) {
+      w = ax;
+    } else if (ax > (1 << 28)) {
+      w = StrictMath.log(ax) + StrictMath.log(2.0);
+    } else if (ax > 2.0) {
+      w = StrictMath.log(2.0 * ax + 1.0 / (Math.sqrt(x * x + 1.0) + ax));
+    } else {
+      double t = x * x;
+      w = StrictMath.log1p(ax + t / (1.0 + Math.sqrt(1.0 + t)));
+    }
+    return Math.copySign(w, x);
+  }
+
+  /**
    * Inverse hyperbolic cosine for the {@code acosh} expression, using the
    * fdlibm {@code e_acosh.c} algorithm (returns {@code NaN} for {@code x < 1}).
    * Shared by the eval and codegen paths so the generated Java is a single call
