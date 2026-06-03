@@ -5128,6 +5128,18 @@
     ],
     "sqlState" : "38000"
   },
+  "INVALID_UDF_PARAMETER_PLACEHOLDER" : {
+    "message" : [
+      "Invalid Python UDF transpiled-expression parameter placeholder: <placeholder>. Placeholders must be of the form `_udf_param_N` where N is a non-negative integer index into the UDF's positional arguments. This is an internal error in the Python UDF transpiler."
+    ],
+    "sqlState" : "42000"
+  },
+  "INVALID_UDF_PARAMETER_PLACEHOLDER_INDEX" : {
+    "message" : [
+      "Python UDF transpiled-expression parameter placeholder `_udf_param_<index>` references position <index> but the UDF only has <numParams> argument(s). This is an internal error in the Python UDF transpiler."
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_URL" : {
     "message" : [
       "The url is invalid: <url>. Use `try_parse_url` to tolerate invalid URL and return NULL instead."
