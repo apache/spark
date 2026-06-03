@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Per-microbatch processor for SCD Type 2 AutoCDC flows, complying to the specified
@@ -80,8 +82,9 @@ case class Scd2BatchProcessor(
    * Stamp each microbatch delete event row with its end time sequence, as they are instantaneous
    * events.
    *
-   * Non-deletes leave a null end, as do not yet know if the row reprsents an active upsert, or a
-   * closed upsert. This will become clear in later reconciliation against the aux/target tables.
+   * Non-deletes leave a null end, as we do not yet know if the row represents an active upsert,
+   * or a closed upsert. This will become clear in later reconciliation against the aux/target
+   * tables.
    */
   private def extendMicrobatchRowsWithEndAt(microbatchDf: DataFrame): DataFrame = {
     microbatchDf.withColumn(
@@ -89,7 +92,7 @@ case class Scd2BatchProcessor(
       col = (
         changeArgs.deleteCondition match {
           case Some(deleteCondition) =>
-            F.when(deleteCondition, changeArgs.sequencing).otherwise(null)
+            F.when(deleteCondition, changeArgs.sequencing).otherwise(F.lit(null))
           case None =>
             F.lit(null)
         }
@@ -105,7 +108,7 @@ case class Scd2BatchProcessor(
   private def extendMicrobatchRowsWithCdcMetadata(microbatchDf: DataFrame): DataFrame = {
     microbatchDf.withColumn(
       colName = AutoCdcReservedNames.cdcMetadataColName,
-      col = Scd2BatchProcessor.constructCdcMetadataStruct(
+      col = Scd2BatchProcessor.constructTargetCdcMetadataCol(
         recordStartAt = changeArgs.sequencing,
         sequencingType = resolvedSequencingType
       )
@@ -122,18 +125,26 @@ case class Scd2BatchProcessor(
   private def projectTargetColumnsOntoMicrobatch(
       microbatch: DataFrame
   ): DataFrame = {
-    val dataSchema = StructType(
-      microbatch.schema.fields.filterNot(f =>
-        Scd2BatchProcessor.reservedFrameworkColNames.contains(f.name)
-      )
+    val caseSensitive = microbatch.sparkSession.sessionState.conf.caseSensitiveAnalysis
+
+    // Strip the framework columns through the same case-aware path as the user selection, for
+    // consistency with Scd1BatchProcessor.projectTargetColumnsOntoMicrobatch.
+    val dataSchema = ColumnSelection.applyToSchema(
+      schemaName = "microbatch",
+      schema = microbatch.schema,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(
+          Scd2BatchProcessor.reservedFrameworkColNames.toSeq.map(UnqualifiedColumnName(_))
+        )
+      ),
+      caseSensitive = caseSensitive
     )
     val userSelectedDataSchema =
       ColumnSelection.applyToSchema(
         schemaName = "microbatch",
         schema = dataSchema,
         columnSelection = changeArgs.columnSelection,
-        caseSensitive =
-          microbatch.sparkSession.sessionState.conf.caseSensitiveAnalysis
+        caseSensitive = caseSensitive
       )
     val finalColumnsToSelect: Seq[Column] =
       userSelectedDataSchema.fieldNames.toSeq.map(colName => {
@@ -278,21 +289,43 @@ object Scd2BatchProcessor {
    * will fail.
    */
   private val reservedFrameworkColNames: Set[String] = Set(
-      startAtColName,
-      endAtColName,
-      AutoCdcReservedNames.cdcMetadataColName
+    startAtColName,
+    endAtColName,
+    AutoCdcReservedNames.cdcMetadataColName
   )
 
   /**
-   * Construct the CDC metadata struct column for SCD1, following the exact schema and field
-   * ordering defined by [[cdcMetadataColSchema]].
+   * Schema of the CDC metadata struct column for SCD2 target table rows.
    */
-  def constructCdcMetadataStruct(
+  private[pipelines] def targetCdcMetadataColSchema(sequencingType: DataType): StructType =
+    StructType(
+      Seq(
+        // The sequence value of the originating CDC event for this row. Nullable because
+        // decomposition tails, which are transient and synthetically constructed during
+        // reconciliation, have a null record start at.
+        StructField(recordStartAtFieldName, sequencingType, nullable = true)
+      )
+    )
+
+  /**
+   * Construct the CDC metadata struct column for SCD2 target/microbatch rows, following the
+   * exact schema and field ordering defined by [[targetCdcMetadataColSchema]].
+   */
+  private def constructTargetCdcMetadataCol(
       recordStartAt: Column,
       sequencingType: DataType
   ): Column = {
-      F.struct(
-          recordStartAt.cast(sequencingType).as(recordStartAtFieldName)
-      )
+    val cdcMetadataFieldsInOrder = targetCdcMetadataColSchema(sequencingType).fields.map { field =>
+      val value = field.name match {
+        case `recordStartAtFieldName` => recordStartAt
+        case other =>
+          throw SparkException.internalError(
+            s"Unable to construct SCD2 target CDC metadata column due to unknown " +
+              s"`${other}` field."
+          )
+      }
+      value.cast(field.dataType).as(field.name)
+    }
+    F.struct(cdcMetadataFieldsInOrder.toImmutableArraySeq: _*)
   }
 }
