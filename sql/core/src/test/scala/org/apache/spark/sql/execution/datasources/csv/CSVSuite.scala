@@ -3514,7 +3514,7 @@ abstract class CSVSuite
     // ArrayIndexOutOfBoundsException. The overflow is on a later row so it is hit during inference.
     withTempPath { path =>
       Files.write(path.toPath, "a,b\nc,d\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
-      val e = intercept[SparkException] {
+      val e = intercept[SparkRuntimeException] {
         spark.read
           .option("header", "false")
           .option("inferSchema", "true")
@@ -3522,11 +3522,8 @@ abstract class CSVSuite
           .option("maxColumns", "2")
           .csv(path.getAbsolutePath)
       }
-      val malformed = firstSparkRuntimeException(e)
-      assert(malformed.isDefined,
-        s"Expected a SparkRuntimeException in the cause chain, got: ${e.getMessage}")
       checkError(
-        exception = malformed.get,
+        exception = e,
         condition = "MALFORMED_CSV_RECORD",
         parameters = Map("badRecord" -> ""),
         sqlState = "KD000")
@@ -3541,29 +3538,19 @@ abstract class CSVSuite
     // ArrayIndexOutOfBoundsException.
     withTempPath { path =>
       Files.write(path.toPath, "a,b\nc,d\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
-      val e = intercept[SparkException] {
+      val e = intercept[SparkRuntimeException] {
         spark.read
           .option("header", "false")
           .option("inferSchema", "true")
           .option("maxColumns", "2")
           .csv(path.getAbsolutePath)
       }
-      val malformed = firstSparkRuntimeException(e)
-      assert(malformed.isDefined,
-        s"Expected a SparkRuntimeException in the cause chain, got: ${e.getMessage}")
       checkError(
-        exception = malformed.get,
+        exception = e,
         condition = "MALFORMED_CSV_RECORD",
         parameters = Map("badRecord" -> "1,2,3"),
         sqlState = "KD000")
     }
-  }
-
-  /** Finds the first SparkRuntimeException in the cause chain, if any. */
-  private def firstSparkRuntimeException(t: Throwable): Option[SparkRuntimeException] = t match {
-    case null => None
-    case r: SparkRuntimeException => Some(r)
-    case other => firstSparkRuntimeException(other.getCause)
   }
 
   test("csv with variant") {

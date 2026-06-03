@@ -23,8 +23,8 @@ import java.util.Locale
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
+import com.univocity.parsers.common.TextParsingException
 import com.univocity.parsers.csv.CsvParser
-import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.{SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
@@ -629,8 +629,9 @@ private[sql] object UnivocityParser {
       try {
         tokenizer.parseNext()
       } catch {
-        case e: Exception if ExceptionUtils.getThrowables(e).exists(
-            _.isInstanceOf[ArrayIndexOutOfBoundsException]) =>
+        case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+          throw malformedCsvRecord(e, "")
+        case e: ArrayIndexOutOfBoundsException =>
           throw malformedCsvRecord(e, "")
       }
     }
@@ -670,8 +671,9 @@ private[sql] object UnivocityParser {
     try {
       tokenizer.parseLine(line)
     } catch {
-      case e: Exception if ExceptionUtils.getThrowables(e).exists(
-          _.isInstanceOf[ArrayIndexOutOfBoundsException]) =>
+      case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+        throw malformedCsvRecord(e, line)
+      case e: ArrayIndexOutOfBoundsException =>
         throw malformedCsvRecord(e, line)
     }
   }
