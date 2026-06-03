@@ -448,6 +448,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         DateAddInterval(Literal(d), Literal(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR))),
         DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-30")))
+
+      // A non-foldable interval keeps the runtime microseconds branch in codegen; exercise
+      // both arms at runtime.
+      val intervalRef =
+        BoundReference(ordinal = 0, dataType = CalendarIntervalType, nullable = true)
+      checkEvaluation(
+        DateAddInterval(Literal(d), intervalRef),
+        DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-29")),
+        InternalRow(new CalendarInterval(1, 1, 0)))
+      checkEvaluation(
+        DateAddInterval(Literal(d), intervalRef),
+        DateTimeUtils.fromJavaDate(Date.valueOf("2016-03-30")),
+        InternalRow(new CalendarInterval(1, 1, 25 * MICROS_PER_HOUR)))
     }
   }
 

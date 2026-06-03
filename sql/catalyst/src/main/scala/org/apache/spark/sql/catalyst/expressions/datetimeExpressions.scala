@@ -1775,22 +1775,44 @@ case class DateAddInterval(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    // In the non-ANSI path the interval's `microseconds` selects a pure date add (when zero) or a
+    // timezone-aware timestamp add. For a constant interval this is known at codegen time, so emit
+    // only the reachable arm and skip the dead one (the timestamp arm also pulls in a zoneId
+    // reference and two temporaries). We match a Literal rather than any foldable child so this
+    // selection never calls `eval` on the interval: ConstantFolding has already reduced a foldable
+    // interval to a Literal, and evaluating a foldable child here could fail in a never-taken
+    // branch.
+    val foldedMicros = interval match {
+      case Literal(itvl: CalendarInterval, _) => Some(itvl.microseconds)
+      case _ => None
+    }
     nullSafeCodeGen(ctx, ev, (sd, i) => if (ansiEnabled) {
       s"""${ev.value} = $dtu.dateAddInterval($sd, $i);"""
     } else {
-      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      val startTs = ctx.freshName("startTs")
-      val resultTs = ctx.freshName("resultTs")
-      s"""
-         |if ($i.microseconds == 0) {
-         |  ${ev.value} = $dtu.dateAddInterval($sd, $i);
-         |} else {
-         |  long $startTs = $dtu.daysToMicros($sd, $zid);
-         |  long $resultTs =
-         |    $dtu.timestampAddInterval($startTs, $i.months, $i.days, $i.microseconds, $zid);
-         |  ${ev.value} = $dtu.microsToDays($resultTs, $zid);
-         |}
-         |""".stripMargin
+      val dateAddArm = s"""${ev.value} = $dtu.dateAddInterval($sd, $i);"""
+      def timestampAddArm: String = {
+        val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+        val startTs = ctx.freshName("startTs")
+        val resultTs = ctx.freshName("resultTs")
+        s"""
+           |long $startTs = $dtu.daysToMicros($sd, $zid);
+           |long $resultTs =
+           |  $dtu.timestampAddInterval($startTs, $i.months, $i.days, $i.microseconds, $zid);
+           |${ev.value} = $dtu.microsToDays($resultTs, $zid);
+           |""".stripMargin
+      }
+      foldedMicros match {
+        case Some(0L) => dateAddArm
+        case Some(_) => timestampAddArm
+        case None =>
+          s"""
+             |if ($i.microseconds == 0) {
+             |  $dateAddArm
+             |} else {
+             |  $timestampAddArm
+             |}
+             |""".stripMargin
+      }
     })
   }
 
