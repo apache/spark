@@ -7853,6 +7853,11 @@
           "The ANALYZE TABLE command does not support views."
         ]
       },
+      "BIN_BY" : {
+        "message" : [
+          "Physical execution of BIN BY is not yet implemented."
+        ]
+      },
       "CATALOG_INTERFACE_METHOD" : {
         "message" : [
           "Catalog API <methodName> is not supported by <catalogClass>."

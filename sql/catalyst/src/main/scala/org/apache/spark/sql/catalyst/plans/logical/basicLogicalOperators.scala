@@ -1752,8 +1752,8 @@ case class UnresolvedBinBy(
  * Aligns range-typed rows to fixed-width bin boundaries by splitting any row whose
  * `[range_start, range_end)` crosses a boundary and proportionally redistributing values in
  * `distributeColumns` across the resulting sub-ranges. Emits one or more output rows per input row
- *  plus three appended columns with default names `bin_start`, `bin_end`, `bin_distribute_ratio`.
- *  The names come from the resolved `appendedAttributes`.
+ * plus three appended columns with default names `bin_start`, `bin_end`, `bin_distribute_ratio`.
+ * The names come from the resolved `appendedAttributes`.
  *
  * Bin boundaries align to `originExpr + k * binWidthExpr` for integer `k`. For `TIMESTAMP` (LTZ)
  * inputs the boundary arithmetic uses civil-time in the session zone for multi-day bins; sub-day

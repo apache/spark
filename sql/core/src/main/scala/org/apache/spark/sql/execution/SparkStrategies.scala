@@ -938,8 +938,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           "Deduplicate operator for non streaming data source should have been replaced " +
             "by aggregate in the optimizer")
       case _: logical.BinBy =>
-        throw SparkException.internalError(
-          "BIN BY physical execution is not yet implemented")
+        throw new SparkUnsupportedOperationException("UNSUPPORTED_FEATURE.BIN_BY")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
