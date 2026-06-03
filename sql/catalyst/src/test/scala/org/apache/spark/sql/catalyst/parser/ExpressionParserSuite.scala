@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
@@ -1211,6 +1211,14 @@ class ExpressionParserSuite extends AnalysisTest {
       assertEqual("TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789'",
         ltz(9, 2020, 1, 1, 0, 0, 0, 123456789))
 
+      // TIMESTAMP_LTZ with an explicit zone offset in the literal: the offset takes precedence
+      // over the session timezone. '2020-01-01 00:00:00.123456789+05:00' is the instant
+      // 2019-12-31 19:00:00.123456789 UTC.
+      assertEqual("TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789+05:00'",
+        Literal(
+          instantToNanosVal(timestampLTZ(2020, 1, 1, 0, 0, 0, 123456789, ZoneOffset.of("+05:00"))),
+          TimestampLTZNanosType(9)))
+
       // Bare TIMESTAMP keyword resolves to LTZ nanos by default (TIMESTAMP_TYPE = LTZ).
       assertEqual("TIMESTAMP '2020-01-01 00:00:00.123456789'",
         ltz(9, 2020, 1, 1, 0, 0, 0, 123456789))
@@ -1247,6 +1255,10 @@ class ExpressionParserSuite extends AnalysisTest {
           fragment = "TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567890'",
           start = 0,
           stop = 45))
+
+      // Special values have no fractional part, so nanosLiteralOpt returns None and the
+      // existing special-value path handles them, producing plain microsecond literals.
+      assertEqual("TIMESTAMP_NTZ 'epoch'", Literal(0L, TimestampNTZType))
     }
 
     // With the preview flag off, 7-9 digit literals narrow to microseconds (legacy behavior).
