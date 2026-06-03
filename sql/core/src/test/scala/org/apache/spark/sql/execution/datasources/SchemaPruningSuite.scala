@@ -470,6 +470,54 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
+  testSchemaPruning("select ArrayExists over nested fields of array of struct") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(org.apache.spark.sql.functions.exists(
+        col("friends"), friend => friend.getField("last") === "Smith"))
+
+    checkScan(query, "struct<friends:array<struct<last:string>>>")
+    checkAnswer(query, Row(true) :: Row(false) :: Nil)
+  }
+
+  testSchemaPruning("select ArrayForAll over nested fields of array of struct") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(forall(col("friends"), friend => friend.getField("last") === "Smith"))
+
+    checkScan(query, "struct<friends:array<struct<last:string>>>")
+    checkAnswer(query, Row(true) :: Row(true) :: Nil)
+  }
+
+  testSchemaPruning("select nested field with ArrayExists predicate") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .where(org.apache.spark.sql.functions.exists(
+        col("friends"), friend => friend.getField("last") === "Smith"))
+      .select(col("friends").getField("first"))
+
+    checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+    checkAnswer(query, Row(Array("Susan")) :: Nil)
+  }
+
+  testSchemaPruning("do not prune ArrayExists when the whole element is used") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(org.apache.spark.sql.functions.exists(col("friends"), friend => friend.isNotNull))
+
+    checkScan(query, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query, Row(true) :: Row(false) :: Nil)
+  }
+
+  testSchemaPruning("do not prune ArrayForAll when the whole element is used") {
+    val query = spark.table("contacts")
+      .where("p = 1")
+      .select(forall(col("friends"), friend => friend.isNotNull))
+
+    checkScan(query, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkAnswer(query, Row(true) :: Row(true) :: Nil)
+  }
+
   testSchemaPruning("SPARK-34638: nested column prune on generator output") {
     val query1 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))

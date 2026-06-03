@@ -29,9 +29,11 @@ import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.NullType
 
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
@@ -193,7 +195,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             field
           }
           if (newChild.resolved) {
-            ExtractValue(child = newChild, extraction = resolvedField, resolver = resolver)
+            // applyOrNull propagates NULL when the base is NullType instead of throwing
+            // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
+            val extracted = ExtractValue.applyOrNull(
+              child = newChild, extraction = resolvedField, resolver = resolver)
+            // A NullType base yields a bare NULL literal, which would otherwise produce an output
+            // column named `NULL`. Alias it with the extraction's text (e.g. `col[0]`) to keep a
+            // stable column name; CleanupAliases later trims this alias where it's not a top-level
+            // projection output.
+            if (newChild.dataType == NullType) {
+              Alias(extracted, toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
+            } else {
+              extracted
+            }
           } else {
             u.copy(child = newChild, extraction = resolvedField)
           }

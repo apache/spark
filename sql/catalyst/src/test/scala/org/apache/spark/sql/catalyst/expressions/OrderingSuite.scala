@@ -132,6 +132,47 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  // SPARK-57179: when the order keys are statically non-nullable, GenerateOrdering skips the
+  // dead null-handling branches. Mirror the test above with non-nullable keys (and a mix of
+  // ascending/descending so both the `comp` and `-comp` emissions are covered) to exercise
+  // that code path and the per-comparison `comp` scoping when multiple keys are concatenated.
+  {
+    val structType =
+      new StructType()
+        .add("f1", FloatType, nullable = true)
+        .add("f2", ArrayType(BooleanType, containsNull = true), nullable = true)
+    val arrayOfStructType = ArrayType(structType)
+    val complexTypes = ArrayType(IntegerType) :: structType :: arrayOfStructType :: Nil
+    (DataTypeTestUtils.atomicTypes ++ complexTypes).foreach { dataType =>
+      test(s"GenerateOrdering with non-nullable keys: $dataType") {
+        val sortOrders =
+          BoundReference(0, dataType, nullable = false).asc ::
+            BoundReference(1, dataType, nullable = false).desc :: Nil
+        val rowOrdering = new InterpretedOrdering(sortOrders)
+        val genOrdering = GenerateOrdering.generate(sortOrders)
+        val rowType = StructType(
+          StructField("a", dataType, nullable = false) ::
+            StructField("b", dataType, nullable = false) :: Nil)
+        val maybeDataGenerator = RandomDataGenerator.forType(rowType, nullable = false)
+        assert(maybeDataGenerator.isDefined)
+        val randGenerator = maybeDataGenerator.get
+        val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
+        for (_ <- 1 to 50) {
+          val a = toCatalyst(randGenerator()).asInstanceOf[InternalRow]
+          val b = toCatalyst(randGenerator()).asInstanceOf[InternalRow]
+          withClue(s"a = $a, b = $b") {
+            assert(genOrdering.compare(a, a) === 0)
+            assert(genOrdering.compare(b, b) === 0)
+            assert(signum(genOrdering.compare(a, b)) === -1 * signum(genOrdering.compare(b, a)))
+            assert(
+              signum(rowOrdering.compare(a, b)) === signum(genOrdering.compare(a, b)),
+              "Generated and non-generated orderings should agree")
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KiB") {
     val sortOrder = Literal("abc").asc
 

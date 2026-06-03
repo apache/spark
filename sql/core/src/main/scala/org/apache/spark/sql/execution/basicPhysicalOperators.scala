@@ -315,8 +315,12 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // predicate that needs them. With no common subexpression the prologue is pure overhead
     // (e.g. decoding a decimal column for rows a cheaper earlier predicate would reject), so we
     // fall back to `generatePredicateCode`.
+    //
+    // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
+    // turned off independently of subexpression elimination elsewhere.
     val (prologueCode, predicateCode) =
-      if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty &&
+      if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
+          otherPreds.nonEmpty &&
           otherPredsEquivalentExpressions.getCommonSubexpressions.nonEmpty) {
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
