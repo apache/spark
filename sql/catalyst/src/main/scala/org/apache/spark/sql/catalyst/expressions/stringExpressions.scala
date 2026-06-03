@@ -2774,27 +2774,11 @@ case class Ascii(child: Expression)
   override def inputTypes: Seq[AbstractDataType] =
     Seq(StringTypeWithCollation(supportsTrimCollation = true))
 
-  protected override def nullSafeEval(string: Any): Any = {
-    // only pick the first character to reduce the `toString` cost
-    val firstCharStr = string.asInstanceOf[UTF8String].substring(0, 1)
-    if (firstCharStr.numChars > 0) {
-      firstCharStr.toString.codePointAt(0)
-    } else {
-      0
-    }
-  }
+  protected override def nullSafeEval(string: Any): Any =
+    ExpressionImplUtils.ascii(string.asInstanceOf[UTF8String])
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    nullSafeCodeGen(ctx, ev, (child) => {
-      val firstCharStr = ctx.freshName("firstCharStr")
-      s"""
-        UTF8String $firstCharStr = $child.substring(0, 1);
-        if ($firstCharStr.numChars() > 0) {
-          ${ev.value} = $firstCharStr.toString().codePointAt(0);
-        } else {
-          ${ev.value} = 0;
-        }
-       """})
+    defineCodeGen(ctx, ev, c => s"${classOf[ExpressionImplUtils].getName}.ascii($c)")
   }
 
   override protected def withNewChildInternal(newChild: Expression): Ascii = copy(child = newChild)
