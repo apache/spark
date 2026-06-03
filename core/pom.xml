@@ -36,6 +36,16 @@
   
   <dependencies>
     <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-proto_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-core_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.scala-lang.modules</groupId>
       <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
     </dependency>
@@ -134,10 +144,12 @@
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-impl</artifactId>
+      <scope>${jjwt.deps.scope}</scope>
     </dependency>
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-jackson</artifactId>
+      <scope>${jjwt.deps.scope}</scope>
     </dependency>
 
     <!-- Jetty dependencies promoted to compile here so they are shaded

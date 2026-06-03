@@ -132,7 +132,7 @@ def build_spark_scala_and_java_docs_if_necessary
   command = "build/sbt -Pkinesis-asl unidoc"
   puts "Running '#{command}'..."
 
-  # Two filter passes on the unidoc output:
+  # Two filter passes on the unidoc output, plus an additive fatal-error summary:
   #
   # 1. Genjavadoc-stub diagnostic blocks (~28 `[error]` lines on stubs under
   #    `target/java/`, plus 3-5 continuation lines each). Inert because
@@ -146,6 +146,18 @@ def build_spark_scala_and_java_docs_if_necessary
   #    per-file `error: reference not found` diagnostics) but carry no signal
   #    of their own. Suppressing them brings the visible log from ~17K to ~5K
   #    lines on a typical run while leaving every diagnostic untouched.
+  #
+  # 3. Fatal-error summary (additive, drops no log lines). The filtered log is
+  #    still ~4K lines and most `error:` text in it is non-fatal source-loading
+  #    chatter, so the build-failing diagnostics are hard to spot. After the
+  #    pipe closes, we print a `Fatal javadoc errors (N): ...` block and emit
+  #    `::error file=,line=::` GitHub Actions annotations so they surface in the
+  #    PR check panel. Captured strictly within the Standard Doclet phase
+  #    bracketed by `Building tree for all the packages and classes...` and
+  #    `Building index for all classes...`, which is where doclint diagnostics
+  #    are emitted -- this matches what javadoc counts toward exit code 1.
+  #    Self-checked against javadoc's own `N errors` summary line; a mismatch
+  #    emits a `::warning::` so future phase-marker drift is visible.
   ansi = /\e\[[0-9;]*[A-Za-z]/
   stub_header = %r{
     \[(?:error|warn)\]\s+
@@ -167,10 +179,51 @@ def build_spark_scala_and_java_docs_if_necessary
      |Generating\s+\S+\.html
     )
   }x
+
+  # Doclint phase tracking for the trailing summary. Standard Doclet bookends the
+  # phase that produces build-failing diagnostics with these marker lines; any
+  # `error:` outside this window is source-loading noise that does not contribute
+  # to javadoc's exit code. The summary below captures only the fatal ones and
+  # re-emits them as GitHub Actions annotations so they surface in the PR check
+  # panel instead of being buried in a 4K-line log.
+  doclint_start   = %r{\bBuilding\s+tree\s+for\s+all\s+the\s+packages\s+and\s+classes\b}
+  doclint_end     = %r{\bBuilding\s+index\s+for\s+all\s+classes\b}
+  doclint_diag    = %r{\A\[warn\]\s+(?<path>\S+):(?<lineno>\d+)(?::\d+)?:\s+error:\s+(?<msg>.+?)\s*\z}
+  doclint_cont    = %r{\A\[warn\]\s(?!\S+:\d+(?::\d+)?:\s+error:)(?<content>.*?)\s*\z}
+  doclint_summary = %r{\A\[warn\]\s+(?<count>[\d,]+)\s+errors?\s*\z}
+
   in_stub = false
+  in_doclint = false
+  fatal_diagnostics = []
+  pending_context_lines = 0  # snippet + caret lines that follow each diag header
+  reported_error_count = nil
+
   IO.popen("#{command} 2>&1", 'r') do |pipe|
     pipe.each_line do |line|
       plain = line.gsub(ansi, '')
+
+      if plain =~ doclint_start
+        in_doclint = true
+      elsif in_doclint && plain =~ doclint_end
+        in_doclint = false
+        pending_context_lines = 0
+      end
+
+      if in_doclint && (m = plain.match(doclint_diag))
+        fatal_diagnostics << {
+          path: m[:path], line: m[:lineno], msg: m[:msg], context: []
+        }
+        pending_context_lines = 2
+      elsif in_doclint && pending_context_lines > 0 &&
+            (m = plain.match(doclint_cont)) && !fatal_diagnostics.empty?
+        fatal_diagnostics.last[:context] << m[:content]
+        pending_context_lines -= 1
+      end
+
+      if reported_error_count.nil? && (m = plain.match(doclint_summary))
+        reported_error_count = m[:count].delete(',').to_i
+      end
+
       if plain =~ verbose_line
         in_stub = false
         # suppress -verbose progress line
@@ -185,6 +238,39 @@ def build_spark_scala_and_java_docs_if_necessary
       end
     end
   end
+
+  unless fatal_diagnostics.empty?
+    bar = "=" * 72
+    puts ""
+    puts bar
+    puts "Fatal javadoc errors (#{fatal_diagnostics.size}):"
+    puts bar
+    fatal_diagnostics.each_with_index do |d, i|
+      puts "  #{i + 1}. #{d[:path]}:#{d[:line]}: #{d[:msg]}"
+      d[:context].each { |c| puts "       #{c}" }
+    end
+    puts bar
+    puts ""
+
+    # GitHub Actions inline annotations. `%`, `\r`, `\n` require URL-style
+    # escaping per the workflow command spec; newlines render as multiple
+    # lines inside the annotation, so the source snippet and caret display
+    # under the error message in the PR check panel.
+    project_root = SPARK_PROJECT_ROOT + '/'
+    fatal_diagnostics.each do |d|
+      rel = d[:path].start_with?(project_root) ? d[:path][project_root.length..] : d[:path]
+      full = ([d[:msg]] + d[:context]).join("\n")
+      enc = full.gsub(/[%\r\n]/, '%' => '%25', "\r" => '%0D', "\n" => '%0A')
+      puts "::error file=#{rel},line=#{d[:line]},title=javadoc::#{enc}"
+    end
+  end
+
+  if reported_error_count && reported_error_count != fatal_diagnostics.size
+    puts "::warning::Javadoc reported #{reported_error_count} errors but " \
+         "build_api_docs.rb captured #{fatal_diagnostics.size}. The doclint " \
+         "phase markers may have shifted; please update build_api_docs.rb."
+  end
+
   raise("Unidoc generation failed") unless $?.success?
 end
 

@@ -82,6 +82,7 @@ message Relation {
     LateralJoin lateral_join = 44;
     ChunkedCachedLocalRelation chunked_cached_local_relation = 45;
     RelationChanges relation_changes = 46;
+    NearestByJoin nearest_by_join = 47;
 
     // NA functions
     NAFill fill_na = 90;
@@ -1275,4 +1276,34 @@ message LateralJoin {
 
   // (Required) The join type.
   Join.JoinType join_type = 4;
+}
+
+// Relation of type [[NearestByJoin]].
+//
+// For each row on the left side, returns up to `num_results` rows from the right side ranked
+// by `ranking_expression`.
+message NearestByJoin {
+  // (Required) Left (query) input relation.
+  Relation left = 1;
+
+  // (Required) Right (base) input relation.
+  Relation right = 2;
+
+  // (Required) Scalar expression used to rank candidate rows on the right side.
+  Expression ranking_expression = 3;
+
+  // (Required) Maximum number of matches per left row. Must be between 1 and 100000.
+  int32 num_results = 4;
+
+  // The following three fields use `string` (not typed enums) for parity with `AsOfJoin`,
+  // which models analogous fields the same way. Validation happens server-side at planning time.
+
+  // (Required) The join type. Must be one of: "inner", "leftouter".
+  string join_type = 5;
+
+  // (Required) Search algorithm contract. Must be one of: "approx", "exact".
+  string mode = 6;
+
+  // (Required) Ranking direction. Must be one of: "distance", "similarity".
+  string direction = 7;
 }

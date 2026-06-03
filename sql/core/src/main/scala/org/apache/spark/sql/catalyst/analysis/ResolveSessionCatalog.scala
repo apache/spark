@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, CharVarcharUtils, ResolveDefaultColumns => DefaultCols}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
-import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, TableCatalog, V1Table, ViewCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogExtension, CatalogManager, CatalogPlugin, CatalogV2Util, LookupCatalog, SupportsNamespaces, V1Table, ViewCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.command._
@@ -36,6 +36,7 @@ import org.apache.spark.sql.execution.datasources.{CreateTable => CreateTableV1,
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
 import org.apache.spark.util.SparkStringUtils
 
@@ -540,20 +541,8 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // The final `_, _` are AlterViewAs.isAnalyzed and referredTempFunctions. We drop both:
     // AlterViewAsCommand is a separate AnalysisOnlyCommand and gets its own markAsAnalyzed pass
     // from HandleSpecialCommand after this rewrite.
-    case alterViewAs @ AlterViewAs(
-        ResolvedViewIdentifier(ident), originalText, query, _, _) =>
-      // For session-catalog persistent views, pick up the analysis-time collation off the
-      // resolved `ViewInfo` -- `ApplyDefaultCollation` rewrites that property to fill the
-      // namespace default when the existing view had none, and `alterPermanentView` wants
-      // the post-rewrite value so the persisted `CatalogTable.collation` matches the
-      // collated literal types in the analyzed plan. Temp views don't carry a `ViewInfo`,
-      // so they pass through without a collation override.
-      val collation = alterViewAs.child match {
-        case rpv: ResolvedPersistentView =>
-          Option(rpv.info.properties.get(TableCatalog.PROP_COLLATION))
-        case _ => None
-      }
-      AlterViewAsCommand(ident, originalText, query, collation = collation)
+    case AlterViewAs(ResolvedViewIdentifier(ident), originalText, query, _, _) =>
+      AlterViewAsCommand(ident, originalText, query)
 
     case AlterViewSchemaBinding(ResolvedViewIdentifier(ident), viewSchemaMode) =>
       AlterViewSchemaBindingCommand(ident, viewSchemaMode)
@@ -576,6 +565,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         replace = replace,
         viewType = PersistedView,
         viewSchemaMode = viewSchemaMode)
+
+    // CREATE VIEW ... WITH METRICS on the session catalog -> V1 runnable command. Non-session
+    // v2 catalogs leave [[CreateMetricView]] in place for `DataSourceV2Strategy` to dispatch
+    // to `CreateV2MetricViewExec`.
+    case cm @ CreateMetricView(ResolvedIdentifier(catalog, _), _, _, _, _, _, _)
+        if isSessionCatalog(catalog) =>
+      CreateMetricViewCommand(
+        cm.child,
+        cm.userSpecifiedColumns,
+        cm.comment,
+        cm.properties,
+        cm.originalText,
+        cm.allowExisting,
+        cm.replace)
 
     // ViewCatalog catalogs are handled by the v2 strategy (enumerates via listViews); we skip
     // the match here so the plan flows through unchanged. Only non-session, non-ViewCatalog

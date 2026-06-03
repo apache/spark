@@ -878,6 +878,29 @@ class FileBasedDataSourceSuite extends SharedSparkSession
     assert(fileList.toSet === expectedFileList.toSet)
   }
 
+  test("recursiveFileLookup with a partitioned catalog table is rejected") {
+    withTable("part_tbl") {
+      sql(
+        """
+          |CREATE TABLE part_tbl (id INT, value STRING)
+          |USING parquet
+          |PARTITIONED BY (year INT)
+          |""".stripMargin)
+      sql("INSERT INTO part_tbl PARTITION (year = 2024) VALUES (1, 'a')")
+      sql("INSERT INTO part_tbl PARTITION (year = 2025) VALUES (2, 'b')")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read
+            .option("recursiveFileLookup", "true")
+            .table("part_tbl")
+            .collect()
+        },
+        condition = "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE",
+        parameters = Map.empty[String, String]
+      )
+    }
+  }
+
   test("Return correct results when data columns overlap with partition columns") {
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>

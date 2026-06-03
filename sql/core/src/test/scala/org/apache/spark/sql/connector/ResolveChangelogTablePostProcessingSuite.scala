@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector
 
 import java.util.Collections
 
-import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -47,9 +45,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * paths (carry-over removal, update detection) and then verifies that Spark's analyzer rule
  * correctly transforms the plan and produces the expected output.
  */
-class ResolveChangelogTablePostProcessingSuite
-    extends SharedSparkSession
-    with BeforeAndAfterEach {
+class ResolveChangelogTablePostProcessingSuite extends SharedSparkSession {
 
   private val catalogName = "cdc_test_catalog"
   private val testTableName = "events"

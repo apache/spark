@@ -40,10 +40,10 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
-  private val exprA = Literal(1)
-  private val exprB = Literal(2)
-  private val exprC = Literal(3)
-  private val exprD = Literal(4)
+  private val exprA = AttributeReference("a", IntegerType)()
+  private val exprB = AttributeReference("b", IntegerType)()
+  private val exprC = AttributeReference("c", IntegerType)()
+  private val exprD = AttributeReference("d", IntegerType)()
 
   private val EnsureRequirements = new EnsureRequirements()
 
@@ -821,7 +821,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         KeyedPartitioning(bucket(4, exprA) :: bucket(16, exprB) :: Nil, Seq.empty)
     )
     plan2 = new DummySparkPlanWithBatchScanChild(
-      outputPartitioning = PartitioningCollection(Seq(
+      outputPartitioning = PartitioningCollection.fromPartitionings(Seq(
         KeyedPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, Seq.empty),
         KeyedPartitioning(bucket(4, exprA) :: bucket(16, exprC) :: Nil, Seq.empty))
       )
@@ -1050,7 +1050,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       // With partition collections
       plan1 = new DummySparkPlanWithBatchScanChild(outputPartitioning =
-        PartitioningCollection(
+        PartitioningCollection.fromPartitionings(
           Seq(KeyedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil, leftPartValues),
             KeyedPartitioning(bucket(4, exprB) :: bucket(8, exprC) :: Nil, leftPartValues))
         )
@@ -1077,13 +1077,13 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       // Nested partition collections
       plan2 = new DummySparkPlanWithBatchScanChild(outputPartitioning =
-        PartitioningCollection(
+        PartitioningCollection.fromPartitionings(
           Seq(
-            PartitioningCollection(
+            PartitioningCollection.fromPartitionings(
               Seq(
                 KeyedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil, rightPartValues),
                 KeyedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil, rightPartValues))),
-              PartitioningCollection(
+              PartitioningCollection.fromPartitionings(
                 Seq(
                   KeyedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil, rightPartValues),
                   KeyedPartitioning(bucket(4, exprC) :: bucket(8, exprB) :: Nil, rightPartValues)))
@@ -1539,7 +1539,7 @@ private case class DummyBothKPBinaryExec(left: SparkPlan, right: SparkPlan)
   override def output: Seq[Attribute] = left.output ++ right.output
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
   override def outputPartitioning: Partitioning =
-    PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+    PartitioningCollection.fromPartitionings(Seq(left.outputPartitioning, right.outputPartitioning))
   override protected def doExecute(): RDD[InternalRow] = null
   override protected def withNewChildrenInternal(
       newLeft: SparkPlan, newRight: SparkPlan): SparkPlan =

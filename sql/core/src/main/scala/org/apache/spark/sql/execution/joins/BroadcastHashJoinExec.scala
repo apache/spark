@@ -84,7 +84,7 @@ case class BroadcastHashJoinExec private(
           // constructor prevents that.
 
           case p :: Nil => p
-          case ps => PartitioningCollection(ps)
+          case ps => PartitioningCollection.fromPartitionings(ps)
         }
       case _ => streamedPlan.outputPartitioning
     }

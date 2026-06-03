@@ -29,8 +29,11 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Metadata
 
 /**
- * Tests that exercise [[org.apache.spark.sql.execution.command.CreateMetricViewCommand]] on a
- * non-session V2 catalog. Metric views are persisted through the same [[ViewCatalog]] interface
+ * Tests that exercise [[org.apache.spark.sql.metricview.logical.CreateMetricView]] on a
+ * non-session V2 catalog (routed through
+ * [[org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy]] to
+ * [[org.apache.spark.sql.execution.datasources.v2.CreateV2MetricViewExec]]).
+ * Metric views are persisted through the same [[ViewCatalog]] interface
  * as plain views; the only marker that distinguishes them is `PROP_TABLE_TYPE = METRIC_VIEW`
  * plus the typed `viewDependencies` field on [[ViewInfo]]. The recording catalog used here is a
  * minimal [[TableViewCatalog]] so the same instance can also host the source table referenced by

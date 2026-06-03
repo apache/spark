@@ -25,12 +25,11 @@ import org.apache.spark.sql.types.StringType
 
 class AlterViewAsSuite extends command.AlterViewAsSuiteBase with ViewCommandSuiteBase {
 
-  test("V2: ALTER VIEW AS picks up the namespace's default collation when the existing view " +
-      "has none") {
-    // Create the namespace with no default collation; create a view in it (PROP_COLLATION
-    // unset). Then set the namespace default and ALTER VIEW AS -- the new ViewInfo must end
-    // up with PROP_COLLATION = UTF8_LCASE (so v1Table.toCatalogTable's `collation` field is
-    // set, and view-read time picks up UTF8_LCASE via AnalysisContext.collation).
+  test("V2: ALTER NAMESPACE DEFAULT COLLATION does not retroactively change a view's collation") {
+    // A view created in a namespace without a default collation keeps its creation-time
+    // collation behavior. A later `ALTER NAMESPACE ... DEFAULT COLLATION` followed by
+    // `ALTER VIEW AS` does not fold the new namespace default into the view -- `PROP_COLLATION`
+    // stays at its create-time value (empty here) and the body literals stay UTF8_BINARY.
     withSQLConf(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED.key -> "true") {
       val viewName = "v2_alter_collation_inherit"
       val view = s"$catalog.$namespace.$viewName"
@@ -45,11 +44,35 @@ class AlterViewAsSuite extends command.AlterViewAsSuiteBase with ViewCommandSuit
       sql(s"ALTER VIEW $view AS SELECT 'x' AS c1, 'y' AS c2")
 
       val stored = viewCatalog.getStoredView(Array(namespace), viewName)
-      assert(stored.properties().get(TableCatalog.PROP_COLLATION) == "UTF8_LCASE")
-      // Read-time the view body's literal types reflect the inherited collation.
+      assert(Option(stored.properties().get(TableCatalog.PROP_COLLATION)).isEmpty)
       val df = spark.table(view)
-      assert(df.schema("c1").dataType === StringType("UTF8_LCASE"))
-      assert(df.schema("c2").dataType === StringType("UTF8_LCASE"))
+      assert(df.schema("c1").dataType === StringType)
+      assert(df.schema("c2").dataType === StringType)
+    }
+  }
+
+  test("V2: ALTER VIEW after ALTER NAMESPACE DEFAULT COLLATION keeps the inherited collation") {
+    withSQLConf(SQLConf.SCHEMA_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      val ns = "ns"
+      val viewName = "v2"
+      val view = s"$catalog.$ns.$viewName"
+      withNamespace(s"$catalog.$ns") {
+        sql(s"CREATE NAMESPACE $catalog.$ns DEFAULT COLLATION UTF8_LCASE")
+        sql(s"CREATE VIEW $view AS SELECT 'a' AS c1")
+        assert(viewCatalog
+          .getStoredView(Array(ns), viewName)
+          .properties()
+          .get(TableCatalog.PROP_COLLATION) == "UTF8_LCASE")
+
+        sql(s"ALTER NAMESPACE $catalog.$ns DEFAULT COLLATION UNICODE")
+        sql(s"ALTER VIEW $view AS SELECT 'x' AS c1, 'y' AS c2")
+
+        val stored = viewCatalog.getStoredView(Array(ns), viewName)
+        assert(stored.properties().get(TableCatalog.PROP_COLLATION) == "UTF8_LCASE")
+        val df = spark.table(view)
+        assert(df.schema("c1").dataType === StringType("UTF8_LCASE"))
+        assert(df.schema("c2").dataType === StringType("UTF8_LCASE"))
+      }
     }
   }
 

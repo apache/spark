@@ -40,7 +40,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -430,6 +430,11 @@ abstract class HashExpression[E] extends Expression {
     s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
   }
 
+  protected def genHashTimestampNanos(input: String, result: String): String = {
+    val epochMicrosHash = s"$hasherClassName.hashLong($input.epochMicros, $result)"
+    s"$result = $hasherClassName.hashInt($input.nanosWithinMicro, $epochMicrosHash);"
+  }
+
   protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
     if (stringType.supportsBinaryEquality) {
@@ -549,6 +554,8 @@ abstract class HashExpression[E] extends Expression {
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
     case LongType | _: TimeType => genHashLong(input, result)
     case TimestampType | TimestampNTZType => genHashTimestamp(input, result)
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+      genHashTimestampNanos(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
@@ -636,6 +643,7 @@ abstract class InterpretedHashFunction {
           hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
         }
       case c: CalendarInterval => hashInt(c.months, hashInt(c.days, hashLong(c.microseconds, seed)))
+      case t: TimestampNanosVal => hashInt(t.nanosWithinMicro, hashLong(t.epochMicros, seed))
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
@@ -977,6 +985,12 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
       $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
      """
 
+  override protected def genHashTimestampNanos(input: String, result: String): String =
+    s"""
+      $result = (int)
+        ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestampNanos($input);
+     """
+
   override protected def genHashString(
       ctx: CodegenContext, stringType: StringType, input: String, result: String): String = {
     if (stringType.supportsBinaryEquality || !isCollationAware) {
@@ -1145,6 +1159,17 @@ object HiveHashFunction extends InterpretedHashFunction {
   }
 
   /**
+   * Extends [[hashTimestamp]] with the sub-microsecond nanoseconds carried by a
+   * [[TimestampNanosVal]], folding the extra field in with the same `* 37 + field` idiom used by
+   * [[hashCalendarInterval]]. Hive has no nanosecond-precision timestamp type, so this is a
+   * Spark-defined, self-consistent hash (equal values hash equally) rather than a Hive-compatible
+   * one.
+   */
+  def hashTimestampNanos(t: TimestampNanosVal): Long = {
+    (hashTimestamp(t.epochMicros) * 37) + t.nanosWithinMicro
+  }
+
+  /**
    * Hive allows input intervals to be defined using units below but the intervals
    * have to be from the same category:
    * - year, month (stored as HiveIntervalYearMonth)
@@ -1242,6 +1267,7 @@ object HiveHashFunction extends InterpretedHashFunction {
 
       case d: Decimal => normalizeDecimal(d.toJavaBigDecimal).hashCode()
       case timestamp: Long if dataType.isInstanceOf[TimestampType] => hashTimestamp(timestamp)
+      case timestampNanos: TimestampNanosVal => hashTimestampNanos(timestampNanos)
       case calendarInterval: CalendarInterval => hashCalendarInterval(calendarInterval)
       case _ => super.hash(value, dataType, 0, isCollationAware, legacyCollationAwareHashing)
     }

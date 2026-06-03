@@ -387,7 +387,7 @@ class ProjectedOrderingAndPartitioningSuite
     val y = AttributeReference("y", IntegerType)()
     val yAlias = AttributeReference("y_alias", IntegerType)()
     val keys2d = Seq(InternalRow(1, 1), InternalRow(1, 2), InternalRow(2, 1), InternalRow(2, 2))
-    val childPartitioning = PartitioningCollection(Seq(
+    val childPartitioning = PartitioningCollection.fromPartitionings(Seq(
       KeyedPartitioning(Seq(x, y), keys2d),
       KeyedPartitioning(Seq(x, yAlias), keys2d)))
     val child = DummyLeafExecWithPartitioning(
@@ -585,6 +585,22 @@ class ProjectedOrderingAndPartitioningSuite
         assert(!kp.isNarrowed, "both positions projected: not narrowed")
       case other => fail(s"Expected KeyedPartitioning, got $other")
     }
+  }
+
+  test("SPARK-46367: mixed-arity KeyedPartitionings rejected by PartitioningCollection") {
+    // PartitioningCollection enforces matching expression arity (and shared partitionKeys
+    // references) across all its KeyedPartitionings, so the invariant required by
+    // `AliasAwareOutputExpression` cannot be violated by the input.
+    val x = AttributeReference("x", IntegerType)()
+    val y = AttributeReference("y", IntegerType)()
+    val keys2d = Seq(InternalRow(1, 1), InternalRow(2, 2))
+    val keys1d = Seq(InternalRow(1), InternalRow(2))
+    val e = intercept[IllegalArgumentException] {
+      PartitioningCollection.fromPartitionings(Seq(
+        KeyedPartitioning(Seq(x, y), keys2d),
+        KeyedPartitioning(Seq(x), keys1d)))
+    }
+    assert(e.getMessage.contains("partitionKeys"))
   }
 }
 

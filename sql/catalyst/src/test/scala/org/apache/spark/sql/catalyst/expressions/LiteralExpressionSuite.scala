@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -85,6 +85,10 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkEvaluation(Literal.default(TimeType()), LocalTime.MIDNIGHT)
     checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0, 0L))
+    checkEvaluation(
+      Literal.default(TimestampNTZNanosType(9)), new TimestampNanosVal(0L, 0.toShort))
+    checkEvaluation(
+      Literal.default(TimestampLTZNanosType(7)), new TimestampNanosVal(0L, 0.toShort))
     checkEvaluation(Literal.default(YearMonthIntervalType()), 0)
     checkEvaluation(Literal.default(DayTimeIntervalType()), 0L)
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
@@ -668,7 +672,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val geog = Geography.fromWKB(pointBytes, 4326)
     val lit = Literal.create(geog, GeographyType(4326))
     assert(lit.dataType === GeographyType(4326))
-    assert(lit.value.isInstanceOf[GeographyVal])
+    assert(lit.value.isInstanceOf[BinaryView])
   }
 
   test("Literal.create with null Geometry value") {
@@ -683,6 +687,6 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val geom = Geometry.fromWKB(pointBytes, 0)
     val lit = Literal.create(geom, GeometryType(0))
     assert(lit.dataType === GeometryType(0))
-    assert(lit.value.isInstanceOf[GeometryVal])
+    assert(lit.value.isInstanceOf[BinaryView])
   }
 }

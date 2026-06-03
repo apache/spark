@@ -68,6 +68,8 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
+      # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
+      head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
       image_url: ${{ steps.infra-image-outputs.outputs.image_url }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
@@ -84,6 +86,9 @@ jobs:
         fetch-depth: 0
         repository: apache/spark
         ref: ${{ inputs.branch }}
+    - name: Resolve apache/spark HEAD SHA
+      id: resolve-sha
+      run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -149,9 +154,11 @@ jobs:
             java25=false
           fi
           build=`./dev/is-changed.py -m "core,unsafe,kvstore,avro,utils,utils-java,network-common,network-shuffle,repl,launcher,examples,sketch,variant,api,catalyst,hive-thriftserver,mllib-local,mllib,graphx,streaming,sql-kafka-0-10,streaming-kafka-0-10,streaming-kinesis-asl,kubernetes,hadoop-cloud,spark-ganglia-lgpl,profiler,protobuf,yarn,connect,sql,hive,pipelines"`
+          build_core_utils=`./dev/is-changed.py -m "core,unsafe,kvstore,utils,utils-java,network-common,network-shuffle,sketch,variant,launcher"`
           precondition="
             {
               \"build\": \"$build\",
+              \"build-core-utils\": \"$build_core_utils\",
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"pyspark-install\": \"$pyspark_install\",
@@ -264,8 +271,8 @@ jobs:
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }}"
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).build == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 150
     strategy:
@@ -281,16 +288,15 @@ jobs:
         # Note that the modules below are from sparktestsupport/modules.py.
         modules:
           - >-
-            core, unsafe, kvstore, avro, utils, utils-java,
-            network-common, network-shuffle, repl, launcher,
-            examples, sketch, variant
+            core, unsafe, kvstore, utils, utils-java,
+            network-common, network-shuffle, sketch, variant, launcher
           - >-
             api, catalyst, hive-thriftserver
           - >-
-            mllib-local, mllib, graphx, profiler, pipelines
+            mllib-local, mllib, graphx, profiler, pipelines, repl, examples
           - >-
             streaming, sql-kafka-0-10, streaming-kafka-0-10, streaming-kinesis-asl,
-            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect
+            kubernetes, hadoop-cloud, spark-ganglia-lgpl, protobuf, connect, avro
           - yarn
         # Here, we split Hive and SQL tests into some of slow ones and the rest of them.
         included-tags: [""]
@@ -334,6 +340,10 @@ jobs:
           # In practice, the build will run in individual PR, but not against the individual commit
           # in Apache Spark repository.
           - modules: ${{ fromJson(needs.precondition.outputs.required).yarn != 'true' && 'yarn' }}
+          # Skip the core/utils group when a PR doesn't touch those modules (e.g. SQL-only or
+          # PySpark-only changes). The precondition is opt-out: omitted means run (so periodic
+          # full-build workflows that set only "build": "true" keep running this entry).
+          - modules: ${{ fromJson(needs.precondition.outputs.required).build-core-utils == 'false' && 'core, unsafe, kvstore, utils, utils-java, network-common, network-shuffle, sketch, variant, launcher' }}
     env:
       MODULES_TO_TEST: ${{ matrix.modules }}
       EXCLUDED_TAGS: ${{ matrix.excluded-tags }}
@@ -352,7 +362,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -378,6 +388,8 @@ jobs:
         key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space ]; then
@@ -400,8 +412,22 @@ jobs:
     - name: Install Python packages (Python 3.12)
       if: (contains(matrix.modules, 'sql') && !contains(matrix.modules, 'sql-')) || contains(matrix.modules, 'connect') || contains(matrix.modules, 'yarn')
       run: |
-        python3.12 -m pip install 'numpy>=1.22' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
+        python3.12 -m pip install 'numpy>=1.23.2' pyarrow 'pandas==2.3.3' pyyaml scipy unittest-xml-reporting 'lxml==4.9.4' 'grpcio==1.76.0' 'grpcio-status==1.76.0' 'protobuf==6.33.5' 'zstandard==0.25.0'
         python3.12 -m pip list
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -412,14 +438,18 @@ jobs:
         # Hive "other tests" test needs larger metaspace size based on experiment.
         if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
         # SPARK-46283: should delete the following env replacement after SPARK 3.x EOL
-        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then 
+        if [[ "$MODULES_TO_TEST" == *"streaming-kinesis-asl"* ]] && [[ "${{ inputs.branch }}" =~ ^branch-3 ]]; then
           MODULES_TO_TEST=${MODULES_TO_TEST//streaming-kinesis-asl, /}
+        fi
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
         fi
         export SERIAL_SBT_TESTS=1
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: |
@@ -434,13 +464,13 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/*.log"
     - name: Upload yarn app log files
       if: ${{ !success() && contains(matrix.modules, 'yarn') }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: yarn-app-log-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
         path: "**/target/test/data/"
@@ -470,7 +500,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: apache/spark
-          ref: ${{ inputs.branch }}
+          ref: ${{ needs.precondition.outputs.head_sha }}
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |
@@ -544,10 +574,13 @@ jobs:
     needs: precondition
     if: >-
       (!cancelled()) && (
+        fromJson(needs.precondition.outputs.required).build == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-pandas == 'true' ||
         fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
-        fromJson(needs.precondition.outputs.required).sparkr == 'true')
+        fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
+        fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
+        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -564,7 +597,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -598,7 +631,7 @@ jobs:
       run: |
         ./build/sbt -Phadoop-3 -Pyarn -Pspark-ganglia-lgpl -Phadoop-cloud -Phive \
           -Pkubernetes -Pjvm-profiler -Pkinesis-asl -Phive-thriftserver \
-          -Pdocker-integration-tests -Pvolcano \
+          -Pdocker-integration-tests -Pkubernetes-integration-tests -Pvolcano \
           Test/package streaming-kinesis-asl-assembly/assembly connect/assembly assembly/package
     - name: Package compile output
       run: |
@@ -606,7 +639,7 @@ jobs:
           | tar --null -czf compile-artifact.tar.gz -T -
         ls -lh compile-artifact.tar.gz
     - name: Upload compile artifact
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
         path: compile-artifact.tar.gz
@@ -689,7 +722,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -742,7 +775,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -835,7 +868,7 @@ jobs:
     - name: Upload test results to report
       env: ${{ fromJSON(inputs.envs) }}
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: |
@@ -851,7 +884,7 @@ jobs:
     - name: Upload unit tests log files
       env: ${{ fromJSON(inputs.envs) }}
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
         path: "**/target/unit-tests.log"
@@ -880,7 +913,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -920,7 +953,7 @@ jobs:
       id: download-precompiled
       if: needs.precompile.result == 'success'
       continue-on-error: true
-      uses: actions/download-artifact@v6
+      uses: actions/download-artifact@v8
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
     - name: Extract precompiled artifact
@@ -944,7 +977,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-sparkr--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -969,7 +1002,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -1031,7 +1064,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -1230,7 +1263,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       run: |
         git config --global --add safe.directory ${GITHUB_WORKSPACE}
@@ -1409,7 +1442,7 @@ jobs:
       run: tar cjf site.tar.bz2 docs/_site
     - name: Upload documentation
       if: github.repository != 'apache/spark'
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: site
         path: site.tar.bz2
@@ -1430,7 +1463,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -1454,6 +1487,8 @@ jobs:
         key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           tpcds-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1507,7 +1542,7 @@ jobs:
         SPARK_TPCDS_DATA=`pwd`/tpcds-sf-1 build/sbt "sql/testOnly org.apache.spark.sql.TPCDSCollationQueryTestSuite"
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1522,14 +1557,14 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-tpcds--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true'
     name: Run Docker integration tests
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1547,7 +1582,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: ${{ inputs.branch }}
+        ref: ${{ needs.precondition.outputs.head_sha }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -1572,18 +1607,38 @@ jobs:
         key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           docker-integration-coursier-
+          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          precompile-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v6
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          export SKIP_SCALA_BUILD=true
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        fi
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: |
@@ -1598,14 +1653,14 @@ jobs:
           **/target/surefire-reports/*.xml
     - name: Upload unit tests log files
       if: ${{ !success() }}
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: unit-tests-log-docker-integration--${{ inputs.java }}-${{ inputs.hadoop }}-hive2.3
         path: "**/target/unit-tests.log"
 
   k8s-integration-tests:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true'
     name: Run Spark on Kubernetes Integration test
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1615,7 +1670,7 @@ jobs:
         with:
           fetch-depth: 0
           repository: apache/spark
-          ref: ${{ inputs.branch }}
+          ref: ${{ needs.precondition.outputs.head_sha }}
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |
@@ -1640,6 +1695,8 @@ jobs:
           key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
             k8s-integration-coursier-
+            precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+            precompile-coursier-
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then
@@ -1650,6 +1707,20 @@ jobs:
         with:
           distribution: zulu
           java-version: ${{ inputs.java }}
+      - name: Download precompiled artifact
+        id: download-precompiled
+        if: needs.precompile.result == 'success'
+        continue-on-error: true
+        uses: actions/download-artifact@v6
+        with:
+          name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+      - name: Extract precompiled artifact
+        id: extract-precompiled
+        if: steps.download-precompiled.outcome == 'success'
+        continue-on-error: true
+        run: |
+          tar -xzf compile-artifact.tar.gz
+          rm compile-artifact.tar.gz
       - name: Install R
         run: |
           sudo apt update
@@ -1685,7 +1756,7 @@ jobs:
           build/sbt -Phadoop-3 -Psparkr -Pkubernetes -Pvolcano -Pkubernetes-integration-tests -Dspark.kubernetes.test.volcanoMaxConcurrencyJobNum=1 -Dtest.exclude.tags=local "kubernetes-integration-tests/test"
       - name: Upload Spark on K8S integration tests log files
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: spark-on-kubernetes-it-log
           path: "**/target/integration-tests.log"

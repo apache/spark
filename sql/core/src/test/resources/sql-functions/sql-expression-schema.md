@@ -94,6 +94,7 @@
 | org.apache.spark.sql.catalyst.expressions.Cos | cos | SELECT cos(0) | struct<COS(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Cosh | cosh | SELECT cosh(0) | struct<COSH(0):double> |
 | org.apache.spark.sql.catalyst.expressions.Cot | cot | SELECT cot(1) | struct<COT(1):double> |
+| org.apache.spark.sql.catalyst.expressions.CounterDiffExpressionBuilder | counter_diff | SELECT m, t, c, counter_diff(c) OVER (PARTITION BY m ORDER BY t) AS diff FROM VALUES ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:00:00', 100), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:01:00', 200), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:02:00', 400), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:03:00', 50), ('http_requests', TIMESTAMP_NTZ '2026-01-01 00:04:00', 100) AS tab(m, t, c) ORDER BY t | struct<m:string,t:timestamp_ntz,c:int,diff:int> |
 | org.apache.spark.sql.catalyst.expressions.Crc32 | crc32 | SELECT crc32('Spark') | struct<crc32(Spark):bigint> |
 | org.apache.spark.sql.catalyst.expressions.CreateArray | array | SELECT array(1, 2, 3) | struct<array(1, 2, 3):array<int>> |
 | org.apache.spark.sql.catalyst.expressions.CreateMap | map | SELECT map(1.0, '2', 3.0, '4') | struct<map(1.0, 2, 3.0, 4):map<decimal(2,1),string>> |

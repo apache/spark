@@ -410,12 +410,8 @@ class PythonUDTFSuite extends SharedSparkSession {
           |  WITH SINGLE PARTITION
           |  ORDER BY device_id, data_ds)
           |""".stripMargin)),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" ->
-        ("The table function call includes a table argument with an invalid " +
-          "partitioning/ordering specification: the ORDER BY clause included multiple " +
-          "expressions without parentheses surrounding them; please add parentheses around these " +
-          "expressions and then retry the query again")),
+      condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+      parameters = Map("clause" -> "ORDER BY"),
       context = ExpectedContext(
         fragment = "TABLE(SELECT 1 AS device_id, 2 AS data_ds)\n  " +
           "WITH SINGLE PARTITION\n  " +

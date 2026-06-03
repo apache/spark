@@ -88,6 +88,7 @@ class AnsiTypeCoercionSuite extends TypeCoercionSuiteBase {
     shouldCast(checkedType, DecimalType, DecimalType.SYSTEM_DEFAULT)
     shouldCast(checkedType, NumericType, NumericType.defaultConcreteType)
     shouldCast(checkedType, AnyTimestampType, AnyTimestampType.defaultConcreteType)
+    shouldCast(checkedType, AnyTimeType, AnyTimeType.defaultConcreteType)
     shouldNotCast(checkedType, IntegralType)
   }
 

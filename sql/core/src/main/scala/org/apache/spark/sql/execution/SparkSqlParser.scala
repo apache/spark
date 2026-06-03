@@ -46,6 +46,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.util.Utils.getUriBuilder
 
@@ -431,15 +432,13 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   private def extractUnquotedResourcePath(ctx: RefreshResourceContext): String = withOrigin(ctx) {
     val unquotedPath = remainder(ctx.REFRESH.getSymbol).trim
-    validate(
-      unquotedPath != null && !unquotedPath.isEmpty,
-      "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
-      ctx)
+    if (unquotedPath == null || unquotedPath.isEmpty) {
+      throw QueryParsingErrors.emptyRefreshResourcePathError(ctx)
+    }
     val forbiddenSymbols = Seq(" ", "\n", "\r", "\t")
-    validate(
-      !forbiddenSymbols.exists(unquotedPath.contains(_)),
-      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths",
-      ctx)
+    if (forbiddenSymbols.exists(unquotedPath.contains(_))) {
+      throw QueryParsingErrors.invalidRefreshResourcePathError(ctx)
+    }
     unquotedPath
   }
 
@@ -863,7 +862,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       .getOrElse(Map.empty)
     val codeLiteral = visitCodeLiteral(ctx.codeLiteral())
 
-    CreateMetricViewCommand(
+    CreateMetricView(
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       userSpecifiedColumns,
       visitCommentSpecList(ctx.commentSpec()),

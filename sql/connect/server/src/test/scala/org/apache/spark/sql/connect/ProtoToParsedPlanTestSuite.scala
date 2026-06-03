@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryChangelogCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, Identifier, InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -160,7 +160,7 @@ class ProtoToParsedPlanTestSuite extends SharedSparkSession with ResourceHelper 
       Array.empty[Transform],
       emptyProps)
 
-    val catalogManager = new CatalogManager(
+    val catalogManager = new DefaultCatalogManager(
       inMemoryCatalog,
       new SessionCatalog(
         new catalog.InMemoryCatalog(),

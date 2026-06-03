@@ -19,7 +19,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.config import set_option, reset_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class CombineFirstMixin:
@@ -92,7 +91,6 @@ class CombineFirstMixin:
 class CombineFirstTests(
     CombineFirstMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

@@ -87,7 +87,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     if (out.isNullAt(0)) null else out.getInt(0)
   }
 
-    test("build and single-point query returns identity; full scan matches naive") {
+  test("build and single-point query returns identity; full scan matches naive") {
     withTaskContext {
       val values = Seq(5, 2, 9, 1, 7, 3, 4, 8, 6, 0)
       val tree = buildTree(values, fanout = 4, blockSize = 1024)
@@ -102,7 +102,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("single-block: range query matches naive baseline for random ranges") {
+  test("single-block: range query matches naive baseline for random ranges") {
     withTaskContext {
       val rnd = new Random(0xC0FFEE)
       val values = Seq.fill(100)(rnd.nextInt(1000))
@@ -119,7 +119,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("fanout boundaries: sizes {1, F, F+1, F*F} for fanout in {2,4,8,16}") {
+  test("fanout boundaries: sizes {1, F, F+1, F*F} for fanout in {2,4,8,16}") {
     withTaskContext {
       val rnd = new Random(42)
       for (fanout <- Seq(2, 4, 8, 16)) {
@@ -151,7 +151,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("identity at empty range query(k, k)") {
+  test("identity at empty range query(k, k)") {
     withTaskContext {
       val values = (1 to 50).reverse
       val tree = buildTree(values, fanout = 4, blockSize = 16)
@@ -163,7 +163,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("block boundary correctness: cross-block vs single-block baseline") {
+  test("block boundary correctness: cross-block vs single-block baseline") {
     withTaskContext {
       val rnd = new Random(123)
       val values = Seq.fill(100)(rnd.nextInt(10000))
@@ -182,7 +182,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("LRU stability: same queries in different orders produce same results") {
+  test("LRU stability: same queries in different orders produce same results") {
     withTaskContext {
       val rnd = new Random(777)
       val values = Seq.fill(100)(rnd.nextInt(10000))
@@ -213,7 +213,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("cross-block: range query matches naive baseline for random ranges") {
+  test("cross-block: range query matches naive baseline for random ranges") {
     withTaskContext {
       val rnd = new Random(0xBEEF)
       val values = Seq.fill(100)(rnd.nextInt(1000))
@@ -231,7 +231,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("cross-block: multi-block level-size invariant") {
+  test("cross-block: multi-block level-size invariant") {
     withTaskContext {
       val rnd = new Random(31337)
       val fanout = 4
@@ -329,7 +329,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("D10 rebuild: second build replaces state; failed build preserves prior state") {
+  test("D10 rebuild: second build replaces state; failed build preserves prior state") {
     withTaskContext {
       val v1 = Seq(5, 1, 9, 3, 7, 2, 8, 4, 6, 0)
       val v2 = Seq(100, 200, 50, 400, 25, 600, 12, 800)
@@ -380,7 +380,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-    test("D11 error paths: invalid ctor args and invalid query ranges") {
+  test("D11 error paths: invalid ctor args and invalid query ranges") {
     withTaskContext {
       // Constructor validation.
       intercept[IllegalArgumentException] {
@@ -503,7 +503,7 @@ class WindowSegmentTreeSuite extends SparkFunSuite with LocalSparkContext {
     math.sqrt(sq / (n - 1))
   }
 
-    test("D12 block-aligned cross-block boundaries") {
+  test("D12 block-aligned cross-block boundaries") {
     withTaskContext {
       val rnd = new Random(12)
       val numRows = 50

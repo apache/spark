@@ -1265,4 +1265,42 @@ trait MergeIntoSchemaEvolutionBasicTests extends MergeIntoSchemaEvolutionSuiteBa
     expected = Seq((1, "hr")).toDF("pk", "dep"),
     expectedWithoutEvolution = Seq((1, "hr")).toDF("pk", "dep")
   )
+
+  for (colName <- Seq("job.title", "job title")) {
+    testEvolution(s"SPARK-56462: source has extra column with special-char name: $colName")(
+      targetData = Seq(
+        (1, 100, "hr"),
+        (2, 200, "software"),
+        (3, 300, "hr")
+      ).toDF("pk", "salary", "dep"),
+      sourceData = Seq(
+        (2, 150, "finance", "engineer"),
+        (4, 400, "finance", "manager")
+      ).toDF("pk", "salary", "dep", colName),
+      clauses = Seq(updateAll(), insertAll()),
+      expected = Seq[(Int, Int, String, String)](
+        (1, 100, "hr", null),
+        (2, 150, "finance", "engineer"),
+        (3, 300, "hr", null),
+        (4, 400, "finance", "manager")
+      ).toDF("pk", "salary", "dep", colName),
+      expectedWithoutEvolution = Seq(
+        (1, 100, "hr"),
+        (2, 150, "finance"),
+        (3, 300, "hr"),
+        (4, 400, "finance")
+      ).toDF("pk", "salary", "dep"),
+      expectedSchema = StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("salary", IntegerType, nullable = false),
+        StructField("dep", StringType),
+        StructField(colName, StringType)
+      )),
+      expectedSchemaWithoutEvolution = StructType(Seq(
+        StructField("pk", IntegerType, nullable = false),
+        StructField("salary", IntegerType, nullable = false),
+        StructField("dep", StringType)
+      ))
+    )
+  }
 }

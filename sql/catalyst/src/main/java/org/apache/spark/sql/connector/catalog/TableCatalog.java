@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import java.util.ArrayList;
 import java.util.Map;
@@ -195,22 +196,25 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Load a {@link Changelog} for the given table, representing the row-level changes within the
-   * range specified by {@code changelogInfo}.
+   * range specified by {@code context}.
    * <p>
    * The default implementation throws an analysis exception indicating that the catalog does
    * not support CDC. Catalogs that support CDC must override this method.
    *
    * @param ident a table identifier
-   * @param changelogInfo the CDC query parameters (range, deduplication mode, etc.)
+   * @param context the CDC query context (range, deduplication mode, etc.)
+   * @param options all options passed to the changelog query, including the CDC-recognized
+   *                keys (range, deduplication mode, etc.) that are also parsed into {@code context}
    * @return a Changelog instance for the requested table and range
    * @throws NoSuchTableException If the table doesn't exist
    *
    * @since 4.2.0
    */
-  default Changelog loadChangelog(Identifier ident, ChangelogInfo changelogInfo)
-      throws NoSuchTableException {
-    throw new UnsupportedOperationException(
-        name() + " does not support Change Data Capture (CDC)");
+  default Changelog loadChangelog(
+      Identifier ident,
+      ChangelogContext context,
+      CaseInsensitiveStringMap options) throws NoSuchTableException {
+    throw new UnsupportedOperationException(name() + " does not support Change Data Capture (CDC)");
   }
 
   /**
