@@ -97,8 +97,9 @@ case class Scd2BatchProcessor(
    * Stamp each microbatch delete event row with its end time sequence, as they are instantaneous
    * events.
    *
-   * Non-deletes leave a null end, as do not yet know if the row reprsents an active upsert, or a
-   * closed upsert. This will become clear in later reconciliation against the aux/target tables.
+   * Non-deletes leave a null end, as we do not yet know if the row represents an active upsert,
+   * or a closed upsert. This will become clear in later reconciliation against the aux/target
+   * tables.
    */
   private def extendMicrobatchRowsWithEndAt(microbatchDf: DataFrame): DataFrame = {
     microbatchDf.withColumn(
@@ -106,7 +107,7 @@ case class Scd2BatchProcessor(
       col = (
         changeArgs.deleteCondition match {
           case Some(deleteCondition) =>
-            F.when(deleteCondition, changeArgs.sequencing).otherwise(null)
+            F.when(deleteCondition, changeArgs.sequencing).otherwise(F.lit(null))
           case None =>
             F.lit(null)
         }
@@ -139,18 +140,26 @@ case class Scd2BatchProcessor(
   private def projectTargetColumnsOntoMicrobatch(
       microbatch: DataFrame
   ): DataFrame = {
-    val dataSchema = StructType(
-      microbatch.schema.fields.filterNot(f =>
-        Scd2BatchProcessor.reservedFrameworkColNames.contains(f.name)
-      )
+    val caseSensitive = microbatch.sparkSession.sessionState.conf.caseSensitiveAnalysis
+
+    // Strip the framework columns through the same case-aware path as the user selection, for
+    // consistency with Scd1BatchProcessor.projectTargetColumnsOntoMicrobatch.
+    val dataSchema = ColumnSelection.applyToSchema(
+      schemaName = "microbatch",
+      schema = microbatch.schema,
+      columnSelection = Some(
+        ColumnSelection.ExcludeColumns(
+          Scd2BatchProcessor.reservedFrameworkColNames.toSeq.map(UnqualifiedColumnName(_))
+        )
+      ),
+      caseSensitive = caseSensitive
     )
     val userSelectedDataSchema =
       ColumnSelection.applyToSchema(
         schemaName = "microbatch",
         schema = dataSchema,
         columnSelection = changeArgs.columnSelection,
-        caseSensitive =
-          microbatch.sparkSession.sessionState.conf.caseSensitiveAnalysis
+        caseSensitive = caseSensitive
       )
     val finalColumnsToSelect: Seq[Column] =
       userSelectedDataSchema.fieldNames.toSeq.map(colName => {
@@ -474,11 +483,15 @@ object Scd2BatchProcessor {
    * Column names reserved by AutoCDC, that will be projected onto the microbatch and target
    * tables. If the user's source dataframe contains any of these columns, SCD2 reconciliation
    * will fail.
+   *
+   * TODO(SPARK-57251): validate at [[AutoCdcMergeFlow]] construction time that the source
+   *   schema and column selection do not collide with these reserved names, so we fail fast
+   *   with a user-actionable error instead of silently overwriting them at preprocess time.
    */
   private val reservedFrameworkColNames: Set[String] = Set(
-      startAtColName,
-      endAtColName,
-      AutoCdcReservedNames.cdcMetadataColName
+    startAtColName,
+    endAtColName,
+    AutoCdcReservedNames.cdcMetadataColName
   )
 
   /**
