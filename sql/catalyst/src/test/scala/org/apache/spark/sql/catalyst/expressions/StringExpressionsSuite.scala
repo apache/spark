@@ -1009,6 +1009,32 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(new StringLocate(s2, s1), null, row2)
     checkEvaluation(new StringLocate(s2, s1), null, row3)
     checkEvaluation(new StringLocate(s2, s1, Literal.create(null, IntegerType)), 0, row4)
+
+    // Codegen skips the statically-dead null check of any non-nullable child, so cover the
+    // mixed-nullability shapes and the all-non-nullable result (which returns isNull = false).
+    val row5 = create_row("aaads", "aa", "zz", null)
+    // start nullable, substr/str non-nullable: result is non-nullable, but the start guard
+    // stays (a null start returns 0).
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), s4), 2, row1)
+    checkEvaluation(StringLocate(Literal("aa"), Literal("aaads"), s4), 0, row5)
+    // substr nullable, str non-nullable: only the substr null check is emitted.
+    checkEvaluation(new StringLocate(s2, Literal("aaads")), 1, row1)
+    checkEvaluation(new StringLocate(s2, Literal("aaads")), null, row3)
+    // substr non-nullable, str nullable: only the str null check is emitted.
+    checkEvaluation(new StringLocate(Literal("aa"), s1), 1, row1)
+    checkEvaluation(new StringLocate(Literal("aa"), s1), null, row2)
+    // substr non-nullable, str nullable, start nullable: the str null check nests in the
+    // start guard.
+    checkEvaluation(StringLocate(Literal("aa"), s1, s4), 2, row1)
+    checkEvaluation(StringLocate(Literal("aa"), s1, s4), null, row2)
+    // substr nullable, str non-nullable, start nullable: the substr null check nests in the
+    // start guard.
+    checkEvaluation(StringLocate(s2, Literal("aaads"), s4), 2, row1)
+    checkEvaluation(StringLocate(s2, Literal("aaads"), s4), null, row3)
+    // all nullable with a non-null start: exercise the substr/str null checks nested inside
+    // the start guard (the start-null short-circuit is covered above).
+    checkEvaluation(StringLocate(s2, s1, s4), null, row3)
+    checkEvaluation(StringLocate(s2, s1, s4), null, row2)
   }
 
   test("LPAD/RPAD") {

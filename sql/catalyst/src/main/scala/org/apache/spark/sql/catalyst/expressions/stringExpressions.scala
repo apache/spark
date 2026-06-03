@@ -1831,27 +1831,67 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     val substrGen = substr.genCode(ctx)
     val strGen = str.genCode(ctx)
     val startGen = start.genCode(ctx)
-    ev.copy(code = code"""
-      int ${ev.value} = 0;
-      boolean ${ev.isNull} = false;
-      ${startGen.code}
-      if (!${startGen.isNull}) {
-        ${substrGen.code}
-        if (!${substrGen.isNull}) {
-          ${strGen.code}
-          if (!${strGen.isNull}) {
-            if (${startGen.value} > 0) {
-              ${ev.value} = CollationSupport.StringLocate.exec(${strGen.value},
-              ${substrGen.value}, ${startGen.value} - 1, $collationId) + 1;
-            }
-          } else {
-            ${ev.isNull} = true;
-          }
+    // The result is computed only when `start` is non-null; a null `start` returns 0 without
+    // looking at `substr`/`str` (conform to Hive). The `substr`/`str` null checks therefore nest
+    // inside the `start` guard, and the result is null iff a non-null `start` meets a null
+    // `substr` or `str`. Each null check is statically dead when the child is non-nullable, so
+    // emit it only when needed (e.g. the 2-arg form defaults `start` to a non-null literal).
+    val compute =
+      code"""
+        if (${startGen.value} > 0) {
+          ${ev.value} = CollationSupport.StringLocate.exec(${strGen.value},
+            ${substrGen.value}, ${startGen.value} - 1, $collationId) + 1;
+        }
+      """
+    val strBlock = if (str.nullable) {
+      code"""
+        ${strGen.code}
+        if (!${strGen.isNull}) {
+          $compute
         } else {
           ${ev.isNull} = true;
         }
-      }
-     """)
+      """
+    } else {
+      code"""
+        ${strGen.code}
+        $compute
+      """
+    }
+    val substrBlock = if (substr.nullable) {
+      code"""
+        ${substrGen.code}
+        if (!${substrGen.isNull}) {
+          $strBlock
+        } else {
+          ${ev.isNull} = true;
+        }
+      """
+    } else {
+      code"""
+        ${substrGen.code}
+        $strBlock
+      """
+    }
+    val startBlock = if (start.nullable) {
+      code"""
+        ${startGen.code}
+        if (!${startGen.isNull}) {
+          $substrBlock
+        }
+      """
+    } else {
+      code"""
+        ${startGen.code}
+        $substrBlock
+      """
+    }
+    val isNullInit = if (nullable) code"boolean ${ev.isNull} = false;" else EmptyBlock
+    ev.copy(code = code"""
+      int ${ev.value} = 0;
+      $isNullInit
+      $startBlock
+     """, isNull = if (nullable) ev.isNull else FalseLiteral)
   }
 
   override def prettyName: String =
