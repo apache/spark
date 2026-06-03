@@ -347,6 +347,27 @@ public class ExpressionImplUtils {
   }
 
   /**
+   * Inverse hyperbolic cosine for the {@code acosh} expression, using the
+   * fdlibm {@code e_acosh.c} algorithm (returns {@code NaN} for {@code x < 1}).
+   * Shared by the eval and codegen paths so the generated Java is a single call
+   * rather than an inline five-branch if/else.
+   */
+  public static double acosh(double x) {
+    if (x < 1.0) {
+      return Double.NaN;
+    } else if (x >= (1 << 28)) {
+      return StrictMath.log(x) + StrictMath.log(2.0);
+    } else if (x == 1.0) {
+      return 0.0;
+    } else if (x > 2.0) {
+      return StrictMath.log(2.0 * x - 1.0 / (x + Math.sqrt(x * x - 1.0)));
+    } else {
+      double t = x - 1.0;
+      return StrictMath.log1p(t + Math.sqrt(2.0 * t + t * t));
+    }
+  }
+
+  /**
    * Returns the single-character string for the {@code chr} expression: the
    * ASCII/Latin-1 character for {@code longVal & 0xFF}. A negative argument
    * yields the empty string. Shared by the eval and codegen paths so the
