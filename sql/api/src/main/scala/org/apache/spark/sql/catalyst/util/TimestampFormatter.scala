@@ -244,11 +244,23 @@ sealed trait TimestampFormatter extends Serializable {
 
   /**
    * Formats a [[TimestampNanosVal]] to a string at the target fractional-second `precision` in
-   * `[7, 9]`. Sub-`precision` digits are truncated (floored) before rendering; the number of
-   * fractional digits actually emitted follows the formatter pattern (e.g. the count of `S`
-   * letters), consistent with the microsecond `format` overloads.
+   * `[7, 9]` for `TIMESTAMP_LTZ(precision)`. The value is rendered in the formatter's `zoneId`
+   * (it goes through the `format(instant: Instant)` path), so it must not be used for NTZ
+   * values; use [[formatWithoutTimeZoneNanos]] for those. Sub-`precision` digits are truncated
+   * (floored) before rendering; the number of fractional digits actually emitted follows the
+   * formatter pattern (e.g. the count of `S` letters), consistent with the microsecond `format`
+   * overloads.
    */
   def formatNanos(v: TimestampNanosVal, precision: Int): String
+
+  /**
+   * NTZ counterpart of [[formatNanos]]: formats a [[TimestampNanosVal]] for
+   * `TIMESTAMP_NTZ(precision)` independently of any time zone. The value is rendered as its
+   * UTC-grid wall-clock local date-time, mirroring the microsecond `format(localDateTime:
+   * LocalDateTime)` path; unlike [[formatNanos]] it does not apply the formatter's `zoneId`.
+   * Sub-`precision` digits are truncated (floored) before rendering.
+   */
+  def formatWithoutTimeZoneNanos(v: TimestampNanosVal, precision: Int): String
 
   def format(us: Long): String
   def format(ts: Timestamp): String
@@ -458,6 +470,17 @@ class Iso8601TimestampFormatter(
       SparkDateTimeUtils.timestampNanosToInstant(v),
       precision)
     format(SparkDateTimeUtils.timestampNanosToInstant(truncated))
+  }
+
+  override def formatWithoutTimeZoneNanos(v: TimestampNanosVal, precision: Int): String = {
+    // Floor sub-`precision` digits, then render the reconstructed local date-time via the
+    // pattern only (no `zoneId`), mirroring `format(localDateTime: LocalDateTime)` on the
+    // microsecond path. Routing an NTZ value through `formatNanos` / `format(Instant)` would
+    // apply the formatter's `zoneId` and shift the UTC-grid wall clock.
+    val truncated = SparkDateTimeUtils.localDateTimeToTimestampNanos(
+      SparkDateTimeUtils.timestampNanosToLocalDateTime(v),
+      precision)
+    format(SparkDateTimeUtils.timestampNanosToLocalDateTime(truncated))
   }
 
   override def validatePatternString(checkLegacy: Boolean): Unit = {
@@ -715,6 +738,9 @@ class LegacyFastTimestampFormatter(pattern: String, zoneId: ZoneId, locale: Loca
   override def formatNanos(v: TimestampNanosVal, precision: Int): String =
     throw TimestampFormatter.legacyNanosUnsupported()
 
+  override def formatWithoutTimeZoneNanos(v: TimestampNanosVal, precision: Int): String =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
   override def validatePatternString(checkLegacy: Boolean): Unit = fastDateFormat
 }
 
@@ -768,6 +794,9 @@ class LegacySimpleTimestampFormatter(
     throw TimestampFormatter.legacyNanosUnsupported()
 
   override def formatNanos(v: TimestampNanosVal, precision: Int): String =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def formatWithoutTimeZoneNanos(v: TimestampNanosVal, precision: Int): String =
     throw TimestampFormatter.legacyNanosUnsupported()
 
   override def validatePatternString(checkLegacy: Boolean): Unit = sdf

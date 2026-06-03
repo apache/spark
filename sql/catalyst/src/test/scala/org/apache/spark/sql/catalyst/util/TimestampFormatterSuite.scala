@@ -645,6 +645,28 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     assert(fraction.formatNanos(value, 7) === "1970-01-01 00:00:00.1234567")
   }
 
+  test("SPARK-57162: formatWithoutTimeZoneNanos is zone-independent (NTZ)") {
+    // Regression guard for an LTZ-only `formatNanos`: with a non-UTC formatter zone, the NTZ
+    // method must render the UTC-grid wall clock unchanged, whereas `formatNanos` (LTZ) routes
+    // through `format(Instant)` and shifts the value into the zone. All-UTC NTZ cases miss this.
+    val value = nanosVal(123456L, 789) // wall clock 1970-01-01 00:00:00.123456789 on the UTC grid
+    val zone = getZoneId("+01:00")
+    val printer = TimestampFormatter(nanosPattern, zone, isParsing = false)
+    // The 9-`S` pattern always emits 9 fractional digits; truncation zeros the low ones.
+    Seq(
+      9 -> "1970-01-01T00:00:00.123456789",
+      8 -> "1970-01-01T00:00:00.123456780",
+      7 -> "1970-01-01T00:00:00.123456700").foreach { case (precision, expectedNtz) =>
+      assert(printer.formatWithoutTimeZoneNanos(value, precision) === expectedNtz)
+    }
+    // LTZ rendering of the same value is shifted by the +01:00 offset.
+    assert(printer.formatNanos(value, 9) === "1970-01-01T01:00:00.123456789")
+    // The NTZ output round-trips through the matching NTZ parser regardless of formatter zone.
+    val parser = TimestampFormatter(nanosPattern, zone, isParsing = true)
+    assert(parser.parseWithoutTimeZoneNanos(
+      printer.formatWithoutTimeZoneNanos(value, 9), 9) === value)
+  }
+
   test("SPARK-57162: NTZ nanos parse rejects a time zone when not allowed") {
     val formatter = TimestampFormatter(
       "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX",
@@ -726,6 +748,12 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
       checkError(
         exception = intercept[SparkUnsupportedOperationException] {
           formatter.parseWithoutTimeZoneNanos("2020-01-01 00:00:00.123456789", 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.formatWithoutTimeZoneNanos(nanosVal(0L, 1), 9)
         },
         condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
         parameters = expectedParameters)
