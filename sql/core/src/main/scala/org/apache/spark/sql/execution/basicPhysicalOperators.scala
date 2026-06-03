@@ -1001,6 +1001,19 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
   // is still in `doConsume`. Each `doCodeGen` pass is itself single-threaded
   // (`produce` -> `doConsume` run inline on one thread), so a `ThreadLocal`
   // isolates the state per pass without that cross-thread race.
+  //
+  // This state is valid only for the duration of one `doCodeGen` pass, not for
+  // the lifetime of a thread (much like the per-pass fields on `CodegenContext`,
+  // e.g. `currentPartitionIndexVar`, which `doProduce` saves and restores just
+  // below). `ThreadLocal` is correct because per-pass and per-thread coincide
+  // here: a pass runs inline on one thread and passes never nest on a thread.
+  // We keep it in a `ThreadLocal` rather than routing it through `ctx` because
+  // `CodegenContext` has no general-purpose per-pass attribute map; threading it
+  // through `ctx` would mean adding `UnionExec`-specific fields to a class shared
+  // by every operator. The `ThreadLocal` keeps this state local to the node that
+  // needs it. Resetting `currentEmittingChild` to -1 at the end of `doProduce`
+  // also guards against a stale value being read by a later, unrelated pass
+  // that reuses the same pooled thread.
   @transient private lazy val numOutputRowsTerm = new ThreadLocal[String]
   @transient private lazy val currentEmittingChild: ThreadLocal[Int] =
     ThreadLocal.withInitial(() => -1)
