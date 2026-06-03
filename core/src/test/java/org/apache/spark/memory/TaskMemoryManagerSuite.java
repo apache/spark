@@ -272,6 +272,31 @@ public class TaskMemoryManagerSuite {
   }
 
   @Test
+  public void pageAllocationFailureCombinesSpillWithFreeTail() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(6144);
+    final SizeLimitedAllocator allocator = new SizeLimitedAllocator(2048);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
+    final TestMemoryConsumer existingConsumer = new TestMemoryConsumer(manager);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+    existingConsumer.use(1024);
+
+    final MemoryBlock page = requestingConsumer.allocate(2048);
+    Assertions.assertEquals(2048, page.size());
+    Assertions.assertEquals(3, allocator.allocationAttempts);
+    Assertions.assertEquals(2048, allocator.lastAllocationSize);
+    Assertions.assertEquals(0, existingConsumer.getUsed());
+    Assertions.assertEquals(2048, requestingConsumer.getUsed());
+    Assertions.assertEquals(5120, manager.getMemoryConsumptionForThisTask());
+
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(0, requestingConsumer.getUsed());
+    Assertions.assertEquals(3072, manager.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(0, manager.getMemoryConsumptionForThisTask());
+  }
+
+  @Test
   public void pageAllocationFailureCanRetryWithFreeTail() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
     memoryManager.limit(5120);

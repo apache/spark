@@ -526,9 +526,20 @@ public class TaskMemoryManager {
             long remaining = allocationSize - partialAllocationSize;
             partialAllocationSize += Math.min(released, remaining);
           } else if (partialAllocationSize > 0 && partialAllocationSize < allocationSize) {
-            // Preserve same-size retries while spilling makes progress, then fall back to a
-            // partial page for callers that can use one.
-            allocationSize = partialAllocationSize;
+            // Preserve one bounded attempt to combine the memory made available by spilling with
+            // any remaining free-tail grant, then fall back to a partial page for callers that can
+            // use one. The additional grant may already include the spilled memory, so do not add
+            // it to partialAllocationSize.
+            long additionalAcquired =
+              acquireAdditionalExecutionMemoryForPageAllocation(size, consumer);
+            if (additionalAcquired > 0) {
+              long overlap = Math.min(partialAllocationSize, additionalAcquired);
+              if (overlap > 0) {
+                releaseExecutionMemory(overlap, consumer);
+              }
+              acquired = Math.addExact(acquired, additionalAcquired - overlap);
+            }
+            allocationSize = Math.max(partialAllocationSize, additionalAcquired);
             tryingPartialAllocation = true;
           } else if (partialAllocationSize == 0) {
             // Preserve one bounded attempt to acquire a smaller free-tail grant. The previous
