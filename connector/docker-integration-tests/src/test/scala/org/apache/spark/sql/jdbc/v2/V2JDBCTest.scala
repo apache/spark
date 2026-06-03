@@ -702,16 +702,17 @@ private[v2] trait V2JDBCTest
   }
 
   test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
-    // salary never equals bonus and both are non-null, so IS NOT NULL matches all rows and
-    // IS NULL matches none. The composite operand must be parenthesized in the pushed SQL.
+    // salary is non-null for every row, so (salary = 10000) is never null: IS NOT NULL matches
+    // all rows and IS NULL matches none. The composite operand must be parenthesized in the
+    // pushed SQL, otherwise dialects that bind IS NULL tighter than = misparse it.
     val df1 = sql(s"SELECT name FROM $catalogAndNamespace.${caseConvert("employee")} " +
-      "WHERE (salary = bonus) IS NOT NULL")
+      "WHERE (salary = 10000) IS NOT NULL")
     checkFilterPushed(df1)
     assert(df1.collect().map(_.getString(0)).sorted ===
       Array("alex", "amy", "cathy", "david", "jen"))
 
     val df2 = sql(s"SELECT name FROM $catalogAndNamespace.${caseConvert("employee")} " +
-      "WHERE (salary = bonus) IS NULL")
+      "WHERE (salary = 10000) IS NULL")
     checkFilterPushed(df2)
     assert(df2.collect().isEmpty)
   }
