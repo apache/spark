@@ -416,6 +416,9 @@ class ParquetFileFormat
     case g: GeometryType => GeometryType.isSridSupported(g.srid)
     case g: GeographyType => GeographyType.isSridSupported(g.srid)
 
+    // Nanosecond-capable timestamps are not yet supported by this datasource.
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => false
+
     case _: AtomicType | _: NullType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
