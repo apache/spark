@@ -815,7 +815,7 @@ case class Cast(
         if (ansiEnabled) {
           DateTimeUtils.stringToTimestampNTZNanosAnsi(utfs, precision, getContextOrNull())
         } else {
-          DateTimeUtils.stringToTimestampNTZNanos(utfs, precision).orNull
+          DateTimeUtils.stringToTimestampNTZNanos(utfs, precision, allowTimeZone = true).orNull
         })
   }
 

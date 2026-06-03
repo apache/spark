@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
@@ -58,12 +59,11 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
 
   test("SPARK-57211: legacy mode cast malformed string to nanosecond timestamp returns null") {
     Seq("123", "2015-03-18 123142", "2015-03-18X", "abdef").foreach { str =>
-      org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision {
-        precision =>
-          checkEvaluation(
-            cast(Literal(str), TimestampLTZNanosType(precision), UTC_OPT), null)
-          checkEvaluation(
-            cast(Literal(str), TimestampNTZNanosType(precision)), null)
+      foreachNanosPrecision { precision =>
+        checkEvaluation(
+          cast(Literal(str), TimestampLTZNanosType(precision), UTC_OPT), null)
+        checkEvaluation(
+          cast(Literal(str), TimestampNTZNanosType(precision)), null)
       }
     }
   }
