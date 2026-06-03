@@ -1602,6 +1602,18 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       // Precision 6 maps to the GA types and stays accepted with the gate off.
       assert(DataType.fromJson("\"timestamp_ltz(6)\"") === TimestampType)
       assert(DataType.fromJson("\"timestamp_ntz(6)\"") === TimestampNTZType)
+      // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION regardless of the flag.
+      Seq("timestamp_ltz" -> "TIMESTAMP_LTZ", "timestamp_ntz" -> "TIMESTAMP_NTZ").foreach {
+        case (name, sqlTypeName) =>
+          Seq("0", "5", "10").foreach { p =>
+            checkError(
+              exception = intercept[SparkException] {
+                DataType.fromJson(s"""\"$name($p)\"""")
+              },
+              condition = "INVALID_TIMESTAMP_PRECISION",
+              parameters = Map("precision" -> p, "type" -> sqlTypeName))
+          }
+      }
     }
   }
 

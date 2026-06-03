@@ -487,6 +487,11 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
     // Precision 6 (microseconds) maps to the GA type and is accepted regardless of the
     // nanos timestamp types preview flag.
     if (p == 6) return TimestampType
+    // Reject out-of-range precisions before the feature-flag check so the error is always
+    // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+    if (p < TimestampLTZNanosType.MIN_PRECISION || p > TimestampLTZNanosType.MAX_PRECISION) {
+      throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
+    }
     DataTypeErrors.checkTimestampNanosTypesEnabled()
     TimestampLTZNanosType(p)
   }
@@ -501,6 +506,11 @@ class DataTypeAstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with DataTypeE
     // Precision 6 (microseconds) maps to the GA type and is accepted regardless of the
     // nanos timestamp types preview flag.
     if (p == 6) return TimestampNTZType
+    // Reject out-of-range precisions before the feature-flag check so the error is always
+    // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+    if (p < TimestampNTZNanosType.MIN_PRECISION || p > TimestampNTZNanosType.MAX_PRECISION) {
+      throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
+    }
     DataTypeErrors.checkTimestampNanosTypesEnabled()
     TimestampNTZNanosType(p)
   }

@@ -246,6 +246,11 @@ object DataType {
         // nanos timestamp types preview flag.
         if (p == 6) {
           TimestampType
+        } else if (p < TimestampLTZNanosType.MIN_PRECISION ||
+            p > TimestampLTZNanosType.MAX_PRECISION) {
+          // Reject out-of-range precisions before the feature-flag check so the error is always
+          // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+          throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_LTZ")
         } else {
           DataTypeErrors.checkTimestampNanosTypesEnabled()
           TimestampLTZNanosType(p)
@@ -261,6 +266,11 @@ object DataType {
         // nanos timestamp types preview flag.
         if (p == 6) {
           TimestampNTZType
+        } else if (p < TimestampNTZNanosType.MIN_PRECISION ||
+            p > TimestampNTZNanosType.MAX_PRECISION) {
+          // Reject out-of-range precisions before the feature-flag check so the error is always
+          // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED.
+          throw DataTypeErrors.invalidTimestampPrecisionError(precision, "TIMESTAMP_NTZ")
         } else {
           DataTypeErrors.checkTimestampNanosTypesEnabled()
           TimestampNTZNanosType(p)

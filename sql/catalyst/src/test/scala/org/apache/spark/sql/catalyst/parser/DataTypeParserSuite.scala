@@ -245,6 +245,18 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       assert(parse("TIMESTAMP_LTZ(6)") === TimestampType)
       assert(parse("TIMESTAMP(6) WITHOUT TIME ZONE") === TimestampNTZType)
       assert(parse("TIMESTAMP(6) WITH LOCAL TIME ZONE") === TimestampType)
+      // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION regardless of the flag.
+      Seq("TIMESTAMP_NTZ" -> "TIMESTAMP_NTZ", "TIMESTAMP_LTZ" -> "TIMESTAMP_LTZ").foreach {
+        case (spelling, errorType) =>
+          Seq(0, 1, 5, 10, 99).foreach { p =>
+            checkError(
+              exception = intercept[SparkException] {
+                CatalystSqlParser.parseDataType(s"$spelling($p)")
+              },
+              condition = "INVALID_TIMESTAMP_PRECISION",
+              parameters = Map("precision" -> p.toString, "type" -> errorType))
+          }
+      }
     }
   }
 
