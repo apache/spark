@@ -55,6 +55,52 @@ public class TaskMemoryManagerSuite {
     }
   }
 
+  private static final class SizeLimitedAllocator implements MemoryAllocator {
+    private final long maximumAllocationSize;
+    private int allocationAttempts;
+    private long lastAllocationSize;
+
+    SizeLimitedAllocator(long maximumAllocationSize) {
+      this.maximumAllocationSize = maximumAllocationSize;
+    }
+
+    @Override
+    public MemoryBlock allocate(long size) throws OutOfMemoryError {
+      allocationAttempts++;
+      lastAllocationSize = size;
+      if (size > maximumAllocationSize) {
+        // checkstyle.off: RegexpSinglelineJava
+        throw new OutOfMemoryError("test allocator failure");
+        // checkstyle.on: RegexpSinglelineJava
+      }
+      return MemoryAllocator.HEAP.allocate(size);
+    }
+
+    @Override
+    public void free(MemoryBlock memory) {
+      MemoryAllocator.HEAP.free(memory);
+    }
+  }
+
+  private static final class PageAllocatingConsumer extends MemoryConsumer {
+    PageAllocatingConsumer(TaskMemoryManager manager, long pageSize) {
+      super(manager, pageSize, MemoryMode.ON_HEAP);
+    }
+
+    MemoryBlock allocate(long required) {
+      return allocatePage(required);
+    }
+
+    void freeAllocatedPage(MemoryBlock page) {
+      freePage(page);
+    }
+
+    @Override
+    public long spill(long size, MemoryConsumer trigger) {
+      return 0;
+    }
+  }
+
   private static final class AllocatingSpillConsumer extends TestMemoryConsumer {
     private MemoryBlock nestedPage;
 
@@ -68,6 +114,22 @@ public class TaskMemoryManagerSuite {
       long used = getUsed();
       free(used);
       return used;
+    }
+  }
+
+  private static final class NonSpillingAllocatingConsumer extends TestMemoryConsumer {
+    private int spillAttempts;
+    private MemoryBlock nestedPage;
+
+    NonSpillingAllocatingConsumer(TaskMemoryManager manager) {
+      super(manager);
+    }
+
+    @Override
+    public long spill(long size, MemoryConsumer trigger) {
+      spillAttempts++;
+      nestedPage = taskMemoryManager.allocatePage(256, this);
+      return 0;
     }
   }
 
@@ -165,21 +227,96 @@ public class TaskMemoryManagerSuite {
   @Test
   public void pageAllocationFailureSpillsAndRetriesTheSameGrant() {
     final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
-    memoryManager.limit(8192);
+    memoryManager.limit(5120);
     final TestAllocator allocator = new TestAllocator(1);
     final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
     final TestMemoryConsumer existingConsumer = new TestMemoryConsumer(manager);
-    final TestMemoryConsumer requestingConsumer = new TestMemoryConsumer(manager);
-    existingConsumer.use(4096);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+    existingConsumer.use(1024);
 
-    final MemoryBlock page = manager.allocatePage(4096, requestingConsumer);
+    final MemoryBlock page = requestingConsumer.allocate(4096);
     Assertions.assertNotNull(page);
     Assertions.assertEquals(2, allocator.allocationAttempts);
     Assertions.assertEquals(0, existingConsumer.getUsed());
+    Assertions.assertEquals(4096, requestingConsumer.getUsed());
     Assertions.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
 
-    manager.freePage(page, requestingConsumer);
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(0, requestingConsumer.getUsed());
     Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void pageAllocationFailureCanRetryWithPartialPage() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(5120);
+    final SizeLimitedAllocator allocator = new SizeLimitedAllocator(1024);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
+    final TestMemoryConsumer existingConsumer = new TestMemoryConsumer(manager);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+    existingConsumer.use(1024);
+
+    final MemoryBlock page = requestingConsumer.allocate(1024);
+    Assertions.assertEquals(1024, page.size());
+    Assertions.assertEquals(3, allocator.allocationAttempts);
+    Assertions.assertEquals(1024, allocator.lastAllocationSize);
+    Assertions.assertEquals(0, existingConsumer.getUsed());
+    Assertions.assertEquals(1024, requestingConsumer.getUsed());
+    Assertions.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
+
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(0, requestingConsumer.getUsed());
+    Assertions.assertEquals(3072, manager.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(0, manager.getMemoryConsumptionForThisTask());
+  }
+
+  @Test
+  public void pageAllocationFailureCanRetryWithFreeTail() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(5120);
+    final SizeLimitedAllocator allocator = new SizeLimitedAllocator(1024);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+
+    final MemoryBlock page = requestingConsumer.allocate(1024);
+    Assertions.assertNotNull(page);
+    Assertions.assertEquals(1024, page.size());
+    Assertions.assertEquals(2, allocator.allocationAttempts);
+    Assertions.assertEquals(1024, allocator.lastAllocationSize);
+    Assertions.assertEquals(1024, requestingConsumer.getUsed());
+    Assertions.assertEquals(5120, manager.getMemoryConsumptionForThisTask());
+
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(0, requestingConsumer.getUsed());
+    Assertions.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(0, manager.getMemoryConsumptionForThisTask());
+  }
+
+  @Test
+  public void freeTailAcquisitionDoesNotReenterPageAllocation() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(6144);
+    final SizeLimitedAllocator allocator = new SizeLimitedAllocator(1024);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
+    final NonSpillingAllocatingConsumer existingConsumer =
+      new NonSpillingAllocatingConsumer(manager);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+    existingConsumer.use(1024);
+
+    final MemoryBlock page = requestingConsumer.allocate(1024);
+    Assertions.assertNotNull(page);
+    Assertions.assertEquals(2, existingConsumer.spillAttempts);
+    Assertions.assertNull(existingConsumer.nestedPage);
+    Assertions.assertEquals(1024, existingConsumer.getUsed());
+    Assertions.assertEquals(1024, requestingConsumer.getUsed());
+    Assertions.assertEquals(6144, manager.getMemoryConsumptionForThisTask());
+
+    existingConsumer.free(1024);
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+    Assertions.assertEquals(0, manager.getMemoryConsumptionForThisTask());
   }
 
   @Test

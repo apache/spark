@@ -366,29 +366,44 @@ public class TaskMemoryManager {
     return released;
   }
 
-  private boolean recoverFromPageAllocationFailure(
+  private long recoverFromPageAllocationFailure(
       long required,
       MemoryConsumer requestingConsumer) {
     if (inPageAllocationRecovery.get()) {
-      return false;
+      return 0;
     }
 
     inPageAllocationRecovery.set(true);
     try {
-      return spillConsumersForPageAllocation(required, requestingConsumer) > 0;
+      return spillConsumersForPageAllocation(required, requestingConsumer);
     } finally {
       inPageAllocationRecovery.remove();
     }
   }
 
-  private void logPageAllocationFailure(long acquired, int retryCount, OutOfMemoryError e) {
+  private long acquireAdditionalExecutionMemoryForPageAllocation(
+      long required,
+      MemoryConsumer requestingConsumer) {
+    if (inPageAllocationRecovery.get()) {
+      return 0;
+    }
+
+    inPageAllocationRecovery.set(true);
+    try {
+      return acquireExecutionMemory(required, requestingConsumer);
+    } finally {
+      inPageAllocationRecovery.remove();
+    }
+  }
+
+  private void logPageAllocationFailure(long allocationSize, int retryCount, OutOfMemoryError e) {
     try {
       if (retryCount == 0) {
         logger.warn("Failed to allocate a page ({} bytes), try spilling task memory.", e,
-          MDC.of(LogKeys.PAGE_SIZE, acquired));
+          MDC.of(LogKeys.PAGE_SIZE, allocationSize));
       } else {
         logger.warn("Failed to allocate a page ({} bytes) after {} spill retries.",
-          MDC.of(LogKeys.PAGE_SIZE, acquired),
+          MDC.of(LogKeys.PAGE_SIZE, allocationSize),
           MDC.of(LogKeys.NUM_RETRY, retryCount));
       }
     } catch (OutOfMemoryError ignored) {
@@ -493,14 +508,41 @@ public class TaskMemoryManager {
     MemoryBlock page = null;
     boolean pageAllocated = false;
     int retryCount = 0;
+    long allocationSize = acquired;
+    long partialAllocationSize = 0;
+    boolean tryingPartialAllocation = false;
     try {
       while (true) {
         try {
-          page = tungstenMemoryAllocator.allocate(acquired);
+          page = tungstenMemoryAllocator.allocate(allocationSize);
           break;
         } catch (OutOfMemoryError e) {
-          logPageAllocationFailure(acquired, retryCount, e);
-          if (!recoverFromPageAllocationFailure(acquired, consumer)) {
+          logPageAllocationFailure(allocationSize, retryCount, e);
+          if (tryingPartialAllocation) {
+            return null;
+          }
+          long released = recoverFromPageAllocationFailure(allocationSize, consumer);
+          if (released > 0) {
+            long remaining = allocationSize - partialAllocationSize;
+            partialAllocationSize += Math.min(released, remaining);
+          } else if (partialAllocationSize > 0 && partialAllocationSize < allocationSize) {
+            // Preserve same-size retries while spilling makes progress, then fall back to a
+            // partial page for callers that can use one.
+            allocationSize = partialAllocationSize;
+            tryingPartialAllocation = true;
+          } else if (partialAllocationSize == 0) {
+            // Preserve one bounded attempt to acquire a smaller free-tail grant. The previous
+            // recursive implementation could return a partial page this way after retaining the
+            // rejected grant, but could also retry without bound.
+            long additionalAcquired =
+              acquireAdditionalExecutionMemoryForPageAllocation(size, consumer);
+            if (additionalAcquired <= 0) {
+              return null;
+            }
+            acquired = Math.addExact(acquired, additionalAcquired);
+            allocationSize = additionalAcquired;
+            tryingPartialAllocation = true;
+          } else {
             return null;
           }
           retryCount++;
@@ -508,9 +550,12 @@ public class TaskMemoryManager {
       }
       page.pageNumber = pageNumber;
       pageTable[pageNumber] = page;
+      synchronized (this) {
+        acquiredButNotUsed = Math.addExact(acquiredButNotUsed, acquired - page.size());
+      }
       pageAllocated = true;
       if (logger.isTraceEnabled()) {
-        logger.trace("Allocate page number {} ({} bytes)", pageNumber, acquired);
+        logger.trace("Allocate page number {} ({} bytes)", pageNumber, allocationSize);
       }
       return page;
     } finally {
