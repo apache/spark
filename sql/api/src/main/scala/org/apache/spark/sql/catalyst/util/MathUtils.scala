@@ -89,6 +89,40 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
+  // Positive modulo (`pmod`): the remainder `a % n` adjusted to share the sign of `n`.
+  // Unlike `floorMod`, this matches the `pmod` SQL function / `HashPartitioning` semantics.
+  // Shared by `Pmod`'s eval and codegen paths so the two never diverge.
+
+  def pmod(a: Int, n: Int): Int = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  def pmod(a: Long, n: Long): Long = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  def pmod(a: Byte, n: Byte): Byte = {
+    val r = a % n
+    if (r < 0) ((r + n) % n).toByte else r.toByte
+  }
+
+  def pmod(a: Short, n: Short): Short = {
+    val r = a % n
+    if (r < 0) ((r + n) % n).toShort else r.toShort
+  }
+
+  def pmod(a: Float, n: Float): Float = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  def pmod(a: Double, n: Double): Double = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
   def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {
     try {
       f
