@@ -60,7 +60,11 @@ class AutoCdcScd1SchemaEvolutionSuite
     val stream = MemoryStream[(Int, String, Option[String], Long)]
     def buildCtx(): TestGraphRegistrationContext =
       singleAutoCdcFlowPipeline(
-        "auto_cdc_flow", "target", stream.toDF().toDF("id", "name", "email", "version"), Seq("id"))
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "email", "version"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
 
     // Run #1: insert with NULL email.
     stream.addData((1, "alice", None, 1L))
@@ -95,13 +99,21 @@ class AutoCdcScd1SchemaEvolutionSuite
     val stream1 = MemoryStream[(Int, Int, Long)]
     stream1.addData((1, 30, 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream1.toDF().toDF("id", "age", "version"), Seq("id")))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "age", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version")))
 
     // Run #2: widen `age` from Int to Long.
     val stream2 = MemoryStream[(Int, Long, Long)]
     stream2.addData((1, 31L, 2L))
     val ctx2 = singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream2.toDF().toDF("id", "age", "version"), Seq("id"))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "age", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"))
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(
       failure = ex,
@@ -131,13 +143,21 @@ class AutoCdcScd1SchemaEvolutionSuite
     val stream1 = MemoryStream[(Int, Long, Long)]
     stream1.addData((1, 100L, 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream1.toDF().toDF("id", "payload", "version"), Seq("id")))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("id", "payload", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version")))
 
     // Run #2: narrow `payload` from Long (BIGINT) to Int (INT).
     val stream2 = MemoryStream[(Int, Int, Long)]
     stream2.addData((1, 5, 2L))
     val ctx2 = singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream2.toDF().toDF("id", "payload", "version"), Seq("id"))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("id", "payload", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version"))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(
@@ -171,7 +191,12 @@ class AutoCdcScd1SchemaEvolutionSuite
     def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext = {
       val sourceDf = stream.toDF().toDF("id", "name", "email", "version")
       val projectedDf = if (includeEmail) sourceDf else sourceDf.drop("email")
-      singleAutoCdcFlowPipeline("auto_cdc_flow", "target", projectedDf, Seq("id"))
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projectedDf,
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
     }
 
     // Run #1: source projects (id, name, version). Target schema is unchanged.
@@ -214,7 +239,11 @@ class AutoCdcScd1SchemaEvolutionSuite
     val stream = MemoryStream[(Int, String, String, Long)]
     def buildCtx(selection: Option[ColumnSelection]): TestGraphRegistrationContext =
       singleAutoCdcFlowPipeline(
-        "auto_cdc_flow", "target", stream.toDF().toDF("id", "name", "email", "version"), Seq("id"),
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "email", "version"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
         columnSelection = selection)
 
     // Run #1: only (id, name, version) selected; `email` is dropped before the MERGE.
@@ -256,7 +285,11 @@ class AutoCdcScd1SchemaEvolutionSuite
     val stream = MemoryStream[(Int, String, String, Long)]
     def buildCtx(selection: Option[ColumnSelection]): TestGraphRegistrationContext =
       singleAutoCdcFlowPipeline(
-        "auto_cdc_flow", "target", stream.toDF().toDF("id", "name", "email", "version"), Seq("id"),
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "email", "version"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
         columnSelection = selection)
 
     // Run #1: include all columns; populate `email` for key=1.
@@ -303,7 +336,12 @@ class AutoCdcScd1SchemaEvolutionSuite
     def buildCtx(includeEmail: Boolean): TestGraphRegistrationContext = {
       val sourceDf = stream.toDF().toDF("id", "name", "email", "version")
       val projectedDf = if (includeEmail) sourceDf else sourceDf.drop("email")
-      singleAutoCdcFlowPipeline("auto_cdc_flow", "target", projectedDf, Seq("id"))
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projectedDf,
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
     }
 
     // Run #1: wide source DF (id, name, email, version). mergeSchemas appends `email` to
@@ -360,7 +398,12 @@ class AutoCdcScd1SchemaEvolutionSuite
         functions.col("version"),
         functions.struct(functions.col("a"), inner.as("b")).as("value")
       )
-      singleAutoCdcFlowPipeline("auto_cdc_flow", "target", projected, Seq("key"))
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projected,
+        keys = Seq("key"),
+        sequencing = functions.col("version"))
     }
 
     stream.addData((1, 1L, 1, 1, 1), (2, 1L, 2, 2, 2))
@@ -409,7 +452,12 @@ class AutoCdcScd1SchemaEvolutionSuite
           functions.struct(functions.col("a"), inner.as("b"))
         ).as("vals")
       )
-      singleAutoCdcFlowPipeline("auto_cdc_flow", "target", projected, Seq("key"))
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projected,
+        keys = Seq("key"),
+        sequencing = functions.col("version"))
     }
 
     stream.addData((1, 1L, 1, 1, 99))
@@ -462,7 +510,12 @@ class AutoCdcScd1SchemaEvolutionSuite
           functions.struct(functions.col("a"), inner.as("b"))
         ).as("vals")
       )
-      singleAutoCdcFlowPipeline("auto_cdc_flow", "target", projected, Seq("key"))
+      singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = projected,
+        keys = Seq("key"),
+        sequencing = functions.col("version"))
     }
 
     stream.addData((1, 1L, 1, 1, 1), (2, 1L, 2, 2, 2))
@@ -504,7 +557,12 @@ class AutoCdcScd1SchemaEvolutionSuite
       // Source DF emits `Value` (capital), differing only in case from the target's
       // `value` column.
       val df = stream.toDF().toDF("key", "version", "Value")
-      val ctx = singleAutoCdcFlowPipeline("auto_cdc_flow", "target", df, Seq("key"))
+      val ctx = singleAutoCdcFlowPipeline(
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = df,
+        keys = Seq("key"),
+        sequencing = functions.col("version"))
 
       val ex = intercept[RuntimeException] { runPipeline(ctx) }
       // The exact `name` and `referenceNames` parameters depend on internal merge-plan
@@ -550,7 +608,11 @@ class AutoCdcScd1SchemaEvolutionSuite
     val stream = MemoryStream[(Int, String, Long)]
     stream.addData((1, "alice", 1L), (2, "bob", 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream.toDF().toDF("id", "name", "version"), Seq("id")))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version")))
 
     checkAnswer(
       spark.table(s"$catalog.$namespace.target").select("id", "name", "version", "extra"),
@@ -577,13 +639,21 @@ class AutoCdcScd1SchemaEvolutionSuite
     val stream1 = MemoryStream[(Int, Long, Timestamp)]
     stream1.addData((1, 1L, Timestamp.valueOf("2024-01-01 10:00:00")))
     runPipeline(singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream1.toDF().toDF("key", "version", "value"), Seq("key")))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream1.toDF().toDF("key", "version", "value"),
+      keys = Seq("key"),
+      sequencing = functions.col("version")))
 
     // Run #2 emits `value` as STRING. mergeSchemas rejects the type change.
     val stream2 = MemoryStream[(Int, Long, String)]
     stream2.addData((1, 2L, "2024-01-02 11:00:00"))
     val ctx2 = singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream2.toDF().toDF("key", "version", "value"), Seq("key"))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream2.toDF().toDF("key", "version", "value"),
+      keys = Seq("key"),
+      sequencing = functions.col("version"))
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(

@@ -53,10 +53,11 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val changeDataFeedStream = MemoryStream[(Int, String, Long)]
     def buildGraphRegistrationContext(): TestGraphRegistrationContext =
       singleAutoCdcFlowPipeline(
-        "auto_cdc_flow",
-        "target",
-        changeDataFeedStream.toDF().toDF("id", "name", "version"),
-        Seq("id"))
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = changeDataFeedStream.toDF().toDF("id", "name", "version"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
 
     // Run #1: insert id=1 at seq=1.
     changeDataFeedStream.addData((1, "alice", 1L))
@@ -93,10 +94,11 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val stream = MemoryStream[(Int, String, Long, Boolean)]
     def buildCtx(): TestGraphRegistrationContext =
       singleAutoCdcFlowPipeline(
-        "auto_cdc_flow",
-        "target",
-        stream.toDF().toDF("id", "name", "version", "is_delete"),
-        Seq("id"),
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "name", "version", "is_delete"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"),
         deleteCondition = Some(functions.col("is_delete") === true),
         columnSelection = Some(ColumnSelection.ExcludeColumns(
           Seq(UnqualifiedColumnName("is_delete"))
@@ -132,7 +134,11 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val stream = MemoryStream[(String, Int, Long)]
     stream.addData(("alice", 1, 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream.toDF().toDF("name", "id", "version"), Seq("id")))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("name", "id", "version"),
+      keys = Seq("id"),
+      sequencing = functions.col("version")))
 
     val auxSchema = spark.table(auxTableNameFor("target")).schema
 
@@ -163,8 +169,11 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val stream = MemoryStream[(String, Int, String, Long)]
     stream.addData(("v", 1, "us", 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "auto_cdc_flow", "target", stream.toDF().toDF("value", "id", "region", "version"),
-      Seq("region", "id")))
+      flowName = "auto_cdc_flow",
+      target = "target",
+      sourceDf = stream.toDF().toDF("value", "id", "region", "version"),
+      keys = Seq("region", "id"),
+      sequencing = functions.col("version")))
 
     val auxSchema = spark.table(auxTableNameFor("target")).schema
     assert(auxSchema.fieldNames.toSeq ==
@@ -186,7 +195,11 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val stream = MemoryStream[(Int, Long)]
     def buildCtx(): TestGraphRegistrationContext =
       singleAutoCdcFlowPipeline(
-        "auto_cdc_flow", "target", stream.toDF().toDF("id", "version"), Seq("id"))
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF("id", "version"),
+        keys = Seq("id"),
+        sequencing = functions.col("version"))
 
     stream.addData((1, 1L))
     runPipeline(buildCtx())
@@ -244,10 +257,11 @@ class AutoCdcScd1AuxiliaryTableDurabilitySuite
     val stream = MemoryStream[(String, String, String, String, Long)]
     def buildCtx(): TestGraphRegistrationContext =
       singleAutoCdcFlowPipeline(
-        "auto_cdc_flow",
-        "target",
-        stream.toDF().toDF((keyNames :+ "version"): _*),
-        backtickQuotedKeys)
+        flowName = "auto_cdc_flow",
+        target = "target",
+        sourceDf = stream.toDF().toDF((keyNames :+ "version"): _*),
+        keys = backtickQuotedKeys,
+        sequencing = functions.col("version"))
 
     // Run #1: a single insert with arbitrary non-empty key values.
     stream.addData(("v1", "v2", "v3", "v4", 1L))

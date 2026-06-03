@@ -449,7 +449,7 @@ trait AutoCdcMergeWriteBase {
    * aux/target schemas by now, so a missing key is an internal error rather than a user-facing
    * condition.
    */
-  private def expectedAuxiliaryKeyFields: Seq[StructField] = {
+  private lazy val expectedAuxiliaryKeyFields: Seq[StructField] = {
     val resolver = spark.sessionState.conf.resolver
     changeArgs.keys.map { key =>
       auxiliaryTableSchema.fields
@@ -468,7 +468,7 @@ trait AutoCdcMergeWriteBase {
    * Returns the resolved AutoCDC key column names as they appear in the auxiliary schema, in
    * `changeArgs.keys` declaration order.
    */
-  private def auxiliaryKeyColumnNames: Seq[String] = expectedAuxiliaryKeyFields.map(_.name)
+  private lazy val auxiliaryKeyColumnNames: Seq[String] = expectedAuxiliaryKeyFields.map(_.name)
 
   /**
    * Validate that the target table's underlying connector implements

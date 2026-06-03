@@ -23,7 +23,6 @@ import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connector.catalog.SharedTablesInMemoryRowLevelOperationTableCatalog
-import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{
   ChangeArgs,
@@ -220,7 +219,7 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
       target: String,
       sourceDf: DataFrame,
       keys: Seq[String],
-      sequencing: Column = functions.col("version"),
+      sequencing: Column,
       columnSelection: Option[ColumnSelection] = None,
       deleteCondition: Option[Column] = None,
       scdType: ScdType = ScdType.Type1): TestGraphRegistrationContext =

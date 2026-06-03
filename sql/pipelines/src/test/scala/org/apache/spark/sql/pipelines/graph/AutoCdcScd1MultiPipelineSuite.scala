@@ -58,7 +58,11 @@ class AutoCdcScd1MultiPipelineSuite
     val streamA = MemoryStream[(Int, String, Long)]
     streamA.addData((1, "alice", 100L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "flow_a", "t_a", streamA.toDF().toDF("id", "name", "version"), Seq("id")))
+      flowName = "flow_a",
+      target = "t_a",
+      sourceDf = streamA.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = $"version"))
 
     // Pipeline #2 only knows about `t_b`. Uses a deliberately *lower* sequence to verify
     // the watermark from pipeline #1's auxiliary table (seq=100) does not leak into
@@ -66,7 +70,11 @@ class AutoCdcScd1MultiPipelineSuite
     val streamB = MemoryStream[(Int, String, Long)]
     streamB.addData((9, "bob", 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "flow_b", "t_b", streamB.toDF().toDF("id", "name", "version"), Seq("id")))
+      flowName = "flow_b",
+      target = "t_b",
+      sourceDf = streamB.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = $"version"))
 
     checkAnswer(
       spark.table(s"$catalog.$namespace.t_a"),
@@ -95,7 +103,11 @@ class AutoCdcScd1MultiPipelineSuite
     val stream = MemoryStream[(Int, String, Long)]
     stream.addData((1, "alice", 1L), (2, "bob", 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "writer", "src", stream.toDF().toDF("id", "name", "version"), Seq("id")))
+      flowName = "writer",
+      target = "src",
+      sourceDf = stream.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = $"version"))
 
     // Pipeline #2 is a regular materialized view that selects the user-data columns from
     // `src` (a different graph entirely). It must observe the merged AutoCDC rows and be
@@ -134,7 +146,11 @@ class AutoCdcScd1MultiPipelineSuite
     val stream1 = MemoryStream[(Int, String, Long)]
     stream1.addData((1, "alice", 1L), (2, "bob", 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "flow_v1", "shared_target", stream1.toDF().toDF("id", "name", "version"), Seq("id")))
+      flowName = "flow_v1",
+      target = "shared_target",
+      sourceDf = stream1.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = $"version"))
 
     // Sanity-check pipeline #1's effect before pipeline #2 runs.
     checkAnswer(
@@ -150,7 +166,11 @@ class AutoCdcScd1MultiPipelineSuite
     val stream2 = MemoryStream[(Int, String, Long)]
     stream2.addData((2, "bob-v2", 2L), (3, "carol", 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "flow_v2", "shared_target", stream2.toDF().toDF("id", "name", "version"), Seq("id")))
+      flowName = "flow_v2",
+      target = "shared_target",
+      sourceDf = stream2.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = $"version"))
 
     // Final target: id=1 untouched (pipeline #1's state), id=2 updated by pipeline #2,
     // id=3 freshly inserted by pipeline #2.
@@ -184,7 +204,11 @@ class AutoCdcScd1MultiPipelineSuite
     val stream1 = MemoryStream[(Int, String, Long)]
     stream1.addData((1, "alice", 1L), (2, "bob", 1L))
     val ctx1 = singleAutoCdcFlowPipeline(
-      "flow_v1", "shared_target", stream1.toDF().toDF("id", "name", "version"), Seq("id"))
+      flowName = "flow_v1",
+      target = "shared_target",
+      sourceDf = stream1.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = $"version")
     runPipeline(ctx1)
 
     // Sanity-check pipeline #1's state before schema evolution kicks in.
@@ -202,7 +226,11 @@ class AutoCdcScd1MultiPipelineSuite
     val stream2 = MemoryStream[(Int, String, Option[Int], Long)]
     stream2.addData((2, "bob-v2", Some(25), 2L), (3, "carol", Some(30), 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "flow_v2", "shared_target", stream2.toDF().toDF("id", "name", "age", "version"), Seq("id")))
+      flowName = "flow_v2",
+      target = "shared_target",
+      sourceDf = stream2.toDF().toDF("id", "name", "age", "version"),
+      keys = Seq("id"),
+      sequencing = $"version"))
 
     checkAnswer(
       spark.table(s"$catalog.$namespace.shared_target"),
@@ -247,14 +275,22 @@ class AutoCdcScd1MultiPipelineSuite
     val stream1 = MemoryStream[(Int, String, Long)]
     stream1.addData((1, "alice", 1L))
     runPipeline(singleAutoCdcFlowPipeline(
-      "flow_v1", "shared_target", stream1.toDF().toDF("id", "name", "version"), Seq("id")))
+      flowName = "flow_v1",
+      target = "shared_target",
+      sourceDf = stream1.toDF().toDF("id", "name", "version"),
+      keys = Seq("id"),
+      sequencing = $"version"))
 
     // Pipeline #2: completely separate graph, but targets the same physical `shared_target`
     // table with `keys = Seq("name")`.
     val stream2 = MemoryStream[(Int, String, Long)]
     stream2.addData((2, "alice", 1L))
     val ctx2 = singleAutoCdcFlowPipeline(
-      "flow_v2", "shared_target", stream2.toDF().toDF("id", "name", "version"), Seq("name"))
+      flowName = "flow_v2",
+      target = "shared_target",
+      sourceDf = stream2.toDF().toDF("id", "name", "version"),
+      keys = Seq("name"),
+      sequencing = $"version")
 
     val ex = intercept[RuntimeException] { runPipeline(ctx2) }
     checkErrorInPipelineFailure(

@@ -448,5 +448,10 @@ class AutoCdcScd1KeyDriftSuite
       flowName: String,
       sourceDf: DataFrame,
       keys: Seq[String]): TestGraphRegistrationContext =
-    singleAutoCdcFlowPipeline(flowName, "target", sourceDf, keys)
+    singleAutoCdcFlowPipeline(
+      flowName = flowName,
+      target = "target",
+      sourceDf = sourceDf,
+      keys = keys,
+      sequencing = $"version")
 }
