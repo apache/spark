@@ -32,6 +32,7 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryConsumer;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 public class ShuffleInMemorySorterSuite {
@@ -55,6 +56,23 @@ public class ShuffleInMemorySorterSuite {
       consumer, 100, shouldUseRadixSort());
     final ShuffleInMemorySorter.ShuffleSorterIterator iter = sorter.getSortedIterator();
     Assertions.assertFalse(iter.hasNext());
+  }
+
+  @Test
+  public void testResetAllocatesPointerArrayLazily() {
+    final ShuffleInMemorySorter sorter = new ShuffleInMemorySorter(
+      consumer, 4, shouldUseRadixSort());
+    Assertions.assertTrue(sorter.hasSpaceForAnotherRecord());
+
+    sorter.reset();
+    Assertions.assertEquals(0, sorter.getMemoryUsage());
+    Assertions.assertFalse(sorter.hasSpaceForAnotherRecord());
+    Assertions.assertFalse(sorter.getSortedIterator().hasNext());
+
+    final LongArray array = consumer.allocateArray(sorter.getInitialSize());
+    sorter.expandPointerArray(array);
+    Assertions.assertTrue(sorter.hasSpaceForAnotherRecord());
+    sorter.free();
   }
 
   @Test

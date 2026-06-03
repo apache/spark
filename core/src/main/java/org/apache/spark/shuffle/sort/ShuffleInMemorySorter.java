@@ -92,33 +92,35 @@ final class ShuffleInMemorySorter {
     return pos;
   }
 
+  public int getInitialSize() {
+    return initialSize;
+  }
+
   public void reset() {
-    // Reset `pos` here so that `spill` triggered by the below `allocateArray` will be no-op.
     pos = 0;
     if (consumer != null) {
-      consumer.freeArray(array);
-      // As `array` has been released, we should set it to  `null` to avoid accessing it before
-      // `allocateArray` returns. `usableCapacity` is also set to `0` to avoid any codes writing
-      // data to `ShuffleInMemorySorter` when `array` is `null` (e.g., in
-      // ShuffleExternalSorter.growPointerArrayIfNecessary, we may try to access
-      // `ShuffleInMemorySorter` when `allocateArray` throws SparkOutOfMemoryError).
+      if (array != null) {
+        consumer.freeArray(array);
+      }
+      // Allocate the replacement lazily. reset() is called while spilling, and allocating here can
+      // recursively trigger another spill while a partially complete allocation is still retained.
       array = null;
       usableCapacity = 0;
-      array = consumer.allocateArray(initialSize);
-      usableCapacity = getUsableCapacity();
     }
   }
 
   public void expandPointerArray(LongArray newArray) {
-    assert(newArray.size() > array.size());
-    Platform.copyMemory(
-      array.getBaseObject(),
-      array.getBaseOffset(),
-      newArray.getBaseObject(),
-      newArray.getBaseOffset(),
-      pos * 8L
-    );
-    consumer.freeArray(array);
+    if (array != null) {
+      assert(newArray.size() > array.size());
+      Platform.copyMemory(
+        array.getBaseObject(),
+        array.getBaseOffset(),
+        newArray.getBaseObject(),
+        newArray.getBaseOffset(),
+        pos * 8L
+      );
+      consumer.freeArray(array);
+    }
     array = newArray;
     usableCapacity = getUsableCapacity();
   }
@@ -182,6 +184,10 @@ final class ShuffleInMemorySorter {
    * Return an iterator over record pointers in sorted order.
    */
   public ShuffleSorterIterator getSortedIterator() {
+    if (pos == 0) {
+      return new ShuffleSorterIterator(0, array, 0);
+    }
+
     int offset = 0;
     if (useRadixSort) {
       offset = RadixSort.sort(

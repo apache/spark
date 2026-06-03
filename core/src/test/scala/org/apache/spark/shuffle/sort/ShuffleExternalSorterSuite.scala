@@ -28,7 +28,8 @@ import org.apache.spark.internal.config.MEMORY_FRACTION
 import org.apache.spark.internal.config.MEMORY_OFFHEAP_ENABLED
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.memory._
-import org.apache.spark.unsafe.Platform
+import org.apache.spark.unsafe.{Platform, UnsafeAlignedOffset}
+import org.apache.spark.unsafe.memory.MemoryBlock
 
 class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 
@@ -56,13 +57,14 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
           memoryManager.maxHeapMemory - memoryManager.executionMemoryUsed > 400) {
           val acquireExecutionMemoryMethod =
             memoryManager.getClass.getMethods.filter(_.getName == "acquireExecutionMemory").head
-          acquireExecutionMemoryMethod.invoke(
-            memoryManager,
-            JLong.valueOf(
-              memoryManager.maxHeapMemory - memoryManager.executionMemoryUsed - 400),
-            JLong.valueOf(1L), // taskAttemptId
-            MemoryMode.ON_HEAP
-          ).asInstanceOf[java.lang.Long]
+          acquireExecutionMemoryMethod
+            .invoke(
+              memoryManager,
+              JLong.valueOf(
+                memoryManager.maxHeapMemory - memoryManager.executionMemoryUsed - 400),
+              JLong.valueOf(1L), // taskAttemptId
+              MemoryMode.ON_HEAP)
+            .asInstanceOf[java.lang.Long]
         }
         super.acquireExecutionMemory(required, consumer)
       }
@@ -116,49 +118,18 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       parameters = Map("requestedBytes" -> "800", "receivedBytes" -> "400"))
   }
 
-  test("cleanupResources should not NPE when reset fails to reallocate array") {
-    // Reproduces a bug where:
-    //   1. insertRecord() triggers spill -> reset() -> array = null -> allocateArray() throws OOM
-    //   2. OOM propagates out of insertRecord()
-    //   3. UnsafeShuffleWriter's finally block calls cleanupResources()
-    //   4. cleanupResources() -> freeMemory() -> updatePeakMemoryUsed() -> getMemoryUsage()
-    //      -> inMemSorter.getMemoryUsage() -> NPE because inMemSorter.array is still null
-    //
-    // The root cause: reset() sets array = null, then allocateArray() fails. The sorter is left
-    // with inMemSorter != null but inMemSorter.array == null. cleanupResources() calls
-    // freeMemory() which calls getMemoryUsage() before reaching inMemSorter.free().
+  test("cleanupResources should handle lazily reset pointer array") {
     val conf = new SparkConf()
       .setMaster("local[1]")
       .setAppName("ShuffleExternalSorterSuite")
       .set(IS_TESTING, true)
-      .set(TEST_MEMORY, 1600L)
+      .set(TEST_MEMORY, 10L * 1024 * 1024)
       .set(MEMORY_FRACTION, 0.9999)
       .set(MEMORY_OFFHEAP_ENABLED, false)
 
     sc = new SparkContext(conf)
     val memoryManager = UnifiedMemoryManager(conf, 1)
-
-    var shouldStealMemory = false
-
-    // Override acquireExecutionMemory to steal freed memory during reset()'s allocateArray(),
-    // forcing the allocation to fail with OOM.
-    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0) {
-      override def acquireExecutionMemory(required: Long, consumer: MemoryConsumer): Long = {
-        if (shouldStealMemory &&
-          memoryManager.maxHeapMemory - memoryManager.executionMemoryUsed > 400) {
-          val acquireExecutionMemoryMethod =
-            memoryManager.getClass.getMethods.filter(_.getName == "acquireExecutionMemory").head
-          acquireExecutionMemoryMethod.invoke(
-            memoryManager,
-            JLong.valueOf(
-              memoryManager.maxHeapMemory - memoryManager.executionMemoryUsed - 400),
-            JLong.valueOf(1L),
-            MemoryMode.ON_HEAP
-          ).asInstanceOf[java.lang.Long]
-        }
-        super.acquireExecutionMemory(required, consumer)
-      }
-    }
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
     val taskContext = mock[TaskContext]
     val taskMetrics = new TaskMetrics
     when(taskContext.taskMetrics()).thenReturn(taskMetrics)
@@ -166,43 +137,64 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       taskMemoryManager,
       sc.env.blockManager,
       taskContext,
-      100, // initialSize: ShuffleInMemorySorter needs 800 bytes (100 * 8)
+      100,
       1,
       conf,
       new ShuffleWriteMetrics)
-    val inMemSorter = {
-      val field = sorter.getClass.getDeclaredField("inMemSorter")
-      field.setAccessible(true)
-      field.get(sorter).asInstanceOf[ShuffleInMemorySorter]
-    }
-
-    // Fill the pointer array until there's no space for another record.
     val bytes = new Array[Byte](1)
-    while (inMemSorter.hasSpaceForAnotherRecord) {
-      sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
-    }
+    sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    sorter.spill()
 
-    // Enable memory stealing so that when spill -> reset() -> allocateArray() runs, the freed
-    // memory is consumed before allocateArray can use it, causing OOM.
-    shouldStealMemory = true
-
-    // insertRecord triggers spill -> reset() -> array = null -> allocateArray fails -> OOM
-    intercept[SparkOutOfMemoryError] {
-      sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, 1, 0)
-    }
-
-    // Verify the broken state: inMemSorter != null but inMemSorter.array == null
     val inMemSorterField = sorter.getClass.getDeclaredField("inMemSorter")
     inMemSorterField.setAccessible(true)
-    assert(inMemSorterField.get(sorter) != null, "inMemSorter should still be non-null")
     val arrayField = classOf[ShuffleInMemorySorter].getDeclaredField("array")
     arrayField.setAccessible(true)
-    assert(arrayField.get(inMemSorterField.get(sorter)) == null,
-      "inMemSorter.array should be null (reset freed it, allocateArray failed)")
+    assert(
+      arrayField.get(inMemSorterField.get(sorter)) == null,
+      "spill should leave the pointer array unallocated until the next insert")
 
-    // Without the fix, this NPEs in:
-    //   cleanupResources -> freeMemory -> updatePeakMemoryUsed -> getMemoryUsage
-    //     -> inMemSorter.getMemoryUsage -> array.size() -> NPE
+    sorter.cleanupResources()
+  }
+
+  test("data page allocation spill should restore the pointer array") {
+    val conf = new SparkConf()
+      .setMaster("local[1]")
+      .setAppName("ShuffleExternalSorterSuite")
+      .set(IS_TESTING, true)
+      .set(TEST_MEMORY, 10L * 1024 * 1024)
+      .set(MEMORY_FRACTION, 0.9999)
+
+    sc = new SparkContext(conf)
+
+    val memoryManager = UnifiedMemoryManager(conf, 1)
+    var spillOnNextPageAllocation = false
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0) {
+      override def allocatePage(size: Long, consumer: MemoryConsumer): MemoryBlock = {
+        if (spillOnNextPageAllocation) {
+          spillOnNextPageAllocation = false
+          consumer.spill(size, consumer)
+        }
+        super.allocatePage(size, consumer)
+      }
+    }
+    val taskContext = mock[TaskContext]
+    when(taskContext.taskMetrics()).thenReturn(new TaskMetrics)
+    val sorter = new ShuffleExternalSorter(
+      taskMemoryManager,
+      sc.env.blockManager,
+      taskContext,
+      100,
+      1,
+      conf,
+      new ShuffleWriteMetrics)
+
+    sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    spillOnNextPageAllocation = true
+    val bytes =
+      new Array[Byte]((taskMemoryManager.pageSizeBytes() - UnsafeAlignedOffset.getUaoSize).toInt)
+    sorter.insertRecord(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, 0)
+
+    assert(sorter.closeAndGetSpills().length === 2)
     sorter.cleanupResources()
   }
 }
