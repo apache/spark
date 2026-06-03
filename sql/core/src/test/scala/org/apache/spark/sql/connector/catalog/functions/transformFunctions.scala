@@ -290,8 +290,8 @@ object UnboundTruncateFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = {
     if (inputType.size == 2) {
       inputType.head.dataType match {
-        case StringType | BinaryType => TruncateFunction
-        case IntegerType | LongType => IntegerTruncateFunction
+        case StringType => TruncateFunction
+        case IntegerType => IntegerTruncateFunction
         case _ =>
           throw new UnsupportedOperationException(
             s"'truncate' does not support data type: ${inputType.head.dataType}")
@@ -307,7 +307,7 @@ object UnboundTruncateFunction extends UnboundFunction {
 }
 
 /**
- * Truncate transform for String/Binary types.
+ * Truncate transform for String type.
  * Follows Iceberg spec: truncate(str, L) = str[0:L]
  *
  * Implements ReducibleFunction: ANY two different widths are compatible.
@@ -354,13 +354,18 @@ case class TruncateReducer(width: Int) extends Reducer[UTF8String, UTF8String] {
 }
 
 /**
- * Truncate transform for Integer/Long types.
- * Follows Iceberg spec: truncate(value, W) = value - (((value % W) + W) % W)
+ * Truncate transform for Integer type.
+ * Follows Iceberg spec: truncate(value, W) = value - (((value % W) + W) % W), which snaps `value`
+ * down to a multiple of `W`.
  *
- * Does NOT implement ReducibleFunction because different integer truncate widths
- * produce incompatible partition structures.
+ * Implements ReducibleFunction: truncate(v, W1) and truncate(v, W2) are always reducible onto a
+ * common coarser grid of multiples of lcm(W1, W2). The finer side (whose width does not already
+ * equal the lcm) reduces by snapping to that grid; when W2 is a multiple of W1 the lcm is simply
+ * the coarser width W2.
  */
-object IntegerTruncateFunction extends ScalarFunction[Int] {
+object IntegerTruncateFunction
+    extends ScalarFunction[Int]
+    with ReducibleFunction[Int, Int] {
   override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "truncate"
@@ -371,4 +376,31 @@ object IntegerTruncateFunction extends ScalarFunction[Int] {
     val width = input.getInt(1)
     value - (((value % width) + width) % width)
   }
+
+  override def reducer(
+      thisParams: ReducibleParameters,
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: ReducibleParameters): Reducer[Int, Int] = {
+    if (otherFunc == IntegerTruncateFunction) {
+      val thisWidth = thisParams.getInt(0)
+      val otherWidth = otherParams.getInt(0)
+      val common = lcm(thisWidth, otherWidth)
+      // Only the finer side reduces; if `common == thisWidth` this side is already the common grid.
+      if (common != thisWidth) {
+        return IntTruncateReducer(common)
+      }
+    }
+    null
+  }
+
+  private def lcm(a: Int, b: Int): Int = {
+    val g = BigInt(a).gcd(BigInt(b))
+    (BigInt(a) / g * BigInt(b)).toInt
+  }
+}
+
+case class IntTruncateReducer(width: Int) extends Reducer[Int, Int] {
+  override def reduce(value: Int): Int = value - (((value % width) + width) % width)
+  override def resultType(): DataType = IntegerType
+  override def displayName(): String = s"truncate($width)"
 }

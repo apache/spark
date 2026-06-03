@@ -4275,29 +4275,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
       checkAnswer(df, Seq(Row(0, 10), Row(1, 20), Row(2, 30)))
     }
   }
-  test("SPARK-50593: TransformExpression.collectLeaves filters out literals") {
-    // bucket(4, col) has children = [Literal(4), col] but collectLeaves should return [col]
-    val col = attr("data")
-    val bucketExpr = TransformExpression(BucketFunction, Seq(Literal(4), col))
-    val leaves = bucketExpr.collectLeaves()
-    assert(leaves.size == 1, s"Expected 1 leaf (column ref), got ${leaves.size}: $leaves")
-    assert(leaves.head.semanticEquals(col),
-      s"Expected leaf to be the column reference, got ${leaves.head}")
-
-    // truncate(col, 3) has children = [col, Literal(3)] but collectLeaves should return [col]
-    val truncExpr = TransformExpression(TruncateFunction, Seq(col, Literal(3)))
-    val truncLeaves = truncExpr.collectLeaves()
-    assert(truncLeaves.size == 1,
-      s"Expected 1 leaf (column ref), got ${truncLeaves.size}: $truncLeaves")
-    assert(truncLeaves.head.semanticEquals(col),
-      s"Expected leaf to be the column reference, got ${truncLeaves.head}")
-
-    // years(col) has children = [col] with no literals
-    val yearsExpr = TransformExpression(YearsFunction, Seq(col))
-    val yearsLeaves = yearsExpr.collectLeaves()
-    assert(yearsLeaves.size == 1,
-      s"Expected 1 leaf for years(), got ${yearsLeaves.size}: $yearsLeaves")
-  }
 
   test("SPARK-50593: existing bucket SPJ still works with ReducibleParameters API") {
     // Exercises the new ReducibleParameters-based reducer path end-to-end: bucket(4) and
@@ -4384,6 +4361,170 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
           "returns null. SPJ must NOT be enabled; a shuffle is required.")
       checkAnswer(df, Seq(Row(0, 0), Row(1, 1), Row(2, 2)))
     }
+  }
+
+  test("SPARK-50593: nested transforms with differing inner are not compatible " +
+      "(no false-positive SPJ)") {
+    import org.apache.spark.sql.catalyst.expressions.Expression
+    import org.apache.spark.sql.types.StringType
+    // A reducer is derived from the outer literal parameters only and is blind to nested inner
+    // transforms (extractParameters keeps only literalChildren). The nonLiteralChildrenSame guard
+    // in TransformExpression.reducer must refuse to reduce when the inner transforms differ;
+    // otherwise SPJ would silently co-locate mismatched partitions and drop matching rows.
+    val ts = attr("ts")
+    val data = AttributeReference("data", StringType)()
+    def bucket(n: Int, e: Expression): TransformExpression =
+      TransformExpression(BucketFunction, Seq(Literal(n), e))
+    def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
+    def days(e: Expression): TransformExpression = TransformExpression(DaysFunction, Seq(e))
+    def truncate(e: Expression, w: Int): TransformExpression =
+      TransformExpression(TruncateFunction, Seq(e, Literal(w)))
+
+    // Outer bucket reducible (4 vs 2) but inner differs (years vs days) -> NOT compatible.
+    val l1 = bucket(4, years(ts))
+    val r1 = bucket(2, days(ts))
+    assert(!l1.isSameFunction(r1))
+    assert(!l1.isCompatible(r1),
+      "bucket(4, years(ts)) must not be compatible with bucket(2, days(ts))")
+    assert(l1.reducers(r1).isEmpty && r1.reducers(l1).isEmpty,
+      "no reducer may be produced across differing inner transforms")
+
+    // No-arg reducer path: outer days/years (empty params) over differing inner buckets.
+    val l2 = days(bucket(4, ts))
+    val r2 = years(bucket(2, ts))
+    assert(!l2.isCompatible(r2),
+      "days(bucket(4, ts)) must not be compatible with years(bucket(2, ts))")
+    assert(l2.reducers(r2).isEmpty)
+
+    // Truncate manifestation: outer width reducible (10 -> 5) but inner differs -> NOT compatible.
+    val l3 = truncate(bucket(4, data), 10)
+    val r3 = truncate(bucket(2, data), 5)
+    assert(!l3.isCompatible(r3),
+      "truncate(.., 10) over bucket(4) must not be compatible with truncate(.., 5) over bucket(2)")
+    assert(l3.reducers(r3).isEmpty)
+
+    // Positive control 1: same inner, outer reducible -> still compatible with a reducer.
+    val same1 = bucket(4, years(ts))
+    val same2 = bucket(2, years(ts))
+    assert(same1.isCompatible(same2),
+      "same inner years(ts) with bucket(4) vs bucket(2) must remain compatible")
+    assert(same1.reducers(same2).isDefined)
+
+    // Positive control 2: flat cross-function reducible days(ts) vs years(ts) -> still compatible.
+    assert(days(ts).isCompatible(years(ts)),
+      "flat days(ts) vs years(ts) must remain compatible (no regression)")
+  }
+
+  test("SPARK-50593: isSameFunction recurses into nested transforms, respects column-ref slots") {
+    import org.apache.spark.sql.catalyst.expressions.{Add, Expression, GetStructField}
+    val a = attr("a")
+    val b = attr("b")
+    def bucket(n: Int, e: Expression): TransformExpression =
+      TransformExpression(BucketFunction, Seq(Literal(n), e))
+    def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
+    def days(e: Expression): TransformExpression = TransformExpression(DaysFunction, Seq(e))
+
+    // Nested identical -> same, with column identity ignored. Without this, the primary nested SPJ
+    // case (bucket(4, years(ts)) on both sides) would silently fall back to a shuffle.
+    assert(bucket(4, years(a)).isSameFunction(bucket(4, years(a))))
+    assert(bucket(4, years(a)).isSameFunction(bucket(4, years(b))), "column identity is ignored")
+    // Nested different inner -> not same.
+    assert(!bucket(4, years(a)).isSameFunction(bucket(4, days(a))))
+    // Different outer literal -> not same.
+    assert(!bucket(4, years(a)).isSameFunction(bucket(2, years(a))))
+    // Flat sanity (no nesting).
+    assert(bucket(4, a).isSameFunction(bucket(4, b)))
+    assert(!bucket(4, a).isSameFunction(bucket(2, b)))
+
+    // A non-reference column slot (a + 1) carries value-changing semantics, so it is conservatively
+    // treated as not-same -- even compared to itself.
+    val add = bucket(4, Add(a, Literal(1)))
+    assert(!add.isSameFunction(bucket(4, Add(b, Literal(1)))))
+    assert(!add.isSameFunction(add), "a non-reference slot is treated as not-same by design")
+
+    // Struct-field column references are recognized (reflexivity preserved for genuine refs).
+    val s = AttributeReference("s", StructType(Seq(StructField("f", IntegerType))))()
+    val sf = GetStructField(s, 0)
+    assert(bucket(4, sf).isSameFunction(bucket(4, sf)))
+  }
+
+  test("SPARK-50593: supportsExpressions admits single-attribute nested, rejects multi-attribute") {
+    import org.apache.spark.sql.catalyst.expressions.Add
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+
+    // Single-attribute nested transform -> admitted (references = {a}).
+    val nested = TransformExpression(BucketFunction,
+      Seq(Literal(4), TransformExpression(YearsFunction, Seq(a))))
+    assert(nested.references.size == 1)
+    assert(physical.KeyedPartitioning.supportsExpressions(Seq(nested)))
+
+    // Multi-attribute transform -> rejected at the gate; the positional model (keyPositions) needs
+    // exactly one clustering column per partition expression.
+    val multi = TransformExpression(BucketFunction, Seq(Literal(4), Add(a, b)))
+    assert(multi.references.size == 2)
+    assert(!physical.KeyedPartitioning.supportsExpressions(Seq(multi)))
+  }
+
+  test("SPARK-50593: canCreatePartitioning is false for nested transforms (avoids flattening)") {
+    import org.apache.spark.sql.catalyst.expressions.{Add, Cast, Expression}
+    val ts = AttributeReference("ts", TimestampType)()
+    val n = AttributeReference("n", IntegerType)()
+    def bucket(n: Int, e: Expression): TransformExpression =
+      TransformExpression(BucketFunction, Seq(Literal(n), e))
+    def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
+
+    // hasOnlyReferenceArgs: true only when every arg is a literal or a bare column reference.
+    assert(bucket(4, ts).hasOnlyReferenceArgs)                       // bare column
+    assert(!bucket(4, years(ts)).hasOnlyReferenceArgs)               // nested transform
+    assert(!bucket(4, Cast(years(ts), IntegerType)).hasOnlyReferenceArgs) // transform under a cast
+    assert(!bucket(4, Cast(n, LongType)).hasOnlyReferenceArgs)       // cast slot
+    assert(!bucket(4, Add(n, Literal(1))).hasOnlyReferenceArgs)      // arithmetic slot
+
+    val dist = physical.ClusteredDistribution(Seq(ts))
+    val nested = physical.KeyedPartitioning(Seq(bucket(4, years(ts))), Seq.empty)
+    val flat = physical.KeyedPartitioning(Seq(bucket(4, ts)), Seq.empty)
+
+    withSQLConf(
+      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
+      // A nested transform must NOT be repartitioned-to-match: createPartitioning would flatten
+      // bucket(4, years(ts)) -> bucket(4, key), producing a non-co-locating partitioning. It must
+      // opt out so EnsureRequirements falls back to a regular shuffle.
+      assert(!physical.KeyedShuffleSpec(nested, dist).canCreatePartitioning,
+        "nested transform must opt out of createPartitioning")
+      // Flat transform remains repartitionable (no regression for v2 bucketing-shuffle).
+      assert(physical.KeyedShuffleSpec(flat, dist).canCreatePartitioning)
+    }
+  }
+
+  test("SPARK-50593: integer truncate is reducible via lcm (generalized reducer, non-bucket)") {
+    // A second reducible transform exercising the generalized ReducibleParameters API with reducer
+    // math distinct from bucket (GCD) and string truncate (prefix-min): integer truncate snaps to
+    // a coarser grid, so truncate(v, W1) and truncate(v, W2) reduce onto multiples of lcm(W1, W2).
+    import org.apache.spark.sql.catalyst.expressions.Expression
+    val id = attr("id")
+    def itrunc(e: Expression, w: Int): TransformExpression =
+      TransformExpression(IntegerTruncateFunction, Seq(e, Literal(w)))
+
+    // Same width -> same function (no reduction needed).
+    assert(itrunc(id, 4).isSameFunction(itrunc(id, 4)))
+
+    // W2 is a multiple of W1: the finer side (W1=2) reduces onto the coarser grid (W2=4).
+    assert(itrunc(id, 2).isCompatible(itrunc(id, 4)))
+    val r = itrunc(id, 2).reducers(itrunc(id, 4))
+    assert(r.isDefined, "truncate(2) must reduce onto truncate(4)")
+    val red = r.get.asInstanceOf[Reducer[Integer, Integer]]
+    // truncate(.,2) values snapped to multiples of 4: 6 -> 4, 2 -> 0, 8 -> 8
+    assert(red.reduce(6) == 4 && red.reduce(2) == 0 && red.reduce(8) == 8)
+    // The coarser side (4) is already the common grid -> no reducer.
+    assert(itrunc(id, 4).reducers(itrunc(id, 2)).isEmpty)
+
+    // Neither divides the other: both sides reduce to the lcm grid.
+    assert(itrunc(id, 6).isCompatible(itrunc(id, 4)))          // lcm(6, 4) = 12
+    assert(itrunc(id, 6).reducers(itrunc(id, 4)).isDefined)
+    assert(itrunc(id, 4).reducers(itrunc(id, 6)).isDefined)
+    assert(itrunc(id, 3).isCompatible(itrunc(id, 5)))          // coprime -> lcm(3, 5) = 15
   }
 
   test("SPARK-50593: ReducibleParameters backward compat - old int API still works via default") {

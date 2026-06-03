@@ -641,10 +641,10 @@ object KeyedPartitioning {
 
   def supportsExpressions(expressions: Seq[Expression]): Boolean = {
     def isSupportedTransform(transform: TransformExpression): Boolean = {
-      // Should only consider column references, not literals.
-      val nonLiteralChildren = transform.children.filterNot(_.isInstanceOf[Literal])
-      // We need exactly one column reference per transform.
-      nonLiteralChildren.size == 1 && isReference(nonLiteralChildren.head)
+      // Use Expression.references (AttributeSet), which already filters out non-attribute
+      // leaves (e.g., Literal parameters introduced by parameterized transforms such as
+      // `bucket(numBuckets, col)` or `truncate(col, width)`).
+      transform.references.size == 1
     }
 
     @tailrec
@@ -1328,8 +1328,15 @@ case class KeyedShuffleSpec(
   override def canCreatePartitioning: Boolean =
     SQLConf.get.v2BucketingShuffleEnabled &&
       !SQLConf.get.v2BucketingPartiallyClusteredDistributionEnabled &&
-      partitioning.expressions.forall { e =>
-        e.isInstanceOf[AttributeReference] || e.isInstanceOf[TransformExpression]
+      partitioning.expressions.forall {
+        case _: AttributeReference => true
+        // Only repartition-to-match a transform whose every argument is a literal or a bare column
+        // reference. Otherwise createPartitioning would rewrite a non-reference slot (nested
+        // transform, cast, arithmetic) wholesale to the join key and flatten its semantics away
+        // (e.g. bucket(4, years(ts)) -> bucket(4, key)), producing a non-co-locating partitioning.
+        // Fallback to a regular shuffle for those.
+        case t: TransformExpression => t.hasOnlyReferenceArgs
+        case _ => false
       }
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
