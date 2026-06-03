@@ -21,7 +21,8 @@ import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
+import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder, OptionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal, MutableTimestampNanos, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -171,6 +172,27 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
           parameters = Map("dataType" -> ("\"" + dt.sql + "\"")))
       }
     }
+  }
+
+  private def checkOptionRoundtrip[T](
+      enc: AgnosticEncoder[Option[T]],
+      values: Seq[Option[T]]): Unit = {
+    val encoder = ExpressionEncoder(enc).resolveAndBind()
+    val toRow = encoder.createSerializer()
+    val fromRow = encoder.createDeserializer()
+    values.foreach(v => assert(fromRow(toRow(v)) === v, s"roundtrip for $enc with $v"))
+  }
+
+  test("Option-wrapped nanos encoders round-trip (wrapper unwrapped before framework dispatch)") {
+    // Regression for the framework serde dispatch keying off enc.dataType: OptionEncoder proxies
+    // dataType to the wrapped nanos leaf, so the wrapper must be handled (UnwrapOption/WrapOption)
+    // before the TypeOps leaf dispatch. Precision 9 keeps the roundtrip lossless (SPARK-57207).
+    checkOptionRoundtrip(
+      OptionEncoder(LocalDateTimeNanosEncoder(9)),
+      Seq(Some(LocalDateTime.parse("2019-02-26T16:56:00.123456789")), None))
+    checkOptionRoundtrip(
+      OptionEncoder(InstantNanosEncoder(9)),
+      Seq(Some(Instant.parse("2019-02-26T16:56:00.123456789Z")), None))
   }
 
   test("framework disabled leaves the nanos types unsupported (no legacy fallback)") {

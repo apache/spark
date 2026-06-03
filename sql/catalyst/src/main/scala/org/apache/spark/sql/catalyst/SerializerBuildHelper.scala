@@ -333,12 +333,20 @@ object SerializerBuildHelper {
    * representation. The mapping between the external and internal representations is described
    * by encoder `enc`.
    */
-  private def createSerializer(enc: AgnosticEncoder[_], input: Expression): Expression =
+  private def createSerializer(enc: AgnosticEncoder[_], input: Expression): Expression = enc match {
+    // OptionEncoder and TransformingEncoder proxy `dataType` to the wrapped encoder, so the
+    // framework dispatch below (which keys off `enc.dataType`) would otherwise fire on the wrapper
+    // and skip Option unwrapping / the transforming codec. Route these wrappers through the default
+    // path first, so the framework leaf dispatch only ever sees unwrapped leaf encoders.
+    case _: OptionEncoder[_] | _: TransformingEncoder[_, _] =>
+      createSerializerDefault(enc, input)
     // Framework dispatch runs before encoder-type checks (AgnosticExpressionPathEncoder,
     // isNativeEncoder) in the default path. This is safe because framework types use dedicated
     // leaf encoders (e.g., LocalTimeEncoder), never migration shims or native primitives.
-    TypeOps(enc.dataType).flatMap(_.createSerializer(input))
-      .getOrElse(createSerializerDefault(enc, input))
+    case _ =>
+      TypeOps(enc.dataType).flatMap(_.createSerializer(input))
+        .getOrElse(createSerializerDefault(enc, input))
+  }
 
   private def createSerializerDefault(
       enc: AgnosticEncoder[_], input: Expression): Expression = enc match {

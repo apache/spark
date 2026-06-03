@@ -32,8 +32,8 @@ import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
  *
  * SCOPE (SPARK-57207): this issue wires physical representation, literals, row accessors, and
  * codegen class selection. Dedicated fractional-second string formatting is not implemented yet:
- * there is no TimestampFormatter for the nanos timestamp types. Until one lands, format() (and the
- * toSQLValue() that delegates to it) raises the user-facing
+ * there is no TimestampFormatter for the nanos timestamp types. Until one lands, format() (and
+ * the toSQLValue() that delegates to it) raises the user-facing
  * UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error rather than silently truncating to
  * microsecond precision.
  *
