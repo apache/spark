@@ -353,6 +353,8 @@ public class TaskMemoryManager {
       MemoryConsumer consumerToSpill = cList.get(idx);
       long usedBeforeSpill = consumerToSpill.getUsed();
       spillConsumer(requestingConsumer, required - released, consumerToSpill);
+      // Measure net tracked memory released. Spill callbacks must not reacquire execution memory;
+      // if a custom consumer violates that contract, conservatively treat it as making no progress.
       long actuallyReleased = Math.max(0L, usedBeforeSpill - consumerToSpill.getUsed());
       if (actuallyReleased > 0) {
         released = Math.addExact(released, actuallyReleased);
