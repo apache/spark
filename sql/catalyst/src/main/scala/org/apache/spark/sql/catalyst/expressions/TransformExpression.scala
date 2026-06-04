@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.annotation.tailrec
 import scala.util.Try
 
 import org.apache.spark.internal.Logging
@@ -47,23 +48,6 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
     children.collect { case l: Literal => l }
 
   /**
-   * Whether every argument of this transform is either a literal parameter or a bare column
-   * reference (an [[Attribute]] or a [[GetStructField]] chain). This is the condition under which
-   * the transform's column slot can be safely rewritten to a join key (see
-   * `KeyedShuffleSpec.createPartitioning`): that rewrite replaces each non-literal child wholesale
-   * with the clustering key, which is only correct when the child IS a plain column reference.
-   *
-   * It excludes nested transforms (`bucket(4, years(ts))`), transforms hidden under a wrapper
-   * (`bucket(4, cast(years(ts)))`), and value-changing slots (`bucket(4, cast(a))`,
-   * `bucket(4, a + 1)`). A single non-recursive pass suffices: any disqualifying node appears at
-   * the top of some child, and [[isColumnRef]] rejects it without needing to look inside.
-   */
-  def hasOnlyReferenceArgs: Boolean = children.forall {
-    case _: Literal => true
-    case e => isColumnRef(e)
-  }
-
-  /**
    * Whether this [[TransformExpression]] has the same semantics as `other`. For instance,
    * `bucket(32, c)` is equal to `bucket(32, d)`, but not to `bucket(16, d)` or `year(c)`.
    * Similarly, `truncate(c, 2)` is equal to `truncate(d, 2)`, but may not to `truncate(c, 4)`.
@@ -90,50 +74,14 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
    */
   def isSameFunction(other: TransformExpression): Boolean =
     function.canonicalName() == other.function.canonicalName() &&
-      childrenMatch(other)(_ == _)
-
-  @scala.annotation.tailrec
-  private def isColumnRef(e: Expression): Boolean = e match {
-    case _: Attribute => true
-    case g: GetStructField => isColumnRef(g.child)
-    case _ => false
-  }
-
-  /**
-   * Whether every non-literal child of this and `other` is structurally the same: nested transforms
-   * must recursively be the same function, and any other slot must be a column reference. Literal
-   * children may differ -- they are exactly the parameters a [[Reducer]] is allowed to reconcile.
-   *
-   * This guards the reducer path. A [[Reducer]] is derived from the outer literal parameters alone
-   * (e.g. bucket numBuckets, truncate width); the nested transform children are not visible to it.
-   * It is therefore only valid when those nested children are identical. Without this check,
-   * `bucket(4, years(ts))` and `bucket(2, days(ts))` would be reduced via `gcd(4, 2) = 2`, silently
-   * joining mismatched partitions even though `years(ts)` and `days(ts)` are different transforms.
-   */
-  private def nonLiteralChildrenSame(other: TransformExpression): Boolean =
-    childrenMatch(other)((_, _) => true)
-
-  /**
-   * Pairwise-match this transform's children against `other`'s. Requires equal arity, recursively
-   * the same function for nested transform arguments, and a plain column reference (Attribute /
-   * GetStructField chain) on both sides for any other slot. The `literalsMatch` predicate decides
-   * how literal parameters are compared:
-   *   - `_ == _` for exact equality ([[isSameFunction]]);
-   *   - `(_, _) => true` to allow them to differ ([[nonLiteralChildrenSame]], the reducer check,
-   *     where differing literal parameters are exactly what a [[Reducer]] reconciles).
-   *
-   * Note nested transform arguments always require full sameness via [[isSameFunction]] regardless
-   * of `literalsMatch`: the reducer is blind to nested transforms, so they must be identical.
-   */
-  private def childrenMatch(other: TransformExpression)
-      (literalsMatch: (Literal, Literal) => Boolean): Boolean =
-    children.length == other.children.length &&
+      children.length == other.children.length &&
       children.zip(other.children).forall {
-        case (l1: Literal, l2: Literal) => literalsMatch(l1, l2)
+        case (l1: Literal, l2: Literal) => l1 == l2
         case (t1: TransformExpression, t2: TransformExpression) => t1.isSameFunction(t2)
-        // any other pair: both must be plain column references; column identity is ignored, but a
-        // non-reference slot (Add, Cast, ...) or a Literal/Transform-vs-ref mismatch is "not same"
-        case (c1, c2) => isColumnRef(c1) && isColumnRef(c2)
+        // Any other pair must be a plain column reference on both sides. Column identity is
+        // ignored (reconciled separately via positional matching); a non-reference slot
+        // (Add, Cast, ...) or a literal/transform-vs-reference mismatch is "not the same".
+        case (c1, c2) => TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2)
       }
 
   /**
@@ -203,13 +151,6 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
       thisExpr: TransformExpression,
       otherFunction: ReducibleFunction[_, _],
       otherExpr: TransformExpression): Option[Reducer[_, _]] = {
-    // The reducer is derived from the literal parameters only (extractParameters drops nested
-    // transform children), so it is valid only when every non-literal child is structurally
-    // identical. This protects both `isCompatible` and the public `reducers` entry point from
-    // reducing across unrelated nested transforms, e.g. bucket(4, years(ts)) vs bucket(2, days(ts))
-    if (!thisExpr.nonLiteralChildrenSame(otherExpr)) {
-      return None
-    }
     val thisParams = extractParameters(thisExpr)
     val otherParams = extractParameters(otherExpr)
     val thisName = thisExpr.function.canonicalName()
@@ -270,4 +211,19 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+}
+
+object TransformExpression {
+  /**
+   * Whether `e` is a bare column reference: an [[Attribute]] or a [[GetStructField]] chain
+   * (struct-field access on a column). Shared by [[TransformExpression.isSameFunction]] and by
+   * `KeyedPartitioning.supportsExpressions`, which both decide whether a transform's single
+   * non-literal argument is a plain column.
+   */
+  @tailrec
+  private[sql] def isColumnRef(e: Expression): Boolean = e match {
+    case _: Attribute => true
+    case g: GetStructField => isColumnRef(g.child)
+    case _ => false
+  }
 }

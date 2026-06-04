@@ -4363,58 +4363,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
-  test("SPARK-50593: nested transforms with differing inner are not compatible " +
-      "(no false-positive SPJ)") {
-    import org.apache.spark.sql.catalyst.expressions.Expression
-    import org.apache.spark.sql.types.StringType
-    // A reducer is derived from the outer literal parameters only and is blind to nested inner
-    // transforms (extractParameters keeps only literalChildren). The nonLiteralChildrenSame guard
-    // in TransformExpression.reducer must refuse to reduce when the inner transforms differ;
-    // otherwise SPJ would silently co-locate mismatched partitions and drop matching rows.
-    val ts = attr("ts")
-    val data = AttributeReference("data", StringType)()
-    def bucket(n: Int, e: Expression): TransformExpression =
-      TransformExpression(BucketFunction, Seq(Literal(n), e))
-    def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
-    def days(e: Expression): TransformExpression = TransformExpression(DaysFunction, Seq(e))
-    def truncate(e: Expression, w: Int): TransformExpression =
-      TransformExpression(TruncateFunction, Seq(e, Literal(w)))
-
-    // Outer bucket reducible (4 vs 2) but inner differs (years vs days) -> NOT compatible.
-    val l1 = bucket(4, years(ts))
-    val r1 = bucket(2, days(ts))
-    assert(!l1.isSameFunction(r1))
-    assert(!l1.isCompatible(r1),
-      "bucket(4, years(ts)) must not be compatible with bucket(2, days(ts))")
-    assert(l1.reducers(r1).isEmpty && r1.reducers(l1).isEmpty,
-      "no reducer may be produced across differing inner transforms")
-
-    // No-arg reducer path: outer days/years (empty params) over differing inner buckets.
-    val l2 = days(bucket(4, ts))
-    val r2 = years(bucket(2, ts))
-    assert(!l2.isCompatible(r2),
-      "days(bucket(4, ts)) must not be compatible with years(bucket(2, ts))")
-    assert(l2.reducers(r2).isEmpty)
-
-    // Truncate manifestation: outer width reducible (10 -> 5) but inner differs -> NOT compatible.
-    val l3 = truncate(bucket(4, data), 10)
-    val r3 = truncate(bucket(2, data), 5)
-    assert(!l3.isCompatible(r3),
-      "truncate(.., 10) over bucket(4) must not be compatible with truncate(.., 5) over bucket(2)")
-    assert(l3.reducers(r3).isEmpty)
-
-    // Positive control 1: same inner, outer reducible -> still compatible with a reducer.
-    val same1 = bucket(4, years(ts))
-    val same2 = bucket(2, years(ts))
-    assert(same1.isCompatible(same2),
-      "same inner years(ts) with bucket(4) vs bucket(2) must remain compatible")
-    assert(same1.reducers(same2).isDefined)
-
-    // Positive control 2: flat cross-function reducible days(ts) vs years(ts) -> still compatible.
-    assert(days(ts).isCompatible(years(ts)),
-      "flat days(ts) vs years(ts) must remain compatible (no regression)")
-  }
-
   test("SPARK-50593: isSameFunction recurses into nested transforms, respects column-ref slots") {
     import org.apache.spark.sql.catalyst.expressions.{Add, Expression, GetStructField}
     val a = attr("a")
@@ -4424,8 +4372,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
     def days(e: Expression): TransformExpression = TransformExpression(DaysFunction, Seq(e))
 
-    // Nested identical -> same, with column identity ignored. Without this, the primary nested SPJ
-    // case (bucket(4, years(ts)) on both sides) would silently fall back to a shuffle.
+    // Nested identical -> same (recursing into the inner transform), with column identity ignored.
+    // isSameFunction stays correct for nested shapes even though the SPJ gate currently rejects
+    // them; keeping this behavior is the right shape for any future nested support.
     assert(bucket(4, years(a)).isSameFunction(bucket(4, years(a))))
     assert(bucket(4, years(a)).isSameFunction(bucket(4, years(b))), "column identity is ignored")
     // Nested different inner -> not same.
@@ -4448,54 +4397,32 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     assert(bucket(4, sf).isSameFunction(bucket(4, sf)))
   }
 
-  test("SPARK-50593: supportsExpressions admits single-attribute nested, rejects multi-attribute") {
-    import org.apache.spark.sql.catalyst.expressions.Add
+  test("SPARK-50593: supportsExpressions admits flat parameterized transforms, " +
+      "rejects nested and non-reference slots") {
+    import org.apache.spark.sql.catalyst.expressions.{Add, Expression}
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
-
-    // Single-attribute nested transform -> admitted (references = {a}).
-    val nested = TransformExpression(BucketFunction,
-      Seq(Literal(4), TransformExpression(YearsFunction, Seq(a))))
-    assert(nested.references.size == 1)
-    assert(physical.KeyedPartitioning.supportsExpressions(Seq(nested)))
-
-    // Multi-attribute transform -> rejected at the gate; the positional model (keyPositions) needs
-    // exactly one clustering column per partition expression.
-    val multi = TransformExpression(BucketFunction, Seq(Literal(4), Add(a, b)))
-    assert(multi.references.size == 2)
-    assert(!physical.KeyedPartitioning.supportsExpressions(Seq(multi)))
-  }
-
-  test("SPARK-50593: canCreatePartitioning is false for nested transforms (avoids flattening)") {
-    import org.apache.spark.sql.catalyst.expressions.{Add, Cast, Expression}
-    val ts = AttributeReference("ts", TimestampType)()
-    val n = AttributeReference("n", IntegerType)()
     def bucket(n: Int, e: Expression): TransformExpression =
       TransformExpression(BucketFunction, Seq(Literal(n), e))
-    def years(e: Expression): TransformExpression = TransformExpression(YearsFunction, Seq(e))
 
-    // hasOnlyReferenceArgs: true only when every arg is a literal or a bare column reference.
-    assert(bucket(4, ts).hasOnlyReferenceArgs)                       // bare column
-    assert(!bucket(4, years(ts)).hasOnlyReferenceArgs)               // nested transform
-    assert(!bucket(4, Cast(years(ts), IntegerType)).hasOnlyReferenceArgs) // transform under a cast
-    assert(!bucket(4, Cast(n, LongType)).hasOnlyReferenceArgs)       // cast slot
-    assert(!bucket(4, Add(n, Literal(1))).hasOnlyReferenceArgs)      // arithmetic slot
+    // Flat parameterized transform over a bare column -> admitted (one non-literal child = column).
+    assert(physical.KeyedPartitioning.supportsExpressions(Seq(bucket(4, a))))
+    // Bare identity column -> admitted.
+    assert(physical.KeyedPartitioning.supportsExpressions(Seq(a)))
 
-    val dist = physical.ClusteredDistribution(Seq(ts))
-    val nested = physical.KeyedPartitioning(Seq(bucket(4, years(ts))), Seq.empty)
-    val flat = physical.KeyedPartitioning(Seq(bucket(4, ts)), Seq.empty)
+    // Nested transform -> rejected: the non-literal child is a transform, not a column reference.
+    // SPJ reasons about a transform via its function and literal params alone, which is unsound
+    // when the remaining argument is itself a transform.
+    val nested = bucket(4, TransformExpression(YearsFunction, Seq(a)))
+    assert(!physical.KeyedPartitioning.supportsExpressions(Seq(nested)))
 
-    withSQLConf(
-      SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-      SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
-      // A nested transform must NOT be repartitioned-to-match: createPartitioning would flatten
-      // bucket(4, years(ts)) -> bucket(4, key), producing a non-co-locating partitioning. It must
-      // opt out so EnsureRequirements falls back to a regular shuffle.
-      assert(!physical.KeyedShuffleSpec(nested, dist).canCreatePartitioning,
-        "nested transform must opt out of createPartitioning")
-      // Flat transform remains repartitionable (no regression for v2 bucketing-shuffle).
-      assert(physical.KeyedShuffleSpec(flat, dist).canCreatePartitioning)
-    }
+    // Value-changing slot (a + 1) -> rejected: not a plain column reference.
+    assert(!physical.KeyedPartitioning.supportsExpressions(Seq(bucket(4, Add(a, Literal(1))))))
+
+    // Two non-literal column references -> rejected: a partition expression must map to exactly one
+    // clustering column (the positional keyPositions model needs a single column per transform).
+    assert(!physical.KeyedPartitioning.supportsExpressions(
+      Seq(TransformExpression(BucketFunction, Seq(Literal(4), a, b)))))
   }
 
   test("SPARK-50593: integer truncate is reducible via lcm (generalized reducer, non-bucket)") {
