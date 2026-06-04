@@ -58,31 +58,30 @@ class ResolveBinBySuite extends AnalysisTest {
       s"expected condition '$condition' but got '${ex.getCondition}'")
   }
 
-  test("user-supplied foldable ALIGN TO of matching type is preserved") {
-    val originExpr: Expression = Literal(123456L, TimestampType)
-    val resolved = ResolveBinBy.apply(unresolved(originExpr = Some(originExpr)))
-    assert(resolved.asInstanceOf[BinBy].originExpr == originExpr)
+  test("user-supplied foldable ALIGN TO of matching type is folded to micros") {
+    val resolved = ResolveBinBy.apply(unresolved(originExpr = Some(Literal(123456L, TimestampType))))
+    assert(resolved.asInstanceOf[BinBy].originMicros == 123456L)
   }
 
   test("omitted ALIGN TO fills the default origin per type and session zone") {
     // LTZ, UTC: epoch.
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val utc = ResolveBinBy.apply(unresolved(originExpr = None)).asInstanceOf[BinBy]
-      assert(utc.originExpr == Literal(0L, TimestampType))
+      assert(utc.originMicros == 0L)
     }
 
     // LTZ, non-UTC: shifted by the zone offset. LA is UTC-8 on 1970-01-01, so local
     // midnight is UTC 08:00 = 28800000000 micros.
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       val la = ResolveBinBy.apply(unresolved(originExpr = None)).asInstanceOf[BinBy]
-      assert(la.originExpr == Literal(8L * 3600L * 1000000L, TimestampType))
+      assert(la.originMicros == 8L * 3600L * 1000000L)
     }
 
     // NTZ: epoch, zone-independent.
     val ntz = ResolveBinBy.apply(
       unresolved(child = ntzChild, rangeStart = tsStartNtz, rangeEnd = tsEndNtz,
         originExpr = None)).asInstanceOf[BinBy]
-    assert(ntz.originExpr == Literal(0L, TimestampNTZType))
+    assert(ntz.originMicros == 0L)
   }
 
   test("rejects invalid ALIGN TO") {
@@ -98,6 +97,9 @@ class ResolveBinBySuite extends AnalysisTest {
     expectError(
       unresolved(child = childWithOrigin, originExpr = Some(originAttr)),
       "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
+    // A foldable but null origin is rejected as a null argument.
+    expectError(
+      unresolved(originExpr = Some(Literal(null, TimestampType))), "BIN_BY_NULL_ARGUMENT")
   }
 
   test("rejects invalid BIN WIDTH") {
@@ -106,7 +108,9 @@ class ResolveBinBySuite extends AnalysisTest {
     invalid(Literal(1, YearMonthIntervalType()))   // year-month
     invalid(Literal(0L, DayTimeIntervalType()))    // zero
     invalid(Literal(-1L, DayTimeIntervalType()))   // negative
-    invalid(Literal(null, DayTimeIntervalType()))  // null
+    // Null width is rejected as a null argument, distinct from a non-positive width.
+    expectError(
+      unresolved(binWidth = Literal(null, DayTimeIntervalType())), "BIN_BY_NULL_ARGUMENT")
     // A foldable CAST that throws on eval (ANSI) surfaces cleanly, not as a raw exception.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
       invalid(Cast(Literal.create("not an interval", StringType), DayTimeIntervalType()))

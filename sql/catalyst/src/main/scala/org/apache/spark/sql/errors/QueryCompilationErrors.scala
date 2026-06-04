@@ -357,6 +357,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "inputExpr" -> toSQLExpr(expr)))
   }
 
+  def binByNullArgumentError(clause: String): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_NULL_ARGUMENT",
+      messageParameters = Map("clause" -> clause))
+  }
+
   def binByRangeTypeMismatchError(
       columnName: String,
       columnType: DataType): Throwable = {

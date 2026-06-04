@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow, Expression, ExprId, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow, Expression, ExprId}
 import org.apache.spark.sql.catalyst.plans.logical.{BinBy, LogicalPlan, UnresolvedBinBy}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_BIN_BY
@@ -72,21 +72,24 @@ object ResolveBinBy extends Rule[LogicalPlan] {
     if (!b.binWidthExpr.foldable) {
       throw QueryCompilationErrors.binByNonFoldableInputError("BIN WIDTH", b.binWidthExpr)
     }
-    // Evaluating a foldable expression can still throw (e.g., a CAST that fails under ANSI
-    // mode, integer overflow inside a constant fold). Surface any such failure as a clean
-    // analysis-time BIN_BY_INVALID_BIN_WIDTH rather than letting the raw exception escape.
-    val binWidthValid = b.binWidthExpr.dataType match {
+    // Fold the bin width to micros.
+    val binWidthMicros: Long = b.binWidthExpr.dataType match {
       case _: DayTimeIntervalType =>
-        try {
-          val v = b.binWidthExpr.eval(EmptyRow)
-          v != null && v.asInstanceOf[Long] > 0L
+        val v = try {
+          b.binWidthExpr.eval(EmptyRow)
         } catch {
-          case NonFatal(_) => false
+          case NonFatal(_) =>
+            throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
         }
-      case _ => false
-    }
-    if (!binWidthValid) {
-      throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
+        if (v == null) {
+          throw QueryCompilationErrors.binByNullArgumentError("BIN WIDTH")
+        }
+        if (v.asInstanceOf[Long] <= 0L) {
+          throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
+        }
+        v.asInstanceOf[Long]
+      case _ =>
+        throw QueryCompilationErrors.binByInvalidBinWidthError(b.binWidthExpr)
     }
 
     val sessionZone = SQLConf.get.sessionLocalTimeZone
@@ -95,7 +98,7 @@ object ResolveBinBy extends Rule[LogicalPlan] {
     // `ALIGN TO` is optional. When omitted, default the resolved plan's origin to
     // `1970-01-01 00:00:00` in the session zone for `TIMESTAMP` (LTZ) and epoch for
     // `TIMESTAMP_NTZ`.
-    val resolvedOrigin: Expression = b.originExpr match {
+    val originMicros: Long = b.originExpr match {
       case Some(o) =>
         if (!o.foldable) {
           throw QueryCompilationErrors.binByNonFoldableInputError("ALIGN TO", o)
@@ -103,11 +106,16 @@ object ResolveBinBy extends Rule[LogicalPlan] {
         if (o.dataType != rangeType) {
           throw QueryCompilationErrors.binByAlignToTypeMismatchError(o.dataType, rangeType)
         }
-        o
+        // Fold the origin to micros.
+        val v = o.eval(EmptyRow)
+        if (v == null) {
+          throw QueryCompilationErrors.binByNullArgumentError("ALIGN TO")
+        }
+        v.asInstanceOf[Long]
       case None if isLTZ =>
-        Literal(DateTimeUtils.daysToMicros(0, DateTimeUtils.getZoneId(sessionZone)), TimestampType)
+        DateTimeUtils.daysToMicros(0, DateTimeUtils.getZoneId(sessionZone))
       case None =>
-        Literal(0L, TimestampNTZType)
+        0L
     }
 
     if (distributeAttrs.isEmpty) {
@@ -130,10 +138,10 @@ object ResolveBinBy extends Rule[LogicalPlan] {
     val appendedAttributes = BinBy.appendedAttributesWithAliases(rangeType, b.outputAliases)
 
     BinBy(
-      binWidthExpr = b.binWidthExpr,
+      binWidthMicros = binWidthMicros,
       rangeStart = rangeStart,
       rangeEnd = rangeEnd,
-      originExpr = resolvedOrigin,
+      originMicros = originMicros,
       distributeColumns = distributeAttrs,
       appendedAttributes = appendedAttributes,
       child = child,
