@@ -860,7 +860,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // range. The overflow must surface as an ArithmeticException instead of silently wrapping
       // around to a bogus (positive) timestamp.
       val minTimestamp = Literal.create(Long.MinValue, TimestampType)
-      Seq("YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE").foreach { fmt =>
+      Seq("YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE",
+          "SECOND", "MILLISECOND").foreach { fmt =>
         checkExceptionInExpression[ArithmeticException](
           TruncTimestamp(Literal.create(fmt, StringType), minTimestamp), "")
       }

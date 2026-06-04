@@ -537,9 +537,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
     level match {
       case TRUNC_TO_MICROSECOND => micros
       case TRUNC_TO_MILLISECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_MILLIS)
+        Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_MILLIS))
       case TRUNC_TO_SECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_SECOND)
+        Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_SECOND))
       case TRUNC_TO_MINUTE =>
         truncToUnitFast(micros, zoneId, MICROS_PER_MINUTE, ChronoUnit.MINUTES)
       case TRUNC_TO_HOUR =>
