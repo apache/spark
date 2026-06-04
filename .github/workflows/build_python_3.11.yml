@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Maven (Scala 2.13, Hadoop 3, JDK 21)"
+name: "Build / Python-only (Python 3.11)"
 
 on:
   workflow_dispatch:
@@ -27,8 +27,18 @@ jobs:
     permissions:
       packages: write
     name: Run
-    uses: ./.github/workflows/maven_test.yml
+    uses: ./.github/workflows/build_and_test.yml
     if: github.repository == 'apache/spark'
     with:
-      branch: branch-4.1
-      java: 21
+      java: 17
+      hadoop: hadoop3
+      envs: >-
+        {
+          "PYSPARK_IMAGE_TO_TEST": "python-311",
+          "PYTHON_TO_TEST": "python3.11"
+        }
+      jobs: >-
+        {
+          "pyspark": "true",
+          "pyspark-pandas": "true"
+        }
