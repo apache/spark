@@ -283,8 +283,17 @@ trait WindowEvaluatorFactoryBase {
           case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
             if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
               val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
-              val cacheHint = estimateMaxCachedBlocks(
-                lower, UnboundedFollowing, frameType, blockSize)
+              // Shrinking frames touch the LRU only for one partial block at
+              // the lower edge -- middle blocks of `[lower, n)` are answered
+              // directly from `blockAggregates`, not the LRU. The cursor
+              // advances monotonically with the output row, so blocks behind
+              // the cursor are never revisited. Hint = 2 (active block + 1
+              // slack for the brief overlap when the cursor crosses a
+              // boundary) suffices regardless of partition size; routing
+              // through `estimateMaxCachedBlocks` would produce 8 by default
+              // (no `IntegerLiteral` upper match) -- correct numerically but
+              // misleading about what the shrinking path actually needs.
+              val cacheHint = Some(2)
               target: InternalRow => {
                 val tc = TaskContext.get()
                 if (tc == null) {
