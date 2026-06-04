@@ -15601,12 +15601,12 @@ def jaro_winkler_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Colu
     --------
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([('MARTHA', 'MARHTA')], ['l', 'r'])
-    >>> df.select('*', sf.jaro_winkler_similarity('l', 'r')).show()
-    +------+------+-------------------------------+
-    |     l|     r|jaro_winkler_similarity(l, r)|
-    +------+------+-------------------------------+
-    |MARTHA|MARHTA|             0.9611111111111111|
-    +------+------+-------------------------------+
+    >>> df.select(sf.jaro_winkler_similarity('l', 'r')).show()
+    +-----------------------------+
+    |jaro_winkler_similarity(l, r)|
+    +-----------------------------+
+    |           0.9611111111111111|
+    +-----------------------------+
     """
     return _invoke_function_over_columns("jaro_winkler_similarity", left, right)
 
