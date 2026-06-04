@@ -2756,7 +2756,8 @@ case class JaroWinkler(left: Expression, right: Expression)
 
   // Note: This implementation uses String.charAt() which operates on UTF-16 code units.
   // Strings containing supplementary characters (surrogate pairs) may produce
-  // inaccurate results, consistent with the existing levenshtein() implementation.
+  // inaccurate results. Unlike levenshtein() which iterates UTF-8 byte boundaries
+  // directly, this decodes to a Java String for character-level comparison.
   override def nullSafeEval(input1: Any, input2: Any): Any = {
     input1.asInstanceOf[UTF8String].jaroWinklerSimilarity(
       input2.asInstanceOf[UTF8String])

@@ -180,11 +180,11 @@ String Functions
     initcap
     instr
     is_valid_utf8
+    jaro_winkler_similarity
     lcase
     left
     length
     levenshtein
-    jaro_winkler_similarity
     locate
     lower
     lpad

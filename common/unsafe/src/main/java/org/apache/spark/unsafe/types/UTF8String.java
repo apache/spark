@@ -1987,7 +1987,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * The Jaro-Winkler metric gives a bonus for common prefixes (up to 4 characters).
    */
   public double jaroWinklerSimilarity(UTF8String other) {
-    // Decode to char arrays for character-level comparison
+    // Decode to Strings for character-level comparison
     String s1 = toString();
     String s2 = other.toString();
 
