@@ -139,7 +139,7 @@ private[spark] class YarnClientSchedulerBackend(
         case NonFatal(e) =>
           logError(log"Unexpected error in YARN application state monitor thread.", e)
           allowInterrupt = false
-          sc.stop()
+          sc.stop(1)
           if (conf.get(AM_CLIENT_MODE_EXIT_ON_ERROR)) {
             logWarning(log"SparkContext stopped due to unexpected error, " +
               log"exiting with code 1.")
