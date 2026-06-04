@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.streaming.state.{InMemoryStateSchemaProvid
 import org.apache.spark.sql.execution.streaming.state.OfflineStateRepartitionErrors
 import org.apache.spark.sql.execution.streaming.utils.StreamingUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister}
 import org.apache.spark.sql.streaming.TimeMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -54,12 +54,21 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * An implementation of [[TableProvider]] with [[DataSourceRegister]] for State Store data source.
  */
-class StateDataSource extends TableProvider with DataSourceRegister with Logging {
+class StateDataSource extends TableProvider with DataSourceRegister
+    with CreatableRelationProvider with Logging {
   private lazy val session: SparkSession = SparkSession.active
 
   private lazy val hadoopConf: Configuration = session.sessionState.newHadoopConf()
 
   override def shortName(): String = "statestore"
+
+  override def createRelation(
+      sqlContext: org.apache.spark.sql.SQLContext,
+      mode: org.apache.spark.sql.SaveMode,
+      parameters: Map[String, String],
+      data: org.apache.spark.sql.DataFrame): BaseRelation = {
+    throw StateDataSourceErrors.writeUnsupported("statestore")
+  }
 
   override def getTable(
       schema: StructType,

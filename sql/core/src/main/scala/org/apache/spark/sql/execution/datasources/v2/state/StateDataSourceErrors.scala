@@ -93,6 +93,10 @@ object StateDataSourceErrors {
       startFormatVersion,
       endFormatVersion)
   }
+
+  def writeUnsupported(sourceName: String): StateDataSourceException = {
+    new StateDataSourceWriteUnsupported(sourceName)
+  }
 }
 
 abstract class StateDataSourceException(
@@ -198,4 +202,10 @@ class StateDataSourceMixedCheckpointFormatVersionsNotSupported(
       "startFormatVersion" -> startFormatVersion.toString,
       "endFormatVersion" -> endFormatVersion.toString
     ),
+    cause = null)
+
+class StateDataSourceWriteUnsupported(sourceName: String)
+  extends StateDataSourceException(
+    "STDS_WRITE_UNSUPPORTED",
+    Map("sourceName" -> sourceName),
     cause = null)

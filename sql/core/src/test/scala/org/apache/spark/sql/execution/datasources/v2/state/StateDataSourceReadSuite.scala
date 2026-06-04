@@ -329,6 +329,42 @@ class StateDataSourceNegativeTestSuite extends StateDataSourceTestBase {
         matchPVals = true)
     }
   }
+
+  test("SPARK-57225: statestore data source does not support write") {
+    withTempDir { tempDir =>
+      runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
+
+      val df = spark.read.format("statestore")
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+        .load()
+
+      val ex = intercept[StateDataSourceWriteUnsupported] {
+        df.write.format("statestore")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .save()
+      }
+      checkError(ex, "STDS_WRITE_UNSUPPORTED", Some("0A000"),
+        Map("sourceName" -> "statestore"))
+    }
+  }
+
+  test("SPARK-57225: state-metadata data source does not support write") {
+    withTempDir { tempDir =>
+      runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
+
+      val df = spark.read.format("state-metadata")
+        .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+        .load()
+
+      val ex = intercept[StateDataSourceWriteUnsupported] {
+        df.write.format("state-metadata")
+          .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+          .save()
+      }
+      checkError(ex, "STDS_WRITE_UNSUPPORTED", Some("0A000"),
+        Map("sourceName" -> "state-metadata"))
+    }
+  }
 }
 
 /**

@@ -7251,6 +7251,13 @@
     ],
     "sqlState" : "42601"
   },
+  "STDS_WRITE_UNSUPPORTED" : {
+    "message" : [
+      "The state data source '<sourceName>' is read-only and does not support write operations.",
+      "State store checkpoint data should not be modified externally."
+    ],
+    "sqlState" : "0A000"
+  },
   "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
     "message" : [
       "Storage-partition join partition transforms produced incompatible reduced types,",
