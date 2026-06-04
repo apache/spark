@@ -145,6 +145,7 @@ __all__ = [  # noqa: F405
     "left",
     "length",
     "levenshtein",
+    "jaro_winkler_similarity",
     "locate",
     "lower",
     "lpad",

@@ -184,6 +184,7 @@ String Functions
     left
     length
     levenshtein
+    jaro_winkler_similarity
     locate
     lower
     lpad

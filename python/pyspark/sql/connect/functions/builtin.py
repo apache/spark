@@ -2704,6 +2704,13 @@ def levenshtein(
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__
 
 
+def jaro_winkler_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("jaro_winkler_similarity", left, right)
+
+
+jaro_winkler_similarity.__doc__ = pysparkfuncs.jaro_winkler_similarity.__doc__
+
+
 def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     return _invoke_function("locate", lit(substr), _to_col(str), lit(pos))
 

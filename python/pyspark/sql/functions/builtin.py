@@ -15578,6 +15578,40 @@ def levenshtein(
 
 
 @_try_remote_functions
+def jaro_winkler_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Computes the Jaro-Winkler similarity between the two given strings.
+
+    The result is a double between 0.0 (no similarity) and 1.0 (identical strings).
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        first column value.
+    right : :class:`~pyspark.sql.Column` or column name
+        second column value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Jaro-Winkler similarity as a double value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('MARTHA', 'MARHTA')], ['l', 'r'])
+    >>> df.select('*', sf.jaro_winkler_similarity('l', 'r')).show()
+    +------+------+-------------------------------+
+    |     l|     r|jaro_winkler_similarity(l, r)|
+    +------+------+-------------------------------+
+    |MARTHA|MARHTA|             0.9611111111111111|
+    +------+------+-------------------------------+
+    """
+    return _invoke_function_over_columns("jaro_winkler_similarity", left, right)
+
+
+@_try_remote_functions
 def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     """
     Locate the position of the first occurrence of substr in a string column, after position pos.
