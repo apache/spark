@@ -83,7 +83,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
-    (atomicTypes ++ timeTypes).foreach(dt => checkNullCast(dt, StringType))
+    val timestampNanosTypes = Seq(
+      TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION),
+      TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION),
+      TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION),
+      TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
+    (atomicTypes ++ timeTypes ++ timestampNanosTypes).foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
