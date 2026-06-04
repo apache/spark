@@ -141,10 +141,17 @@ Arrow cache supports all Spark SQL data types:
 ## Statistics and Filter Pushdown
 
 Arrow cache automatically collects min/max statistics for the following types:
-- All numeric types (Boolean, Byte, Short, Int, Long, Float, Double)
-- Date and Timestamp types
-- String
+- Boolean
+- Numeric types (Byte, Short, Int, Long, Float, Double)
 - Decimal
+- Date, Timestamp, and Timestamp without time zone (TIMESTAMP_NTZ)
+- Time
+- Year-month and day-time intervals
+- String (using collation-aware comparison for collated strings)
+
+Other types (Binary, Variant, calendar intervals, and complex types such as
+Array/Struct/Map) are cached but do not contribute min/max bounds, so they only
+record null counts and sizes.
 
 These statistics enable partition pruning when filtering:
 
