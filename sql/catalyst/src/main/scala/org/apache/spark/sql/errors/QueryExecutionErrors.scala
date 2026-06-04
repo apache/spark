@@ -2891,48 +2891,55 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function)))
   }
 
-  def approxTopKNonPositiveValue(argName: String, argValue: Int): Throwable = {
+  def approxFrequentItemsNonPositiveValue(functionName: String, argName: String, argValue: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "APPROX_TOP_K_NON_POSITIVE_ARG",
+      errorClass = "APPROX_FREQUENT_ITEMS_NON_POSITIVE_ARG",
       messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
         "argName" -> toSQLId(argName),
         "argValue" -> toSQLValue(argValue, IntegerType)))
   }
 
-  def approxTopKNullArg(argName: String): Throwable = {
+  def approxFrequentItemsNullArg(functionName: String, argName: String): Throwable = {
     new SparkRuntimeException(
-      errorClass = "APPROX_TOP_K_NULL_ARG",
-      messageParameters = Map("argName" -> toSQLId(argName)))
+      errorClass = "APPROX_FREQUENT_ITEMS_NULL_ARG",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "argName" -> toSQLId(argName)))
   }
 
-  def approxTopKMaxItemsTrackedLessThanK(maxItemsTracked: Int, k: Int): Throwable = {
+  def approxFrequentItemsMaxItemsTrackedLessThanK(functionName: String, maxItemsTracked: Int, k: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K",
+      errorClass = "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_LESS_THAN_K",
       messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
         "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
         "k" -> toSQLValue(k, IntegerType)))
   }
 
-  def approxTopKMaxItemsTrackedExceedsLimit(maxItemsTracked: Int, limit: Int): Throwable = {
+  def approxFrequentItemsMaxItemsTrackedExceedsLimit(functionName: String, maxItemsTracked: Int, limit: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
+      errorClass = "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
       messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
         "maxItemsTracked" -> toSQLValue(maxItemsTracked, IntegerType),
         "limit" -> toSQLValue(limit, IntegerType)))
   }
 
-  def approxTopKSketchSizeNotMatch(size1: Int, size2: Int): Throwable = {
+  def approxFrequentItemsSketchSizeNotMatch(functionName: String, size1: Int, size2: Int): Throwable = {
     new SparkRuntimeException(
-      errorClass = "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH",
+      errorClass = "APPROX_FREQUENT_ITEMS_SKETCH_SIZE_NOT_MATCH",
       messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
         "size1" -> toSQLValue(size1, IntegerType),
         "size2" -> toSQLValue(size2, IntegerType)))
   }
 
-  def approxTopKSketchTypeNotMatch(type1: DataType, type2: DataType): Throwable = {
+  def approxFrequentItemsSketchTypeNotMatch(functionName: String, type1: DataType, type2: DataType): Throwable = {
     new SparkRuntimeException(
-      errorClass = "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH",
+      errorClass = "APPROX_FREQUENT_ITEMS_SKETCH_TYPE_NOT_MATCH",
       messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
         "type1" -> toSQLType(type1),
         "type2" -> toSQLType(type2)))
   }

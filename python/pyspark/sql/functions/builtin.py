@@ -29306,6 +29306,264 @@ def tuple_union_theta_integer(
     return _invoke_function_over_columns(fn, col1, col2, _lgNomEntries, _mode)
 
 
+@_try_remote_functions
+def approx_frequent_items(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the approximate frequent items (heavy hitters) in a column.
+    The result is an array of structs, each containing a frequent item and its estimated frequency.
+    The items are sorted by their estimated frequency in descending order.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The number of items to return. If not specified, it defaults to 5.
+    maxItemsTracked : :class:`~pyspark.sql.Column` or int, optional
+        The maximum number of items to track in the sketch. If not specified, it defaults to 10000.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        An array of structs containing the frequent items and their frequencies.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([0, 0, 1, 1, 2, 3, 4, 4], "INT")
+    >>> df.agg(sf.approx_frequent_items("value")).show(truncate=False)
+    +---------------------------------------------------------------------------------------------------------+
+    |approx_frequent_items(value, 5, 10000)                                                                   |
+    +---------------------------------------------------------------------------------------------------------+
+    |[{item -> 0, count -> 2}, {item -> 4, count -> 2}, {item -> 1, count -> 2}, {item -> 2, count -> 1}, ...] |
+    +---------------------------------------------------------------------------------------------------------+
+    """
+    fn = "approx_frequent_items"
+    if k is None and maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    elif maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col, lit(k))
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k), lit(maxItemsTracked))
+
+
+@_try_remote_functions
+def approx_heavy_hitters(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the approximate heavy hitters (frequent items) in a column.
+    The result is an array of structs, each containing a heavy hitter and its estimated frequency.
+    The items are sorted by their estimated frequency in descending order.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The number of items to return. If not specified, it defaults to 5.
+    maxItemsTracked : :class:`~pyspark.sql.Column` or int, optional
+        The maximum number of items to track in the sketch. If not specified, it defaults to 10000.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        An array of structs containing the heavy hitters and their frequencies.
+
+    Examples
+    --------
+    >>> df = spark.createDataFrame([0, 0, 1, 1, 2, 3, 4, 4], "INT")
+    >>> df.agg(sf.approx_heavy_hitters("value")).show(truncate=False)
+    +--------------------------------------------------------------------------------------------------------+
+    |approx_heavy_hitters(value, 5, 10000)                                                                   |
+    +--------------------------------------------------------------------------------------------------------+
+    |[{item -> 0, count -> 2}, {item -> 4, count -> 2}, {item -> 1, count -> 2}, {item -> 2, count -> 1}, ...] |
+    +--------------------------------------------------------------------------------------------------------+
+    """
+    fn = "approx_heavy_hitters"
+    if k is None and maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    elif maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col, lit(k))
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k), lit(maxItemsTracked))
+
+
+@_try_remote_functions
+def approx_frequent_items_accumulate(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: accumulates items into a frequent items sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    maxItemsTracked : :class:`~pyspark.sql.Column` or int, optional
+        The maximum number of items to track in the sketch. If not specified, it defaults to 10000.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the frequent items sketch state.
+    """
+    fn = "approx_frequent_items_accumulate"
+    if maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxItemsTracked))
+
+
+@_try_remote_functions
+def approx_heavy_hitters_accumulate(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: accumulates items into a heavy hitters sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    maxItemsTracked : :class:`~pyspark.sql.Column` or int, optional
+        The maximum number of items to track in the sketch. If not specified, it defaults to 10000.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the heavy hitters sketch state.
+    """
+    fn = "approx_heavy_hitters_accumulate"
+    if maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxItemsTracked))
+
+
+@_try_remote_functions
+def approx_frequent_items_combine(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: combines multiple frequent items sketches into a single sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    maxItemsTracked : :class:`~pyspark.sql.Column` or int, optional
+        The maximum number of items to track in the sketch.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the combined frequent items sketch state.
+    """
+    fn = "approx_frequent_items_combine"
+    if maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxItemsTracked))
+
+
+@_try_remote_functions
+def approx_heavy_hitters_combine(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: combines multiple heavy hitters sketches into a single sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    maxItemsTracked : :class:`~pyspark.sql.Column` or int, optional
+        The maximum number of items to track in the sketch.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        The binary representation of the combined heavy hitters sketch state.
+    """
+    fn = "approx_heavy_hitters_combine"
+    if maxItemsTracked is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(maxItemsTracked))
+
+
+@_try_remote_functions
+def approx_frequent_items_estimate(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Returns the estimated frequent items from a frequent items sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The number of items to estimate. If not specified, it defaults to 5.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        An array of structs containing the frequent items and their frequencies.
+    """
+    fn = "approx_frequent_items_estimate"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def approx_heavy_hitters_estimate(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Returns the estimated heavy hitters from a heavy hitters sketch.
+
+    .. versionadded:: 4.1.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+    k : :class:`~pyspark.sql.Column` or int, optional
+        The number of items to estimate. If not specified, it defaults to 5.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        An array of structs containing the heavy hitters and their frequencies.
+    """
+    fn = "approx_heavy_hitters_estimate"
+    if k is None:
+        return _invoke_function_over_columns(fn, col)
+    else:
+        return _invoke_function_over_columns(fn, col, lit(k))
+
+
 # ---------------------- Predicates functions ------------------------------
 
 

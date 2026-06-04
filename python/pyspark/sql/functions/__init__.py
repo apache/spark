@@ -351,6 +351,12 @@ __all__ = [  # noqa: F405
     # Aggregate Functions
     "any_value",
     "approx_count_distinct",
+    "approx_frequent_items",
+    "approx_frequent_items_accumulate",
+    "approx_frequent_items_combine",
+    "approx_heavy_hitters",
+    "approx_heavy_hitters_accumulate",
+    "approx_heavy_hitters_combine",
     "approx_percentile",
     "array_agg",
     "avg",
@@ -539,6 +545,8 @@ __all__ = [  # noqa: F405
     "UserDefinedTableFunction",
     "arrow_udf",
     # Datasketch Functions
+    "approx_frequent_items_estimate",
+    "approx_heavy_hitters_estimate",
     "hll_sketch_estimate",
     "hll_union",
     "kll_sketch_get_n_bigint",

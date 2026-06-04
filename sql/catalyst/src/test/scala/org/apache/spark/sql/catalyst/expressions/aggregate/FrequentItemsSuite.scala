@@ -19,18 +19,18 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckFailure}
-import org.apache.spark.sql.catalyst.expressions.{Abs, ApproxTopKEstimate, BoundReference, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Abs, ApproxFrequentItemsEstimate, BoundReference, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast.ordinalNumber
 import org.apache.spark.sql.types.{ArrayType, BinaryType, IntegerType, LongType, MapType, StringType, StructField, StructType}
 
-class ApproxTopKSuite extends SparkFunSuite {
+class FrequentItemsSuite extends SparkFunSuite {
 
-  /////////////////////////////
-  // ApproxTopK tests
-  /////////////////////////////
+  /////////////////////////////////
+  // ApproxFrequentItems tests
+  /////////////////////////////////
 
-  test("SPARK-52515: Accepts literal and foldable inputs") {
-    val agg = new ApproxTopK(
+  test("Accepts literal and foldable inputs") {
+    val agg = new ApproxFrequentItems(
       expr = BoundReference(0, IntegerType, nullable = true),
       k = Abs(Literal(10)),
       maxItemsTracked = Abs(Literal(-10))
@@ -38,8 +38,8 @@ class ApproxTopKSuite extends SparkFunSuite {
     assert(agg.checkInputDataTypes().isSuccess)
   }
 
-  test("SPARK-52515: Fail if parameters are not foldable") {
-    val badAgg = new ApproxTopK(
+  test("Fail if parameters are not foldable") {
+    val badAgg = new ApproxFrequentItems(
       expr = BoundReference(0, IntegerType, nullable = true),
       k = Sum(BoundReference(1, IntegerType, nullable = true)),
       maxItemsTracked = Literal(10)
@@ -57,7 +57,7 @@ class ApproxTopKSuite extends SparkFunSuite {
       )
     )
 
-    val badAgg2 = new ApproxTopK(
+    val badAgg2 = new ApproxFrequentItems(
       expr = BoundReference(0, IntegerType, nullable = true),
       k = Literal(10),
       maxItemsTracked = Sum(BoundReference(1, IntegerType, nullable = true))
@@ -76,7 +76,7 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
   }
 
-  gridTest("SPARK-52515: invalid ApproxTopK with unsupported item types")(
+  gridTest("invalid ApproxFrequentItems with unsupported item types")(
     Seq(
       ("array", ArrayType(IntegerType)),
       ("map", MapType(StringType, IntegerType)),
@@ -84,7 +84,7 @@ class ApproxTopKSuite extends SparkFunSuite {
       ("binary", BinaryType)
     )) { unSupportedType =>
     val (typeName, dataType) = unSupportedType
-    val agg = new ApproxTopK(
+    val agg = new ApproxFrequentItems(
       expr = BoundReference(0, dataType, nullable = true),
       k = Literal(10),
       maxItemsTracked = Literal(10000)
@@ -93,11 +93,11 @@ class ApproxTopKSuite extends SparkFunSuite {
     assert(agg.checkInputDataTypes() == TypeCheckFailure(s"$typeName columns are not supported"))
   }
 
-  /////////////////////////////
-  // ApproxTopKAccumulate tests
-  /////////////////////////////
+  ///////////////////////////////////////////
+  // ApproxFrequentItemsAccumulate tests
+  ///////////////////////////////////////////
 
-  gridTest("SPARK-52588: invalid accumulate if item type is not supported")(
+  gridTest("invalid accumulate if item type is not supported")(
     Seq(
       ("array", ArrayType(IntegerType)),
       ("map", MapType(StringType, IntegerType)),
@@ -105,7 +105,7 @@ class ApproxTopKSuite extends SparkFunSuite {
       ("binary", BinaryType)
     )) { unSupportedType =>
     val (typeName, dataType) = unSupportedType
-    val badAccumulate = ApproxTopKAccumulate(
+    val badAccumulate = ApproxFrequentItemsAccumulate(
       expr = BoundReference(0, dataType, nullable = true),
       maxItemsTracked = Literal(10)
     )
@@ -114,8 +114,8 @@ class ApproxTopKSuite extends SparkFunSuite {
       TypeCheckFailure(s"$typeName columns are not supported"))
   }
 
-  test("SPARK-52588: invalid accumulate if maxItemsTracked are not foldable") {
-    val badAccumulate = ApproxTopKAccumulate(
+  test("invalid accumulate if maxItemsTracked are not foldable") {
+    val badAccumulate = ApproxFrequentItemsAccumulate(
       expr = BoundReference(0, IntegerType, nullable = true),
       maxItemsTracked = Sum(BoundReference(1, IntegerType, nullable = true))
     )
@@ -133,12 +133,12 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
   }
 
-  /////////////////////////////
-  // ApproxTopKEstimate tests
-  /////////////////////////////
+  /////////////////////////////////////////
+  // ApproxFrequentItemsEstimate tests
+  /////////////////////////////////////////
 
-  test("SPARK-52588: invalid estimate if k are not foldable") {
-    val badEstimate = ApproxTopKEstimate(
+  test("invalid estimate if k are not foldable") {
+    val badEstimate = ApproxFrequentItemsEstimate(
       state = BoundReference(0, StructType(Seq(
         StructField("sketch", BinaryType),
         StructField("maxItemsTracked", IntegerType),
@@ -161,8 +161,8 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-52588: invalid estimate if state is not a struct") {
-    val badEstimate = ApproxTopKEstimate(
+  test("invalid estimate if state is not a struct") {
+    val badEstimate = ApproxFrequentItemsEstimate(
       state = BoundReference(0, IntegerType, nullable = false),
       k = Literal(5)
     )
@@ -180,13 +180,13 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-52588: invalid estimate if state struct length is not 4") {
+  test("invalid estimate if state struct length is not 4") {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("maxItemsTracked", IntegerType)
       // Missing "itemDataType", "itemDataTypeDDL" fields
     ))
-    val badEstimate = ApproxTopKEstimate(
+    val badEstimate = ApproxFrequentItemsEstimate(
       state = BoundReference(0, invalidState, nullable = false),
       k = Literal(5)
     )
@@ -198,14 +198,14 @@ class ApproxTopKSuite extends SparkFunSuite {
         "Got: struct<sketch:binary,maxItemsTracked:int>"))
   }
 
-  test("SPARK-52588: invalid estimate if state struct's first field is not binary") {
+  test("invalid estimate if state struct's first field is not binary") {
     val invalidState = StructType(Seq(
       StructField("notSketch", IntegerType), // Should be BinaryType
       StructField("maxItemsTracked", IntegerType),
       StructField("itemDataType", IntegerType),
       StructField("itemDataTypeDDL", StringType)
     ))
-    val badEstimate = ApproxTopKEstimate(
+    val badEstimate = ApproxFrequentItemsEstimate(
       state = BoundReference(0, invalidState, nullable = false),
       k = Literal(5)
     )
@@ -214,14 +214,14 @@ class ApproxTopKSuite extends SparkFunSuite {
       TypeCheckFailure("State struct must have the first field to be binary. Got: int"))
   }
 
-  test("SPARK-52588: invalid estimate if state struct's second field is not int") {
+  test("invalid estimate if state struct's second field is not int") {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("maxItemsTracked", LongType), // Should be IntegerType
       StructField("itemDataType", IntegerType),
       StructField("itemDataTypeDDL", StringType)
     ))
-    val badEstimate = ApproxTopKEstimate(
+    val badEstimate = ApproxFrequentItemsEstimate(
       state = BoundReference(0, invalidState, nullable = false),
       k = Literal(5)
     )
@@ -230,7 +230,7 @@ class ApproxTopKSuite extends SparkFunSuite {
       TypeCheckFailure("State struct must have the second field to be int. Got: bigint"))
   }
 
-  gridTest("SPARK-52588: invalid estimate if state struct's third field is not supported")(
+  gridTest("invalid estimate if state struct's third field is not supported")(
     Seq(
       ("array<int>", ArrayType(IntegerType)),
       ("map<string,int>", MapType(StringType, IntegerType)),
@@ -244,7 +244,7 @@ class ApproxTopKSuite extends SparkFunSuite {
       StructField("itemDataType", dataType),
       StructField("itemDataTypeDDL", StringType)
     ))
-    val badEstimate = ApproxTopKEstimate(
+    val badEstimate = ApproxFrequentItemsEstimate(
       state = BoundReference(0, invalidState, nullable = false),
       k = Literal(5)
     )
@@ -254,14 +254,14 @@ class ApproxTopKSuite extends SparkFunSuite {
         s"Got: $typeName"))
   }
 
-  test("SPARK-52588: invalid estimate if state struct's fourth field is not string") {
+  test("invalid estimate if state struct's fourth field is not string") {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("maxItemsTracked", IntegerType),
       StructField("itemDataType", IntegerType),
       StructField("itemDataTypeDDL", BinaryType) // Should be StringType
     ))
-    val badEstimate = ApproxTopKEstimate(
+    val badEstimate = ApproxFrequentItemsEstimate(
       state = BoundReference(0, invalidState, nullable = false),
       k = Literal(5)
     )
@@ -270,11 +270,12 @@ class ApproxTopKSuite extends SparkFunSuite {
       TypeCheckFailure("State struct must have the fourth field to be string. Got: binary"))
   }
 
-  /////////////////////////////
-  // ApproxTopKCombine tests
-  /////////////////////////////
-  test("SPARK-52798: invalid combine if maxItemsTracked is not foldable") {
-    val badCombine = ApproxTopKCombine(
+  ////////////////////////////////////////
+  // ApproxFrequentItemsCombine tests
+  ////////////////////////////////////////
+
+  test("invalid combine if maxItemsTracked is not foldable") {
+    val badCombine = ApproxFrequentItemsCombine(
       state = BoundReference(0, StructType(Seq(
         StructField("sketch", BinaryType),
         StructField("maxItemsTracked", IntegerType),
@@ -297,8 +298,8 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-52798: invalid combine if state is not a struct") {
-    val badCombine = ApproxTopKCombine(
+  test("invalid combine if state is not a struct") {
+    val badCombine = ApproxFrequentItemsCombine(
       state = BoundReference(0, IntegerType, nullable = false),
       maxItemsTracked = Literal(10)
     )
@@ -316,13 +317,13 @@ class ApproxTopKSuite extends SparkFunSuite {
     )
   }
 
-  test("SPARK-52798: invalid combine if state struct length is not 4") {
+  test("invalid combine if state struct length is not 4") {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("maxItemsTracked", IntegerType)
       // Missing "itemDataType", "itemDataTypeDDL" fields
     ))
-    val badCombine = ApproxTopKCombine(
+    val badCombine = ApproxFrequentItemsCombine(
       state = BoundReference(0, invalidState, nullable = false),
       maxItemsTracked = Literal(10)
     )
@@ -334,14 +335,14 @@ class ApproxTopKSuite extends SparkFunSuite {
         "Got: struct<sketch:binary,maxItemsTracked:int>"))
   }
 
-  test("SPARK-52798: invalid combine if state struct's first field is not binary") {
+  test("invalid combine if state struct's first field is not binary") {
     val invalidState = StructType(Seq(
       StructField("sketch", IntegerType), // Should be BinaryType
       StructField("maxItemsTracked", IntegerType),
       StructField("itemDataType", IntegerType),
       StructField("itemDataTypeDDL", StringType)
     ))
-    val badCombine = ApproxTopKCombine(
+    val badCombine = ApproxFrequentItemsCombine(
       state = BoundReference(0, invalidState, nullable = false),
       maxItemsTracked = Literal(10)
     )
@@ -350,14 +351,14 @@ class ApproxTopKSuite extends SparkFunSuite {
       TypeCheckFailure("State struct must have the first field to be binary. Got: int"))
   }
 
-  test("SPARK-52798: invalid combine if state struct's second field is not int") {
+  test("invalid combine if state struct's second field is not int") {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("maxItemsTracked", LongType), // Should be IntegerType
       StructField("itemDataType", IntegerType),
       StructField("itemDataTypeDDL", StringType)
     ))
-    val badCombine = ApproxTopKCombine(
+    val badCombine = ApproxFrequentItemsCombine(
       state = BoundReference(0, invalidState, nullable = false),
       maxItemsTracked = Literal(10)
     )
@@ -366,7 +367,7 @@ class ApproxTopKSuite extends SparkFunSuite {
       TypeCheckFailure("State struct must have the second field to be int. Got: bigint"))
   }
 
-  gridTest("SPARK-52798: invalid combine if state struct's third field is not supported")(
+  gridTest("invalid combine if state struct's third field is not supported")(
     Seq(
       ("array<int>", ArrayType(IntegerType)),
       ("map<string,int>", MapType(StringType, IntegerType)),
@@ -380,7 +381,7 @@ class ApproxTopKSuite extends SparkFunSuite {
       StructField("itemDataType", dataType),
       StructField("itemDataTypeDDL", StringType)
     ))
-    val badCombine = ApproxTopKCombine(
+    val badCombine = ApproxFrequentItemsCombine(
       state = BoundReference(0, invalidState, nullable = false),
       maxItemsTracked = Literal(10)
     )
@@ -390,14 +391,14 @@ class ApproxTopKSuite extends SparkFunSuite {
         s"Got: $typeName"))
   }
 
-  test("SPARK-52798: invalid combine if state struct's fourth field is not string") {
+  test("invalid combine if state struct's fourth field is not string") {
     val invalidState = StructType(Seq(
       StructField("sketch", BinaryType),
       StructField("maxItemsTracked", IntegerType),
       StructField("itemDataType", IntegerType),
       StructField("itemDataTypeDDL", BinaryType) // Should be StringType
     ))
-    val badCombine = ApproxTopKCombine(
+    val badCombine = ApproxFrequentItemsCombine(
       state = BoundReference(0, invalidState, nullable = false),
       maxItemsTracked = Literal(10)
     )

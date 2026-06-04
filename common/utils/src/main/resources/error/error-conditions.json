@@ -90,39 +90,39 @@
     ],
     "sqlState" : "42000"
   },
-  "APPROX_TOP_K_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT" : {
+  "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT" : {
     "message" : [
-      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be less than or equal to <limit>."
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of <functionName> should be less than or equal to <limit>."
     ],
     "sqlState" : "22023"
   },
-  "APPROX_TOP_K_MAX_ITEMS_TRACKED_LESS_THAN_K" : {
+  "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_LESS_THAN_K" : {
     "message" : [
-      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of `approx_top_k` should be greater than or equal to `k`(<k>)."
+      "The max items tracked `maxItemsTracked`(<maxItemsTracked>) of <functionName> should be greater than or equal to `k`(<k>)."
     ],
     "sqlState" : "22023"
   },
-  "APPROX_TOP_K_NON_POSITIVE_ARG" : {
+  "APPROX_FREQUENT_ITEMS_NON_POSITIVE_ARG" : {
     "message" : [
-      "The value of <argName> in `approx_top_k` must be a positive integer, but got <argValue>."
+      "The value of <argName> in <functionName> must be a positive integer, but got <argValue>."
     ],
     "sqlState" : "22023"
   },
-  "APPROX_TOP_K_NULL_ARG" : {
+  "APPROX_FREQUENT_ITEMS_NULL_ARG" : {
     "message" : [
-      "The value of <argName> in `approx_top_k` cannot be NULL."
+      "The value of <argName> in <functionName> cannot be NULL."
     ],
     "sqlState" : "22004"
   },
-  "APPROX_TOP_K_SKETCH_SIZE_NOT_MATCH" : {
+  "APPROX_FREQUENT_ITEMS_SKETCH_SIZE_NOT_MATCH" : {
     "message" : [
-      "Combining approx_top_k sketches of different sizes is not allowed. Found sketches of size <size1> and <size2>."
+      "Combining <functionName> sketches of different sizes is not allowed. Found sketches of size <size1> and <size2>."
     ],
     "sqlState" : "42846"
   },
-  "APPROX_TOP_K_SKETCH_TYPE_NOT_MATCH" : {
+  "APPROX_FREQUENT_ITEMS_SKETCH_TYPE_NOT_MATCH" : {
     "message" : [
-      "Combining approx_top_k sketches of different types is not allowed. Found sketches of type <type1> and <type2>."
+      "Combining <functionName> sketches of different types is not allowed. Found sketches of type <type1> and <type2>."
     ],
     "sqlState" : "42846"
   },
