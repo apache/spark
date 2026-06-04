@@ -300,7 +300,6 @@ object ArrowCacheExample {
 
 ## Further Reading
 
-- [Migration Guide: Default Cache to Arrow Cache Format](sql-arrow-cache-migration-guide.html)
 - [Apache Arrow Project](https://arrow.apache.org/)
 - [Spark Caching Documentation](https://spark.apache.org/docs/latest/sql-performance-tuning.html#caching-data-in-memory)
 - [Arrow IPC Format](https://arrow.apache.org/docs/format/Columnar.html#ipc-file-format)
