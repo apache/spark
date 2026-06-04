@@ -272,6 +272,12 @@
     ],
     "sqlState" : "42601"
   },
+  "BIN_BY_NULL_ARGUMENT" : {
+    "message" : [
+      "The <clause> expression in BIN BY must not be NULL."
+    ],
+    "sqlState" : "22004"
+  },
   "BIN_BY_RANGE_TYPE_MISMATCH" : {
     "message" : [
       "The range columns in BIN BY must be TIMESTAMP or TIMESTAMP_NTZ. Column <columnName> has type <columnType>. Both range columns must have the same type."

@@ -1755,7 +1755,7 @@ case class UnresolvedBinBy(
  * plus three appended columns with default names `bin_start`, `bin_end`, `bin_distribute_ratio`.
  * The names come from the resolved `appendedAttributes`.
  *
- * Bin boundaries align to `originExpr + k * binWidthExpr` for integer `k`. For `TIMESTAMP` (LTZ)
+ * Bin boundaries align to `originMicros + k * binWidthMicros` for integer `k`. For `TIMESTAMP` (LTZ)
  * inputs the boundary arithmetic uses civil-time in the session zone for multi-day bins; sub-day
  * LTZ bins and `TIMESTAMP_NTZ` bins use UTC microsecond arithmetic.
  *
@@ -1768,10 +1768,12 @@ case class UnresolvedBinBy(
  * `AMBIGUOUS_REFERENCE` when the output is referenced downstream rather than at the BIN BY clause
  * itself.
  *
- * @param binWidthExpr        Resolved day-time interval literal (or foldable expression).
+ * @param binWidthMicros      Bin width in microseconds: the folded value of the day-time interval
+ *                            `BIN WIDTH` expression. Always positive.
  * @param rangeStart          Resolved attribute holding each row's window-start timestamp.
  * @param rangeEnd            Resolved attribute holding each row's window-end timestamp.
- * @param originExpr          Resolved alignment-anchor expression.
+ * @param originMicros        Alignment anchor in microseconds since the epoch: the folded value of
+ *                            `ALIGN TO`, or the type-specific default when the clause is omitted.
  * @param distributeColumns   Resolved columns to proportionally redistribute.
  * @param appendedAttributes  The three output attributes appended after `child.output`. Provided
  *                            by the analyzer; held in the case class so the attribute `ExprId`s
@@ -1782,10 +1784,10 @@ case class UnresolvedBinBy(
  *                            `None` when it is `TimestampNTZType`.
  */
 case class BinBy(
-    binWidthExpr: Expression,
+    binWidthMicros: Long,
     rangeStart: Attribute,
     rangeEnd: Attribute,
-    originExpr: Expression,
+    originMicros: Long,
     distributeColumns: Seq[Attribute],
     appendedAttributes: Seq[Attribute],
     child: LogicalPlan,
