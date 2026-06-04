@@ -50,6 +50,10 @@ class StreamStreamJoinStatePartitionReaderFactory(
 /**
  * An implementation of [[PartitionReader]] for State Store data source, specifically to read
  * the partition for the state from stream-stream join.
+ *
+ * NOTE: The state data source is strictly read-only. Any new reader added here must open the
+ * state store in read-only mode. For the join reader, this means constructing the
+ * [[SymmetricHashJoinStateManager]] with readOnly = true.
  */
 class StreamStreamJoinStatePartitionReader(
     storeConf: StateStoreConf,
@@ -184,7 +188,8 @@ class StreamStreamJoinStatePartitionReader(
             startKeyWithIndexToValueStateStoreCkptId = startKeyWithIndexToValueStateStoreCkptId,
             endKeyToNumValuesStateStoreCkptId = endKeyToNumValuesStateStoreCkptId,
             endKeyWithIndexToValueStateStoreCkptId = endKeyWithIndexToValueStateStoreCkptId)),
-        joinStoreGenerator = new JoinStateManagerStoreGenerator()
+        joinStoreGenerator = new JoinStateManagerStoreGenerator(),
+        readOnly = true
       )
     }
 

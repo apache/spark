@@ -1707,6 +1707,31 @@ class StateStoreSuite extends StateStoreSuiteBase[HDFSBackedStateStoreProvider]
     filePath.createNewFile()
   }
 
+  // The trait return type of replayStateFromSnapshot is the writable StateStore. On
+  // HDFS, the writable and read-only stores are separate classes, so a readOnly=true
+  // call cannot honor the flag through this method. The provider rejects it and directs
+  // callers to replayReadStateFromSnapshot. (RocksDB's StateStore class is unified and
+  // respects the flag internally, so RocksDB still implements both paths via this entry
+  // point.)
+  test("replayStateFromSnapshot rejects readOnly=true (use replayReadStateFromSnapshot)") {
+    tryWithProviderResource(newStoreProvider(opId = Random.nextInt(), partition = 0,
+        minDeltasForSnapshot = 1)) { provider =>
+      val s1 = provider.getStore(0)
+      put(s1, "a", 1, 1)
+      s1.commit()
+      val s2 = provider.getStore(1)
+      put(s2, "a", 2, 2)
+      s2.commit()
+      provider.doMaintenance()
+
+      val ex = intercept[IllegalArgumentException] {
+        provider.asInstanceOf[SupportsFineGrainedReplay]
+          .replayStateFromSnapshot(1, 2, readOnly = true)
+      }
+      assert(ex.getMessage.contains("replayReadStateFromSnapshot"))
+    }
+  }
+
   override protected def testQuietly(name: String)(f: => Unit): Unit = {
     // Use the implementation from StateStoreSuiteBase.
     // There is another in QueryTest. Doing this to avoid conflict error.

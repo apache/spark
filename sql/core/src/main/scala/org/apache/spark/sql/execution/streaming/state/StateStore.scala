@@ -270,6 +270,22 @@ trait ReadStateStore {
    * @return Set of all column family names
    */
   def allColumnFamilyNames: Set[String]
+
+  /**
+   * Register a column family for reading. Implementations must treat this as an in-memory
+   * operation that sets up the key/value encoders needed to decode data from the column
+   * family; it must not write to the checkpoint.
+   */
+  def createColFamilyIfAbsent(
+      colFamilyName: String,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useMultipleValuesPerKey: Boolean = false,
+      isInternal: Boolean = false): Unit = {
+    throw new UnsupportedOperationException(
+      "createColFamilyIfAbsent is not supported by this ReadStateStore")
+  }
 }
 
 /**
@@ -473,6 +489,24 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def iteratorWithMultiValues(
       colFamilyName: String): StateStoreIterator[UnsafeRowPair] = {
     store.iteratorWithMultiValues(colFamilyName)
+  }
+
+  // Unlike other mutating operations, this is delegated to the underlying store rather than
+  // rejected. Registering a column family is a purely in-memory operation: the underlying
+  // implementation only updates its in-memory bookkeeping (virtual column family id and the
+  // key/value encoders) and does not touch the native store or write to the checkpoint. Reads
+  // cannot decode a column family that has not been registered, so read-only consumers must be
+  // able to call this.
+  override def createColFamilyIfAbsent(
+      colFamilyName: String,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useMultipleValuesPerKey: Boolean = false,
+      isInternal: Boolean = false): Unit = {
+    store.createColFamilyIfAbsent(
+      colFamilyName, keySchema, valueSchema, keyStateEncoderSpec,
+      useMultipleValuesPerKey, isInternal)
   }
 }
 

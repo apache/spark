@@ -27,7 +27,7 @@ import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, Streaming
 import org.apache.spark.sql.execution.streaming.state.{AlsoTestWithEncodingTypes, AlsoTestWithRocksDBFeatures, EnableStateStoreRowChecksum, RocksDBFileManager, RocksDBStateStoreProvider, TestClass}
 import org.apache.spark.sql.functions.{col, explode, timestamp_seconds}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.{InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, StateStoreMetricsTest, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
+import org.apache.spark.sql.streaming.{InputMapRow, ListState, MapInputEvent, MapOutputEvent, MapStateTTLProcessor, MaxEventTimeStatefulProcessor, OutputMode, RunningCountStatefulProcessor, RunningCountStatefulProcessorWithProcTimeTimerUpdates, StatefulProcessor, TestMapStateProcessor, TimeMode, TimerValues, TransformWithStateSuiteUtils, Trigger, TTLConfig, ValueState}
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
@@ -127,7 +127,7 @@ class SessionGroupsStatefulProcessorWithTTL extends
  * Test suite to verify integration of state data source reader with the transformWithState operator
  */
 @SlowSQLTest
-class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
+class StateDataSourceTransformWithStateSuite extends StateDataSourceTestBase
   with AlsoTestWithEncodingTypes with AlsoTestWithRocksDBFeatures {
 
   import testImplicits._
@@ -1106,12 +1106,15 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
       } else {
         dfsRootDir.getAbsolutePath + "/3.changelog"
       }
-      Utils.deleteRecursively(new File(changelogFilePath))
+      withWritableCheckpoint {
+        Utils.deleteRecursively(new File(changelogFilePath))
 
-      // Write the retained entry back to the changelog
-      val changelogWriter = fileManager.getChangeLogWriter(3, false, checkpointUniqueId, lineage)
-      changelogWriter.put(retainEntry._2, retainEntry._3)
-      changelogWriter.commit()
+        // Write the retained entry back to the changelog
+        val changelogWriter = fileManager.getChangeLogWriter(
+          3, false, checkpointUniqueId, lineage)
+        changelogWriter.put(retainEntry._2, retainEntry._3)
+        changelogWriter.commit()
+      }
 
       // Ensure that we have only one entry in the changelog for version 3
       // For this test - key 9 is retained and key 12 is deleted
@@ -1167,6 +1170,65 @@ class StateDataSourceTransformWithStateSuite extends StateStoreMetricsTest
               Row(6, 2L, 4),
               Row(9, 1L, 4),
               Row(12, 4L, 4)))
+        }
+      }
+    }
+  }
+
+  /**
+   * Recursively removes write permission from a directory tree, simulating a
+   * read-only filesystem (e.g. a read-only cloud object store with only READ permission).
+   */
+  private def makeReadOnly(dir: java.io.File): Unit = {
+    if (dir.isDirectory) {
+      dir.listFiles().foreach(makeReadOnly)
+    }
+    dir.setWritable(false)
+  }
+
+  /** Recursively restores write permission to a directory tree. */
+  private def makeWritable(dir: java.io.File): Unit = {
+    dir.setWritable(true)
+    if (dir.isDirectory) {
+      dir.listFiles().foreach(makeWritable)
+    }
+  }
+
+  test("SPARK-57269: TWS state data source read succeeds on read-only checkpoint") {
+    withTempDir { tempDir =>
+      withSQLConf(SQLConf.STATE_STORE_PROVIDER_CLASS.key ->
+        classOf[RocksDBStateStoreProvider].getName,
+        SQLConf.SHUFFLE_PARTITIONS.key ->
+          TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString) {
+        val checkpointPath = tempDir.getAbsolutePath
+        val inputData = MemoryStream[String]
+        val result = inputData.toDS()
+          .groupByKey(x => x)
+          .transformWithState(new RunningCountStatefulProcessor(),
+            TimeMode.None(),
+            OutputMode.Update())
+
+        testStream(result, OutputMode.Update())(
+          StartStream(checkpointLocation = checkpointPath),
+          AddData(inputData, "a"),
+          AddData(inputData, "b"),
+          ProcessAllAvailable(),
+          StopStream
+        )
+
+        val stateDir = new java.io.File(tempDir, "state")
+        assert(stateDir.exists(), "State directory should exist after running the query")
+        makeReadOnly(stateDir)
+
+        try {
+          val df = spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, checkpointPath)
+            .option(StateSourceOptions.STATE_VAR_NAME, "countState")
+            .load()
+          assert(df.collect().length > 0)
+        } finally {
+          makeWritable(stateDir)
         }
       }
     }

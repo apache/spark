@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.operators.stateful.{StatefulOperatorStateInfo, StatefulOpStateStoreCheckpointInfo, WatermarkSupport}
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, RangeScanBoundaryUtils, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
+import org.apache.spark.sql.execution.streaming.state.{DropLastNFieldsStatePartitionKeyExtractor, KeyStateEncoderSpec, NoopStatePartitionKeyExtractor, NoPrefixKeyStateEncoderSpec, RangeScanBoundaryUtils, ReadStateStore, StatePartitionKeyExtractor, StateSchemaBroadcast, StateStore, StateStoreCheckpointInfo, StateStoreColFamilySchema, StateStoreConf, StateStoreErrors, StateStoreId, StateStoreMetrics, StateStoreProvider, StateStoreProviderId, SupportsFineGrainedReplay, TimestampAsPostfixKeyStateEncoderSpec, TimestampAsPrefixKeyStateEncoderSpec, TimestampKeyStateEncoder}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, LongType, NullType, StructField, StructType}
 import org.apache.spark.util.NextIterator
@@ -239,7 +239,8 @@ class SymmetricHashJoinStateManagerV4(
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
     joinStoreGenerator: JoinStateManagerStoreGenerator,
-    joinKeyOrdinalForWatermark: Option[Int] = None)
+    joinKeyOrdinalForWatermark: Option[Int] = None,
+    readOnly: Boolean = false)
   extends SymmetricHashJoinStateManager with SupportsEvictByTimestamp with Logging {
 
   // TODO: [SPARK-55729] Once the new state manager is integrated to stream-stream join operator,
@@ -319,23 +320,48 @@ class SymmetricHashJoinStateManagerV4(
 
   private var stateStoreProvider: StateStoreProvider = _
 
+  private var _stateStore: StateStore = _
+  private var _readStateStore: ReadStateStore = _
+
+  /**
+   * Writable store. Access fails fast when in read-only mode.
+   */
+  private def stateStore: StateStore = {
+    require(!readOnly,
+      "Writable stateStore is not available on a read-only V4 join state manager")
+    _stateStore
+  }
+
+  /** Read view of the loaded store. Safe to use in either mode. */
+  private def readStateStore: ReadStateStore =
+    if (readOnly) _readStateStore else _stateStore
+
   // We will use the dummy schema for the default CF since we will register CF separately.
-  private val stateStore = getStateStore(
+  initializeStateStore(
     dummySchema, dummySchema, useVirtualColumnFamilies = true,
     NoPrefixKeyStateEncoderSpec(dummySchema), useMultipleValuesPerKey = false
   )
 
-  private def getStateStore(
+  /**
+   * Load the state store and populate `_stateStore` (when !readOnly) or `_readStateStore`
+   * (when readOnly). Subclasses invoke this for the side effect during construction;
+   * afterwards, the [[stateStore]] / [[readStateStore]] accessors return the right view.
+   */
+  private def initializeStateStore(
       keySchema: StructType,
       valueSchema: StructType,
       useVirtualColumnFamilies: Boolean,
       keyStateEncoderSpec: KeyStateEncoderSpec,
-      useMultipleValuesPerKey: Boolean): StateStore = {
+      useMultipleValuesPerKey: Boolean): Unit = {
     val storeName = StateStoreId.DEFAULT_STORE_NAME
     val storeProviderId = StateStoreProviderId(stateInfo.get, partitionId, storeName)
-    val store = if (useStateStoreCoordinator) {
+    val handle: ReadStateStore = if (useStateStoreCoordinator) {
       assert(handlerSnapshotOptions.isEmpty, "Should not use state store coordinator " +
         "when reading state as data source.")
+      // JoinStateManagerStoreGenerator only exposes a writable getStore. Read-only mode is
+      // only ever used with useStateStoreCoordinator=false (data source reads).
+      require(!readOnly,
+        "readOnly mode is not supported with useStateStoreCoordinator=true")
       joinStoreGenerator.getStore(
         storeProviderId, keySchema, valueSchema, keyStateEncoderSpec,
         stateInfo.get.storeVersion, stateStoreCkptId, None, useVirtualColumnFamilies,
@@ -353,19 +379,34 @@ class SymmetricHashJoinStateManagerV4(
             stateStoreProvider.getClass.toString)
         }
         val opts = handlerSnapshotOptions.get
-        stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
-          .replayStateFromSnapshot(
+        val replayer = stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
+        if (readOnly) {
+          replayer.replayReadStateFromSnapshot(
             opts.snapshotVersion,
             opts.endVersion,
-            readOnly = true,
             opts.startStateStoreCkptId,
             opts.endStateStoreCkptId)
+        } else {
+          replayer.replayStateFromSnapshot(
+            opts.snapshotVersion,
+            opts.endVersion,
+            readOnly = false,
+            opts.startStateStoreCkptId,
+            opts.endStateStoreCkptId)
+        }
+      } else if (readOnly) {
+        stateStoreProvider.getReadStore(stateInfo.get.storeVersion, stateStoreCkptId)
       } else {
         stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
       }
     }
-    logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
-    store
+    if (readOnly) {
+      _readStateStore = handle
+      logInfo(log"Loaded read-only store ${MDC(STATE_STORE_ID, handle.id)}")
+    } else {
+      _stateStore = handle.asInstanceOf[StateStore]
+      logInfo(log"Loaded store ${MDC(STATE_STORE_ID, handle.id)}")
+    }
   }
 
   private val keyWithTsToValues = new KeyWithTsToValuesStore
@@ -577,7 +618,9 @@ class SymmetricHashJoinStateManagerV4(
   }
 
   override def abortIfNeeded(): Unit = {
-    if (!stateStore.hasCommitted) {
+    if (readOnly) {
+      readStateStore.release()
+    } else if (!stateStore.hasCommitted) {
       logInfo(log"Aborted store ${MDC(STATE_STORE_ID, stateStore.id)}")
       stateStore.abort()
     }
@@ -626,8 +669,7 @@ class SymmetricHashJoinStateManagerV4(
     private val attachTimestampProjection: UnsafeProjection =
       TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
-    // Create the specific column family in the store for this join side's KeyWithTsToValuesStore.
-    stateStore.createColFamilyIfAbsent(
+    readStateStore.createColFamilyIfAbsent(
       colFamilyName,
       keySchema,
       valueRowConverter.valueAttributes.toStructType,
@@ -659,7 +701,7 @@ class SymmetricHashJoinStateManagerV4(
     }
 
     def get(key: UnsafeRow, timestamp: Long): Iterator[ValueAndMatchPair] = {
-      stateStore.valuesIterator(createKeyRow(key, timestamp), colFamilyName).map { valueRow =>
+      readStateStore.valuesIterator(createKeyRow(key, timestamp), colFamilyName).map { valueRow =>
         valueRowConverter.convertValue(valueRow)
       }
     }
@@ -700,9 +742,9 @@ class SymmetricHashJoinStateManagerV4(
           val startKey = createKeyRow(key, minTs).copy()
           // rangeScanWithMultiValues endKey is exclusive, so use maxTs + 1
           val endKey = Some(createKeyRow(key, maxTs + 1))
-          stateStore.rangeScanWithMultiValues(Some(startKey), endKey, colFamilyName)
+          readStateStore.rangeScanWithMultiValues(Some(startKey), endKey, colFamilyName)
         } else {
-          stateStore.prefixScanWithMultiValues(key, colFamilyName)
+          readStateStore.prefixScanWithMultiValues(key, colFamilyName)
         }
 
         private var currentTs = -1L
@@ -763,7 +805,7 @@ class SymmetricHashJoinStateManagerV4(
     }
 
     def iterator(): Iterator[KeyAndTsToValuePair] = {
-      val iter = stateStore.iteratorWithMultiValues(colFamilyName)
+      val iter = readStateStore.iteratorWithMultiValues(colFamilyName)
       val reusableKeyAndTsToValuePair = KeyAndTsToValuePair()
       iter.map { kv =>
         val keyRow = detachTimestampProjection(kv.key)
@@ -800,9 +842,8 @@ class SymmetricHashJoinStateManagerV4(
     private val attachTimestampProjection: UnsafeProjection =
       TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
-    // Create the specific column family in the store for this join side's TsWithKeyStore.
     // Mark as internal so that numKeys counts only primary data, not the secondary index.
-    stateStore.createColFamilyIfAbsent(
+    readStateStore.createColFamilyIfAbsent(
       colFamilyName,
       keySchema,
       valueStructType,
@@ -881,7 +922,8 @@ class SymmetricHashJoinStateManagerV4(
       } else {
         None
       }
-      val evictIterator = stateStore.rangeScanWithMultiValues(startKeyRow, endKeyRow, colFamilyName)
+      val evictIterator =
+        readStateStore.rangeScanWithMultiValues(startKeyRow, endKeyRow, colFamilyName)
       new NextIterator[EvictedKeysResult]() {
         var currentKeyRow: UnsafeRow = null
         var currentEventTime: Long = -1L
@@ -1025,7 +1067,8 @@ abstract class SymmetricHashJoinStateManagerBase(
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
-    joinStoreGenerator: JoinStateManagerStoreGenerator)
+    joinStoreGenerator: JoinStateManagerStoreGenerator,
+    readOnly: Boolean = false)
   extends SymmetricHashJoinStateManager
   with SupportsEvictByCondition
   with SupportsIndexedKeys
@@ -1522,8 +1565,22 @@ abstract class SymmetricHashJoinStateManagerBase(
       handlerSnapshotOptions: Option[HandlerSnapshotOptions] = None) extends Logging {
     private var stateStoreProvider: StateStoreProvider = _
 
-    /** StateStore that the subclasses of this class is going to operate on */
-    protected def stateStore: StateStore
+    // Exactly one is populated by initializeStateStore -- readOnly decides which.
+    private var _stateStore: StateStore = _
+    private var _readStateStore: ReadStateStore = _
+
+    /**
+     * Writable store. Access fails fast when in read-only mode.
+     */
+    protected def stateStore: StateStore = {
+      require(!readOnly,
+        "Writable stateStore is not available on a read-only state store handler")
+      _stateStore
+    }
+
+    /** Read view of the loaded store. Safe to use in either mode. */
+    protected def readStateStore: ReadStateStore =
+      if (readOnly) _readStateStore else _stateStore
 
     def commit(): Unit = {
       stateStore.commit()
@@ -1531,7 +1588,9 @@ abstract class SymmetricHashJoinStateManagerBase(
     }
 
     def abortIfNeeded(): Unit = {
-      if (!stateStore.hasCommitted) {
+      if (readOnly) {
+        readStateStore.release()
+      } else if (!stateStore.hasCommitted) {
         logInfo(log"Aborted store ${MDC(STATE_STORE_ID, stateStore.id)}")
         stateStore.abort()
       }
@@ -1544,24 +1603,33 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     def metrics: StateStoreMetrics = stateStore.metrics
 
-    def getLatestCheckpointInfo(): StateStoreCheckpointInfo = {
+    def getLatestCheckpointInfo(): StateStoreCheckpointInfo =
       stateStore.getStateStoreCheckpointInfo()
-    }
 
-    /** Get the StateStore with the given schema */
-    protected def getStateStore(
+    /**
+     * Load the state store for this handler and populate `_stateStore` (when !readOnly)
+     * or `_readStateStore` (when readOnly). Subclasses invoke this for the side effect
+     * during construction; afterwards, the [[stateStore]] / [[readStateStore]] accessors
+     * return the right view based on mode.
+     */
+    protected def initializeStateStore(
         keySchema: StructType,
         valueSchema: StructType,
-        useVirtualColumnFamilies: Boolean): StateStore = {
+        useVirtualColumnFamilies: Boolean): Unit = {
       val storeName = if (useVirtualColumnFamilies) {
         StateStoreId.DEFAULT_STORE_NAME
       } else {
         getStateStoreName(joinSide, stateStoreType)
       }
       val storeProviderId = StateStoreProviderId(stateInfo.get, partitionId, storeName)
-      val store = if (useStateStoreCoordinator) {
+      val handle: ReadStateStore = if (useStateStoreCoordinator) {
         assert(handlerSnapshotOptions.isEmpty, "Should not use state store coordinator " +
           "when reading state as data source.")
+        // JoinStateManagerStoreGenerator only exposes a writable getStore. Read-only
+        // mode is only ever used with useStateStoreCoordinator=false (data source reads),
+        // so this branch must not be reached with readOnly=true.
+        require(!readOnly,
+          "readOnly mode is not supported with useStateStoreCoordinator=true")
         joinStoreGenerator.getStore(
           storeProviderId, keySchema, valueSchema, NoPrefixKeyStateEncoderSpec(keySchema),
           stateInfo.get.storeVersion, stateStoreCkptId, None, useVirtualColumnFamilies,
@@ -1578,19 +1646,35 @@ abstract class SymmetricHashJoinStateManagerBase(
               stateStoreProvider.getClass.toString)
           }
           val opts = handlerSnapshotOptions.get
-          stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
-            .replayStateFromSnapshot(
+          val replayer = stateStoreProvider.asInstanceOf[SupportsFineGrainedReplay]
+          if (readOnly) {
+            replayer.replayReadStateFromSnapshot(
               opts.snapshotVersion,
               opts.endVersion,
-              readOnly = true,
               opts.startStateStoreCkptId,
               opts.endStateStoreCkptId)
+          } else {
+            replayer.replayStateFromSnapshot(
+              opts.snapshotVersion,
+              opts.endVersion,
+              readOnly = false,
+              opts.startStateStoreCkptId,
+              opts.endStateStoreCkptId)
+          }
+        } else if (readOnly) {
+          // readOnly mode must not write to the checkpoint path; use the read-only store.
+          stateStoreProvider.getReadStore(stateInfo.get.storeVersion, stateStoreCkptId)
         } else {
           stateStoreProvider.getStore(stateInfo.get.storeVersion, stateStoreCkptId)
         }
       }
-      logInfo(log"Loaded store ${MDC(STATE_STORE_ID, store.id)}")
-      store
+      if (readOnly) {
+        _readStateStore = handle
+        logInfo(log"Loaded read-only store ${MDC(STATE_STORE_ID, handle.id)}")
+      } else {
+        _stateStore = handle.asInstanceOf[StateStore]
+        logInfo(log"Loaded store ${MDC(STATE_STORE_ID, handle.id)}")
+      }
     }
   }
 
@@ -1617,8 +1701,7 @@ abstract class SymmetricHashJoinStateManagerBase(
     private val longValueSchema = new StructType().add("value", "long")
     private val longToUnsafeRow = UnsafeProjection.create(longValueSchema)
     private val valueRow = longToUnsafeRow(new SpecificInternalRow(longValueSchema))
-    protected val stateStore: StateStore =
-      getStateStore(keySchema, longValueSchema, useVirtualColumnFamilies)
+    initializeStateStore(keySchema, longValueSchema, useVirtualColumnFamilies)
 
     // Set up virtual column family name in the store if it is being used
     private val colFamilyName = if (useVirtualColumnFamilies) {
@@ -1629,7 +1712,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     // Create the specific column family in the store for this join side's KeyToNumValuesStore
     if (useVirtualColumnFamilies) {
-      stateStore.createColFamilyIfAbsent(
+      readStateStore.createColFamilyIfAbsent(
         colFamilyName,
         keySchema,
         longValueSchema,
@@ -1640,7 +1723,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     /** Get the number of values the key has */
     def get(key: UnsafeRow): Long = {
-      val longValueRow = stateStore.get(key, colFamilyName)
+      val longValueRow = readStateStore.get(key, colFamilyName)
       if (longValueRow != null) longValueRow.getLong(0) else 0L
     }
 
@@ -1657,7 +1740,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     def iterator: Iterator[KeyAndNumValues] = {
       val keyAndNumValues = new KeyAndNumValues()
-      stateStore.iterator(colFamilyName).map { pair =>
+      readStateStore.iterator(colFamilyName).map { pair =>
         keyAndNumValues.withNew(pair.key, pair.value.getLong(0))
       }
     }
@@ -1727,7 +1810,7 @@ abstract class SymmetricHashJoinStateManagerBase(
     private val valueRowConverter = StreamingSymmetricHashJoinValueRowConverter
       .create(inputValueAttributes, stateFormatVersion)
 
-    protected val stateStore = getStateStore(keyWithIndexSchema,
+    initializeStateStore(keyWithIndexSchema,
       valueRowConverter.valueAttributes.toStructType, useVirtualColumnFamilies)
 
     // Set up virtual column family name in the store if it is being used
@@ -1739,7 +1822,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     // Create the specific column family in the store for this join side's KeyWithIndexToValueStore
     if (useVirtualColumnFamilies) {
-      stateStore.createColFamilyIfAbsent(
+      readStateStore.createColFamilyIfAbsent(
         colFamilyName,
         keyWithIndexSchema,
         valueRowConverter.valueAttributes.toStructType,
@@ -1749,7 +1832,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     def get(key: UnsafeRow, valueIndex: Long): ValueAndMatchPair = {
       valueRowConverter.convertValue(
-        stateStore.get(keyWithIndexRow(key, valueIndex), colFamilyName)
+        readStateStore.get(keyWithIndexRow(key, valueIndex), colFamilyName)
       )
     }
 
@@ -1767,7 +1850,7 @@ abstract class SymmetricHashJoinStateManagerBase(
           while (hasMoreValues) {
             val keyWithIndex = keyWithIndexRow(key, index)
             val valuePair =
-              valueRowConverter.convertValue(stateStore.get(keyWithIndex, colFamilyName))
+              valueRowConverter.convertValue(readStateStore.get(keyWithIndex, colFamilyName))
             if (valuePair == null) {
               handleNullValuePair(key, index, numValues)
               skippedNullValueCount.foreach(_ += 1L)
@@ -1813,7 +1896,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     def iterator: Iterator[KeyWithIndexAndValue] = {
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
-      stateStore.iterator(colFamilyName).map { pair =>
+      readStateStore.iterator(colFamilyName).map { pair =>
         val valuePair = valueRowConverter.convertValue(pair.value)
         keyWithIndexAndValue.withNew(
           keyRowGenerator(pair.key), pair.key.getLong(indexOrdinalInKeyWithIndexRow), valuePair)
@@ -1851,12 +1934,13 @@ class SymmetricHashJoinStateManagerV1(
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
-    joinStoreGenerator: JoinStateManagerStoreGenerator)
+    joinStoreGenerator: JoinStateManagerStoreGenerator,
+    readOnly: Boolean = false)
   extends SymmetricHashJoinStateManagerBase(
     joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
     partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
     stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-    joinStoreGenerator) {
+    joinStoreGenerator, readOnly) {
 
   /** Commit all the changes to all the state stores */
   override def commit(): Unit = {
@@ -1931,12 +2015,13 @@ class SymmetricHashJoinStateManagerV2(
     skippedNullValueCount: Option[SQLMetric] = None,
     useStateStoreCoordinator: Boolean = true,
     snapshotOptions: Option[SnapshotOptions] = None,
-    joinStoreGenerator: JoinStateManagerStoreGenerator)
+    joinStoreGenerator: JoinStateManagerStoreGenerator,
+    readOnly: Boolean = false)
   extends SymmetricHashJoinStateManagerBase(
     joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
     partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
     stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-    joinStoreGenerator) {
+    joinStoreGenerator, readOnly) {
 
   /** Commit all the changes to the state store */
   override def commit(): Unit = {
@@ -2043,27 +2128,28 @@ object SymmetricHashJoinStateManager {
       useStateStoreCoordinator: Boolean = true,
       snapshotOptions: Option[SnapshotOptions] = None,
       joinStoreGenerator: JoinStateManagerStoreGenerator,
-      joinKeyOrdinalForWatermark: Option[Int] = None): SymmetricHashJoinStateManager = {
+      joinKeyOrdinalForWatermark: Option[Int] = None,
+      readOnly: Boolean = false): SymmetricHashJoinStateManager = {
     if (stateFormatVersion == 4) {
       new SymmetricHashJoinStateManagerV4(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator, joinKeyOrdinalForWatermark
+        joinStoreGenerator, joinKeyOrdinalForWatermark, readOnly
       )
     } else if (stateFormatVersion == 3) {
       new SymmetricHashJoinStateManagerV2(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator
+        joinStoreGenerator, readOnly
       )
     } else {
       new SymmetricHashJoinStateManagerV1(
         joinSide, inputValueAttributes, joinKeys, stateInfo, storeConf, hadoopConf,
         partitionId, keyToNumValuesStateStoreCkptId, keyWithIndexToValueStateStoreCkptId,
         stateFormatVersion, skippedNullValueCount, useStateStoreCoordinator, snapshotOptions,
-        joinStoreGenerator
+        joinStoreGenerator, readOnly
       )
     }
   }

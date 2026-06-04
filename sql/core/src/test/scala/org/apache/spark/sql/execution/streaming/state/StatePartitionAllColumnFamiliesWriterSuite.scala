@@ -83,24 +83,29 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     val lastBatch = targetCheckpointMetadata.commitLog.getLatestBatchId().get
     val targetOffsetSeq = targetCheckpointMetadata.offsetLog.get(lastBatch).get
     val writeBatchId = lastBatch + 1
-    targetCheckpointMetadata.offsetLog.add(writeBatchId, targetOffsetSeq)
+    // Wrap the offset/commit-log writes and StateRewriter.run() (which writes state files
+    // and metadata into the target checkpoint) so they bypass write protection on the
+    // target temp dir. Subsequent state-data-source reads stay protected.
+    withWritableCheckpoint {
+      targetCheckpointMetadata.offsetLog.add(writeBatchId, targetOffsetSeq)
 
-    val rewriter = new StateRewriter(
-      spark,
-      readBatchId,
-      writeBatchId,
-      targetCpLocation,
-      hadoopConf,
-      readResolvedCheckpointLocation = Some(sourceCpLocation),
-      transformFunc = None,
-      writeCheckpointMetadata = Some(targetCheckpointMetadata)
-    )
-    val checkpointInfos = rewriter.run()
+      val rewriter = new StateRewriter(
+        spark,
+        readBatchId,
+        writeBatchId,
+        targetCpLocation,
+        hadoopConf,
+        readResolvedCheckpointLocation = Some(sourceCpLocation),
+        transformFunc = None,
+        writeCheckpointMetadata = Some(targetCheckpointMetadata)
+      )
+      val checkpointInfos = rewriter.run()
 
-    // Commit to commitLog with checkpoint IDs
-    val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
-    val commitMetadata = latestCommit.withStateUniqueIds(checkpointInfos)
-    targetCheckpointMetadata.commitLog.add(writeBatchId, commitMetadata)
+      // Commit to commitLog with checkpoint IDs
+      val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
+      val commitMetadata = latestCommit.withStateUniqueIds(checkpointInfos)
+      targetCheckpointMetadata.commitLog.add(writeBatchId, commitMetadata)
+    }
     val versionToCheck = writeBatchId + 1
 
     storeToColumnFamilies.foreach { case (storeName, columnFamilies) =>
