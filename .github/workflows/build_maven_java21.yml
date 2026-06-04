@@ -30,5 +30,4 @@ jobs:
     uses: ./.github/workflows/maven_test.yml
     if: github.repository == 'apache/spark'
     with:
-      branch: branch-4.1
       java: 21
