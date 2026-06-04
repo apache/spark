@@ -21,14 +21,14 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow, Expression, ExprId}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, EmptyRow, Expression, ExprId, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{BinBy, LogicalPlan, UnresolvedBinBy}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_BIN_BY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AnyTimestampType, DayTimeIntervalType, NumericType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{AnyTimestampType, DayTimeIntervalType, NumericType, TimestampType}
 
 /**
  * Resolves [[UnresolvedBinBy]] into [[BinBy]]: looks up column references against the child's
@@ -153,18 +153,18 @@ object ResolveBinBy extends Rule[LogicalPlan] {
       child: LogicalPlan,
       resolver: Resolver): Attribute = expr match {
     case u: UnresolvedAttribute =>
+      // Still unresolved here means genuinely absent: ResolveReferences rewrites resolvable refs.
       child.resolve(u.nameParts, resolver) match {
         case Some(a: Attribute) => a
-        case Some(_) =>
-          // Resolved to a NamedExpression that is not a top-level Attribute (e.g.,
-          // `RANGE struct_col.field TO ...` resolves to an Alias wrapping GetStructField).
-          throw QueryCompilationErrors.binByRequiresTopLevelColumnError(u.name)
-        case None => throw QueryCompilationErrors.binByColumnNotFoundError(u.name)
+        case _ => throw QueryCompilationErrors.binByColumnNotFoundError(u.name)
       }
     case a: Attribute => a
+    case ne: NamedExpression if ne.resolved =>
+      // A nested ref (e.g. `struct.field`) is resolved to an Alias(GetStructField) by
+      // ResolveReferences; the column exists, so this is distinct from BIN_BY_COLUMN_NOT_FOUND.
+      throw QueryCompilationErrors.binByRequiresTopLevelColumnError(ne.name)
     case other =>
-      // This branch is unreachable from user SQL: AstBuilder always builds UnresolvedAttribute,
-      // and resolved Attributes are handled above.
+      // Genuinely unexpected; the grammar restricts these positions to multipartIdentifier.
       throw SparkException.internalError(
         s"Unexpected expression in BIN BY column position: $other")
   }

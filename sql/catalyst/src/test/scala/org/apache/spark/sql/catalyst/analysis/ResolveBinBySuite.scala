@@ -59,7 +59,8 @@ class ResolveBinBySuite extends AnalysisTest {
   }
 
   test("user-supplied foldable ALIGN TO of matching type is folded to micros") {
-    val resolved = ResolveBinBy.apply(unresolved(originExpr = Some(Literal(123456L, TimestampType))))
+    val origin = Some(Literal(123456L, TimestampType))
+    val resolved = ResolveBinBy.apply(unresolved(originExpr = origin))
     assert(resolved.asInstanceOf[BinBy].originMicros == 123456L)
   }
 
@@ -220,26 +221,26 @@ class ResolveBinBySuite extends AnalysisTest {
       unresolved(distribute = Seq(UnresolvedAttribute("nonexistent"))), "BIN_BY_COLUMN_NOT_FOUND")
   }
 
-  test("rejects nested/computed column references with BIN_BY_REQUIRES_TOP_LEVEL_COLUMN") {
-    // A struct-field access resolves to a non-Attribute (Alias(GetStructField)). The column
-    // exists, so this is distinct from BIN_BY_COLUMN_NOT_FOUND.
-    val structField = AttributeReference(
+  test("rejects nested column refs through the full analyzer (RULE_ORDERING_DEPENDENCIES)") {
+    val structCol = AttributeReference(
       "outer",
       StructType(Seq(
         StructField("ts_start", TimestampType, nullable = true),
         StructField("ts_end", TimestampType, nullable = true))),
       nullable = true)()
     val numeric = AttributeReference("value", LongType, nullable = true)()
-    expectError(
-      UnresolvedBinBy(
-        binWidthExpr = fiveMinutes,
-        rangeStartCol = UnresolvedAttribute(Seq("outer", "ts_start")),
-        rangeEndCol = UnresolvedAttribute(Seq("outer", "ts_end")),
-        originExpr = Some(ltzOrigin),
-        distributeColumns = Seq(numeric),
-        outputAliases = BinByOutputAliases.empty,
-        child = LocalRelation(structField, numeric)),
-      "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN")
+    val plan = UnresolvedBinBy(
+      binWidthExpr = fiveMinutes,
+      rangeStartCol = UnresolvedAttribute(Seq("outer", "ts_start")),
+      rangeEndCol = UnresolvedAttribute(Seq("outer", "ts_end")),
+      originExpr = Some(ltzOrigin),
+      distributeColumns = Seq(numeric),
+      outputAliases = BinByOutputAliases.empty,
+      child = LocalRelation(structCol, numeric))
+    assertAnalysisErrorCondition(
+      plan,
+      "BIN_BY_REQUIRES_TOP_LEVEL_COLUMN",
+      Map("columnName" -> "`ts_start`"))
   }
 
   test("rejects non-timestamp or mismatched RANGE columns") {
