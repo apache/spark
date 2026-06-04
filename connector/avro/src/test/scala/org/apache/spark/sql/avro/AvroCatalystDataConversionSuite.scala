@@ -24,7 +24,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecordBuilder}
 import org.apache.avro.message.{BinaryMessageDecoder, BinaryMessageEncoder}
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, NoopFilters, OrderedFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, GenericInternalRow, Literal}
@@ -37,8 +37,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 
-class AvroCatalystDataConversionSuite extends SparkFunSuite
-  with SharedSparkSession
+class AvroCatalystDataConversionSuite extends SharedSparkSession
   with ExpressionEvalHelper {
 
   private def roundTripTest(data: Literal): Unit = {

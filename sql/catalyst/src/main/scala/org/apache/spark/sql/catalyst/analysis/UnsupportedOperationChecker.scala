@@ -579,7 +579,7 @@ object UnsupportedOperationChecker extends Logging {
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
             "aggregated DataFrame/Dataset in Complete output mode")
 
-        case Sample(_, _, _, _, child) if child.isStreaming =>
+        case Sample(_, _, _, _, child, _) if child.isStreaming =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
         case Window(windowExpression, _, _, child, _) if child.isStreaming =>

@@ -642,7 +642,7 @@ Subquery:1 Hosting operator id = 72 Hosting Expression = Subquery scalar-subquer
 * HashAggregate (130)
 +- Exchange (129)
    +- * HashAggregate (128)
-      +- Union (127)
+      +- * Union (127)
          :- * Project (116)
          :  +- * BroadcastHashJoin Inner BuildRight (115)
          :     :- * ColumnarToRow (113)
@@ -667,19 +667,19 @@ Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ss_sold_date_sk#115), dynamicpruningexpression(ss_sold_date_sk#115 IN dynamicpruning#12)]
 ReadSchema: struct<ss_quantity:int,ss_list_price:decimal(7,2)>
 
-(113) ColumnarToRow [codegen id : 2]
+(113) ColumnarToRow [codegen id : 4]
 Input [3]: [ss_quantity#113, ss_list_price#114, ss_sold_date_sk#115]
 
 (114) ReusedExchange [Reuses operator id: 140]
 Output [1]: [d_date_sk#116]
 
-(115) BroadcastHashJoin [codegen id : 2]
+(115) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_sold_date_sk#115]
 Right keys [1]: [d_date_sk#116]
 Join type: Inner
 Join condition: None
 
-(116) Project [codegen id : 2]
+(116) Project [codegen id : 4]
 Output [2]: [ss_quantity#113 AS quantity#117, ss_list_price#114 AS list_price#118]
 Input [4]: [ss_quantity#113, ss_list_price#114, ss_sold_date_sk#115, d_date_sk#116]
 
@@ -690,19 +690,19 @@ Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(cs_sold_date_sk#121), dynamicpruningexpression(cs_sold_date_sk#121 IN dynamicpruning#12)]
 ReadSchema: struct<cs_quantity:int,cs_list_price:decimal(7,2)>
 
-(118) ColumnarToRow [codegen id : 4]
+(118) ColumnarToRow
 Input [3]: [cs_quantity#119, cs_list_price#120, cs_sold_date_sk#121]
 
 (119) ReusedExchange [Reuses operator id: 140]
 Output [1]: [d_date_sk#122]
 
-(120) BroadcastHashJoin [codegen id : 4]
+(120) BroadcastHashJoin
 Left keys [1]: [cs_sold_date_sk#121]
 Right keys [1]: [d_date_sk#122]
 Join type: Inner
 Join condition: None
 
-(121) Project [codegen id : 4]
+(121) Project
 Output [2]: [cs_quantity#119 AS quantity#123, cs_list_price#120 AS list_price#124]
 Input [4]: [cs_quantity#119, cs_list_price#120, cs_sold_date_sk#121, d_date_sk#122]
 
@@ -713,25 +713,25 @@ Location: InMemoryFileIndex []
 PartitionFilters: [isnotnull(ws_sold_date_sk#127), dynamicpruningexpression(ws_sold_date_sk#127 IN dynamicpruning#12)]
 ReadSchema: struct<ws_quantity:int,ws_list_price:decimal(7,2)>
 
-(123) ColumnarToRow [codegen id : 6]
+(123) ColumnarToRow
 Input [3]: [ws_quantity#125, ws_list_price#126, ws_sold_date_sk#127]
 
 (124) ReusedExchange [Reuses operator id: 140]
 Output [1]: [d_date_sk#128]
 
-(125) BroadcastHashJoin [codegen id : 6]
+(125) BroadcastHashJoin
 Left keys [1]: [ws_sold_date_sk#127]
 Right keys [1]: [d_date_sk#128]
 Join type: Inner
 Join condition: None
 
-(126) Project [codegen id : 6]
+(126) Project
 Output [2]: [ws_quantity#125 AS quantity#129, ws_list_price#126 AS list_price#130]
 Input [4]: [ws_quantity#125, ws_list_price#126, ws_sold_date_sk#127, d_date_sk#128]
 
-(127) Union
+(127) Union [codegen id : 4]
 
-(128) HashAggregate [codegen id : 7]
+(128) HashAggregate [codegen id : 4]
 Input [2]: [quantity#117, list_price#118]
 Keys: []
 Functions [1]: [partial_avg((cast(quantity#117 as decimal(10,0)) * list_price#118))]
@@ -742,7 +742,7 @@ Results [2]: [sum#133, count#134]
 Input [2]: [sum#133, count#134]
 Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=16]
 
-(130) HashAggregate [codegen id : 8]
+(130) HashAggregate [codegen id : 5]
 Input [2]: [sum#133, count#134]
 Keys: []
 Functions [1]: [avg((cast(quantity#117 as decimal(10,0)) * list_price#118))]

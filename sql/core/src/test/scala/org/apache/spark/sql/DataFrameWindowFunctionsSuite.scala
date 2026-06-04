@@ -835,6 +835,28 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
           "v", "z", null, "v", "z", "y", null, "va")))
   }
 
+  test("counter_diff with and without startTime") {
+    import java.sql.Timestamp
+    val df = Seq(
+      (1, Timestamp.valueOf("2024-01-01 00:00:00"), 100),
+      (2, Timestamp.valueOf("2024-01-01 12:00:00"), 200),
+      (3, Timestamp.valueOf("2024-01-01 12:00:00"), 400),
+      (4, Timestamp.valueOf("2024-01-02 00:00:00"), 50),
+      (5, Timestamp.valueOf("2024-01-02 00:00:00"), 150)
+    ).toDF("t", "st", "c")
+    val w = Window.orderBy($"t")
+
+    // 1-arg form: reset detected by counter decrease only.
+    checkAnswer(
+      df.select($"t", counter_diff($"c").over(w)).orderBy($"t"),
+      Seq(Row(1, null), Row(2, 100), Row(3, 200), Row(4, null), Row(5, 100)))
+
+    // 2-arg form: reset also detected by startTime advance.
+    checkAnswer(
+      df.select($"t", counter_diff($"c", $"st").over(w)).orderBy($"t"),
+      Seq(Row(1, null), Row(2, null), Row(3, 200), Row(4, null), Row(5, 100)))
+  }
+
   test("lag - Offset expression <offset> must be a literal") {
     val nullStr: String = null
     val df = Seq(

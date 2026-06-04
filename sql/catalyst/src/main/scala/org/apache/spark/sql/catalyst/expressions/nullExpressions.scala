@@ -145,6 +145,21 @@ case class Coalesce(children: Seq[Expression])
     copy(children = newChildren)
 }
 
+private case class TypedNullLiteral(child: Expression)
+    extends UnaryExpression with RuntimeReplaceable {
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType
+
+  override def toString: String = "null"
+
+  override def sql: String = "NULL"
+
+  override lazy val replacement: Expression = Literal.create(null, child.dataType)
+
+  override protected def withNewChildInternal(newChild: Expression): TypedNullLiteral =
+    copy(child = newChild)
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
@@ -162,10 +177,10 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
     this(left, right,
       if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
         With(left) { case Seq(ref) =>
-          If(EqualTo(ref, right), Literal.create(null, left.dataType), ref)
+          If(EqualTo(ref, right), TypedNullLiteral(ref), ref)
         }
       } else {
-        If(EqualTo(left, right), Literal.create(null, left.dataType), left)
+        If(EqualTo(left, right), TypedNullLiteral(left), left)
       }
     )
   }

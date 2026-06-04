@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.connector.catalog.SharedInMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -38,7 +38,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * a static [[ConcurrentHashMap]] that all catalog instances share,
  * regardless of which session created them.
  */
-class DataSourceV2ExtSessionColumnIdSuite extends QueryTest with SharedSparkSession {
+class DataSourceV2ExtSessionColumnIdSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.ANSI_ENABLED, true)

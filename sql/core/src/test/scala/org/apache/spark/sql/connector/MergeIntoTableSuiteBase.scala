@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, In, Not}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
@@ -484,6 +485,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(1, 100, "hr"), // insert
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
+
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsInserted === 3L)
+      assert(mergeSummary.numTargetRowsCopied === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -510,6 +521,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         Seq(
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
+
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsInserted === 2L)
+      assert(mergeSummary.numTargetRowsCopied === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -539,6 +560,16 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(1, 100, "hr"), // insert
           Row(2, 200, "finance"), // insert
           Row(3, 300, "hr"))) // insert
+
+      val mergeSummary = getMergeSummary()
+      assert(mergeSummary.numTargetRowsInserted === 3L)
+      assert(mergeSummary.numTargetRowsCopied === 0L)
+      assert(mergeSummary.numTargetRowsUpdated === 0L)
+      assert(mergeSummary.numTargetRowsDeleted === 0L)
+      assert(mergeSummary.numTargetRowsMatchedUpdated === 0L)
+      assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+      assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
     }
   }
 
@@ -2659,6 +2690,58 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
           sql(s"DROP TABLE $tableNameAsString")
         }
+      }
+    }
+  }
+
+  test("metric values are stable across stage retries") {
+    // The join in the MERGE plan introduces a shuffle (with broadcast disabled), and the
+    // DAGScheduler corrupts the first attempt of every upstream shuffle map stage. Note:
+    // the current fetch-failure injection does not retry the MergeRowsExec/writer stage,
+    // so this test passes equally well with plain SQLMetric — it only exercises the
+    // SLAM-aware read path. Follow-up #55738 will add infra to actually retry the writer
+    // stage and exercise the SLAM behavior end-to-end for MERGE.
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTempView("source") {
+        createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "dep": "hr" }
+            |""".stripMargin)
+
+        val sourceDF = Seq(1, 2, 10).toDF("pk")
+        sourceDF.createOrReplaceTempView("source")
+
+        withSparkContextConf(
+            config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
+          sql(
+            s"""MERGE INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |WHEN MATCHED THEN
+               | UPDATE SET salary = salary + 100
+               |WHEN NOT MATCHED THEN
+               | INSERT (pk, salary, dep) VALUES (s.pk, 999, 'unknown')
+               |""".stripMargin)
+        }
+
+        val mergeSummary = getMergeSummary()
+        assert(mergeSummary.numTargetRowsUpdated === 2L)
+        assert(mergeSummary.numTargetRowsMatchedUpdated === 2L)
+        assert(mergeSummary.numTargetRowsInserted === 1L)
+        assert(mergeSummary.numTargetRowsCopied === (if (deltaMerge) 0L else 1L))
+        assert(mergeSummary.numTargetRowsDeleted === 0L)
+        assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
+        assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
+
+        checkAnswer(
+          sql(s"SELECT pk, salary FROM $tableNameAsString ORDER BY pk"),
+          Seq(
+            Row(1, 200),
+            Row(2, 300),
+            Row(3, 300),
+            Row(10, 999)))
       }
     }
   }

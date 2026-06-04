@@ -44,6 +44,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 class FileBasedDataSourceSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -878,6 +879,29 @@ class FileBasedDataSourceSuite extends SharedSparkSession
     assert(fileList.toSet === expectedFileList.toSet)
   }
 
+  test("recursiveFileLookup with a partitioned catalog table is rejected") {
+    withTable("part_tbl") {
+      sql(
+        """
+          |CREATE TABLE part_tbl (id INT, value STRING)
+          |USING parquet
+          |PARTITIONED BY (year INT)
+          |""".stripMargin)
+      sql("INSERT INTO part_tbl PARTITION (year = 2024) VALUES (1, 'a')")
+      sql("INSERT INTO part_tbl PARTITION (year = 2025) VALUES (2, 'b')")
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read
+            .option("recursiveFileLookup", "true")
+            .table("part_tbl")
+            .collect()
+        },
+        condition = "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE",
+        parameters = Map.empty[String, String]
+      )
+    }
+  }
+
   test("Return correct results when data columns overlap with partition columns") {
     Seq("parquet", "orc", "json").foreach { format =>
       withTempPath { path =>
@@ -1305,6 +1329,65 @@ class FileBasedDataSourceSuite extends SharedSparkSession
                   "columnName" -> "`g`",
                   "columnType" -> expectedType,
                   "format" -> formatMapping(format)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57166: nanosecond timestamp types are not supported in file data sources") {
+    // None of these built-in file formats support nanosecond-capable timestamps yet.
+    val unsupportedDataSources = Seq("parquet", "orc", "json", "csv", "xml")
+    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // Test both v1 and v2 data sources.
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) {
+          unsupportedDataSources.mkString(",")
+        } else {
+          ""
+        }
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          unsupportedDataSources.foreach { format =>
+            nanosTypes.foreach { nanosType =>
+              val expectedType = s""""${nanosType.sql}""""
+              withTempDir { dir =>
+                // Write path: a nanos-typed column cannot be written. The nanos literal is built
+                // directly from its internal value to avoid relying on cast/parser support.
+                val nanosLiteral =
+                  Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
+                val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
+                val writeDir = new File(dir, "write").getCanonicalPath
+                checkError(
+                  exception = intercept[AnalysisException] {
+                    df.write.format(format).mode("overwrite").save(writeDir)
+                  },
+                  condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+                  parameters = Map(
+                    "columnName" -> "`ts`",
+                    "columnType" -> expectedType,
+                    "format" -> formatMapping(format)))
+
+                // Read path: a user-specified nanos schema is rejected. Write a benign file first
+                // so schema validation (not file listing) is what fails.
+                val readDir = new File(dir, "read").getCanonicalPath
+                // XML requires a `rowTag` option on both the read and write paths.
+                val extraOptions =
+                  if (format == "xml") Map("rowTag" -> "row") else Map.empty[String, String]
+                Seq("a").toDF("ts").write.format(format).options(extraOptions)
+                  .mode("overwrite").save(readDir)
+                checkError(
+                  exception = intercept[AnalysisException] {
+                    spark.read.schema(new StructType().add("ts", nanosType))
+                      .format(format).options(extraOptions).load(readDir).collect()
+                  },
+                  condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+                  parameters = Map(
+                    "columnName" -> "`ts`",
+                    "columnType" -> expectedType,
+                    "format" -> formatMapping(format)))
+              }
             }
           }
         }

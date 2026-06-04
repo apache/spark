@@ -535,10 +535,10 @@ private[sql] object CatalogV2Util {
 
   /**
    * Construct a [[ViewInfo.Builder]] seeded from an existing view's metadata. Used by ALTER
-   * VIEW execs (SET / UNSET TBLPROPERTIES, ALTER VIEW ... WITH SCHEMA BINDING) and by
-   * `ApplyDefaultCollation` -- override the one field that changes, then `build` to produce
-   * the replacement payload for [[ViewCatalog#replaceView]]. Every other field flows through
-   * unchanged so a metadata-only mutation does not perturb the view body.
+   * VIEW execs (SET / UNSET TBLPROPERTIES, ALTER VIEW ... WITH SCHEMA BINDING) -- override
+   * the one field that changes, then `build` to produce the replacement payload for
+   * [[ViewCatalog#replaceView]]. Every other field flows through unchanged so a metadata-only
+   * mutation does not perturb the view body.
    */
   def viewInfoBuilderFrom(existing: ViewInfo): ViewInfo.Builder = {
     val builder = new ViewInfo.Builder()

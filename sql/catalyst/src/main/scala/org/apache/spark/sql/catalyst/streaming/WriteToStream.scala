@@ -28,6 +28,7 @@ import org.apache.spark.sql.streaming.OutputMode
  */
 case class WriteToStream(
     name: String,
+    sinkName: Option[String],
     resolvedCheckpointLocation: String,
     sink: Table,
     outputMode: OutputMode,

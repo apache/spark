@@ -32,7 +32,7 @@ import org.apache.spark.util.SparkErrorUtils
  * numeric/string/date-timestamp types, RANGE, Decimal/Binary merge, UDAF
  * fallback, and frame lifecycle.
  */
-class SegmentTreeWindowFunctionSuite extends QueryTest with SharedSparkSession {
+class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
 
   import testImplicits._
 

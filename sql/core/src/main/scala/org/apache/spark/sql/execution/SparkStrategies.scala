@@ -972,6 +972,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.python.MapInPandasExec(func, output, planLater(child), isBarrier, profile) :: Nil
       case logical.MapInArrow(func, output, child, isBarrier, profile) =>
         execution.python.MapInArrowExec(func, output, planLater(child), isBarrier, profile) :: Nil
+      case logical.MapPartitionsExternalUDF(
+          workerSpec, functionExpr, isBarrier, child) =>
+        execution.externalUDF.MapPartitionsExternalUDFExec(
+          workerSpec, functionExpr,
+          isBarrier, planLater(child)) :: Nil
       case logical.AttachDistributedSequence(attr, child, cache) =>
         execution.python.AttachDistributedSequenceExec(attr, planLater(child), cache) :: Nil
       case logical.PythonWorkerLogs(jsonAttr) =>
@@ -1040,7 +1045,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.FilterExec(f.typedCondition(f.deserializer), planLater(f.child)) :: Nil
       case e @ logical.Expand(_, _, child) =>
         execution.ExpandExec(e.projections, e.output, planLater(child)) :: Nil
-      case logical.Sample(lb, ub, withReplacement, seed, child) =>
+      case logical.Sample(lb, ub, withReplacement, seed, child, sampleMethod) =>
+        if (sampleMethod == logical.SampleMethod.System) {
+          // V2ScanRelationPushDown is non-excludable and always handles SYSTEM samples
+          // (either pushes down or throws). Reaching here indicates an internal invariant
+          // violation.
+          throw SparkException.internalError(
+            "TABLESAMPLE SYSTEM node was not properly handled by V2ScanRelationPushDown.")
+        }
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _, stream) =>
         LocalTableScanExec(output, data, stream) :: Nil

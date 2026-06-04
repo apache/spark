@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.window
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
@@ -36,7 +36,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * [[SegmentTreeWindowFunctionSuite]].
  */
 class WindowSegmentTreeAllowlistSuite
-    extends QueryTest with SharedSparkSession with SQLMetricsTestUtils {
+    extends SharedSparkSession with SQLMetricsTestUtils {
 
   import testImplicits._
 

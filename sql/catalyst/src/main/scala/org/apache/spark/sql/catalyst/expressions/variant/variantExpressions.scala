@@ -62,8 +62,9 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     Seq(
       child,
       Literal(SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS), BooleanType),
-      Literal(failOnError, BooleanType)),
-    inputTypes :+ BooleanType :+ BooleanType,
+      Literal(failOnError, BooleanType),
+      Literal(SQLConf.get.getConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING), BooleanType)),
+    inputTypes :+ BooleanType :+ BooleanType :+ BooleanType,
     returnNullable = !failOnError)
 
   override def inputTypes: Seq[AbstractDataType] =

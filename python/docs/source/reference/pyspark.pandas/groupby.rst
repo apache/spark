@@ -97,6 +97,7 @@ The following methods are available only for `DataFrameGroupBy` objects.
 .. autosummary::
    :toctree: api/
 
+   DataFrameGroupBy.cov
    DataFrameGroupBy.describe
 
 The following methods are available only for `SeriesGroupBy` objects.

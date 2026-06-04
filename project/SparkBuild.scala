@@ -59,8 +59,8 @@ object BuildCommons {
     Seq("connect-common", "connect", "connect-client-jdbc", "connect-client-jvm", "connect-shims")
       .map(ProjectRef(buildLocation, _))
 
-  val udfWorkerProjects@Seq(udfWorkerProto, udfWorkerCore) =
-    Seq("udf-worker-proto", "udf-worker-core").map(ProjectRef(buildLocation, _))
+  val udfWorkerProjects@Seq(udfWorkerProto, udfWorkerCore, udfWorkerGrpc) =
+    Seq("udf-worker-proto", "udf-worker-core", "udf-worker-grpc").map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
@@ -124,6 +124,11 @@ object SparkBuild extends PomBuild {
         throw new MessageOnlyException(
           "The Java version used to build the project is outdated. " +
             s"Please use Java $minimumVersion or later.")
+      }
+      if (currentVersionFeature == 25 && currentVersionUpdate < 3) {
+        throw new MessageOnlyException(
+          s"Java 25 requires update 3 or later due to JDK-8377811. " +
+            s"Current version: $currentVersion. Please use Java 25.0.3 or later.")
       }
     },
     (Compile / compile) := ((Compile / compile) dependsOn checkJavaVersion).value,
@@ -411,7 +416,7 @@ object SparkBuild extends PomBuild {
       spark, hive, hiveThriftServer, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
       connectJdbc, connectClient, variant, connectShims, profiler, commonUtilsJava,
-      udfWorkerProto, udfWorkerCore
+      udfWorkerProto, udfWorkerCore, udfWorkerGrpc
     ).contains(x)
   }
 
@@ -466,6 +471,9 @@ object SparkBuild extends PomBuild {
 
   /* UDF Worker Proto settings */
   enable(UDFWorkerProto.settings)(udfWorkerProto)
+
+  /* UDF Worker gRPC settings */
+  enable(UDFWorkerGrpc.settings)(udfWorkerGrpc)
 
   enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
@@ -1087,25 +1095,13 @@ object SparkProtobuf {
 }
 
 object UDFWorkerProto {
-  import BuildCommons.protoVersion
-  lazy val settings = Seq(
-    PB.protocVersion := BuildCommons.protoVersion,
-    libraryDependencies += "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf",
-
-    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
-
-    (Compile / PB.targets) := Seq(
-      PB.gens.java -> target.value / "generated-sources"
-    ),
-
-    (assembly / test) := { },
-
-    (assembly / logLevel) := Level.Info,
-
-    // Exclude `scala-library` from assembly.
-    (assembly / assemblyPackageScala / assembleArtifact) := false,
-
-    // Include only the proto module jar and protobuf-java in the assembly.
+  // Reuses SparkConnectCommon for proto codegen wiring; overrides the assembly
+  // fields that need the UDF-worker namespace and restricts code generation to
+  // protobuf-java messages only. The gRPC service stubs are generated in the
+  // separate udf-worker-grpc module, so this module (and its consumers) carry
+  // no gRPC dependency.
+  lazy val settings = SparkConnectCommon.settings ++ Seq(
+    // Include only this module's jar and protobuf-java in the assembly.
     (assembly / assemblyExcludedJars) := {
       val cp = (assembly / fullClasspath).value
       val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
@@ -1116,25 +1112,59 @@ object UDFWorkerProto {
 
     (assembly / assemblyShadeRules) := Seq(
       ShadeRule.rename("com.google.protobuf.**" ->
-        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll
     ),
 
-    (assembly / assemblyMergeStrategy) := {
-      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
-        MergeStrategy.filterDistinctLines
-      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
-      case _ => MergeStrategy.first
-    }
+    // Generate only protobuf-java messages here (overrides the java + grpc-java
+    // targets inherited from SparkConnectCommon).
+    (Compile / PB.targets) := Seq(
+      PB.gens.java -> target.value / "generated-sources" / "protobuf" / "java"
+    )
+  )
+}
+
+object UDFWorkerGrpc {
+  import BuildCommons.protoVersion
+
+  // Generates only the gRPC service stubs, reading the .proto definitions from
+  // the udf-worker-proto module (whose protobuf-java messages the stubs compile
+  // against). Confines the gRPC runtime to this module.
+  lazy val settings = Seq(
+    PB.protocVersion := protoVersion,
+
+    libraryDependencies ++= {
+      val grpcVersion =
+        SbtPomKeys.effectivePom.value.getProperties.get(
+          "io.grpc.version").asInstanceOf[String]
+      Seq(
+        "io.grpc" % "protoc-gen-grpc-java" % grpcVersion asProtocPlugin(),
+        "com.google.protobuf" % "protobuf-java" % protoVersion % "protobuf"
+      )
+    },
+
+    dependencyOverrides += "com.google.protobuf" % "protobuf-java" % protoVersion,
+
+    // Read the shared .proto sources from the proto module.
+    (Compile / PB.protoSources) := Seq(
+      baseDirectory.value / ".." / "proto" / "src" / "main" / "protobuf")
   ) ++ {
     val sparkProtocExecPath = sys.props.get("spark.protoc.executable.path")
-    if (sparkProtocExecPath.isDefined) {
+    val connectPluginExecPath = sys.props.get("connect.plugin.executable.path")
+    if (sparkProtocExecPath.isDefined && connectPluginExecPath.isDefined) {
       Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.plugin(name = "grpc-java", path = connectPluginExecPath.get) ->
+            target.value / "generated-sources" / "protobuf" / "grpc-java"
+        ),
         PB.protocExecutable := file(sparkProtocExecPath.get)
       )
     } else {
-      Seq.empty
+      Seq(
+        (Compile / PB.targets) := Seq(
+          PB.gens.plugin("grpc-java") ->
+            target.value / "generated-sources" / "protobuf" / "grpc-java"
+        )
+      )
     }
   }
 }
@@ -1248,7 +1278,7 @@ object KubernetesIntegrationTests {
  * Overrides to work around sbt's dependency resolution being different from Maven's.
  */
 object DependencyOverrides {
-  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.2")
+  lazy val jacksonVersion = sys.props.get("fasterxml.jackson.version").getOrElse("2.21.3")
   lazy val jacksonDeps = Bom.dependencies("com.fasterxml.jackson" % "jackson-bom" % jacksonVersion)
   lazy val settings = jacksonDeps ++ Seq(
     dependencyOverrides ++= {
@@ -1728,7 +1758,8 @@ object Unidoc {
     (JavaUnidoc / unidoc / unidocProjectFilter) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectJdbc,
-        connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore),
+        connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore,
+        udfWorkerGrpc),
   )
 }
 
@@ -1949,8 +1980,9 @@ object TestSettings {
         "-Dio.netty.tryReflectionSetAccessible=true",
         "-Dio.netty.allocator.type=pooled",
         "-Dio.netty.handler.ssl.defaultEndpointVerificationAlgorithm=NONE",
-        "-Dio.netty.noUnsafe=false",
-        "--enable-native-access=ALL-UNNAMED").mkString(" ")
+        "--sun-misc-unsafe-memory-access=allow",
+        "--enable-native-access=ALL-UNNAMED",
+        "-XX:+EnableDynamicAgentLoading").mkString(" ")
       s"-Xmx$heapSize -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:ReservedCodeCacheSize=128m -Dfile.encoding=UTF-8 $extraTestJavaArgs"
         .split(" ").toSeq
     },

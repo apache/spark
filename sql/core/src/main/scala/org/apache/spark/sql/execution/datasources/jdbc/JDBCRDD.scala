@@ -31,7 +31,6 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
-import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
@@ -141,7 +140,7 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
-   * @param sample - The pushed down tableSample.
+   * @param sampleClause - The pushed down table sample SQL clause.
    * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
    *                is not pushed down.
    * @param sortOrders - The sort orders cooperates with limit to realize top N.
@@ -158,7 +157,7 @@ object JDBCRDD extends Logging {
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
-      sample: Option[TableSampleInfo] = None,
+      sampleClause: Option[String] = None,
       limit: Int = 0,
       sortOrders: Array[String] = Array.empty[String],
       offset: Int = 0,
@@ -184,7 +183,7 @@ object JDBCRDD extends Logging {
       options,
       databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory),
       groupByColumns,
-      sample,
+      sampleClause,
       limit,
       sortOrders,
       offset,
@@ -209,7 +208,7 @@ class JDBCRDD(
     options: JDBCOptions,
     databaseMetadata: JDBCDatabaseMetadata,
     groupByColumns: Option[Array[String]],
-    sample: Option[TableSampleInfo],
+    sampleClause: Option[String],
     limit: Int,
     sortOrders: Array[String],
     offset: Int,
@@ -252,8 +251,8 @@ class JDBCRDD(
       builder = builder.withGroupByColumns(groupByKeys)
     }
 
-    sample.foreach { tableSampleInfo =>
-      builder = builder.withTableSample(tableSampleInfo)
+    sampleClause.foreach { clause =>
+      builder = builder.withTableSampleClause(clause)
     }
 
     builder.build()

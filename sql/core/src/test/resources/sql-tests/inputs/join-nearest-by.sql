@@ -36,6 +36,11 @@ SELECT u.user_id, p.product
 FROM users u LEFT OUTER JOIN (SELECT * FROM products WHERE false) p
   APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
 
+-- INNER JOIN with NEAREST BY, empty right side
+SELECT u.user_id, p.product
+FROM users u INNER JOIN (SELECT * FROM products WHERE false) p
+  APPROX NEAREST 1 BY SIMILARITY -abs(u.score - p.pscore);
+
 -- Explicit INNER keyword
 SELECT u.user_id, p.product
 FROM users u INNER JOIN products p
@@ -69,13 +74,15 @@ SELECT u.user_id, p.product
 FROM users u JOIN products p
   APPROX NEAREST 1 BY SIMILARITY map(u.score, p.pscore);
 
--- Error: EXACT mode with nondeterministic ranking expression
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  EXACT NEAREST 1 BY SIMILARITY rand() + p.pscore;
-
--- APPROX permits a nondeterministic ranking expression (per the SPIP). Rows differ run to
+-- Both EXACT and APPROX permit a nondeterministic ranking expression. Rows differ run to
 -- run, so we only assert the row count: one match per left row when k = 1.
+SELECT COUNT(*) AS num_rows
+FROM (
+  SELECT u.user_id, p.product
+  FROM users u JOIN products p
+    EXACT NEAREST 1 BY SIMILARITY rand() + p.pscore
+);
+
 SELECT COUNT(*) AS num_rows
 FROM (
   SELECT u.user_id, p.product

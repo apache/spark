@@ -24,7 +24,7 @@ import java.util
 
 import scala.util.{Failure, Success, Try}
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.connect.proto
 import org.apache.spark.internal.LogKeys.PATH
 import org.apache.spark.sql.catalyst.{catalog, QueryPlanningTracker}
@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.connect.config.Connect
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
-import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, Identifier, InMemoryChangelogCatalog}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, Identifier, InMemoryChangelogCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -70,10 +70,7 @@ import org.apache.spark.util.Utils
  * compatibility.
  */
 // scalastyle:on
-class ProtoToParsedPlanTestSuite
-    extends SparkFunSuite
-    with SharedSparkSession
-    with ResourceHelper {
+class ProtoToParsedPlanTestSuite extends SharedSparkSession with ResourceHelper {
 
   private val cleanOrphanedGoldenFiles: Boolean =
     System.getenv("SPARK_CLEAN_ORPHANED_GOLDEN_FILES") == "1"
@@ -163,7 +160,7 @@ class ProtoToParsedPlanTestSuite
       Array.empty[Transform],
       emptyProps)
 
-    val catalogManager = new CatalogManager(
+    val catalogManager = new DefaultCatalogManager(
       inMemoryCatalog,
       new SessionCatalog(
         new catalog.InMemoryCatalog(),

@@ -31,6 +31,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ArrayImplicits._
 
@@ -89,8 +90,7 @@ abstract class PartitioningAwareFileIndex(
         PartitionDirectory(InternalRow.empty, allFiles().toArray.filter(isNonEmptyFile))) :: Nil
     } else {
       if (recursiveFileLookup) {
-        throw new IllegalArgumentException(
-          "Datasource with partition do not allow recursive file loading.")
+        throw QueryCompilationErrors.recursiveFileLookupNotSupportedForPartitionedDataSourceError()
       }
       prunePartitions(partitionFilters, partitionSpec()).map {
         case PartitionPath(values, path) =>

@@ -114,7 +114,7 @@ class QueryExecution(
   //    should keep state about the reads (tables+predicates) that occurred during the transaction.
   // 3. The analyzer instance is passed to nested Query Execution instances. These need to respect
   //    the open transaction instead of creating their own.
-  private lazy val transactionOpt: Option[Transaction] =
+  private val lazyTransactionOpt = LazyTry {
     // Always inherit an active transaction from the outer analyzer, regardless of mode.
     analyzerOpt.flatMap(_.catalogManager.transaction).orElse {
       // Only begin a new transaction for outer QEs that lead to execution.
@@ -136,6 +136,8 @@ class QueryExecution(
         None
       }
     }
+  }
+  private def transactionOpt: Option[Transaction] = lazyTransactionOpt.get
 
   // For path-based tables (e.g. `format.`/path/to/table``) the first identifier part is a
   // connector name. SupportsCatalogOptions on the connector tells us which catalog actually
@@ -169,14 +171,18 @@ class QueryExecution(
   // so that all catalog lookups and rule applications during analysis see the correct state
   // without relying on thread-local context. Any nested QueryExecution that is created during
   // analysis or execution of a transactional plan must receive this analyzer via analyzerOpt.
-  private lazy val analyzer: Analyzer = analyzerOpt.getOrElse {
-    transactionOpt match {
-      case Some(txn) =>
-        sparkSession.sessionState.analyzer.withCatalogManager(catalogManager.withTransaction(txn))
-      case None =>
-        sparkSession.sessionState.analyzer
+  private val lazyAnalyzer = LazyTry {
+    analyzerOpt.getOrElse {
+      transactionOpt match {
+        case Some(txn) =>
+          sparkSession.sessionState.analyzer.withCatalogManager(
+            catalogManager.withTransaction(txn))
+        case None =>
+          sparkSession.sessionState.analyzer
+      }
     }
   }
+  private def analyzer: Analyzer = lazyAnalyzer.get
 
   def assertAnalyzed(): Unit = {
     try {

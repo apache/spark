@@ -203,10 +203,10 @@ trait WindowEvaluatorFactoryBase {
           case WindowExpression(ae: AggregateExpression, _) => ae.filter
           case _ => None
         }.toArray
-        // Keep as `def` (by-name): the FRAME_LESS_OFFSET / UNBOUNDED_OFFSET /
-        // UNBOUNDED_PRECEDING_OFFSET branches do not read `processor`. Eager
-        // `val` construction would invoke `AggregateProcessor.apply` on
-        // Lag / Lead / NthValue and throw
+        // Keep as `def` (lazy / per-call): the FRAME_LESS_OFFSET /
+        // UNBOUNDED_OFFSET / UNBOUNDED_PRECEDING_OFFSET branches do not read
+        // `processor`. Eager `val` construction would invoke
+        // `AggregateProcessor.apply` on Lag / Lead / NthValue and throw
         // `INTERNAL_ERROR: Unsupported aggregate function`.
         def processor = if (functions.exists(_.isInstanceOf[PythonFuncExpression])) {
           null
@@ -367,6 +367,7 @@ trait WindowEvaluatorFactoryBase {
     val frameTypeOk = frameType match {
       case RowFrame => true
       case RangeFrame => orderSpec.size == 1
+      case _ => false
     }
     conf.windowSegmentTreeEnabled &&
       frameTypeOk &&
@@ -395,6 +396,12 @@ trait WindowEvaluatorFactoryBase {
       case (IntegerLiteral(lo), CurrentRow) => Some(math.abs(lo) + 1)
       case _ => None
     }
+    // `ceil(W / blockSize)` is the minimum number of blocks a single frame can
+    // straddle; `+ 2` adds one block of slack at each end to cover the case
+    // where the frame's [lower, upper) interval is offset within its leftmost
+    // block (so the cursor temporarily holds the previous block as well) and
+    // the symmetric case at the right edge -- without this slack the LRU
+    // would thrash on the boundary blocks every time the cursor advances.
     w.map(ww => math.ceil(ww.toDouble / blockSize).toInt + 2).orElse(Some(8))
   }
 

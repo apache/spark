@@ -439,6 +439,7 @@ class DataSourceV2SQLSuiteV1Filter
     Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
       case (catalog, identifier) =>
         spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+        checkInsertMetrics(identifier, numInsertedRows = 3)
 
         val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
 

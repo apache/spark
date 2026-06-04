@@ -212,6 +212,10 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       SparkListenerApplicationEnd(2L)
       )
     logFile2.setReadable(false, false)
+    // setReadable(false) is a no-op for root users since they bypass file
+    // permission checks. Skip the test in that case.
+    assume(!logFile2.canRead, "Test requires the file to be unreadable; " +
+      "skipping when running as root.")
 
     updateAndCheck(provider) { list =>
       list.size should be (1)

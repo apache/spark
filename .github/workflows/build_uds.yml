@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build / Unix Domain Socket (master, Hadoop 3, JDK 17, Scala 2.13)"
+name: "Build / Unix Domain Socket (Hadoop 3, JDK 17, Scala 2.13)"
 
 on:
   schedule:

@@ -108,7 +108,7 @@ RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get update && apt-get install -y \
     python3.9 python3.9-distutils \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9
+RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9
 RUN python3.9 -m pip install --ignore-installed 'blinker>=1.6.2' # mlflow needs this
 RUN python3.9 -m pip install --force $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS && \
     python3.9 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \

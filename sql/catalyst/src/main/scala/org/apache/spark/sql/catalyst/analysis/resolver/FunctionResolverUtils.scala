@@ -19,7 +19,9 @@ package org.apache.spark.sql.catalyst.analysis.resolver
 
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{
+  FunctionResolution,
   ResolvedStar,
   Star,
   UnresolvedFunction,
@@ -35,6 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait FunctionResolverUtils {
   protected def expressionResolver: ExpressionResolver
+  protected def functionResolution: FunctionResolution
   protected def conf: SQLConf
 
   private val scopes = expressionResolver.getNameScopes
@@ -99,7 +102,21 @@ trait FunctionResolverUtils {
       unresolvedFunction: UnresolvedFunction,
       normalizeFunctionName: Boolean = true
   ): Boolean = {
-    !unresolvedFunction.isDistinct && isCount(unresolvedFunction, normalizeFunctionName)
+    !unresolvedFunction.isDistinct &&
+      isCount(unresolvedFunction, normalizeFunctionName) &&
+      !isUnqualifiedCountShadowedByTemp(unresolvedFunction)
+  }
+
+  /**
+   * Keep single-pass behavior aligned with fixed-point: when PATH puts system.session before
+   * system.builtin and a temp `count` exists, unqualified `count(*)` must not be rewritten to
+   * `count(1)`.
+   */
+  private def isUnqualifiedCountShadowedByTemp(unresolvedFunction: UnresolvedFunction): Boolean = {
+    unresolvedFunction.nameParts.length == 1 &&
+      functionResolution.isSessionBeforeBuiltinInPath &&
+      functionResolution.catalogManager.v1SessionCatalog
+        .isTemporaryFunction(FunctionIdentifier(unresolvedFunction.nameParts.head))
   }
 
   private def isCount(

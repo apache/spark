@@ -25,11 +25,16 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.streaming.runtime.ErrorNotifier
 
 /**
  * Implementation of CommitLog to perform asynchronous writes to storage
  */
-class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: ThreadPoolExecutor)
+class AsyncCommitLog(
+    sparkSession: SparkSession,
+    path: String,
+    executorService: ThreadPoolExecutor,
+    errorNotifier: ErrorNotifier = new ErrorNotifier())
   extends CommitLog(sparkSession, path) {
 
   // the cache needs to be enabled because we may not be persisting every entry to durable storage
@@ -48,7 +53,7 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
    *         the async write of the batch is completed.  Future may also be completed exceptionally
    *         to indicate some write error.
    */
-  def addAsync(batchId: Long, metadata: CommitMetadata): CompletableFuture[Long] = {
+  def addAsync(batchId: Long, metadata: CommitMetadataBase): CompletableFuture[Long] = {
     require(metadata != null, "'null' metadata cannot be written to a metadata log")
     val future: CompletableFuture[Long] = addNewBatchByStreamAsync(batchId) { output =>
       serialize(metadata, output)
@@ -72,7 +77,7 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
    * @param metadata metadata of batch to write
    * @return true if operation is successful otherwise false.
    */
-  def addInMemory(batchId: Long, metadata: CommitMetadata): Boolean = {
+  def addInMemory(batchId: Long, metadata: CommitMetadataBase): Boolean = {
     if (batchCache.containsKey(batchId)) {
       false
     } else {
@@ -109,6 +114,14 @@ class AsyncCommitLog(sparkSession: SparkSession, path: String, executorService: 
       executorService.submit(new Runnable {
         override def run(): Unit = {
           try {
+            val priorError = errorNotifier.getError().orNull
+            if (priorError != null) {
+              logWarning(log"Skipping async commit write for batch " +
+                log"${MDC(LogKeys.BATCH_ID, batchId)} because a previous async " +
+                log"write task already failed", priorError)
+              future.completeExceptionally(priorError)
+              return
+            }
             if (fileManager.exists(batchMetadataFile)) {
               future.complete(false)
             } else {

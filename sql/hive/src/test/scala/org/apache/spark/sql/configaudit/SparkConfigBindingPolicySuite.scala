@@ -36,7 +36,7 @@ class SparkConfigBindingPolicySuite extends SparkFunSuite {
 
   test("Test adding bindingPolicy to config") {
     val allConfigs = SQLConf.getConfigEntries().asScala.filter { entry =>
-      entry.key == SQLConf.VIEW_SCHEMA_EVOLUTION_PRESERVE_USER_COMMENTS.key
+      entry.key == SQLConf.PLAN_CHANGE_LOG_LEVEL.key
     }
     assert(allConfigs.head.bindingPolicy.isDefined)
     assert(allConfigs.head.bindingPolicy.get == ConfigBindingPolicy.SESSION)

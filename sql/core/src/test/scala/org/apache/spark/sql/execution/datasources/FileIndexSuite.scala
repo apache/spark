@@ -31,7 +31,8 @@ import org.mockito.Mockito.{mock, when}
 
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -655,6 +656,28 @@ class FileIndexSuite extends SharedSparkSession {
     assert(FileIndexOptions.isValidOption("modifiedbefore"))
     assert(FileIndexOptions.isValidOption("modifiedafter"))
     assert(FileIndexOptions.isValidOption("pathglobfilter"))
+  }
+
+  test("recursiveFileLookup with a user-specified partition spec is rejected") {
+    withTempDir { dir =>
+      val partitionSchema = StructType(Seq(StructField("year", IntegerType, nullable = true)))
+      val partitionSpec = PartitionSpec(
+        partitionSchema,
+        Seq(PartitionPath(InternalRow(2024), new Path(dir.getCanonicalPath))))
+      val fileIndex = new InMemoryFileIndex(
+        spark,
+        rootPathsSpecified = Seq(new Path(dir.getCanonicalPath)),
+        parameters = Map("recursiveFileLookup" -> "true"),
+        userSpecifiedSchema = None,
+        userSpecifiedPartitionSpec = Some(partitionSpec))
+      checkError(
+        exception = intercept[AnalysisException] {
+          fileIndex.listFiles(Nil, Nil)
+        },
+        condition = "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE",
+        parameters = Map.empty[String, String]
+      )
+    }
   }
 
   test("SPARK-52339: Correctly compare root paths") {

@@ -58,9 +58,11 @@ private[hive] object IsolatedClientLoader extends Logging {
       resolvedVersions((resolvedVersion, hadoopVersion))
     } else {
       val remoteRepos = sparkConf.get(SQLConf.ADDITIONAL_REMOTE_REPOSITORIES)
+      val ivySettingsPath = sparkConf.getOption(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       val (downloadedFiles, actualHadoopVersion) =
         try {
-          (downloadVersion(resolvedVersion, hadoopVersion, ivyPath, remoteRepos), hadoopVersion)
+          (downloadVersion(resolvedVersion, hadoopVersion, ivyPath, ivySettingsPath, remoteRepos),
+            hadoopVersion)
         } catch {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
@@ -73,7 +75,8 @@ private[hive] object IsolatedClientLoader extends Logging {
               log"set jars used by Hive metastore client through spark.sql.hive.metastore.jars " +
               log"in the production environment.")
             (downloadVersion(
-              resolvedVersion, fallbackVersion, ivyPath, remoteRepos), fallbackVersion)
+              resolvedVersion, fallbackVersion, ivyPath, ivySettingsPath, remoteRepos),
+              fallbackVersion)
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
       resolvedVersions((resolvedVersion, actualHadoopVersion))
@@ -120,6 +123,7 @@ private[hive] object IsolatedClientLoader extends Logging {
       version: HiveVersion,
       hadoopVersion: String,
       ivyPath: Option[String],
+      ivySettingsPath: Option[String],
       remoteRepos: String): Seq[URL] = {
     val hadoopJarNames = if (supportsHadoopShadedClient(hadoopVersion)) {
       Seq(s"org.apache.hadoop:hadoop-client-api:$hadoopVersion",
@@ -132,16 +136,23 @@ private[hive] object IsolatedClientLoader extends Logging {
         .map(a => s"org.apache.hive:$a:${version.fullVersion}") ++ hadoopJarNames
 
     implicit val printStream: PrintStream = SparkSubmit.printStream
+    val ivySettings = ivySettingsPath match {
+      case Some(path) =>
+        MavenUtils.loadIvySettings(path, Some(remoteRepos), ivyPath)
+      case None =>
+        MavenUtils.buildIvySettings(Some(remoteRepos), ivyPath)
+    }
+    val noCacheIvySettings = ivySettingsPath match {
+      case Some(path) =>
+        Some(MavenUtils.loadIvySettings(path, Some(remoteRepos), ivyPath))
+      case None =>
+        Some(MavenUtils.buildIvySettings(Some(remoteRepos), ivyPath, useLocalM2AsCache = false))
+    }
     val classpaths = quietly {
       MavenUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        MavenUtils.buildIvySettings(
-          Some(remoteRepos),
-          ivyPath),
-        Some(MavenUtils.buildIvySettings(
-          Some(remoteRepos),
-          ivyPath,
-          useLocalM2AsCache = false)),
+        ivySettings,
+        noCacheIvySettings,
         transitive = true,
         exclusions = version.exclusions)
     }

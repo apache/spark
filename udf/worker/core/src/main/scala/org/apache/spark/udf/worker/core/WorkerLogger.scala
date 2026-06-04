@@ -36,6 +36,8 @@ import org.apache.spark.annotation.Experimental
 trait WorkerLogger {
   def warn(msg: => String): Unit
   def warn(msg: => String, t: Throwable): Unit
+  def info(msg: => String): Unit
+  def info(msg: => String, t: Throwable): Unit
   def debug(msg: => String): Unit
   def debug(msg: => String, t: Throwable): Unit
 }
@@ -45,6 +47,8 @@ object WorkerLogger {
   val NoOp: WorkerLogger = new WorkerLogger {
     override def warn(msg: => String): Unit = ()
     override def warn(msg: => String, t: Throwable): Unit = ()
+    override def info(msg: => String): Unit = ()
+    override def info(msg: => String, t: Throwable): Unit = ()
     override def debug(msg: => String): Unit = ()
     override def debug(msg: => String, t: Throwable): Unit = ()
   }

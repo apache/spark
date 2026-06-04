@@ -44,6 +44,7 @@ jobs:
       jobs: >-
         {
           "build": "true",
+          "build-core-utils": "false",
           "docs": "true",
           "pyspark": "true",
           "sparkr": "true",

@@ -22,7 +22,6 @@ import java.util.UUID
 import scala.util.Random
 
 import org.apache.hadoop.conf.Configuration
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.should.Matchers
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -40,8 +39,7 @@ import org.apache.spark.util.Utils
  * [[TimestampAsPrefixKeyStateEncoder]] and [[TimestampAsPostfixKeyStateEncoder]].
  */
 @ExtendedSQLTest
-class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession
-  with BeforeAndAfterEach with Matchers {
+class RocksDBTimestampEncoderOperationsSuite extends SharedSparkSession with Matchers {
 
   // Test schemas
   private val keySchema = StructType(Seq(

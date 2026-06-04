@@ -19,7 +19,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesCumulativeMixin:
@@ -120,7 +119,6 @@ class SeriesCumulativeMixin:
 class SeriesCumulativeTests(
     SeriesCumulativeMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

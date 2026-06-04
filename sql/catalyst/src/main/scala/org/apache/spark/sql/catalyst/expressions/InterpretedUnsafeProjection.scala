@@ -159,13 +159,17 @@ object InterpretedUnsafeProjection {
 
         case PhysicalCalendarIntervalType => (v, i) => writer.write(i, v.getInterval(i))
 
+        case PhysicalTimestampNTZNanosType => (v, i) =>
+          writer.write(i, v.getTimestampNTZNanos(i))
+
+        case PhysicalTimestampLTZNanosType => (v, i) =>
+          writer.write(i, v.getTimestampLTZNanos(i))
+
         case PhysicalBinaryType => (v, i) => writer.write(i, v.getBinary(i))
 
         case _: PhysicalStringType => (v, i) => writer.write(i, v.getUTF8String(i))
 
-        case _: PhysicalGeographyType => (v, i) => writer.write(i, v.getGeography(i))
-
-        case _: PhysicalGeometryType => (v, i) => writer.write(i, v.getGeometry(i))
+        case _: PhysicalBinaryViewType => (v, i) => writer.write(i, v.getBinaryView(i))
 
         case PhysicalVariantType => (v, i) => writer.write(i, v.getVariant(i))
 
@@ -256,6 +260,9 @@ object InterpretedUnsafeProjection {
       case CalendarIntervalType =>
         // We can't call setNullAt() for CalendarIntervalType, we call write directly.
         unsafeWriter
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        // We can't call setNullAt() for nanos timestamp types, we call write directly.
+        unsafeWriter
       case BooleanType | ByteType =>
         (v, i) => {
           if (!v.isNullAt(i)) {
@@ -301,6 +308,7 @@ object InterpretedUnsafeProjection {
   @scala.annotation.tailrec
   private def getElementSize(dataType: DataType): Int = dataType match {
     case NullType | _: StringType | BinaryType | CalendarIntervalType | VariantType |
+         _: TimestampNTZNanosType | _: TimestampLTZNanosType |
          _: DecimalType | _: StructType | _: ArrayType | _: MapType => 8
     case udt: UserDefinedType[_] =>
       getElementSize(udt.sqlType)
