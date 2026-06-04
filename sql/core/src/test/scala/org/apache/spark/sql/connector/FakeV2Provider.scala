@@ -18,10 +18,12 @@
 package org.apache.spark.sql.connector
 
 import java.util
+import java.util.Optional
 
-import org.apache.spark.sql.connector.catalog.{SupportsV1OverwriteWithSaveAsTable, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Identifier, SessionConfigSupport, SupportsCatalogOptions, SupportsV1OverwriteWithSaveAsTable, Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, ScanBuilder}
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -92,4 +94,53 @@ class FakeV2ProviderWithV1SaveAsTableOverwriteWriteOptionDisabled
     extends FakeV2Provider
     with SupportsV1OverwriteWithSaveAsTable {
   override def addV1OverwriteWithSaveAsTableOption(): Boolean = false
+}
+
+/**
+ * Simulates a path-based connector that implements [[SupportsCatalogOptions]] and routes
+ * `pathformat.\`/path/to/t\`` SQL identifiers to a dedicated catalog (`pathformat_cat`).
+ * Tests register that catalog and assert against it so the SCO seam is exercised
+ * unambiguously: without SCO, `CatalogAndIdentifier` falls back to the current catalog
+ * (session catalog) and the target catalog stays empty.
+ */
+class FakePathBasedSource
+    extends FakeV2ProviderWithCustomSchema
+    with SupportsCatalogOptions
+    with DataSourceRegister {
+
+  override def shortName(): String = "pathformat"
+
+  override def extractCatalog(options: CaseInsensitiveStringMap): String =
+    FakePathBasedSource.CATALOG_NAME
+
+  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
+    Identifier.of(Array(shortName()), options.get("path"))
+
+  override def extractTimeTravelVersion(options: CaseInsensitiveStringMap): Optional[String] =
+    Optional.ofNullable(options.get("versionAsOf"))
+}
+
+object FakePathBasedSource {
+  val CATALOG_NAME: String = "pathformat_cat"
+}
+
+/**
+ * Like [[FakePathBasedSource]] but resolves the owning catalog from the session config
+ * `spark.datasource.pathformat2.catalog` instead of always returning null. This simulates
+ * a connector that lets users configure the target catalog.
+ */
+class FakePathBasedSourceWithSessionConfig
+    extends FakeV2ProviderWithCustomSchema
+    with SupportsCatalogOptions
+    with SessionConfigSupport
+    with DataSourceRegister {
+
+  override def shortName(): String = "pathformat2"
+
+  override def keyPrefix: String = "pathformat2"
+
+  override def extractCatalog(options: CaseInsensitiveStringMap): String = options.get("catalog")
+
+  override def extractIdentifier(options: CaseInsensitiveStringMap): Identifier =
+    Identifier.of(Array(shortName()), options.get("path"))
 }

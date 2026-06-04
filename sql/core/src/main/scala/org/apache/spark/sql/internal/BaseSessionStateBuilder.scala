@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
-import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
+import org.apache.spark.sql.connector.catalog.{DataSourceCatalogResolver, DefaultCatalogManager}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.aggregate.{ResolveEncodersInScalaAgg, Scal
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.{CheckViewReferences, CommandCheck}
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.v2.{TableCapabilityCheck, V2SessionCatalog}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, TableCapabilityCheck, V2SessionCatalog}
 import org.apache.spark.sql.execution.externalUDF.{ClassicExternalUDFPlanner,
   ExternalUDFPlanner, UnifiedExternalUDFPlanner}
 import org.apache.spark.sql.execution.streaming.runtime.ResolveWriteToStream
@@ -162,8 +162,11 @@ abstract class BaseSessionStateBuilder(
 
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
+  protected lazy val dataSourceCatalogResolver: DataSourceCatalogResolver =
+    DataSourceV2Utils.supportsCatalogOptionsResolver(conf)
+
   protected lazy val catalogManager = {
-    val cm = new DefaultCatalogManager(v2SessionCatalog, catalog)
+    val cm = new DefaultCatalogManager(v2SessionCatalog, catalog, dataSourceCatalogResolver)
     parentState.foreach(ps => cm.copySessionPathFrom(ps.catalogManager))
     cm
   }

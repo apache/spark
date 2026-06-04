@@ -252,3 +252,23 @@ object SharedTablesInMemoryRowLevelOperationTableCatalog {
 
   def reset(): Unit = sharedTables.clear()
 }
+
+/**
+ * A second [[SharedTablesInMemoryRowLevelOperationTableCatalog]] variant with an independent
+ * shared map. Tests that use this catalog must call
+ * [[SecondSharedTablesInMemoryRowLevelOperationTableCatalog.reset()]] in `afterEach`.
+ */
+class SecondSharedTablesInMemoryRowLevelOperationTableCatalog
+    extends InMemoryRowLevelOperationTableCatalog {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    super.initialize(name, options)
+    tables = SecondSharedTablesInMemoryRowLevelOperationTableCatalog.sharedTables
+  }
+}
+
+object SecondSharedTablesInMemoryRowLevelOperationTableCatalog {
+  private[catalog] val sharedTables: ConcurrentHashMap[Identifier, Table] =
+    new ConcurrentHashMap[Identifier, Table]()
+
+  def reset(): Unit = sharedTables.clear()
+}

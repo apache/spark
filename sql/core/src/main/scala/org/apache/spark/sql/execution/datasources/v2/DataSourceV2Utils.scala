@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.analysis.TimeTravelSpec
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, DataSourceCatalogResolver, Identifier, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
@@ -99,6 +99,60 @@ private[sql] object DataSourceV2Utils extends Logging {
     }
   }
 
+  /**
+   * Builds the [[CaseInsensitiveStringMap]] passed to a v2 [[TableProvider]]: session configs
+   * extracted from the provider, merged with the caller-supplied options-with-path map.
+   */
+  def buildDsOptions(
+      provider: TableProvider,
+      conf: SQLConf,
+      optionsWithPath: CaseInsensitiveMap[String]): CaseInsensitiveStringMap = {
+    val sessionOptions = extractSessionConfigs(provider, conf)
+    val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
+      optionsWithPath.originalMap
+    new CaseInsensitiveStringMap(finalOptions.asJava)
+  }
+
+  /**
+   * Extracts the catalog name and connector-canonical identifier from a
+   * [[SupportsCatalogOptions]] provider. Shared by all SCO entry points (DataFrame reader, SQL
+   * multipart-name resolution) so they observe identical null-handling semantics:
+   * `extractCatalog` returning null falls back to the session catalog, matching
+   * [[CatalogV2Util.getTableProviderCatalog]].
+   */
+  def extractCatalogAndIdentifier(
+      provider: SupportsCatalogOptions,
+      dsOptions: CaseInsensitiveStringMap): (String, Identifier) = {
+    val ident = provider.extractIdentifier(dsOptions)
+    val catalogName = Option(provider.extractCatalog(dsOptions))
+      .getOrElse(CatalogManager.SESSION_CATALOG_NAME)
+    (catalogName, ident)
+  }
+
+  /**
+   * Resolver bound to a session [[SQLConf]] that maps a multipart SQL identifier
+   * (e.g. `pathformat.\`/path/to/t\``) to a `(catalogName, identifier)` pair when the head
+   * names a registered [[SupportsCatalogOptions]] data source. Returns `None` for non-SCO
+   * sources or unknown format heads, letting the caller fall back to standard catalog
+   * resolution.
+   */
+  def supportsCatalogOptionsResolver(conf: SQLConf): DataSourceCatalogResolver =
+    (nameParts: Seq[String]) =>
+      try {
+        DataSource.lookupDataSourceV2(nameParts.head, conf).flatMap {
+          case sco: SupportsCatalogOptions =>
+            val optionsWithPath = getOptionsWithPaths(
+              CaseInsensitiveMap(Map.empty), nameParts.tail: _*)
+            val dsOptions = buildDsOptions(sco, conf, optionsWithPath)
+            Some(extractCatalogAndIdentifier(sco, dsOptions))
+          case _ => None
+        }
+      } catch {
+        // The format name is not a registered data source. Fall through and let the caller
+        // treat it as a catalog/namespace name.
+        case _: ClassNotFoundException => None
+      }
+
   def loadV2Source(
       sparkSession: SparkSession,
       provider: TableProvider,
@@ -108,23 +162,16 @@ private[sql] object DataSourceV2Utils extends Logging {
       paths: String*): Option[LogicalPlan] = {
     val catalogManager = sparkSession.sessionState.catalogManager
     val conf = sparkSession.sessionState.conf
-    val sessionOptions = DataSourceV2Utils.extractSessionConfigs(provider, conf)
-
     val optionsWithPath = getOptionsWithPaths(extraOptions, paths: _*)
-
-    val finalOptions = sessionOptions.filter { case (k, _) => !optionsWithPath.contains(k) } ++
-      optionsWithPath.originalMap
-    val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
+    val dsOptions = buildDsOptions(provider, conf, optionsWithPath)
     val (table, catalog, ident, timeTravelSpec) = provider match {
       case _: SupportsCatalogOptions if userSpecifiedSchema.nonEmpty =>
         throw new IllegalArgumentException(
           s"$source does not support user specified schema. Please don't specify the schema.")
       case hasCatalog: SupportsCatalogOptions =>
-        val ident = hasCatalog.extractIdentifier(dsOptions)
-        val catalog = CatalogV2Util.getTableProviderCatalog(
-          hasCatalog,
-          catalogManager,
-          dsOptions)
+        import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+        val (catalogName, ident) = extractCatalogAndIdentifier(hasCatalog, dsOptions)
+        val catalog = catalogManager.catalog(catalogName).asTableCatalog
 
         val version = hasCatalog.extractTimeTravelVersion(dsOptions)
         val timestamp = hasCatalog.extractTimeTravelTimestamp(dsOptions)

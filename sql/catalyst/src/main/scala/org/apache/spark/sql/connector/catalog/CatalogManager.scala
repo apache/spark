@@ -35,6 +35,19 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
+ * Resolves a multipart SQL identifier whose head names a path-based data source format
+ * (e.g. `pathformat.\`/path/to/t\``) to the owning catalog and a connector-canonicalized
+ * identifier, when the format implements [[SupportsCatalogOptions]].
+ */
+private[sql] trait DataSourceCatalogResolver {
+  def resolve(nameParts: Seq[String]): Option[(String, Identifier)]
+}
+
+private[sql] object DataSourceCatalogResolver {
+  val NoOp: DataSourceCatalogResolver = (_: Seq[String]) => None
+}
+
+/**
  * A thread-safe contract for managing [[CatalogPlugin]]s. Implementations resolve catalogs by
  * name and maintain the current catalog and namespace for a session.
  *
@@ -55,6 +68,7 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
   def defaultSessionCatalog: CatalogPlugin
   def v1SessionCatalog: SessionCatalog
   def tempVariableManager: TempVariableManager
+  def dataSourceCatalogResolver: DataSourceCatalogResolver
 
   // ---- Catalog access ----
   def catalog(name: String): CatalogPlugin
@@ -70,6 +84,14 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
       case _: CatalogNotFoundException => false
     }
   }
+
+  /**
+   * Returns the catalog name and connector-canonicalized identifier for a multipart SQL name
+   * whose head is a [[SupportsCatalogOptions]] data source format. Returns None if the format
+   * head is unknown or does not implement [[SupportsCatalogOptions]].
+   */
+  def catalogAndIdentForDataSource(nameParts: Seq[String]): Option[(String, Identifier)] =
+    dataSourceCatalogResolver.resolve(nameParts)
 
   // ---- Transactions ----
   def transaction: Option[Transaction] = None
@@ -112,7 +134,9 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
  */
 private[sql] class DefaultCatalogManager(
     override val defaultSessionCatalog: CatalogPlugin,
-    override val v1SessionCatalog: SessionCatalog) extends CatalogManager {
+    override val v1SessionCatalog: SessionCatalog,
+    override val dataSourceCatalogResolver: DataSourceCatalogResolver =
+      DataSourceCatalogResolver.NoOp) extends CatalogManager {
   import CatalogManager.SESSION_CATALOG_NAME
   import CatalogV2Util._
 

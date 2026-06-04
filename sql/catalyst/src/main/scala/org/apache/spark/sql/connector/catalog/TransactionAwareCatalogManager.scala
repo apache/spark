@@ -36,6 +36,8 @@ private[sql] class TransactionAwareCatalogManager(
   override def defaultSessionCatalog: CatalogPlugin = delegate.defaultSessionCatalog
   override def v1SessionCatalog: SessionCatalog = delegate.v1SessionCatalog
   override def tempVariableManager: TempVariableManager = delegate.tempVariableManager
+  override def dataSourceCatalogResolver: DataSourceCatalogResolver =
+    delegate.dataSourceCatalogResolver
 
   // ---- Catalog access: redirect to txn catalog when names match. ----
   override def catalog(name: String): CatalogPlugin = {
