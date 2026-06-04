@@ -218,7 +218,7 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
     }
   }
 
-  test("successful growth allocation should be reused when initial array has no capacity") {
+  test("successful growth allocation after spill should restore minimum pointer array") {
     val conf = new SparkConf()
       .setMaster("local[1]")
       .setAppName("ShuffleExternalSorterSuite")
@@ -232,24 +232,14 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
     Seq(false, true).foreach { useRadixSort =>
       conf.set(SHUFFLE_SORT_USE_RADIXSORT, useRadixSort)
       val initialSize = 1
-      val initialArrayBytes = initialSize * 8L
       var spillOnGrowthAllocation = false
-      var rejectInitialAllocationAfterSpill = false
       val taskMemoryManager = new TaskMemoryManager(memoryManager, 0) {
         override def allocatePage(size: Long, consumer: MemoryConsumer): MemoryBlock = {
           if (spillOnGrowthAllocation) {
             spillOnGrowthAllocation = false
-            assert(size > initialArrayBytes)
             consumer.spill(size, consumer)
-            val page = super.allocatePage(size, consumer)
-            rejectInitialAllocationAfterSpill = true
-            page
-          } else if (rejectInitialAllocationAfterSpill && size == initialArrayBytes) {
-            rejectInitialAllocationAfterSpill = false
-            null
-          } else {
-            super.allocatePage(size, consumer)
           }
+          super.allocatePage(size, consumer)
         }
       }
       val taskContext = mock[TaskContext]
@@ -267,9 +257,10 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       spillOnGrowthAllocation = true
       sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
 
-      assert(
-        rejectInitialAllocationAfterSpill,
-        "the successful growth allocation should be reused")
+      val inMemSorterField = sorter.getClass.getDeclaredField("inMemSorter")
+      inMemSorterField.setAccessible(true)
+      val inMemSorter = inMemSorterField.get(sorter).asInstanceOf[ShuffleInMemorySorter]
+      assert(inMemSorter.getMemoryUsage === inMemSorter.getInitialSizeWithUsableCapacity * 8L)
       assert(sorter.closeAndGetSpills().length === 2)
       sorter.cleanupResources()
     }
