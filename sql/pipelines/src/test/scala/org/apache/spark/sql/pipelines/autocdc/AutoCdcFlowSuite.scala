@@ -186,7 +186,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
 
   /** Convenience to extract the [[StructType]] of the projected `_cdc_metadata` column. */
   private def cdcMetadataStruct(schema: StructType): StructType =
-    schema(Scd1BatchProcessor.cdcMetadataColName).dataType.asInstanceOf[StructType]
+    schema(AutoCdcReservedNames.cdcMetadataColName).dataType.asInstanceOf[StructType]
 
   test(
     "AutoCdcMergeFlow.schema appends _cdc_metadata to the source schema when no " +
@@ -200,7 +200,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       .add("seq", LongType)
       .add(
         StructField(
-          Scd1BatchProcessor.cdcMetadataColName,
+          AutoCdcReservedNames.cdcMetadataColName,
           Scd1BatchProcessor.cdcMetadataColSchema(LongType),
           nullable = false
         )
@@ -223,7 +223,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       .add("seq", LongType)
       .add(
         StructField(
-          Scd1BatchProcessor.cdcMetadataColName,
+          AutoCdcReservedNames.cdcMetadataColName,
           Scd1BatchProcessor.cdcMetadataColSchema(LongType),
           nullable = false
         )
@@ -244,7 +244,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       .add("seq", LongType)
       .add(
         StructField(
-          Scd1BatchProcessor.cdcMetadataColName,
+          AutoCdcReservedNames.cdcMetadataColName,
           Scd1BatchProcessor.cdcMetadataColSchema(LongType),
           nullable = false
         )
@@ -270,7 +270,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
   test("AutoCdcMergeFlow.schema's _cdc_metadata field is non-null with nullable inner fields") {
     val resolvedFlow = newAutoCdcMergeFlow(threeColumnSourceDf())
 
-    val metaField = resolvedFlow.schema(Scd1BatchProcessor.cdcMetadataColName)
+    val metaField = resolvedFlow.schema(AutoCdcReservedNames.cdcMetadataColName)
     assert(!metaField.nullable, "_cdc_metadata column itself must be non-null")
 
     val metaStruct = metaField.dataType.asInstanceOf[StructType]
@@ -330,7 +330,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     // The user-selected portion drops `name`; the trailing column is the SCD1 metadata.
     assert(
       loadedDf.schema.fieldNames.toSeq ==
-      Seq("id", "seq", Scd1BatchProcessor.cdcMetadataColName)
+      Seq("id", "seq", AutoCdcReservedNames.cdcMetadataColName)
     )
   }
 
@@ -345,7 +345,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     assert(loadedDf.schema == resolvedFlow.schema)
     assert(
       loadedDf.schema.fieldNames.toSeq ==
-      Seq("id", "seq", Scd1BatchProcessor.cdcMetadataColName)
+      Seq("id", "seq", AutoCdcReservedNames.cdcMetadataColName)
     )
   }
 
@@ -442,7 +442,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
     // Locks in the previous engine-level guard at flow-construction time. Any future
     // regression where a user-supplied CDC stream carries the reserved metadata column name
     // should fail eagerly here.
-    val sourceDf = sourceDfWithExtraColumns(Scd1BatchProcessor.cdcMetadataColName -> StringType)
+    val sourceDf = sourceDfWithExtraColumns(AutoCdcReservedNames.cdcMetadataColName -> StringType)
 
     checkError(
       exception = intercept[AnalysisException] {
@@ -452,7 +452,7 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       sqlState = "42710",
       parameters = Map(
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
-        "columnName" -> Scd1BatchProcessor.cdcMetadataColName,
+        "columnName" -> AutoCdcReservedNames.cdcMetadataColName,
         "schemaName" -> "changeDataFeed",
         "reservedColumnNamePrefix" -> AutoCdcReservedNames.prefix
       )
