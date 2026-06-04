@@ -853,6 +853,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("TruncTimestamp of Long.MinValue overflows with ArithmeticException") {
+    withDefaultTimeZone(UTC) {
+      // Long.MinValue is the smallest representable timestamp value (in micros). Truncating it
+      // rounds the value down to an earlier instant, which falls below the representable micros
+      // range. The overflow must surface as an ArithmeticException instead of silently wrapping
+      // around to a bogus (positive) timestamp.
+      val minTimestamp = Literal.create(Long.MinValue, TimestampType)
+      Seq("YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE",
+          "SECOND", "MILLISECOND").foreach { fmt =>
+        checkExceptionInExpression[ArithmeticException](
+          TruncTimestamp(Literal.create(fmt, StringType), minTimestamp), "")
+      }
+    }
+  }
+
   test("unsupported fmt fields for trunc/date_trunc results null") {
     Seq("INVALID", "decade", "century", "millennium", "whatever", null).foreach { field =>
       testTruncDate(Date.valueOf("2000-03-08"), field, null)
