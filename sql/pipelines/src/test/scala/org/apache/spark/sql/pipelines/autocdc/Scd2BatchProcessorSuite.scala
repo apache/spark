@@ -31,6 +31,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
   /**
    * Build an aux-table [[DataFrame]] from explicit user rows + framework column values.
+   *
+   * TODO(SPARK-57265): switch to the production aux-schema helper once it lands, to avoid drift.
    */
   private def auxTableOf(
       userSchema: StructType,
@@ -742,7 +744,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -781,7 +783,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -809,7 +811,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -844,7 +846,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -882,7 +884,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = currentBatchId
     )
 
@@ -893,6 +895,40 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
         Row(1, "live",    10L, null, Row(10L)),
         Row(1, "retried", 11L, null, Row(11L))
       )
+    )
+  }
+
+  test("findAffectedRowsFromAuxiliaryTable falls back to the next anchor when the closest " +
+    "candidate was logically deleted by a different batch") {
+    val processor = processorWithKeys(Seq("id"))
+    val keySchema = new StructType().add("id", IntegerType)
+    val userSchema = keySchema.add("value", StringType)
+
+    val currentBatchId = 100L
+    val differentBatchId = 99L
+
+    // Codifies the step-ordering invariant inside `findAffectedRowsFromAuxiliaryTable`: the
+    // idempotency filter MUST run before the anchor `max(...)` aggregation. Here the closest
+    // pre-minSeq candidate (recordStartAt=7) was logically deleted by a different batch, so
+    // it is filtered out and the anchor falls back to recordStartAt=3. If a future refactor
+    // were to flip these two steps (e.g. as a "perf optimization"), this test would catch it
+    // because the natural-anchor row (7) would otherwise be selected and then dropped, leaving
+    // no anchor at all.
+    val aux = auxTableOf(userSchema)(
+      Row(1, "live3",  3L, null, Row(3L), null),
+      Row(1, "stale7", 7L, null, Row(7L), differentBatchId)
+    )
+    val minSeq = minSeqOf(keySchema)(Row(1, 10L))
+
+    val result = processor.findAffectedRowsFromAuxiliaryTable(
+      rawAuxiliaryTableDf = aux,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
+      batchId = currentBatchId
+    )
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(Row(1, "live3", 3L, null, Row(3L)))
     )
   }
 
@@ -911,7 +947,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -930,7 +966,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -966,7 +1002,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -990,7 +1026,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -1009,7 +1045,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -1031,7 +1067,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromAuxiliaryTable(
       rawAuxiliaryTableDf = aux,
-      perKeyMinimumSequenceInMicrobatch = minSeq,
+      perKeyMinimumSequenceInMicrobatchDf = minSeq,
       batchId = 100L
     )
 
@@ -1063,7 +1099,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      perKeyMinimumSequenceInMicrobatch = minSeq
+      perKeyMinimumSequenceInMicrobatchDf = minSeq
     )
 
     checkAnswer(
@@ -1100,7 +1136,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      perKeyMinimumSequenceInMicrobatch = minSeq
+      perKeyMinimumSequenceInMicrobatchDf = minSeq
     )
 
     checkAnswer(
@@ -1137,7 +1173,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      perKeyMinimumSequenceInMicrobatch = minSeq
+      perKeyMinimumSequenceInMicrobatchDf = minSeq
     )
 
     checkAnswer(
@@ -1159,7 +1195,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      perKeyMinimumSequenceInMicrobatch = minSeq
+      perKeyMinimumSequenceInMicrobatchDf = minSeq
     )
 
     assert(result.collect().isEmpty)
@@ -1177,9 +1213,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val result = processor.findAffectedRowsFromTargetTable(
       targetTableDf = target,
-      perKeyMinimumSequenceInMicrobatch = minSeq
+      perKeyMinimumSequenceInMicrobatchDf = minSeq
     )
 
     assert(result.collect().isEmpty)
   }
+
 }
