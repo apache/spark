@@ -19,14 +19,14 @@ license: |
   limitations under the License.
 ---
 
-Terminates the execution of an iteration of a looping statement and continues with the next iteration if the looping condition is met.
+Terminates the execution of an iteration of a looping statement and exits the loop.
 
 This statement may only be used within a [compound statement](compound-stmt.html).
 
 ## Syntax
 
 ```
-ITERATE label
+LEAVE label
 ```
 
 ## Parameters
