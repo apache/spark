@@ -51,7 +51,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -65,7 +65,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
 
-        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": False}):
+        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": False}):
             call = PlusFour()
             pudf = UserDefinedFunction(call, LongType())
             self.assertEqual([], pudf.transpiled)
@@ -84,7 +84,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -100,7 +100,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
             self.assertNotIn("UDF", physical_plan)
 
-        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": False}):
+        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": False}):
             call = PlusFour()
             pudf = UserDefinedFunction(call, LongType())
             self.assertEqual([], pudf.transpiled)
@@ -118,7 +118,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 if col is not None:
                     return col in "4"
 
-        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFS": True}):
+        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": True}):
             call = UnsupportedEx()
             pudf = UserDefinedFunction(call, BooleanType())
             self.assertEqual([], pudf.transpiled)
@@ -136,7 +136,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": False,
             }
         ):
@@ -153,7 +153,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -161,7 +161,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertTrue(
                 pudf.transpiled,
                 "expected transpilation to produce a Catalyst expression "
-                "when both transpilePyUDFS and ANSI mode are enabled",
+                "when both transpilePyUDFs and ANSI mode are enabled",
             )
 
     def test_udf_transpile_falls_back_for_unsupported_patterns(self):
@@ -216,7 +216,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -276,7 +276,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -318,7 +318,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         schema = StructType([StructField("a", LongType(), nullable=True)])
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -344,7 +344,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         schema = StructType([StructField("a", LongType(), nullable=True)])
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -390,7 +390,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         )
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -455,7 +455,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         schema = StructType([StructField("a", LongType(), nullable=True)])
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -489,7 +489,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         schema = StructType([StructField("a", LongType(), nullable=False)])
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -522,7 +522,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         schema = StructType([StructField("a", LongType(), nullable=True)])
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -568,7 +568,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         ]
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -623,7 +623,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -683,7 +683,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -778,7 +778,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):
@@ -822,7 +822,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         with self.sql_conf(
             {
-                "spark.sql.experimental.optimizer.transpilePyUDFS": True,
+                "spark.sql.experimental.optimizer.transpilePyUDFs": True,
                 "spark.sql.ansi.enabled": True,
             }
         ):

@@ -174,8 +174,12 @@ abstract class Optimizer(catalogManager: CatalogManager)
         PushDownPredicates))
 
     val batches: Seq[Batch] = flattenBatches(Seq(
-    // UDF substitution rules should be executed before any other rules.
-    // This is so that the optimizer can optimize the substituted results.
+    // UDF substitution rules should be executed before any other optimization rules
+    // so that the substituted Catalyst alternatives go through the same finalization
+    // (FinishAnalysis, RewriteWithExpression, etc.) and downstream optimization as
+    // any other expression. Anything ConvertToCatalyst leaves behind -- including
+    // RuntimeReplaceable nodes inside transpiled options -- is still rewritten by
+    // the FinishAnalysis batch that runs immediately after.
     Batch("Convert python UDFs to Catalyst", Once, ConvertToCatalyst),
     Batch("Finish Analysis", FixedPoint(1), FinishAnalysis),
     // We must run this batch after `ReplaceExpressions`, as `RuntimeReplaceable` expression

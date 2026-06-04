@@ -537,14 +537,15 @@ object SQLConf {
     .createWithDefault(true)
 
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
-    buildConf("spark.sql.experimental.optimizer.transpilePyUDFS")
+    buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .doc("When true, attempt to transpile Python UDFs to Catalyst expressions. " +
         "Transpilation also requires ANSI mode (spark.sql.ansi.enabled=true) -- " +
         "the rewritten expressions target ANSI semantics, so with ANSI off the " +
         "transpiler falls back to interpreted Python and a warning is logged at " +
         "UDF construction. " +
-        "This initial version only works in regular Spark with Spark Connect to follow"
+        "This initial version only works with non-Connect Spark; Spark Connect " +
+        "support is to follow."
     )
     .version("4.3.0")
     .booleanConf
@@ -554,8 +555,9 @@ object SQLConf {
   val PYTHON_UDF_TRANSPILERS =
     buildConf("spark.sql.experimental.optimizer.pyTranspilers")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
-    .doc("Which Python transpilers to use for transpiling UDFs. Without the default optimizer " +
-      "the first successful result will be the one used.")
+    .doc("Comma-separated list of Python transpilers to attempt, in order. " +
+      "The first transpiler that successfully produces a Catalyst expression " +
+      "is used. Default: catalyst.")
     .version("4.3.0")
     .stringConf
     .createWithDefault("catalyst")

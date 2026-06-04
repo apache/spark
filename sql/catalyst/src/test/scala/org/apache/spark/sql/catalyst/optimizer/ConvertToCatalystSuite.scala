@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, Project}
 import org.apache.spark.sql.internal.SQLConf
@@ -41,6 +42,13 @@ class ConvertToCatalystSuite extends PlanTest {
   private def makePyUDF(input: Expression = attrA): PythonUDF =
     PythonUDF("udf", null, LongType, Seq(input),
       PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+
+  // A leaf PythonUDAF (grouped-agg pandas eval type, return type Long for parity
+  // with Count's output). func=null is intentional, as with makePyUDF.
+  private def makePyUDAF(input: Expression = attrA): PythonUDAF =
+    PythonUDAF("agg", null, LongType, Seq(input),
+      udfDeterministic = true,
+      evalType = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF)
 
   // A TranspiledPythonUDF wrapping pyUDF with a single Catalyst option.
   private def makeTPUDF(pyUDF: PythonUDF, catalystOpt: Expression): TranspiledPythonUDF =
@@ -192,6 +200,38 @@ class ConvertToCatalystSuite extends PlanTest {
       val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
       assert(result == preCoerced,
         s"Expected pre-coerced expression unchanged, got: $result")
+    }
+  }
+
+  // ---- UDAF cases (post-fromUDFExpr shape) ----
+  //
+  // After UserDefinedPythonFunction.fromUDFExpr lifts a PythonUDAF inside a
+  // TranspiledPythonUDF, the wrapper holds an AggregateExpression instead of a
+  // bare PythonUDAF. These tests pin the optimizer rule's behavior on that shape.
+
+  test("transpiles TranspiledPythonUDF wrapping AggregateExpression(PythonUDAF)") {
+    transpileOn {
+      val pyAgg = makePyUDAF().toAggregateExpression()
+      val catalystAgg = Count(Seq(attrA)).toAggregateExpression()
+      val tpudf = TranspiledPythonUDF("agg", pyAgg, List(catalystAgg))
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      assert(result == catalystAgg,
+        s"Expected catalyst aggregate alternative, got: $result")
+    }
+  }
+
+  test("falls back to AggregateExpression(PythonUDAF) when ANSI is off (UDAF)") {
+    ansiOff {
+      val pyAgg = makePyUDAF().toAggregateExpression()
+      val catalystAgg = Count(Seq(attrA)).toAggregateExpression()
+      val tpudf = TranspiledPythonUDF("agg", pyAgg, List(catalystAgg))
+      val result = ConvertToCatalyst.applyExpr(tpudf, parentIsUdf = false)
+      result match {
+        case ae: AggregateExpression =>
+          assert(ae.aggregateFunction.isInstanceOf[PythonUDAF],
+            s"Expected aggregateFunction to be PythonUDAF, got: ${ae.aggregateFunction}")
+        case other => fail(s"Expected AggregateExpression(PythonUDAF, ...), got: $other")
+      }
     }
   }
 }
