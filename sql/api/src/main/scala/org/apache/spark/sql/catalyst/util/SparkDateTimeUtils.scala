@@ -215,14 +215,20 @@ trait SparkDateTimeUtils {
    * The input is the already-extracted `nanosWithinMicro` component (`0..999`), so truncation is
    * independent of the epoch sign of the original timestamp value.
    *
-   * Precisions outside `[7, 9]` are passed through unchanged because the surrounding timestamp
-   * nanos types validate the bound.
+   * `precision` is expected to originate from a validated `TimestampNTZNanosType` /
+   * `TimestampLTZNanosType` (which can only be constructed with `p` in [7, 9]), so it is not a
+   * user-reachable input here. An out-of-range value therefore indicates an internal caller bug
+   * and raises an internal error rather than silently retaining all sub-microsecond digits.
    */
   private def truncateNanosWithinMicroToPrecision(nanosWithinMicro: Int, precision: Int): Int = {
     precision match {
       case 7 => (nanosWithinMicro / 100) * 100
       case 8 => (nanosWithinMicro / 10) * 10
-      case _ => nanosWithinMicro
+      case 9 => nanosWithinMicro
+      case _ =>
+        throw SparkException.internalError(
+          s"Fractional second precision $precision is out of range " +
+            s"[${TimestampNTZNanosType.MIN_PRECISION}, ${TimestampNTZNanosType.MAX_PRECISION}].")
     }
   }
 
