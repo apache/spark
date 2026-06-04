@@ -321,6 +321,7 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
       newIntReader().readUnsignedIntegers(NUM_ROWS, longVec, 0)
     }
     benchmark.addCase("readUnsignedLongs (INT64 -> Decimal(20,0))") { _ =>
+      unsignedLongVec.reset()
       newLongReader().readUnsignedLongs(NUM_ROWS, unsignedLongVec, 0)
     }
     benchmark.addCase("skipBytes") { _ => newIntReader().skipBytes(NUM_ROWS) }

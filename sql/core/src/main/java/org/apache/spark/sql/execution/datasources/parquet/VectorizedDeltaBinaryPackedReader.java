@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -70,6 +69,9 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   private int remainingInBlock = 0; // values in current block still to be read
   private int remainingInMiniBlock = 0; // values in current mini block still to be read
   private long[] unpackedValuesBuffer;
+  // Scratch buffer for narrowing long -> int during bulk readIntegers.
+  // Allocated eagerly in initFromPage, sized to miniBlockSizeInValues.
+  private int[] intScratchBuffer;
 
   private ByteBufferInputStream in;
 
@@ -95,6 +97,7 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     this.totalValueCount = BytesUtils.readUnsignedVarInt(in);
     this.bitWidths = new int[miniBlockNumInABlock];
     this.unpackedValuesBuffer = new long[miniBlockSizeInValues];
+    this.intScratchBuffer = new int[miniBlockSizeInValues];
     // read the first value
     firstValue = BytesUtils.readZigZagVarLong(in);
   }
@@ -140,7 +143,7 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
 
   @Override
   public void readIntegers(int total, WritableColumnVector c, int rowId) {
-    readValues(total, c, rowId, (w, r, v) -> w.putInt(r, (int) v));
+    readBulkIntegers(total, c, rowId);
   }
 
   // Based on VectorizedPlainValuesReader.readIntegersWithRebase
@@ -170,13 +173,13 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   @Override
   public void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
     readValues(total, c, rowId, (w, r, v) -> {
-      w.putByteArray(r, new BigInteger(Long.toUnsignedString(v)).toByteArray());
+      putUnsignedLongAsBigInteger(w, r, v);
     });
   }
 
   @Override
   public void readLongs(int total, WritableColumnVector c, int rowId) {
-    readValues(total, c, rowId, WritableColumnVector::putLong);
+    readBulkLongs(total, c, rowId);
   }
 
   @Override
@@ -215,6 +218,111 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     skipValues(total);
   }
 
+  // ---- Bulk read helpers for readIntegers / readLongs ----------------------------
+  //
+  // The generic readValues() path dispatches a lambda per value.  For the two most
+  // common callers (readIntegers, readLongs) we can do much better: compute a prefix
+  // sum over the unpacked deltas in-place, then bulk-copy the result into the column
+  // vector with putInts / putLongs (backed by System.arraycopy on-heap).
+
+  /**
+   * Callback for writing a chunk of prefix-summed absolute values from
+   * {@code unpackedValuesBuffer} into a column vector.  Called once per mini-block
+   * (not per value), so lambda overhead is negligible.
+   */
+  @FunctionalInterface
+  private interface BulkWriter {
+    void write(WritableColumnVector c, int rowId, long[] values, int start, int count);
+  }
+
+  /** Narrows long[] -> int[] scratch and bulk-writes via putInts. */
+  private void bulkWriteInts(WritableColumnVector c, int rowId,
+      long[] buf, int start, int count) {
+    for (int i = start; i < start + count; i++) {
+      intScratchBuffer[i] = (int) buf[i];
+    }
+    c.putInts(rowId, count, intScratchBuffer, start);
+  }
+
+  private void readBulkIntegers(int total, WritableColumnVector c, int rowId) {
+    checkReadBounds(total);
+    int remaining = total;
+    if (valuesRead == 0) {
+      c.putInt(rowId, (int) firstValue);
+      lastValueRead = firstValue;
+      rowId++;
+      remaining--;
+    }
+    readBulkLoop(remaining, c, rowId, this::bulkWriteInts);
+    valuesRead += total;
+  }
+
+  private void readBulkLongs(int total, WritableColumnVector c, int rowId) {
+    checkReadBounds(total);
+    int remaining = total;
+    if (valuesRead == 0) {
+      c.putLong(rowId, firstValue);
+      lastValueRead = firstValue;
+      rowId++;
+      remaining--;
+    }
+    readBulkLoop(remaining, c, rowId,
+        (col, r, buf, s, n) -> col.putLongs(r, n, buf, s));
+    valuesRead += total;
+  }
+
+  private void checkReadBounds(int total) {
+    if (valuesRead + total > totalValueCount) {
+      throw new ParquetDecodingException(
+          "No more values to read. Total values read:  " + valuesRead + ", total count: "
+              + totalValueCount + ", trying to read " + total + " more.");
+    }
+  }
+
+  /** Mini-block iteration loop shared by readBulkIntegers and readBulkLongs. */
+  private void readBulkLoop(int remaining, WritableColumnVector c, int rowId,
+      BulkWriter writer) {
+    while (remaining > 0) {
+      int n;
+      try {
+        n = loadMiniBlockBulk(remaining, c, rowId, writer);
+      } catch (IOException e) {
+        throw new ParquetDecodingException("Error reading mini block.", e);
+      }
+      rowId += n;
+      remaining -= n;
+    }
+  }
+
+  /**
+   * Loads the next mini-block (if needed), prefix-sums the deltas in-place, and
+   * delegates the type-specific column write to {@code writer}.
+   */
+  private int loadMiniBlockBulk(int remaining, WritableColumnVector c, int rowId,
+      BulkWriter writer) throws IOException {
+    if (remainingInBlock == 0) readBlockHeader();
+    if (remainingInMiniBlock == 0) unpackMiniBlock();
+
+    int start = miniBlockSizeInValues - remainingInMiniBlock;
+    int count = Math.min(remaining, remainingInMiniBlock);
+
+    // Prefix-sum: convert raw deltas -> absolute values in-place.
+    long running = lastValueRead;
+    long minDelta = minDeltaInCurrentBlock;
+    long[] buf = unpackedValuesBuffer;
+    for (int i = start; i < start + count; i++) {
+      running += minDelta + buf[i];
+      buf[i] = running;
+    }
+    lastValueRead = running;
+
+    writer.write(c, rowId, buf, start, count);
+
+    remainingInBlock -= count;
+    remainingInMiniBlock -= count;
+    return count;
+  }
+
   private void readValues(int total, WritableColumnVector c, int rowId,
       IntegerOutputWriter outputWriter) {
     if (valuesRead + total > totalValueCount) {
@@ -240,7 +348,7 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
       rowId += n;
       remaining -= n;
     }
-    valuesRead = total - remaining;
+    valuesRead += total;
   }
 
 
@@ -326,6 +434,14 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   private void skipValues(int total) {
     // Read the values but don't write them out (the writer output method is a no-op)
     readValues(total, null, -1, (w, r, v) -> {});
+  }
+
+  // Reusable buffer for unsigned long -> BigInteger encoding (9 bytes: sign + 8 value bytes).
+  private final ByteBuffer unsignedLongBuf = ByteBuffer.allocate(9);
+
+  private void putUnsignedLongAsBigInteger(WritableColumnVector c, int rowId, long v) {
+    int start = encodeUnsignedLongBigEndian(v, unsignedLongBuf);
+    c.putByteArray(rowId, unsignedLongBuf.array(), start, 9 - start);
   }
 
 }

@@ -16,6 +16,9 @@
  */
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+
 import org.apache.parquet.column.values.ValuesReader;
 import org.apache.parquet.io.api.Binary;
 import org.apache.spark.SparkUnsupportedOperationException;
@@ -26,6 +29,43 @@ import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
  * of methods that are not supported by concrete implementations
  */
 public class VectorizedReaderBase extends ValuesReader implements VectorizedValuesReader {
+
+  /**
+   * Encodes an unsigned long as a minimal big-endian two's-complement byte array
+   * compatible with {@link java.math.BigInteger} encoding. The result is written into
+   * the backing array of {@code buf} (which must have capacity >= 9). Returns the
+   * start offset; the valid bytes are {@code buf.array()[start .. 8]} (length = 9 - start).
+   *
+   * <p>This avoids the per-value overhead of
+   * {@code new BigInteger(Long.toUnsignedString(v)).toByteArray()} which allocates a
+   * String, a BigInteger, and a byte[] on every call.
+   */
+  static int encodeUnsignedLongBigEndian(long v, ByteBuffer buf) {
+    byte[] scratch = buf.array();
+    // ByteBuffer is big-endian by default; writes 8 bytes MSB-first at offset 1.
+    // Always write before the zero-check so that the buffer is current even when reused.
+    buf.putLong(1, v);
+    if (v == 0L) {
+      return 8;  // scratch[8] is already 0x00; caller writes 9 - 8 = 1 byte: [0x00]
+    }
+    // Find the first non-zero byte (minimal encoding).
+    int start = 1;
+    while (scratch[start] == 0) start++;
+    // Prepend 0x00 sign byte if MSB of the first significant byte is set.
+    if ((scratch[start] & 0x80) != 0) scratch[--start] = 0;
+    return start;
+  }
+
+  /**
+   * Convenience: encodes an unsigned long and returns a new byte[] with the minimal
+   * BigInteger-compatible encoding. Use {@link #encodeUnsignedLongBigEndian(long, ByteBuffer)}
+   * with a reusable buffer in hot paths to avoid allocation.
+   */
+  static byte[] unsignedLongToBytesBigEndian(long v) {
+    ByteBuffer buf = ByteBuffer.allocate(9);
+    int start = encodeUnsignedLongBigEndian(v, buf);
+    return Arrays.copyOfRange(buf.array(), start, 9);
+  }
 
   @Override
   public void skip() {
