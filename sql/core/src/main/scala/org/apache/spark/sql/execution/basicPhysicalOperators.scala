@@ -315,8 +315,12 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // predicate that needs them. With no common subexpression the prologue is pure overhead
     // (e.g. decoding a decimal column for rows a cheaper earlier predicate would reject), so we
     // fall back to `generatePredicateCode`.
+    //
+    // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
+    // turned off independently of subexpression elimination elsewhere.
     val (prologueCode, predicateCode) =
-      if (conf.subexpressionEliminationEnabled && otherPreds.nonEmpty &&
+      if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
+          otherPreds.nonEmpty &&
           otherPredsEquivalentExpressions.getCommonSubexpressions.nonEmpty) {
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
@@ -1013,16 +1017,38 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = Seq(unionedInputRDD)
 
-  // Set in `doProduce`, read in `doConsume` during single-threaded code
-  // emission. `numOutputRowsTerm` is registered once per stage so the
-  // metric appears in `references[]` exactly once instead of once per
-  // child. `currentEmittingChild` tells `doConsume` which child's
-  // projection to bind.
-  @transient private var numOutputRowsTerm: String = _
-  @transient private var currentEmittingChild: Int = -1
+  // Per-emission codegen state, set in `doProduce` and read in `doConsume`.
+  // `numOutputRowsTerm` is registered once per stage so the metric appears in
+  // `references[]` exactly once instead of once per child; `currentEmittingChild`
+  // tells `doConsume` which child's projection to bind.
+  //
+  // A single `UnionExec` instance can have its codegen driven by more than one
+  // thread at the same time: a reused exchange/subquery stage is generated
+  // concurrently with the main plan, and async subquery / dynamic-pruning
+  // execution can overlap a driver-side `doCodeGen`. A plain field would let a
+  // racing `doProduce` reset `currentEmittingChild` to -1 while another thread
+  // is still in `doConsume`. Each `doCodeGen` pass is itself single-threaded
+  // (`produce` -> `doConsume` run inline on one thread), so a `ThreadLocal`
+  // isolates the state per pass without that cross-thread race.
+  //
+  // This state is valid only for the duration of one `doCodeGen` pass, not for
+  // the lifetime of a thread (much like the per-pass fields on `CodegenContext`,
+  // e.g. `currentPartitionIndexVar`, which `doProduce` saves and restores just
+  // below). `ThreadLocal` is correct because per-pass and per-thread coincide
+  // here: a pass runs inline on one thread and passes never nest on a thread.
+  // We keep it in a `ThreadLocal` rather than routing it through `ctx` because
+  // `CodegenContext` has no general-purpose per-pass attribute map; threading it
+  // through `ctx` would mean adding `UnionExec`-specific fields to a class shared
+  // by every operator. The `ThreadLocal` keeps this state local to the node that
+  // needs it. Resetting `currentEmittingChild` to -1 at the end of `doProduce`
+  // also guards against a stale value being read by a later, unrelated pass
+  // that reuses the same pooled thread.
+  @transient private lazy val numOutputRowsTerm = new ThreadLocal[String]
+  @transient private lazy val currentEmittingChild: ThreadLocal[Int] =
+    ThreadLocal.withInitial(() => -1)
 
   override protected def doProduce(ctx: CodegenContext): String = {
-    numOutputRowsTerm = metricTerm(ctx, "numOutputRows")
+    numOutputRowsTerm.set(metricTerm(ctx, "numOutputRows"))
 
     // For each partition of the unioned RDD, record its owning child and its
     // index within that child's RDD. Read both fields directly off the
@@ -1057,7 +1083,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     val savedPartIdxVar = ctx.currentPartitionIndexVar
     ctx.currentPartitionIndexVar = s"((int[]) $p2lRef)[partitionIndex]"
     val cases = children.zipWithIndex.map { case (c, i) =>
-      currentEmittingChild = i
+      currentEmittingChild.set(i)
       val producedCode = c.asInstanceOf[CodegenSupport].produce(ctx, this)
       val helper = ctx.freshName("unionChildProcess")
       val qualifiedHelper = ctx.addNewFunction(helper,
@@ -1071,7 +1097,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
          |  break;
          |}""".stripMargin
     }
-    currentEmittingChild = -1
+    currentEmittingChild.set(-1)
     ctx.currentPartitionIndexVar = savedPartIdxVar
 
     s"""
@@ -1087,7 +1113,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   override def doConsume(
       ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val i = currentEmittingChild
+    val i = currentEmittingChild.get
     require(i >= 0, "UnionExec.doConsume invoked outside doProduce emission window")
     // Route BoundReference reads through `currentVars` (the incoming row is
     // delivered as variables under WSCG, not via ctx.INPUT_ROW).
@@ -1097,7 +1123,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
     val projectedExprCodes = bound.map(_.genCode(ctx))
 
     s"""
-       |$numOutputRowsTerm.add(1L);
+       |${numOutputRowsTerm.get}.add(1L);
        |${consume(ctx, projectedExprCodes)}
      """.stripMargin
   }

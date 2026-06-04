@@ -16350,7 +16350,10 @@ def regexp_extract_all(
 
 @_try_remote_functions
 def regexp_replace(
-    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+    string: "ColumnOrName",
+    pattern: Union[str, Column],
+    replacement: Union[str, Column],
+    position: Optional[Union[int, Column]] = None,
 ) -> Column:
     r"""Replace all substrings of the specified string value that match regexp with replacement.
 
@@ -16358,6 +16361,8 @@ def regexp_replace(
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+    .. versionchanged:: 4.3.0
+        Supports the `position` parameter.
 
     Parameters
     ----------
@@ -16367,6 +16372,8 @@ def regexp_replace(
         column object or str containing the regexp pattern
     replacement : :class:`~pyspark.sql.Column` or str
         column object or str containing the replacement
+    position : :class:`~pyspark.sql.Column` or int, optional
+        position to start replacement. The first position is 1.
 
     Returns
     -------
@@ -16404,8 +16411,29 @@ def regexp_replace(
     +-------+-------+-----------+--------------------------------------------+
     |100-200|  (\d+)|         --|                                       -----|
     +-------+-------+-----------+--------------------------------------------+
+
+    Example 3: Replaces substrings starting from the specified position.
+    For the input string "100-200", position 5 starts replacement after "100-".
+
+    >>> df.select(sf.regexp_replace("str", r"(\d+)", "--", 5).alias("d")).show()
+    +------+
+    |     d|
+    +------+
+    |100---|
+    +------+
     """
-    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
+    if position is None:
+        return _invoke_function_over_columns(
+            "regexp_replace", string, lit(pattern), lit(replacement)
+        )
+    else:
+        return _invoke_function_over_columns(
+            "regexp_replace",
+            string,
+            lit(pattern),
+            lit(replacement),
+            lit(position),
+        )
 
 
 @_try_remote_functions

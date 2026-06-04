@@ -38,7 +38,7 @@ import org.apache.spark.TestUtils.assertExceptionMsg
 import org.apache.spark.sql._
 import org.apache.spark.sql.TestingUDT.IntervalData
 import org.apache.spark.sql.avro.AvroCompressionCodec._
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, LA, UTC}
@@ -52,6 +52,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.v2.avro.AvroScan
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 
 abstract class AvroSuite
@@ -3187,6 +3188,46 @@ abstract class AvroSuite
         val file = getResourceAvroFilePath("empty_file.avro")
         val df = spark.read.format("avro").load(file)
         assert(df.count() == 0)
+      }
+    }
+  }
+
+  test("SPARK-57166: nanosecond timestamp types are not supported in Avro") {
+    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      nanosTypes.foreach { nanosType =>
+        val expectedType = s""""${nanosType.sql}""""
+        withTempDir { dir =>
+          // Write path: a nanos-typed column cannot be written. The nanos literal is built
+          // directly from its internal value to avoid relying on cast/parser support.
+          val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
+          val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
+          val writeDir = new File(dir, "write").getCanonicalPath
+          checkError(
+            exception = intercept[AnalysisException] {
+              df.write.format("avro").mode("overwrite").save(writeDir)
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = Map(
+              "columnName" -> "`ts`",
+              "columnType" -> expectedType,
+              "format" -> "Avro"))
+
+          // Read path: a user-specified nanos schema is rejected. Write a benign file first
+          // so schema validation (not file listing) is what fails.
+          val readDir = new File(dir, "read").getCanonicalPath
+          Seq("a").toDF("ts").write.format("avro").mode("overwrite").save(readDir)
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.read.schema(new StructType().add("ts", nanosType))
+                .format("avro").load(readDir).collect()
+            },
+            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+            parameters = Map(
+              "columnName" -> "`ts`",
+              "columnType" -> expectedType,
+              "format" -> "Avro"))
+        }
       }
     }
   }
