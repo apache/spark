@@ -378,15 +378,14 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space ]; then
@@ -617,9 +616,9 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
-        key: precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -742,13 +741,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          pyspark-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
@@ -933,13 +932,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          sparkr-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -1084,13 +1083,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docs-coursier-
+          ${{ runner.os }}-coursier-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
@@ -1276,13 +1275,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docs-coursier-
+          ${{ runner.os }}-coursier-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
@@ -1444,15 +1443,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          tpcds-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1578,15 +1575,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docker-integration-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1666,15 +1661,13 @@ jobs:
           key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
             build-
-      - name: Cache Coursier local repository
-        uses: actions/cache@v5
+      - name: Restore Coursier local repository
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/coursier
-          key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            k8s-integration-coursier-
-            precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-            precompile-coursier-
+            ${{ runner.os }}-coursier-
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then
