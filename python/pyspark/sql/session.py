@@ -2288,11 +2288,14 @@ class SparkSession(SparkConversionMixin):
                         messageParameters={"normalized_path": normalized_path},
                     )
         if archive:
-            self._sc.addArchive(*path)
+            for p in path:
+                self._sc.addArchive(p)
         elif pyfile:
-            self._sc.addPyFile(*path)
+            for p in path:
+                self._sc.addPyFile(p)
         elif file:
-            self._sc.addFile(*path)  # type: ignore[arg-type]
+            for p in path:
+                self._sc.addFile(p)
 
     addArtifact = addArtifacts
 

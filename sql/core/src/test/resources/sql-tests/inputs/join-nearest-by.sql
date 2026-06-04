@@ -74,13 +74,15 @@ SELECT u.user_id, p.product
 FROM users u JOIN products p
   APPROX NEAREST 1 BY SIMILARITY map(u.score, p.pscore);
 
--- Error: EXACT mode with nondeterministic ranking expression
-SELECT u.user_id, p.product
-FROM users u JOIN products p
-  EXACT NEAREST 1 BY SIMILARITY rand() + p.pscore;
-
--- APPROX permits a nondeterministic ranking expression (per the SPIP). Rows differ run to
+-- Both EXACT and APPROX permit a nondeterministic ranking expression. Rows differ run to
 -- run, so we only assert the row count: one match per left row when k = 1.
+SELECT COUNT(*) AS num_rows
+FROM (
+  SELECT u.user_id, p.product
+  FROM users u JOIN products p
+    EXACT NEAREST 1 BY SIMILARITY rand() + p.pscore
+);
+
 SELECT COUNT(*) AS num_rows
 FROM (
   SELECT u.user_id, p.product

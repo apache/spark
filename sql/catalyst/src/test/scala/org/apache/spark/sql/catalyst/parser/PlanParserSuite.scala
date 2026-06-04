@@ -994,8 +994,8 @@ class PlanParserSuite extends AnalysisTest {
     val fragment2 = "tablesample(bucket 11 out of 10)"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (1.1) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "1.1"),
       context = ExpectedContext(
         fragment = fragment2,
         start = 16,
@@ -1157,8 +1157,8 @@ class PlanParserSuite extends AnalysisTest {
     // > 100 PERCENT
     checkError(
       exception = parseException(s"$sql tablesample system (150 percent) as x"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (1.5) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "1.5"),
       context = ExpectedContext(
         fragment = "tablesample system (150 percent)",
         start = 16,
@@ -1166,8 +1166,8 @@ class PlanParserSuite extends AnalysisTest {
     // Negative PERCENT
     checkError(
       exception = parseException(s"$sql tablesample system (-10 percent) as x"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (-0.1) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "-0.1"),
       context = ExpectedContext(
         fragment = "tablesample system (-10 percent)",
         start = 16,
@@ -1997,17 +1997,24 @@ class PlanParserSuite extends AnalysisTest {
         val sql8 = s"select * from my_tvf(arg1 => $sql8tableArg $sql8partition)"
         checkError(
           exception = parseException(sql8),
-          condition = "_LEGACY_ERROR_TEMP_0064",
-          parameters = Map(
-            "msg" ->
-              ("The table function call includes a table argument with an invalid " +
-              "partitioning/ordering specification: the PARTITION BY clause included multiple " +
-              "expressions without parentheses surrounding them; please add parentheses around " +
-              "these expressions and then retry the query again")),
+          condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+          parameters = Map("clause" -> "PARTITION BY"),
           context = ExpectedContext(
             fragment = s"$sql8tableArg $sql8partition",
             start = 29,
             stop = 110 + partition.length)
+        )
+        val sql9tableArg = "table(select col1, col2, col3 from v2)"
+        val sql9partition = s"$partition by col1 $order by col2 asc, col3 desc"
+        val sql9 = s"select * from my_tvf(arg1 => $sql9tableArg $sql9partition)"
+        checkError(
+          exception = parseException(sql9),
+          condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+          parameters = Map("clause" -> "ORDER BY"),
+          context = ExpectedContext(
+            fragment = s"$sql9tableArg $sql9partition",
+            start = 29,
+            stop = 99 + partition.length + order.length)
         )
       }
     }

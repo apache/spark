@@ -112,16 +112,16 @@ class StreamingInnerJoinV4Suite
         CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
       val keySchemaWithTimestamp = new StructType()
-        .add("field0", IntegerType, nullable = false)
-        .add("__event_time", LongType, nullable = false)
+        .add("field0", IntegerType)
+        .add("__event_time", LongType)
 
       val leftValueSchema: StructType = new StructType()
-        .add("key", IntegerType, nullable = false)
-        .add("leftValue", IntegerType, nullable = false)
+        .add("key", IntegerType)
+        .add("leftValue", IntegerType)
         .add("matched", BooleanType)
       val rightValueSchema: StructType = new StructType()
-        .add("key", IntegerType, nullable = false)
-        .add("rightValue", IntegerType, nullable = false)
+        .add("key", IntegerType)
+        .add("rightValue", IntegerType)
         .add("matched", BooleanType)
 
       val dummyValueSchema =

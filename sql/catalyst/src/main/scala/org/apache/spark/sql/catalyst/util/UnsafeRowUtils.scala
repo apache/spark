@@ -17,10 +17,37 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.nio.ByteOrder.{nativeOrder, BIG_ENDIAN}
+
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types._
 
 object UnsafeRowUtils {
+
+  private[util] sealed trait PaddingProvider {
+    def getPadding(row: UnsafeRow, index: Int, bitShift: Int): Long
+    def getPaddingBoolean(row: UnsafeRow, index: Int): Long
+  }
+
+  private[util] object PaddingProviderLE extends PaddingProvider {
+    override def getPadding(
+      row: UnsafeRow, index: Int, bitShift: Int): Long = row.getLong(index) >> bitShift
+    override def getPaddingBoolean(
+      row: UnsafeRow, index: Int): Long = row.getLong(index) >> 1
+  }
+
+  private[util] object PaddingProviderBE extends PaddingProvider {
+    override def getPadding(
+      row: UnsafeRow, index: Int, bitShift: Int): Long = row.getLong(index) << bitShift
+    override def getPaddingBoolean(
+      row: UnsafeRow, index: Int): Long = row.getLong(index) & 0xFEFFFFFFFFFFFFFFL
+  }
+
+  private val padder: PaddingProvider = if (nativeOrder() == BIG_ENDIAN) {
+    PaddingProviderBE
+  } else {
+    PaddingProviderLE
+  }
 
   /**
    * Use the following rules to check the integrity of the UnsafeRow:
@@ -74,23 +101,23 @@ object UnsafeRowUtils {
       case (field, index) if UnsafeRow.isFixedLength(field.dataType) && !row.isNullAt(index) =>
         field.dataType match {
           case BooleanType =>
-            if ((row.getLong(index) >> 1) != 0L) {
+            if (padder.getPaddingBoolean(row, index) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case ByteType =>
-            if ((row.getLong(index) >> 8) != 0L) {
+            if (padder.getPadding(row, index, 8) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case ShortType =>
-            if ((row.getLong(index) >> 16) != 0L) {
+            if (padder.getPadding(row, index, 16) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case IntegerType =>
-            if ((row.getLong(index) >> 32) != 0L) {
+            if (padder.getPadding(row, index, 32) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case FloatType =>
-            if ((row.getLong(index) >> 32) != 0L) {
+            if (padder.getPadding(row, index, 32) != 0L) {
               return Some(s"Fixed-length field validation error: field: $field, index: $index")
             }
           case _ =>
@@ -173,6 +200,7 @@ object UnsafeRowUtils {
   def avoidSetNullAt(dt: DataType): Boolean = dt match {
     case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS => true
     case CalendarIntervalType => true
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => true
     case _ => false
   }
 

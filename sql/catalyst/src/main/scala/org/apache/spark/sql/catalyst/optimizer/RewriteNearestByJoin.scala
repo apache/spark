@@ -56,11 +56,11 @@ import org.apache.spark.sql.catalyst.rules._
  * preserves array order, so the K rows emitted per left row appear best-first in the output
  * of this rule. (Downstream operators may reorder.)
  *
- * If `rankingExpression` is nondeterministic (legal only under `APPROX`), an extra
- * `Project` is inserted above the `Join` to materialize the value as `__ranking__`. The
- * standard projection machinery runs `Nondeterministic.initialize(partitionIndex)` on every
- * nondeterministic descendant before any value is evaluated, so `MaxMinByK` only ever sees a
- * plain `AttributeReference` and never evaluates a nondeterministic expression directly.
+ * If `rankingExpression` is nondeterministic, an extra `Project` is inserted above the `Join`
+ * to materialize the value as `__ranking__`. The standard projection machinery runs
+ * `Nondeterministic.initialize(partitionIndex)` on every nondeterministic descendant before any
+ * value is evaluated, so `MaxMinByK` only ever sees a plain `AttributeReference` and never
+ * evaluates a nondeterministic expression directly.
  *
  * Unlike [[RewriteAsOfJoin]], which uses a correlated scalar subquery, this rule materializes
  * the cross product directly. A scalar subquery returns a single value per left row, so it

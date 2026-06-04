@@ -86,6 +86,11 @@ JIRA_BASE = "https://issues.apache.org/jira/browse"
 JIRA_API_BASE = "https://issues.apache.org/jira"
 # Prefix added to temporary branches
 BRANCH_PREFIX = "PR_TOOL"
+# Set to a truthy value to skip the check that compares this script against apache/spark master.
+# Intended for committers iterating on the merge script itself, where a local diff is expected.
+SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
+# Path of this script relative to the repo root, used to fetch the canonical copy from master.
+MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
 
 
 def semver_branch_rank(name):
@@ -543,9 +548,17 @@ def cherry_pick(pr_num, merge_hash, default_branch, branch_names, target_ref, al
     maintenance-only bugfix). Returns the list of refs actually picked into, so
     the main loop can advance its remaining-branches list correctly.
     """
-    pick_ref = bold_input("Enter a branch name [%s]: " % default_branch)
-    if pick_ref == "":
-        pick_ref = default_branch
+    while True:
+        pick_ref = bold_input(f"Enter a branch name [{default_branch}]: ")
+        if pick_ref == "":
+            pick_ref = default_branch
+        if pick_ref in branch_names:
+            break
+        valid_branches = ", ".join(branch_names)
+        print_error(
+            f"'{pick_ref}' is not a known release branch. "
+            f"Valid branches: {valid_branches}. Please try again."
+        )
 
     sibling_x = _upstream_first_sibling(target_ref, pick_ref, branch_names, already_picked)
     if sibling_x is not None:
@@ -1055,13 +1068,15 @@ def get_current_ref():
 
 
 def initialize_jira():
+    # JIRA access is mandatory: a successful merge must resolve the associated ticket. Bail out
+    # early -- before any git work -- if a prerequisite is missing, rather than silently merging
+    # and leaving the JIRA open (which is easy to miss and tedious to reconcile after the fact).
     global asf_jira
     asf_jira = None
     jira_server = {"server": JIRA_API_BASE}
 
     if not JIRA_IMPORTED:
-        print_error("ERROR finding jira library. Run 'pip3 install jira' to install.")
-        continue_maybe("Continue without jira?")
+        fail("ERROR finding jira library. Run 'pip3 install jira' to install, then retry.")
     elif JIRA_ACCESS_TOKEN:
         client = jira.client.JIRA(
             jira_server, token_auth=JIRA_ACCESS_TOKEN, timeout=(JIRA_CONNECT_TIMEOUT, 30)
@@ -1090,11 +1105,69 @@ def initialize_jira():
             timeout=(JIRA_CONNECT_TIMEOUT, 30),
         )
     else:
-        print("Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set.")
-        continue_maybe("Continue without jira?")
+        fail(
+            "Neither JIRA_ACCESS_TOKEN nor JIRA_USERNAME/JIRA_PASSWORD are set. Configure JIRA "
+            "credentials (a personal access token is recommended) and retry. See "
+            "https://issues.apache.org/jira/secure/ViewProfile.jspa -> Personal Access Tokens."
+        )
+
+
+def check_script_up_to_date():
+    # Running a stale merge script can silently reintroduce already-fixed behavior (e.g. skipping
+    # JIRA resolution). Rather than download the whole file, ask GitHub only for the latest commit
+    # on master that touched this script (a small response) and fail if that commit is not already
+    # in the local history -- i.e. the committer is missing an upstream update. Being ahead of
+    # master (branched from it) is fine and does not trip the check. Best-effort: if master cannot
+    # be reached we warn and proceed rather than block merges on a transient network/rate error.
+    if SKIP_VERSION_CHECK:
+        print("SKIP_VERSION_CHECK is set; not verifying this script against master.")
+        return
+
+    url = "%s/commits?path=%s&sha=master&per_page=1" % (GITHUB_API_BASE, MERGE_SCRIPT_REPO_PATH)
+    try:
+        request = Request(url)
+        if GITHUB_OAUTH_KEY:
+            request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+        commits = json.load(urlopen(request))
+    except Exception as e:
+        print_error(
+            "Could not check %s against master (%s). Proceeding with the local copy."
+            % (MERGE_SCRIPT_REPO_PATH, e)
+        )
+        return
+    if not commits:
+        return
+    latest_sha = commits[0]["sha"]
+
+    # `git merge-base --is-ancestor` exits 0 when latest_sha is reachable from HEAD (we have it),
+    # nonzero when it is missing (stale) or unknown locally (never fetched).
+    try:
+        subprocess.check_call(
+            ["git", "merge-base", "--is-ancestor", latest_sha, "HEAD"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return
+    except subprocess.CalledProcessError:
+        pass
+
+    fail(
+        "Your local %s is out of date: apache/spark master has a newer revision (%s) that is not "
+        "in your local history. Update it before merging, e.g.:\n"
+        "    git fetch %s master && git checkout %s/master -- %s\n"
+        "then re-run. Set SKIP_VERSION_CHECK=1 to bypass (e.g. when changing this script itself)."
+        % (
+            MERGE_SCRIPT_REPO_PATH,
+            latest_sha[:12],
+            PUSH_REMOTE_NAME,
+            PUSH_REMOTE_NAME,
+            MERGE_SCRIPT_REPO_PATH,
+        )
+    )
 
 
 def main():
+    check_script_up_to_date()
     initialize_jira()
     global original_head
 
@@ -1116,9 +1189,9 @@ def main():
     url = pr["url"]
     title = pr["title"]
 
-    # Fail hard on WIP or DO-NOT-MERGE to prevent accidental merges.
-    if "[WIP]" in title or "[DO-NOT-MERGE]" in title:
-        fail("Cannot merge a PR with [WIP] or [DO-NOT-MERGE] in the title:\n%s" % title)
+    # Fail hard on draft, WIP, or DO-NOT-MERGE PRs to prevent accidental merges.
+    if pr.get("draft", False) or "[WIP]" in title or "[DO-NOT-MERGE]" in title:
+        fail("Cannot merge a draft PR #%s: %s" % (pr_num, title))
 
     # e.g. 'Revert "[SPARK-56357][BUILD] Upgrade sbt to 1.12.8"'
     is_revert_pr = title.startswith('Revert "') and title.endswith('"')
@@ -1258,13 +1331,31 @@ def main():
         )
         continue_maybe(msg)
 
-    if asf_jira is not None:
-        jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
-        for jira_id in jira_ids:
-            try:
-                print_jira_issue_summary(asf_jira.issue(jira_id))
-            except Exception:
-                print_error("Unable to fetch summary of %s" % jira_id)
+    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
+    # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
+    # Collect every offender so the committer sees the full list in one shot rather than
+    # discovering them one-by-one across repeated merge attempts.
+    blocking_issue_types = {"Epic", "Umbrella"}
+    blockers = []
+    for jira_id in jira_ids:
+        try:
+            issue = asf_jira.issue(jira_id)
+        except Exception:
+            print_error("Unable to fetch summary of %s" % jira_id)
+            continue
+        print_jira_issue_summary(issue)
+        issue_type = issue.fields.issuetype.name
+        if issue_type in blocking_issue_types:
+            blockers.append((jira_id, issue_type))
+    if blockers:
+        ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
+        fail(
+            "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
+            "tickets and MUST not be resolved by a single PR. File "
+            "Sub-task(s) under %s and update the PR title to reference "
+            "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
+        )
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
@@ -1304,16 +1395,14 @@ def main():
             if b in remaining_branches:
                 remaining_branches.remove(b)
 
-    if asf_jira is not None:
-        continue_maybe("Would you like to update an associated JIRA?")
-        jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
-            pr_num,
-            GITHUB_BASE,
-            pr_num,
-        )
-        resolve_jira_issues(title, merged_refs, jira_comment)
-    else:
-        print("Exiting without trying to close the associated JIRA.")
+    # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
+    continue_maybe("Would you like to update an associated JIRA?")
+    jira_comment = "Issue resolved by pull request %s\n[%s/%s]" % (
+        pr_num,
+        GITHUB_BASE,
+        pr_num,
+    )
+    resolve_jira_issues(title, merged_refs, jira_comment)
 
 
 if __name__ == "__main__":

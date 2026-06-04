@@ -25,12 +25,10 @@ SCALA_BINARY_VERSION: "2.13"
 SCALA_VERSION: "2.13.18"
 SPARK_ISSUE_TRACKER_URL: https://issues.apache.org/jira/browse/SPARK
 SPARK_GITHUB_URL: https://github.com/apache/spark
-# Before a new release, we should:
-#   1. update the `version` array for the new Spark documentation
-#      on https://github.com/algolia/docsearch-configs/blob/master/configs/apache_spark.json.
-#   2. update the value of `facetFilters.version` in `algoliaOptions` on the new release branch.
-# Otherwise, after release, the search results are always based on the latest documentation
-# (https://spark.apache.org/docs/latest/) even when visiting the documentation of previous releases.
+# The DocSearch index is maintained by the Algolia crawler at https://crawler.algolia.com/.
+# The crawler indexes only https://spark.apache.org/docs/latest/ and tags every page with
+# `version:latest`. All release branches share this single index, so `facetFilters` stays
+# pinned to `version:latest` everywhere and no per-release update is required.
 DOCSEARCH_SCRIPT: |
   docsearch({
       apiKey: 'd62f962a82bc9abb53471cb7b89da35e',

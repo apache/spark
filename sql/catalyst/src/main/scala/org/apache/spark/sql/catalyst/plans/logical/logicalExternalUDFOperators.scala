@@ -56,10 +56,12 @@ case class MapPartitionsExternalUDF(
     child: LogicalPlan)
   extends ExternalUDF {
 
-  // Map partitions always operate on StructTypes
-  override def output: Seq[Attribute] = toAttributes(
+  val nodeOutputAttributes = toAttributes(
     function.dataType.asInstanceOf[StructType]
   )
+
+  // Map partitions always operate on StructTypes
+  override def output: Seq[Attribute] = nodeOutputAttributes
 
   override protected def withNewChildInternal(
       newChild: LogicalPlan): MapPartitionsExternalUDF =

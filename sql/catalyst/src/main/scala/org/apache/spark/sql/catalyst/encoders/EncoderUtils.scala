@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.types.{PhysicalBinaryType, PhysicalIntegerType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, ObjectType, ShortType, StringType, StructType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VariantType, YearMonthIntervalType}
-import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteType, CalendarIntervalType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalType, DoubleType, FloatType, GeographyType, GeometryType, IntegerType, LongType, MapType, ObjectType, ShortType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, UserDefinedType, VariantType, YearMonthIntervalType}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String, VariantVal}
 
 /**
  * :: DeveloperApi ::
@@ -107,12 +107,13 @@ object EncoderUtils {
       case _: DayTimeIntervalType => classOf[PhysicalLongType.InternalType]
       case _: YearMonthIntervalType => classOf[PhysicalIntegerType.InternalType]
       case _: TimeType => classOf[PhysicalLongType.InternalType]
+      case _: TimestampNTZNanosType => classOf[TimestampNanosVal]
+      case _: TimestampLTZNanosType => classOf[TimestampNanosVal]
       case _: StringType => classOf[UTF8String]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]
-      case _: GeographyType => classOf[GeographyVal]
-      case _: GeometryType => classOf[GeometryVal]
+      case _: GeographyType | _: GeometryType => classOf[BinaryView]
       case ObjectType(cls) => cls
       case _ => typeJavaMapping.getOrElse(dt, classOf[java.lang.Object])
     }
@@ -126,6 +127,8 @@ object EncoderUtils {
     case BinaryType => classOf[Array[Byte]]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
+    case _: TimestampNTZNanosType => classOf[TimestampNanosVal]
+    case _: TimestampLTZNanosType => classOf[TimestampNanosVal]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]
     case _: MapType => classOf[MapData]

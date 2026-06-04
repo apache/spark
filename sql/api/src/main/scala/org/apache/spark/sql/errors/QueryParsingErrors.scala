@@ -288,6 +288,47 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def invalidTableSampleFractionError(fraction: Double, ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TABLESAMPLE_FRACTION",
+      messageParameters = Map("fraction" -> fraction.toString),
+      ctx)
+  }
+
+  def unsupportedRowFormatLinesTerminatedByError(
+      value: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.UNSUPPORTED_ROW_FORMAT_LINES_TERMINATED_BY",
+      messageParameters = Map("value" -> value),
+      ctx)
+  }
+
+  def invalidTableFunctionTableArgumentPartitioningError(
+      clause: String,
+      ctx: ParserRuleContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+      messageParameters = Map("clause" -> clause),
+      ctx)
+  }
+
+  def emptyQuantifiedPatternError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.EMPTY_QUANTIFIED_PATTERN", ctx)
+  }
+
+  def invalidWindowFrameBoundError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND", ctx)
+  }
+
+  def emptyRefreshResourcePathError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.EMPTY_REFRESH_RESOURCE_PATH", ctx)
+  }
+
+  def invalidRefreshResourcePathError(ctx: ParserRuleContext): Throwable = {
+    new ParseException(errorClass = "INVALID_SQL_SYNTAX.INVALID_REFRESH_RESOURCE_PATH", ctx)
+  }
+
   def invalidEscapeStringError(invalidEscape: String, ctx: PredicateContext): Throwable = {
     new ParseException(
       errorClass = "INVALID_ESC",

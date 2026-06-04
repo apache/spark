@@ -2955,7 +2955,8 @@ class SparkConnectPlanner(
       sessionHolder,
       command,
       responseObserver,
-      transformRelation)
+      transformRelation,
+      transformExpression)
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
       proto.ExecutePlanResponse

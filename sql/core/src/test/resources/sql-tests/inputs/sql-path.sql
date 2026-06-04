@@ -97,9 +97,20 @@ SELECT current_path();
 
 
 -- 2.3 SYSTEM_PATH shortcut ----------------------------------------------------
+--
+-- SYSTEM_PATH expands to the system-managed namespaces under the `system`
+-- catalog. Today that is just `system.builtin`; the shortcut is reserved for
+-- future system-managed schemas.
 
 SET PATH = SYSTEM_PATH;
 SELECT current_path();
+
+-- SYSTEM_PATH composes naturally with CURRENT_SCHEMA to give "system functions
+-- plus my working schema".
+USE spark_catalog.default;
+SET PATH = SYSTEM_PATH, CURRENT_SCHEMA;
+SELECT current_path();
+SET PATH = DEFAULT_PATH;
 
 
 -- 2.4 PATH keyword (append to live path) --------------------------------------

@@ -267,6 +267,8 @@ try:
             "pyspark",
             "pyspark.core",
             "pyspark.cloudpickle",
+            "pyspark.messages",
+            "pyspark.messages.socket",
             "pyspark.mllib",
             "pyspark.mllib.linalg",
             "pyspark.mllib.stat",

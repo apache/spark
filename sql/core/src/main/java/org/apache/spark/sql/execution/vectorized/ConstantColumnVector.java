@@ -24,6 +24,7 @@ import org.apache.spark.sql.vectorized.ColumnVector;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 
@@ -73,6 +74,11 @@ public class ConstantColumnVector extends ColumnVector {
       this.childData[0] = new ConstantColumnVector(1, DataTypes.IntegerType);
       this.childData[1] = new ConstantColumnVector(1, DataTypes.IntegerType);
       this.childData[2] = new ConstantColumnVector(1, DataTypes.LongType);
+    } else if (type instanceof TimestampNTZNanosType || type instanceof TimestampLTZNanosType) {
+      // Two columns. EpochMicros as Long. NanosWithinMicro as Short.
+      this.childData = new ConstantColumnVector[2];
+      this.childData[0] = new ConstantColumnVector(1, DataTypes.LongType);
+      this.childData[1] = new ConstantColumnVector(1, DataTypes.ShortType);
     } else if (type instanceof VariantType) {
       this.childData = new ConstantColumnVector[2];
       this.childData[0] = new ConstantColumnVector(1, DataTypes.BinaryType);
@@ -357,6 +363,14 @@ public class ConstantColumnVector extends ColumnVector {
     this.childData[0].setInt(value.months);
     this.childData[1].setInt(value.days);
     this.childData[2].setLong(value.microseconds);
+  }
+
+  /**
+   * Sets the nanosecond timestamp `value` for all rows
+   */
+  public void setTimestampNanosVal(TimestampNanosVal value) {
+    this.childData[0].setLong(value.epochMicros);
+    this.childData[1].setShort(value.nanosWithinMicro);
   }
 
   /**

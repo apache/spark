@@ -32,12 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{
-  ARRAYS_ZIP,
-  CONCAT,
-  MAP_FROM_ENTRIES,
-  TreePattern
-}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAY_DISTINCT, ARRAY_EXCEPT, ARRAY_INTERSECT, ARRAY_UNION, ARRAYS_OVERLAP, ARRAYS_ZIP, CONCAT, MAP_FROM_ENTRIES, TreePattern}
 import org.apache.spark.sql.catalyst.types.{DataTypeUtils, PhysicalDataType, PhysicalIntegralType}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -1809,6 +1804,9 @@ case class ArrayAppend(left: Expression, right: Expression) extends ArrayPendBas
 // scalastyle:off line.size.limit
 case class ArraysOverlap(left: Expression, right: Expression)
   extends BinaryArrayExpressionWithImplicitCast with Predicate {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_OVERLAP)
+
   override def nullIntolerant: Boolean = true
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
@@ -2054,13 +2052,7 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     val startInt = startVal.asInstanceOf[Int]
     val lengthInt = lengthVal.asInstanceOf[Int]
     val arr = xVal.asInstanceOf[ArrayData]
-    val startIndex = if (startInt == 0) {
-      throw QueryExecutionErrors.unexpectedValueForStartInFunctionError(prettyName)
-    } else if (startInt < 0) {
-      startInt + arr.numElements()
-    } else {
-      startInt - 1
-    }
+    val startIndex = ArrayExpressionUtils.sliceStartIndex(startInt, arr.numElements(), prettyName)
     if (lengthInt < 0) {
       throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(prettyName, lengthInt)
     }
@@ -2077,26 +2069,12 @@ case class Slice(x: Expression, start: Expression, length: Expression)
     nullSafeCodeGen(ctx, ev, (x, start, length) => {
       val startIdx = ctx.freshName("startIdx")
       val resLength = ctx.freshName("resLength")
-      val defaultIntValue = CodeGenerator.defaultValue(CodeGenerator.JAVA_INT, false)
+      val utils = classOf[ArrayExpressionUtils].getName
       s"""
-         |${CodeGenerator.JAVA_INT} $startIdx = $defaultIntValue;
-         |${CodeGenerator.JAVA_INT} $resLength = $defaultIntValue;
-         |if ($start == 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForStartInFunctionError("$prettyName");
-         |} else if ($start < 0) {
-         |  $startIdx = $start + $x.numElements();
-         |} else {
-         |  // arrays in SQL are 1-based instead of 0-based
-         |  $startIdx = $start - 1;
-         |}
-         |if ($length < 0) {
-         |  throw QueryExecutionErrors.unexpectedValueForLengthInFunctionError(
-         |    "$prettyName", $length);
-         |} else if ($length > $x.numElements() - $startIdx) {
-         |  $resLength = $x.numElements() - $startIdx;
-         |} else {
-         |  $resLength = $length;
-         |}
+         |${CodeGenerator.JAVA_INT} $startIdx =
+         |  $utils.sliceStartIndex($start, $x.numElements(), "$prettyName");
+         |${CodeGenerator.JAVA_INT} $resLength =
+         |  $utils.sliceLength($length, $x.numElements(), $startIdx, "$prettyName");
          |${genCodeForResult(ctx, ev, x, startIdx, resLength)}
        """.stripMargin
     })
@@ -2310,9 +2288,16 @@ case class ArrayJoin(
         }
       }
     } else {
+      // When array and delimiter are both non-nullable, neither nullSafeExec wrapper above runs,
+      // so reset ev.isNull here. doGenCode initializes ev.isNull to true whenever the expression
+      // is nullable (e.g. a nullable nullReplacement), and without this reset the computed result
+      // would be discarded as NULL. When the expression is non-nullable, ev.isNull is a literal
+      // false and must not be assigned.
+      val resetIsNull = if (nullable) s"${ev.isNull} = false;" else ""
       s"""
          |${arrayGen.code}
          |${delimiterGen.code}
+         |$resetIsNull
          |$resultCode""".stripMargin
     }
   }
@@ -4235,6 +4220,9 @@ trait ArraySetLike {
   since = "2.4.0")
 case class ArrayDistinct(child: Expression)
   extends UnaryExpression with ArraySetLike with ExpectsInputTypes {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_DISTINCT)
+
   override def nullIntolerant: Boolean = true
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType)
 
@@ -4431,6 +4419,8 @@ trait ArrayBinaryLike
 case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_UNION)
+
   @transient lazy val evalUnion: (ArrayData, ArrayData) => ArrayData = {
     if (TypeUtils.typeWithProperEquals(elementType)) {
       (array1, array2) =>
@@ -4607,6 +4597,8 @@ case class ArrayUnion(left: Expression, right: Expression) extends ArrayBinaryLi
   since = "2.4.0")
 case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_INTERSECT)
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck
@@ -4823,7 +4815,7 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
 }
 
 /**
- * Returns an array of the elements in the intersect of x and y, without duplicates
+ * Returns an array of the elements in x but not in y, without duplicates
  */
 @ExpressionDescription(
   usage = """
@@ -4839,6 +4831,8 @@ case class ArrayIntersect(left: Expression, right: Expression) extends ArrayBina
   since = "2.4.0")
 case class ArrayExcept(left: Expression, right: Expression) extends ArrayBinaryLike
   with ComplexTypeMergingExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAY_EXCEPT)
 
   private lazy val internalDataType: DataType = {
     dataTypeCheck

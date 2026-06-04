@@ -225,7 +225,7 @@ jobs:
         echo "Error: Failed to push after 5 attempts."
         exit 1
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}-${{ matrix.split }}
         path: target/benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar

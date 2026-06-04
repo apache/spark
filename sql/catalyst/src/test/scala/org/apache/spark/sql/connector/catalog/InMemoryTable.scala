@@ -158,10 +158,7 @@ class InMemoryTable(
 
     copiedTable.commits ++= commits.map(_.copy())
 
-    copiedTable.setVersion(version())
-    if (validatedVersion() != null) {
-      copiedTable.setValidatedVersion(validatedVersion())
-    }
+    copiedTable.setVersionAndValidatedVersionFrom(this)
 
     copiedTable
   }

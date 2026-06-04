@@ -161,7 +161,7 @@ class TaskContext:
         return cls._taskContext
 
     @classmethod
-    def _setTaskContext(cls: Type["TaskContext"], taskContext: "TaskContext") -> None:
+    def _setTaskContext(cls: Type["TaskContext"], taskContext: Optional["TaskContext"]) -> None:
         cls._taskContext = taskContext
 
     @classmethod

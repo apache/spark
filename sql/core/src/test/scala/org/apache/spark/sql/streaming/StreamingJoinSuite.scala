@@ -1181,16 +1181,16 @@ abstract class StreamingInnerJoinSuite extends StreamingInnerJoinBase {
       val hadoopConf = spark.sessionState.newHadoopConf()
       val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
-      val keySchemaForNums = new StructType().add("field0", IntegerType, nullable = false)
+      val keySchemaForNums = new StructType().add("field0", IntegerType)
       val keySchemaForIndex = keySchemaForNums.add("index", LongType)
       val numSchema: StructType = new StructType().add("value", LongType)
       val leftIndexSchema: StructType = new StructType()
-        .add("key", IntegerType, nullable = false)
-        .add("leftValue", IntegerType, nullable = false)
+        .add("key", IntegerType)
+        .add("leftValue", IntegerType)
         .add("matched", BooleanType)
       val rightIndexSchema: StructType = new StructType()
-        .add("key", IntegerType, nullable = false)
-        .add("rightValue", IntegerType, nullable = false)
+        .add("key", IntegerType)
+        .add("rightValue", IntegerType)
         .add("matched", BooleanType)
 
       val schemaLeftIndex = StateStoreColFamilySchema(

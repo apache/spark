@@ -658,9 +658,9 @@ class ConnectInvalidPipelineSuite extends PipelineTest with SharedSparkSession {
   test(
     "AutoCDC flow targeting a temporary view fails with AUTOCDC_RELATION_FOR_TEMPORARY_VIEW"
   ) {
-    // Temporary views in SDP normally accept either streaming or batch producing flows, but
+    // Temporary views in SDP normally accept either streaming or batch-producing flows, but
     // AutoCDC flows are an explicit exception: SCD reconciliation only runs at the
-    // streaming-table sink (`Scd1ForeachBatchExec`), so pointing an AutoCDC flow at a view
+    // streaming-table sink (`Scd1ForeachBatchHandler`), so pointing an AutoCDC flow at a view
     // would silently drop reconciliation and expose just the projected CDF to consumers.
     // `validateFlowStreamingness` rejects this case with a dedicated sub-condition under
     // INVALID_FLOW_QUERY_TYPE.
