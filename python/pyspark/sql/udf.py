@@ -219,7 +219,10 @@ class UserDefinedFunction:
         transpile_enabled = (
             False
             if session is None
-            else session.conf.get("spark.sql.experimental.optimizer.transpilePyUDFs") == "true"
+            else (
+                evalType == PythonEvalType.SQL_BATCHED_UDF
+                and session.conf.get("spark.sql.experimental.optimizer.transpilePyUDFs") == "true"
+            )
         )
         ansi_enabled = (
             False if session is None else session.conf.get("spark.sql.ansi.enabled") == "true"
