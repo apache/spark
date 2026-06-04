@@ -30980,6 +30980,230 @@ def arrow_udtf(
         return _create_pyarrow_udtf(cls=cls, returnType=returnType)
 
 
+# ---------------------- Vector Functions ----------------------
+
+
+@_try_remote_functions
+def vector_cosine_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Returns the cosine similarity between two float vectors.
+    The vectors must have the same dimension.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        first vector column.
+    right : :class:`~pyspark.sql.Column` or column name
+        second vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        cosine similarity as a float value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('a', ArrayType(FloatType())), StructField('b', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])], schema)
+    >>> df.select(sf.vector_cosine_similarity('a', 'b')).first()[0]
+    0.974631...
+    """
+    return _invoke_function_over_columns("vector_cosine_similarity", left, right)
+
+
+@_try_remote_functions
+def vector_inner_product(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Returns the inner product (dot product) between two float vectors.
+    The vectors must have the same dimension.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        first vector column.
+    right : :class:`~pyspark.sql.Column` or column name
+        second vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        inner product as a float value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('a', ArrayType(FloatType())), StructField('b', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])], schema)
+    >>> df.select(sf.vector_inner_product('a', 'b')).first()[0]
+    32.0
+    """
+    return _invoke_function_over_columns("vector_inner_product", left, right)
+
+
+@_try_remote_functions
+def vector_l2_distance(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Returns the Euclidean (L2) distance between two float vectors.
+    The vectors must have the same dimension.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        first vector column.
+    right : :class:`~pyspark.sql.Column` or column name
+        second vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        L2 distance as a float value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('a', ArrayType(FloatType())), StructField('b', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])], schema)
+    >>> df.select(sf.vector_l2_distance('a', 'b')).first()[0]
+    5.196152...
+    """
+    return _invoke_function_over_columns("vector_l2_distance", left, right)
+
+
+@_try_remote_functions
+def vector_norm(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    """Returns the Lp norm of a float vector using the specified degree.
+    Degree defaults to 2.0 (Euclidean norm) if unspecified.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    vector : :class:`~pyspark.sql.Column` or column name
+        input vector column.
+    degree : :class:`~pyspark.sql.Column` or column name, optional
+        norm degree (1.0 for L1, 2.0 for L2, float('inf') for infinity norm).
+        Defaults to 2.0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the Lp norm as a float value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('v', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([3.0, 4.0],)], schema)
+    >>> df.select(sf.vector_norm('v', sf.lit(2.0).cast('float'))).first()[0]
+    5.0
+    """
+    if degree is None:
+        return _invoke_function_over_columns("vector_norm", vector)
+    else:
+        return _invoke_function_over_columns("vector_norm", vector, degree)
+
+
+@_try_remote_functions
+def vector_normalize(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    """Normalizes a float vector to unit length using the specified norm degree.
+    Degree defaults to 2.0 (Euclidean norm) if unspecified.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    vector : :class:`~pyspark.sql.Column` or column name
+        input vector column.
+    degree : :class:`~pyspark.sql.Column` or column name, optional
+        norm degree (1.0 for L1, 2.0 for L2, float('inf') for infinity norm).
+        Defaults to 2.0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the normalized vector as an array of floats.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('v', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([3.0, 4.0],)], schema)
+    >>> df.select(sf.vector_normalize('v', sf.lit(2.0).cast('float'))).first()[0]
+    [0.6..., 0.8...]
+    """
+    if degree is None:
+        return _invoke_function_over_columns("vector_normalize", vector)
+    else:
+        return _invoke_function_over_columns("vector_normalize", vector, degree)
+
+
+@_try_remote_functions
+def vector_avg(col: "ColumnOrName") -> Column:
+    """Aggregate function: returns the element-wise mean of float vectors in a group.
+    All vectors must have the same dimension.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the element-wise average vector as an array of floats.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('v', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0],), ([3.0, 4.0],)], schema)
+    >>> df.select(sf.vector_avg('v')).first()[0]
+    [2.0, 3.0]
+    """
+    return _invoke_function_over_columns("vector_avg", col)
+
+
+@_try_remote_functions
+def vector_sum(col: "ColumnOrName") -> Column:
+    """Aggregate function: returns the element-wise sum of float vectors in a group.
+    All vectors must have the same dimension.
+
+    .. versionadded:: 4.2.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the element-wise sum vector as an array of floats.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('v', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0],), ([3.0, 4.0],)], schema)
+    >>> df.select(sf.vector_sum('v')).first()[0]
+    [4.0, 6.0]
+    """
+    return _invoke_function_over_columns("vector_sum", col)
+
+
 def _test() -> None:
     import doctest
     from pyspark.sql import SparkSession
