@@ -44,37 +44,26 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
   // to confirm cache substitution went through the txn path.
   val registeredScans: ArrayBuffer[Seq[Scan]] = ArrayBuffer.empty
 
-  // Test-only switch. When true, `registerScans` mimics the default Transaction interface
-  // behavior (always returns false) instead of running the version-equality check. Used to
-  // verify Spark's cache-bypass behavior when a connector hasn't implemented `registerScans`.
-  var useDefaultRegisterScans: Boolean = false
+  // Test-only switch. When true, `registerScans` unconditionally returns false, simulating
+  // a connector that rejects all cache reuse. Used to verify Spark's cache-bypass behavior.
+  var rejectRegisteredScansAttempt: Boolean = false
 
   def currentState: TransactionState = state
 
   def isClosed: Boolean = closed
 
-  // Accept the batch if relevant scans were built against the table at exactly the
-  // version the table is at now. A real connector could be more permissive. For example, it
-  // could accept older snapshots and record them in the read set for commit-time conflict
-  // detection.
-  //
-  // The scan list may include foreign scans that originated in other catalogs. We
-  // identify our own scans by structural type AND by table identity an InMemoryBatchScan
-  // whose underlying table is one this catalog instance is tracking. Foreign scans are
-  // non-transactional from our perspective and are ignored.
-  override def registerScans(javaScans: java.util.List[Scan]): Boolean = {
-    if (useDefaultRegisterScans) return false
+  // Accept the batch if all scans were built against the table at exactly the version the
+  // table is at now. A real connector could be more permissive. For example, it could accept
+  // older snapshots and record them in the read set for commit-time conflict detection.
+  override def registerScans(scans: Array[Scan]): Boolean = {
+    if (rejectRegisteredScansAttempt) return false
 
-    val scans = javaScans.asScala.toSeq
-    val myScans = scans.collect {
-      case s: InMemoryBaseTable#InMemoryBatchScan
-        if catalog.txnTables.values.exists(_.delegate eq s.table) => s
-    }
+    val myScans = scans.collect { case s: InMemoryBaseTable#InMemoryBatchScan => s }
     val accepted = myScans.forall { s =>
       s.builtAtTableVersion == s.currentTableVersion
     }
     if (accepted) {
-      registeredScans += scans
+      registeredScans += scans.toSeq
       myScans.foreach { s =>
         catalog.txnTables.values
           .find(_.delegate eq s.table)
@@ -126,6 +115,9 @@ class TxnTable(
   // Expose the same id as the delegate so that identity checks during transaction re-resolution
   // don't false-positive on the TxnTable wrapper having a different UUID.
   override val id: String = delegate.id
+
+  // The starting version should be the delegate version.
+  setVersion(delegate.version())
 
   // Preserve column IDs from the delegate so that column ID validation can correctly detect
   // drop-and-re-add scenarios (different IDs) and pass when columns are unchanged (same IDs).

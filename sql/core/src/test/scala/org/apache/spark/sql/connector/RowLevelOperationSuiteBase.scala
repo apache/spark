@@ -51,7 +51,7 @@ abstract class RowLevelOperationSuiteBase
   }
 
   after {
-    catalog.nextTxnUsesDefaultRegisterScans = false
+    catalog.nextTxnRejectRegisteredScansAttempt = false
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf("spark.sql.catalog.cat")
   }

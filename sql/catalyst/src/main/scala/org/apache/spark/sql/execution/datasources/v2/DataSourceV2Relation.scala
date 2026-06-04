@@ -28,10 +28,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, ExposesMetadataC
 import org.apache.spark.sql.catalyst.streaming.{StreamingSourceIdentifyingName, Unassigned}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{truncatedString, CharVarcharUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Column, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
-import org.apache.spark.sql.connector.catalog.constraints.Constraint
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
@@ -121,21 +120,6 @@ case class DataSourceV2Relation(
 
   override def newInstance(): DataSourceV2Relation = {
     copy(output = output.map(_.newInstance()))
-  }
-
-  // Replace the `table` field with an identity placeholder. This allows two relations
-  // that point at the same logical table compare equal even when one is wrapped (e.g.
-  // by a transaction-aware catalog). Note, when `Table.id()` is null we key only on catalog
-  // and identifier, thus, drop-and-recreate is not distinguished.
-  override def doCanonicalize(): LogicalPlan = {
-    val base = super.doCanonicalize().asInstanceOf[DataSourceV2Relation]
-    val catalogName = base.catalog.map(_.name())
-    (catalogName, base.identifier) match {
-      case (Some(cn), Some(ident)) =>
-        base.copy(table = DataSourceV2Relation.CanonicalTableKey(
-          cn, ident, Option(base.table.id())))
-      case _ => base
-    }
   }
 
   override lazy val metadataOutput: Seq[AttributeReference] = table match {
@@ -336,27 +320,6 @@ object ExtractV2ScanInfo {
 }
 
 object DataSourceV2Relation {
-
-  // Substituted into a canonicalized `DataSourceV2Relation.table` field so that two
-  // relations targeting the same metastore entity compare equal regardless of which concrete
-  // `Table` instance backs each side. Should only appear in canonicalized plans.
-  private[v2] case class CanonicalTableKey(
-      catalogName: String,
-      identifier: Identifier,
-      idOpt: Option[String]) extends Table {
-    override def id(): String = idOpt.orNull
-    override def name(): String = s"$catalogName.$identifier"
-    override def capabilities(): java.util.Set[TableCapability] = throwExecutionAccess()
-    override def columns(): Array[Column] = throwExecutionAccess()
-    override def partitioning(): Array[Transform] = throwExecutionAccess()
-    override def properties(): java.util.Map[String, String] = throwExecutionAccess()
-    override def constraints(): Array[Constraint] = throwExecutionAccess()
-    override def version(): String = throwExecutionAccess()
-
-    private def throwExecutionAccess(): Nothing =
-      throw SparkException.internalError(
-        "CanonicalTableKey is canonicalization-only and must not appear in execution plans")
-  }
 
   def create(
       table: Table,

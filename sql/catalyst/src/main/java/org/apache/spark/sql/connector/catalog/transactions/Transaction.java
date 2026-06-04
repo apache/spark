@@ -23,7 +23,6 @@ import org.apache.spark.sql.connector.catalog.TransactionalCatalogPlugin;
 import org.apache.spark.sql.connector.read.Scan;
 
 import java.io.Closeable;
-import java.util.List;
 
 /**
  * Represents a transaction.
@@ -69,27 +68,18 @@ public interface Transaction extends Closeable {
   void abort();
 
   /**
-   * Attempts to register a list of materialized scans against this transaction's read set.
+   * Attempts to register materialized scans against this transaction's read set.
    * <p>
-   * Spark calls this when considering reuse of a cached subtree during the transaction. The
-   * list contains every materialized scan in the candidate cached subtree. That may include
-   * scans that belong to catalogs other than this transaction's catalog. The connector can
-   * decide which scans to register or ignore.
+   * An example use case is cache reuse. Spark passes the scans of a candidate cached subtree
+   * for the transaction's catalog and the connector decides whether to accept them.
    * <p>
-   * The connector decides whether reusing the cached snapshots is compatible with the
-   * transaction's isolation contract. It must either accept the cache entry (returning
-   * {@code true} after adding any of its own scans to the read set) or refuse it (returning
-   * {@code false} without modifying the read set).
-   * <p>
-   * This method may be called multiple times during a single query with overlapping scan
-   * lists. Registering a scan that is already in the read set must be a no-op.
+   * The connector must either accept (returning {@code true} after adding any relevant scans
+   * to the read set) or refuse (returning {@code false} without modifying the read set).
    *
-   * @param scans Every materialized scan in the candidate cached subtree.
-   * @return true if the connector accepts reuse of the cache entry; false otherwise.
+   * @param scans the scans to register.
+   * @return true if the connector accepts the scans; false otherwise.
    */
-  default boolean registerScans(List<Scan> scans) {
-    return false;
-  }
+  boolean registerScans(Scan[] scans);
 
   /**
    * Releases any resources held by this transaction.

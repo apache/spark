@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.{sources, Column, Row}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.classic.MergeIntoWriter
-import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryBaseTable}
+import org.apache.spark.sql.connector.catalog.{Aborted, Committed, InMemoryBaseTable, InMemoryRowLevelOperationTableCatalog}
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableInfo
 import org.apache.spark.sql.functions._
@@ -1409,7 +1409,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
   }
 
-  test("default Transaction.registerScans (returns false) causes cache bypass") {
+  test("connector rejecting registerScans causes cache bypass") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
@@ -1420,9 +1420,9 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     sourceDF.cache()
     sourceDF.count()
 
-    // Force the default Transaction.registerScans (returns false unconditionally) so Spark
-    // must bypass the cache.
-    catalog.nextTxnUsesDefaultRegisterScans = true
+    // Force the connector to reject `registerScans` (return false) so Spark must bypass
+    // the cache.
+    catalog.nextTxnRejectRegisteredScansAttempt = true
 
     val (txn, txnTables) = executeTransaction {
       sourceDF
@@ -1433,7 +1433,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
-    assert(txn.registeredScans.isEmpty, "default registerScans should refuse the cache")
+    assert(txn.registeredScans.isEmpty, "rejected registerScans attempt")
 
     val targetTxnTable = txnTables(tableNameAsString)
     assert(targetTxnTable.scanEvents.flatten.exists {
@@ -1447,5 +1447,51 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         Row(1, 101, "hr"),
         Row(2, 201, "software"),
         Row(3, 300, "hr")))
+  }
+
+  test("registerScans receives only scans for the transaction's catalog") {
+    withSQLConf("spark.sql.catalog.cat2" ->
+        classOf[InMemoryRowLevelOperationTableCatalog].getName) {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      withTable("cat2.ns.lookup") {
+        sql("CREATE TABLE cat2.ns.lookup (pk INT) USING foo")
+        sql("INSERT INTO cat2.ns.lookup VALUES (1), (2)")
+
+        // Cache a subtree that joins a `cat` table (the txn catalog) with a `cat2` table.
+        val sourceDF = spark.table(tableNameAsString)
+          .join(spark.table("cat2.ns.lookup"), "pk")
+          .as("source")
+        sourceDF.cache()
+        sourceDF.count()
+
+        val (txn, _) = executeTransaction {
+          sourceDF
+            .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
+            .whenMatched()
+            .update(Map("salary" -> targetTableCol("salary").plus(1)))
+            .merge()
+        }
+
+        assert(txn.currentState == Committed)
+        val passed = txn.registeredScans.flatten.collect {
+          case s: InMemoryBaseTable#InMemoryBatchScan => s
+        }
+        assert(passed.nonEmpty, "registerScans should have been consulted")
+        // The filter should pass only the cat-side scan; the cat2 scan must be filtered out.
+        val catTable = catalog.loadTable(ident)
+        assert(passed.forall(_.table.id() == catTable.id()),
+          "only the txn-catalog's scan should reach registerScans")
+
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString"),
+          Seq(
+            Row(1, 101, "hr"),
+            Row(2, 201, "software")))
+      }
+    }
   }
 }

@@ -116,6 +116,21 @@ abstract class InMemoryBaseTable(
     }
   }
 
+  // Version-aware equality: two tables refer to the same metastore entity at the same state.
+  // Fallback to reference equality when `id()` is null (no metastore identity).
+  override def equals(obj: Any): Boolean = obj match {
+    case other: InMemoryBaseTable =>
+      if (this eq other) true
+      else if (id() == null || other.id() == null) false
+      else id() == other.id() && version() == other.version()
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    if (id() == null) System.identityHashCode(this)
+    else java.util.Objects.hash(id(), version())
+  }
+
   def increaseVersion(): Unit = {
     tableVersion += 1
   }

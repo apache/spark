@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution
 
-import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -483,11 +482,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   private def lookupCachedDataInternal(
       plan: LogicalPlan,
-      transactionOpt: Option[Transaction] = None): Option[CachedData] = {
-    val result = cachedData.find { cd =>
-      plan.sameResult(cd.plan) &&
-        transactionOpt.forall(txn => validateCachedEntryForTransaction(cd, txn))
-    }
+      canUse: CachedData => Boolean = _ => true): Option[CachedData] = {
+    val result = cachedData.find(cd => plan.sameResult(cd.plan) && canUse(cd))
     if (result.isDefined) {
       CacheManager.logCacheOperation(log"Dataframe cache hit for input plan:" +
         log"\n${MDC(QUERY_PLAN, plan)} matched with cache entry:" +
@@ -497,33 +493,36 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   // Decides whether the cached entry can be substituted into a plan being executed inside
-  // the given transaction. It identifies the scans and attempts to register them in the connector.
-  // The connector returns true if reusing the cached snapshot is consistent with its isolation
-  // contract. Note, the scans might belong to different catalogs. The connector can decide which
-  // one to register and which ones to ignore.
+  // the given transaction. Collects only the scans whose table belongs to the transaction's
+  // catalog and asks the connector whether reusing the cached snapshot is compatible with its
+  // isolation contract.
   private def validateCachedEntryForTransaction(cd: CachedData, txn: Transaction): Boolean = {
+    val txnCatalogName = txn.catalog().name()
+    val txnTables = cd.cachedRepresentation.cacheBuilder.logicalPlan.collectWithSubqueries {
+      case r: DataSourceV2Relation if r.catalog.exists(_.name() == txnCatalogName) => r.table
+    }.toSet
     val scans = collectWithSubqueries(cd.cachedRepresentation.cacheBuilder.cachedPlan) {
-      case b: BatchScanExec => b.scan
+      case b: BatchScanExec if txnTables.contains(b.table) => b.scan
     }
-    scans.isEmpty || txn.registerScans(scans.asJava)
+    scans.isEmpty || txn.registerScans(scans.toArray)
   }
 
   /**
    * Replaces segments of the given logical plan with cached versions where possible. The input
    * plan must be normalized.
    *
-   * @param plan           the plan to rewrite.
-   * @param transactionOpt if defined, each candidate cache hit is validated against the
-   *                       transaction's isolation contract (via `Transaction.registerScans`).
+   * @param plan   the plan to rewrite.
+   * @param canUse predicate filtering which cached entries are eligible for substitution.
+   *               Defaults to accepting any entry.
    */
   private[sql] def useCachedData(
       plan: LogicalPlan,
-      transactionOpt: Option[Transaction] = None): LogicalPlan = {
+      canUse: CachedData => Boolean = _ => true): LogicalPlan = {
     val newPlan = plan transformDown {
       case command: Command => command
 
       case currentFragment =>
-        lookupCachedDataInternal(currentFragment, transactionOpt).map { cached =>
+        lookupCachedDataInternal(currentFragment, canUse).map { cached =>
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
@@ -536,7 +535,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
 
     val result = newPlan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION)) {
-      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, transactionOpt))
+      case s: SubqueryExpression => s.withNewPlan(useCachedData(s.plan, canUse))
     }
 
     if (result.fastEquals(plan)) {
@@ -551,6 +550,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     }
     result
   }
+
+  /** Transaction-aware variant of [[useCachedData]]. */
+  private[sql] def useCachedData(plan: LogicalPlan, txn: Transaction): LogicalPlan =
+    useCachedData(plan, validateCachedEntryForTransaction(_, txn))
 
   /**
    * Tries to re-cache all the cache entries that contain `resourcePath` in one or more
