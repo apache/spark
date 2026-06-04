@@ -3803,6 +3803,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val USE_HASH_AGG = buildConf("spark.sql.execution.useHashAggregateExec")
+    .internal()
+    .doc("Decides if we use HashAggregateExec")
+    .version("4.3.0")
+    .booleanConf
+    .createWithDefault(true)
+
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
       .doc("Whether to ignore null fields when generating JSON objects in JSON data source and " +
@@ -8188,6 +8195,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def useHashAggregation: Boolean = getConf(USE_HASH_AGG)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 

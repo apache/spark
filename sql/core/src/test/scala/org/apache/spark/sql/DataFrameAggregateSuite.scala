@@ -3322,7 +3322,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
-      Seq("spark.sql.test.forceApplySortAggregate" -> "true")
+      Seq(SQLConf.USE_HASH_AGG -> "false")
     )
 
     // Make tests faster
