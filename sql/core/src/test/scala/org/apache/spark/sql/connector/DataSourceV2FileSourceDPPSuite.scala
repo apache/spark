@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningExpression, DynamicPruningSubquery}
-import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.catalyst.expressions.{DynamicPruning, DynamicPruningExpression, DynamicPruningSubquery, Expression}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.internal.SQLConf
@@ -59,8 +59,7 @@ class DataSourceV2FileSourceDPPSuite extends QueryTest with SharedSparkSession {
     spark.read.parquet(dimPath).createOrReplaceTempView("dim")
   }
 
-  private def collectDppFilters(plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan)
-    : Seq[org.apache.spark.sql.catalyst.expressions.Expression] = {
+  private def collectDppFilters(plan: LogicalPlan): Seq[Expression] = {
     plan.collect {
       case f: Filter if f.condition.exists(_.isInstanceOf[DynamicPruningSubquery]) => f.condition
     }
