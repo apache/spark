@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayTransform, ArrayUnion, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, TransformValues, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
@@ -31,59 +31,82 @@ import org.apache.spark.util.ArrayImplicits._
  * We need to take care of special floating numbers (NaN and -0.0) in several places:
  *   1. When compare values, different NaNs should be treated as same, `-0.0` and `0.0` should be
  *      treated as same.
- *   2. In aggregate grouping keys, different NaNs should belong to the same group, -0.0 and 0.0
+ *   2. In aggregate grouping keys, different NaNs should belong to the same group, `-0.0` and `0.0`
  *      should belong to the same group.
  *   3. In join keys, different NaNs should be treated as same, `-0.0` and `0.0` should be
  *      treated as same.
- *   4. In window partition keys, different NaNs should belong to the same partition, -0.0 and 0.0
- *      should belong to the same partition.
+ *   4. In window partition keys, different NaNs should belong to the same partition, `-0.0`
+ *      and `0.0` should belong to the same partition.
+ *   5. In hash-based array set operations, different NaNs should be treated as same, `-0.0`
+ *      and `0.0` should be treated as same.
  *
- * Case 1 is fine, as we handle NaN and -0.0 well during comparison. For complex types, we
+ * Case 1 is fine, as we handle NaN and `-0.0` well during comparison. For complex types, we
  * recursively compare the fields/elements, so it's also fine.
  *
  * Case 2, 3 and 4 are problematic, as Spark SQL turns grouping/join/window partition keys into
  * binary `UnsafeRow` and compare the binary data directly. Different NaNs have different binary
- * representation, and the same thing happens for -0.0 and 0.0.
+ * representation, and the same thing happens for `-0.0` and `0.0`.
  *
- * This rule normalizes NaN and -0.0 in window partition keys, join keys and aggregate grouping
- * keys.
+ * Case 5 is problematic for a similar reason: hash-based array set operations compare elements by
+ * their binary representation via hash sets.
+ *
+ * This rule runs in two places:
+ *    1. Early in `FinishAnalysis` (right after `ReplaceExpressions` and before `EvalInlineTables`)
+ *    so that array set-like operations are wrapped before optimizer rules that pre-evaluate
+ *    expressions (e.g. `ConstantFolding`, `ConvertToLocalRelation`, `EvalInlineTables`).
+ *
+ *    2. As a late batch at the end of the optimizer, because rules like subquery rewrite and
+ *    join reorder can create new joins or join conditions after `FinishAnalysis` that still
+ *    need their keys to be normalized.
  *
  * Ideally we should do the normalization in the physical operators that compare the
  * binary `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine
  * is not optimized to run on binary data. This rule is created to simplify the implementation, so
  * that we have a single place to do normalization, which is more maintainable.
  *
- * Note that, this rule must be executed at the end of optimizer, because the optimizer may create
- * new joins(the subquery rewrite) and new join conditions(the join reorder).
  */
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    case _ => plan.transformWithPruning( _.containsAnyPattern(WINDOW, JOIN)) {
-      case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
-        // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
-        // to normalize the `windowExpressions`, as they are executed per input row and should take
-        // the input row as it is.
-        w.copy(partitionSpec = w.partitionSpec.map(normalize))
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan
+      .transformWithPruning( _.containsAnyPattern(WINDOW, JOIN)) {
+        case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
+          // Although the `windowExpressions` may refer to `partitionSpec` expressions,
+          // we don't need to normalize the `windowExpressions`, as they are executed
+          // per input row and should take the input row as it is.
+          w.copy(partitionSpec = w.partitionSpec.map(normalize))
 
-      // Only hash join and sort merge join need the normalization. Here we catch all Joins with
-      // join keys, assuming Joins with join keys are always planned as hash join or sort merge
-      // join. It's very unlikely that we will break this assumption in the near future.
-      case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _, _)
-          // The analyzer guarantees left and right joins keys are of the same data type. Here we
-          // only need to check join keys of one side.
-          if leftKeys.exists(k => needNormalize(k)) =>
-        val newLeftJoinKeys = leftKeys.map(normalize)
-        val newRightJoinKeys = rightKeys.map(normalize)
-        val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
-          case (l, r) => EqualTo(l, r)
-        } ++ condition
-        j.copy(condition = Some(newConditions.reduce(And)))
+        // Only hash join and sort merge join need the normalization. Here we catch all Joins with
+        // join keys, assuming Joins with join keys are always planned as hash join or sort merge
+        // join. It's very unlikely that we will break this assumption in the near future.
+        case j @ ExtractEquiJoinKeys(_, leftKeys, rightKeys, condition, _, _, _, _)
+            // The analyzer guarantees left and right joins keys are of the same data type. Here we
+            // only need to check join keys of one side.
+            if leftKeys.exists(k => needNormalize(k)) =>
+          val newLeftJoinKeys = leftKeys.map(normalize)
+          val newRightJoinKeys = rightKeys.map(normalize)
+          val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
+            case (l, r) => EqualTo(l, r)
+          } ++ condition
+          j.copy(condition = Some(newConditions.reduce(And)))
 
-      // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
-      // mixed in its aggregate expressions. It's unreliable to change the grouping expressions
-      // here. For now we normalize grouping expressions in `AggUtils` during planning.
-    }
+        // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
+        // mixed in its aggregate expressions. It's unreliable to change the grouping expressions
+        // here. For now we normalize grouping expressions in `AggUtils` during planning.
+      }
+      .transformAllExpressionsWithPruning(_.containsAnyPattern(
+        ARRAY_DISTINCT, ARRAY_UNION, ARRAY_INTERSECT, ARRAY_EXCEPT, ARRAYS_OVERLAP)) {
+        case e: ArrayDistinct if needNormalize(e.child) =>
+          e.copy(child = normalize(e.child))
+        case e: ArrayUnion if needNormalize(e.left) =>
+          e.copy(left = normalize(e.left), right = normalize(e.right))
+        case e: ArrayIntersect if needNormalize(e.left) =>
+          e.copy(left = normalize(e.left), right = normalize(e.right))
+        case e: ArrayExcept if needNormalize(e.left) =>
+          e.copy(left = normalize(e.left), right = normalize(e.right))
+        case e: ArraysOverlap if needNormalize(e.left) =>
+          e.copy(left = normalize(e.left), right = normalize(e.right))
+      }
   }
 
   /**

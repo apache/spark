@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalTime, Period, ZoneId}
 import java.util.concurrent.TimeUnit
 
 import org.scalacheck.{Arbitrary, Gen}
@@ -26,9 +26,10 @@ import org.scalatest.Assertions._
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, MILLIS_PER_DAY, NANOS_PER_MICROS}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localTimeToNanos, nanosToMicros}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localTimeToNanos, nanosToMicros}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal}
 
 /**
  * Property is a high-level specification of behavior that should hold for a range of data points.
@@ -154,6 +155,62 @@ object LiteralGenerator {
         DateTimeUtils.microsToLocalDateTime(millis * MICROS_PER_MILLIS), TimestampNTZType)
   }
 
+  // Microsecond-grained epoch generator for the nanosecond timestamp types. Unlike `millisGen`,
+  // which is millisecond-grained and therefore never yields sub-millisecond fractional digits,
+  // this draws over the full microsecond range so generated values exercise sub-millisecond
+  // variation. Bounds match the valid range used by the microsecond generators.
+  private def microsGen = {
+    val minMicros = instantToMicros(Instant.parse("0001-01-01T00:00:00.000000Z"))
+    val maxMicros = instantToMicros(Instant.parse("9999-12-31T23:59:59.999999Z"))
+    Gen.choose(minMicros, maxMicros)
+  }
+
+  // Generates a `nanosWithinMicro` value in [0, 999], biased to include the edge values
+  // {0, 1, 999}, and truncated to the declared precision so the result is valid for
+  // TIMESTAMP(precision): p=7 -> multiple of 100, p=8 -> multiple of 10, p=9 -> any value.
+  private def nanosWithinMicroGen(precision: Int): Gen[Int] = {
+    val truncate = TimestampNanosTestUtils.nanoOfSecTruncator(precision)
+    Gen.oneOf(
+      Gen.oneOf(0, 1, TimestampNanosVal.MAX_NANOS_WITHIN_MICRO),
+      Gen.choose(0, TimestampNanosVal.MAX_NANOS_WITHIN_MICRO)
+    ).map(truncate)
+  }
+
+  // Builds a generator of nanosecond-timestamp literals of the given `dataType`, mixing uniform
+  // random values with the precision-truncated `specialNanosTs` edge-case corpus. The `special`
+  // values are supplied as already-converted `TimestampNanosVal`s so this helper is shared by the
+  // NTZ and LTZ variants, which differ only in the external-to-physical conversion and the type.
+  private def nanosLiteralGen(
+      precision: Int,
+      dataType: DataType,
+      special: Seq[TimestampNanosVal]): Gen[Literal] = {
+    val random = for {
+      micros <- microsGen
+      nanos <- nanosWithinMicroGen(precision)
+    } yield TimestampNanosVal.fromParts(micros, nanos.toShort)
+    Gen.oneOf(random, Gen.oneOf(special)).map(Literal.create(_, dataType))
+  }
+
+  def timestampNTZNanosLiteralGen(precision: Int): Gen[Literal] = {
+    val truncate = TimestampNanosTestUtils.nanoOfSecTruncator(precision)
+    val special = TimestampNanosTestUtils.specialNanosTs.map { s =>
+      val ldt = TimestampNanosTestUtils.parseSpecialNanosNTZ(s)
+      TimestampNanosTestUtils.localDateTimeToNanosVal(ldt.withNano(truncate(ldt.getNano)))
+    }
+    nanosLiteralGen(precision, TimestampNTZNanosType(precision), special)
+  }
+
+  def timestampLTZNanosLiteralGen(precision: Int): Gen[Literal] = {
+    val truncate = TimestampNanosTestUtils.nanoOfSecTruncator(precision)
+    val zoneId = ZoneId.systemDefault()
+    val special = TimestampNanosTestUtils.specialNanosTs.map { s =>
+      val instant = TimestampNanosTestUtils.parseSpecialNanosLTZ(s, zoneId)
+      TimestampNanosTestUtils.instantToNanosVal(
+        Instant.ofEpochSecond(instant.getEpochSecond, truncate(instant.getNano).toLong))
+    }
+    nanosLiteralGen(precision, TimestampLTZNanosType(precision), special)
+  }
+
   // Valid range for DateType and TimestampType is [0001-01-01, 9999-12-31]
   private val maxIntervalInMonths: Int = 10000 * 12
 
@@ -208,6 +265,8 @@ object LiteralGenerator {
       case _: TimeType => timeLiteralGen
       case TimestampType => timestampLiteralGen
       case TimestampNTZType => timestampNTZLiteralGen
+      case t: TimestampNTZNanosType => timestampNTZNanosLiteralGen(t.precision)
+      case t: TimestampLTZNanosType => timestampLTZNanosLiteralGen(t.precision)
       case BooleanType => booleanLiteralGen
       case StringType => stringLiteralGen
       case BinaryType => binaryLiteralGen

@@ -1787,14 +1787,14 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
             TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
           SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
           withTempDir { checkpointDir =>
-            // When Avro is used, we want to set the StructFields to nullable
-            val shouldBeNullable = encoding == "avro"
             val metadataPathPostfix = "state/0/_stateSchema/default"
             val stateSchemaPath = new Path(checkpointDir.toString,
               s"$metadataPathPostfix")
             val hadoopConf = spark.sessionState.newHadoopConf()
             val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
+            // When Avro is used, we want to set the StructFields to nullable
+            val shouldBeNullable = encoding == "avro"
             val keySchema = new StructType().add("value", StringType)
             val schema0 = StateStoreColFamilySchema(
               "countState", 0,

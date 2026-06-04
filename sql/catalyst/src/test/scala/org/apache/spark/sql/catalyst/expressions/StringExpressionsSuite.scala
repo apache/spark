@@ -378,6 +378,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a = $"a".string.at(0)
     checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))
     checkEvaluation(Ascii(a), 97, create_row("abdef"))
+    // U+1F600 is a supplementary-plane code point; ascii must return the full code point
+    // (128512 via codePointAt), not the leading UTF-16 surrogate (55357 via charAt).
+    // scalastyle:off
+    checkEvaluation(Ascii(Literal("😀")), 128512, create_row("😀"))
+    // scalastyle:on
     checkEvaluation(Ascii(a), 0, create_row(""))
     checkEvaluation(Ascii(a), null, create_row(null))
     checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))

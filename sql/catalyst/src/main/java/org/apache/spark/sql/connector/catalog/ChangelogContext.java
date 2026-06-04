@@ -38,11 +38,21 @@ public class ChangelogContext {
    */
   public enum DeduplicationMode {
     /** Raw change rows as-is from the connector — no post-processing. */
-    NONE,
+    NONE("none"),
     /** Remove identical insert/delete pairs from copy-on-write file rewrites (default). */
-    DROP_CARRYOVERS,
+    DROP_CARRYOVERS("dropCarryovers"),
     /** Collapse to one net change per row identity across the entire changelog range. */
-    NET_CHANGES
+    NET_CHANGES("netChanges");
+
+    private final String value;
+
+    DeduplicationMode(String value) {
+      this.value = value;
+    }
+
+    public String value() {
+      return value;
+    }
   }
 
   private final ChangelogRange range;

@@ -53,6 +53,25 @@ object ExtractValue {
   }
 
   /**
+   * Resolution-time variant of [[apply]]: extracting a field/element/key from a NULL (`NullType`)
+   * base yields NULL (SQL NULL propagation) instead of throwing `INVALID_EXTRACT_BASE_FIELD_TYPE`.
+   * A `NullType` column can arise e.g. from schema evolution with missing columns. This is used by
+   * the user-facing extraction resolution sites (multipart name resolution and
+   * `UnresolvedExtractValue` resolution). `extractValue` itself is left unchanged, so the other
+   * direct consumers keep their prior (throwing) behavior.
+   */
+  def applyOrNull(
+      child: Expression,
+      extraction: Expression,
+      resolver: Resolver): Expression = {
+    if (child.dataType == NullType) {
+      Literal(null, NullType)
+    } else {
+      apply(child, extraction, resolver)
+    }
+  }
+
+  /**
    * Returns the resolved `ExtractValue`. It will return one kind of concrete `ExtractValue`,
    * depend on the type of `child` and `extraction`.
    *
@@ -119,13 +138,21 @@ object ExtractValue {
     val withExtractedNestedFields = nestedFields
       .foldLeft(Some(attribute): Option[Expression]) {
         case (Some(expression), field) =>
-          ExtractValue.extractValue(
-            child = expression,
-            extraction = Literal(field),
-            resolver = resolver
-          ) match {
-            case Left(e) => Some(e)
-            case Right(_) => None
+          // Extraction from a NULL (NullType) base propagates NULL rather than failing, matching
+          // the user-facing resolution sites (which use applyOrNull). Treating it as extractable
+          // here keeps the NullType candidate in single-pass NameScope candidate filtering so it
+          // resolves consistently with the legacy analyzer.
+          if (expression.dataType == NullType) {
+            Some(Literal(null, NullType))
+          } else {
+            ExtractValue.extractValue(
+              child = expression,
+              extraction = Literal(field),
+              resolver = resolver
+            ) match {
+              case Left(e) => Some(e)
+              case Right(_) => None
+            }
           }
         case _ =>
           None

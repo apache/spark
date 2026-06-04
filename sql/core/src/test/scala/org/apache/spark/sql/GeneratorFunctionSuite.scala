@@ -796,6 +796,28 @@ class GeneratorFunctionSuite extends SharedSparkSession {
       .elementType.asInstanceOf[StructType].fieldNames.toSeq
     assert(fields2 === Seq("value", "key"))
   }
+
+  test("SPARK-56426: LATERAL VIEW column alias with dot in name should resolve correctly") {
+    // Single-alias: explode with a dotted alias
+    checkAnswer(
+      sql(
+        """
+          |SELECT id, `skill.inst`
+          |FROM VALUES (1, array('a', 'b')) AS t(id, skills)
+          |LATERAL VIEW explode(skills) skills_table AS `skill.inst`
+        """.stripMargin),
+      Row(1, "a") :: Row(1, "b") :: Nil)
+
+    // Multi-alias: inline with multiple dotted aliases
+    checkAnswer(
+      sql(
+        """
+          |SELECT `a.b`, `c.d`
+          |FROM (SELECT 1) t
+          |LATERAL VIEW inline(array(named_struct('f1', 10, 'f2', 'hello'))) gen AS `a.b`, `c.d`
+        """.stripMargin),
+      Row(10, "hello") :: Nil)
+  }
 }
 
 case class EmptyGenerator() extends Generator with LeafLike[Expression] {

@@ -32,13 +32,15 @@ case class UnqualifiedColumnName private (name: String) {
 }
 
 object UnqualifiedColumnName {
-  def apply(input: String): UnqualifiedColumnName = {
-    val nameParts = CatalystSqlParser.parseMultipartIdentifier(input)
+  def apply(nameParts: Seq[String]): UnqualifiedColumnName = {
     if (nameParts.length != 1) {
-      throw multipartColumnIdentifierError(input, nameParts)
+      throw multipartColumnIdentifierError(nameParts.mkString("."), nameParts)
     }
     new UnqualifiedColumnName(nameParts.head)
   }
+
+  def apply(input: String): UnqualifiedColumnName =
+    apply(CatalystSqlParser.parseMultipartIdentifier(input))
 
   private def multipartColumnIdentifierError(
       columnName: String,
@@ -129,13 +131,23 @@ private[pipelines] object CaseSensitivityLabels {
 }
 
 /** The SCD (Slowly Changing Dimension) strategy for a CDC flow. */
-sealed trait ScdType
+sealed trait ScdType {
+  /**
+   * Short, stable label for this SCD type. Persisted as table property on AutoCDC flow auxiliary
+   * tables.
+   */
+  def label: String
+}
 
 object ScdType {
   /** Representation for the standard SCD1 strategy. */
-  case object Type1 extends ScdType
+  case object Type1 extends ScdType {
+    override val label: String = "SCD1"
+  }
   /** Representation for the standard SCD2 strategy. */
-  case object Type2 extends ScdType
+  case object Type2 extends ScdType {
+    override val label: String = "SCD2"
+  }
 }
 
 /**

@@ -30,13 +30,13 @@ on:
 jobs:
   notify:
     name: Notify test workflow
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       actions: read
       checks: write
     steps:
       - name: "Notify test workflow"
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
@@ -61,22 +61,48 @@ jobs:
             console.log('Ref: ' + context.payload.pull_request.head.ref)
             console.log('SHA: ' + context.payload.pull_request.head.sha)
 
-            // Wait 3 seconds to make sure the fork repository triggered a workflow.
-            await new Promise(r => setTimeout(r, 3000))
-
-            let runs
-            try {
-              runs = await github.request(endpoint, params)
-            } catch (error) {
-              console.error(error)
-              // Assume that runs were not found.
-            }
-
             const name = 'Build'
             const head_sha = context.payload.pull_request.head.sha
             let status = 'queued'
 
-            if (!runs || runs.data.workflow_runs.length === 0) {
+            // Wait 3 seconds to make sure the fork repository triggered a workflow.
+            await new Promise(r => setTimeout(r, 3000))
+
+            // The workflow run for this exact SHA may not be registered yet, and the
+            // listing endpoint orders by most recent, so blindly taking the first run
+            // can return a stale run from a previous push. Re-query a few times looking
+            // for the run whose head_sha matches this PR's head SHA before giving up.
+            let matched_run
+            let any_runs = false
+            let retryCount = 0
+            while (retryCount < 3) {
+              let runs
+              try {
+                runs = await github.request(endpoint, params)
+              } catch (error) {
+                console.error(error)
+                // Assume that runs were not found.
+              }
+              if (runs && runs.data.workflow_runs.length > 0) {
+                any_runs = true
+                matched_run = runs.data.workflow_runs.find(r => r.head_sha == head_sha)
+                if (matched_run) {
+                  break
+                }
+              }
+              retryCount++
+              if (retryCount < 3) {
+                await new Promise(resolve => setTimeout(resolve, 3000))
+              }
+            }
+
+            // If we saw runs but none matched the PR head SHA, a newer commit was pushed
+            // and a fresh notify run will handle it; nothing useful to report for this SHA.
+            if (any_runs && !matched_run) {
+              throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
+            }
+
+            if (!matched_run) {
               status = 'completed'
               const conclusion = 'action_required'
 
@@ -108,18 +134,26 @@ jobs:
                 }
               })
             } else {
-              const run_id = runs.data.workflow_runs[0].id
+              const run_id = matched_run.id
 
-              if (runs.data.workflow_runs[0].head_sha != context.payload.pull_request.head.sha) {
-                throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
-              }
+              const actions_url = 'https://github.com/'
+                + context.payload.pull_request.head.repo.full_name
+                + '/actions/runs/'
+                + run_id
+              console.log('Actions URL: ' + actions_url)
 
-              // Here we get check run ID to provide Check run view instead of Actions view, see also SPARK-37879.
+              // Here we get the check run ID to provide a Check run view instead of the
+              // Actions view, see also SPARK-37879. The check run may not have materialized
+              // yet (it is created later than the workflow run, especially when the matrix
+              // is queued), so this is best-effort: if it cannot be found, we fall back to
+              // the Actions run URL rather than failing and leaving the PR with no Build
+              // check for the scheduled updater to sync.
               let retryCount = 0;
               let check_run_head;
               while (retryCount < 3) {
                 const check_runs = await github.request(check_run_endpoint, check_run_params);
-                check_run_head = check_runs.data.check_runs.find(r => r.name === "Run / Check changes");
+                check_run_head = check_runs.data.check_runs.find(
+                  r => r.name === "Run / Check changes" && r.head_sha == head_sha);
                 if (check_run_head) {
                   break;
                 }
@@ -128,25 +162,17 @@ jobs:
                   await new Promise(resolve => setTimeout(resolve, 3000));
                 }
               }
-              if (!check_run_head) {
-                throw new Error('Failed to retrieve check_run_head after 3 attempts');
+
+              let summary_url = actions_url
+              if (check_run_head) {
+                summary_url = 'https://github.com/'
+                  + context.payload.pull_request.head.repo.full_name
+                  + '/runs/'
+                  + check_run_head.id
+                console.log('Check run URL: ' + summary_url)
+              } else {
+                console.log('Check run not found; falling back to Actions URL: ' + actions_url)
               }
-
-              if (check_run_head.head_sha != context.payload.pull_request.head.sha) {
-                throw new Error('There was a new unsynced commit pushed. Please retrigger the workflow.');
-              }
-
-              const check_run_url = 'https://github.com/'
-                + context.payload.pull_request.head.repo.full_name
-                + '/runs/'
-                + check_run_head.id
-              console.log('Check run URL: ' + check_run_url)
-
-              const actions_url = 'https://github.com/'
-                + context.payload.pull_request.head.repo.full_name
-                + '/actions/runs/'
-                + run_id
-              console.log('Actions URL: ' + actions_url)
 
               github.rest.checks.create({
                 owner: context.repo.owner,
@@ -156,7 +182,7 @@ jobs:
                 status: status,
                 output: {
                   title: 'Test results',
-                  summary: '[See test results](' + check_run_url + ')\n\n'
+                  summary: '[See test results](' + summary_url + ')\n\n'
                     + 'If the tests fail for reasons unrelated to this pull request, '
                     + 'please rerun the workflow in your forked repository.\n'
                     + 'If the failures are related to this pull request, '

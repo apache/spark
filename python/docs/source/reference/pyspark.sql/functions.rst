@@ -301,6 +301,12 @@ Date and Timestamp Functions
     timestamp_seconds
     time_bucket
     time_diff
+    time_from_micros
+    time_from_millis
+    time_from_seconds
+    time_to_micros
+    time_to_millis
+    time_to_seconds
     time_trunc
     to_date
     to_time

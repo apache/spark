@@ -163,11 +163,11 @@ object HiveResult extends SQLConfHelper {
     case (v: VariantVal, VariantType) => v.toString
     case (g: Geometry, dt: GeometryType) =>
       val internalGeom = STUtils.serializeGeomFromWKB(g, dt)
-      val s = STUtils.stAsEwkt(internalGeom).toString
+      val s = STUtils.stGeomAsEwkt(internalGeom).toString
       if (nested) "\"" + s + "\"" else s
     case (g: Geography, dt: GeographyType) =>
       val internalGeog = STUtils.serializeGeogFromWKB(g, dt)
-      val s = STUtils.stAsEwkt(internalGeog).toString
+      val s = STUtils.stGeogAsEwkt(internalGeog).toString
       if (nested) "\"" + s + "\"" else s
     case (other, u: UserDefinedType[_]) => u.stringifyValue(other)
   }

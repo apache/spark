@@ -694,6 +694,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
     wkbParseError(msg, pos.toString)
   }
 
+  def cannotMutateReadOnlyGeoValueError(): SparkRuntimeException = {
+    // This guards an internal invariant: setSrid mutates the backing buffer in place, which only
+    // works when the value owns a tight on-heap array. It is never reachable from user input (the
+    // only caller copies first), so a misuse here is a Spark bug, hence INTERNAL_ERROR.
+    new SparkRuntimeException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" ->
+        ("setSrid requires a value that owns its backing buffer; call copy() before mutating a " +
+          "value read directly from an UnsafeRow / ColumnVector buffer.")))
+  }
+
   def withSuggestionIntervalArithmeticOverflowError(
       suggestedFunc: String,
       context: QueryContext): ArithmeticException = {
@@ -1199,6 +1210,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def cannotAcquireMemoryToBuildUnsafeHashedRelationError(): Throwable = {
     new SparkOutOfMemoryError(
       "_LEGACY_ERROR_TEMP_2107",
+      new java.util.HashMap[String, String]())
+  }
+
+  def aggregateOutOfMemoryError(): SparkOutOfMemoryError = {
+    new SparkOutOfMemoryError(
+      "AGGREGATE_OUT_OF_MEMORY",
       new java.util.HashMap[String, String]())
   }
 

@@ -18,8 +18,7 @@
 package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.SparkIllegalArgumentException;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.junit.jupiter.api.Test;
 
@@ -76,14 +75,14 @@ class STUtilsSuite {
 
   @Test
   void testGeometryToGeography() {
-    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometry4326Bytes);
-    GeographyVal geographyVal = STUtils.geometryToGeography(geometryVal);
+    BinaryView geometryVal = BinaryView.fromBytes(testGeometry4326Bytes);
+    BinaryView geographyVal = STUtils.geometryToGeography(geometryVal);
     assertNotNull(geographyVal);
     assertArrayEquals(geometryVal.getBytes(), geographyVal.getBytes());
     // Non-geographic SRID should not be allowed for geometry to geography casting.
     SparkIllegalArgumentException sridException = assertThrows(
       SparkIllegalArgumentException.class,
-      () -> STUtils.geometryToGeography(GeometryVal.fromBytes(testGeometryBytes)));
+      () -> STUtils.geometryToGeography(BinaryView.fromBytes(testGeometryBytes)));
     assertEquals("ST_INVALID_SRID_VALUE", sridException.getCondition());
     // Coordinates outside geography bounds should not be allowed even with a valid SRID.
     ByteBuffer oobWkbBuf = ByteBuffer.allocate(21).order(ByteOrder.LITTLE_ENDIAN);
@@ -96,14 +95,14 @@ class STUtilsSuite {
     System.arraycopy(oobWkb, 0, oobGeomBytes, sridLen, oobWkb.length);
     SparkIllegalArgumentException coordinateException = assertThrows(
       SparkIllegalArgumentException.class,
-      () -> STUtils.geometryToGeography(GeometryVal.fromBytes(oobGeomBytes)));
+      () -> STUtils.geometryToGeography(BinaryView.fromBytes(oobGeomBytes)));
     assertEquals("WKB_PARSE_ERROR", coordinateException.getCondition());
   }
 
   @Test
   void testGeographyToGeometry() {
-    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
-    GeometryVal geometryVal = STUtils.geographyToGeometry(geographyVal);
+    BinaryView geographyVal = BinaryView.fromBytes(testGeographyBytes);
+    BinaryView geometryVal = STUtils.geographyToGeometry(geographyVal);
     assertNotNull(geometryVal);
     assertArrayEquals(geographyVal.getBytes(), geometryVal.getBytes());
   }
@@ -113,16 +112,16 @@ class STUtilsSuite {
   // ST_AsBinary
   @Test
   void testStAsBinaryGeography() {
-    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
-    byte[] geographyWkb = STUtils.stAsBinary(geographyVal, ENDIANNESS_NDR);
+    BinaryView geographyVal = BinaryView.fromBytes(testGeographyBytes);
+    byte[] geographyWkb = STUtils.stGeogAsBinary(geographyVal, ENDIANNESS_NDR);
     assertNotNull(geographyWkb);
     assertArrayEquals(testWkb, geographyWkb);
   }
 
   @Test
   void testStAsBinaryGeometry() {
-    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
-    byte[] geometryWkb = STUtils.stAsBinary(geometryVal, ENDIANNESS_NDR);
+    BinaryView geometryVal = BinaryView.fromBytes(testGeometryBytes);
+    byte[] geometryWkb = STUtils.stGeomAsBinary(geometryVal, ENDIANNESS_NDR);
     assertNotNull(geometryWkb);
     assertArrayEquals(testWkb, geometryWkb);
   }
@@ -130,35 +129,67 @@ class STUtilsSuite {
   // ST_AsEWKT
   @Test
   void testStAsEwktGeography() {
-    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
-    assertEquals("SRID=4326;POINT(1 2)", STUtils.stAsEwkt(geographyVal).toString());
+    BinaryView geographyVal = BinaryView.fromBytes(testGeographyBytes);
+    assertEquals("SRID=4326;POINT(1 2)", STUtils.stGeogAsEwkt(geographyVal).toString());
   }
 
   @Test
   void testStAsEwktGeometry() {
-    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
-    assertEquals("POINT(1 2)", STUtils.stAsEwkt(geometryVal).toString());
+    BinaryView geometryVal = BinaryView.fromBytes(testGeometryBytes);
+    assertEquals("POINT(1 2)", STUtils.stGeomAsEwkt(geometryVal).toString());
   }
 
   // ST_GeogFromWKB
   @Test
-  void testStGeogFromWKB() {
-    GeographyVal geographyVal = STUtils.stGeogFromWKB(testWkb);
+  void testStGeogFromWKBNoSrid() {
+    BinaryView geographyVal = STUtils.stGeogFromWKB(testWkb);
     assertNotNull(geographyVal);
     assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKBWithDefaultSrid() {
+    BinaryView geographyVal = STUtils.stGeogFromWKB(testWkb, testGeographySrid);
+    assertNotNull(geographyVal);
+    assertArrayEquals(testGeographyBytes, geographyVal.getBytes());
+  }
+
+  @Test
+  void testStGeogFromWKBWithValidSrid() {
+    // Geography supports a variety of geographic SRIDs (not just the default 4326).
+    for (int validGeographySrid : new int[]{4267, 4269, 4326, 4612, 37001, 104030}) {
+      BinaryView geographyVal = STUtils.stGeogFromWKB(testWkb, validGeographySrid);
+      assertNotNull(geographyVal);
+      byte[] expectedBytes = new byte[testWkb.length + sridLen];
+      byte[] geogSrid = ByteBuffer.allocate(sridLen).order(end).putInt(validGeographySrid).array();
+      System.arraycopy(geogSrid, 0, expectedBytes, 0, sridLen);
+      System.arraycopy(testWkb, 0, expectedBytes, sridLen, testWkb.length);
+      assertArrayEquals(expectedBytes, geographyVal.getBytes());
+    }
+  }
+
+  @Test
+  void testStGeogFromWKBWithInvalidSrid() {
+    // SRIDs that are either out of range or correspond to non-geographic SRSes (e.g. 0, 3857).
+    for (int invalidGeographySrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
+      SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
+              () -> STUtils.stGeogFromWKB(testWkb, invalidGeographySrid));
+      assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
+      assertTrue(exception.getMessage().contains("value: " + invalidGeographySrid + "."));
+    }
   }
 
   // ST_GeomFromWKB
   @Test
   void testStGeomFromWKBNoSrid() {
-    GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb);
+    BinaryView geometryVal = STUtils.stGeomFromWKB(testWkb);
     assertNotNull(geometryVal);
     assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
   }
 
   @Test
   void testStGeomFromWKBWithDefaultSrid() {
-    GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb, testGeometrySrid);
+    BinaryView geometryVal = STUtils.stGeomFromWKB(testWkb, testGeometrySrid);
     assertNotNull(geometryVal);
     assertArrayEquals(testGeometryBytes, geometryVal.getBytes());
   }
@@ -166,7 +197,7 @@ class STUtilsSuite {
   @Test
   void testStGeomFromWKBWithValidSrid() {
     int srid = 4326;
-    GeometryVal geometryVal = STUtils.stGeomFromWKB(testWkb, srid);
+    BinaryView geometryVal = STUtils.stGeomFromWKB(testWkb, srid);
     assertNotNull(geometryVal);
     byte[] testGeometryBytes = new byte[testWkb.length + sridLen];
     byte[] geomSrid = ByteBuffer.allocate(sridLen).order(end).putInt(srid).array();
@@ -188,22 +219,22 @@ class STUtilsSuite {
   // ST_Srid
   @Test
   void testStSridGeography() {
-    GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
-    assertEquals(testGeographySrid, STUtils.stSrid(geographyVal));
+    BinaryView geographyVal = BinaryView.fromBytes(testGeographyBytes);
+    assertEquals(testGeographySrid, STUtils.stGeogSrid(geographyVal));
   }
 
   @Test
   void testStSridGeometry() {
-    GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
-    assertEquals(testGeometrySrid, STUtils.stSrid(geometryVal));
+    BinaryView geometryVal = BinaryView.fromBytes(testGeometryBytes);
+    assertEquals(testGeometrySrid, STUtils.stGeomSrid(geometryVal));
   }
 
   // ST_SetSrid
   @Test
   void testStSetSridGeography() {
     for (int validGeographySrid : new int[]{4326}) {
-      GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
-      GeographyVal updatedGeographyVal = STUtils.stSetSrid(geographyVal, validGeographySrid);
+      BinaryView geographyVal = BinaryView.fromBytes(testGeographyBytes);
+      BinaryView updatedGeographyVal = STUtils.stGeogSetSrid(geographyVal, validGeographySrid);
       assertNotNull(updatedGeographyVal);
       Geography updatedGeography = Geography.fromBytes(updatedGeographyVal.getBytes());
       assertEquals(validGeographySrid, updatedGeography.srid());
@@ -213,9 +244,9 @@ class STUtilsSuite {
   @Test
   void testStSetSridGeographyInvalidSrid() {
     for (int invalidGeographySrid : new int[]{-9999, -2, -1, 0, 1, 2, 3857, 9999}) {
-      GeographyVal geographyVal = GeographyVal.fromBytes(testGeographyBytes);
+      BinaryView geographyVal = BinaryView.fromBytes(testGeographyBytes);
       SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
-        () -> STUtils.stSetSrid(geographyVal, invalidGeographySrid));
+        () -> STUtils.stGeogSetSrid(geographyVal, invalidGeographySrid));
       assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
       assertTrue(exception.getMessage().contains("value: " + invalidGeographySrid + "."));
     }
@@ -224,8 +255,8 @@ class STUtilsSuite {
   @Test
   void testStSetSridGeometry() {
     for (int validGeographySrid : new int[]{0, 3857, 4326}) {
-      GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
-      GeometryVal updatedGeometryVal = STUtils.stSetSrid(geometryVal, validGeographySrid);
+      BinaryView geometryVal = BinaryView.fromBytes(testGeometryBytes);
+      BinaryView updatedGeometryVal = STUtils.stGeomSetSrid(geometryVal, validGeographySrid);
       assertNotNull(updatedGeometryVal);
       Geometry updatedGeometry = Geometry.fromBytes(updatedGeometryVal.getBytes());
       assertEquals(validGeographySrid, updatedGeometry.srid());
@@ -235,9 +266,9 @@ class STUtilsSuite {
   @Test
   void testStSetSridGeometryInvalidSrid() {
     for (int invalidGeometrySrid : new int[]{-9999, -2, -1, 1, 2, 9999}) {
-      GeometryVal geometryVal = GeometryVal.fromBytes(testGeometryBytes);
+      BinaryView geometryVal = BinaryView.fromBytes(testGeometryBytes);
       SparkIllegalArgumentException exception = assertThrows(SparkIllegalArgumentException.class,
-        () -> STUtils.stSetSrid(geometryVal, invalidGeometrySrid));
+        () -> STUtils.stGeomSetSrid(geometryVal, invalidGeometrySrid));
       assertEquals("ST_INVALID_SRID_VALUE", exception.getCondition());
       assertTrue(exception.getMessage().contains("value: " + invalidGeometrySrid + "."));
     }

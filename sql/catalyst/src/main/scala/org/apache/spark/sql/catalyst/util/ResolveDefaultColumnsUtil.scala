@@ -439,7 +439,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
           throw QueryCompilationErrors.defaultValuesDataTypeError(
             statementType, colName, defaultSQL, dataType, other.dataType))
     }
-    if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(dataType)) {
+    if (!conf.charVarcharAsString && CharVarcharUtils.hasCharVarchar(dataType) && ret.foldable) {
       CharVarcharUtils.stringLengthCheck(ret, dataType).eval(EmptyRow)
     }
     ret

@@ -27,6 +27,8 @@ import sys
 from typing import Any, Generator, IO, Optional, Union, overload
 import warnings
 
+from pyspark.messages import ZeroCopyByteStream
+
 if "SPARK_TESTING" in os.environ:
     assert os.environ.get("SPARK_PYTHON_RUNTIME") == "PYTHON_WORKER", (
         "This module can only be imported in python woker"
@@ -65,11 +67,11 @@ def add_path(path: str) -> bool:
     return False
 
 
-def read_command(serializer: FramedSerializer, file: Union[IO, bytes]) -> Any:
+def read_command(serializer: FramedSerializer, file: Union[IO, bytes, memoryview]) -> Any:
     if not is_remote_only():
         from pyspark.core.broadcast import Broadcast
 
-    if isinstance(file, bytes):
+    if isinstance(file, (bytes, memoryview)):
         command = serializer.loads(file)
     else:
         command = serializer._read_with_length(file)
@@ -173,7 +175,9 @@ def setup_spark_files(
 
 
 @overload
-def setup_broadcasts(infile_or_variables: IO) -> None: ...
+def setup_broadcasts(infile_or_variables: IO[Any]) -> None: ...
+@overload
+def setup_broadcasts(infile_or_variables: ZeroCopyByteStream) -> None: ...
 @overload
 def setup_broadcasts(
     infile_or_variables: list[tuple[int, Union[str, None]]], conn_info: str, auth_secret: None
@@ -184,10 +188,12 @@ def setup_broadcasts(
 ) -> None: ...
 @overload
 def setup_broadcasts(
-    infile_or_variables: list[tuple[int, Union[str, None]]], conn_info: None, auth_secret: None
+    infile_or_variables: list[tuple[int, Union[str, None]]],
+    conn_info: Optional[Union[str, int]],
+    auth_secret: Optional[str],
 ) -> None: ...
 def setup_broadcasts(
-    infile_or_variables: Union[IO, list[tuple[int, Union[str, None]]]],
+    infile_or_variables: Union[ZeroCopyByteStream, IO[Any], list[tuple[int, Union[str, None]]]],
     conn_info: Optional[Union[str, int]] = None,
     auth_secret: Optional[str] = None,
 ) -> None:
