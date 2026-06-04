@@ -80,6 +80,7 @@ class CoGroupedArrowPythonRunner(
 
   override val hideTraceback: Boolean = SQLConf.get.pysparkHideTraceback
   override val simplifiedTraceback: Boolean = SQLConf.get.pysparkSimplifiedTraceback
+  override val tracebackWithLocals: Boolean = SQLConf.get.pysparkTracebackWithLocals
 
   private val maxRecordsPerBatch: Int = {
     val v = SQLConf.get.arrowMaxRecordsPerBatch
