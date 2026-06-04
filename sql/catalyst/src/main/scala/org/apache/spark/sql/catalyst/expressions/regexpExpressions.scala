@@ -736,9 +736,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
       lastReplacement = lastReplacementInUTF8.toString
     }
-    val subject = s.asInstanceOf[UTF8String]
-    val m = pattern.matcher(subject.toString)
-    RegExpUtils.replace(m, subject, lastReplacement,
+    RegExpUtils.replace(pattern, s.asInstanceOf[UTF8String], lastReplacement,
       p.asInstanceOf[UTF8String], r.asInstanceOf[UTF8String], i.asInstanceOf[Int])
   }
 
@@ -750,8 +748,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def prettyName: String = "regexp_replace"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val matcher = ctx.freshName("matcher")
-
     val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
     val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
 
@@ -763,17 +759,19 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val regExpUtils = RegExpUtils.getClass.getName.stripSuffix("$")
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep, pos) => {
-    s"""
-      ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName, collationId)}
-      if (!$rep.equals($termLastReplacementInUTF8)) {
-        // replacement string changed
-        $termLastReplacementInUTF8 = $rep.clone();
-        $termLastReplacement = $termLastReplacementInUTF8.toString();
-      }
-      ${ev.value} = $regExpUtils.replace(
-        $matcher, $subject, $termLastReplacement, $regexp, $rep, $pos);
-      $setEvNotNull
-    """
+      val (patternCode, termPattern) =
+        RegExpUtils.initLastPatternCode(ctx, regexp, prettyName, collationId)
+      s"""
+        $patternCode
+        if (!$rep.equals($termLastReplacementInUTF8)) {
+          // replacement string changed
+          $termLastReplacementInUTF8 = $rep.clone();
+          $termLastReplacement = $termLastReplacementInUTF8.toString();
+        }
+        ${ev.value} = $regExpUtils.replace(
+          $termPattern, $subject, $termLastReplacement, $regexp, $rep, $pos);
+        $setEvNotNull
+      """
     })
   }
 
@@ -1197,6 +1195,33 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
 }
 
 object RegExpUtils {
+  // Emits the regex-pattern caching block (recompile only when the regexp value changes) and
+  // returns (code, patternTermName). The caller can build a Matcher from the returned term, or
+  // pass it to `replace`.
+  def initLastPatternCode(
+      ctx: CodegenContext,
+      regexp: String,
+      prettyName: String,
+      collationId: Int): (String, String) = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+    val collationRegexFlags = CollationSupport.collationAwareRegexFlags(collationId)
+    val utils = classOf[ExpressionImplUtils].getName
+
+    val code =
+      s"""
+         |if (!$regexp.equals($termLastRegex)) {
+         |  // regex value changed
+         |  UTF8String r = $regexp.clone();
+         |  $termPattern =
+         |    $utils.compileRegexPattern(r.toString(), $collationRegexFlags, "$prettyName");
+         |  $termLastRegex = r;
+         |}
+         |""".stripMargin
+    (code, termPattern)
+  }
+
   def initLastMatcherCode(
       ctx: CodegenContext,
       subject: String,
@@ -1204,20 +1229,9 @@ object RegExpUtils {
       matcher: String,
       prettyName: String,
       collationId: Int): String = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-    val collationRegexFlags = CollationSupport.collationAwareRegexFlags(collationId)
-    val utils = classOf[ExpressionImplUtils].getName
-
+    val (patternCode, termPattern) = initLastPatternCode(ctx, regexp, prettyName, collationId)
     s"""
-       |if (!$regexp.equals($termLastRegex)) {
-       |  // regex value changed
-       |  UTF8String r = $regexp.clone();
-       |  $termPattern =
-       |    $utils.compileRegexPattern(r.toString(), $collationRegexFlags, "$prettyName");
-       |  $termLastRegex = r;
-       |}
+       |$patternCode
        |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
        |""".stripMargin
   }
@@ -1232,12 +1246,13 @@ object RegExpUtils {
 
   /**
    * Runs the regexp_replace loop shared by RegExpReplace's eval and codegen, so the generated
-   * Java is a single call rather than an inline match/replace loop plus the error construction.
-   * `matcher` must already wrap `subject.toString`. `regexp`/`rep`/`pos` are only used to build
-   * the error message on a failed replacement.
+   * Java is a single call rather than an inline matcher build + match/replace loop + error
+   * construction. The matcher is built here from `pattern` so `subject.toString` is computed once.
+   * `subject` is returned unchanged when the start position is out of range; `regexp`/`rep`/`pos`
+   * are only used to build the error message on a failed replacement.
    */
   def replace(
-      matcher: Matcher,
+      pattern: Pattern,
       subject: UTF8String,
       replacement: String,
       regexp: UTF8String,
@@ -1246,6 +1261,7 @@ object RegExpUtils {
     val source = subject.toString
     val position = pos - 1
     if (position == 0 || position < source.length) {
+      val matcher = pattern.matcher(source)
       matcher.region(position, source.length)
       val result = new JStringBuilder
       while (matcher.find()) {
