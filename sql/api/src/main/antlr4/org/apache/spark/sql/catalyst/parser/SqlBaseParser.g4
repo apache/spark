@@ -550,17 +550,8 @@ replaceTableHeader
     : (CREATE OR)? REPLACE TABLE identifierReference
     ;
 
-expressionOrMultipartIdentifier
-    : expression
-    | multipartIdentifier
-    ;
-
-expressionOrMultipartIdentifierList
-    : expressionOrMultipartIdentifier (COMMA expressionOrMultipartIdentifier)*
-    ;
-
 clusterBySpec
-    : CLUSTER BY LEFT_PAREN expressionOrMultipartIdentifierList RIGHT_PAREN
+    : CLUSTER BY LEFT_PAREN transform (COMMA transform)* RIGHT_PAREN
     ;
 
 bucketSpec

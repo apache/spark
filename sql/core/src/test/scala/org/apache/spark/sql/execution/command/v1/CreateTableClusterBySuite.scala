@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v1
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.ClusterBySpec
-import org.apache.spark.sql.connector.expressions.{FieldReference, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -37,7 +37,7 @@ trait CreateTableClusterBySuiteBase extends command.CreateTableClusterBySuiteBas
     val catalog = spark.sessionState.catalog
     val (_, db, t) = parseTableName(tableName)
     val table = catalog.getTableMetadata(TableIdentifier.apply(t, Some(db)))
-    assert(table.clusterBySpec === Some(ClusterBySpec(clusteringColumns.map(FieldReference(_)))))
+    assert(table.clusterBySpec === Some(ClusterBySpec.ofColumns(clusteringColumns.map(FieldReference(_)))))
   }
 
   override def validateClusterBy(
@@ -49,16 +49,17 @@ trait CreateTableClusterBySuiteBase extends command.CreateTableClusterBySuiteBas
     val table = catalog.getTableMetadata(TableIdentifier.apply(t, Some(db)))
     val spec = table.clusterBySpec.get
     assert(spec.columnNames === clusteringColumns.map(FieldReference(_)))
-    val actualTransforms = if (spec.clusteringColumnTransforms.nonEmpty) {
-      spec.clusteringColumnTransforms
-    } else {
-      clusteringColumns.map(_ => None)
-    }
-    assert(actualTransforms.length === expectedTransforms.length,
-      s"Expected ${expectedTransforms.length} transforms but got ${actualTransforms.length}")
-    actualTransforms.zip(expectedTransforms).foreach { case (actual, expected) =>
-      assert(actual === expected,
-        s"Transform mismatch: actual=$actual, expected=$expected")
+    assert(spec.entries.length === expectedTransforms.length,
+      s"Expected ${expectedTransforms.length} entries but got ${spec.entries.length}")
+    spec.entries.zip(expectedTransforms).foreach {
+      case (entry, None) =>
+        assert(entry.isInstanceOf[IdentityTransform],
+          s"Expected plain column but got: $entry")
+      case (entry, Some(transform)) =>
+        assert(entry.isInstanceOf[ApplyTransform],
+          s"Expected ApplyTransform but got: $entry")
+        assert(entry.name() === transform.name(),
+          s"Transform name mismatch: ${entry.name()} != ${transform.name()}")
     }
   }
 }

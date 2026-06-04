@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command.v2
 
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
-import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, ClusterByTransform, FieldReference, IdentityTransform, Transform}
 import org.apache.spark.sql.execution.command
 
 /**
@@ -35,7 +35,7 @@ class AlterTableClusterBySuite extends command.AlterTableClusterBySuiteBase
       .loadTable(Identifier.of(Array(namespace), table))
       .asInstanceOf[InMemoryTable]
     assert(partTable.partitioning ===
-      Array(ClusterByTransform(clusteringColumns.map(FieldReference(_)))))
+      Array(ClusterByTransform.ofColumns(clusteringColumns.map(FieldReference(_)))))
   }
 
   // The V2 in-memory test catalog does not apply ClusterBy changes via alterTable,
@@ -57,18 +57,17 @@ class AlterTableClusterBySuite extends command.AlterTableClusterBySuiteBase
           case (actual, expectedColName) =>
             assert(actual.fieldNames().toSeq === Seq(expectedColName))
         }
-        clusteringColumns.zip(expectedTransforms).zipWithIndex.foreach {
-          case ((_, expectedTransform), idx) =>
+        clusterByTransform.entries.zip(expectedTransforms).foreach {
+          case (entry, expectedTransform) =>
             expectedTransform match {
               case None =>
-                assert(clusterByTransform.transforms.forall(_.columnIndex != idx),
-                  s"Expected no transform for column at index $idx")
+                assert(entry.isInstanceOf[IdentityTransform],
+                  s"Expected plain column but got: $entry")
               case Some(transform) =>
-                val actual = clusterByTransform.transforms.find(_.columnIndex == idx)
-                assert(actual.isDefined,
-                  s"Expected transform for column at index $idx")
-                assert(actual.get.function === transform.name(),
-                  s"Transform name mismatch for column at index $idx")
+                assert(entry.isInstanceOf[ApplyTransform],
+                  s"Expected ApplyTransform but got: $entry")
+                assert(entry.name() === transform.name(),
+                  s"Transform name mismatch: ${entry.name()} != ${transform.name()}")
             }
         }
       case None =>

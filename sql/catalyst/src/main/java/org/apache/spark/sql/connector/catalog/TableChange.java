@@ -19,12 +19,10 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Arrays;
 import java.util.Objects;
-import java.util.Optional;
 import javax.annotation.Nullable;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.DataType;
 
@@ -275,14 +273,12 @@ public interface TableChange {
   /**
    * Create a TableChange for changing clustering columns for a table.
    *
-   * @param clusteringColumns clustering columns to change to. Each clustering column represents
-   *                          field names.
+   * @param entries clustering entries. Each entry is either an IdentityTransform (plain column)
+   *                or an ApplyTransform (expression like upper(col)).
    * @return a TableChange for this assignment
    */
-  static TableChange clusterBy(
-          NamedReference[] clusteringColumns,
-          Optional<Transform>[] transforms) {
-    return new ClusterBy(clusteringColumns, transforms);
+  static TableChange clusterBy(Transform[] entries) {
+    return new ClusterBy(entries);
   }
 
   /**
@@ -876,31 +872,25 @@ public interface TableChange {
 
   /** A TableChange to alter clustering columns for a table. */
   final class ClusterBy implements TableChange {
-    private final NamedReference[] clusteringColumns;
-    private final Optional<Transform>[] transforms;
+    private final Transform[] entries;
 
-    private ClusterBy(
-            NamedReference[] clusteringColumns,
-            Optional<Transform>[] transforms) {
-      this.clusteringColumns = clusteringColumns;
-      this.transforms = transforms;
+    private ClusterBy(Transform[] entries) {
+      this.entries = entries;
     }
 
-    public NamedReference[] clusteringColumns() { return clusteringColumns; }
-    public Optional<Transform>[] transforms() { return transforms; }
+    public Transform[] entries() { return entries; }
 
     @Override
     public boolean equals(Object o) {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       ClusterBy that = (ClusterBy) o;
-      return Arrays.equals(clusteringColumns, that.clusteringColumns())
-              && Arrays.equals(transforms, that.transforms);
+      return Arrays.equals(entries, that.entries);
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(Arrays.hashCode(clusteringColumns), Arrays.hashCode(transforms));
+      return Arrays.hashCode(entries);
     }
   }
 

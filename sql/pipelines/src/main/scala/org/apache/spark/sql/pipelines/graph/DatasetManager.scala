@@ -265,7 +265,7 @@ object DatasetManager extends Logging {
     val mergedProperties = resolveTableProperties(table, identifier)
     val partitioning = table.partitionCols.toSeq.flatten.map(Expressions.identity)
     val clustering = table.clusterCols.map(cols =>
-      ClusterByTransform(cols.map(col => Expressions.column(col)))
+      ClusterByTransform.ofColumns(cols.map(col => Expressions.column(col)))
     ).toSeq
 
     // Validate that partition and cluster columns don't coexist

@@ -586,7 +586,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
     val bucketing =
       getBucketSpec.map(spec => CatalogV2Implicits.BucketSpecHelper(spec).asTransform).toSeq
     val clustering = clusteringColumns.map { colNames =>
-      ClusterByTransform(colNames.map(FieldReference(_)))
+      ClusterByTransform.ofColumns(colNames.map(FieldReference(_)))
     }
     partitioning ++ bucketing ++ clustering
   }

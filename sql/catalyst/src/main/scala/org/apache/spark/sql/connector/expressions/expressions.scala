@@ -57,7 +57,10 @@ private[sql] object LogicalExpressions {
       references.toImmutableArraySeq, sortedCols.toImmutableArraySeq)
 
   def clusterBy(references: Array[NamedReference]): ClusterByTransform =
-    ClusterByTransform(references.toImmutableArraySeq)
+    ClusterByTransform.ofColumns(references.toImmutableArraySeq)
+
+  def clusterBy(entries: Seq[Transform]): ClusterByTransform =
+    new ClusterByTransform(entries)
 
   def identity(reference: NamedReference): IdentityTransform = IdentityTransform(reference)
 
@@ -158,104 +161,75 @@ private[sql] object BucketTransform {
 }
 
 /**
- * Minimal description of a per-column transform applied within a CLUSTER BY expression.
- *
- * @param columnIndex index into [[ClusterByTransform.columnNames]] identifying the column
- *                    being transformed.
- * @param argumentIndex the index in the argument list where the bound clustering column
- *                      should be substituted. Zero-indexed, and any arguments at or after
- *                      this index in `arguments` should be shifted to the right by one.
- * @param function    canonical SQL function name (e.g. "variant_get").
- * @param arguments   the non-column literal arguments to the function.
- */
-case class ClusterByColumnTransform(
-    columnIndex: Int,
-    argumentIndex: Int,
-    function: String,
-    arguments: Seq[LiteralValue[_]])
-
-/**
  * This class represents a transform for `ClusterBySpec`. This is used to bundle
  * ClusterBySpec in CreateTable's partitioning transforms to pass it down to analyzer.
+ *
+ * Each entry is either an `IdentityTransform` (plain column) or an `ApplyTransform`
+ * (function call like `upper(col)`).
  */
-final case class ClusterByTransform(
-    columnNames: Seq[NamedReference],
-    transforms: Seq[ClusterByColumnTransform] = Seq.empty) extends RewritableTransform {
+private[sql] final case class ClusterByTransform(
+    entries: Seq[Transform]) extends RewritableTransform {
 
   override val name: String = "cluster_by"
 
-  override def references: Array[NamedReference] = columnNames.toArray
-
-  override def arguments: Array[Expression] = columnNames.toArray
-
-  override def toString: String = s"$name(${arguments.map(_.describe).mkString(", ")})"
-
-  override def withReferences(newReferences: Seq[NamedReference]): Transform = {
-    this.copy(columnNames = newReferences)
+  def columnNames: Seq[NamedReference] = entries.map {
+    case IdentityTransform(ref) => ref
+    case t => t.references.head
   }
 
-  /** Converts [[transforms]] to a per-column `Seq[Option[Transform]]` for [[ClusterBySpec]]. */
-  def toClusteringColumnTransforms: Seq[Option[Transform]] = {
-    columnNames.indices.map { idx =>
-      transforms.find(_.columnIndex == idx).map { t =>
-        val args = t.arguments.toArray
+  override def references: Array[NamedReference] = entries.flatMap(_.references).toArray
 
-        new ClusteringColumnTransform(
-          t.function,
-          args.slice(0, t.argumentIndex) ++
-            Array[Expression](columnNames(idx)) ++ args.slice(t.argumentIndex, args.length))
-      }
+  override def arguments: Array[Expression] = entries.toArray
+
+  override def describe: String = s"cluster_by(${entries.map(_.describe).mkString(", ")})"
+
+  override def toString: String = describe
+
+  override def withReferences(newReferences: Seq[NamedReference]): Transform = {
+    var refIdx = 0
+    val newEntries = entries.map {
+      case _: IdentityTransform =>
+        val e = IdentityTransform(newReferences(refIdx))
+        refIdx += 1
+        e
+      case a: ApplyTransform =>
+        val newArgs = a.args.map {
+          case _: NamedReference =>
+            val r = newReferences(refIdx)
+            refIdx += 1
+            r
+          case other => other
+        }
+        ApplyTransform(a.name, newArgs)
+      case other =>
+        refIdx += other.references.length
+        other
     }
+    this.copy(entries = newEntries)
   }
 }
 
 /**
- * Convenience extractor for ClusterByTransform.
+ * Companion object for ClusterByTransform with extractor.
  */
 object ClusterByTransform {
-  def unapply(transform: Transform): Option[Seq[NamedReference]] =
+  /** Factory that wraps plain column references as IdentityTransforms. */
+  def ofColumns(columnNames: Seq[NamedReference]): ClusterByTransform =
+    new ClusterByTransform(columnNames.map(IdentityTransform(_)))
+
+  def unapply(transform: Transform): Option[Seq[Transform]] =
     transform match {
+      case ct: ClusterByTransform => Some(ct.entries)
       case NamedTransform("cluster_by", arguments) =>
-        Some(arguments.map(_.asInstanceOf[NamedReference]))
+        Some(arguments.map {
+          case ref: NamedReference => IdentityTransform(ref)
+          case t: Transform => t
+          case other => throw new IllegalArgumentException(
+            s"Unexpected argument type in cluster_by: ${other.getClass}")
+        })
       case _ =>
         None
     }
-}
-
-/**
- * A Transform implementation that wraps a column transform expression for CLUSTER BY.
- * For example, `CLUSTER BY (UPPER(col))` produces a ClusteringColumnTransform
- * wrapping the UPPER function with `col` as a NamedReference argument. Used with ClusterBySpec.
- */
-final class ClusteringColumnTransform(
-    override val name: String,
-    private val args: Array[Expression]) extends Transform {
-
-  override def arguments(): Array[Expression] = args
-
-  override def toString: String = {
-    s"$name(${arguments().map(_.toString).mkString(", ")})"
-  }
-
-  override def describe: String = toString
-
-  override def equals(obj: Any): Boolean = obj match {
-    case other: Transform =>
-      other.name() == this.name &&
-        java.util.Arrays.equals(
-          other.arguments().asInstanceOf[Array[Object]],
-          this.arguments().asInstanceOf[Array[Object]])
-    case _ => false
-  }
-
-  override def hashCode(): Int =
-    java.util.Objects.hash(
-      name,
-      Integer.valueOf(java.util.Arrays.hashCode(arguments().asInstanceOf[Array[Object]])))
-
-  override def references(): Array[NamedReference] = {
-    args.collect { case n: NamedReference => n }
-  }
 }
 
 private[sql] final case class SortedBucketTransform(

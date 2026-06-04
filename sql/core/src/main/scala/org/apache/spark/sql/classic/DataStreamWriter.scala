@@ -168,7 +168,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
           DataSourceUtils.CLUSTERING_COLUMNS_KEY -> DataSourceUtils.encodePartitioningColumns(cols))
       }.getOrElse(Map.empty)
       val partitioningOrClusteringTransform = normalizedClusteringCols.map { colNames =>
-        Array(ClusterByTransform(colNames.map(col => FieldReference(col)))).toImmutableArraySeq
+        Array(ClusterByTransform.ofColumns(colNames.map(col => FieldReference(col)))).toImmutableArraySeq
       }.getOrElse(partitioningColumns.getOrElse(Nil).asTransforms.toImmutableArraySeq)
 
       /**

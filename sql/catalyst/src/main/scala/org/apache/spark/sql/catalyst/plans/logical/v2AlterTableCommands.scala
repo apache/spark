@@ -310,19 +310,8 @@ case class AlterColumns(
 case class AlterTableClusterBy(
     table: LogicalPlan, clusterBySpec: Option[ClusterBySpec]) extends AlterTableCommand {
   override def changes: Seq[TableChange] = {
-    val clusterByTransforms = clusterBySpec.map { spec =>
-      if (spec.clusteringColumnTransforms.nonEmpty) {
-        spec.clusteringColumnTransforms.map {
-          case None => java.util.Optional.empty[Transform]()
-          case Some(transform) => java.util.Optional.of[Transform](transform)
-        }.toArray
-      } else {
-        spec.columnNames.map(_ => java.util.Optional.empty[Transform]()).toArray
-      }
-    }.getOrElse(Array.empty[java.util.Optional[Transform]])
-    Seq(TableChange.clusterBy(clusterBySpec
-      .map(_.columnNames.toArray) // CLUSTER BY (col1, col2, ...)
-      .getOrElse(Array.empty), clusterByTransforms))
+    val entries = clusterBySpec.map(_.entries.toArray).getOrElse(Array.empty[Transform])
+    Seq(TableChange.clusterBy(entries))
   }
 
   protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan = copy(table = newChild)

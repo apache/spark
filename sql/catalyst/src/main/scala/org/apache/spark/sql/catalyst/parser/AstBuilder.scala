@@ -4873,26 +4873,31 @@ class AstBuilder extends DataTypeAstBuilder
           })
   }
 
-  override def visitExpressionOrMultipartIdentifier(
-      ctx: ExpressionOrMultipartIdentifierContext): Either[Expression, Seq[String]] =
-    withOrigin(ctx) {
-      if (ctx.expression() != null) {
-        scala.util.Left(expression(ctx.expression()))
-      } else {
-        scala.util.Right(typedVisit[Seq[String]](ctx.multipartIdentifier()))
-      }
-    }
-
   /**
-   * Create a [[ClusterBySpec]].
+   * Create a [[ClusterBySpec]] by reusing the `transform` grammar rule.
+   * Each entry is converted to an IdentityTransform (plain column) or ApplyTransform
+   * (function call). For CLUSTER BY, we require at least one column reference in each
+   * ApplyTransform.
    */
   override def visitClusterBySpec(ctx: ClusterBySpecContext): ClusterBySpec = withOrigin(ctx) {
-    val columnReferences =
-      ctx.expressionOrMultipartIdentifierList.expressionOrMultipartIdentifier
-        .asScala
-        .map(visitExpressionOrMultipartIdentifier)
-        .toSeq
-    ClusterBySpec.fromExpressions(columnReferences)
+    val entries = ctx.transform.asScala.map { transformCtx =>
+      transformCtx match {
+        case identityCtx: IdentityTransformContext =>
+          IdentityTransform(FieldReference(
+            typedVisit[Seq[String]](identityCtx.qualifiedName))): Transform
+        case applyCtx: ApplyTransformContext =>
+          val funcName = applyCtx.identifier.getText
+          val arguments = applyCtx.argument.asScala.map(visitTransformArgument).toSeq
+          val refs = arguments.collect { case ref: FieldReference => ref }
+          if (refs.isEmpty) {
+            throw new AnalysisException(
+              errorClass = "CLUSTER_BY_EXPRESSION_INCORRECT_COLUMN_REFERENCE",
+              messageParameters = Map("expressionType" -> funcName))
+          }
+          ApplyTransform(funcName, arguments): Transform
+      }
+    }.toSeq
+    new ClusterBySpec(entries)
   }
 
   /**

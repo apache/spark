@@ -198,13 +198,9 @@ private[sql] object CatalogV2Util {
     newPartitioning
   }
 
-  /** Construct a [[ClusterBySpec]] from a [[ClusterBy]] table change, including transforms. */
+  /** Construct a [[ClusterBySpec]] from a [[ClusterBy]] table change. */
   private def clusterBySpecFromChange(clusterBy: ClusterBy): ClusterBySpec = {
-    val transforms = clusterBy.transforms().map { tOpt =>
-      if (tOpt.isPresent) Some(tOpt.get()) else None
-    }.toIndexedSeq
-    val transformsSeq = if (transforms.forall(_.isEmpty)) Seq.empty else transforms
-    ClusterBySpec(clusterBy.clusteringColumns.toIndexedSeq, transformsSeq)
+    new ClusterBySpec(clusterBy.entries().toIndexedSeq)
   }
 
   /**

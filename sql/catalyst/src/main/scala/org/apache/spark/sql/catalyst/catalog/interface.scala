@@ -36,21 +36,20 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CurrentUserContext, FunctionIdentifier, InternalRow, SQLConfHelper, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NormalizeableRelation, Resolver, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, UnresolvedAttribute, UnresolvedFunction, UnresolvedLeafNode, ViewSchemaMode}
+import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, NormalizeableRelation, Resolver, SchemaBinding, SchemaCompensation, SchemaEvolution, SchemaTypeEvolution, SchemaUnsupported, UnresolvedLeafNode, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, Expression, ExprId, Literal}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.ClusterByHelper
-import org.apache.spark.sql.connector.expressions.{ClusterByTransform, ClusteringColumnTransform, FieldReference, LiteralValue, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, ClusterByTransform, Expression => V2Expression, FieldReference, IdentityTransform, LiteralValue, NamedReference, Transform}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
@@ -272,38 +271,46 @@ case class CatalogTablePartition(
 /**
  * A container for clustering information.
  *
- * @param columnNames the names of the columns used for clustering.
- * @param clusteringColumnTransforms per-column transforms for expression-based clustering.
- *                                   When non-empty, each element corresponds to a column in
- *                                   columnNames: None means a plain column reference,
- *                                   Some(transform) means an expression like UPPER(col).
- *                                   An empty Seq means no transforms on any columns.
+ * @param entries the clustering entries, each either an `IdentityTransform` (plain column)
+ *                or an `ApplyTransform` (expression like `upper(col)`).
  */
-case class ClusterBySpec(
-    columnNames: Seq[NamedReference],
-    clusteringColumnTransforms: Seq[Option[Transform]] = Seq.empty) {
+case class ClusterBySpec(entries: Seq[Transform]) {
+  def columnNames: Seq[NamedReference] = entries.map {
+    case IdentityTransform(ref) => ref
+    case t => t.references.head
+  }
+
   override def toString: String = toJson
 
-  def toJson: String = toColumnNames
-
-  def toColumnNames: String = {
-    val entries: Seq[Seq[String]] = if (clusteringColumnTransforms.isEmpty) {
-      columnNames.map(_.fieldNames().toSeq)
-    } else {
-      columnNames.zip(clusteringColumnTransforms).map {
-        case (colName, None) => colName.fieldNames().toSeq
-        case (colName, Some(transform)) =>
-          val args = transform.arguments().map {
-            case n: NamedReference => n.fieldNames().map(QuotingUtils.quoteIfNeeded).mkString(".")
-            case LiteralValue(value, dataType) =>
-              Literal(value, dataType).sql
-            case other => throw new IllegalStateException(
-              s"Unexpected argument type in CLUSTER BY expression: ${other.getClass}")
-          }
-          Seq(s"${QuotingUtils.quoteIfNeeded(transform.name())}(${args.mkString(",")})")
+  def toJson: String = {
+    val hasTransforms = entries.exists(_.isInstanceOf[ApplyTransform])
+    if (hasTransforms) {
+      // New structured JSON format
+      val jsonEntries = entries.map {
+        case IdentityTransform(ref) =>
+          JObject("col" -> JArray(ref.fieldNames().toList.map(JString)))
+        case a: ApplyTransform =>
+          val argsJson = a.args.collect {
+            case lit: LiteralValue[_] => ClusterBySpec.literalToJson(lit)
+          }.toList
+          val colRef = a.references.head
+          JObject(
+            "col" -> JArray(colRef.fieldNames().toList.map(JString)),
+            "transform" -> JObject(
+              "name" -> JString(a.name),
+              "args" -> JArray(argsJson)))
+        case other => throw new IllegalStateException(
+          s"Unexpected entry type in ClusterBySpec: ${other.getClass}")
       }
+      compact(render(JArray(jsonEntries.toList)))
+    } else {
+      // Old backward-compatible Seq[Seq[String]] format for plain columns
+      val colArrays = entries.map {
+        case IdentityTransform(ref) => ref.fieldNames().toSeq
+        case t => t.references.head.fieldNames().toSeq
+      }
+      ClusterBySpec.mapper.writeValueAsString(colArrays)
     }
-    ClusterBySpec.mapper.writeValueAsString(entries)
   }
 }
 
@@ -316,118 +323,131 @@ object ClusterBySpec {
     ret
   }
 
+  /** Factory that wraps plain column references as IdentityTransforms. */
+  def ofColumns(columnNames: Seq[NamedReference]): ClusterBySpec =
+    new ClusterBySpec(columnNames.map(IdentityTransform(_)))
+
   /**
    * Converts the clustering column property to a ClusterBySpec.
+   * Detects format: if top-level elements are arrays, it's old format;
+   * if objects, it's new structured format.
    */
   def fromProperty(columns: String): ClusterBySpec = {
-    ClusterBySpec.fromColumnEntries(mapper.readValue[Seq[Seq[String]]](columns))
+    val parsed = parse(columns)
+    parsed match {
+      case JArray(elements) if elements.nonEmpty =>
+        elements.head match {
+          case _: JArray =>
+            // Old format: Seq[Seq[String]]
+            val colArrays = mapper.readValue[Seq[Seq[String]]](columns)
+            new ClusterBySpec(
+              colArrays.map(names => IdentityTransform(FieldReference(names))))
+          case _: JObject =>
+            // New structured format
+            new ClusterBySpec(elements.map(parseJsonEntry))
+          case _ =>
+            // Fallback: try old format
+            val colArrays = mapper.readValue[Seq[Seq[String]]](columns)
+            new ClusterBySpec(
+              colArrays.map(names => IdentityTransform(FieldReference(names))))
+        }
+      case _ =>
+        // Empty or unexpected -- return empty
+        new ClusterBySpec(Seq.empty[Transform])
+    }
   }
 
-  /**
-   * Constructs a [[ClusterBySpec]] from the stored column entries (each a Seq[String]).
-   * An entry is either a multi-part column name or a single-element Seq containing an
-   * expression string like "variant_get(col,'$.foo','STRING')".
-   */
-  def fromColumnEntries(entries: Seq[Seq[String]]): ClusterBySpec = {
-    val parsedCols: Seq[(NamedReference, Option[Transform])] = entries.map {
-      case names if names.length == 1 =>
-        // Could be an expression of form "funcName(col, arg1, arg2, ...)"
-        try {
-          CatalystSqlParser.parseExpression(names.head) match {
-            case u: UnresolvedFunction =>
-              val transform: Transform = new ClusteringColumnTransform(
-                QuotingUtils.quoted(u.nameParts.toArray),
-                u.children.map {
-                  case a: UnresolvedAttribute =>
-                    FieldReference(QuotingUtils.quoted(a.nameParts.toArray))
-                  case l: Literal => LiteralValue(l.value, l.dataType)
-                  case other => throw new IllegalStateException(
-                    s"Unexpected argument type in CLUSTER BY expression: ${other.getClass}")
-                }.toArray)
-              val colRef = transform.arguments().collectFirst {
-                case f: FieldReference => f
-              }.getOrElse(throw new IllegalStateException(
-                "CLUSTER BY expression must contain exactly one column reference"))
-              (colRef, Some(transform))
-            case _ => (FieldReference(names), None)
+  private def parseJsonEntry(entry: JValue): Transform = entry match {
+    case JObject(fields) =>
+      val fieldMap = fields.toMap
+      val colParts = fieldMap("col") match {
+        case JArray(parts) => parts.map { case JString(s) => s; case other =>
+          throw new IllegalStateException(s"Unexpected col part: $other") }
+        case other => throw new IllegalStateException(s"Unexpected col value: $other")
+      }
+      val colRef = FieldReference(colParts)
+      fieldMap.get("transform") match {
+        case None => IdentityTransform(colRef)
+        case Some(JObject(tFields)) =>
+          val tMap = tFields.toMap
+          val funcName = tMap("name") match {
+            case JString(s) => s
+            case other => throw new IllegalStateException(
+              s"Unexpected transform name: $other")
           }
-        } catch {
-          // Sometimes, we can get a parse exception if the column name contains invalid
-          // characters by itself. Quote the column name and see if parsing it as a multipart
-          // identifier works, and if so, use that as a direct FieldReference to a column.
-          case _: ParseException =>
-            val identifier = CatalystSqlParser.parseMultipartIdentifier(
-              QuotingUtils.quoteIfNeeded(names.head))
-            (FieldReference(identifier.map(_.stripPrefix("`").stripSuffix("`"))), None)
-        }
-      case names => (FieldReference(names), None)
-    }
-    val (colNames, transforms) = parsedCols.unzip
-    val transformsSeq = if (transforms.forall(_.isEmpty)) Seq.empty else transforms
-    ClusterBySpec(colNames, transformsSeq)
+          val litArgs: Seq[V2Expression] = tMap.get("args") match {
+            case Some(JArray(args)) => args.map(jsonToLiteral)
+            case _ => Nil
+          }
+          ApplyTransform(funcName, colRef +: litArgs)
+        case other =>
+          throw new IllegalStateException(s"Unexpected transform value: $other")
+      }
+    case other =>
+      throw new IllegalStateException(s"Unexpected JSON entry in ClusterBySpec: $other")
   }
 
-  def fromExpressions(
-      parsedCols: Seq[Either[Expression, Seq[String]]]): ClusterBySpec = {
-    val (clusteringColumnNames, clusteringColumnExpressions) = parsedCols.map {
-      case Left(e) =>
-        e match {
-          // A bare column reference parsed as an expression - treat as plain column.
-          case a: UnresolvedAttribute =>
-            (FieldReference(a.nameParts), None)
-          case u: UnresolvedFunction =>
-            val transform = new ClusteringColumnTransform(
-              QuotingUtils.quoted(u.nameParts.toArray),
-              u.children.map {
-                case a: UnresolvedAttribute =>
-                  FieldReference(QuotingUtils.quoted(a.nameParts.toArray))
-                case l: Literal => LiteralValue(l.value, l.dataType)
-                case _ => throw new IllegalStateException(
-                  "Unsupported expression argument in CLUSTER BY transform")
-              }.toArray)
-            val transformName = QuotingUtils.quoted(u.nameParts.toArray)
-            val refs = transform.arguments().collect {
-              case f: FieldReference => f
-            }
-            if (refs.isEmpty) {
-              throw new AnalysisException(
-                errorClass = "CLUSTER_BY_EXPRESSION_INCORRECT_COLUMN_REFERENCE",
-                messageParameters = Map("expressionType" -> transformName))
-            }
-            if (refs.length != 1) {
-              throw new AnalysisException(
-                errorClass = "CLUSTER_BY_EXPRESSION_INCORRECT_COLUMN_REFERENCE",
-                messageParameters = Map("expressionType" -> transformName))
-            }
-            if (!transform.arguments().head.isInstanceOf[FieldReference]) {
-              throw new AnalysisException(
-                errorClass = "CLUSTER_BY_EXPRESSION_INCORRECT_COLUMN_REFERENCE",
-                messageParameters = Map(
-                  "expressionType" -> transformName))
-            }
-            (FieldReference(refs.head.fieldNames.toIndexedSeq), Some(transform))
-          case _ => throw new IllegalStateException(
-            "Unsupported expression in CLUSTER BY: only function calls are supported")
-        }
-      case Right(names) => (FieldReference(names), None)
-    }.unzip
-    // If there are no transforms at all (all plain columns), use empty Seq for backward compat
-    val transformsSeq = if (clusteringColumnExpressions.forall(_.isEmpty)) {
-      Seq.empty
-    } else {
-      clusteringColumnExpressions
+  private[catalog] def literalToJson(lit: LiteralValue[_]): JValue = {
+    val typeStr = lit.dataType.typeName
+    val valueJson = lit.value match {
+      case null => JNull
+      case s: UTF8String => JString(s.toString)
+      case i: Int => JInt(i)
+      case l: Long => JLong(l)
+      case d: Double => JDouble(d)
+      case b: Boolean => JBool(b)
+      case s: Short => JInt(s.toInt)
+      case b: Byte => JInt(b.toInt)
+      case f: Float => JDouble(f.toDouble)
+      case bd: java.math.BigDecimal => JDecimal(BigDecimal(bd))
+      case bd: BigDecimal => JDecimal(bd)
+      case other => JString(other.toString)
     }
-    ClusterBySpec(clusteringColumnNames, transformsSeq)
+    JObject("value" -> valueJson, "type" -> JString(typeStr))
+  }
+
+  private def jsonToLiteral(json: JValue): LiteralValue[_] = json match {
+    case JObject(fields) =>
+      val fieldMap = fields.toMap
+      val dataType = DataType.fromDDL(fieldMap("type") match {
+        case JString(s) => s
+        case other => throw new IllegalStateException(s"Unexpected type value: $other")
+      })
+      val value = fieldMap("value") match {
+        case JNull => null
+        case JString(s) => dataType match {
+          case StringType => UTF8String.fromString(s)
+          case _ => s
+        }
+        case JInt(i) => dataType match {
+          case IntegerType => i.toInt
+          case LongType => i.toLong
+          case ShortType => i.toShort
+          case ByteType => i.toByte
+          case _ => i.toLong
+        }
+        case JLong(l) => dataType match {
+          case IntegerType => l.toInt
+          case LongType => l
+          case _ => l
+        }
+        case JDouble(d) => dataType match {
+          case FloatType => d.toFloat
+          case DoubleType => d
+          case _ => d
+        }
+        case JBool(b) => b
+        case JDecimal(d) => d.underlying()
+        case other => throw new IllegalStateException(s"Unexpected value: $other")
+      }
+      LiteralValue(value, dataType)
+    case other =>
+      throw new IllegalStateException(s"Unexpected literal JSON: $other")
   }
 
   /**
    * Converts a ClusterBySpec to a clustering column property map entry, with validation
    * of the column names against the schema.
-   *
-   * @param schema the schema of the table.
-   * @param clusterBySpec the ClusterBySpec to be converted to a property.
-   * @param resolver the resolver used to match the column names.
-   * @return a map entry for the clustering column property.
    */
   def toProperty(
       schema: StructType,
@@ -440,9 +460,6 @@ object ClusterBySpec {
   /**
    * Converts a ClusterBySpec to a clustering column property map entry, without validating
    * the column names against the schema.
-   *
-   * @param clusterBySpec existing ClusterBySpec to be converted to properties.
-   * @return a map entry for the clustering column property.
    */
   def toPropertyWithoutValidation(clusterBySpec: ClusterBySpec): (String, String) = {
     (CatalogTable.PROP_CLUSTERING_COLUMNS -> clusterBySpec.toJson)
@@ -456,27 +473,40 @@ object ClusterBySpec {
       return clusterBySpec
     }
 
-    val normalizedColumns = clusterBySpec.columnNames.map { columnName =>
-      val position = SchemaUtils.findColumnPosition(
-        columnName.fieldNames().toImmutableArraySeq, schema, resolver)
-      FieldReference(SchemaUtils.getColumnName(position, schema))
+    val normalizedEntries = clusterBySpec.entries.map {
+      case IdentityTransform(ref) =>
+        val position = SchemaUtils.findColumnPosition(
+          ref.fieldNames().toImmutableArraySeq, schema, resolver)
+        IdentityTransform(FieldReference(
+          SchemaUtils.getColumnName(position, schema))): Transform
+      case a: ApplyTransform =>
+        val newArgs: Seq[V2Expression] = a.args.map {
+          case ref: NamedReference =>
+            val position = SchemaUtils.findColumnPosition(
+              ref.fieldNames().toImmutableArraySeq, schema, resolver)
+            FieldReference(SchemaUtils.getColumnName(position, schema))
+          case other => other
+        }
+        ApplyTransform(a.name, newArgs): Transform
+      case other => other
+    }
+
+    val normalizedColumns = normalizedEntries.map {
+      case IdentityTransform(ref) => ref
+      case t => t.references.head
     }
 
     SchemaUtils.checkColumnNameDuplication(
       normalizedColumns.map(_.toString),
       resolver)
 
-    ClusterBySpec(normalizedColumns, clusterBySpec.clusteringColumnTransforms)
+    new ClusterBySpec(normalizedEntries)
   }
 
   def extractClusterBySpec(transforms: Seq[Transform]): Option[ClusterBySpec] = {
     transforms.collectFirst {
       case ct: ClusterByTransform =>
-        if (ct.transforms.nonEmpty) {
-          ClusterBySpec(ct.columnNames, ct.toClusteringColumnTransforms)
-        } else {
-          ClusterBySpec(ct.columnNames)
-        }
+        new ClusterBySpec(ct.entries)
     }
   }
 
@@ -485,11 +515,11 @@ object ClusterBySpec {
       clusterBySpec: ClusterBySpec,
       resolver: Resolver): ClusterByTransform = {
     val normalizedClusterBySpec = normalizeClusterBySpec(schema, clusterBySpec, resolver)
-    new ClusterByHelper(normalizedClusterBySpec).asTransform.asInstanceOf[ClusterByTransform]
+    new ClusterByTransform(normalizedClusterBySpec.entries)
   }
 
   def fromColumnNames(names: Seq[String]): ClusterBySpec = {
-    ClusterBySpec(names.map(FieldReference(_)))
+    ClusterBySpec.ofColumns(names.map(FieldReference(_)))
   }
 }
 

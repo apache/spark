@@ -552,7 +552,7 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
     val table = catalog("testcat").loadTable(Identifier.of(Array(), "table_name"))
 
     assert(table.name === "testcat.table_name")
-    assert(table.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
+    assert(table.partitioning === Seq(ClusterByTransform.ofColumns(Seq(FieldReference("id")))))
   }
 
   test("Create: fail if table already exists") {
@@ -701,7 +701,7 @@ class DataFrameWriterV2Suite extends SharedSparkSession with BeforeAndAfter {
       Array(ColumnV2.create("id", LongType),
         ColumnV2.create("data", StringType),
         ColumnV2.create("even_or_odd", StringType)))
-    assert(replaced.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
+    assert(replaced.partitioning === Seq(ClusterByTransform.ofColumns(Seq(FieldReference("id")))))
     assert(replaced.properties === defaultOwnership.asJava)
   }
 

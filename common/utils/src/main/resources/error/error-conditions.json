@@ -850,7 +850,7 @@
   },
   "CLUSTER_BY_EXPRESSION_INCORRECT_COLUMN_REFERENCE": {
     "message" : [
-      "CLUSTER BY expression <expressionType> has either no column reference, or a column reference in an unsupported argument position."
+      "CLUSTER BY expression <expressionType> must contain at least one column reference."
     ],
     "sqlState" : "42000"
   },

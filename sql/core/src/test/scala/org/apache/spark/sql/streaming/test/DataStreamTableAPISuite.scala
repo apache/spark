@@ -346,7 +346,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
       val table = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
         .loadTable(Identifier.of(Array(), "cluster_test"))
-      assert(table.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
+      assert(table.partitioning === Seq(ClusterByTransform.ofColumns(Seq(FieldReference("id")))))
     }
   }
 
@@ -359,7 +359,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
 
       val table = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
         .loadTable(Identifier.of(Array(), "cluster_test"))
-      assert(table.partitioning === Seq(ClusterByTransform(Seq(FieldReference("id")))))
+      assert(table.partitioning === Seq(ClusterByTransform.ofColumns(Seq(FieldReference("id")))))
     }
   }
 

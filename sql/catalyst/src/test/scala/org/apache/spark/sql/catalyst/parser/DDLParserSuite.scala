@@ -217,7 +217,7 @@ class DDLParserSuite extends AnalysisTest {
           ColumnDefinition("b", StringType),
           ColumnDefinition("ts", TimestampType)
         ),
-        ClusterByTransform(Seq(FieldReference("a"), FieldReference("b")))),
+        ClusterByTransform.ofColumns(Seq(FieldReference("a"), FieldReference("b")))),
       ("a STRUCT<b INT, c STRING>, ts TIMESTAMP",
         "a.b, ts",
         Seq(
@@ -225,7 +225,7 @@ class DDLParserSuite extends AnalysisTest {
             "a", new StructType().add("b", IntegerType).add("c", StringType)),
           ColumnDefinition("ts", TimestampType)
         ),
-        ClusterByTransform(Seq(FieldReference(Seq("a", "b")), FieldReference("ts"))))
+        ClusterByTransform.ofColumns(Seq(FieldReference(Seq("a", "b")), FieldReference("ts"))))
     ).foreach { case (columns, clusteringColumns, schema, clusterByTransform) =>
       val createSql =
         s"""CREATE TABLE my_tab ($columns) USING parquet
