@@ -1128,6 +1128,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(ltz(ldt, 9, "America/Los_Angeles"), "2019-12-31 16:00:00.123456789")
     checkEvaluation(ltz(ldt, 9, "Asia/Kolkata"), "2020-01-01 05:30:00.123456789")
 
+    // DST spring-forward boundary in America/Los_Angeles: 2020-03-08 02:00 PST -> 03:00 PDT.
+    // The UTC instant 10:00:00 lands at 03:00:00 PDT (UTC-7); fractional part is unaffected.
+    checkEvaluation(
+      ltz(LocalDateTime.of(2020, 3, 8, 10, 0, 0, 123456789), 9, "America/Los_Angeles"),
+      "2020-03-08 03:00:00.123456789")
+
     // nanosWithinMicro boundaries 0 and 999 (under UTC).
     checkEvaluation(
       ltz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456000), 9, "UTC"),
