@@ -2695,6 +2695,16 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("128MB") // parquet.block.size
 
+  val ARCHIVE_FORMAT_READER_ENABLED = buildConf("spark.sql.files.archive.reader.enabled")
+    .doc("When true, the CSV data source can read tar archives (.tar, .tar.gz, .tgz): each " +
+      "archive is read as a single split and its entries are streamed through the CSV parser " +
+      "(never unpacked to disk), as if the entries were separate CSV files. Only the CSV data " +
+      "source supports reading archives.")
+    .version("5.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val FILES_OPEN_COST_IN_BYTES = buildConf("spark.sql.files.openCostInBytes")
     .internal()
     .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in" +
