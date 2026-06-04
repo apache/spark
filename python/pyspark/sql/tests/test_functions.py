@@ -3278,11 +3278,15 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame(
             [("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"]
         )
+
         self.assertTrue(
             all(
                 df.select(
                     F.regexp_replace("str", r"(\d+)", "--") == "-----",
                     F.regexp_replace("str", F.col("pattern"), F.col("replacement")) == "-----",
+                    F.regexp_replace("str", r"(\d+)", "--", 5) == "100---",
+                    F.regexp_replace("str", F.col("pattern"), F.col("replacement"), F.lit(5))
+                    == "100---",
                 ).first()
             )
         )
