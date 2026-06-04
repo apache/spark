@@ -5393,6 +5393,16 @@ object functions {
     regexp_replace(e, lit(pattern), lit(replacement))
 
   /**
+   * Replace all substrings of the specified string value that match regexp with rep, starting at
+   * the specified position `pos`.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def regexp_replace(e: Column, pattern: String, replacement: String, pos: Int): Column =
+    regexp_replace(e, lit(pattern), lit(replacement), lit(pos))
+
+  /**
    * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs
@@ -5400,6 +5410,16 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement)
+
+  /**
+   * Replace all substrings of the specified string value that match regexp with rep, starting at
+   * the specified position `pos`.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def regexp_replace(e: Column, pattern: Column, replacement: Column, pos: Column): Column =
+    Column.fn("regexp_replace", e, pattern, replacement, pos)
 
   /**
    * Returns the substring that matches the regular expression `regexp` within the string `str`.
