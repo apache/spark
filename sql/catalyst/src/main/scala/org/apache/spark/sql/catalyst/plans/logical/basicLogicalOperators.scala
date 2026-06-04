@@ -1755,9 +1755,9 @@ case class UnresolvedBinBy(
  * plus three appended columns with default names `bin_start`, `bin_end`, `bin_distribute_ratio`.
  * The names come from the resolved `appendedAttributes`.
  *
- * Bin boundaries align to `originMicros + k * binWidthMicros` for integer `k`. For `TIMESTAMP` (LTZ)
- * inputs the boundary arithmetic uses civil-time in the session zone for multi-day bins; sub-day
- * LTZ bins and `TIMESTAMP_NTZ` bins use UTC microsecond arithmetic.
+ * Bin boundaries align to `originMicros + k * binWidthMicros` for integer `k`.
+ * For `TIMESTAMP` (LTZ) inputs the boundary arithmetic uses civil-time in the session zone for
+ * multi-day bins; sub-day LTZ bins and `TIMESTAMP_NTZ` bins use UTC microsecond arithmetic.
  *
  * Construction invariants (bin width is positive day-time, range columns are timestamps and share
  * a type, origin matches the range column type, distribute columns are numeric and distinct) are
