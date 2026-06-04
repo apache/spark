@@ -4807,11 +4807,15 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
   /**
-   * Create a generation expression string.
+   * Create a generation expression.
    */
-  override def visitGeneratedColumn(ctx: GeneratedColumnContext): String =
+  override def visitGeneratedColumn(ctx: GeneratedColumnContext): GeneratedColumnExpression =
     withOrigin(ctx) {
-      getDefaultExpression(ctx.expression(), "GENERATED").originalSQL
+      val expr = expression(ctx.expression())
+      if (expr.containsPattern(PARAMETER)) {
+        throw QueryParsingErrors.parameterMarkerNotAllowed("GENERATED", expr.origin)
+      }
+      GeneratedColumnExpression(expr, getOriginalText(ctx.expression()))
     }
 
   /**
