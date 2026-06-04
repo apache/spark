@@ -98,8 +98,8 @@ public class V2ExpressionSQLBuilder {
           List<String> children = expressionsToStringList(expressions, 1, expressions.length - 1);
           yield visitIn(build(expressions[0]), children);
         }
-        case "IS_NULL" -> visitIsNull(inputToSQL(e.children()[0]));
-        case "IS_NOT_NULL" -> visitIsNotNull(inputToSQL(e.children()[0]));
+        case "IS_NULL" -> visitIsNull(visitIsNullOperand(e.children()[0]));
+        case "IS_NOT_NULL" -> visitIsNotNull(visitIsNullOperand(e.children()[0]));
         case "STARTS_WITH" -> visitStartsWith(build(e.children()[0]), build(e.children()[1]));
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
@@ -182,6 +182,21 @@ public class V2ExpressionSQLBuilder {
       return "CASE WHEN " + v + " IS NULL THEN NULL ELSE FALSE END";
     }
     return joinListToString(list, ", ", v + " IN (", ")");
+  }
+
+  // Parenthesize a binary comparison operand so `col = 'x' IS NULL` renders as
+  // `(col = 'x') IS NULL`. 
+  protected String visitIsNullOperand(Expression operand) {
+    if (operand instanceof GeneralScalarExpression e) {
+      switch (e.name()) {
+        case "=", "<>", "<=>", "<", "<=", ">", ">=" -> {
+          return "(" + build(operand) + ")";
+        }
+        default -> {
+          return build(operand);
+        }
+      }
+    }
   }
 
   protected String visitIsNull(String v) {

@@ -94,7 +94,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     "scan with aggregate push-down: REGR_SXY with DISTINCT (false)",
     "scan with aggregate push-down: REGR_SXY with DISTINCT (true)",
     "scan with aggregate push-down: REGR_SXY without DISTINCT (false)",
-    "scan with aggregate push-down: REGR_SXY without DISTINCT (true)")
+    "scan with aggregate push-down: REGR_SXY without DISTINCT (true)",
+    // MsSqlServer has no boolean type, so IS [NOT] NULL over a predicate cannot be pushed down.
+    "SPARK-57243: IS [NOT] NULL over a composite operand is pushed down")
 
   override val catalogName: String = "mssql"
   override val db = new MsSQLServerDatabaseOnDocker

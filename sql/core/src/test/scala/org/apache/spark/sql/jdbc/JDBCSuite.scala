@@ -910,6 +910,26 @@ class JDBCSuite extends SharedSparkSession {
     assert(dialect.compileExpression(eqFalse).get === "\"a\" = (1 = 0)")
   }
 
+  test("SPARK-57243: IS [NOT] NULL parenthesizes a predicate operand") {
+    val dialect = JdbcDialects.get("jdbc:")
+    val eq = new Predicate("=", Array[V2Expression](FieldReference("a"), FieldReference("b")))
+    val isNull = new Predicate("IS_NULL", Array[V2Expression](eq))
+    val isNotNull = new Predicate("IS_NOT_NULL", Array[V2Expression](eq))
+    // The predicate operand must be parenthesized.
+    assert(dialect.compileExpression(isNull).get === "(\"a\" = \"b\") IS NULL")
+    assert(dialect.compileExpression(isNotNull).get === "(\"a\" = \"b\") IS NOT NULL")
+    // A bare column reference is not parenthesized.
+    val bareIsNull = new Predicate("IS_NULL", Array[V2Expression](FieldReference("a")))
+    assert(dialect.compileExpression(bareIsNull).get === "\"a\" IS NULL")
+
+    // MsSqlServer has no boolean type, so it must not push down IS [NOT] NULL over a
+    // predicate operand, but IS [NOT] NULL over a plain column is still pushed.
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    assert(msSqlServer.compileExpression(isNull).isEmpty)
+    assert(msSqlServer.compileExpression(isNotNull).isEmpty)
+    assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
+  }
+
   test("Dialect unregister") {
     JdbcDialects.unregisterDialect(H2Dialect())
     try {

@@ -105,6 +105,10 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
         case e: Predicate => e.name() match {
+          case "IS_NULL" | "IS_NOT_NULL" if e.children().head.isInstanceOf[Predicate] =>
+            // For MsSqlServer syntax`(a = b) IS NULL` is not valid.
+            // Give up the push down so Spark evaluates it.
+              visitUnexpectedExpr(expr)
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
             val Array(l, r) = e.children().map(inputToSQLNoBool)
             visitBinaryComparison(e.name(), l, r)
