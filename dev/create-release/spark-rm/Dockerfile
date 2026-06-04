@@ -41,7 +41,7 @@ RUN add-apt-repository ppa:deadsnakes/ppa && \
     && rm -rf /var/lib/apt/lists/*
 
 # Install pip for both Python versions
-RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.9 && \
+RUN curl -sS https://bootstrap.pypa.io/pip/3.9/get-pip.py | python3.9 && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
 
 # Basic Python packages for Spark 4.0
