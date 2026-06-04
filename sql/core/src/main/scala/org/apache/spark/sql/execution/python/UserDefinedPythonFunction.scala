@@ -103,13 +103,13 @@ case class UserDefinedPythonFunction(
               if nameParts.length == 1 && nameParts.head.startsWith("_udf_param_") =>
             val suffix = nameParts.head.stripPrefix("_udf_param_")
             val index = suffix.toIntOption.getOrElse {
-              throw new IllegalArgumentException(
-                s"Invalid UDF parameter placeholder: ${nameParts.head}")
+              throw QueryCompilationErrors.invalidUDFParameterPlaceholder(nameParts.head)
             }
             if (index >= 0 && index < children.length) {
               children(index)
             } else {
-              throw new IllegalArgumentException(s"Invalid UDF parameter index: $index")
+              throw QueryCompilationErrors.invalidUDFParameterPlaceholderIndex(
+                index, children.length)
             }
           case _ =>
             expression.mapChildren(resolveUDFParams(_, children))
@@ -133,6 +133,8 @@ case class UserDefinedPythonFunction(
    */
   def fromUDFExpr(expr: Expression): Column = {
     Column(expr match {
+      case TranspiledPythonUDF(name, udaf: PythonUDAF, transpiled) =>
+        TranspiledPythonUDF(name, udaf.toAggregateExpression(), transpiled)
       case udaf: PythonUDAF => udaf.toAggregateExpression()
       case _ => expr
     })
