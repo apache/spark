@@ -82,25 +82,29 @@ When enabled, cached data is read as columnar batches instead of rows, which can
 
 ## Performance Characteristics
 
-### Performance Characteristics
+In our benchmarks, the Arrow cache format performs best on the following workloads. Actual
+results depend on data types, compression settings, and hardware, and the default cache format
+can be faster in some cases (for example, with higher compression levels):
 
-Based on benchmarks, Arrow cache consistently outperforms default cache across various workloads:
-
-1. **Filter-Heavy Workloads**: Queries with selective filters benefit from min/max statistics (1.4X faster)
-2. **Columnar Operations**: Aggregations, projections on cached data benefit from efficient Arrow format (2.1X faster)
-3. **Parquet/ORC Caching**: Despite no zero-copy benefit, Arrow's efficient batch processing provides 1.6X speedup
-4. **Re-caching with Column Projection**: Best performance (2.2X faster) when dropping columns from Arrow-cached data preserves ArrowColumnVector format
+1. **Filter-Heavy Workloads**: Queries with selective filters benefit from min/max statistics.
+2. **Columnar Operations**: Aggregations and projections on cached data benefit from the Arrow format.
+3. **Parquet/ORC Caching**: Arrow's batch processing helps even without the zero-copy path.
+4. **Re-caching with Column Projection**: Dropping columns from Arrow-cached data preserves the
+   `ArrowColumnVector` format, enabling true zero-copy extraction and the largest gains.
 
 ### Benchmark Results
 
-Based on benchmarks on Apple M4 Max (OpenJDK 21.0.8):
+The numbers below are illustrative results from one run on an Apple M4 Max (OpenJDK 21.0.8) and
+will vary with hardware, JDK, and compression settings. They are not a guarantee. For the
+authoritative, regularly regenerated numbers, see
+`sql/core/benchmarks/ArrowCacheBenchmark-jdk21-results.txt` and the `ArrowCacheBenchmark` suite.
 
 | Workload | Default Cache | Arrow Cache | Speedup |
 |----------|--------------|-------------|---------|
-| Write + Read (5M rows, 3 primitive columns) | 152.6 ns/row | 71.5 ns/row | **2.1X faster** |
-| Filter with stats (5M rows) | 102.7 ns/row | 73.0 ns/row | **1.4X faster** |
-| Columnar input from Parquet (2M rows, 3 primitive columns) | 193.0 ns/row | 120.8 ns/row | **1.6X faster** |
-| Re-cache with zero-copy (2M rows, 2 columns) | 273.3 ns/row | 123.9 ns/row | **2.2X faster** |
+| Write + Read (5M rows, 3 primitive columns) | 153.7 ns/row | 74.2 ns/row | **~2X faster** |
+| Filter with stats (5M rows) | 100.1 ns/row | 70.8 ns/row | **~1.4X faster** |
+| Columnar input from Parquet (2M rows, 3 primitive columns) | 195.3 ns/row | 113.1 ns/row | **~1.7X faster** |
+| Re-cache with zero-copy (2M rows, 2 columns) | 123.3 ns/row | 38.5 ns/row | **~3.2X faster** |
 
 **Notes**:
 - **Write + Read**: Significant improvement from efficient Arrow serialization and vectorized operations
@@ -296,6 +300,8 @@ object ArrowCacheExample {
 
 ## Further Reading
 
+- [Migration Guide: Default Cache to Arrow Cache Format](sql-arrow-cache-migration-guide.html)
+- [Arrow Cache Performance Tuning Guide](sql-arrow-cache-tuning-guide.html)
 - [Apache Arrow Project](https://arrow.apache.org/)
 - [Spark Caching Documentation](https://spark.apache.org/docs/latest/sql-performance-tuning.html#caching-data-in-memory)
 - [Arrow IPC Format](https://arrow.apache.org/docs/format/Columnar.html#ipc-file-format)
