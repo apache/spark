@@ -1070,6 +1070,89 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57256: cast timestamp_ntz with nanosecond precision to string") {
+    // NTZ rendering uses the UTC wall-clock grid and is independent of the session time zone.
+    def ntz(ldt: LocalDateTime, precision: Int, zoneId: Option[String]): Cast =
+      cast(Literal.create(localDateTimeToNanosVal(ldt), TimestampNTZNanosType(precision)),
+        StringType, zoneId)
+
+    outstandingZoneIds.foreach { zid =>
+      val tz = Option(zid.getId)
+      val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+      // Sub-precision digits are floored, then trailing zeros are trimmed.
+      checkEvaluation(ntz(ldt, 9, tz), "2020-01-01 00:00:00.123456789")
+      checkEvaluation(ntz(ldt, 8, tz), "2020-01-01 00:00:00.12345678")
+      checkEvaluation(ntz(ldt, 7, tz), "2020-01-01 00:00:00.1234567")
+
+      // nanosWithinMicro boundaries 0 and 999.
+      checkEvaluation(
+        ntz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456000), 9, tz),
+        "2020-01-01 00:00:00.123456")
+      checkEvaluation(
+        ntz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456999), 9, tz),
+        "2020-01-01 00:00:00.123456999")
+
+      // An all-zero fraction trims to no fractional part at all.
+      checkEvaluation(ntz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 0), 9, tz),
+        "2020-01-01 00:00:00")
+
+      // Pre-epoch and year-9999 boundaries.
+      checkEvaluation(
+        ntz(LocalDateTime.of(1969, 12, 31, 23, 59, 59, 123456789), 9, tz),
+        "1969-12-31 23:59:59.123456789")
+      checkEvaluation(
+        ntz(LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999), 9, tz),
+        "9999-12-31 23:59:59.999999999")
+
+      // Null input.
+      checkEvaluation(
+        cast(Literal.create(null, TimestampNTZNanosType(9)), StringType, tz), null)
+    }
+  }
+
+  test("SPARK-57256: cast timestamp_ltz with nanosecond precision to string") {
+    // The physical value is an epoch instant (built here from a UTC wall clock); the string is
+    // rendered in the session time zone.
+    def ltz(ldt: LocalDateTime, precision: Int, zoneId: String): Cast =
+      cast(Literal.create(localDateTimeToNanosVal(ldt), TimestampLTZNanosType(precision)),
+        StringType, Option(zoneId))
+
+    val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+    // UTC session zone: the wall clock matches the UTC instant. Sub-precision digits are floored
+    // and trailing zeros trimmed.
+    checkEvaluation(ltz(ldt, 9, "UTC"), "2020-01-01 00:00:00.123456789")
+    checkEvaluation(ltz(ldt, 8, "UTC"), "2020-01-01 00:00:00.12345678")
+    checkEvaluation(ltz(ldt, 7, "UTC"), "2020-01-01 00:00:00.1234567")
+
+    // A non-UTC session zone shifts the wall clock; the fractional second is unaffected.
+    checkEvaluation(ltz(ldt, 9, "America/Los_Angeles"), "2019-12-31 16:00:00.123456789")
+    checkEvaluation(ltz(ldt, 9, "Asia/Kolkata"), "2020-01-01 05:30:00.123456789")
+
+    // nanosWithinMicro boundaries 0 and 999 (under UTC).
+    checkEvaluation(
+      ltz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456000), 9, "UTC"),
+      "2020-01-01 00:00:00.123456")
+    checkEvaluation(
+      ltz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456999), 9, "UTC"),
+      "2020-01-01 00:00:00.123456999")
+
+    // An all-zero fraction trims to no fractional part at all.
+    checkEvaluation(ltz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 0), 9, "UTC"),
+      "2020-01-01 00:00:00")
+
+    // Pre-epoch and year-9999 boundaries (under UTC).
+    checkEvaluation(
+      ltz(LocalDateTime.of(1969, 12, 31, 23, 59, 59, 123456789), 9, "UTC"),
+      "1969-12-31 23:59:59.123456789")
+    checkEvaluation(
+      ltz(LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999), 9, "UTC"),
+      "9999-12-31 23:59:59.999999999")
+
+    // Null input.
+    checkEvaluation(
+      cast(Literal.create(null, TimestampLTZNanosType(9)), StringType, UTC_OPT), null)
+  }
+
   test("SPARK-35112: Cast string to day-time interval") {
     checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType()), 0L)
     checkEvaluation(cast(Literal.create(" interval '0 0:0:0' Day TO second   "),

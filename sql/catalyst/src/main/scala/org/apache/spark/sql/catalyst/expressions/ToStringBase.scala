@@ -30,7 +30,7 @@ import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.UTF8StringBuilder
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
@@ -82,6 +82,12 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
+    case t: TimestampLTZNanosType =>
+      acceptAny[TimestampNanosVal](v =>
+        UTF8String.fromString(timestampFormatter.formatNanos(v, t.precision)))
+    case t: TimestampNTZNanosType =>
+      acceptAny[TimestampNanosVal](v =>
+        UTF8String.fromString(timestampNTZFormatter.formatWithoutTimeZoneNanos(v, t.precision)))
     case _: TimeType =>
       acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
     case ArrayType(et, _) =>
@@ -235,6 +241,18 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+      case t: TimestampLTZNanosType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
+          timestampFormatter.getClass)
+        (c, evPrim) =>
+          code"$evPrim = UTF8String.fromString($tf.formatNanos($c, ${t.precision}));"
+      case t: TimestampNTZNanosType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
+          timestampNTZFormatter.getClass)
+        (c, evPrim) =>
+          code"$evPrim = UTF8String.fromString($tf.formatWithoutTimeZoneNanos($c, ${t.precision}));"
       case _: TimeType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timeFormatter", timeFormatter),
