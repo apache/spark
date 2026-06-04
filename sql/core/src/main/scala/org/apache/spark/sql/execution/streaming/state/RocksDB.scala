@@ -309,13 +309,18 @@ class RocksDB(
    *
    * @param colFamilyName - column family name
    * @param isInternal - whether the column family is for internal use or not
+   * @param forceSnapshot - force a snapshot on the next commit when a new family is created.
+   *                        Read-only callers pass `false` (they never commit).
    * @return - virtual column family id
    */
-  def createColFamilyIfAbsent(colFamilyName: String, isInternal: Boolean): Short = {
+  def createColFamilyIfAbsent(
+      colFamilyName: String,
+      isInternal: Boolean,
+      forceSnapshot: Boolean = true): Short = {
     if (!checkColFamilyExists(colFamilyName)) {
       val newColumnFamilyId = maxColumnFamilyId.incrementAndGet().toShort
       addToColFamilyMaps(colFamilyName, newColumnFamilyId, isInternal)
-      shouldForceSnapshot.set(true)
+      if (forceSnapshot) shouldForceSnapshot.set(true)
       newColumnFamilyId
     } else {
       colFamilyNameToInfoMap.get(colFamilyName).cfId

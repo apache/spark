@@ -272,11 +272,11 @@ trait ReadStateStore {
   def allColumnFamilyNames: Set[String]
 
   /**
-   * Register a column family for reading. Implementations must treat this as an in-memory
-   * operation that sets up the key/value encoders needed to decode data from the column
-   * family; it must not write to the checkpoint.
+   * Read-only counterpart of [[StateStore.createColFamilyIfAbsent]]: a purely in-memory
+   * registration of the column family's id and encoders so reads can decode it. Must not write
+   * to the checkpoint or carry write intent (e.g. forcing a snapshot).
    */
-  def createColFamilyIfAbsent(
+  def registerColFamily(
       colFamilyName: String,
       keySchema: StructType,
       valueSchema: StructType,
@@ -284,7 +284,7 @@ trait ReadStateStore {
       useMultipleValuesPerKey: Boolean = false,
       isInternal: Boolean = false): Unit = {
     throw new UnsupportedOperationException(
-      "createColFamilyIfAbsent is not supported by this ReadStateStore")
+      "registerColFamily is not supported by this ReadStateStore")
   }
 }
 
@@ -491,20 +491,18 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
     store.iteratorWithMultiValues(colFamilyName)
   }
 
-  // Unlike other mutating operations, this is delegated to the underlying store rather than
-  // rejected. Registering a column family is a purely in-memory operation: the underlying
-  // implementation only updates its in-memory bookkeeping (virtual column family id and the
-  // key/value encoders) and does not touch the native store or write to the checkpoint. Reads
-  // cannot decode a column family that has not been registered, so read-only consumers must be
-  // able to call this.
-  override def createColFamilyIfAbsent(
+  // Registering a column family is a purely in-memory operation (virtual column family id and
+  // key/value encoders); it does not touch the native store or write to the checkpoint. Reads
+  // cannot decode a column family that has not been registered, so this is delegated to the
+  // underlying store via its read-safe registerColFamily rather than rejected.
+  override def registerColFamily(
       colFamilyName: String,
       keySchema: StructType,
       valueSchema: StructType,
       keyStateEncoderSpec: KeyStateEncoderSpec,
       useMultipleValuesPerKey: Boolean = false,
       isInternal: Boolean = false): Unit = {
-    store.createColFamilyIfAbsent(
+    store.registerColFamily(
       colFamilyName, keySchema, valueSchema, keyStateEncoderSpec,
       useMultipleValuesPerKey, isInternal)
   }

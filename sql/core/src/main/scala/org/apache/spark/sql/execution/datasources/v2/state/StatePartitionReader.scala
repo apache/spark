@@ -183,7 +183,7 @@ abstract class StatePartitionReaderBase(
         StateStoreColumnFamilySchemaUtils.isTestingInternalColFamily(
           stateStoreColFamilySchema.colFamilyName)
       require(stateStoreColFamilySchema.keyStateEncoderSpec.isDefined)
-      readStore.createColFamilyIfAbsent(
+      readStore.registerColFamily(
         stateStoreColFamilySchema.colFamilyName,
         stateStoreColFamilySchema.keySchema,
         stateStoreColFamilySchema.valueSchema,
@@ -413,7 +413,7 @@ class StatePartitionAllColumnFamiliesReader(
             val useMultipleValuesPerKey = isMultiValuedCF(cfSchema.colFamilyName)
             require(cfSchema.keyStateEncoderSpec.isDefined,
               s"keyStateEncoderSpec must be defined for column family ${cfSchema.colFamilyName}")
-            stateStore.createColFamilyIfAbsent(
+            stateStore.registerColFamily(
               cfSchema.colFamilyName,
               cfSchema.keySchema,
               cfSchema.valueSchema,

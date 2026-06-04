@@ -336,6 +336,27 @@ class SymmetricHashJoinStateManagerV4(
   private def readStateStore: ReadStateStore =
     if (readOnly) _readStateStore else _stateStore
 
+  /**
+   * Register a column family on the loaded store. In read-only mode this is the read-safe
+   * in-memory registration ([[ReadStateStore.registerColFamily]]); in write mode it is the
+   * writable [[StateStore.createColFamilyIfAbsent]] (which forces a snapshot for a new family).
+   */
+  private def registerColFamily(
+      colFamilyName: String,
+      keySchema: StructType,
+      valueSchema: StructType,
+      keyStateEncoderSpec: KeyStateEncoderSpec,
+      useMultipleValuesPerKey: Boolean = false,
+      isInternal: Boolean = false): Unit = {
+    if (readOnly) {
+      readStateStore.registerColFamily(colFamilyName, keySchema, valueSchema,
+        keyStateEncoderSpec, useMultipleValuesPerKey, isInternal)
+    } else {
+      stateStore.createColFamilyIfAbsent(colFamilyName, keySchema, valueSchema,
+        keyStateEncoderSpec, useMultipleValuesPerKey, isInternal)
+    }
+  }
+
   // We will use the dummy schema for the default CF since we will register CF separately.
   initializeStateStore(
     dummySchema, dummySchema, useVirtualColumnFamilies = true,
@@ -669,7 +690,7 @@ class SymmetricHashJoinStateManagerV4(
     private val attachTimestampProjection: UnsafeProjection =
       TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
-    readStateStore.createColFamilyIfAbsent(
+    registerColFamily(
       colFamilyName,
       keySchema,
       valueRowConverter.valueAttributes.toStructType,
@@ -843,7 +864,7 @@ class SymmetricHashJoinStateManagerV4(
       TimestampKeyStateEncoder.getAttachTimestampProjection(keySchema)
 
     // Mark as internal so that numKeys counts only primary data, not the secondary index.
-    readStateStore.createColFamilyIfAbsent(
+    registerColFamily(
       colFamilyName,
       keySchema,
       valueStructType,
@@ -1582,6 +1603,27 @@ abstract class SymmetricHashJoinStateManagerBase(
     protected def readStateStore: ReadStateStore =
       if (readOnly) _readStateStore else _stateStore
 
+    /**
+     * Register a column family on the loaded store. In read-only mode this is the read-safe
+     * in-memory registration ([[ReadStateStore.registerColFamily]]); in write mode it is the
+     * writable [[StateStore.createColFamilyIfAbsent]] (which forces a snapshot for a new family).
+     */
+    protected def registerColFamily(
+        colFamilyName: String,
+        keySchema: StructType,
+        valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
+      if (readOnly) {
+        readStateStore.registerColFamily(colFamilyName, keySchema, valueSchema,
+          keyStateEncoderSpec, useMultipleValuesPerKey, isInternal)
+      } else {
+        stateStore.createColFamilyIfAbsent(colFamilyName, keySchema, valueSchema,
+          keyStateEncoderSpec, useMultipleValuesPerKey, isInternal)
+      }
+    }
+
     def commit(): Unit = {
       stateStore.commit()
       logDebug("Committed, metrics = " + stateStore.metrics)
@@ -1712,7 +1754,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     // Create the specific column family in the store for this join side's KeyToNumValuesStore
     if (useVirtualColumnFamilies) {
-      readStateStore.createColFamilyIfAbsent(
+      registerColFamily(
         colFamilyName,
         keySchema,
         longValueSchema,
@@ -1822,7 +1864,7 @@ abstract class SymmetricHashJoinStateManagerBase(
 
     // Create the specific column family in the store for this join side's KeyWithIndexToValueStore
     if (useVirtualColumnFamilies) {
-      readStateStore.createColFamilyIfAbsent(
+      registerColFamily(
         colFamilyName,
         keyWithIndexSchema,
         valueRowConverter.valueAttributes.toStructType,

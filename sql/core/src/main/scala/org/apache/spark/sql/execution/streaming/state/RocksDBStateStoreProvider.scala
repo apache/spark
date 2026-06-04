@@ -201,6 +201,20 @@ private[sql] class RocksDBStateStoreProvider
       }
     }
 
+    // Read-only registration: sets up the virtual column-family id and the key/value encoders
+    // needed to decode this family. Purely in-memory -- it does not write to the checkpoint and
+    // carries no write intent (no forced snapshot). Safe to call on a read-only store.
+    override def registerColFamily(
+        colFamilyName: String,
+        keySchema: StructType,
+        valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        useMultipleValuesPerKey: Boolean = false,
+        isInternal: Boolean = false): Unit = {
+      registerColFamilyInternal(colFamilyName, keySchema, valueSchema, keyStateEncoderSpec,
+        useMultipleValuesPerKey, isInternal, forceSnapshot = false)
+    }
+
     override def createColFamilyIfAbsent(
         colFamilyName: String,
         keySchema: StructType,
@@ -208,9 +222,23 @@ private[sql] class RocksDBStateStoreProvider
         keyStateEncoderSpec: KeyStateEncoderSpec,
         useMultipleValuesPerKey: Boolean = false,
         isInternal: Boolean = false): Unit = {
+      // Writable variant: same registration plus write intent -- a newly created family forces a
+      // snapshot on commit so it is durably persisted.
+      registerColFamilyInternal(colFamilyName, keySchema, valueSchema, keyStateEncoderSpec,
+        useMultipleValuesPerKey, isInternal, forceSnapshot = true)
+    }
+
+    private def registerColFamilyInternal(
+        colFamilyName: String,
+        keySchema: StructType,
+        valueSchema: StructType,
+        keyStateEncoderSpec: KeyStateEncoderSpec,
+        useMultipleValuesPerKey: Boolean,
+        isInternal: Boolean,
+        forceSnapshot: Boolean): Unit = {
       validateAndTransitionState(UPDATE)
       verifyColFamilyCreationOrDeletion("create_col_family", colFamilyName, isInternal)
-      val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal)
+      val cfId = rocksDB.createColFamilyIfAbsent(colFamilyName, isInternal, forceSnapshot)
       val dataEncoderCacheKey = StateRowEncoderCacheKey(
         queryRunId = StateStoreProvider.getRunId(hadoopConf),
         operatorId = stateStoreId.operatorId,
