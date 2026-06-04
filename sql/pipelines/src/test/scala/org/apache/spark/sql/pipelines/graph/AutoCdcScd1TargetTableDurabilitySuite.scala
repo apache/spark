@@ -20,7 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
-import org.apache.spark.sql.pipelines.autocdc.Scd1BatchProcessor
+import org.apache.spark.sql.pipelines.autocdc.AutoCdcReservedNames
 import org.apache.spark.sql.pipelines.utils.{ExecutionTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -147,8 +147,8 @@ class AutoCdcScd1TargetTableDurabilitySuite
 
     val schema = spark.table(s"$catalog.$namespace.target").schema
     assert(
-      schema.fieldNames.contains(Scd1BatchProcessor.cdcMetadataColName),
-      s"Target must have ${Scd1BatchProcessor.cdcMetadataColName} after first AutoCDC run; " +
+      schema.fieldNames.contains(AutoCdcReservedNames.cdcMetadataColName),
+      s"Target must have ${AutoCdcReservedNames.cdcMetadataColName} after first AutoCDC run; " +
       s"got ${schema.fieldNames.toSeq}"
     )
     checkAnswer(
