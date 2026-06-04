@@ -95,7 +95,10 @@ abstract class RowLevelOperationSuiteBase
   }
 
   protected def table: InMemoryRowLevelOperationTable = {
-    catalog.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+    // Use liveTable, not loadTable, because loadTable returns a snapshot copy.
+    // Tests mutate state through this accessor (e.g., `table.increaseVersion()`) and need
+    // those mutations to be observable to subsequent loads.
+    catalog.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
   }
 
   protected def createTable(schemaString: String): Unit = {

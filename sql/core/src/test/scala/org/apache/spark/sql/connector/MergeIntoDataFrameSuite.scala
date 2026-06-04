@@ -1235,7 +1235,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
   }
 
   // Cache-substitution tests for the txn path: connector approves stale-free cached scans via
-  // Transaction.registerScans (returns true iff cached version == current).
+  // Transaction.registerScans.
   test("cached merge source is reused when the table is unchanged since caching") {
     createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
       """{ "pk": 1, "salary": 100, "dep": "hr" }
@@ -1260,17 +1260,23 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 1)
+    assert(table.version() == "2")
     assert(txn.registeredScans.nonEmpty, "registerScans should have accepted the cached scan")
 
-    // MERGE references the source twice (matched + not-matched branches), so the filter
-    // appears twice in scanEvents whether contributed by registerScans or fresh scans.
     val targetTxnTable = txnTables(tableNameAsString)
+    assert(targetTxnTable.scanEvents.size == 4)
     val sourceFilterScans = targetTxnTable.scanEvents.flatten.count {
       case sources.LessThan("salary", 250) => true
       case _ => false
     }
     assert(sourceFilterScans == 2,
-      s"expected two salary<250 scan events, got " +
+      s"expected two salary < 250 scan events, got " +
+        s"${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
+    val targetScans = targetTxnTable.scanEvents.count(_.isEmpty)
+    assert(targetScans == 2,
+      s"expected two target-side scans with no pushed filters, got " +
         s"${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
 
     checkAnswer(
@@ -1307,16 +1313,24 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 1)
+    assert(table.version() == "3")
     assert(txn.registeredScans.isEmpty, "registerScans should refuse the stale cached scan")
 
     val targetTxnTable = txnTables(tableNameAsString)
-    val sourceFilterScanned = targetTxnTable.scanEvents.flatten.exists {
+    assert(targetTxnTable.scanEvents.size == 4)
+    val sourceFilterScans = targetTxnTable.scanEvents.flatten.count {
       case sources.LessThan("salary", 250) => true
       case _ => false
     }
-    assert(sourceFilterScanned,
-      s"expected the source's salary<250 filter to appear as a scan event after cache bypass, " +
-        s"got ${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
+    assert(sourceFilterScans == 2,
+      s"expected two salary<250 scan events (fresh, since cache was bypassed), got " +
+        s"${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
+    val targetScans = targetTxnTable.scanEvents.count(_.isEmpty)
+    assert(targetScans == 2,
+      s"expected two target-side scans with no pushed filters, got " +
+        s"${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1343,7 +1357,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     sourceDF.cache()
     sourceDF.count()
 
-    val (txn, _) = executeTransaction {
+    val (txn, txnTables) = executeTransaction {
       sourceDF
         .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
         .whenMatched()
@@ -1352,8 +1366,17 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 1)
+    assert(table.version() == "2")
     assert(txn.registeredScans.isEmpty,
       "registerScans should not be consulted when the cached subtree has no txn-catalog reads")
+
+    val targetTxnTable = txnTables(tableNameAsString)
+    val targetScans = targetTxnTable.scanEvents.count(_.isEmpty)
+    assert(targetScans == 2,
+      s"expected two target-side scans, got " +
+        s"${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1385,7 +1408,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         .where("pk IN (SELECT pk FROM cache_lookup_view)")
         .as("source")
 
-      val (txn, _) = executeTransaction {
+      val (txn, txnTables) = executeTransaction {
         sourceDF
           .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
           .whenMatched()
@@ -1394,11 +1417,24 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
       }
 
       assert(txn.currentState == Committed)
+      assert(txn.isClosed)
+      // The helper `txnTables` is built from physical BatchScanExec nodes in the executed plan;
+      // since cache_lookup is cache-served, it has no BatchScanExec and doesn't appear here.
+      assert(txnTables.size == 1)
+      // Both the target (test_table) and the IN-subquery's lookup (cache_lookup) must be
+      // tracked through the txn catalog via TxnTableCatalog.loadTable. This is the diagnostic
+      // that surfaces UnresolveRelationsInTransaction subquery-walking gaps.
+      assert(txn.catalog.txnTables.size == 2)
+      assert(table.version() == "2")
       // Every registered scan must point at the lookup (the only cached subtree in this plan).
-      val lookupTable = catalog.loadTable(Identifier.of(Array("ns1"), "cache_lookup"))
+      val lookupIdent = Identifier.of(Array("ns1"), "cache_lookup")
+      val lookupTable = catalog.loadTable(lookupIdent)
       assert(txn.registeredScans.flatten.collect {
         case s: InMemoryBaseTable#InMemoryBatchScan => s.table
       }.distinct == Seq(lookupTable))
+      val lookupTxnTable = txn.catalog.txnTables(lookupIdent)
+      assert(lookupTxnTable.scanEvents.nonEmpty,
+        "lookup scan events should be recorded via registerScans")
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
@@ -1433,13 +1469,24 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
     }
 
     assert(txn.currentState == Committed)
+    assert(txn.isClosed)
+    assert(txnTables.size == 1)
+    assert(table.version() == "2")
     assert(txn.registeredScans.isEmpty, "rejected registerScans attempt")
 
     val targetTxnTable = txnTables(tableNameAsString)
-    assert(targetTxnTable.scanEvents.flatten.exists {
+    assert(targetTxnTable.scanEvents.size == 4)
+    val sourceFilterScans = targetTxnTable.scanEvents.flatten.count {
       case sources.LessThan("salary", 250) => true
       case _ => false
-    }, "expected salary<250 to appear as a scan event after cache bypass")
+    }
+    assert(sourceFilterScans == 2,
+      s"expected two salary < 250 scan events (fresh, since cache was bypassed), got " +
+        s"${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
+    val targetScans = targetTxnTable.scanEvents.count(_.isEmpty)
+    assert(targetScans == 2,
+      s"expected two target-side scans, got " +
+        s"${targetTxnTable.scanEvents.map(_.toSeq).mkString("[", ", ", "]")}")
 
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
@@ -1468,7 +1515,7 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         sourceDF.cache()
         sourceDF.count()
 
-        val (txn, _) = executeTransaction {
+        val (txn, txnTables) = executeTransaction {
           sourceDF
             .mergeInto(tableNameAsString, $"source.pk" === targetTableCol("pk"))
             .whenMatched()
@@ -1477,6 +1524,12 @@ class MergeIntoDataFrameSuite extends RowLevelOperationSuiteBase {
         }
 
         assert(txn.currentState == Committed)
+        assert(txn.isClosed)
+        // Only the cat-side target is tracked in the txn's catalog; cat2.lookup goes through
+        // a different (non-transactional) catalog and must not appear here.
+        assert(txnTables.size == 1)
+        assert(txn.catalog.txnTables.size == 1)
+        assert(table.version() == "2")
         val passed = txn.registeredScans.flatten.collect {
           case s: InMemoryBaseTable#InMemoryBatchScan => s
         }

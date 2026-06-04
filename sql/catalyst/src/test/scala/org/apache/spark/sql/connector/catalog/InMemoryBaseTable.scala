@@ -700,12 +700,6 @@ abstract class InMemoryBaseTable(
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
 
-    // Snapshot of the table version when this scan was built.
-    val builtAtTableVersion: Int = InMemoryBaseTable.this.tableVersion
-
-    // The current table version, read fresh on each access.
-    def currentTableVersion: Int = InMemoryBaseTable.this.tableVersion
-
     // Back-pointer to the table this scan was built against.
     val table: InMemoryBaseTable = InMemoryBaseTable.this
 

@@ -52,25 +52,25 @@ class Txn(override val catalog: TxnTableCatalog) extends Transaction {
 
   def isClosed: Boolean = closed
 
-  // Accept the batch if all scans were built against the table at exactly the version the
-  // table is at now. A real connector could be more permissive. For example, it could accept
-  // older snapshots and record them in the read set for commit-time conflict detection.
+  // Accept the batch only if every scan can be routed to a TxnTable this catalog is tracking;
+  // otherwise refuse. Staleness is handled upstream: `loadTable` returns a snapshot pinned at
+  // load, and version-aware `Table.equals` rejects cache matches whose underlying table has
+  // moved on.
   override def registerScans(scans: Array[Scan]): Boolean = {
     if (rejectRegisteredScansAttempt) return false
 
-    val myScans = scans.collect { case s: InMemoryBaseTable#InMemoryBatchScan => s }
-    val accepted = myScans.forall { s =>
-      s.builtAtTableVersion == s.currentTableVersion
+    val routed = scans.toSeq.map {
+      case s: InMemoryBaseTable#InMemoryBatchScan =>
+        catalog.txnTables.values.find(_.delegate == s.table).map(_ -> s)
+      case _ => None
     }
-    if (accepted) {
-      registeredScans += scans.toSeq
-      myScans.foreach { s =>
-        catalog.txnTables.values
-          .find(_.delegate eq s.table)
-          .foreach(_.scanEvents += s.pushedFilters)
-      }
+    if (routed.exists(_.isEmpty)) return false
+
+    registeredScans += scans.toSeq
+    routed.flatten.foreach { case (txnTable, s) =>
+      txnTable.scanEvents += s.pushedFilters
     }
-    accepted
+    true
   }
 
   override def commit(): Unit = {
@@ -190,7 +190,9 @@ class TxnTableCatalog(delegate: InMemoryRowLevelOperationTableCatalog) extends T
   // table.
   override def loadTable(ident: Identifier): Table = {
     tables.computeIfAbsent(ident, _ => {
-      val table = delegate.loadTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
+      // Wrap the live underlying instance (not a snapshot copy from loadTable) so commits
+      // propagate back to the catalog's authoritative state.
+      val table = delegate.liveTable(ident).asInstanceOf[InMemoryRowLevelOperationTable]
       new TxnTable(table, table.schema(), this)
     })
   }

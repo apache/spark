@@ -39,6 +39,18 @@ class InMemoryRowLevelOperationTableCatalog
   // register-scans calls (`registerScans` returns false unconditionally). Reset after consumed.
   var nextTxnRejectRegisteredScansAttempt: Boolean = false
 
+  // Each `loadTable` returns a fresh snapshot pinned at the current table version (id is
+  // preserved). This is the "pin at table loading" semantics that lets version-aware
+  // `Table.equals` catch staleness: a cached relation holds a copy frozen at V1; a later load
+  // returns a copy at V2, and the two compare unequal so cache substitution fails before
+  // `Transaction.registerScans` is consulted.
+  override def loadTable(ident: Identifier): Table = {
+    liveTable(ident) match {
+      case rlot: InMemoryRowLevelOperationTable => rlot.copy()
+      case other => other
+    }
+  }
+
   override def beginTransaction(info: TransactionInfo): Transaction = {
     assert(transaction == null || transaction.currentState != Active)
     val txn = new Txn(new TxnTableCatalog(this))

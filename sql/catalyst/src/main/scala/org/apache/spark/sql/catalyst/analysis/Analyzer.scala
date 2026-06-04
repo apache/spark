@@ -2532,20 +2532,25 @@ class Analyzer(
      *     outer plan to get evaluated.
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
+      // A subquery containing a V2TableReference also needs re-analysis: the placeholder is
+      // a structurally resolved LeafNode, so the subquery's `resolved` flag is true even
+      // though the V2TableReference must still be re-resolved through the txn-aware catalog.
+      def needsReanalysis(sub: LogicalPlan): Boolean =
+        !sub.resolved || sub.exists(_.isInstanceOf[V2TableReference])
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _) if !sub.resolved =>
+        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _) if needsReanalysis(sub) =>
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
+        case e @ Exists(sub, _, exprId, _, _) if needsReanalysis(sub) =>
           resolveSubQuery(e, outer)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
-            if values.forall(_.resolved) && !l.resolved =>
+        case InSubquery(values, l @ ListQuery(sub, _, exprId, _, _, _))
+            if values.forall(_.resolved) && needsReanalysis(sub) =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output.length)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
-        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
+        case s @ LateralSubquery(sub, _, exprId, _, _) if needsReanalysis(sub) =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
-        case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
+        case a: FunctionTableSubqueryArgumentExpression if needsReanalysis(a.plan) =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
       }
