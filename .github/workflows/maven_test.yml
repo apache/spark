@@ -89,18 +89,18 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-
+            ${{ runner.os }}-build-
       - name: Cache Maven local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
         uses: actions/cache@v5
         with:
           path: ~/.m2/repository
-          key: java${{ inputs.java }}-maven-${{ hashFiles('**/pom.xml') }}
+          key: ${{ runner.os }}-java${{ inputs.java }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            java${{ inputs.java }}-maven-
+            ${{ runner.os }}-java${{ inputs.java }}-maven-
       - name: Install Java ${{ inputs.java }}
         uses: actions/setup-java@v5
         with:
@@ -240,18 +240,18 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-
+            ${{ runner.os }}-build-
       - name: Cache Maven local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
         uses: actions/cache@v5
         with:
           path: ~/.m2/repository
-          key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
+          key: ${{ runner.os }}-java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            java${{ matrix.java }}-maven-
+            ${{ runner.os }}-java${{ matrix.java }}-maven-
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v5
         with:

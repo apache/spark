@@ -128,9 +128,9 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-
+            ${{ runner.os }}-build-
       - name: Cache Coursier local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
