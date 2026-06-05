@@ -119,12 +119,10 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
 
   test("fetch size, fetch direction, result set type and query timeout accessors") {
     withStatement { stmt =>
-      // fetch size: a stored hint that defaults, resets to default on 0, and validates
-      assert(stmt.getFetchSize === 1000)
+      // fetch size: validated then silently dropped, always reads back as 0
+      assert(stmt.getFetchSize === 0)
       stmt.setFetchSize(42)
-      assert(stmt.getFetchSize === 42)
-      stmt.setFetchSize(0)
-      assert(stmt.getFetchSize === 1000)
+      assert(stmt.getFetchSize === 0)
       val se1 = intercept[SQLException] {
         stmt.setFetchSize(-1)
       }
@@ -140,10 +138,10 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
       // result set type is forward-only
       assert(stmt.getResultSetType === ResultSet.TYPE_FORWARD_ONLY)
 
-      // query timeout: a stored hint with validation
+      // query timeout: validated then silently dropped, always reads back as 0
       assert(stmt.getQueryTimeout === 0)
       stmt.setQueryTimeout(30)
-      assert(stmt.getQueryTimeout === 30)
+      assert(stmt.getQueryTimeout === 0)
       val se2 = intercept[SQLException] {
         stmt.setQueryTimeout(-1)
       }

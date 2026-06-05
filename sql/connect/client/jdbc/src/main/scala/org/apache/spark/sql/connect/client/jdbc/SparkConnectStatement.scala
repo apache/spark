@@ -28,10 +28,6 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
 
   private var maxRows: Int = 0
 
-  private var fetchSize: Int = SparkConnectStatement.DEFAULT_FETCH_SIZE
-
-  private var queryTimeout: Int = 0
-
   private var resultsExhausted: Boolean = false
 
   @volatile private var closed: Boolean = false
@@ -147,16 +143,15 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
 
   override def getQueryTimeout: Int = {
     checkOpen()
-    queryTimeout
+    0
   }
 
-  // stored as a hint and echoed back; Spark Connect has no client-side timeout
+  // This driver does not apply a query timeout; validate and silently drop the value.
   override def setQueryTimeout(seconds: Int): Unit = {
     checkOpen()
     if (seconds < 0) {
       throw new SQLException("Query timeout must be zero or a positive integer.")
     }
-    queryTimeout = seconds
   }
 
   override def cancel(): Unit = {
@@ -208,18 +203,17 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
     ResultSet.FETCH_FORWARD
   }
 
-  // stored as a hint; Spark Connect results are forward-only and server-paginated
+  // This driver does not apply a fetch size hint; validate and silently drop the value.
   override def setFetchSize(rows: Int): Unit = {
     checkOpen()
     if (rows < 0) {
       throw new SQLException("Fetch size must be zero or a positive integer.")
     }
-    fetchSize = if (rows == 0) SparkConnectStatement.DEFAULT_FETCH_SIZE else rows
   }
 
   override def getFetchSize: Int = {
     checkOpen()
-    fetchSize
+    0
   }
 
   override def getResultSetConcurrency: Int = {
@@ -302,8 +296,4 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   }
 
   override def isWrapperFor(iface: Class[_]): Boolean = iface.isInstance(this)
-}
-
-object SparkConnectStatement {
-  private val DEFAULT_FETCH_SIZE = 1000
 }
