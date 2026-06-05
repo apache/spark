@@ -98,11 +98,8 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
   override def createStatement(
        resultSetType: Int,
        resultSetConcurrency: Int,
-       resultSetHoldability: Int): Statement = {
-    // holdability is ignored
-    checkSupportedResultSet(resultSetType, resultSetConcurrency)
-    createStatement()
-  }
+       resultSetHoldability: Int): Statement =
+    throw new SQLFeatureNotSupportedException
 
   override def prepareStatement(
       sql: String,

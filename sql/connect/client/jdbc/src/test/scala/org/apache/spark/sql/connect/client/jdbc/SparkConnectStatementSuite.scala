@@ -187,12 +187,12 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
         stmt => assert(stmt.getResultSetType === ResultSet.TYPE_FORWARD_ONLY)
       }
 
-      // the holdability overload applies the same policy
-      Using.resource(conn.createStatement(
+      // the holdability overload is not supported
+      intercept[SQLFeatureNotSupportedException] {
+        conn.createStatement(
           ResultSet.TYPE_FORWARD_ONLY,
           ResultSet.CONCUR_READ_ONLY,
-          ResultSet.CLOSE_CURSORS_AT_COMMIT)) { stmt =>
-        assert(stmt.getResultSetType === ResultSet.TYPE_FORWARD_ONLY)
+          ResultSet.CLOSE_CURSORS_AT_COMMIT)
       }
 
       // updatable concurrency and scroll-sensitive type are rejected
