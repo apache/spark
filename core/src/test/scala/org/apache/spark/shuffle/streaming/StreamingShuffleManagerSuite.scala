@@ -74,9 +74,14 @@ class StreamingShuffleManagerSuite
 
   test("getQueryId throws when no query id property is set") {
     val context = mock[TaskContext]
-    intercept[SparkException] {
+    val e = intercept[SparkException] {
       getQueryId(context)
     }
+    checkError(
+      e,
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" ->
+        "Streaming shuffle requires the query id or SQL execution id local property to be set"))
   }
 
   // ---- registerShuffle ----
@@ -92,28 +97,29 @@ class StreamingShuffleManagerSuite
 
   // ---- SparkEnv tracker initialization gating ----
 
-  test("SparkEnv initializes the streaming shuffle tracker when StreamingShuffleManager is set") {
-    val conf = new SparkConf().set(SHUFFLE_MANAGER, classOf[StreamingShuffleManager].getName)
+  private def assertTrackerInitialized(shuffleManager: Option[String], expectPresent: Boolean):
+      Unit = {
+    val conf = new SparkConf()
+    shuffleManager.foreach(conf.set(SHUFFLE_MANAGER, _))
     withSpark(new SparkContext("local", "StreamingShuffleManagerSuite", conf)) { _ =>
       val tracker = SparkEnv.get.streamingShuffleOutputTracker
-      assert(tracker.isDefined)
-      // The driver hosts the master tracker.
-      assert(tracker.get.isInstanceOf[StreamingShuffleOutputTrackerMaster])
+      assert(tracker.isDefined == expectPresent)
+      // On the driver a present tracker is always the master.
+      if (expectPresent) {
+        assert(tracker.get.isInstanceOf[StreamingShuffleOutputTrackerMaster])
+      }
     }
   }
 
-  test("SparkEnv does not initialize the streaming shuffle tracker for a non-streaming manager") {
-    // A non-streaming shuffle manager (the default sort manager, configured explicitly) must
-    // not trigger StreamingShuffleOutputTracker initialization.
-    val conf = new SparkConf().set(SHUFFLE_MANAGER, classOf[SortShuffleManager].getName)
-    withSpark(new SparkContext("local", "StreamingShuffleManagerSuite", conf)) { _ =>
-      assert(SparkEnv.get.streamingShuffleOutputTracker.isEmpty)
-    }
+  test("SparkEnv initializes the streaming shuffle tracker for StreamingShuffleManager") {
+    assertTrackerInitialized(Some(classOf[StreamingShuffleManager].getName), expectPresent = true)
   }
 
-  test("SparkEnv does not initialize the streaming shuffle tracker for the default manager") {
-    withSpark(new SparkContext("local", "StreamingShuffleManagerSuite", new SparkConf())) { _ =>
-      assert(SparkEnv.get.streamingShuffleOutputTracker.isEmpty)
-    }
+  test("SparkEnv does not initialize the tracker for a non-streaming (sort) manager") {
+    assertTrackerInitialized(Some(classOf[SortShuffleManager].getName), expectPresent = false)
+  }
+
+  test("SparkEnv does not initialize the tracker for the default manager") {
+    assertTrackerInitialized(None, expectPresent = false)
   }
 }

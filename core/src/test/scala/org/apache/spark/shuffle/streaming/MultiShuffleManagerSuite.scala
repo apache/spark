@@ -42,23 +42,24 @@ class MultiShuffleManagerSuite
     isStreamingShuffleEnabled(props) should be(false)
   }
 
-  test("registerShuffle routes to the streaming manager when enabled for the query") {
+  private def assertRoutesToStreaming(enabled: Boolean): Unit = {
     withSpark(new SparkContext("local", "MultiShuffleManagerSuite", new SparkConf())) { sc =>
-      sc.setLocalProperty(STREAMING_SHUFFLE_ENABLED_PROPERTY, "true")
+      if (enabled) {
+        sc.setLocalProperty(STREAMING_SHUFFLE_ENABLED_PROPERTY, "true")
+      }
       val rdd = sc.parallelize(1 to 4).map(x => (x, x))
       val dep = new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(2))
       val handle = new MultiShuffleManager(sc.conf).registerShuffle(7, dep)
-      assert(handle.isInstanceOf[StreamingShuffleHandle[_, _, _]])
+      assert(handle.isInstanceOf[StreamingShuffleHandle[_, _, _]] == enabled)
     }
   }
 
+  test("registerShuffle routes to the streaming manager when enabled for the query") {
+    assertRoutesToStreaming(enabled = true)
+  }
+
   test("registerShuffle routes to the sort manager when not enabled for the query") {
-    withSpark(new SparkContext("local", "MultiShuffleManagerSuite", new SparkConf())) { sc =>
-      val rdd = sc.parallelize(1 to 4).map(x => (x, x))
-      val dep = new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(2))
-      val handle = new MultiShuffleManager(sc.conf).registerShuffle(7, dep)
-      assert(!handle.isInstanceOf[StreamingShuffleHandle[_, _, _]])
-    }
+    assertRoutesToStreaming(enabled = false)
   }
 
   test("SparkEnv initializes the streaming shuffle tracker when MultiShuffleManager is set") {

@@ -80,16 +80,12 @@ private[spark] class StreamingShuffleManager extends ShuffleManager with Logging
 
   logInfo(log"Using StreamingShuffleManager")
 
-  /**
-   * Register a shuffle with the manager and obtain a handle for it to pass to tasks.
-   */
   override def registerShuffle[K, V, C](
       shuffleId: Int,
       dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
     new StreamingShuffleHandle(shuffleId, dependency)
   }
 
-  /** Get a writer for a given partition. Called on executors by map tasks. */
   override def getWriter[K, V](
       handle: ShuffleHandle,
       mapId: Long,
@@ -101,15 +97,8 @@ private[spark] class StreamingShuffleManager extends ShuffleManager with Logging
   }
 
   /**
-   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive)
-   * to read from a range of map outputs(startMapIndex to endMapIndex-1, inclusive). If
-   * endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length of total map
-   * outputs of the shuffle in `getMapSizesByExecutorId`.
-   *
-   * Called on executors by reduce tasks.
-   *
-   * For the streaming shuffle arguments startMapIndex, endMapIndex, startPartition,
-   * and endPartition are not relevant
+   * For the streaming shuffle, the startMapIndex, endMapIndex, startPartition, and endPartition
+   * arguments are not relevant.
    */
   override def getReader[K, C](
       handle: ShuffleHandle,
@@ -124,11 +113,6 @@ private[spark] class StreamingShuffleManager extends ShuffleManager with Logging
       "StreamingShuffleManager.getReader is not yet implemented")
   }
 
-  /**
-   * Remove a shuffle's metadata from the ShuffleManager.
-   * @return
-   *   true if the metadata removed successfully, otherwise false.
-   */
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     // No manager-side state to release here: the driver's StreamingShuffleOutputTracker is
     // unregistered in BlockManagerStorageEndpoint's RemoveShuffle handler, and per-task writer
@@ -136,15 +120,11 @@ private[spark] class StreamingShuffleManager extends ShuffleManager with Logging
     true
   }
 
-  /**
-   * Return a resolver capable of retrieving shuffle block data based on block coordinates.
-   */
   override def shuffleBlockResolver: ShuffleBlockResolver = {
     // don't need to support this for the streaming shuffle implementation
     // since block manager is not used
     throw new UnsupportedOperationException()
   }
 
-  /** Shut down this ShuffleManager. */
   override def stop(): Unit = {}
 }

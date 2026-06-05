@@ -32,7 +32,12 @@ class MultiShuffleHandle(
   extends ShuffleHandle(streamingShuffleHandle.shuffleId)
 
 object MultiShuffleManager {
-  val STREAMING_SHUFFLE_ENABLED_PROPERTY = "spark.shuffle.streaming.useForCurrentQuery"
+  // Streaming shuffle is used for queries running in Real-Time Mode (concurrent stages), gated by
+  // the same per-query local property that the RTM micro-batch execution sets.
+  // TODO(SPARK-57000): once ConcurrentStageDAGScheduler is merged (apache/spark#56055), reference
+  // ConcurrentStageDAGScheduler.CONCURRENT_STAGES_ENABLED_PROPERTY here (and delegate to
+  // ConcurrentStageDAGScheduler.isConcurrentStagesEnabled) instead of hardcoding the property.
+  val STREAMING_SHUFFLE_ENABLED_PROPERTY = "streaming.concurrent.stages.enabled"
 
   def isStreamingShuffleEnabled(properties: Properties): Boolean =
     "true" == properties.getProperty(STREAMING_SHUFFLE_ENABLED_PROPERTY)
