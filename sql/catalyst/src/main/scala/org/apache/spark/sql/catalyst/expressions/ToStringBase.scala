@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
@@ -67,10 +66,16 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case NoConstraint => castToString(from)
     }
 
-  private def castToString(from: DataType): Any => UTF8String =
-    TypeApiOps(from)
-      .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
-      .getOrElse(castToStringDefault(from))
+  private def castToString(from: DataType): Any => UTF8String = from match {
+    // Nanosecond timestamp string formatting is zone-aware (LTZ renders in the session time zone),
+    // so it lives in castToStringDefault alongside the microsecond timestamp types rather than the
+    // zone-less Types Framework formatter (SPARK-57256).
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => castToStringDefault(from)
+    case _ =>
+      TypeApiOps(from)
+        .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
+        .getOrElse(castToStringDefault(from))
+  }
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
@@ -324,13 +329,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
       case _: StringType =>
         (c, evPrim) => code"$evPrim = $c;"
-      // Fractional-second (nanosecond) timestamp formatting is not implemented yet: there is no
-      // TimestampFormatter for the nanos timestamp types. The interpreted path raises this via the
-      // Types Framework (castToString -> TypeApiOps.format); the codegen path has no framework
-      // hook, so it raises the same user-facing error directly until a formatter lands
-      // (SPARK-57207).
-      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-        throw DataTypeErrors.cannotConvertNanosTimestampToStringError(from)
       case _ =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
