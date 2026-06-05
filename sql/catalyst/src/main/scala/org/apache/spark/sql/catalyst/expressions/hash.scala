@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal, RoundingMode}
 import java.util.concurrent.TimeUnit._
-import java.util.zip.CRC32
 
 import scala.annotation.tailrec
 
@@ -214,20 +213,13 @@ case class Crc32(child: Expression)
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any = {
-    val checksum = new CRC32
-    checksum.update(input.asInstanceOf[Array[Byte]], 0, input.asInstanceOf[Array[Byte]].length)
-    checksum.getValue
+    ExpressionImplUtils.crc32(input.asInstanceOf[Array[Byte]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val CRC32 = "java.util.zip.CRC32"
-    val checksum = ctx.freshName("checksum")
+    val utils = classOf[ExpressionImplUtils].getName
     nullSafeCodeGen(ctx, ev, value => {
-      s"""
-        $CRC32 $checksum = new $CRC32();
-        $checksum.update($value, 0, $value.length);
-        ${ev.value} = $checksum.getValue();
-      """
+      s"${ev.value} = $utils.crc32($value);"
     })
   }
 

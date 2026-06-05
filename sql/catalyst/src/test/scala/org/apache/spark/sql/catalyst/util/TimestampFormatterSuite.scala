@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import java.time.{DateTimeException, LocalDateTime, ZoneId}
+import java.time.{DateTimeException, Instant, LocalDateTime, ZoneId}
 import java.util.Locale
 
-import org.apache.spark.{SparkException, SparkUpgradeException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.LENIENT_SIMPLE_DATE_FORMAT
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 class TimestampFormatterSuite extends DatetimeFormatterSuite {
 
@@ -558,5 +559,221 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
         "message" -> ("Cannot parse field value '2021-13-01T25:61:61' for pattern " +
           "'yyyy-MM-dd HH:mm:ss' as the target spark data type \"TIMESTAMP_NTZ\"."))
     )
+  }
+
+  // The expected LTZ value: floor the sub-`precision` fractional digits, then split into
+  // (epochMicros, nanosWithinMicro). Mirrors `SparkDateTimeUtils.instantToTimestampNanos`.
+  private def expectedLTZNanos(instant: Instant, precision: Int): TimestampNanosVal = {
+    val truncatedNano = nanoOfSecTruncator(precision)(instant.getNano)
+    instantToNanosVal(Instant.ofEpochSecond(instant.getEpochSecond, truncatedNano.toLong))
+  }
+
+  // The expected NTZ value (interpreted at UTC), with sub-`precision` digits floored.
+  private def expectedNTZNanos(ldt: LocalDateTime, precision: Int): TimestampNanosVal = {
+    localDateTimeToNanosVal(ldt.withNano(nanoOfSecTruncator(precision)(ldt.getNano)))
+  }
+
+  private val nanosPattern = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
+
+  test("SPARK-57162: Iso8601 formatter parses strings into TimestampNanosVal (LTZ)") {
+    outstandingZoneIds.foreach { zoneId =>
+      val formatter = TimestampFormatter(nanosPattern, zoneId, isParsing = true)
+      foreachNanosPrecision { precision =>
+        specialNanosTs.foreach { ts =>
+          val input = ts.replace(' ', 'T')
+          val expected = expectedLTZNanos(parseSpecialNanosLTZ(ts, zoneId), precision)
+          assert(formatter.parseNanos(input, precision) === expected)
+          assert(formatter.parseNanosOptional(input, precision).contains(expected))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57162: Iso8601 formatter parses strings into TimestampNanosVal (NTZ)") {
+    // NTZ values are zone-independent (interpreted at UTC), so a single formatter zone suffices.
+    val formatter = TimestampFormatter(nanosPattern, UTC, isParsing = true)
+    foreachNanosPrecision { precision =>
+      specialNanosTs.foreach { ts =>
+        val input = ts.replace(' ', 'T')
+        val expected = expectedNTZNanos(parseSpecialNanosNTZ(ts), precision)
+        assert(formatter.parseWithoutTimeZoneNanos(input, precision) === expected)
+        assert(formatter.parseWithoutTimeZoneNanos(input, precision, allowTimeZone = true) ===
+          expected)
+        assert(formatter.parseWithoutTimeZoneNanosOptional(input, precision, allowTimeZone = true)
+          .contains(expected))
+      }
+    }
+  }
+
+  test("SPARK-57162: round-trip TimestampNanosVal -> string -> TimestampNanosVal") {
+    outstandingZoneIds.foreach { zoneId =>
+      val parser = TimestampFormatter(nanosPattern, zoneId, isParsing = true)
+      val printer = TimestampFormatter(nanosPattern, zoneId, isParsing = false)
+      foreachNanosPrecision { precision =>
+        specialNanosTs.foreach { ts =>
+          val value = expectedLTZNanos(parseSpecialNanosLTZ(ts, zoneId), precision)
+          val formatted = printer.formatNanos(value, precision)
+          assert(parser.parseNanos(formatted, precision) === value)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57162: sub-precision fractional digits are truncated on parse") {
+    val formatter = TimestampFormatter(nanosPattern, UTC, isParsing = true)
+    val input = "1970-01-01T00:00:00.123456789"
+    Seq(
+      9 -> nanosVal(123456L, 789),
+      8 -> nanosVal(123456L, 780),
+      7 -> nanosVal(123456L, 700)).foreach { case (precision, expected) =>
+      assert(formatter.parseNanos(input, precision) === expected)
+      assert(formatter.parseWithoutTimeZoneNanos(input, precision) === expected)
+    }
+  }
+
+  test("SPARK-57162: formatNanos truncates to precision and renders per pattern width") {
+    val value = nanosVal(123456L, 789) // 1970-01-01 00:00:00.123456789 at UTC
+    val fixed = TimestampFormatter(nanosPattern, UTC, isParsing = false)
+    assert(fixed.formatNanos(value, 9) === "1970-01-01T00:00:00.123456789")
+    assert(fixed.formatNanos(value, 8) === "1970-01-01T00:00:00.123456780")
+    assert(fixed.formatNanos(value, 7) === "1970-01-01T00:00:00.123456700")
+
+    // The fraction formatter omits trailing zeros.
+    val fraction = TimestampFormatter.getFractionFormatter(UTC)
+    assert(fraction.formatNanos(value, 9) === "1970-01-01 00:00:00.123456789")
+    assert(fraction.formatNanos(value, 8) === "1970-01-01 00:00:00.12345678")
+    assert(fraction.formatNanos(value, 7) === "1970-01-01 00:00:00.1234567")
+  }
+
+  test("SPARK-57162: formatWithoutTimeZoneNanos is zone-independent (NTZ)") {
+    // Regression guard for an LTZ-only `formatNanos`: with a non-UTC formatter zone, the NTZ
+    // method must render the UTC-grid wall clock unchanged, whereas `formatNanos` (LTZ) routes
+    // through `format(Instant)` and shifts the value into the zone. All-UTC NTZ cases miss this.
+    val value = nanosVal(123456L, 789) // wall clock 1970-01-01 00:00:00.123456789 on the UTC grid
+    val zone = getZoneId("+01:00")
+    val printer = TimestampFormatter(nanosPattern, zone, isParsing = false)
+    // The 9-`S` pattern always emits 9 fractional digits; truncation zeros the low ones.
+    Seq(
+      9 -> "1970-01-01T00:00:00.123456789",
+      8 -> "1970-01-01T00:00:00.123456780",
+      7 -> "1970-01-01T00:00:00.123456700").foreach { case (precision, expectedNtz) =>
+      assert(printer.formatWithoutTimeZoneNanos(value, precision) === expectedNtz)
+    }
+    // LTZ rendering of the same value is shifted by the +01:00 offset.
+    assert(printer.formatNanos(value, 9) === "1970-01-01T01:00:00.123456789")
+    // The NTZ output round-trips through the matching NTZ parser regardless of formatter zone.
+    val parser = TimestampFormatter(nanosPattern, zone, isParsing = true)
+    assert(parser.parseWithoutTimeZoneNanos(
+      printer.formatWithoutTimeZoneNanos(value, 9), 9) === value)
+  }
+
+  test("SPARK-57162: NTZ nanos parse rejects a time zone when not allowed") {
+    val formatter = TimestampFormatter(
+      "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX",
+      UTC,
+      isParsing = true)
+    val input = "2018-12-02T10:11:12.123456789+01:00"
+    // When the zone component is allowed it is discarded and the local fields are kept.
+    val expected = expectedNTZNanos(LocalDateTime.of(2018, 12, 2, 10, 11, 12, 123456789), 9)
+    assert(formatter.parseWithoutTimeZoneNanos(input, 9, allowTimeZone = true) === expected)
+
+    intercept[SparkException] {
+      formatter.parseWithoutTimeZoneNanos(input, 9, allowTimeZone = false)
+    }
+    assert(formatter.parseWithoutTimeZoneNanosOptional(input, 9, allowTimeZone = false).isEmpty)
+  }
+
+  test("SPARK-57162: DefaultTimestampFormatter parses nanos without a pattern") {
+    outstandingZoneIds.foreach { zoneId =>
+      val formatter = new DefaultTimestampFormatter(
+        zoneId,
+        locale = DateFormatter.defaultLocale,
+        legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+        isParsing = true)
+      val ldt = LocalDateTime.of(2021, 8, 12, 18, 31, 50, 123456789)
+      val input = "2021-08-12T18:31:50.123456789"
+      foreachNanosPrecision { precision =>
+        val expectedLtz = expectedLTZNanos(ldt.atZone(zoneId).toInstant, precision)
+        assert(formatter.parseNanos(input, precision) === expectedLtz)
+        assert(formatter.parseNanosOptional(input, precision).contains(expectedLtz))
+        val expectedNtz = expectedNTZNanos(ldt, precision)
+        assert(formatter.parseWithoutTimeZoneNanos(input, precision) === expectedNtz)
+        assert(formatter.parseWithoutTimeZoneNanosOptional(input, precision, allowTimeZone = true)
+          .contains(expectedNtz))
+      }
+      assert(formatter.parseNanosOptional("x123", 9).isEmpty)
+      assert(formatter.parseWithoutTimeZoneNanosOptional("x123", 9, allowTimeZone = true).isEmpty)
+    }
+  }
+
+  test("SPARK-57162: DefaultTimestampFormatter.formatNanos uses the default pattern (no fracs)") {
+    // DefaultTimestampFormatter inherits Iso8601TimestampFormatter.formatNanos, which renders via
+    // the default pattern "yyyy-MM-dd HH:mm:ss". That pattern has no S fields, so sub-second
+    // digits are not emitted. This is expected behaviour: DefaultTimestampFormatter is
+    // parse-oriented and callers that need fractional output should use FractionTimestampFormatter.
+    val formatter = new DefaultTimestampFormatter(
+      UTC,
+      locale = DateFormatter.defaultLocale,
+      legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+      isParsing = false)
+    val value = nanosVal(123456L, 789) // 1970-01-01 00:00:00.123456789 UTC
+    assert(formatter.formatNanos(value, 9) === "1970-01-01 00:00:00")
+    assert(formatter.formatNanos(value, 7) === "1970-01-01 00:00:00")
+  }
+
+  test("SPARK-57162: legacy formatters reject nanosecond precision") {
+    val fast = new LegacyFastTimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss.SSSSSS",
+      zoneId = UTC,
+      locale = DateFormatter.defaultLocale)
+    val simple = new LegacySimpleTimestampFormatter(
+      "yyyy-MM-dd HH:mm:ss.SSSSSS",
+      zoneId = UTC,
+      locale = DateFormatter.defaultLocale)
+    val expectedParameters = Map(
+      "config" -> ("\"" + SQLConf.LEGACY_TIME_PARSER_POLICY.key + "\""))
+    Seq[TimestampFormatter](fast, simple).foreach { formatter =>
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.parseNanos("2020-01-01 00:00:00.123456789", 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+      // The optional variants must surface the unsupported-feature error too, not swallow it and
+      // return None. Their counterparts are abstract in the trait specifically to force this.
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.parseNanosOptional("2020-01-01 00:00:00.123456789", 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.formatNanos(nanosVal(0L, 1), 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.parseWithoutTimeZoneNanos("2020-01-01 00:00:00.123456789", 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.parseWithoutTimeZoneNanosOptional(
+            "2020-01-01 00:00:00.123456789",
+            9,
+            allowTimeZone = true)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          formatter.formatWithoutTimeZoneNanos(nanosVal(0L, 1), 9)
+        },
+        condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER",
+        parameters = expectedParameters)
+    }
   }
 }

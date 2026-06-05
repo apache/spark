@@ -105,6 +105,7 @@ jobs:
           pyspark=`./dev/is-changed.py -m $pyspark_modules`
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           pyspark_install=`./dev/is-changed.py -m pyspark-install`
+          pyspark_connect_old_client="$pyspark"
           if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
@@ -139,6 +140,7 @@ jobs:
             java25=true
           else
             pyspark_install=false
+            pyspark_connect_old_client=false
             pandas=false
             yarn=false
             kubernetes=false
@@ -160,6 +162,7 @@ jobs:
               \"pyspark\": \"$pyspark\",
               \"pyspark-pandas\": \"$pandas\",
               \"pyspark-install\": \"$pyspark_install\",
+              \"pyspark-connect-old-client\": \"$pyspark_connect_old_client\",
               \"sparkr\": \"$sparkr\",
               \"tpcds-1g\": \"$tpcds\",
               \"docker-integration-tests\": \"$docker\",
@@ -378,15 +381,14 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space ]; then
@@ -577,7 +579,8 @@ jobs:
         fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
         fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
         fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
-        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true')
+        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true' ||
+        fromJson(needs.precondition.outputs.required).tpcds-1g == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -616,9 +619,9 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
-        key: precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -671,6 +674,8 @@ jobs:
           - >-
             pyspark-connect
           - >-
+            pyspark-connect-old-client
+          - >-
             pyspark-install
           - >-
             pyspark-pandas
@@ -688,6 +693,7 @@ jobs:
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-mllib, pyspark-ml, pyspark-ml-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-streaming, pyspark-structured-streaming, pyspark-structured-streaming-connect' }}
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark != 'true' && 'pyspark-connect' }}
+          - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-connect-old-client != 'true' &&  'pyspark-connect-old-client'}}
           # pyspark-install is very slow so we only run it when it's changed or explicity requested
           - modules: ${{ fromJson(needs.precondition.outputs.required).pyspark-install != 'true' && 'pyspark-install' }}
           # Always run if pyspark-pandas == 'true', even infra-image is skip (such as non-master job)
@@ -738,13 +744,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          pyspark-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
@@ -782,6 +788,7 @@ jobs:
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
+      if: ${{ matrix.modules != 'pyspark-connect-old-client' }}
       shell: 'script -q -e -c "bash {0}"'
       run: |
         if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
@@ -798,6 +805,41 @@ jobs:
           # For branch-3.5 and below, it uses the default Python versions.
           ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
         fi
+    - name: Run tests for old client
+      env:
+        SPARK_TESTING: 1
+        SPARK_SKIP_CONNECT_COMPAT_TESTS: 1
+        SPARK_CONNECT_TESTING_REMOTE: sc://localhost
+      if: ${{ matrix.modules == 'pyspark-connect-old-client' && inputs.branch == 'master' }}
+      run: |
+        # Build Spark
+        if [ "${{ steps.extract-precompiled.outcome }}" = "success" ]; then
+          echo "Reusing precompiled artifact, skipping local SBT build."
+        else
+          ./build/sbt -Phive Test/package
+        fi
+
+        # Make less noisy
+        cp conf/log4j2.properties.template conf/log4j2.properties
+        sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
+
+        # Start a Spark Connect server for local
+        PYTHONPATH="python/lib/pyspark.zip:python/lib/py4j-0.10.9.9-src.zip:$PYTHONPATH" ./sbin/start-connect-server.sh \
+          --driver-java-options "-Dlog4j.configurationFile=file:$GITHUB_WORKSPACE/conf/log4j2.properties" \
+          --jars "`find connector/protobuf/target -name spark-protobuf-*SNAPSHOT.jar`,`find connector/avro/target -name spark-avro*SNAPSHOT.jar`" \
+          --conf spark.sql.execution.arrow.pyspark.validateSchema.enabled=false \
+          --conf spark.sql.execution.pandas.convertToArrowArraySafely=false
+
+        # Checkout to branch-4.0 to use the tests in branch-4.0.
+        cd ..
+        git clone --single-branch --branch branch-4.0 https://github.com/apache/spark.git spark-4.0
+        cd spark-4.0
+
+        # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
+        # Run branch-4.0 tests
+        ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-connect
+        # None of tests are dependent on each other in Pandas API on Spark so run them in parallel
+        ./python/run-tests --parallelism=1 --python-executables=python3 --modules pyspark-pandas-connect,pyspark-pandas-slow-connect
     - name: Upload coverage to Codecov
       if: fromJSON(inputs.envs).PYSPARK_CODECOV == 'true'
       uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe # v5
@@ -888,13 +930,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          sparkr-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -1039,13 +1081,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docs-coursier-
+          ${{ runner.os }}-coursier-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
@@ -1238,13 +1280,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docs-coursier-
+          ${{ runner.os }}-coursier-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
@@ -1403,8 +1445,8 @@ jobs:
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1433,20 +1475,32 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          tpcds-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
@@ -1553,15 +1607,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docker-integration-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1641,15 +1693,13 @@ jobs:
           key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
             build-
-      - name: Cache Coursier local repository
-        uses: actions/cache@v5
+      - name: Restore Coursier local repository
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/coursier
-          key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            k8s-integration-coursier-
-            precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-            precompile-coursier-
+            ${{ runner.os }}-coursier-
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then

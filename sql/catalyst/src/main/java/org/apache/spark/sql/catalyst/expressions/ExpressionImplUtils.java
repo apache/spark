@@ -22,9 +22,13 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 import java.text.BreakIterator;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.zip.CRC32;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
@@ -341,5 +345,126 @@ public class ExpressionImplUtils {
 
     String sp = str.toString().replaceAll(qtChar, qtCharRep);
     return UTF8String.fromString(qtChar + sp + qtChar);
+  }
+
+  /**
+   * Inverse hyperbolic sine for the {@code asinh} expression, using the fdlibm
+   * {@code s_asinh.c} algorithm (odd function, so the sign of {@code x} is
+   * preserved). Shared by the eval and codegen paths so the generated Java is a
+   * single call rather than an inline five-branch if/else.
+   */
+  public static double asinh(double x) {
+    double ax = Math.abs(x);
+    double w;
+    if (Double.isInfinite(ax) || Double.isNaN(ax)) {
+      w = ax;
+    } else if (ax < 1.0 / (1 << 28)) {
+      w = ax;
+    } else if (ax > (1 << 28)) {
+      w = StrictMath.log(ax) + StrictMath.log(2.0);
+    } else if (ax > 2.0) {
+      w = StrictMath.log(2.0 * ax + 1.0 / (Math.sqrt(x * x + 1.0) + ax));
+    } else {
+      double t = x * x;
+      w = StrictMath.log1p(ax + t / (1.0 + Math.sqrt(1.0 + t)));
+    }
+    return Math.copySign(w, x);
+  }
+
+  /**
+   * Inverse hyperbolic cosine for the {@code acosh} expression, using the
+   * fdlibm {@code e_acosh.c} algorithm (returns {@code NaN} for {@code x < 1}).
+   * Shared by the eval and codegen paths so the generated Java is a single call
+   * rather than an inline five-branch if/else.
+   */
+  public static double acosh(double x) {
+    if (x < 1.0) {
+      return Double.NaN;
+    } else if (x >= (1 << 28)) {
+      return StrictMath.log(x) + StrictMath.log(2.0);
+    } else if (x == 1.0) {
+      return 0.0;
+    } else if (x > 2.0) {
+      return StrictMath.log(2.0 * x - 1.0 / (x + Math.sqrt(x * x - 1.0)));
+    } else {
+      double t = x - 1.0;
+      return StrictMath.log1p(t + Math.sqrt(2.0 * t + t * t));
+    }
+  }
+
+  /**
+   * Returns the single-character string for the {@code chr} expression: the
+   * ASCII/Latin-1 character for {@code longVal & 0xFF}. A negative argument
+   * yields the empty string. Shared by the eval and codegen paths so the
+   * generated Java is a single call rather than an inline if/else chain.
+   */
+  public static UTF8String chr(long longVal) {
+    if (longVal < 0) {
+      return UTF8String.EMPTY_UTF8;
+    } else if ((longVal & 0xFF) == 0) {
+      return UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
+    } else {
+      char c = (char) (longVal & 0xFF);
+      return UTF8String.fromString(String.valueOf(c));
+    }
+  }
+
+  /**
+   * Compiles {@code regex} with the given {@code flags} for the regexp expression
+   * family, translating a {@link PatternSyntaxException} into the user-facing
+   * INVALID_PARAMETER_VALUE.PATTERN error. Shared by the regexp eval and codegen
+   * paths so the generated Java is a single call instead of an inline try/catch
+   * around {@code Pattern.compile}.
+   */
+  public static Pattern compileRegexPattern(String regex, int flags, String funcName) {
+    try {
+      return Pattern.compile(regex, flags);
+    } catch (PatternSyntaxException e) {
+      throw QueryExecutionErrors.invalidPatternError(funcName, e.getPattern(), e);
+    }
+  }
+
+  /**
+   * Computes the CRC32 checksum of {@code bytes} for the {@code crc32} expression.
+   * Shared by the eval and codegen paths so the per-stage generated Java is a
+   * single call rather than an inline allocate / update / getValue sequence.
+   */
+  public static long crc32(byte[] bytes) {
+    CRC32 checksum = new CRC32();
+    checksum.update(bytes, 0, bytes.length);
+    return checksum.getValue();
+  }
+
+  /**
+   * Returns the numeric value of the first character of the input string, or 0 if it is empty.
+   * Shared by the Ascii expression's eval and codegen paths so the generated Java is a single
+   * call rather than an inline substring/if-else block.
+   */
+  public static int ascii(UTF8String str) {
+    // only pick the first character to reduce the `toString` cost
+    UTF8String firstCharStr = str.substring(0, 1);
+    if (firstCharStr.numChars() > 0) {
+      return firstCharStr.toString().codePointAt(0);
+    } else {
+      return 0;
+    }
+  }
+
+  /**
+   * Builds the number pattern for the given scale (the default grouping pattern followed by
+   * {@code scale} decimal places) and applies it to the given {@link DecimalFormat}. Shared by the
+   * FormatNumber expression's eval and codegen paths so the generated Java is a single call and
+   * the pattern buffer does not need to be threaded through mutable state.
+   */
+  public static void applyNumberFormatScale(
+      DecimalFormat numberFormat, String defaultFormat, int scale) {
+    StringBuilder pattern = new StringBuilder(defaultFormat);
+    if (scale > 0) {
+      pattern.append('.');
+      for (int i = 0; i < scale; i++) {
+        pattern.append('0');
+      }
+    }
+    numberFormat.applyLocalizedPattern(pattern.toString());
   }
 }

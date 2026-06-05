@@ -222,10 +222,9 @@ case class Scd2BatchProcessor(
    *   a validated and preprocessed microbatch as produced by [[preprocessMicrobatch]] - in
    *   particular, non-null key columns and a non-null [[recordStartAtFieldName]] on every row.
    * @return
-   *   a dataframe containing one row per distinct key. Schema, in column order:
-   *     1. The key columns ([[ChangeArgs.keys]]), in their declared order.
-   *     2. [[minSequenceColName]], carrying the min [[recordStartAtFieldName]]
-   *        across all records within the microbatch for that key.
+   *   a dataframe containing one row per distinct key, with the key columns
+   *   ([[ChangeArgs.keys]]) and a [[minSequenceColName]] column carrying the min
+   *   [[recordStartAtFieldName]] across that key's records in the microbatch.
    */
   private[autocdc] def computeMinimumSequencePerKey(preprocessedBatchDf: DataFrame): DataFrame = {
     val recordStartAt =
@@ -245,7 +244,8 @@ case class Scd2BatchProcessor(
    *   one row per distinct key as produced by [[computeMinimumSequencePerKey]], representing
    *   the minimum sequence for that key in the microbatch.
    * @param batchId
-   *   the underlying Spark streaming query's batchId, which serves as the idempotency key.
+   *   the underlying Spark streaming query's batchId, used to scope aux-row visibility for
+   *   replay-stability across retries of the same microbatch.
    * @return
    *   a dataframe containing all the affected aux rows, with the aux-only
    *   [[deletedByBatchIdColName]] column dropped so the result is union-compatible with
@@ -263,9 +263,11 @@ case class Scd2BatchProcessor(
 
     val reducedAuxiliaryTableDf = rawAuxiliaryTableDf
       .filter(
-        // Ignore any auxiliary table rows logically deleted by any microbatch other than this one
-        // itself. Recall this execution could be a retry attempt on the same microbatch, and
-        // batchId is our idempotency key.
+        // [[deletedByBatchIdColName]] carries the batchId whose MERGE logically deleted the
+        // row, or null on live aux rows. Rows deleted by other batches are excluded - those
+        // decisions are final. Rows deleted by THIS batch are re-included - this can only
+        // happen when the current execution is a retry of a partially-failed prior attempt of
+        // the same microbatch.
         auxTableDeletedByBatchIdCol.isNull ||
           auxTableDeletedByBatchIdCol === F.lit(batchId)
       )
@@ -308,8 +310,10 @@ case class Scd2BatchProcessor(
     val auxRowIsAnchorRow = auxTableRecordStartAtField === anchorSequenceCol
 
     // Now that we have the minimum sequence in the microbatch and the sequence of the anchor row,
-    // we have enough information to compute the full set of auxiliary rows that affect or are
-    // affected by the microbatch.
+    // we have enough information to compute the full set of auxiliary rows that may affect or
+    // be affected by the microbatch. Membership here is a conservative superset: every row that
+    // could possibly participate in reconciliation is included, but downstream reconciliation
+    // determines the actual outcome per row.
     val auxRowIsAtOrAfterMinSequenceInMicrobatch =
       auxTableRecordStartAtField >= perKeyMinimumSequenceInMicrobatchCol
 
@@ -655,8 +659,8 @@ case class Scd2BatchProcessor(
  * latest row values for that run. The target table in its entirety represents the SCD2
  * representation of the CDC flow's source table.
  *
- * Lifetime invariant: per key, no two target-table persisted rows share the same
- * [[recordStartAtFieldName]] value.
+ * Lifetime invariant: As per the SCD2 contract, the target table should never have overlapping
+ * rows by [startAt, endAt) intervals.
  *
  * -------------
  * Concept: aux table.
@@ -667,9 +671,6 @@ case class Scd2BatchProcessor(
  *       and may match with a late-arriving upsert in a future microbatch.
  *    2. No-op upserts (i.e. tails of runs); hidden no-op rows that may reconcile as
  *       state-changing run heads in a future microbatch.
- *
- * Lifetime invariant: per key, no two aux-table persisted rows share the same
- * [[recordStartAtFieldName]] value.
  *
  * The aux table is considered an internal table that users should neither tamper nor consider
  * public contract.
@@ -713,7 +714,8 @@ object Scd2BatchProcessor {
   /**
    * Aux-table only column that holds the microbatch id by which a row was logically
    * deleted (null if the row is still live). Future microbatches must treat any row with a
-   * non-null value here, other than the current batch's id, as deleted.
+   * non-null value here, other than the current batch's id, as deleted, and may safely
+   * physically reap them since prior microbatches commit before the next one starts.
    *
    * Logically-deleted rows exist as a concept on the auxiliary table to provide
    * idempotency, should a microbatch fail between a MERGE executed against the auxiliary
