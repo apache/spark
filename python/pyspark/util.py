@@ -527,13 +527,15 @@ def handle_worker_exception(
     def format_exception() -> str:
         if hide_traceback:
             return "".join(traceback.format_exception_only(type(e), e))
-        tb = sys.exc_info()[-1]  # type: ignore[arg-type]
+        tb = sys.exc_info()[-1]
         if os.environ.get("SPARK_SIMPLIFIED_TRACEBACK", False):
             simplified_tb = try_simplify_traceback(tb)  # type: ignore[arg-type]
             if simplified_tb is not None:
                 tb = simplified_tb
                 e.__cause__ = None
-        capture_locals = os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False)
+        # We only set SPARK_TRACEBACK_WITH_LOCALS=1 for now. This equivalent to a
+        # check for the existence of the environment variable.
+        capture_locals = bool(os.environ.get("SPARK_TRACEBACK_WITH_LOCALS", False))
         te = traceback.TracebackException(
             type(e), e, tb, compact=True, capture_locals=capture_locals
         )
