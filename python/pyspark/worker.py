@@ -2989,9 +2989,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
         map_udf, _, _, return_type = udfs[0]
         output_schema = StructType([StructField("_0", return_type)])
-        # Reuse the iterator-pandas wrapper: iterability check, per-element
-        # DataFrame type check, and verify_pandas_result against return_type.
-        verified_udf = wrap_pandas_batch_iter_udf(map_udf, return_type, runner_conf)
+        iter_type_label = (
+            "pandas.DataFrame" if isinstance(return_type, StructType) else "pandas.Series"
+        )
+        elem_type = pd.DataFrame if isinstance(return_type, StructType) else pd.Series
 
         def func(
             split_index: int,
@@ -3011,7 +3012,28 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         df_for_struct=True,
                     )[0]
 
-            for df, _ in verified_udf(dataframe_iter()):
+            result = map_udf(dataframe_iter())
+            if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": "iterator of {}".format(iter_type_label),
+                        "actual": type(result).__name__,
+                    },
+                )
+
+            for df in result:
+                if not isinstance(df, elem_type):
+                    raise PySparkTypeError(
+                        errorClass="UDF_RETURN_TYPE",
+                        messageParameters={
+                            "expected": "iterator of {}".format(iter_type_label),
+                            "actual": "iterator of {}".format(type(df).__name__),
+                        },
+                    )
+                verify_pandas_result(
+                    df, return_type, assign_cols_by_name=True, truncate_return_schema=True
+                )
                 yield PandasToArrowConversion.convert(
                     [df],
                     output_schema,
