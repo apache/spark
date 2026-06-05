@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, Int
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, MapData, SQLOrderingUtil}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
+import org.apache.spark.sql.types.{ArrayType, BinaryType, BooleanType, ByteExactNumeric, ByteType, CalendarIntervalType, CharType, DataType, DateType, DayTimeIntervalType, Decimal, DecimalExactNumeric, DecimalType, DoubleExactNumeric, DoubleType, FloatExactNumeric, FloatType, FractionalType, GeographyType, GeometryType, IntegerExactNumeric, IntegerType, IntegralType, LongExactNumeric, LongType, MapType, NullType, NumericType, ShortExactNumeric, ShortType, StringType, StructField, StructType, TimestampNTZType, TimestampType, TimeType, VarcharType, VariantType, YearMonthIntervalType}
 import org.apache.spark.unsafe.types.{BinaryView, ByteArray, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -55,8 +55,6 @@ object PhysicalDataType {
     case TimestampType => PhysicalLongType
     case TimestampNTZType => PhysicalLongType
     case CalendarIntervalType => PhysicalCalendarIntervalType
-    case _: TimestampNTZNanosType => PhysicalTimestampNTZNanosType
-    case _: TimestampLTZNanosType => PhysicalTimestampLTZNanosType
     case DayTimeIntervalType(_, _) => PhysicalLongType
     case YearMonthIntervalType(_, _) => PhysicalIntegerType
     case DateType => PhysicalIntegerType

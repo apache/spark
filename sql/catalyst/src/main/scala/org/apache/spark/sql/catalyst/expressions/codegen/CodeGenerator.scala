@@ -2031,8 +2031,6 @@ object CodeGenerator extends Logging {
     case _: GeographyType | _: GeometryType => classOf[BinaryView]
     case _: StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-      classOf[org.apache.spark.unsafe.types.TimestampNanosVal]
     case _: StructType => classOf[InternalRow]
     case _: ArrayType => classOf[ArrayData]
     case _: MapType => classOf[MapData]
