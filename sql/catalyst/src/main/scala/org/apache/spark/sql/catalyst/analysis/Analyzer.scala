@@ -1698,7 +1698,8 @@ class Analyzer(
       case o: OverwriteByExpression if o.table.resolved =>
         // The delete condition of `OverwriteByExpression` will be passed to the table
         // implementation and should be resolved based on the table schema.
-        o.copy(deleteExpr = resolveExpressionByPlanOutput(o.deleteExpr, o.table))
+        o.copy(deleteExpr = resolveExpressionByPlanOutput(
+          o.deleteExpr, o.table, includeLastResort = true))
 
       case u: UpdateTable => resolveReferencesInUpdate(u)
 
