@@ -218,7 +218,7 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
     }
   }
 
-  test("successful growth allocation after spill should restore minimum pointer array") {
+  test("successful growth allocation after spill should be reused") {
     val conf = new SparkConf()
       .setMaster("local[1]")
       .setAppName("ShuffleExternalSorterSuite")
@@ -260,10 +260,107 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       val inMemSorterField = sorter.getClass.getDeclaredField("inMemSorter")
       inMemSorterField.setAccessible(true)
       val inMemSorter = inMemSorterField.get(sorter).asInstanceOf[ShuffleInMemorySorter]
-      assert(inMemSorter.getMemoryUsage === inMemSorter.getInitialSizeWithUsableCapacity * 8L)
+      assert(
+        inMemSorter.getMemoryUsage === inMemSorter.getInitialSizeWithUsableCapacity * 2L * 8L)
       assert(sorter.closeAndGetSpills().length === 2)
       sorter.cleanupResources()
     }
+  }
+
+  test("pointer fallback should preserve spill failures") {
+    val conf = new SparkConf()
+      .setMaster("local[1]")
+      .setAppName("ShuffleExternalSorterSuite")
+      .set(IS_TESTING, true)
+      .set(TEST_MEMORY, 10L * 1024 * 1024)
+      .set(MEMORY_FRACTION, 0.9999)
+
+    sc = new SparkContext(conf)
+    val memoryManager = UnifiedMemoryManager(conf, 1)
+    var spillOnGrowthAllocation = false
+    var failNextPageAllocation = false
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0) {
+      override def allocatePage(size: Long, consumer: MemoryConsumer): MemoryBlock = {
+        if (spillOnGrowthAllocation) {
+          spillOnGrowthAllocation = false
+          consumer.spill(size, consumer)
+          failNextPageAllocation = true
+        } else if (failNextPageAllocation) {
+          failNextPageAllocation = false
+          val parameters = new java.util.HashMap[String, String]()
+          parameters.put("consumerToSpill", "test")
+          parameters.put("message", "test failure")
+          // scalastyle:off throwerror
+          throw new SparkOutOfMemoryError("SPILL_OUT_OF_MEMORY", parameters)
+          // scalastyle:on throwerror
+        }
+        super.allocatePage(size, consumer)
+      }
+    }
+    val taskContext = mock[TaskContext]
+    when(taskContext.taskMetrics()).thenReturn(new TaskMetrics)
+    val sorter = new ShuffleExternalSorter(
+      taskMemoryManager,
+      sc.env.blockManager,
+      taskContext,
+      1,
+      1,
+      conf,
+      new ShuffleWriteMetrics)
+
+    sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    spillOnGrowthAllocation = true
+    val error = intercept[SparkOutOfMemoryError] {
+      sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    }
+    assert(error.getCondition === "SPILL_OUT_OF_MEMORY")
+    sorter.cleanupResources()
+  }
+
+  test("pointer growth should preserve spill failures") {
+    val conf = new SparkConf()
+      .setMaster("local[1]")
+      .setAppName("ShuffleExternalSorterSuite")
+      .set(IS_TESTING, true)
+      .set(TEST_MEMORY, 10L * 1024 * 1024)
+      .set(MEMORY_FRACTION, 0.9999)
+
+    sc = new SparkContext(conf)
+    val memoryManager = UnifiedMemoryManager(conf, 1)
+    var failGrowthAfterSpill = false
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0) {
+      override def allocatePage(size: Long, consumer: MemoryConsumer): MemoryBlock = {
+        if (failGrowthAfterSpill) {
+          failGrowthAfterSpill = false
+          consumer.spill(size, consumer)
+          val parameters = new java.util.HashMap[String, String]()
+          parameters.put("consumerToSpill", "test")
+          parameters.put("message", "test failure")
+          // scalastyle:off throwerror
+          throw new SparkOutOfMemoryError("SPILL_OUT_OF_MEMORY", parameters)
+          // scalastyle:on throwerror
+        }
+        super.allocatePage(size, consumer)
+      }
+    }
+    val taskContext = mock[TaskContext]
+    when(taskContext.taskMetrics()).thenReturn(new TaskMetrics)
+    val sorter = new ShuffleExternalSorter(
+      taskMemoryManager,
+      sc.env.blockManager,
+      taskContext,
+      1,
+      1,
+      conf,
+      new ShuffleWriteMetrics)
+
+    sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    failGrowthAfterSpill = true
+    val error = intercept[SparkOutOfMemoryError] {
+      sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    }
+    assert(error.getCondition === "SPILL_OUT_OF_MEMORY")
+    sorter.cleanupResources()
   }
 
   test("data page allocation spill should restore the pointer array") {

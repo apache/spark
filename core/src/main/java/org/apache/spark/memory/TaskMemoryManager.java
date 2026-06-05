@@ -535,13 +535,15 @@ public class TaskMemoryManager {
             long additionalAcquired =
               acquireAdditionalExecutionMemoryForPageAllocation(size, consumer);
             if (additionalAcquired > 0) {
-              long overlap = Math.min(partialAllocationSize, additionalAcquired);
+              long overlap =
+                additionalAcquired >= partialAllocationSize ? partialAllocationSize : 0L;
               if (overlap > 0) {
                 releaseExecutionMemory(overlap, consumer);
               }
               acquired = Math.addExact(acquired, additionalAcquired - overlap);
             }
-            allocationSize = Math.max(partialAllocationSize, additionalAcquired);
+            allocationSize =
+              additionalAcquired > 0 ? additionalAcquired : partialAllocationSize;
             tryingPartialAllocation = true;
           } else if (partialAllocationSize == 0) {
             // Preserve one bounded attempt to acquire a smaller free-tail grant. The previous

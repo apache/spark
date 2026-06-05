@@ -392,23 +392,44 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
         spill();
       } catch (SparkOutOfMemoryError e) {
         // should have trigger spilling
-        if (inMemSorter.hasPointerArray()) {
+        if (!"UNABLE_TO_ACQUIRE_MEMORY".equals(e.getCondition()) ||
+            inMemSorter.hasPointerArray()) {
           logger.error("Unable to grow the pointer array");
           throw e;
         }
       }
       // check if spilling is triggered or not
       if (!inMemSorter.hasPointerArray()) {
-        // A spill reset the pointer array while allocateArray() was in progress. Drop the stale
-        // growth allocation and restore the minimum usable initial array outside the spill
-        // callback.
+        // A spill reset the pointer array while allocateArray() was in progress. Reuse a successful
+        // growth allocation, or restore the minimum usable initial array if allocation failed.
         if (array != null) {
-          freeArray(array);
+          inMemSorter.expandPointerArray(array);
+        } else {
+          allocateInitialPointerArray();
         }
-        allocateInitialPointerArray();
         return;
       }
       inMemSorter.expandPointerArray(array);
+    }
+  }
+
+  private void acquireNewPageWithPointerArrayFallback(int required) {
+    try {
+      acquireNewPageIfNecessary(required);
+    } catch (SparkOutOfMemoryError e) {
+      long minimumPointerArrayBytes =
+        Math.multiplyExact(inMemSorter.getInitialSizeWithUsableCapacity(), 8L);
+      if (!"UNABLE_TO_ACQUIRE_MEMORY".equals(e.getCondition()) ||
+          inMemSorter.numRecords() != 0 ||
+          inMemSorter.getMemoryUsage() <= minimumPointerArrayBytes) {
+        throw e;
+      }
+      // A growth allocation retained after spilling can consume all memory made available by the
+      // spill. Since the sorter is still empty, shrink the pointer array and retry the data page
+      // once so that pointer growth cannot starve record storage.
+      inMemSorter.reset();
+      allocateInitialPointerArray();
+      acquireNewPageIfNecessary(required);
     }
   }
 
@@ -462,7 +483,7 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     final int uaoSize = UnsafeAlignedOffset.getUaoSize();
     // Need 4 or 8 bytes to store the record length.
     final int required = length + uaoSize;
-    acquireNewPageIfNecessary(required);
+    acquireNewPageWithPointerArrayFallback(required);
     // Data page allocation may spill and reset the pointer array, so check its capacity again.
     growPointerArrayIfNecessary();
 

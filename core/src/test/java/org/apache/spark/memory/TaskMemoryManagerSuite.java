@@ -82,6 +82,36 @@ public class TaskMemoryManagerSuite {
     }
   }
 
+  private static final class CompetingTaskAllocator implements MemoryAllocator {
+    private final MemoryManager memoryManager;
+    private int allocationAttempts;
+
+    CompetingTaskAllocator(MemoryManager memoryManager) {
+      this.memoryManager = memoryManager;
+    }
+
+    @Override
+    public MemoryBlock allocate(long size) throws OutOfMemoryError {
+      allocationAttempts++;
+      if (allocationAttempts == 2) {
+        long acquired =
+          memoryManager.acquireExecutionMemory(2048L, 1L, MemoryMode.ON_HEAP);
+        Assertions.assertEquals(2048L, acquired);
+      }
+      if (size > 1024L) {
+        // checkstyle.off: RegexpSinglelineJava
+        throw new OutOfMemoryError("test allocator failure");
+        // checkstyle.on: RegexpSinglelineJava
+      }
+      return MemoryAllocator.HEAP.allocate(size);
+    }
+
+    @Override
+    public void free(MemoryBlock memory) {
+      MemoryAllocator.HEAP.free(memory);
+    }
+  }
+
   private static final class PageAllocatingConsumer extends MemoryConsumer {
     PageAllocatingConsumer(TaskMemoryManager manager, long pageSize) {
       super(manager, pageSize, MemoryMode.ON_HEAP);
@@ -294,6 +324,33 @@ public class TaskMemoryManagerSuite {
     Assertions.assertEquals(3072, manager.getMemoryConsumptionForThisTask());
     Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
     Assertions.assertEquals(0, manager.getMemoryConsumptionForThisTask());
+  }
+
+  @Test
+  public void pageAllocationFailurePreservesSmallerGrantAfterCompetingAcquisition() {
+    final SparkConf conf = new SparkConf(false)
+      .set("spark.testing", "true")
+      .set("spark.testing.memory", "10240")
+      .set("spark.memory.fraction", "1.0")
+      .set("spark.memory.storageFraction", "0.5");
+    final MemoryManager memoryManager = UnifiedMemoryManager$.MODULE$.apply(conf, 1);
+    final CompetingTaskAllocator allocator = new CompetingTaskAllocator(memoryManager);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator);
+    final TestMemoryConsumer existingConsumer = new TestMemoryConsumer(manager);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+    existingConsumer.use(2048);
+
+    final MemoryBlock page = requestingConsumer.allocate(1024);
+    Assertions.assertEquals(1024, page.size());
+    Assertions.assertEquals(3, allocator.allocationAttempts);
+    Assertions.assertEquals(0, existingConsumer.getUsed());
+    Assertions.assertEquals(1024, requestingConsumer.getUsed());
+    Assertions.assertEquals(5120, manager.getMemoryConsumptionForThisTask());
+
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+    memoryManager.releaseExecutionMemory(2048L, 1L, MemoryMode.ON_HEAP);
   }
 
   @Test

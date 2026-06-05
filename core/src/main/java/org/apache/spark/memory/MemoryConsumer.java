@@ -73,7 +73,9 @@ public abstract class MemoryConsumer {
    *
    * This should be implemented by subclass.
    *
-   * Note: In order to avoid possible deadlock, should not call acquireMemory() from spill().
+   * Note: In order to avoid possible deadlock, implementations must release memory synchronously
+   * on the calling thread and must not acquire task memory from spill(), either directly or from
+   * another thread.
    *
    * Note: today, this only frees Tungsten-managed pages.
    *
