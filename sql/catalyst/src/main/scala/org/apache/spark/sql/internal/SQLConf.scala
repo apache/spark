@@ -637,7 +637,8 @@ object SQLConf {
   val TYPES_FRAMEWORK_ENABLED =
     buildConf("spark.sql.types.framework.enabled")
       .internal()
-      .doc("When true, use the Types Framework for supported types (currently TimeType). " +
+      .doc("When true, use the Types Framework for supported types (currently TimeType and the " +
+        "nanosecond timestamp types TimestampNTZNanosType and TimestampLTZNanosType). " +
         "The framework centralizes type-specific operations in Ops classes instead of " +
         "scattered pattern matching. When false, use legacy scattered implementation.")
       .version("4.2.0")
@@ -655,11 +656,19 @@ object SQLConf {
         "Unparameterized TIMESTAMP, TIMESTAMP_NTZ, and TIMESTAMP_LTZ remain microsecond " +
         "types. Enabling this flag does not guarantee full SQL support: casts, Parquet read, " +
         "typed literals, and other operations may still fail until their respective features " +
-        "are implemented.")
+        "are implemented. The nanosecond timestamp types are implemented solely through the " +
+        "Types Framework, so this flag can only be set to true when " +
+        s"${TYPES_FRAMEWORK_ENABLED.key} is also true.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .checkValue(
+        enabled => !enabled || SQLConf.get.typesFrameworkEnabled,
+        "REQUIREMENT",
+        _ => Map("confRequirement" ->
+          (s"'${TYPES_FRAMEWORK_ENABLED.key}' must be true to enable the nanosecond " +
+            "timestamp types.")))
+      .createWithDefaultFunction(() => Utils.isTesting)
 
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
     .doc("A comma-separated list of classes that implement the" +

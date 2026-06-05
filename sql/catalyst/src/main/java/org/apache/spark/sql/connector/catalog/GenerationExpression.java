@@ -21,34 +21,36 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
- * A class that represents default value expressions.
+ * A class that represents generated column expressions.
  * <p>
- * Connectors can define default values using either a SQL string (Spark SQL dialect) or a more
+ * Connectors can define generated columns using either a SQL string (Spark SQL dialect) or a more
  * portable connector {@link Expression expression}, whose semantics follow the ANSI SQL standard.
  * <p>
  * If both the SQL string and the expression are provided, Spark first attempts to convert the
  * given expression to its internal representation. If the expression cannot be converted, and a
  * SQL string is provided, Spark will fall back to parsing the SQL string.
  *
- * @since 4.1.0
+ * @since 4.3.0
  */
 @Evolving
-public class DefaultValue extends ColumnExpressionBase {
+public class GenerationExpression extends ColumnExpressionBase {
 
-  public DefaultValue(String sql) {
+  public GenerationExpression(String sql) {
     this(sql, null /* no expression */);
   }
 
-  public DefaultValue(Expression expr) {
+  public GenerationExpression(Expression expr) {
     this(null /* no sql */, expr);
   }
 
-  public DefaultValue(String sql, Expression expr) {
+  public GenerationExpression(String sql, Expression expr) {
     super(sql, expr);
   }
 
   @Override
   public String toString() {
-    return String.format("DefaultValue{sql=%s, expression=%s}", getSql(), getExpression());
+    return String.format(
+        "GenerationExpression{sql=%s, expression=%s}", getSql(), getExpression());
   }
 }
+

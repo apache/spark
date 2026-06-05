@@ -381,15 +381,14 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space ]; then
@@ -580,7 +579,8 @@ jobs:
         fromJson(needs.precondition.outputs.required).pyspark-install == 'true' ||
         fromJson(needs.precondition.outputs.required).sparkr == 'true' ||
         fromJson(needs.precondition.outputs.required).docker-integration-tests == 'true' ||
-        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true')
+        fromJson(needs.precondition.outputs.required).k8s-integration-tests == 'true' ||
+        fromJson(needs.precondition.outputs.required).tpcds-1g == 'true')
     name: "Precompile Spark"
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -619,9 +619,9 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
-        key: precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -744,13 +744,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          pyspark-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
@@ -832,13 +832,8 @@ jobs:
 
         # Checkout to branch-4.0 to use the tests in branch-4.0.
         cd ..
-        git clone --single-branch --branch branch-4.0 $GITHUB_SERVER_URL/$GITHUB_REPOSITORY spark-4.0
+        git clone --single-branch --branch branch-4.0 https://github.com/apache/spark.git spark-4.0
         cd spark-4.0
-        # Merge in apache/spark's branch-4.0 so CI runs against the latest upstream tests,
-        # while still incorporating any changes the contributor made on their fork's branch-4.0.
-        git fetch https://github.com/apache/spark.git branch-4.0
-        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' \
-            merge --no-edit FETCH_HEAD
 
         # Several tests related to catalog requires to run them sequencially, e.g., writing a table in a listener.
         # Run branch-4.0 tests
@@ -935,13 +930,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: sparkr-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          sparkr-coursier-
+          ${{ runner.os }}-coursier-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -1086,13 +1081,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docs-coursier-
+          ${{ runner.os }}-coursier-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
@@ -1285,13 +1280,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docs-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docs-coursier-
+          ${{ runner.os }}-coursier-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
@@ -1450,8 +1445,8 @@ jobs:
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g-gen job of benchmark.yml as well
   tpcds-1g:
-    needs: precondition
-    if: fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
+    needs: [precondition, precompile]
+    if: (!cancelled()) && fromJson(needs.precondition.outputs.required).tpcds-1g == 'true'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -1480,20 +1475,32 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: tpcds-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          tpcds-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
         distribution: zulu
         java-version: ${{ inputs.java }}
+    - name: Download precompiled artifact
+      id: download-precompiled
+      if: needs.precompile.result == 'success'
+      continue-on-error: true
+      uses: actions/download-artifact@v8
+      with:
+        name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
+    - name: Extract precompiled artifact
+      id: extract-precompiled
+      if: steps.download-precompiled.outcome == 'success'
+      continue-on-error: true
+      run: |
+        tar -xzf compile-artifact.tar.gz
+        rm compile-artifact.tar.gz
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
@@ -1600,15 +1607,13 @@ jobs:
         key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
           build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
+    - name: Restore Coursier local repository
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: docker-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          docker-integration-coursier-
-          precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          precompile-coursier-
+          ${{ runner.os }}-coursier-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1688,15 +1693,13 @@ jobs:
           key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
             build-
-      - name: Cache Coursier local repository
-        uses: actions/cache@v5
+      - name: Restore Coursier local repository
+        uses: actions/cache/restore@v5
         with:
           path: ~/.cache/coursier
-          key: k8s-integration-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            k8s-integration-coursier-
-            precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-            precompile-coursier-
+            ${{ runner.os }}-coursier-
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then

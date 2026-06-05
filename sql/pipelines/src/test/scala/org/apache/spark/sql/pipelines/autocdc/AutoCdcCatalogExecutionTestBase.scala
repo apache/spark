@@ -82,7 +82,7 @@ trait AutoCdcCatalogExecutionTestBase {
   }
 
   /**
-   * Schema of the [[Scd1BatchProcessor.cdcMetadataColName]] struct column for a given
+   * Schema of the [[AutoCdcReservedNames.cdcMetadataColName]] struct column for a given
    * sequencing column type. Defaults to [[LongType]] because all current SCD1 tests use
    * `Long` sequencing.
    */
@@ -92,7 +92,7 @@ trait AutoCdcCatalogExecutionTestBase {
       .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, sequencingType)
 
   /**
-   * Build a [[Row]] matching the [[Scd1BatchProcessor.cdcMetadataColName]] struct's two fields,
+   * Build a [[Row]] matching the [[AutoCdcReservedNames.cdcMetadataColName]] struct's two fields,
    * in the order produced by [[Scd1BatchProcessor.constructCdcMetadataCol]]:
    */
   protected def cdcMetadataRow[T](deleteSeq: Option[T], upsertSeq: Option[T]): Row =

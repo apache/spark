@@ -299,4 +299,10 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
         "configValue" -> "true"),
       cause = null)
   }
+
+  def cannotConvertNanosTimestampToStringError(dataType: DataType): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING",
+      messageParameters = Map("dataType" -> toSQLType(dataType)))
+  }
 }

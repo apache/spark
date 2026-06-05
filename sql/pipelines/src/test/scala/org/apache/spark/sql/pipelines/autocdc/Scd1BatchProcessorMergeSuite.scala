@@ -47,13 +47,13 @@ class Scd1BatchProcessorMergeSuite
    */
   private val minimalSchema: StructType = new StructType()
     .add("id", IntegerType)
-    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+    .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
 
   /** Minimal target-table shape: one key, one data column, and CDC metadata. */
   private val targetSchema: StructType = new StructType()
     .add("id", IntegerType)
     .add("value", StringType)
-    .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+    .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
 
   /**
    * A processor with a single key column `id`. `sequencing` is irrelevant for
@@ -85,7 +85,7 @@ class Scd1BatchProcessorMergeSuite
     val withKeys = keyColumns.foldLeft(new StructType()) { case (s, (name, dt)) =>
       s.add(name, dt)
     }
-    withKeys.add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+    withKeys.add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
   }
 
   /**
@@ -116,7 +116,7 @@ class Scd1BatchProcessorMergeSuite
       .add("id", IntegerType)
       .add("value", StringType)
       .add(
-        Scd1BatchProcessor.cdcMetadataColName,
+        AutoCdcReservedNames.cdcMetadataColName,
         new StructType()
           .add(Scd1BatchProcessor.cdcDeleteSequenceFieldName, LongType)
           .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
@@ -446,7 +446,7 @@ class Scd1BatchProcessorMergeSuite
       // The schema always stores the backtick consumed column name, so unticked the raw name here.
       .add(rawKeyName, IntegerType)
       .add("value", StringType)
-      .add(Scd1BatchProcessor.cdcMetadataColName, cdcMetadataColSchemaType())
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
 
     createTable(
       defaultTargetIdent,

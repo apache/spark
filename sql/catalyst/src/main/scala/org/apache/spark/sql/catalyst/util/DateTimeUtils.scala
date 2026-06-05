@@ -510,7 +510,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val offsetMicros = originalOffsetSec * MICROS_PER_SECOND
     try {
       val local = Math.addExact(micros, offsetMicros)
-      val truncatedLocal = local - Math.floorMod(local, unitMicros)
+      val truncatedLocal = Math.subtractExact(local, Math.floorMod(local, unitMicros))
       val candidate = Math.subtractExact(truncatedLocal, offsetMicros)
       if (!rules.isFixedOffset) {
         val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
@@ -537,9 +537,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
     level match {
       case TRUNC_TO_MICROSECOND => micros
       case TRUNC_TO_MILLISECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_MILLIS)
+        Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_MILLIS))
       case TRUNC_TO_SECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_SECOND)
+        Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_SECOND))
       case TRUNC_TO_MINUTE =>
         truncToUnitFast(micros, zoneId, MICROS_PER_MINUTE, ChronoUnit.MINUTES)
       case TRUNC_TO_HOUR =>
