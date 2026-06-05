@@ -309,10 +309,11 @@ class SparkSessionExtensions {
     optimizerRules += builder
   }
 
-  private[this] val earlyOptimizerRules = mutable.Buffer.empty[RuleBuilder]
+  private[this] val preOperatorOptimizationRuleBuilders = mutable.Buffer.empty[RuleBuilder]
 
-  private[sql] def buildEarlyOptimizerRules(session: SparkSession): Seq[Rule[LogicalPlan]] = {
-    earlyOptimizerRules.map(_.apply(session)).toSeq
+  private[sql] def buildPreOperatorOptimizationRules(
+      session: SparkSession): Seq[Rule[LogicalPlan]] = {
+    preOperatorOptimizationRuleBuilders.map(_.apply(session)).toSeq
   }
 
   /**
@@ -321,8 +322,8 @@ class SparkSessionExtensions {
    * Use this for rules that must observe the pre-optimization plan shape before built-in rules
    * like FoldablePropagation or ConstantFolding transform it.
    */
-  def injectEarlyOptimizerRule(builder: RuleBuilder): Unit = {
-    earlyOptimizerRules += builder
+  def injectPreOperatorOptimizationRule(builder: RuleBuilder): Unit = {
+    preOperatorOptimizationRuleBuilders += builder
   }
 
   private[this] val preCBORules = mutable.Buffer.empty[RuleBuilder]

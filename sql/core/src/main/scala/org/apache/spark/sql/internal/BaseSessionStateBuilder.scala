@@ -333,8 +333,8 @@ abstract class BaseSessionStateBuilder(
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
 
-      override def earlyOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
-        super.earlyOperatorOptimizationRules ++ customEarlyOperatorOptimizationRules
+      override def preOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
+        super.preOperatorOptimizationRules ++ customPreOperatorOptimizationRules
     }
   }
 
@@ -354,8 +354,8 @@ abstract class BaseSessionStateBuilder(
    *
    * Note that this may NOT depend on the `optimizer` function.
    */
-  protected def customEarlyOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = {
-    extensions.buildEarlyOptimizerRules(session)
+  protected def customPreOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPreOperatorOptimizationRules(session)
   }
 
   /**
