@@ -135,7 +135,7 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(prettyString.sql === child.sql)
   }
 
-  test("TimestampNTZNanos as pretty strings") {
+  test("SPARK-57256: TimestampNTZNanos as pretty strings") {
     def ntzNanos(micros: Long, nanos: Short): Expression =
       ToPrettyString(Literal.create(new TimestampNanosVal(micros, nanos), TimestampNTZNanosType(9)))
     checkEvaluation(ntzNanos(0L, 1), "1970-01-01 00:00:00.000000001")
@@ -145,7 +145,7 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
       "1970-01-01 00:00:00")
   }
 
-  test("TimestampLTZNanos as pretty strings") {
+  test("SPARK-57256: TimestampLTZNanos as pretty strings") {
     def ltzNanos(micros: Long, nanos: Short): Expression =
       ToPrettyString(Literal.create(new TimestampNanosVal(micros, nanos), TimestampLTZNanosType(9)))
     withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {

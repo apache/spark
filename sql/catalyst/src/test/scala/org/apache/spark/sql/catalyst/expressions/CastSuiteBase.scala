@@ -1164,6 +1164,37 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       cast(Literal.create(null, TimestampLTZNanosType(9)), StringType, UTC_OPT), null)
   }
 
+  test("SPARK-57256: cast complex types with nanosecond timestamps to string") {
+    val ntzElem = Literal.create(
+      localDateTimeToNanosVal(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)),
+      TimestampNTZNanosType(9))
+    val ltzElem = Literal.create(
+      localDateTimeToNanosVal(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)),
+      TimestampLTZNanosType(9))
+
+    // array<timestamp_ntz_nanos> with a null element exercises the recursive element path
+    // (including nullString) in ToStringBase. NTZ is independent of the session time zone.
+    checkEvaluation(
+      cast(CreateArray(Seq(ntzElem, Literal.create(null, TimestampNTZNanosType(9)))), StringType),
+      "[2020-01-01 00:00:00.123456789, null]")
+
+    // array<timestamp_ltz_nanos> is rendered in the session time zone (here UTC).
+    checkEvaluation(
+      cast(
+        CreateArray(Seq(ltzElem, Literal.create(null, TimestampLTZNanosType(9)))),
+        StringType,
+        UTC_OPT),
+      "[2020-01-01 00:00:00.123456789, null]")
+
+    // A struct nesting both nanosecond timestamp variants.
+    checkEvaluation(
+      cast(
+        CreateNamedStruct(Seq(Literal("ntz"), ntzElem, Literal("ltz"), ltzElem)),
+        StringType,
+        UTC_OPT),
+      "{2020-01-01 00:00:00.123456789, 2020-01-01 00:00:00.123456789}")
+  }
+
   test("SPARK-35112: Cast string to day-time interval") {
     checkEvaluation(cast(Literal.create("0 0:0:0"), DayTimeIntervalType()), 0L)
     checkEvaluation(cast(Literal.create(" interval '0 0:0:0' Day TO second   "),
