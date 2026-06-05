@@ -30,9 +30,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
 
   /**
-   * Build an aux-table [[DataFrame]] from explicit user rows + framework column values.
-   *
-   * TODO(SPARK-57265): switch to the production aux-schema helper once it lands, to avoid drift.
+   * Build an mock aux-table [[DataFrame]] from explicit user rows + framework column values.
    */
   private def auxTableOf(
       userSchema: StructType,
