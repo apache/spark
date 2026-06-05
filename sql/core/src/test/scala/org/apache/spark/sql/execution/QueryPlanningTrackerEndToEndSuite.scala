@@ -60,28 +60,28 @@ class QueryPlanningTrackerEndToEndSuite extends StreamTest {
   }
 
   test("SPARK-57212: Track preparation rules") {
-    val df = spark.range(1000).selectExpr("count(*)")
-    df.collect()
-    val ruleNames = df.queryExecution.tracker.rules.keySet
-    assert(ruleNames.contains(classOf[
-      org.apache.spark.sql.execution.exchange.EnsureRequirements].getName))
-    assert(ruleNames.contains(classOf[
-      org.apache.spark.sql.execution.CollapseCodegenStages].getName))
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.range(1000).selectExpr("count(*)")
+      df.collect()
+      val ruleNames = df.queryExecution.tracker.rules.keySet
+      assert(ruleNames.contains(classOf[
+        org.apache.spark.sql.execution.exchange.EnsureRequirements].getName))
+      assert(ruleNames.contains(classOf[
+        org.apache.spark.sql.execution.CollapseCodegenStages].getName))
+    }
   }
 
   test("SPARK-57212: Track AQE-internal preparation rules") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
-      // Run a query with a shuffle so AQE creates a query stage and runs preparation rules.
-      val df = spark.range(1000).repartition(4).selectExpr("count(*)")
-      df.collect()
-      val ruleNames = df.queryExecution.tracker.rules.keySet
-      // AQE-only rules in queryStagePreparationRules; only reachable via
-      // AdaptiveSparkPlanExec.applyPhysicalRules.
-      assert(ruleNames.contains(
-        "org.apache.spark.sql.execution.adaptive.AdjustShuffleExchangePosition"))
-      assert(ruleNames.contains(
-        "org.apache.spark.sql.execution.adaptive.ValidateSparkPlan"))
-    }
+    // Run a query with a shuffle so AQE creates a query stage and runs preparation rules.
+    val df = spark.range(1000).repartition(4).selectExpr("count(*)")
+    df.collect()
+    val ruleNames = df.queryExecution.tracker.rules.keySet
+    // AQE-only rules in queryStagePreparationRules; only reachable via
+    // AdaptiveSparkPlanExec.applyPhysicalRules.
+    assert(ruleNames.contains(
+      "org.apache.spark.sql.execution.adaptive.AdjustShuffleExchangePosition"))
+    assert(ruleNames.contains(
+      "org.apache.spark.sql.execution.adaptive.ValidateSparkPlan"))
   }
 
   test("The start times should be in order: parsing <= analysis <= optimization <= planning") {
