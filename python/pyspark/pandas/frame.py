@@ -4360,6 +4360,75 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return DataFrame(internal)
 
+    def set_axis(
+        self,
+        labels: Any,
+        axis: Axis = 0,
+    ) -> "DataFrame":
+        """
+        Assign desired index to given axis.
+
+        Indexes for column or row labels can be changed by assigning a list-like or
+        Index.
+
+        Parameters
+        ----------
+        labels : list-like, Index
+            The values for the new index.
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            The axis to update. The value 0 or 'index' identifies the row axis.
+            For Series there is only one axis to set.
+
+        Returns
+        -------
+        DataFrame
+            An object of same type as caller.
+
+        See Also
+        --------
+        DataFrame.rename_axis : Alter the name of the index or columns.
+
+        Examples
+        --------
+        >>> df = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]})
+
+        Change the row labels.
+
+        >>> df.set_axis(['a', 'b', 'c'])
+           A  B
+        a  1  4
+        b  2  5
+        c  3  6
+
+        Change the column labels.
+
+        >>> df.set_axis(['I', 'II'], axis=1)
+           I  II
+        0  1   4
+        1  2   5
+        2  3   6
+
+        >>> df.set_axis(['I', 'II'], axis='columns')
+           I  II
+        0  1   4
+        1  2   5
+        2  3   6
+        """
+        axis = validate_axis(axis)
+        if axis == 0:
+            return self.set_index(pd.Index(labels))  # type: ignore[arg-type]
+        elif axis == 1:
+            if not isinstance(labels, pd.Index):
+                labels = pd.Index(labels)
+            if len(labels) != len(self.columns):
+                raise ValueError(
+                    "Length mismatch: Expected axis has %d elements, "
+                    "new values have %d elements" % (len(self.columns), len(labels))
+                )
+            return self.rename(columns=dict(zip(self.columns, labels)))
+        else:
+            raise ValueError("No axis named %s for object type DataFrame" % axis)
+
     def reset_index(
         self,
         level: Optional[Union[int, Name, Sequence[Union[int, Name]]]] = None,
