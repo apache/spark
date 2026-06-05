@@ -1151,7 +1151,7 @@ case class ArrayAggregate(
     // Be very conservative with nullable. We cannot be sure that the accumulator does not
     // evaluate to null. So we always set nullable to true here.
     val ArrayType(elementType, containsNull) = argument.dataType
-    val acc = zero.dataType -> true
+    val acc = zero.dataType.asNullable -> true
     val newMerge = f(merge, acc :: (elementType, containsNull) :: Nil)
     val newFinish = f(finish, acc :: Nil)
     copy(merge = newMerge, finish = newFinish)
