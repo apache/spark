@@ -736,7 +736,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
       lastReplacement = lastReplacementInUTF8.toString
     }
-    RegExpUtils.replace(pattern, s.toString, lastReplacement, p.toString, i.asInstanceOf[Int])
+    RegExpUtils.replace(pattern, s.toString, lastReplacement, i.asInstanceOf[Int])
   }
 
   override def dataType: DataType = subject.dataType
@@ -768,7 +768,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
           $termLastReplacement = $termLastReplacementInUTF8.toString();
         }
         ${ev.value} = $regExpUtils.replace(
-          $termPattern, $subject.toString(), $termLastReplacement, $regexp.toString(), $pos);
+          $termPattern, $subject.toString(), $termLastReplacement, $pos);
         $setEvNotNull
       """
     })
@@ -1247,14 +1247,13 @@ object RegExpUtils {
    * Runs the regexp_replace loop shared by RegExpReplace's eval and codegen, so the generated
    * Java is a single call rather than an inline matcher build + match/replace loop + error
    * construction. The matcher is built here from `pattern`. `source` is returned (as a new
-   * UTF8String) when the start position is out of range; `regexp`/`pos` are only used to build
-   * the error message on a failed replacement.
+   * UTF8String) when the start position is out of range; `pos` and `pattern.pattern()` (the
+   * original regex string) are only used to build the error message on a failed replacement.
    */
   def replace(
       pattern: Pattern,
       source: String,
       replacement: String,
-      regexp: String,
       pos: Int): UTF8String = {
     val position = pos - 1
     if (position == 0 || position < source.length) {
@@ -1266,8 +1265,11 @@ object RegExpUtils {
           matcher.appendReplacement(result, replacement)
         } catch {
           case NonFatal(e) =>
+            // pattern.pattern() is the original regexp string: the pattern is compiled from the
+            // raw regexp without escaping (see ExpressionImplUtils.compileRegexPattern), so it
+            // round-trips exactly into the error message.
             throw QueryExecutionErrors.invalidRegexpReplaceError(
-              source, regexp, replacement, pos, e)
+              source, pattern.pattern(), replacement, pos, e)
         }
       }
       matcher.appendTail(result)
