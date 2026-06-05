@@ -94,6 +94,11 @@
       <version>${wildfly-openssl.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.wildfly.openssl</groupId>
+      <artifactId>wildfly-openssl-macosx-aarch64</artifactId>
+      <version>${wildfly-openssl.version}</version>
+    </dependency>
+    <dependency>
       <groupId>software.amazon.awssdk</groupId>
       <artifactId>bundle</artifactId>
       <version>${aws.java.sdk.v2.version}</version>
