@@ -31,6 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase with command.TestsV1AndV2Commands {
   override def defaultNamespace: Seq[String] = Seq("default")
+  override def expectedTableTypeInJson: String = "MANAGED"
 
   private def withSourceViews(f: => Unit): Unit = {
     withTable("source", "source2") {

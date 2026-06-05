@@ -674,7 +674,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case ShowViews(ResolvedNamespace(catalog: ViewCatalog, ns, _), pattern, output) =>
       ShowViewsExec(output, catalog, ns, pattern) :: Nil
 
-    case ShowTablesExtended(ResolvedNamespace(catalog, ns, _), pattern, output) =>
+    case ShowTablesExtended(
+        ResolvedNamespace(catalog, ns, _),
+        pattern,
+        output) =>
       ShowTablesExtendedExec(output, catalog.asTableCatalog, ns, pattern) :: Nil
 
     case ShowTablePartition(r: ResolvedTable, part, output) =>

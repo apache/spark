@@ -370,7 +370,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case ShowTables(ResolvedV1Database(db), pattern, output) if conf.useV1Command =>
       ShowTablesCommand(Some(db), pattern, output)
 
-    case ShowTablesExtended(ResolvedV1Database(db), pattern, output) =>
+    case ShowTablesExtended(
+        ResolvedV1Database(db),
+        pattern,
+        output) =>
       val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
         output.head.withName("database") +: output.tail
       } else {
