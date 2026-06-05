@@ -5847,8 +5847,7 @@ class AstBuilder extends DataTypeAstBuilder
     } else {
       CurrentNamespace
     }
-    val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
-    ShowTables(ns, pattern)
+    ShowTables(ns, Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
 
   /**

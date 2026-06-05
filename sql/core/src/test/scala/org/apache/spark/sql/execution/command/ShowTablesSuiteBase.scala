@@ -39,6 +39,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   override val command = "SHOW TABLES"
   protected def defaultNamespace: Seq[String]
+  protected def expectedTableTypeInJson: String = "TABLE"
 
   protected def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
     val df = spark.sql(sqlText)
@@ -511,7 +512,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
       assert(tables.length == 1)
       val entry = tables.head
       assert((entry \ "name").extract[String] == "tbl")
-      assert((entry \ "type").extract[String] == "TABLE")
+      assert((entry \ "type").extract[String] == expectedTableTypeInJson)
       assert((entry \ "isTemporary").extract[Boolean] == false)
       assert((entry \ "catalog").isInstanceOf[JString])
       assert((entry \ "namespace").isInstanceOf[JArray])
@@ -558,7 +559,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val tblEntry = tables.find(e => (e \ "name").extract[String] == "tbl")
         assert(tblEntry.isDefined)
         assert((tblEntry.get \ "isTemporary").extract[Boolean] == false)
-        assert((tblEntry.get \ "type").extract[String] == "TABLE")
+        assert((tblEntry.get \ "type").extract[String] == expectedTableTypeInJson)
 
         val tempViewEntry = tables.find(e => (e \ "name").extract[String] == localTmpViewName)
         assert(tempViewEntry.isDefined)
@@ -651,7 +652,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("SHOW TABLES AS JSON - LIKE pattern filters results") {
+  test("SHOW TABLES AS JSON with LIKE pattern") {
     withNamespaceAndTable("ns", "tab_matched") { t =>
       sql(s"CREATE TABLE $t (id INT) $defaultUsing")
       withTable(s"$catalog.ns.other") {
@@ -665,7 +666,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("SHOW TABLES AS JSON - without IN clause uses current namespace") {
+  test("SHOW TABLES AS JSON without IN clause") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT) $defaultUsing")
       sql(s"USE $catalog.ns")
@@ -675,7 +676,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("SHOW TABLES AS JSON - output wraps table entries in a tables key") {
+  test("SHOW TABLES AS JSON wraps entries in tables key") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
       val jsonStr = sql(s"SHOW TABLES IN $catalog.ns AS JSON").collect()(0).getString(0)
@@ -684,7 +685,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("SHOW TABLES AS JSON - same result regardless of useV1Command") {
+  test("SHOW TABLES AS JSON with useV1Command") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT) $defaultUsing")
       val query = s"SHOW TABLES IN $catalog.ns AS JSON"

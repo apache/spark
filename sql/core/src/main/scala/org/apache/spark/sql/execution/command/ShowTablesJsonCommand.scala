@@ -22,9 +22,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.ResolvedNamespace
-import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -57,6 +57,9 @@ case class ShowTablesJsonCommand(
         } else {
           runForV2Catalog(sparkSession, catalog.asTableCatalog, ns)
         }
+      case other =>
+        throw SparkException.internalError(
+          s"Unexpected child in ShowTablesJsonCommand: ${other.getClass.getSimpleName}")
     }
     Seq(Row(compact(render(jsonOutput))))
   }
@@ -78,8 +81,7 @@ case class ShowTablesJsonCommand(
         val tableType = if (isTemp) {
           "VIEW"
         } else {
-          val meta = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
-          if (meta.tableType == CatalogTableType.VIEW) "VIEW" else "TABLE"
+          sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent).tableType.name
         }
         JObject(
           "name" -> JString(tableIdent.table),
@@ -123,22 +125,19 @@ case class ShowTablesJsonCommand(
     val jsonRows = new ArrayBuffer[JObject]()
     filteredIdents.foreach { ident =>
       val nsArray = JArray(ident.namespace().map(JString(_)).toList)
-      // Non-session V2 catalogs do not surface session temp views.
-      val isTemp = false
-
       val entry = if (isExtended) {
         JObject(
           "name" -> JString(ident.name()),
           "catalog" -> JString(catalog.name()),
           "namespace" -> nsArray,
-          "type" -> JString(if (isTemp) "VIEW" else "TABLE"),
-          "isTemporary" -> JBool(isTemp)
+          "type" -> JString("TABLE"),
+          "isTemporary" -> JBool(false)
         )
       } else {
         JObject(
           "name" -> JString(ident.name()),
           "namespace" -> nsArray,
-          "isTemporary" -> JBool(isTemp)
+          "isTemporary" -> JBool(false)
         )
       }
       jsonRows += entry
