@@ -658,8 +658,6 @@ jobs:
       options: >-
         --cap-add=SYS_PTRACE
         --security-opt seccomp=unconfined
-      volumes:
-        - /home/runner/.cache/coursier:/github/home/.cache/coursier
     strategy:
       fail-fast: false
       max-parallel: 20
@@ -900,8 +898,6 @@ jobs:
     timeout-minutes: 120
     container:
       image: ${{ needs.precondition.outputs.image_sparkr_url_link }}
-      volumes:
-        - /home/runner/.cache/coursier:/github/home/.cache/coursier
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -1062,8 +1058,6 @@ jobs:
       BRANCH: ${{ inputs.branch }}
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
-      volumes:
-        - /home/runner/.cache/coursier:/github/home/.cache/coursier
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
@@ -1263,8 +1257,6 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
-      volumes:
-        - /home/runner/.cache/coursier:/github/home/.cache/coursier
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v6
