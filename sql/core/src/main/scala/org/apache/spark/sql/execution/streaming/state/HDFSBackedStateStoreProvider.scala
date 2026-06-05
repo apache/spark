@@ -536,13 +536,20 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
     Ordering[Long].reverse)
   private lazy val baseDir = stateStoreId.storeCheckpointLocation()
 
-  // baseDir is created lazily on the first write, so read-only entry points
-  // never trigger a mkdirs on the checkpoint path.
-  @volatile private var baseDirChecked: Boolean = false
+  // baseDir is created lazily on the first write, so read-only entry points never trigger a
+  // mkdirs on the checkpoint path. compareAndSet ensures only one task issues the mkdirs even
+  // if several tasks for this partition race here; the flag is reset on failure so a transient
+  // mkdirs error does not permanently skip creation.
+  private val baseDirChecked = new AtomicBoolean(false)
   private def createBaseDirIfNotExists(): Unit = {
-    if (!baseDirChecked) {
-      if (!fm.exists(baseDir)) fm.mkdirs(baseDir)
-      baseDirChecked = true
+    if (baseDirChecked.compareAndSet(false, true)) {
+      try {
+        if (!fm.exists(baseDir)) fm.mkdirs(baseDir)
+      } catch {
+        case e: Throwable =>
+          baseDirChecked.set(false)
+          throw e
+      }
     }
   }
   // Visible to state pkg for testing.
