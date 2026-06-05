@@ -141,29 +141,22 @@ object SchemaPruning extends SQLConfHelper {
   private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case ArrayTransform(argument, lambda: LambdaFunction) =>
-        // Field accesses through the lambda variable are not directly rooted at the input
-        // attribute. Convert them into a projected type for the transform argument so that
-        // physical nested column pruning can see them.
-        val nestedRootFields = lambda.arguments.headOption.collect {
-          case elementVar: NamedLambdaVariable =>
-            getArrayTransformRootField(argument, lambda.function, elementVar)
-        }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
-        if (nestedRootFields.nonEmpty) {
-          nestedRootFields ++ getRootFields(lambda.function)
-        } else {
-          expr.children.flatMap(getRootFields)
-        }
+        getArrayHigherOrderFunctionRootFields(expr, argument, lambda)
       case att: Attribute =>
         RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
           derivedFromAtt = true) :: Nil
-      case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
+      case SelectedField(field) =>
+        RootField(field, derivedFromAtt = false) +:
+          getArrayReturningHigherOrderFunctionRootFields(expr)
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later
       // if there are any nested fields accesses in the query plan.
       case IsNotNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
+        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
+          getArrayReturningHigherOrderFunctionRootFields(expr)
       case IsNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) :: Nil
+        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
+          getArrayReturningHigherOrderFunctionRootFields(expr)
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
       case s: SubqueryExpression =>
@@ -175,7 +168,26 @@ object SchemaPruning extends SQLConfHelper {
     }
   }
 
-  private def getArrayTransformRootField(
+  private def getArrayHigherOrderFunctionRootFields(
+      expr: Expression,
+      argument: Expression,
+      lambda: LambdaFunction): Seq[RootField] = {
+    // Field accesses through the lambda variable are not directly rooted at the input
+    // attribute. Convert them into a projected type for the array argument so that
+    // physical nested column pruning can see them.
+    val nestedRootFields = lambda.arguments.headOption.collect {
+      case elementVar: NamedLambdaVariable =>
+        getArrayHigherOrderFunctionRootField(argument, lambda.function, elementVar)
+    }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
+    if (nestedRootFields.nonEmpty) {
+      nestedRootFields ++ getRootFields(lambda.function) ++
+        getArrayReturningHigherOrderFunctionRootFields(argument)
+    } else {
+      expr.children.flatMap(getRootFields)
+    }
+  }
+
+  private def getArrayHigherOrderFunctionRootField(
       argument: Expression,
       function: Expression,
       elementVar: NamedLambdaVariable): Option[StructField] = {
@@ -197,6 +209,58 @@ object SchemaPruning extends SQLConfHelper {
     }
   }
 
+  private def getArrayReturningHigherOrderFunctionRootFields(expr: Expression): Seq[RootField] = {
+    expr match {
+      case ArrayFilter(argument, lambda: LambdaFunction) =>
+        getArrayReturningHigherOrderFunctionRootFields(argument, lambda, numElementVariables = 1)
+      case ArraySort(argument, lambda: LambdaFunction, allowNullComparisonResult)
+          if !allowNullComparisonResult && lambda.function.nullable =>
+        // The strict null-comparator error includes the compared values, so pruning their
+        // element fields would change the observable error parameters.
+        getRootFields(argument) ++ getRootFields(lambda.function)
+      case ArraySort(argument, lambda: LambdaFunction, _) =>
+        getArrayReturningHigherOrderFunctionRootFields(argument, lambda, numElementVariables = 2)
+      case _ =>
+        expr.children.flatMap(getArrayReturningHigherOrderFunctionRootFields)
+    }
+  }
+
+  private def getArrayReturningHigherOrderFunctionRootFields(
+      argument: Expression,
+      lambda: LambdaFunction,
+      numElementVariables: Int): Seq[RootField] = {
+    val nestedRootFields = argument.dataType match {
+      case ArrayType(_: StructType, containsNull) =>
+        val elementVariables = lambda.arguments.take(numElementVariables).collect {
+          case elementVar: NamedLambdaVariable => elementVar
+        }
+        val selectedFields = elementVariables.map(collectLambdaVariableFields(lambda.function, _))
+        if (elementVariables.length == numElementVariables && selectedFields.forall(_.isDefined)) {
+          val fields = selectedFields.flatten.flatten
+          if (fields.nonEmpty) {
+            val mergedElementSchema = fields
+              .map(field => StructType(Array(field)))
+              .reduceLeft(_ merge _)
+            SelectedField.withDataType(
+              argument,
+              ArrayType(mergedElementSchema, containsNull)).toSeq match {
+              case Seq() => getRootFields(argument).map(_.field)
+              case fields => fields
+            }
+          } else {
+            Seq.empty
+          }
+        } else {
+          getRootFields(argument).map(_.field)
+        }
+      case _ =>
+        getRootFields(argument).map(_.field)
+    }
+    nestedRootFields.map(field => RootField(field, derivedFromAtt = false)) ++
+      getRootFields(lambda.function) ++
+      getArrayReturningHigherOrderFunctionRootFields(argument)
+  }
+
   /**
    * Collects statically identifiable nested fields read from `elementVar`.
    *
@@ -204,6 +268,8 @@ object SchemaPruning extends SQLConfHelper {
    * `Some(fields)` means every reference can be satisfied by the listed nested fields. `None`
    * means the full element is required somewhere (for example, `x => struct(x.a, x)`), so it is
    * not safe to prune the element struct.
+   *
+   * Bound lambda references are matched by exprId because they may be instantiated separately.
    *
    * Currently only `GetStructField` chains rooted at `elementVar` are collected; array or map
    * traversal within the lambda conservatively requires the full element. Keep this set of
@@ -213,9 +279,13 @@ object SchemaPruning extends SQLConfHelper {
       expr: Expression,
       elementVar: NamedLambdaVariable): Option[Seq[StructField]] = {
     expr match {
-      case LambdaVariableField(field, variable) if variable.semanticEquals(elementVar) =>
+      case LambdaVariableField(field, variable) if variable.exprId == elementVar.exprId =>
         Some(field :: Nil)
-      case variable: NamedLambdaVariable if variable.semanticEquals(elementVar) =>
+      case IsNotNull(variable: NamedLambdaVariable) if variable.exprId == elementVar.exprId =>
+        Some(Seq.empty)
+      case IsNull(variable: NamedLambdaVariable) if variable.exprId == elementVar.exprId =>
+        Some(Seq.empty)
+      case variable: NamedLambdaVariable if variable.exprId == elementVar.exprId =>
         None
       case _ =>
         expr.children.foldLeft(Option(Seq.empty[StructField])) {
