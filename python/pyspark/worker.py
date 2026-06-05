@@ -2989,10 +2989,10 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
         map_udf, _, _, return_type = udfs[0]
         output_schema = StructType([StructField("_0", return_type)])
-        # mypy can't validate a dynamic class as a type parameter, so use Any here.
-        expected_iter_type: Any = (
-            Iterator[pd.DataFrame] if isinstance(return_type, StructType) else Iterator[pd.Series]
+        iter_type_label = (
+            "pandas.DataFrame" if isinstance(return_type, StructType) else "pandas.Series"
         )
+        elem_type = pd.DataFrame if isinstance(return_type, StructType) else pd.Series
 
         def func(
             split_index: int,
@@ -3012,10 +3012,28 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                         df_for_struct=True,
                     )[0]
 
-            # Call UDF and verify result type (iterator of pd.Series / pd.DataFrame)
-            verified_iter = verify_return_type(map_udf(dataframe_iter()), expected_iter_type)
+            # mapInPandas accepts any iterable (e.g. a list), not just an
+            # iterator, so the standard verify_return_type (which requires an
+            # Iterator) is intentionally not reused here.
+            result = map_udf(dataframe_iter())
+            if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": "iterator of {}".format(iter_type_label),
+                        "actual": type(result).__name__,
+                    },
+                )
 
-            for df in verified_iter:
+            for df in result:
+                if not isinstance(df, elem_type):
+                    raise PySparkTypeError(
+                        errorClass="UDF_RETURN_TYPE",
+                        messageParameters={
+                            "expected": "iterator of {}".format(iter_type_label),
+                            "actual": "iterator of {}".format(type(df).__name__),
+                        },
+                    )
                 verify_pandas_result(
                     df, return_type, assign_cols_by_name=True, truncate_return_schema=True
                 )
