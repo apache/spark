@@ -552,6 +552,13 @@ trait SparkDateTimeUtils {
    * SQL rule (the precision of a timestamp literal is the number of digits in its
    * `<seconds fraction>`). Digits beyond the fractional run (e.g. a trailing time zone) are not
    * counted.
+   *
+   * This is intentionally a lightweight pre-parse digit counter: it does not validate that `s` is
+   * a well-formed timestamp. Callers use the returned count only to choose a parse path (the
+   * digit count routes between the microsecond path, the nanosecond path, and the ">9 digits"
+   * error); each of those paths then re-parses and validates the whole string, so a malformed
+   * input such as `"abcd.1234"` is still rejected downstream by the chosen parser. Consequently
+   * the result is meaningful only for strings that are otherwise valid timestamp/time literals.
    */
   def fractionalSecondsDigits(s: String): Int = {
     val dot = s.indexOf('.')

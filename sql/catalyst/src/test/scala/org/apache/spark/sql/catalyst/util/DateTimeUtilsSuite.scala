@@ -412,6 +412,35 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       None)
   }
 
+  test("SPARK-57250: fractionalSecondsDigits counts digits after the first dot") {
+    // No fractional part.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00") === 0)
+    assert(fractionalSecondsDigits("2020-01-01") === 0)
+    assert(fractionalSecondsDigits("") === 0)
+
+    // A trailing dot with no digits.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.") === 0)
+
+    // Boundary digit counts used by the literal precision routing.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.1") === 1)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.123456") === 6)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.1234567") === 7)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.123456789") === 9)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.1234567890") === 10)
+
+    // Counting stops at the first non-digit, e.g. a trailing time zone or whitespace.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.123456789+08:00") === 9)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.123 ") === 3)
+    assert(fractionalSecondsDigits("12:30:45.5Z") === 1)
+
+    // Only the first dot introduces the fraction; later dots are not counted.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.12.34") === 2)
+
+    // The helper does not validate the rest of the string; it just counts the fractional run.
+    assert(fractionalSecondsDigits("abcd.1234") === 4)
+    assert(fractionalSecondsDigits(".789") === 3)
+  }
+
   test("SPARK-15379: special invalid date string") {
     // Test stringToDate
     assert(toDate("2015-02-29 00:00:00").isEmpty)

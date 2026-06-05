@@ -1267,6 +1267,12 @@ class ExpressionParserSuite extends AnalysisTest {
       SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       assertEqual("TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789'",
         Literal(LocalDateTime.parse("2020-01-01T00:00:00.123456")))
+
+      // More than 9 fractional digits is NOT rejected when the flag is off; the strict
+      // INVALID_TIMESTAMP_LITERAL_PRECISION validation is intentionally flag-gated, so the
+      // literal silently narrows to microseconds via the legacy fall-through path.
+      assertEqual("TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567890'",
+        Literal(LocalDateTime.parse("2020-01-01T00:00:00.123456")))
     }
   }
 
