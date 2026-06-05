@@ -23,15 +23,16 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint}
+import org.apache.spark.sql.catalyst.plans.physical.NullAwareHashPartitioning
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructType}
 
 class ExistenceJoinSuite extends SharedSparkSession {
-  import testImplicits.toRichColumn
+  import testImplicits.{localSeqToDatasetHolder, newProductEncoder, toRichColumn}
 
   private val EnsureRequirements = new EnsureRequirements()
 
@@ -77,6 +78,55 @@ class ExistenceJoinSuite extends SharedSparkSession {
   private lazy val composedConditionNEQ = {
     And(LessThan(left.col("a").expr, right.col("c").expr),
       LessThan(left.col("b").expr, right.col("d").expr))
+  }
+
+  test("ordinary left anti equi-join spreads NULL keys in shuffle partitioning") {
+    val nullableLeft = Seq(
+      (Integer.valueOf(1), "left-1"),
+      (Integer.valueOf(2), "left-2"),
+      (null.asInstanceOf[Integer], "left-null-1"),
+      (null.asInstanceOf[Integer], "left-null-2")).toDF("k", "lv")
+    val nullableRight = Seq(
+      (Integer.valueOf(1), "right-1"),
+      (null.asInstanceOf[Integer], "right-null")).toDF("k", "rv")
+    val joinCondition = EqualTo(nullableLeft("k").expr, nullableRight("k").expr)
+    val join = Join(nullableLeft.logicalPlan, nullableRight.logicalPlan,
+      LeftAnti, Some(joinCondition), JoinHint.NONE)
+
+    val (_, leftKeys, rightKeys, boundCondition, _, _, _, _) =
+      ExtractEquiJoinKeys.unapply(join).getOrElse(fail("Failed to extract equi-join keys"))
+    val expectedAnswer = Seq(
+      Row(2, "left-2"),
+      Row(null, "left-null-1"),
+      Row(null, "left-null-2"))
+
+    def checkJoin(createJoin: (SparkPlan, SparkPlan) => SparkPlan): Unit = {
+      val plan = EnsureRequirements.apply(createJoin(
+        nullableLeft.queryExecution.sparkPlan,
+        nullableRight.queryExecution.sparkPlan))
+      val partitionings = plan.collect {
+        case exchange: ShuffleExchangeExec => exchange.outputPartitioning
+      }
+      assert(partitionings.size == 2)
+      assert(partitionings.forall(_.isInstanceOf[NullAwareHashPartitioning]))
+
+      checkAnswer2(
+        nullableLeft,
+        nullableRight,
+        (left: SparkPlan, right: SparkPlan) => EnsureRequirements.apply(createJoin(left, right)),
+        expectedAnswer,
+        sortAnswers = true)
+    }
+
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED.key -> "true") {
+      checkJoin((left, right) =>
+        SortMergeJoinExec(leftKeys, rightKeys, LeftAnti, boundCondition, left, right))
+      checkJoin((left, right) =>
+        ShuffledHashJoinExec(
+          leftKeys, rightKeys, LeftAnti, BuildRight, boundCondition, left, right))
+    }
   }
 
   // Note: the input dataframes and expression must be evaluated lazily because
