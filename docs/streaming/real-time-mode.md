@@ -20,6 +20,7 @@ license: |
 ---
 
 * Table of contents
+{:toc}
 
 # Real-time Mode
 
@@ -244,8 +245,8 @@ The following operations, sources, and sinks are supported as of Spark 4.1.0:
 
 - *Sources*: the source must support Real-time Mode. In Apache Spark, the **Kafka** source supports
   Real-time Mode. An unsupported source fails with
-  `STREAMING_REAL_TIME_MODE.INPUT_STREAM_NOT_SUPPORTED`. (The `rate` source and the in-memory source
-  used for testing are not supported as Real-time sources.)
+  `STREAMING_REAL_TIME_MODE.INPUT_STREAM_NOT_SUPPORTED`. (The built-in `rate` source is not supported
+  as a Real-time source.)
 
 - *Sinks*:
   + **Kafka** sink.
