@@ -133,19 +133,19 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
     createStatement()
   }
 
-  // SCROLL_INSENSITIVE is accepted but the returned statement is forward-only.
-  // Mirrors the Hive JDBC driver policy used by the Spark Thrift Server.
+  // Spark Connect results are forward-only and server-paginated, so only
+  // TYPE_FORWARD_ONLY result sets are supported.
   private def checkSupportedResultSet(
       resultSetType: Int, resultSetConcurrency: Int): Unit = {
+    if (resultSetType != ResultSet.TYPE_FORWARD_ONLY) {
+      throw new SQLFeatureNotSupportedException(
+        s"ResultSet type ${stringifyResultSetType(resultSetType)} is not supported; " +
+          "only TYPE_FORWARD_ONLY.")
+    }
     if (resultSetConcurrency != ResultSet.CONCUR_READ_ONLY) {
       throw new SQLFeatureNotSupportedException(
         s"ResultSet concurrency ${stringifyResultSetConcurrency(resultSetConcurrency)} " +
           "is not supported; only CONCUR_READ_ONLY.")
-    }
-    if (resultSetType == ResultSet.TYPE_SCROLL_SENSITIVE) {
-      throw new SQLFeatureNotSupportedException(
-        s"ResultSet type ${stringifyResultSetType(resultSetType)} is not supported; " +
-          "use TYPE_FORWARD_ONLY or TYPE_SCROLL_INSENSITIVE.")
     }
   }
 

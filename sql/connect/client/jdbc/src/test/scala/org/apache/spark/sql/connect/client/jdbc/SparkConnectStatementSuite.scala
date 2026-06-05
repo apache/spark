@@ -181,12 +181,6 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
         assert(stmt.getResultSetType === ResultSet.TYPE_FORWARD_ONLY)
       }
 
-      // scroll-insensitive is accepted but downgraded to forward-only
-      Using.resource(
-        conn.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY)) {
-        stmt => assert(stmt.getResultSetType === ResultSet.TYPE_FORWARD_ONLY)
-      }
-
       // the holdability overload is not supported
       intercept[SQLFeatureNotSupportedException] {
         conn.createStatement(
@@ -195,12 +189,14 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
           ResultSet.CLOSE_CURSORS_AT_COMMIT)
       }
 
-      // updatable concurrency and scroll-sensitive type are rejected
+      // only TYPE_FORWARD_ONLY and CONCUR_READ_ONLY are supported
       intercept[SQLFeatureNotSupportedException] {
         conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)
       }
-      intercept[SQLFeatureNotSupportedException] {
-        conn.createStatement(ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_READ_ONLY)
+      Seq(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.TYPE_SCROLL_SENSITIVE).foreach { typ =>
+        intercept[SQLFeatureNotSupportedException] {
+          conn.createStatement(typ, ResultSet.CONCUR_READ_ONLY)
+        }
       }
     }
   }
