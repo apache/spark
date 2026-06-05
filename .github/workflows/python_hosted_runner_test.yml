@@ -102,9 +102,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/coursier
-          key: precompile-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            precompile-coursier-
+            ${{ runner.os }}-coursier-
       - name: Install Java ${{ inputs.java }}
         uses: actions/setup-java@v5
         with:
