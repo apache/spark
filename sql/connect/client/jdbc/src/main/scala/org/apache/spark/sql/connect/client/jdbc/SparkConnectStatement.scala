@@ -20,6 +20,7 @@ package org.apache.spark.sql.connect.client.jdbc
 import java.sql.{Array => _, _}
 
 import org.apache.spark.sql.connect.client.SparkResult
+import org.apache.spark.sql.connect.client.jdbc.util.JdbcErrorUtils
 
 class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
 
@@ -194,7 +195,8 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   override def setFetchDirection(direction: Int): Unit = {
     checkOpen()
     if (direction != ResultSet.FETCH_FORWARD) {
-      throw new SQLException(s"Fetch direction $direction is not supported.")
+      throw new SQLException(
+        s"Fetch direction ${JdbcErrorUtils.stringifyFetchDirection(direction)} is not supported.")
     }
   }
 

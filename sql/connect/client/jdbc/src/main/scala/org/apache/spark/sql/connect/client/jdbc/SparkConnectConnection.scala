@@ -142,12 +142,12 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
       resultSetType: Int, resultSetConcurrency: Int): Unit = {
     if (resultSetConcurrency != ResultSet.CONCUR_READ_ONLY) {
       throw new SQLFeatureNotSupportedException(
-        s"ResultSet concurrency $resultSetConcurrency is not supported; " +
-          "only CONCUR_READ_ONLY.")
+        s"ResultSet concurrency ${stringifyResultSetConcurrency(resultSetConcurrency)} " +
+          "is not supported; only CONCUR_READ_ONLY.")
     }
     if (resultSetType == ResultSet.TYPE_SCROLL_SENSITIVE) {
       throw new SQLFeatureNotSupportedException(
-        s"ResultSet type $resultSetType is not supported; " +
+        s"ResultSet type ${stringifyResultSetType(resultSetType)} is not supported; " +
           "use TYPE_FORWARD_ONLY or TYPE_SCROLL_INSENSITIVE.")
     }
   }
