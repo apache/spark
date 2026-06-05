@@ -22,7 +22,7 @@ import java.time.LocalTime
 import org.apache.arrow.vector.{TimeNanoVector, ValueVector}
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableLong, MutableValue}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableLong, MutableValue, SpecializedGetters}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -69,6 +69,9 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
   override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =
     (input, v) => input.setLong(ordinal, v.asInstanceOf[Long])
 
+  override def getScalaAccessor: (SpecializedGetters, Int) => Any =
+    (input, ordinal) => input.getLong(ordinal)
+
   // ==================== Literal Creation ====================
 
   override def getDefaultLiteral: Literal = Literal.create(0L, t)
@@ -89,6 +92,14 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
   override def toScalaImpl(row: InternalRow, column: Int): Any = {
     DateTimeUtils.nanosToLocalTime(row.getLong(column))
   }
+
+  // ==================== Code Generation ====================
+
+  override def getCodegenGetter(input: String, ordinal: String): String =
+    s"$input.getLong($ordinal)"
+
+  override def getCodegenSetter(row: String, ordinal: Int, value: String): String =
+    s"$row.setLong($ordinal, $value)"
 
   // ==================== Optional Operations ====================
 

@@ -537,11 +537,21 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           }
         case ByteType | ShortType =>
           ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
-        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType | _: TimeType =>
+        case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType =>
           toExprCode(s"${value}L")
         case _ =>
-          val constRef = ctx.addReferenceObj("literal", value, javaType)
-          ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
+          TypeOps(dataType)
+            .map(ops => toExprCode(ops.getJavaLiteral(value)))
+            .getOrElse {
+              // `references` is an Object[], so casting an element to a primitive type (e.g.
+              // `((long) references[i])`) does not compile. Cast to the boxed type instead and
+              // let Java auto-unbox the value when it is consumed in a primitive context.
+              val refClass =
+                if (CodeGenerator.isPrimitiveType(javaType)) CodeGenerator.boxedType(javaType)
+                else javaType
+              val constRef = ctx.addReferenceObj("literal", value, refClass)
+              ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
+            }
       }
     }
   }

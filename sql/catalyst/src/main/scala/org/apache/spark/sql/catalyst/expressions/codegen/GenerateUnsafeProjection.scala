@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.types.ops.TypeOps
 import org.apache.spark.sql.types._
 
 /**
@@ -113,9 +114,16 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
             // Can't call setNullAt() for DecimalType with precision larger than 18.
             s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
           case CalendarIntervalType => s"$rowWriter.write($index, (CalendarInterval) null);"
-          case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-            s"$rowWriter.write($index, (TimestampNanosVal) null);"
-          case _ => s"$rowWriter.setNullAt($index);"
+          case _ =>
+            TypeOps(dt)
+              .flatMap(_.getCodegenNullWrite(rowWriter, index.toString))
+              .getOrElse {
+                dt match {
+                  case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+                    s"$rowWriter.write($index, (TimestampNanosVal) null);"
+                  case _ => s"$rowWriter.setNullAt($index);"
+                }
+              }
         }
 
         val writeField = writeElement(ctx, input.value, index.toString, dt, rowWriter)
@@ -191,9 +199,16 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
         s"$arrayWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
       case CalendarIntervalType => s"$arrayWriter.write($index, (CalendarInterval) null);"
-      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-        s"$arrayWriter.write($index, (TimestampNanosVal) null);"
-      case _ => s"$arrayWriter.setNull${elementOrOffsetSize}Bytes($index);"
+      case _ =>
+        TypeOps(et)
+          .flatMap(_.getCodegenNullWrite(arrayWriter, index))
+          .getOrElse {
+            et match {
+              case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+                s"$arrayWriter.write($index, (TimestampNanosVal) null);"
+              case _ => s"$arrayWriter.setNull${elementOrOffsetSize}Bytes($index);"
+            }
+          }
     }
 
     val elementAssignment = if (containsNull) {

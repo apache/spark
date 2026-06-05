@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder, OptionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, Literal, MutableTimestampNanos, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeGenerator, CodegenContext}
+import org.apache.spark.sql.catalyst.types.ops.{TimestampLTZNanosTypeOps, TimestampNTZNanosTypeOps}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampLTZNanosType, PhysicalTimestampNTZNanosType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -123,6 +124,56 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
         val e = intercept[org.apache.spark.SparkException](TypeApiOps(dt).get.getEncoder)
         assert(e.getCondition === "FEATURE_NOT_ENABLED")
       }
+    }
+  }
+
+  test("getScalaAccessor reads the correct NTZ/LTZ value via InternalRow.getAccessor") {
+    allCases.foreach { case (dt, _, value) =>
+      val accessor = InternalRow.getAccessor(dt)
+      val row = new GenericInternalRow(Array[Any](value))
+      assert(accessor(row, 0) === value, s"getScalaAccessor roundtrip for $dt")
+      val nullRow = new GenericInternalRow(Array[Any](null))
+      assert(accessor(nullRow, 0) === null, s"getScalaAccessor null for $dt")
+    }
+  }
+
+  test("CodeGenerator.javaType routes through getJavaClass.getSimpleName") {
+    allCases.foreach { case (dt, _, _) =>
+      assert(CodeGenerator.javaType(dt) === "TimestampNanosVal",
+        s"javaType for $dt")
+    }
+  }
+
+  test("getCodegenGetter and getCodegenSetter produce correct method-call strings") {
+    val ntzOps = TimestampNTZNanosTypeOps(TimestampNTZNanosType(9))
+    assert(ntzOps.getCodegenGetter("row", "i") === "row.getTimestampNTZNanos(i)")
+    assert(ntzOps.getCodegenSetter("row", 0, "v") === "row.setTimestampNTZNanos(0, v)")
+
+    val ltzOps = TimestampLTZNanosTypeOps(TimestampLTZNanosType(7))
+    assert(ltzOps.getCodegenGetter("row", "i") === "row.getTimestampLTZNanos(i)")
+    assert(ltzOps.getCodegenSetter("row", 0, "v") === "row.setTimestampLTZNanos(0, v)")
+  }
+
+  test("getCodegenNullWrite returns the typed-null write statement for variable-length nanos") {
+    allCases.foreach { case (dt, _, _) =>
+      val ops = TypeOps(dt).get
+      assert(ops.getCodegenNullWrite("w", "3") ===
+        Some("w.write(3, (TimestampNanosVal) null);"),
+        s"getCodegenNullWrite for $dt")
+    }
+  }
+
+  test("Literal.doGenCode emits getJavaLiteral inline, not a reference object") {
+    allCases.foreach { case (dt, _, value) =>
+      val literal = Literal.create(value, dt)
+      val ctx = new CodegenContext
+      val ev = literal.genCode(ctx)
+      // The generated value expression must contain the inline fromParts(...) call produced
+      // by getJavaLiteral, rather than a global field reference (addReferenceObj path).
+      assert(ev.value.code.contains("fromParts"),
+        s"expected inline fromParts call for $dt, got: ${ev.value.code}")
+      assert(!ctx.references.exists(_.isInstanceOf[TimestampNanosVal]),
+        s"TimestampNanosVal should not be added as a reference object for $dt")
     }
   }
 

@@ -1699,22 +1699,26 @@ object CodeGenerator extends Logging {
     val jt = javaType(dataType)
     dataType match {
       case udt: UserDefinedType[_] => getValue(input, udt.sqlType, ordinal)
-      case _ if isPrimitiveType(jt) => s"$input.get${primitiveTypeName(jt)}($ordinal)"
-      case _ => PhysicalDataType(dataType) match {
-        case _: PhysicalArrayType => s"$input.getArray($ordinal)"
-        case PhysicalBinaryType => s"$input.getBinary($ordinal)"
-        case _: PhysicalBinaryViewType => s"$input.getBinaryView($ordinal)"
-        case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
-        case PhysicalTimestampNTZNanosType => s"$input.getTimestampNTZNanos($ordinal)"
-        case PhysicalTimestampLTZNanosType => s"$input.getTimestampLTZNanos($ordinal)"
-        case t: PhysicalDecimalType => s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
-        case _: PhysicalMapType => s"$input.getMap($ordinal)"
-        case PhysicalNullType => "null"
-        case _: PhysicalStringType => s"$input.getUTF8String($ordinal)"
-        case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
-        case PhysicalVariantType => s"$input.getVariant($ordinal)"
-        case _ => s"($jt)$input.get($ordinal, null)"
-      }
+      case _ =>
+        TypeOps(dataType).map(_.getCodegenGetter(input, ordinal)).getOrElse {
+          if (isPrimitiveType(jt)) s"$input.get${primitiveTypeName(jt)}($ordinal)"
+          else PhysicalDataType(dataType) match {
+            case _: PhysicalArrayType => s"$input.getArray($ordinal)"
+            case PhysicalBinaryType => s"$input.getBinary($ordinal)"
+            case _: PhysicalBinaryViewType => s"$input.getBinaryView($ordinal)"
+            case PhysicalCalendarIntervalType => s"$input.getInterval($ordinal)"
+            case PhysicalTimestampNTZNanosType => s"$input.getTimestampNTZNanos($ordinal)"
+            case PhysicalTimestampLTZNanosType => s"$input.getTimestampLTZNanos($ordinal)"
+            case t: PhysicalDecimalType =>
+              s"$input.getDecimal($ordinal, ${t.precision}, ${t.scale})"
+            case _: PhysicalMapType => s"$input.getMap($ordinal)"
+            case PhysicalNullType => "null"
+            case _: PhysicalStringType => s"$input.getUTF8String($ordinal)"
+            case t: PhysicalStructType => s"$input.getStruct($ordinal, ${t.fields.length})"
+            case PhysicalVariantType => s"$input.getVariant($ordinal)"
+            case _ => s"($jt)$input.get($ordinal, null)"
+          }
+        }
     }
   }
 
@@ -1778,20 +1782,28 @@ object CodeGenerator extends Logging {
   def setColumn(row: String, dataType: DataType, ordinal: Int, value: String): String = {
     val jt = javaType(dataType)
     dataType match {
-      case _ if isPrimitiveType(jt) => s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
-      case CalendarIntervalType => s"$row.setInterval($ordinal, $value)"
-      case _: TimestampNTZNanosType => s"$row.setTimestampNTZNanos($ordinal, $value)"
-      case _: TimestampLTZNanosType => s"$row.setTimestampLTZNanos($ordinal, $value)"
-      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       case udt: UserDefinedType[_] => setColumn(row, udt.sqlType, ordinal, value)
+      case CalendarIntervalType => s"$row.setInterval($ordinal, $value)"
+      case t: DecimalType => s"$row.setDecimal($ordinal, $value, ${t.precision})"
       // The UTF8String, BinaryView, InternalRow, ArrayData and MapData may came from UnsafeRow, we
       // should copy it to avoid keeping a "pointer" to a memory region which may get updated
       // afterwards.
       case _: StringType | _: GeometryType | _: GeographyType |
            _: StructType | _: ArrayType | _: MapType =>
         s"$row.update($ordinal, $value.copy())"
-      case _ => s"$row.update($ordinal, $value)"
+      case _ =>
+        TypeOps(dataType).map(_.getCodegenSetter(row, ordinal, value)).getOrElse {
+          if (isPrimitiveType(jt)) s"$row.set${primitiveTypeName(jt)}($ordinal, $value)"
+          else setColumnDefault(row, dataType, ordinal, value)
+        }
     }
+  }
+
+  private def setColumnDefault(
+      row: String, dataType: DataType, ordinal: Int, value: String): String = dataType match {
+    case _: TimestampNTZNanosType => s"$row.setTimestampNTZNanos($ordinal, $value)"
+    case _: TimestampLTZNanosType => s"$row.setTimestampLTZNanos($ordinal, $value)"
+    case _ => s"$row.update($ordinal, $value)"
   }
 
   /**
@@ -1992,26 +2004,29 @@ object CodeGenerator extends Logging {
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
     case ObjectType(cls) => cls.getName
-    case _ => PhysicalDataType(dt) match {
-      case _: PhysicalArrayType => "ArrayData"
-      case PhysicalBinaryType => "byte[]"
-      case PhysicalBooleanType => JAVA_BOOLEAN
-      case PhysicalByteType => JAVA_BYTE
-      case PhysicalCalendarIntervalType => "CalendarInterval"
-      case PhysicalTimestampNTZNanosType => "TimestampNanosVal"
-      case PhysicalTimestampLTZNanosType => "TimestampNanosVal"
-      case PhysicalIntegerType => JAVA_INT
-      case _: PhysicalDecimalType => "Decimal"
-      case PhysicalDoubleType => JAVA_DOUBLE
-      case PhysicalFloatType => JAVA_FLOAT
-      case PhysicalLongType => JAVA_LONG
-      case _: PhysicalMapType => "MapData"
-      case PhysicalShortType => JAVA_SHORT
-      case _: PhysicalStringType => "UTF8String"
-      case _: PhysicalStructType => "InternalRow"
-      case _: PhysicalVariantType => "VariantVal"
-      case _ => "Object"
-    }
+    case _ =>
+      TypeOps(dt).map(_.getJavaClass.getSimpleName).getOrElse {
+        PhysicalDataType(dt) match {
+          case _: PhysicalArrayType => "ArrayData"
+          case PhysicalBinaryType => "byte[]"
+          case PhysicalBooleanType => JAVA_BOOLEAN
+          case PhysicalByteType => JAVA_BYTE
+          case PhysicalCalendarIntervalType => "CalendarInterval"
+          case PhysicalTimestampNTZNanosType => "TimestampNanosVal"
+          case PhysicalTimestampLTZNanosType => "TimestampNanosVal"
+          case PhysicalIntegerType => JAVA_INT
+          case _: PhysicalDecimalType => "Decimal"
+          case PhysicalDoubleType => JAVA_DOUBLE
+          case PhysicalFloatType => JAVA_FLOAT
+          case PhysicalLongType => JAVA_LONG
+          case _: PhysicalMapType => "MapData"
+          case PhysicalShortType => JAVA_SHORT
+          case _: PhysicalStringType => "UTF8String"
+          case _: PhysicalStructType => "InternalRow"
+          case _: PhysicalVariantType => "VariantVal"
+          case _ => "Object"
+        }
+      }
   }
 
   def javaClass(dt: DataType): Class[_] =

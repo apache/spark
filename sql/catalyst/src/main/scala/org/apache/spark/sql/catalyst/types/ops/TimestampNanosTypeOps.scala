@@ -21,7 +21,7 @@ import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableTimestampNanos, MutableValue}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableTimestampNanos, MutableValue, SpecializedGetters}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampLTZNanosType, PhysicalTimestampNTZNanosType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -66,6 +66,13 @@ trait TimestampNanosTypeOps extends TypeOps {
       s"${tn.epochMicros}L, (short) ${tn.nanosWithinMicro})"
   }
 
+  // ==================== Code Generation ====================
+
+  // Both NTZ and LTZ store a variable-length 16-byte payload in UnsafeRow, so a typed null must
+  // use the write(i, (TimestampNanosVal) null) overload rather than setNullAt.
+  override def getCodegenNullWrite(writer: String, index: String): Option[String] =
+    Some(s"$writer.write($index, (TimestampNanosVal) null);")
+
   // ==================== External Type Conversion ====================
 
   // Raises the same error as the legacy CatalystTypeConverters (SPARK-57033) when an external
@@ -93,6 +100,15 @@ case class TimestampNTZNanosTypeOps(override val t: TimestampNTZNanosType)
 
   override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =
     (input, v) => input.setTimestampNTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
+
+  override def getScalaAccessor: (SpecializedGetters, Int) => Any =
+    (input, ordinal) => input.getTimestampNTZNanos(ordinal)
+
+  override def getCodegenGetter(input: String, ordinal: String): String =
+    s"$input.getTimestampNTZNanos($ordinal)"
+
+  override def getCodegenSetter(row: String, ordinal: Int, value: String): String =
+    s"$row.setTimestampNTZNanos($ordinal, $value)"
 
   override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
     case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l, t.precision)
@@ -137,6 +153,15 @@ case class TimestampLTZNanosTypeOps(override val t: TimestampLTZNanosType)
 
   override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =
     (input, v) => input.setTimestampLTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
+
+  override def getScalaAccessor: (SpecializedGetters, Int) => Any =
+    (input, ordinal) => input.getTimestampLTZNanos(ordinal)
+
+  override def getCodegenGetter(input: String, ordinal: String): String =
+    s"$input.getTimestampLTZNanos($ordinal)"
+
+  override def getCodegenSetter(row: String, ordinal: Int, value: String): String =
+    s"$row.setTimestampLTZNanos($ordinal, $value)"
 
   override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
     case i: Instant => DateTimeUtils.instantToTimestampNanos(i, t.precision)

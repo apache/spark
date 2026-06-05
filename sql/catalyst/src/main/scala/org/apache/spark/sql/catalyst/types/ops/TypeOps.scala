@@ -23,7 +23,7 @@ import org.apache.arrow.vector.ValueVector
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.WalkedTypePath
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableValue}
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableValue, SpecializedGetters}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
 import org.apache.spark.sql.internal.SQLConf
@@ -112,6 +112,17 @@ trait TypeOps extends Serializable {
    */
   def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit
 
+  /**
+   * Returns an accessor function for reading this type's raw internal value from a row.
+   *
+   * Used by InternalRow.getAccessor. Returns the internal Catalyst representation (e.g., Long for
+   * TimeType, TimestampNanosVal for nanosecond timestamps), not the external Scala type.
+   *
+   * @return
+   *   accessor function (SpecializedGetters, Int) => Any
+   */
+  def getScalaAccessor: (SpecializedGetters, Int) => Any
+
   // ==================== Literal Creation ====================
 
   /**
@@ -192,6 +203,54 @@ trait TypeOps extends Serializable {
   final def toScala(row: InternalRow, column: Int): Any = {
     if (row.isNullAt(column)) null else toScalaImpl(row, column)
   }
+
+  // ==================== Code Generation ====================
+
+  /**
+   * Returns the Java expression string that reads a value of this type from a row in generated
+   * code.
+   *
+   * @param input
+   *   Java variable name of the SpecializedGetters / InternalRow
+   * @param ordinal
+   *   Java expression for the column ordinal
+   * @return
+   *   Java expression string, e.g. "input.getTimestampNTZNanos(ordinal)"
+   */
+  def getCodegenGetter(input: String, ordinal: String): String
+
+  /**
+   * Returns the Java statement string that writes a value of this type into a row in generated
+   * code.
+   *
+   * @param row
+   *   Java variable name of the InternalRow
+   * @param ordinal
+   *   column ordinal
+   * @param value
+   *   Java expression for the value to write
+   * @return
+   *   Java statement string, e.g. "row.setTimestampNTZNanos(ordinal, value)"
+   */
+  def getCodegenSetter(row: String, ordinal: Int, value: String): String
+
+  /**
+   * Returns the Java statement string that writes a typed null into an UnsafeWriter in generated
+   * code, or None to delegate to the caller's default.
+   *
+   * Fixed-size (primitive-backed) types return None: the caller knows the right default for its
+   * context (setNullAt for row writers, setNullXBytes for array writers). Variable-length types
+   * (e.g. nanosecond timestamps) return Some(...) with the typed write(i, (Type) null) overload
+   * that preserves the variable-length offset.
+   *
+   * @param writer
+   *   Java variable name of the UnsafeRowWriter / UnsafeArrayWriter
+   * @param index
+   *   Java expression for the column index
+   * @return
+   *   Some(Java statement string) for variable-length types; None for fixed-size types
+   */
+  def getCodegenNullWrite(writer: String, index: String): Option[String] = None
 
   // ==================== Serialization (optional) ====================
 

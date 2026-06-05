@@ -552,6 +552,18 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57101: literal codegen with the Types Framework disabled") {
+    // With the framework off, TypeOps(dt) is empty and Literal.doGenCode falls back to
+    // addReferenceObj. The reference array is Object[], so a primitive-typed value (e.g. TimeType,
+    // backed by long) must be cast via its boxed type or the generated code does not compile.
+    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
+      val time = LocalTime.of(12, 13, 14)
+      DataTypeTestUtils.timeTypes.foreach { tt =>
+        checkEvaluation(Literal.create(time, tt), localTime(12, 13, 14))
+      }
+    }
+  }
+
   test("SPARK-37967: Literal.create support ObjectType") {
     checkEvaluation(
       Literal.create(UTF8String.fromString("Spark SQL"), ObjectType(classOf[UTF8String])),
