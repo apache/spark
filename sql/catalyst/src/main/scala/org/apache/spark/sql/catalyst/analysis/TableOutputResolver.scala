@@ -457,7 +457,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     val output = if (reordered.length == expectedCols.length) {
       if (matchedCols.size < inputCols.length) {
         val extraCols = inputCols.filterNot(col => matchedCols.contains(col.name))
-          .map(col => s"${toSQLId(col.name)}").mkString(", ")
+          .map(col => s"${toSQLId(Seq(col.name))}").mkString(", ")
         if (colPath.isEmpty) {
           throw QueryCompilationErrors.incompatibleDataToTableExtraColumnsError(tableName,
             extraCols)
@@ -495,7 +495,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     }
     if (inputCols.size > actualExpectedCols.size) {
       val extraColsStr = inputCols.takeRight(inputCols.size - actualExpectedCols.size)
-        .map(col => toSQLId(col.name))
+        .map(col => toSQLId(Seq(col.name)))
         .mkString(", ")
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName,
@@ -508,7 +508,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
     } else if (inputCols.size < actualExpectedCols.size && !fillDefaultValue) {
       val missingCols = actualExpectedCols.drop(inputCols.size)
       val missingColsStr = missingCols
-        .map(col => toSQLId(col.name))
+        .map(col => toSQLId(Seq(col.name)))
         .mkString(", ")
       if (colPath.isEmpty) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(tableName,
