@@ -97,7 +97,7 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
         getProjection(child).map(projection => reverse.copy(child = projection))
       case shuffle @ Shuffle(child, _) =>
         getProjection(child).map(projection => shuffle.copy(child = projection))
-      case slice @ Slice(x, _, _) =>
+      case slice @ Slice(x, start, length) if start.foldable && length.foldable =>
         getProjection(x).map(projection => slice.copy(x = projection))
       case knownNotContainsNull @ KnownNotContainsNull(child) =>
         getProjection(child).map(projection => knownNotContainsNull.copy(child = projection))
