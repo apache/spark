@@ -439,6 +439,35 @@ class FractionalOps(NumericOps):
     def pretty_name(self) -> str:
         return "fractions"
 
+    def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        if not is_valid_operand_for_numeric_arithmetic(right):
+            raise TypeError("Addition can not be applied to given types.")
+        # Always raise TypeError for decimal-float mixed operations (SPARK-55818)
+        # This matches pandas behavior regardless of ANSI mode.
+        if _is_decimal_float_mixed(left, right):
+            raise TypeError("Addition can not be applied to given types.")
+        new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
+
+        def wrapped_add(lc: PySparkColumn, rc: Any) -> PySparkColumn:
+            return _cast_back_float(PySparkColumn.__add__(lc, rc), left.dtype, right)
+
+        return column_op(wrapped_add)(left, new_right)
+
+    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
+        if not is_valid_operand_for_numeric_arithmetic(right):
+            raise TypeError("Subtraction can not be applied to given types.")
+        # Always raise TypeError for decimal-float mixed operations (SPARK-55818)
+        if _is_decimal_float_mixed(left, right):
+            raise TypeError("Subtraction can not be applied to given types.")
+        new_right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
+
+        def wrapped_sub(lc: PySparkColumn, rc: Any) -> PySparkColumn:
+            return _cast_back_float(PySparkColumn.__sub__(lc, rc), left.dtype, right)
+
+        return column_op(wrapped_sub)(left, new_right)
+
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         _sanitize_list_like(right)
         if not is_valid_operand_for_numeric_arithmetic(right):
