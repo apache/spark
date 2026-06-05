@@ -4812,6 +4812,7 @@ object SQLConf {
         "by overlapping decompression with consumption. Increases memory usage by up to " +
         "one additional batch worth of Arrow vectors.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 

@@ -62,6 +62,21 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       .set(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key, "false")
   }
 
+  // InMemoryRelation caches the serializer instance in a process-wide field that is initialized
+  // from spark.sql.cache.serializer only on first use. When another suite runs first in the same
+  // JVM, that field is already bound to DefaultCachedBatchSerializer, so reset it here to pick up
+  // the Arrow serializer configured above, and reset it again afterwards so we do not leak the
+  // Arrow serializer to later suites.
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    InMemoryRelation.clearSerializer()
+  }
+
+  override def afterAll(): Unit = {
+    InMemoryRelation.clearSerializer()
+    super.afterAll()
+  }
+
   test("basic caching with primitive types") {
     val df = Seq(
       (1, 2L, 3.0f, 4.0, "hello"),
@@ -1800,6 +1815,16 @@ class ArrowCachedBatchKryoRegistrationSuite extends QueryTest with SharedSparkSe
     .set(StaticSQLConf.SPARK_CACHE_SERIALIZER.key, classOf[ArrowCachedBatchSerializer].getName)
     .set("spark.kryo.registrationRequired", "true")
     .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    InMemoryRelation.clearSerializer()
+  }
+
+  override def afterAll(): Unit = {
+    InMemoryRelation.clearSerializer()
+    super.afterAll()
+  }
 
   test("ArrowCachedBatch and ArrowCachedBatchSerializer are registered in KryoSerializer") {
     withTable("t1") {
