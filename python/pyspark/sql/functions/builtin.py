@@ -30988,7 +30988,7 @@ def vector_cosine_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Col
     """Returns the cosine similarity between two float vectors.
     The vectors must have the same dimension.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -31019,7 +31019,7 @@ def vector_inner_product(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """Returns the inner product (dot product) between two float vectors.
     The vectors must have the same dimension.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -31050,7 +31050,7 @@ def vector_l2_distance(left: "ColumnOrName", right: "ColumnOrName") -> Column:
     """Returns the Euclidean (L2) distance between two float vectors.
     The vectors must have the same dimension.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -31081,7 +31081,7 @@ def vector_norm(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None)
     """Returns the Lp norm of a float vector using the specified degree.
     Degree defaults to 2.0 (Euclidean norm) if unspecified.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -31116,7 +31116,7 @@ def vector_normalize(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = 
     """Normalizes a float vector to unit length using the specified norm degree.
     Degree defaults to 2.0 (Euclidean norm) if unspecified.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -31151,7 +31151,7 @@ def vector_avg(col: "ColumnOrName") -> Column:
     """Aggregate function: returns the element-wise mean of float vectors in a group.
     All vectors must have the same dimension.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -31180,7 +31180,7 @@ def vector_sum(col: "ColumnOrName") -> Column:
     """Aggregate function: returns the element-wise sum of float vectors in a group.
     All vectors must have the same dimension.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------

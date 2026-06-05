@@ -11906,7 +11906,7 @@ object functions {
   /**
    * Returns the cosine similarity between two float vectors.
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_cosine_similarity(left: Column, right: Column): Column =
     Column.fn("vector_cosine_similarity", left, right)
@@ -11914,7 +11914,7 @@ object functions {
   /**
    * Returns the inner product (dot product) between two float vectors.
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_inner_product(left: Column, right: Column): Column =
     Column.fn("vector_inner_product", left, right)
@@ -11922,7 +11922,7 @@ object functions {
   /**
    * Returns the Euclidean (L2) distance between two float vectors.
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_l2_distance(left: Column, right: Column): Column =
     Column.fn("vector_l2_distance", left, right)
@@ -11930,7 +11930,7 @@ object functions {
   /**
    * Returns the Lp norm of a float vector. Degree defaults to 2.0 if unspecified.
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_norm(vector: Column, degree: Column): Column =
     Column.fn("vector_norm", vector, degree)
@@ -11938,7 +11938,7 @@ object functions {
   /**
    * Returns the Lp norm of a float vector using degree 2.0 (Euclidean norm).
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_norm(vector: Column): Column =
     Column.fn("vector_norm", vector)
@@ -11946,7 +11946,7 @@ object functions {
   /**
    * Normalizes a float vector to unit length. Degree defaults to 2.0 if unspecified.
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_normalize(vector: Column, degree: Column): Column =
     Column.fn("vector_normalize", vector, degree)
@@ -11954,7 +11954,7 @@ object functions {
   /**
    * Normalizes a float vector to unit length using degree 2.0 (Euclidean norm).
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_normalize(vector: Column): Column =
     Column.fn("vector_normalize", vector)
@@ -11962,14 +11962,14 @@ object functions {
   /**
    * Aggregate function: returns the element-wise mean of float vectors in a group.
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_avg(col: Column): Column = Column.fn("vector_avg", col)
 
   /**
    * Aggregate function: returns the element-wise sum of float vectors in a group.
    * @group vector_funcs
-   * @since 4.2.0
+   * @since 4.3.0
    */
   def vector_sum(col: Column): Column = Column.fn("vector_sum", col)
 
