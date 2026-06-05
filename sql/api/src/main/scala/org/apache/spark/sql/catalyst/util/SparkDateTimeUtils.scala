@@ -551,6 +551,35 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Returns the number of fractional-second digits in a timestamp/time string, i.e. the count of
+   * decimal digits immediately following the first `.` (0 if there is no fractional part). In a
+   * well-formed timestamp/time string the only `.` is the one that introduces the seconds
+   * fraction, so this is sufficient to derive the precision `p` of a typed literal per the ANSI
+   * SQL rule (the precision of a timestamp literal is the number of digits in its
+   * `<seconds fraction>`). Digits beyond the fractional run (e.g. a trailing time zone) are not
+   * counted.
+   *
+   * This is intentionally a lightweight pre-parse digit counter: it does not validate that `s` is
+   * a well-formed timestamp. Callers use the returned count only to choose a parse path (the
+   * digit count routes between the microsecond path, the nanosecond path, and the ">9 digits"
+   * error); each of those paths then re-parses and validates the whole string, so a malformed
+   * input such as `"abcd.1234"` is still rejected downstream by the chosen parser. Consequently
+   * the result is meaningful only for strings that are otherwise valid timestamp/time literals.
+   */
+  def fractionalSecondsDigits(s: String): Int = {
+    val dot = s.indexOf('.')
+    if (dot < 0) {
+      0
+    } else {
+      var i = dot + 1
+      while (i < s.length && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+        i += 1
+      }
+      i - (dot + 1)
+    }
+  }
+
+  /**
    * Trims and parses a given UTF8 timestamp string to the corresponding timestamp segments, time
    * zone id and whether it is just time without a date. value. The return type is [[Option]] in
    * order to distinguish between 0L and null. The following formats are allowed:
