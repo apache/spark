@@ -219,10 +219,17 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
       returnType: Option[String] = None): String = {
     val castFuncCall = if (returnType.isEmpty) funcCall else s"(${returnType.get}) $funcCall"
     if (needTryCatch) {
+      // Catch Throwable rather than Exception: invoked methods may declare
+      // `throws Throwable` (common in reflection-derived signatures), and the
+      // JDK compiler requires the catch type to cover the declared throw. Janino
+      // erases checked-exception checks; javac enforces them. Platform.throwException
+      // rethrows the caught value unchanged (an Unsafe sneaky-throw, no wrapping), so
+      // an Error passing through here is observably identical to one propagating
+      // uncaught - the wider catch type must not change runtime behavior.
       s"""
         try {
           $resultVal = $castFuncCall;
-        } catch (Exception e) {
+        } catch (Throwable e) {
           org.apache.spark.unsafe.Platform.throwException(e);
         }
       """
@@ -595,7 +602,12 @@ case class NewInstance(
     propagateNull: Boolean,
     dataType: DataType,
     outerPointer: Option[() => AnyRef]) extends InvokeLike {
+  // JVM-form binary name (with `$` for inner classes); used where literal `$`
+  // is intentional (e.g., Scala companion access `Foo$.MODULE$`).
   private val className = cls.getName
+  // Dotted Java-source FQN; required by the JDK compiler in `new X(...)`
+  // expressions and casts. Equal to `className` for top-level classes.
+  private val javaSourceClassName = CodeGenerator.javaSourceName(cls)
 
   override def nullable: Boolean = needNullCheck
 
@@ -678,7 +690,7 @@ case class NewInstance(
       case _ => outer.map { gen =>
         s"${gen.value}.new ${Utils.getSimpleName(cls)}($argString)"
       }.getOrElse {
-        s"new $className($argString)"
+        s"new $javaSourceClassName($argString)"
       }
     }
 
@@ -1182,7 +1194,11 @@ case class MapObjects private(
     val (initCollection, addElement, getResult): (String, String => String, String) =
       customCollectionCls match {
         case Some(cls) if classOf[mutable.ArraySeq[_]].isAssignableFrom(cls) =>
-          val tag = ctx.addReferenceObj("tag", elementClassTag())
+          // Cast the reference to the public ClassTag interface rather than the
+          // ClassTag's concrete runtime class, which can be a non-public inner class
+          // (e.g. scala.reflect.ClassTag$GenericClassTag). The JDK compiler rejects a
+          // cast to an inaccessible type ("has private access"); Janino does not.
+          val tag = ctx.addReferenceObj("tag", elementClassTag(), classOf[ClassTag[_]].getName)
           val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
           val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
           val builder = ctx.freshName("collectionBuilder")
@@ -1196,7 +1212,11 @@ case class MapObjects private(
               s"MODULE$$.make($builder.result());"
           )
         case Some(cls) if classOf[immutable.ArraySeq[_]].isAssignableFrom(cls) =>
-          val tag = ctx.addReferenceObj("tag", elementClassTag())
+          // Cast the reference to the public ClassTag interface rather than the
+          // ClassTag's concrete runtime class, which can be a non-public inner class
+          // (e.g. scala.reflect.ClassTag$GenericClassTag). The JDK compiler rejects a
+          // cast to an inaccessible type ("has private access"); Janino does not.
+          val tag = ctx.addReferenceObj("tag", elementClassTag(), classOf[ClassTag[_]].getName)
           val builderClassName = classOf[mutable.ArrayBuilder[_]].getName
           val getBuilder = s"$builderClassName$$.MODULE$$.make($tag)"
           val builder = ctx.freshName("collectionBuilder")

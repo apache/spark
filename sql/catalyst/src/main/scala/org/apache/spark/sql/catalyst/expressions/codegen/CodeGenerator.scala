@@ -17,23 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import java.io.ByteArrayInputStream
-
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.jdk.CollectionConverters._
-import scala.util.control.NonFatal
 
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
-import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
-import org.codehaus.janino.ClassBodyEvaluator
-import org.codehaus.janino.util.ClassFile
-import org.codehaus.janino.util.ClassFile.CodeAttribute
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, TaskContext, TaskKilledException}
-import org.apache.spark.executor.InputMetrics
-import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
@@ -42,14 +33,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationAwareUTF8String, CollationFactory, CollationSupport, MapData, SQLOrderingUtil, UnsafeRowUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, MapData, SQLOrderingUtil, UnsafeRowUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, ParentClassLoader, Utils}
+import org.apache.spark.util.{LongAccumulator, NonFateSharingCache, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -266,9 +256,11 @@ class CodegenContext extends Logging {
    *
    * @param javaType Java type of the field. Note that short names can be used for some types,
    *                 e.g. InternalRow, UnsafeRow, UnsafeArrayData, etc. Other types will have to
-   *                 specify the fully-qualified Java type name. See the code in doCompile() for
-   *                 the list of default imports available.
-   *                 Also, generic type arguments are accepted but ignored.
+   *                 specify the fully-qualified Java type name. See
+   *                 `CodeCompiler.DefaultImports` for the list of default imports available.
+   *                 Generic type arguments are kept in the field declaration but erased
+   *                 from array creation expressions (the standard
+   *                 `Foo&lt;X&gt;[] f = new Foo[n]` idiom).
    * @param variableName Name of the field.
    * @param initFunc Function includes statement(s) to put into the init() method to initialize
    *                 this field. The argument is the name of the mutable state variable.
@@ -373,6 +365,15 @@ class CodegenContext extends Logging {
       s"private $javaType $variableName;"
     }
 
+    // Strip type parameters from a type used in array CREATION: `Foo<X>` -> `Foo`.
+    // Java forbids "generic array creation" (`new Foo<X>[n]`), though Janino allows
+    // it; the field declaration keeps the parameterized element type while the
+    // `new` uses the raw type (the standard `Foo<X>[] a = new Foo[n]` idiom).
+    def erasedType(t: String): String = {
+      val lt = t.indexOf('<')
+      if (lt < 0) t else t.substring(0, lt)
+    }
+
     val arrayStates = arrayCompactedMutableStates.flatMap { case (javaType, mutableStateArrays) =>
       val numArrays = mutableStateArrays.arrayNames.size
       mutableStateArrays.arrayNames.zipWithIndex.map { case (arrayName, index) =>
@@ -384,10 +385,10 @@ class CodegenContext extends Logging {
         if (javaType.contains("[]")) {
           // initializer had an one-dimensional array variable
           val baseType = javaType.substring(0, javaType.length - 2)
-          s"private $javaType[] $arrayName = new $baseType[$length][];"
+          s"private $javaType[] $arrayName = new ${erasedType(baseType)}[$length][];"
         } else {
           // initializer had a scalar variable
-          s"private $javaType[] $arrayName = new $javaType[$length];"
+          s"private $javaType[] $arrayName = new ${erasedType(javaType)}[$length];"
         }
       }
     }
@@ -1443,7 +1444,8 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 }
 
 /**
- * Java bytecode statistics of a compiled class by Janino.
+ * Java bytecode statistics of a compiled generated class. Populated by whichever
+ * [[CodeCompiler]] backend produced the class.
  */
 case class ByteCodeStats(maxMethodCodeSize: Int, maxConstPoolSize: Int, numInnerClasses: Int)
 
@@ -1473,6 +1475,25 @@ object CodeGenerator extends Logging {
   // class.
   final val GENERATED_CLASS_SIZE_THRESHOLD = 1000000
 
+  /**
+   * The `scala.Function1` `apply(Object)` bridge that projection codegen must emit for
+   * the Janino backend but hide from the JDK backend.
+   *
+   * Generated projections extend a Scala `Projection` (an `InternalRow => *`) and define
+   * the typed `apply(InternalRow)`. Janino does not synthesize bridge methods for the
+   * inherited generic supertype method, so it reports the class as not implementing
+   * `scala.Function1.apply(Object)` unless this explicit bridge is present. The JDK
+   * compiler, on the other hand, synthesizes the bridge itself and rejects an explicit
+   * one as a name clash. The two backends therefore need different source, so the bridge
+   * is emitted here in exactly the shape [[JdkCodeCompiler]] strips before invoking javac
+   * (keep the two in sync). `argName` can be any valid Java identifier - the body just
+   * casts and delegates to the typed overload.
+   */
+  def function1ApplyBridge(argName: String): String =
+    s"""public java.lang.Object apply(java.lang.Object $argName) {
+       |  return apply((InternalRow) $argName);
+       |}""".stripMargin
+
   // This is the threshold for the number of global variables, whose types are primitive type or
   // complex type (e.g. more than one-dimensional array), that will be placed at the outer class
   final val OUTER_CLASS_VARIABLES_THRESHOLD = 10000
@@ -1500,141 +1521,28 @@ object CodeGenerator extends Logging {
   def resetCompileTime(): Unit = _compileTime.reset()
 
   /**
-   * Compile the Java source code into a Java class, using Janino.
+   * Compile the Java source code into a Java class via the active [[CodeCompiler]]
+   * backend (normally the one [[SQLConf.CODEGEN_COMPILER]] selects; see
+   * [[CodeCompiler.active]] for the deterministic routing overrides).
    *
    * @return a pair of a generated class and the bytecode statistics of generated functions.
    */
   def compile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = try {
     val classLoaderRef = new HashableWeakReference(Utils.getContextOrSparkClassLoader)
-    cache.get((classLoaderRef, code))
+    // The active backend is part of the cache key: flipping
+    // `spark.sql.codegen.compiler` mid-session must not silently reuse a class
+    // (and `ByteCodeStats`) compiled by the previously selected backend. The key
+    // holds the CodeCompiler singleton itself rather than its name: identity
+    // equality/hashCode is stable for an in-memory cache and immune to case
+    // variants of the name.
+    val backend = CodeCompiler.active(code)
+    cache.get((classLoaderRef, backend, code))
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
     // https://guava.dev/releases/14.0.1/api/docs/com/google/common/cache/
     //   Cache.html#get(K,%20java.util.concurrent.Callable)
     case e @ (_: UncheckedExecutionException | _: ExecutionError) =>
       throw e.getCause
-  }
-
-  /**
-   * Compile the Java source code into a Java class, using Janino.
-   */
-  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = {
-    val evaluator = new ClassBodyEvaluator()
-
-    // A special classloader used to wrap the actual parent classloader of
-    // [[org.codehaus.janino.ClassBodyEvaluator]] (see CodeGenerator.doCompile). This classloader
-    // does not throw a ClassNotFoundException with a cause set (i.e. exception.getCause returns
-    // a null). This classloader is needed because janino will throw the exception directly if
-    // the parent classloader throws a ClassNotFoundException with cause set instead of trying to
-    // find other possible classes (see org.codehaus.janinoClassLoaderIClassLoader's
-    // findIClass method). Please also see https://issues.apache.org/jira/browse/SPARK-15622 and
-    // https://issues.apache.org/jira/browse/SPARK-11636.
-    val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
-    evaluator.setParentClassLoader(parentClassLoader)
-    // Cannot be under package codegen, or fail with java.lang.InstantiationException
-    evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
-    evaluator.setDefaultImports(
-      classOf[Platform].getName,
-      classOf[InternalRow].getName,
-      classOf[UnsafeRow].getName,
-      classOf[BinaryView].getName,
-      classOf[UTF8String].getName,
-      classOf[Decimal].getName,
-      classOf[CalendarInterval].getName,
-      classOf[org.apache.spark.unsafe.types.TimestampNanosVal].getName,
-      classOf[VariantVal].getName,
-      classOf[ArrayData].getName,
-      classOf[UnsafeArrayData].getName,
-      classOf[MapData].getName,
-      classOf[UnsafeMapData].getName,
-      classOf[Expression].getName,
-      classOf[TaskContext].getName,
-      classOf[TaskKilledException].getName,
-      classOf[InputMetrics].getName,
-      classOf[CollationAwareUTF8String].getName,
-      classOf[CollationFactory].getName,
-      classOf[CollationSupport].getName,
-      QueryExecutionErrors.getClass.getName.stripSuffix("$")
-    )
-    evaluator.setExtendedClass(classOf[GeneratedClass])
-
-    logBasedOnLevel(SQLConf.get.codegenLogLevel) {
-      // Only add extra debugging info to byte code when we are going to print the source code.
-      evaluator.setDebuggingInformation(true, true, false)
-      log"\n${MDC(LogKeys.CODE, CodeFormatter.format(code))}"
-    }
-
-    val codeStats = try {
-      evaluator.cook("generated.java", code.body)
-      updateAndGetCompilationStats(evaluator)
-    } catch {
-      case e: InternalCompilerException =>
-        logError("Failed to compile the generated Java code.", e)
-        logGeneratedCode(code)
-        throw QueryExecutionErrors.internalCompilerError(e)
-      case e: CompileException =>
-        logError("Failed to compile the generated Java code.", e)
-        logGeneratedCode(code)
-        throw QueryExecutionErrors.compilerError(e)
-    }
-
-    (evaluator.getClazz().getConstructor().newInstance().asInstanceOf[GeneratedClass], codeStats)
-  }
-
-  private def logGeneratedCode(code: CodeAndComment): Unit = {
-    val maxLines = SQLConf.get.loggingMaxLinesForCodegen
-    if (Utils.isTesting) {
-      logError(s"\n${CodeFormatter.format(code, maxLines)}")
-    } else {
-      logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
-    }
-  }
-
-  /**
-   * Returns the bytecode statistics (max method bytecode size, max constant pool size, and
-   * # of inner classes) of generated classes by inspecting Janino classes.
-   * Also, this method updates the metrics information.
-   */
-  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): ByteCodeStats = {
-    // First retrieve the generated classes.
-    val classes = evaluator.getBytecodes.asScala
-
-    // Then walk the classes to get at the method bytecode.
-    val codeStats = classes.map { case (_, classBytes) =>
-      val classCodeSize = classBytes.length
-      CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classCodeSize)
-      try {
-        val cf = new ClassFile(new ByteArrayInputStream(classBytes))
-        val constPoolSize = cf.getConstantPoolSize
-        val methodCodeSizes = cf.methodInfos.asScala.flatMap { method =>
-          method.getAttributes.collect { case attr: CodeAttribute =>
-            val byteCodeSize = attr.code.length
-            CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
-
-            if (byteCodeSize > DEFAULT_JVM_HUGE_METHOD_LIMIT) {
-              logInfo(log"Generated method too long to be JIT compiled: " +
-                log"${MDC(LogKeys.CLASS_NAME, cf.getThisClassName)}." +
-                log"${MDC(LogKeys.METHOD_NAME, method.getName)} is " +
-                log"${MDC(LogKeys.BYTECODE_SIZE, byteCodeSize)} bytes")
-            }
-
-            byteCodeSize
-          }
-        }
-        (methodCodeSizes.max, constPoolSize)
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Error calculating stats of compiled class.", e)
-          (-1, -1)
-      }
-    }
-
-    val (maxMethodSizes, constPoolSize) = codeStats.unzip
-    ByteCodeStats(
-      maxMethodCodeSize = maxMethodSizes.max,
-      maxConstPoolSize = constPoolSize.max,
-      // Minus 2 for `GeneratedClass` and an outer-most generated class
-      numInnerClasses = classes.size - 2)
   }
 
   /**
@@ -1651,10 +1559,11 @@ object CodeGenerator extends Logging {
    * aborted. See [[NonFateSharingCache]] for more details.
    */
   private val cache = {
-    val loadFunc: ((HashableWeakReference, CodeAndComment)) => (GeneratedClass, ByteCodeStats) = {
-      case (_, code) =>
+    val loadFunc: ((HashableWeakReference, CodeCompiler, CodeAndComment))
+        => (GeneratedClass, ByteCodeStats) = {
+      case (_, backend, code) =>
         val startTime = System.nanoTime()
-        val result = doCompile(code)
+        val result = backend.compile(code)
         val endTime = System.nanoTime()
         val duration = endTime - startTime
         val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
@@ -1683,6 +1592,20 @@ object CodeGenerator extends Logging {
    */
   val primitiveTypes =
     Seq(JAVA_BOOLEAN, JAVA_BYTE, JAVA_SHORT, JAVA_INT, JAVA_LONG, JAVA_FLOAT, JAVA_DOUBLE)
+
+  /**
+   * Returns the class name to embed as a type reference in generated code: the
+   * JVM binary name from `Class#getName` (e.g. `Outer$Inner` for nested classes).
+   *
+   * Janino accepts binary names directly, so this matches the historical
+   * behaviour. The JDK backend cannot, and adapts the name to the source form it
+   * requires in `JdkCodeCompiler.rewriteInnerClassRefs`: a regular nested class
+   * becomes `Outer.Inner`, while a class nested in a Scala `object` keeps its
+   * binary name (its canonical form carries a module `$` that javac cannot
+   * resolve). Feeding both backends the binary name from one place keeps that
+   * single adaptation correct for every reference.
+   */
+  def javaSourceName(cls: Class[_]): String = cls.getName
 
   /**
    * Returns true if a Java type is Java primitive primitive type
@@ -1991,7 +1914,7 @@ object CodeGenerator extends Logging {
     case _: GeographyType | _: GeometryType => "BinaryView"
     case udt: UserDefinedType[_] => javaType(udt.sqlType)
     case ObjectType(cls) if cls.isArray => s"${javaType(ObjectType(cls.getComponentType))}[]"
-    case ObjectType(cls) => cls.getName
+    case ObjectType(cls) => javaSourceName(cls)
     case _ => PhysicalDataType(dt) match {
       case _: PhysicalArrayType => "ArrayData"
       case PhysicalBinaryType => "byte[]"

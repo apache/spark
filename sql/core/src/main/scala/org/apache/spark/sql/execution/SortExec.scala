@@ -150,8 +150,12 @@ case class SortExec(
       v => s"$v = $thisPlan.createSorter();", forceInline = true)
     val metrics = ctx.addMutableState(classOf[TaskMetrics].getName, "metrics",
       v => s"$v = org.apache.spark.TaskContext.get().taskMetrics();", forceInline = true)
-    val sortedIterator = ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", "sortedIter",
-      forceInline = true)
+    // Declared as Iterator<InternalRow> to match UnsafeExternalRowSorter.sort()'s actual
+    // return type; the consumer below already casts each row back to UnsafeRow. Janino
+    // erases generics so the prior <UnsafeRow> annotation worked there, but javac
+    // (JDK backend) enforces parameterised assignment.
+    val sortedIterator = ctx.addMutableState(
+      "scala.collection.Iterator<InternalRow>", "sortedIter", forceInline = true)
 
     val addToSorter = ctx.freshName("addToSorter")
     // Pass `partitionIndex` as a parameter so bare references in the child's

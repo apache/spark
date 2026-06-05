@@ -188,8 +188,9 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           ${ctx.initPartition()}
         }
 
-        public java.lang.Object apply(java.lang.Object _i) {
-          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+        ${CodeGenerator.function1ApplyBridge(ctx.INPUT_ROW)}
+
+        public InternalRow apply(InternalRow ${ctx.INPUT_ROW}) {
           $allExpressions
           return mutableRow;
         }

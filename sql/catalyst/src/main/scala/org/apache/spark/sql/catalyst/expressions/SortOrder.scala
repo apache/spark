@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -194,9 +194,13 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.child.genCode(ctx)
     val input = childCode.value
-    val BinaryPrefixCmp = classOf[BinaryPrefixComparator].getName
-    val DoublePrefixCmp = classOf[DoublePrefixComparator].getName
-    val StringPrefixCmp = classOf[StringPrefixComparator].getName
+    // Use javaSourceName to emit the canonical binary form (e.g.
+    // `PrefixComparators$DoublePrefixComparator`); Janino loads that name directly,
+    // and the JDK backend's rewriteInnerClassRefs converts it to the dotted source
+    // form javac requires.
+    val BinaryPrefixCmp = CodeGenerator.javaSourceName(classOf[BinaryPrefixComparator])
+    val DoublePrefixCmp = CodeGenerator.javaSourceName(classOf[DoublePrefixComparator])
+    val StringPrefixCmp = CodeGenerator.javaSourceName(classOf[StringPrefixComparator])
     val prefixCode = child.child.dataType match {
       case BooleanType =>
         s"$input ? 1L : 0L"

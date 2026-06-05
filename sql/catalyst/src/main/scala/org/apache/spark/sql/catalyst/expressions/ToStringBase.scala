@@ -215,10 +215,19 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       from: DataType, ctx: CodegenContext): (ExprValue, ExprValue) => Block = {
     from match {
       case BinaryType =>
+        // Pass the public BinaryFormatter trait as the reference's cast type.
+        // `binaryFormatter` is a lambda (UTF8String.fromBytes); its runtime class is a
+        // non-nameable synthetic (e.g. ToStringBase$$anonfun$binaryFormatter$N), which
+        // the JDK compiler cannot reference ("cannot find symbol"); Janino tolerates it.
         val bf = JavaCode.global(
-          ctx.addReferenceObj("binaryFormatter", binaryFormatter),
+          ctx.addReferenceObj("binaryFormatter", binaryFormatter, classOf[BinaryFormatter].getName),
           classOf[BinaryFormatter])
-        (c, evPrim) => code"$evPrim = $bf.apply($c);"
+        // `BinaryFormatter` extends `Array[Byte] => UTF8String` (a Function1). The JDK
+        // compiler resolves `bf.apply(c)` through the parameterised signature and infers
+        // `UTF8String`, but Janino binds it to the erased `apply(Object)` and infers
+        // `Object`, so the assignment to the `UTF8String` result needs an explicit cast
+        // to compile under both backends.
+        (c, evPrim) => code"$evPrim = (UTF8String) $bf.apply($c);"
       case DateType =>
         val df = JavaCode.global(
           ctx.addReferenceObj("dateFormatter", dateFormatter),

@@ -374,7 +374,12 @@ sealed abstract class LikeAllBase extends MultiLikeBase {
     val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
     val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+    // Cast to a parameterized List so the generated for-each binds elements to Pattern
+    // (javac rejects iterating a raw collection into a typed loop var; Janino allows it),
+    // and so the cast targets the public List interface rather than the non-public
+    // Scala collection wrapper's runtime class.
+    val patternCache = ctx.addReferenceObj(
+      "patternCache", cache.asJava, "java.util.List<java.util.regex.Pattern>")
 
     val checkNotMatchCode = if (isNotSpecified) {
       s"$pattern.matcher($valueArg.toString()).matches()"
@@ -434,7 +439,12 @@ sealed abstract class LikeAnyBase extends MultiLikeBase {
     val javaDataType = CodeGenerator.javaType(child.dataType)
     val pattern = ctx.freshName("pattern")
     val valueArg = ctx.freshName("valueArg")
-    val patternCache = ctx.addReferenceObj("patternCache", cache.asJava)
+    // Cast to a parameterized List so the generated for-each binds elements to Pattern
+    // (javac rejects iterating a raw collection into a typed loop var; Janino allows it),
+    // and so the cast targets the public List interface rather than the non-public
+    // Scala collection wrapper's runtime class.
+    val patternCache = ctx.addReferenceObj(
+      "patternCache", cache.asJava, "java.util.List<java.util.regex.Pattern>")
 
     val checkMatchCode = if (isNotSpecified) {
       s"!$pattern.matcher($valueArg.toString()).matches()"
