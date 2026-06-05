@@ -56,6 +56,20 @@ Project [cast(2020-01-01 00:00:00.000000001 as timestamp_ltz(7)) AS CAST(2020-01
 
 
 -- !query
+SELECT CAST('1960-01-01 00:00:00.000000001' AS timestamp_ltz(9))
+-- !query analysis
+Project [cast(1960-01-01 00:00:00.000000001 as timestamp_ltz(9)) AS CAST(1960-01-01 00:00:00.000000001 AS TIMESTAMP_LTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST('1960-01-01 00:00:00.123456789' AS timestamp_ltz(7))
+-- !query analysis
+Project [cast(1960-01-01 00:00:00.123456789 as timestamp_ltz(7)) AS CAST(1960-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT array(CAST('2020-01-01 00:00:00.123456789' AS timestamp_ltz(9)))
 -- !query analysis
 Project [array(cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(9))) AS array(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9)))#x]
@@ -73,4 +87,32 @@ Project [map(k, cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(9))) AS map(
 SELECT named_struct('f', CAST('2020-01-01 00:00:00.123456789' AS timestamp_ltz(9)))
 -- !query analysis
 Project [named_struct(f, cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(9))) AS named_struct(f, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(NULL AS timestamp_ltz(9))
+-- !query analysis
+Project [cast(null as timestamp_ltz(9)) AS CAST(NULL AS TIMESTAMP_LTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT array(CAST(NULL AS timestamp_ltz(9)))
+-- !query analysis
+Project [array(cast(null as timestamp_ltz(9))) AS array(CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT map('k', CAST(NULL AS timestamp_ltz(9)))
+-- !query analysis
+Project [map(k, cast(null as timestamp_ltz(9))) AS map(k, CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT named_struct('f', CAST(NULL AS timestamp_ltz(9)))
+-- !query analysis
+Project [named_struct(f, cast(null as timestamp_ltz(9))) AS named_struct(f, CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
 +- OneRowRelation

@@ -81,8 +81,10 @@ class HiveResultSuite extends SharedSparkSession {
   test("SPARK-57257: nanosecond timestamp formatting in hive result") {
     // Each input fraction maps to the expected rendered fraction at precision 7, 8, 9. Sub-`p`
     // digits are floored and trailing zeros trimmed, so an all-zero fraction renders as no
-    // fraction at all (e.g. ".000000001" at p=7/8).
-    val base = "2020-01-01 00:00:00"
+    // fraction at all (e.g. ".000000001" at p=7/8). The flooring/trimming is independent of the
+    // epoch sign, so the pre-1970 base (negative epoch micros + positive nanosWithinMicro)
+    // shares the same expected fractions.
+    val bases = Seq("2020-01-01 00:00:00", "1960-01-01 00:00:00")
     val cases = Seq(
       ".123456789" -> Seq(".1234567", ".12345678", ".123456789"),
       ".999999999" -> Seq(".9999999", ".99999999", ".999999999"),
@@ -94,18 +96,38 @@ class HiveResultSuite extends SharedSparkSession {
         SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       Seq(7, 8, 9).zipWithIndex.foreach { case (p, idx) =>
-        cases.foreach { case (frac, expectedByPrecision) =>
-          val input = base + frac
-          val expected = base + expectedByPrecision(idx)
-          Seq("timestamp_ltz", "timestamp_ntz").foreach { typeName =>
-            val df = spark.sql(s"SELECT CAST('$input' AS $typeName($p)) AS b")
-            assert(hiveResultString(df.queryExecution.executedPlan) === Seq(expected),
-              s"type = $typeName($p), input = $input")
-            val nested = spark.sql(s"SELECT array(CAST('$input' AS $typeName($p))) AS b")
-            assert(hiveResultString(nested.queryExecution.executedPlan) === Seq(s"[$expected]"),
-              s"nested type = $typeName($p), input = $input")
+        bases.foreach { base =>
+          cases.foreach { case (frac, expectedByPrecision) =>
+            val input = base + frac
+            val expected = base + expectedByPrecision(idx)
+            Seq("timestamp_ltz", "timestamp_ntz").foreach { typeName =>
+              val df = spark.sql(s"SELECT CAST('$input' AS $typeName($p)) AS b")
+              assert(hiveResultString(df.queryExecution.executedPlan) === Seq(expected),
+                s"type = $typeName($p), input = $input")
+              val nested = spark.sql(s"SELECT array(CAST('$input' AS $typeName($p))) AS b")
+              assert(hiveResultString(nested.queryExecution.executedPlan) === Seq(s"[$expected]"),
+                s"nested type = $typeName($p), input = $input")
+            }
           }
         }
+      }
+
+      // NULL values: handled by the generic `(null, _)` branch in `toHiveString` (before the
+      // type-specific cases), so the path is type-agnostic. Verify top-level and nested NULLs.
+      Seq("timestamp_ltz(9)", "timestamp_ntz(9)").foreach { typeName =>
+        val nullCast = s"CAST(NULL AS $typeName)"
+        val topLevel = spark.sql(s"SELECT $nullCast AS b")
+        assert(hiveResultString(topLevel.queryExecution.executedPlan) === Seq("NULL"),
+          s"top-level NULL of $typeName")
+        val inArray = spark.sql(s"SELECT array($nullCast) AS b")
+        assert(hiveResultString(inArray.queryExecution.executedPlan) === Seq("[null]"),
+          s"array NULL of $typeName")
+        val inMap = spark.sql(s"SELECT map('k', $nullCast) AS b")
+        assert(hiveResultString(inMap.queryExecution.executedPlan) === Seq("{\"k\":null}"),
+          s"map NULL of $typeName")
+        val inStruct = spark.sql(s"SELECT named_struct('f', $nullCast) AS b")
+        assert(hiveResultString(inStruct.queryExecution.executedPlan) === Seq("{\"f\":null}"),
+          s"struct NULL of $typeName")
       }
     }
   }

@@ -16,7 +16,17 @@ SELECT CAST('2020-01-01 00:00:00.000000001' AS timestamp_ntz(9));
 SELECT CAST('2020-01-01 00:00:00.000000001' AS timestamp_ntz(8));
 SELECT CAST('2020-01-01 00:00:00.000000001' AS timestamp_ntz(7));
 
+-- Pre-1970 values exercise the negative-epoch path.
+SELECT CAST('1960-01-01 00:00:00.000000001' AS timestamp_ntz(9));
+SELECT CAST('1960-01-01 00:00:00.123456789' AS timestamp_ntz(7));
+
 -- Nested values (array / map / struct).
 SELECT array(CAST('2020-01-01 00:00:00.123456789' AS timestamp_ntz(9)));
 SELECT map('k', CAST('2020-01-01 00:00:00.123456789' AS timestamp_ntz(9)));
 SELECT named_struct('f', CAST('2020-01-01 00:00:00.123456789' AS timestamp_ntz(9)));
+
+-- NULL values (top-level and nested).
+SELECT CAST(NULL AS timestamp_ntz(9));
+SELECT array(CAST(NULL AS timestamp_ntz(9)));
+SELECT map('k', CAST(NULL AS timestamp_ntz(9)));
+SELECT named_struct('f', CAST(NULL AS timestamp_ntz(9)));
