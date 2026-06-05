@@ -320,7 +320,6 @@ object ExtractV2ScanInfo {
 }
 
 object DataSourceV2Relation {
-
   def create(
       table: Table,
       catalog: Option[CatalogPlugin],

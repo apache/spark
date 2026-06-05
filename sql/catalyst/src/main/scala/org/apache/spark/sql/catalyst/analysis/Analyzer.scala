@@ -2532,27 +2532,31 @@ class Analyzer(
      *     outer plan to get evaluated.
      */
     private def resolveSubQueries(plan: LogicalPlan, outer: LogicalPlan): LogicalPlan = {
-      // A subquery containing a V2TableReference also needs re-analysis: the placeholder is
-      // a structurally resolved LeafNode, so the subquery's `resolved` flag is true even
-      // though the V2TableReference must still be re-resolved through the txn-aware catalog.
-      def needsReanalysis(sub: LogicalPlan): Boolean =
-        !sub.resolved || sub.exists(_.isInstanceOf[V2TableReference])
       plan.transformAllExpressionsWithPruning(_.containsPattern(PLAN_EXPRESSION), ruleId) {
-        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _) if needsReanalysis(sub) =>
+        case s @ ScalarSubquery(sub, _, exprId, _, _, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(ScalarSubquery(_, _, exprId))
-        case e @ Exists(sub, _, exprId, _, _) if needsReanalysis(sub) =>
+        case e @ Exists(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(e, outer)(Exists(_, _, exprId))
-        case InSubquery(values, l @ ListQuery(sub, _, exprId, _, _, _))
-            if values.forall(_.resolved) && needsReanalysis(sub) =>
+        case InSubquery(values, l @ ListQuery(_, _, exprId, _, _, _))
+            if values.forall(_.resolved) && !l.resolved =>
           val expr = resolveSubQuery(l, outer)((plan, exprs) => {
             ListQuery(plan, exprs, exprId, plan.output.length)
           })
           InSubquery(values, expr.asInstanceOf[ListQuery])
-        case s @ LateralSubquery(sub, _, exprId, _, _) if needsReanalysis(sub) =>
+        case s @ LateralSubquery(sub, _, exprId, _, _) if !sub.resolved =>
           resolveSubQuery(s, outer)(LateralSubquery(_, _, exprId))
-        case a: FunctionTableSubqueryArgumentExpression if needsReanalysis(a.plan) =>
+        case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
+        // The subquery's plan is already resolved. Replace any V2TableReferences without
+        // re-running any analyzer rules.
+        case se: SubqueryExpression
+            if se.plan.resolved &&
+               se.plan.collectFirstWithSubqueries { case _: V2TableReference => () }.isDefined =>
+          val newPlan = se.plan.transformWithSubqueries {
+            case r: V2TableReference => relationResolution.resolveReference(r)
+          }
+          se.withNewPlan(newPlan)
       }
     }
 
