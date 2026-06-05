@@ -31,12 +31,6 @@ ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
 RUN printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources
 
-# zstd is required by @actions/cache (GitHub Actions cache action). The action computes
-# a cache "version" as SHA256(paths + compression_method). Host runners have zstd and
-# use it; without zstd the container falls back to gzip, producing a different version
-# hash, so cache entries saved by host jobs are invisible to container jobs even when
-# the key string matches.
-# See: https://github.com/actions/toolkit/blob/main/packages/cache/src/internal/cacheUtils.ts
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
