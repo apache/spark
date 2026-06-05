@@ -28,6 +28,12 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
 
   private var maxRows: Int = 0
 
+  private var fetchSize: Int = SparkConnectStatement.DEFAULT_FETCH_SIZE
+
+  private var queryTimeout: Int = 0
+
+  private var resultsExhausted: Boolean = false
+
   @volatile private var closed: Boolean = false
 
   override def isClosed: Boolean = closed
@@ -94,6 +100,7 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
     // reset before executing new query
     operationId = null
     resultSet = null
+    resultsExhausted = false
 
     var df = conn.spark.sql(sql)
     if (maxRows > 0) {
@@ -140,11 +147,17 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
 
   override def getQueryTimeout: Int = {
     checkOpen()
-    0
+    queryTimeout
   }
 
-  override def setQueryTimeout(seconds: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  // stored as a hint and echoed back; Spark Connect has no client-side timeout
+  override def setQueryTimeout(seconds: Int): Unit = {
+    checkOpen()
+    if (seconds < 0) {
+      throw new SQLException("Query timeout must be zero or a positive integer.")
+    }
+    queryTimeout = seconds
+  }
 
   override def cancel(): Unit = {
     checkOpen()
@@ -164,35 +177,60 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   override def getUpdateCount: Int = {
     checkOpen()
 
-    if (resultSet != null) {
+    if (resultsExhausted || resultSet != null) {
       -1
     } else {
       0 // always return 0 because affected rows is not supported yet
     }
   }
 
-  override def getMoreResults: Boolean =
-    throw new SQLFeatureNotSupportedException
+  // a single result per execute(), so there is no next one: close the current
+  // ResultSet and mark exhausted, flipping getUpdateCount() to -1 so drain loops end
+  override def getMoreResults: Boolean = {
+    checkOpen()
+    if (resultSet != null) {
+      resultSet.close()
+      resultSet = null
+    }
+    resultsExhausted = true
+    false
+  }
 
-  override def setFetchDirection(direction: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  override def setFetchDirection(direction: Int): Unit = {
+    checkOpen()
+    if (direction != ResultSet.FETCH_FORWARD) {
+      throw new SQLException(s"Fetch direction $direction is not supported.")
+    }
+  }
 
-  override def getFetchDirection: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getFetchDirection: Int = {
+    checkOpen()
+    ResultSet.FETCH_FORWARD
+  }
 
-  override def setFetchSize(rows: Int): Unit =
-    throw new SQLFeatureNotSupportedException
+  // stored as a hint; Spark Connect results are forward-only and server-paginated
+  override def setFetchSize(rows: Int): Unit = {
+    checkOpen()
+    if (rows < 0) {
+      throw new SQLException("Fetch size must be zero or a positive integer.")
+    }
+    fetchSize = if (rows == 0) SparkConnectStatement.DEFAULT_FETCH_SIZE else rows
+  }
 
-  override def getFetchSize: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getFetchSize: Int = {
+    checkOpen()
+    fetchSize
+  }
 
   override def getResultSetConcurrency: Int = {
     checkOpen()
     ResultSet.CONCUR_READ_ONLY
   }
 
-  override def getResultSetType: Int =
-    throw new SQLFeatureNotSupportedException
+  override def getResultSetType: Int = {
+    checkOpen()
+    ResultSet.TYPE_FORWARD_ONLY
+  }
 
   override def addBatch(sql: String): Unit =
     throw new SQLFeatureNotSupportedException
@@ -264,4 +302,8 @@ class SparkConnectStatement(conn: SparkConnectConnection) extends Statement {
   }
 
   override def isWrapperFor(iface: Class[_]): Boolean = iface.isInstance(this)
+}
+
+object SparkConnectStatement {
+  private val DEFAULT_FETCH_SIZE = 1000
 }

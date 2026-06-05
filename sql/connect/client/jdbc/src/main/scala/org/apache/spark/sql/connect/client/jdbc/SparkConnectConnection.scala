@@ -98,8 +98,11 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
   override def createStatement(
        resultSetType: Int,
        resultSetConcurrency: Int,
-       resultSetHoldability: Int): Statement =
-    throw new SQLFeatureNotSupportedException
+       resultSetHoldability: Int): Statement = {
+    // holdability is ignored
+    checkSupportedResultSet(resultSetType, resultSetConcurrency)
+    createStatement()
+  }
 
   override def prepareStatement(
       sql: String,
@@ -128,8 +131,26 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
     throw new SQLFeatureNotSupportedException
 
   override def createStatement(
-      resultSetType: Int, resultSetConcurrency: Int): Statement =
-    throw new SQLFeatureNotSupportedException
+      resultSetType: Int, resultSetConcurrency: Int): Statement = {
+    checkSupportedResultSet(resultSetType, resultSetConcurrency)
+    createStatement()
+  }
+
+  // SCROLL_INSENSITIVE is accepted but the returned statement is forward-only.
+  // Mirrors the Hive JDBC driver policy used by the Spark Thrift Server.
+  private def checkSupportedResultSet(
+      resultSetType: Int, resultSetConcurrency: Int): Unit = {
+    if (resultSetConcurrency != ResultSet.CONCUR_READ_ONLY) {
+      throw new SQLFeatureNotSupportedException(
+        s"ResultSet concurrency $resultSetConcurrency is not supported; " +
+          "only CONCUR_READ_ONLY.")
+    }
+    if (resultSetType == ResultSet.TYPE_SCROLL_SENSITIVE) {
+      throw new SQLFeatureNotSupportedException(
+        s"ResultSet type $resultSetType is not supported; " +
+          "use TYPE_FORWARD_ONLY or TYPE_SCROLL_INSENSITIVE.")
+    }
+  }
 
   override def prepareStatement(
       sql: String,
