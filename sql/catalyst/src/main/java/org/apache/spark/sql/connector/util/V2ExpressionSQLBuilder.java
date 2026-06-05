@@ -185,18 +185,17 @@ public class V2ExpressionSQLBuilder {
   }
 
   // Parenthesize a binary comparison operand so `col = 'x' IS NULL` renders as
-  // `(col = 'x') IS NULL`. 
+  // `(col = 'x') IS NULL`. Dialects such as Snowflake bind IS NULL tighter than =.
   protected String visitIsNullOperand(Expression operand) {
     if (operand instanceof GeneralScalarExpression e) {
       switch (e.name()) {
         case "=", "<>", "<=>", "<", "<=", ">", ">=" -> {
           return "(" + build(operand) + ")";
         }
-        default -> {
-          return build(operand);
-        }
+        default -> { }
       }
     }
+    return build(operand);
   }
 
   protected String visitIsNull(String v) {
