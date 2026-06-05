@@ -4944,6 +4944,12 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIMESTAMP_LITERAL_PRECISION" : {
+    "message" : [
+      "The timestamp literal <value> has more than 9 fractional-second digits. The maximum supported fractional-second precision of a timestamp literal is 9 (nanoseconds)."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TIMESTAMP_PRECISION" : {
     "message" : [
       "The seconds precision <precision> of <type> is invalid. Expected an integer in [7, 9] for nanosecond precision; use precision 6 or parameterless <type> for the standard microsecond type."
