@@ -17,6 +17,9 @@
 
 package org.apache.spark
 
+import java.lang.ref.WeakReference
+import java.util.concurrent.TimeUnit
+
 import scala.annotation.tailrec
 
 import org.scalactic.source.Position
@@ -95,6 +98,28 @@ abstract class SparkFunSuite
     testFun: A => Unit): Unit = {
     for (param <- params) {
       test(testNamePrefix + s" ${param._1}", testTags: _*)(testFun(param._2))
+    }
+  }
+
+  /** Run GC and make sure it actually has run. */
+  protected def runGC(): Unit = {
+    val weakRef = new WeakReference(new Object())
+    val startTimeNs = System.nanoTime()
+    System.gc() // Make a best effort to run the garbage collection. It *usually* runs GC.
+    // Wait until a weak reference object has been GCed
+    while (System.nanoTime() - startTimeNs < TimeUnit.SECONDS.toNanos(10) && weakRef.get != null) {
+      System.gc()
+      Thread.sleep(200)
+    }
+  }
+
+  /** Run `body`; if it throws OutOfMemoryError, force a GC and retry once. */
+  protected def retryOnOOM[T](body: => T): T = {
+    try body
+    catch {
+      case _: OutOfMemoryError =>
+        runGC()
+        body
     }
   }
 }

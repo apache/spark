@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{EvaluateUnresolvedInlineTable, IntervalUtils}
-import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
+import org.apache.spark.sql.connector.catalog.{ChangelogContext, ChangelogRange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -994,8 +994,8 @@ class PlanParserSuite extends AnalysisTest {
     val fragment2 = "tablesample(bucket 11 out of 10)"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (1.1) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "1.1"),
       context = ExpectedContext(
         fragment = fragment2,
         start = 16,
@@ -1157,8 +1157,8 @@ class PlanParserSuite extends AnalysisTest {
     // > 100 PERCENT
     checkError(
       exception = parseException(s"$sql tablesample system (150 percent) as x"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (1.5) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "1.5"),
       context = ExpectedContext(
         fragment = "tablesample system (150 percent)",
         start = 16,
@@ -1166,8 +1166,8 @@ class PlanParserSuite extends AnalysisTest {
     // Negative PERCENT
     checkError(
       exception = parseException(s"$sql tablesample system (-10 percent) as x"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (-0.1) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "-0.1"),
       context = ExpectedContext(
         fragment = "tablesample system (-10 percent)",
         start = 16,
@@ -1997,17 +1997,24 @@ class PlanParserSuite extends AnalysisTest {
         val sql8 = s"select * from my_tvf(arg1 => $sql8tableArg $sql8partition)"
         checkError(
           exception = parseException(sql8),
-          condition = "_LEGACY_ERROR_TEMP_0064",
-          parameters = Map(
-            "msg" ->
-              ("The table function call includes a table argument with an invalid " +
-              "partitioning/ordering specification: the PARTITION BY clause included multiple " +
-              "expressions without parentheses surrounding them; please add parentheses around " +
-              "these expressions and then retry the query again")),
+          condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+          parameters = Map("clause" -> "PARTITION BY"),
           context = ExpectedContext(
             fragment = s"$sql8tableArg $sql8partition",
             start = 29,
             stop = 110 + partition.length)
+        )
+        val sql9tableArg = "table(select col1, col2, col3 from v2)"
+        val sql9partition = s"$partition by col1 $order by col2 asc, col3 desc"
+        val sql9 = s"select * from my_tvf(arg1 => $sql9tableArg $sql9partition)"
+        checkError(
+          exception = parseException(sql9),
+          condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+          parameters = Map("clause" -> "ORDER BY"),
+          context = ExpectedContext(
+            fragment = s"$sql9tableArg $sql9partition",
+            start = 29,
+            stop = 99 + partition.length + order.length)
         )
       }
     }
@@ -2194,14 +2201,14 @@ class PlanParserSuite extends AnalysisTest {
         endInclusive: Boolean = true): RelationChanges = {
       RelationChanges(
         UnresolvedRelation(Seq("a", "b", "c")),
-        new ChangelogInfo(
+        new ChangelogContext(
           new ChangelogRange.VersionRange(
             startVersion,
             endVersion.map(java.util.Optional.of[String])
               .getOrElse(java.util.Optional.empty[String]),
             startInclusive,
             endInclusive),
-          ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+          ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
           false))
     }
 
@@ -2262,7 +2269,7 @@ class PlanParserSuite extends AnalysisTest {
         case rc: RelationChanges => rc
         case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
       }
-      changes.changelogInfo.range().asInstanceOf[ChangelogRange.TimestampRange]
+      changes.changelogContext.range().asInstanceOf[ChangelogRange.TimestampRange]
     }
 
     // Basic timestamp range
@@ -2300,54 +2307,54 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("CHANGES clause - with options") {
-    def assertChangelogInfo(sql: String): ChangelogInfo = {
+    def assertChangelogContext(sql: String): ChangelogContext = {
       val plan = parsePlan(sql)
       val project = plan.asInstanceOf[Project]
       val changes = project.child match {
         case rc: RelationChanges => rc
         case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
       }
-      changes.changelogInfo
+      changes.changelogContext
     }
 
     // Default: DROP_CARRYOVERS and computeUpdates = false
-    val info1 = assertChangelogInfo(
+    val info1 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20")
-    assert(info1.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info1.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(!info1.computeUpdates())
 
     // deduplicationMode = none
-    val info2 = assertChangelogInfo(
+    val info2 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none')")
-    assert(info2.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info2.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
     assert(!info2.computeUpdates())
 
     // deduplicationMode = netChanges
-    val info3 = assertChangelogInfo(
+    val info3 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'netChanges')")
-    assert(info3.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES)
+    assert(info3.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES)
 
     // computeUpdates = true
-    val info4 = assertChangelogInfo(
+    val info4 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (computeUpdates = 'true')")
-    assert(info4.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info4.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(info4.computeUpdates())
 
     // Both options together
-    val info5 = assertChangelogInfo(
+    val info5 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none', computeUpdates = 'true')")
-    assert(info5.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info5.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
     assert(info5.computeUpdates())
 
     // Case-insensitive deduplicationMode value
-    val info6 = assertChangelogInfo(
+    val info6 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'DROPCARRYOVERS')")
-    assert(info6.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info6.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
   }
 
   test("CHANGES clause - invalid deduplicationMode") {
@@ -2378,10 +2385,10 @@ class PlanParserSuite extends AnalysisTest {
       Project(Seq(UnresolvedStar(None)),
         RelationChanges(
           UnresolvedRelation(Seq("my_table")),
-          new ChangelogInfo(
+          new ChangelogContext(
             new ChangelogRange.VersionRange(
               "1", java.util.Optional.empty[String], true, true),
-            ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+            ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
             false))))
   }
 

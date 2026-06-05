@@ -121,6 +121,37 @@ class CogroupedMapInArrowTestsMixin:
         cogrouped_df = grouped_left_df.cogroup(grouped_right_df)
         self.do_test_apply_in_arrow(cogrouped_df, key_column=None)
 
+    def test_apply_in_arrow_large_var_types(self):
+        # SPARK-56929: when useLargeVarTypes=true, the expected schema computed by
+        # worker.py for result validation must also use large_string/large_binary,
+        # otherwise verify_arrow_result raises a spurious RESULT_COLUMN_TYPES_MISMATCH.
+        left = self.spark.createDataFrame(
+            [(0, "foo", b"foo"), (1, None, None)], "id long, s string, b binary"
+        )
+        right = self.spark.createDataFrame(
+            [(0, "bar", b"bar"), (1, "baz", b"baz")], "id long, s string, b binary"
+        )
+        schema = "s string, b binary"
+
+        def func(left_tbl, right_tbl):
+            assert pa.types.is_large_string(left_tbl.schema.field("s").type)
+            assert pa.types.is_large_binary(left_tbl.schema.field("b").type)
+            return left_tbl.select(["s", "b"])
+
+        expected = left.select("s", "b")
+        for assign_cols_by_name in [True, False]:
+            with self.subTest(assign_cols_by_name=assign_cols_by_name):
+                with self.sql_conf(
+                    {
+                        "spark.sql.execution.arrow.useLargeVarTypes": True,
+                        "spark.sql.legacy.execution.pandas.groupedMap."
+                        "assignColumnsByName": assign_cols_by_name,
+                    }
+                ):
+                    cogrouped = left.groupBy("id").cogroup(right.groupBy("id"))
+                    actual = cogrouped.applyInArrow(func, schema)
+                    assertDataFrameEqual(actual, expected)
+
     def test_apply_in_arrow_not_returning_arrow_table(self):
         def func(key, left, right):
             return key
@@ -198,6 +229,34 @@ class CogroupedMapInArrowTestsMixin:
             ):
                 # stats returns three columns while here we set schema with two columns
                 self.cogrouped.applyInArrow(stats, schema="id long, m double").collect()
+
+    def test_apply_in_arrow_returning_wrong_column_count_positional_assignment(self):
+        def too_many_cols(key, left, right):
+            return pa.Table.from_pydict(
+                {
+                    "a": [key[0].as_py()],
+                    "b": [pc.mean(left.column("v")).as_py()],
+                    "c": [pc.mean(right.column("v")).as_py()],
+                }
+            )
+
+        def too_few_cols(key, left, right):
+            return pa.Table.from_pydict({"a": [key[0].as_py()]})
+
+        with self.sql_conf(
+            {"spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName": False}
+        ):
+            with self.quiet():
+                for func, expected, actual in [
+                    (too_many_cols, 2, 3),
+                    (too_few_cols, 2, 1),
+                ]:
+                    with self.subTest(func=func.__name__):
+                        with self.assertRaisesRegex(
+                            PythonException,
+                            rf"Expected: {expected}.*Actual: {actual}",
+                        ):
+                            self.cogrouped.applyInArrow(func, schema="a long, b double").collect()
 
     def test_apply_in_arrow_returning_empty_dataframe(self):
         def odd_means(key, left, right):

@@ -49,6 +49,7 @@ from pyspark.sql.types import (
     DataType,
     StringType,
     StructType,
+    MapType,
     NumericType,
     _from_numpy_type,
 )
@@ -6480,7 +6481,7 @@ def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = No
     Use the ORDER BY clause of the window to order the observations by the associated timestamp
     in ascending order.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -15541,7 +15542,7 @@ def levenshtein(
         if set when the levenshtein distance of the two given strings
         less than or equal to a given threshold then return result distance, or -1
 
-        .. versionadded: 3.5.0
+        .. versionadded:: 3.5.0
 
     Returns
     -------
@@ -16349,7 +16350,10 @@ def regexp_extract_all(
 
 @_try_remote_functions
 def regexp_replace(
-    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+    string: "ColumnOrName",
+    pattern: Union[str, Column],
+    replacement: Union[str, Column],
+    position: Optional[Union[int, Column]] = None,
 ) -> Column:
     r"""Replace all substrings of the specified string value that match regexp with replacement.
 
@@ -16357,6 +16361,8 @@ def regexp_replace(
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+    .. versionchanged:: 4.3.0
+        Supports the `position` parameter.
 
     Parameters
     ----------
@@ -16366,6 +16372,8 @@ def regexp_replace(
         column object or str containing the regexp pattern
     replacement : :class:`~pyspark.sql.Column` or str
         column object or str containing the replacement
+    position : :class:`~pyspark.sql.Column` or int, optional
+        position to start replacement. The first position is 1.
 
     Returns
     -------
@@ -16403,8 +16411,29 @@ def regexp_replace(
     +-------+-------+-----------+--------------------------------------------+
     |100-200|  (\d+)|         --|                                       -----|
     +-------+-------+-----------+--------------------------------------------+
+
+    Example 3: Replaces substrings starting from the specified position.
+    For the input string "100-200", position 5 starts replacement after "100-".
+
+    >>> df.select(sf.regexp_replace("str", r"(\d+)", "--", 5).alias("d")).show()
+    +------+
+    |     d|
+    +------+
+    |100---|
+    +------+
     """
-    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
+    if position is None:
+        return _invoke_function_over_columns(
+            "regexp_replace", string, lit(pattern), lit(replacement)
+        )
+    else:
+        return _invoke_function_over_columns(
+            "regexp_replace",
+            string,
+            lit(pattern),
+            lit(replacement),
+            lit(position),
+        )
 
 
 @_try_remote_functions
@@ -21044,7 +21073,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
 @_try_remote_functions
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, MapType, Column, str],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
@@ -21061,8 +21090,8 @@ def from_json(
     ----------
     col : :class:`~pyspark.sql.Column` or str
         a column or column name in JSON format
-    schema : :class:`DataType` or str
-        a StructType, ArrayType of StructType or Python string literal with a DDL-formatted string
+    schema : :class:`StructType`, :class:`ArrayType`, :class:`MapType`, or str
+        a StructType, ArrayType of StructType, MapType, or Python string literal with a DDL-formatted string
         to use when parsing the json column
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
@@ -27605,7 +27634,7 @@ def kll_merge_agg_bigint(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------
@@ -27649,7 +27678,7 @@ def kll_merge_agg_float(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------
@@ -27693,7 +27722,7 @@ def kll_merge_agg_double(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------

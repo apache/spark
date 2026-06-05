@@ -61,7 +61,7 @@ relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria | nearest_by_
 
     `APPROX | EXACT`
 
-    Controls the search algorithm contract. `APPROX` allows the optimizer to use faster approximate strategies (such as indexed nearest-neighbor search when available). `EXACT` forces brute-force evaluation and requires `ranking_expression` to be deterministic.
+    Controls the search algorithm contract. `APPROX` allows the optimizer to use faster approximate strategies (such as indexed nearest-neighbor search when available). `EXACT` forces brute-force evaluation.
 
     `num_results`
 
@@ -73,7 +73,7 @@ relation { [ join_type ] JOIN [ LATERAL ] relation [ join_criteria | nearest_by_
 
     `ranking_expression`
 
-    A scalar expression that returns an orderable type. Must be deterministic with `EXACT`; may be nondeterministic with `APPROX` (e.g., `rand()` for randomized tie-breaking). The expression is evaluated once per (left, right) pair on the brute-force path, so avoid expensive or side-effecting UDFs in ranking expressions.
+    A scalar expression that returns an orderable type. The expression is evaluated once per (left, right) pair on the brute-force path, so avoid expensive or side-effecting UDFs in ranking expressions.
 
     **Performance note.** The current implementation evaluates the full cross-product of the left and right sides and bounds memory per left row by `num_results`. Per-query work is `O(|left| × |right| × log num_results)`. Index-backed approximate strategies (transparent to `APPROX` queries) are planned in a future release; until then, pre-filter the right side (e.g. via a subquery) when it is large.
 

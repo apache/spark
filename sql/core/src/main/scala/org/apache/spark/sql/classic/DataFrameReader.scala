@@ -29,7 +29,7 @@ import org.apache.spark.sql
 import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.DataSourceOptions
 import org.apache.spark.sql.catalyst.analysis.{RelationChanges, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.analysis.ChangelogInfoUtils
+import org.apache.spark.sql.catalyst.analysis.ChangelogContextUtils
 import org.apache.spark.sql.catalyst.csv.{CSVHeaderChecker, CSVOptions, UnivocityParser}
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
@@ -328,10 +328,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
     val multipartIdentifier =
       sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val options = new CaseInsensitiveStringMap(extraOptions.toMap.asJava)
-    val changelogInfo = ChangelogInfoUtils.fromOptions(
+    val changelogContext = ChangelogContextUtils.fromOptions(
       options, sparkSession.sessionState.conf.sessionLocalTimeZone)
     val relation = UnresolvedRelation(multipartIdentifier, options)
-    Dataset.ofRows(sparkSession, RelationChanges(relation, changelogInfo))
+    Dataset.ofRows(sparkSession, RelationChanges(relation, changelogContext))
   }
 
   /** @inheritdoc */

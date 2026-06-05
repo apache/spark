@@ -21,7 +21,6 @@ Utilities to deal with types. This is mostly focused on python3.
 
 import datetime
 import decimal
-import sys
 import typing
 from collections.abc import Iterable
 from inspect import isclass
@@ -863,21 +862,16 @@ def _new_type_holders(
         isinstance(param, slice) and param.step is None and param.stop is not None
         for param in params
     )
-    if sys.version_info < (3, 11):
-        is_unnamed_params = all(
-            not isinstance(param, slice) and not isinstance(param, Iterable) for param in params
+    # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11+
+    is_unnamed_params = all(
+        not isinstance(param, slice)
+        and (
+            not isinstance(param, Iterable)
+            or isinstance(param, typing.GenericAlias)  # type: ignore[attr-defined]
+            or isinstance(param, typing._GenericAlias)  # type: ignore[attr-defined]
         )
-    else:
-        # PEP 646 changes `GenericAlias` instances into iterable ones at Python 3.11
-        is_unnamed_params = all(
-            not isinstance(param, slice)
-            and (
-                not isinstance(param, Iterable)
-                or isinstance(param, typing.GenericAlias)  # type: ignore[attr-defined]
-                or isinstance(param, typing._GenericAlias)  # type: ignore[attr-defined]
-            )
-            for param in params
-        )
+        for param in params
+    )
 
     if is_named_params:
         # DataFrame["id": int, "A": int]

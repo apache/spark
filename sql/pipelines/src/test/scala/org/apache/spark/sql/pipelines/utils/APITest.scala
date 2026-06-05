@@ -267,9 +267,7 @@ trait APITest
         name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
-                     |from pyspark.sql import DataFrame, SparkSession
-                     |
-                     |spark = SparkSession.active()
+                     |from pyspark.sql import DataFrame
                      |
                      |@dp.append_flow(target = "c", name = "append_to_c")
                      |def flow():
@@ -296,9 +294,7 @@ trait APITest
         name = "transformations/mv.py",
         contents = """
                      |from pyspark import pipelines as dp
-                     |from pyspark.sql import DataFrame, SparkSession
-                     |
-                     |spark = SparkSession.active()
+                     |from pyspark.sql import DataFrame
                      |
                      |@dp.materialized_view
                      |def src():
@@ -308,9 +304,7 @@ trait APITest
         name = "transformations/st.py",
         contents = """
                      |from pyspark import pipelines as dp
-                     |from pyspark.sql import DataFrame, SparkSession
-                     |
-                     |spark = SparkSession.active()
+                     |from pyspark.sql import DataFrame
                      |
                      |@dp.materialized_view
                      |def a():
@@ -347,9 +341,7 @@ trait APITest
         name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
-                     |from pyspark.sql import DataFrame, SparkSession
-                     |
-                     |spark = SparkSession.active()
+                     |from pyspark.sql import DataFrame
                      |
                      |@dp.materialized_view
                      |def a():
@@ -374,6 +366,52 @@ trait APITest
   }
 
   /* Python Language Tests */
+  test("Python Pipeline with explicit spark assignment is backward compatible") {
+    val pipelineSpec =
+      TestPipelineSpec(include = Seq("transformations/**"))
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
+    val sources = Seq(
+      PipelineSourceFile(
+        name = "transformations/definition.py",
+        contents = """
+                     |from pyspark import pipelines as dp
+                     |from pyspark.sql import SparkSession
+                     |
+                     |spark = SparkSession.active()
+                     |
+                     |@dp.materialized_view
+                     |def mv():
+                     |  return spark.range(5)
+                     |""".stripMargin))
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
+
+    checkAnswer(spark.sql(s"SELECT * FROM mv"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+  }
+
+  test("Python Pipeline with spark session placeholder works as expected") {
+    val pipelineSpec =
+      TestPipelineSpec(include = Seq("transformations/**"))
+    val pipelineConfig = TestPipelineConfiguration(pipelineSpec)
+    val sources = Seq(
+      PipelineSourceFile(
+        name = "transformations/definition.py",
+        contents = """
+                     |from pyspark import pipelines as dp
+                     |from pyspark.sql import SparkSession
+                     |
+                     |spark: SparkSession
+                     |
+                     |@dp.materialized_view
+                     |def mv():
+                     |  return spark.range(5)
+                     |""".stripMargin))
+    val pipeline = createAndRunPipeline(pipelineConfig, sources)
+    awaitPipelineTermination(pipeline)
+
+    checkAnswer(spark.sql(s"SELECT * FROM mv"), Seq(Row(0), Row(1), Row(2), Row(3), Row(4)))
+  }
+
   test("Python Pipeline with materialized_view, create_streaming_table, and append_flow") {
     val pipelineSpec =
       TestPipelineSpec(include = Seq("transformations/**"))
@@ -383,9 +421,7 @@ trait APITest
         name = "transformations/st.py",
         contents = s"""
            |from pyspark import pipelines as dp
-           |from pyspark.sql import DataFrame, SparkSession
-           |
-           |spark = SparkSession.active()
+           |from pyspark.sql import DataFrame
            |
            |dp.create_streaming_table(
            |  name = "a",
@@ -401,9 +437,7 @@ trait APITest
         name = "transformations/mv.py",
         contents = s"""
            |from pyspark import pipelines as dp
-           |from pyspark.sql import DataFrame, SparkSession
-           |
-           |spark = SparkSession.active()
+           |from pyspark.sql import DataFrame
            |
            |@dp.materialized_view(
            |  name = "src",
@@ -431,9 +465,7 @@ trait APITest
         name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
-                     |from pyspark.sql import DataFrame, SparkSession
-                     |
-                     |spark = SparkSession.active()
+                     |from pyspark.sql import DataFrame
                      |
                      |@dp.temporary_view(
                      | name = "view_1",
@@ -475,9 +507,7 @@ trait APITest
             contents =
               s"""
                  |from pyspark import pipelines as dp
-                 |from pyspark.sql import DataFrame, SparkSession
-                 |
-                 |spark = SparkSession.active()
+                 |from pyspark.sql import DataFrame
                  |
                  |dp.create_sink(
                  |  "mySink",
@@ -518,10 +548,8 @@ trait APITest
         name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
-                     |from pyspark.sql import DataFrame, SparkSession
+                     |from pyspark.sql import DataFrame
                      |from pyspark.sql.functions import col
-                     |
-                     |spark = SparkSession.active()
                      |
                      |@dp.materialized_view(partition_cols = ["id_mod"])
                      |def mv():
@@ -551,10 +579,8 @@ trait APITest
         name = "transformations/definition.py",
         contents = """
                      |from pyspark import pipelines as dp
-                     |from pyspark.sql import DataFrame, SparkSession
+                     |from pyspark.sql import DataFrame
                      |from pyspark.sql.functions import col
-                     |
-                     |spark = SparkSession.active()
                      |
                      |@dp.materialized_view(cluster_by = ["cluster_col1"])
                      |def mv():

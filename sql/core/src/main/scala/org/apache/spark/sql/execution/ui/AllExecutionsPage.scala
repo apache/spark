@@ -39,6 +39,9 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") {
       <span>
         <div id="group-sub-exec-config" style="display:none"
              data-value={groupSubExec.toString}></div>
+        <div id="sql-summary-bar" class="mb-3">
+          {spinner}
+        </div>
         <div id="sql-executions-table">
           {spinner}
         </div>

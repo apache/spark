@@ -149,6 +149,7 @@ object Literal {
     case _ if clz == classOf[BigInt] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[BigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[CalendarInterval] => CalendarIntervalType
+    case _ if clz == classOf[TimestampNanosVal] => TimestampNTZNanosType()
     case _ if clz == classOf[VariantVal] => VariantType
 
     case _ if clz.isArray => ArrayType(componentTypeToDataType(clz.getComponentType))
@@ -242,6 +243,8 @@ object Literal {
         case PhysicalBooleanType => v.isInstanceOf[Boolean]
         case PhysicalByteType => v.isInstanceOf[Byte]
         case PhysicalCalendarIntervalType => v.isInstanceOf[CalendarInterval]
+        case PhysicalTimestampNTZNanosType => v.isInstanceOf[TimestampNanosVal]
+        case PhysicalTimestampLTZNanosType => v.isInstanceOf[TimestampNanosVal]
         case PhysicalIntegerType => v.isInstanceOf[Int]
         case _: PhysicalDecimalType => v.isInstanceOf[Decimal]
         case PhysicalDoubleType => v.isInstanceOf[Double]
@@ -256,8 +259,7 @@ object Literal {
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
         case _: PhysicalStringType => v.isInstanceOf[UTF8String]
-        case _: PhysicalGeographyType => v.isInstanceOf[GeographyVal]
-        case _: PhysicalGeometryType => v.isInstanceOf[GeometryVal]
+        case _: PhysicalBinaryViewType => v.isInstanceOf[BinaryView]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {

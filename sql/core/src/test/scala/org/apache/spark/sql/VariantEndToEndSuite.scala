@@ -185,6 +185,39 @@ class VariantEndToEndSuite extends SharedSparkSession {
     checkAnswer(variantDF, Seq(Row(expected)))
   }
 
+  test("SPARK-56654: parse_json/from_json reject unpaired UTF-16 surrogates by default") {
+    val invalidJson = "\"\\uD835\""
+    val df = Seq(invalidJson).toDF("j")
+    checkAnswer(df.selectExpr("try_parse_json(j)"), Seq(Row(null)))
+    checkAnswer(df.selectExpr("from_json(j, 'variant')"), Seq(Row(null)))
+    val parseJsonError = intercept[SparkException] {
+      df.selectExpr("parse_json(j)").collect()
+    }
+    checkError(
+      exception = parseJsonError,
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> invalidJson, "failFastMode" -> "FAILFAST")
+    )
+
+    val fromJsonFailFast = intercept[SparkException] {
+      df.selectExpr("from_json(j, 'variant', map('mode', 'FAILFAST'))").collect()
+    }
+    checkError(
+      exception = fromJsonFailFast,
+      condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+      parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST")
+    )
+
+    withSQLConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING.key -> "false") {
+      val parsed = df.selectExpr("parse_json(j)").collect()
+      assert(parsed.length == 1 && parsed.head.get(0) != null,
+        "legacy mode should accept unpaired surrogates")
+      val tryParsed = df.selectExpr("try_parse_json(j)").collect()
+      assert(tryParsed.length == 1 && tryParsed.head.get(0) != null,
+        "legacy mode should accept unpaired surrogates via try_parse_json")
+    }
+  }
+
   test("to_variant_object - Codegen Support") {
     Seq("CODEGEN_ONLY", "NO_CODEGEN").foreach { codegenMode =>
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenMode) {

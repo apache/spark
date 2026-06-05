@@ -68,6 +68,11 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("TIMESTAMP WITHOUT TIME ZONE", TimestampNTZType)
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)
+  // Precision 6 (microseconds) maps to the GA types and needs no preview flag.
+  checkDataType("TIMESTAMP_NTZ(6)", TimestampNTZType)
+  checkDataType("TIMESTAMP_LTZ(6)", TimestampType)
+  checkDataType("TIMESTAMP(6) WITHOUT TIME ZONE", TimestampNTZType)
+  checkDataType("TIMESTAMP(6) WITH LOCAL TIME ZONE", TimestampType)
   checkDataType("string", StringType)
   checkDataType("ChaR(5)", CharType(5))
   checkDataType("ChaRacter(5)", CharType(5))
@@ -161,11 +166,97 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       assert(parse("timestamp") === TimestampNTZType)
       assert(parse("timestamp with local time zone") === TimestampType)
       assert(parse("timestamp without time zone") === TimestampNTZType)
+      // Bare TIMESTAMP(6) resolves to the session default GA type, no preview flag needed.
+      assert(parse("timestamp(6)") === TimestampNTZType)
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+        assert(parse("timestamp(9)") === TimestampNTZNanosType(9))
+        // Bare TIMESTAMP(p) routes through SqlApiConf.get.timestampType, so an
+        // out-of-range precision must surface as the NTZ error here.
+        checkError(
+          exception = intercept[SparkException] {
+            CatalystSqlParser.parseDataType("timestamp(10)")
+          },
+          condition = "INVALID_TIMESTAMP_PRECISION",
+          parameters = Map("precision" -> "10", "type" -> "TIMESTAMP_NTZ"))
+      }
     }
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
       assert(parse("timestamp") === TimestampType)
       assert(parse("timestamp with local time zone") === TimestampType)
       assert(parse("timestamp without time zone") === TimestampNTZType)
+      // Bare TIMESTAMP(6) resolves to the session default GA type, no preview flag needed.
+      assert(parse("timestamp(6)") === TimestampType)
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+        assert(parse("timestamp(9)") === TimestampLTZNanosType(9))
+        // Bare TIMESTAMP(p) under LTZ default must surface as the LTZ error.
+        checkError(
+          exception = intercept[SparkException] {
+            CatalystSqlParser.parseDataType("timestamp(10)")
+          },
+          condition = "INVALID_TIMESTAMP_PRECISION",
+          parameters = Map("precision" -> "10", "type" -> "TIMESTAMP_LTZ"))
+      }
+    }
+  }
+
+  test("parse nanos timestamp types when the preview flag is enabled") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      assert(parse("TIMESTAMP_NTZ(7)") === TimestampNTZNanosType(7))
+      assert(parse("TIMESTAMP_NTZ(8)") === TimestampNTZNanosType(8))
+      assert(parse("TIMESTAMP_NTZ(9)") === TimestampNTZNanosType(9))
+      assert(parse("TIMESTAMP_LTZ(7)") === TimestampLTZNanosType(7))
+      assert(parse("TIMESTAMP_LTZ(8)") === TimestampLTZNanosType(8))
+      assert(parse("TIMESTAMP_LTZ(9)") === TimestampLTZNanosType(9))
+      assert(parse("Timestamp_Ntz(9)") === TimestampNTZNanosType(9))
+      assert(parse("timestamp_ltz(7)") === TimestampLTZNanosType(7))
+      assert(parse("TIMESTAMP(9) WITHOUT TIME ZONE") === TimestampNTZNanosType(9))
+      assert(parse("TIMESTAMP(7) WITH LOCAL TIME ZONE") === TimestampLTZNanosType(7))
+      assert(parse("timestamp(8) without time zone") === TimestampNTZNanosType(8))
+      assert(parse("timestamp(8) with local time zone") === TimestampLTZNanosType(8))
+    }
+  }
+
+  test("nanos timestamp parser surface is gated by SQL conf when disabled") {
+    val gatedSpellings = Seq(
+      "TIMESTAMP_NTZ(7)",
+      "TIMESTAMP_LTZ(9)",
+      "TIMESTAMP(9) WITHOUT TIME ZONE",
+      "TIMESTAMP(9) WITH LOCAL TIME ZONE",
+      "TIMESTAMP(9)")
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      gatedSpellings.foreach { spelling =>
+        checkError(
+          exception = intercept[SparkException] {
+            CatalystSqlParser.parseDataType(spelling)
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+      // Bare unparameterized forms remain accepted even with the gate off.
+      assert(parse("TIMESTAMP_NTZ") === TimestampNTZType)
+      assert(parse("TIMESTAMP_LTZ") === TimestampType)
+      assert(parse("TIMESTAMP WITHOUT TIME ZONE") === TimestampNTZType)
+      assert(parse("TIMESTAMP WITH LOCAL TIME ZONE") === TimestampType)
+      // Precision 6 maps to the GA types and stays accepted with the gate off.
+      assert(parse("TIMESTAMP_NTZ(6)") === TimestampNTZType)
+      assert(parse("TIMESTAMP_LTZ(6)") === TimestampType)
+      assert(parse("TIMESTAMP(6) WITHOUT TIME ZONE") === TimestampNTZType)
+      assert(parse("TIMESTAMP(6) WITH LOCAL TIME ZONE") === TimestampType)
+      // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION regardless of the flag.
+      Seq("TIMESTAMP_NTZ" -> "TIMESTAMP_NTZ", "TIMESTAMP_LTZ" -> "TIMESTAMP_LTZ").foreach {
+        case (spelling, errorType) =>
+          Seq(0, 1, 5, 10, 99).foreach { p =>
+            checkError(
+              exception = intercept[SparkException] {
+                CatalystSqlParser.parseDataType(s"$spelling($p)")
+              },
+              condition = "INVALID_TIMESTAMP_PRECISION",
+              parameters = Map("precision" -> p.toString, "type" -> errorType))
+          }
+      }
     }
   }
 
@@ -240,5 +331,50 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'WITH'", "hint" -> ""))
+  }
+
+  test("invalid precision of the nanos timestamp data type") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq("TIMESTAMP_NTZ" -> "TIMESTAMP_NTZ", "TIMESTAMP_LTZ" -> "TIMESTAMP_LTZ").foreach {
+        case (spelling, errorType) =>
+          // Precision 6 is valid (maps to the GA type); only [0, 5] and [10, ...] are invalid.
+          // Precision 5 is included to pin the lower boundary of the p=6 carve-out.
+          Seq(0, 1, 5, 10, 99).foreach { p =>
+            checkError(
+              exception = intercept[SparkException] {
+                CatalystSqlParser.parseDataType(s"$spelling($p)")
+              },
+              condition = "INVALID_TIMESTAMP_PRECISION",
+              parameters = Map("precision" -> p.toString, "type" -> errorType))
+          }
+      }
+      // Integer overflow: regex matches but Int.parseInt fails. Original digits are preserved.
+      checkError(
+        exception = intercept[SparkException] {
+          CatalystSqlParser.parseDataType("TIMESTAMP_NTZ(99999999999)")
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> "99999999999", "type" -> "TIMESTAMP_NTZ"))
+      // TIMESTAMP(p) with zone aliases route to the corresponding nanos type's error.
+      checkError(
+        exception = intercept[SparkException] {
+          CatalystSqlParser.parseDataType("TIMESTAMP(10) WITH LOCAL TIME ZONE")
+        },
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> "10", "type" -> "TIMESTAMP_LTZ"))
+      // Negative precision is rejected by the parser, not by the type constructor.
+      checkError(
+        exception = intercept[ParseException] {
+          CatalystSqlParser.parseDataType("TIMESTAMP_NTZ(-1)")
+        },
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'-'", "hint" -> ""))
+      checkError(
+        exception = intercept[ParseException] {
+          CatalystSqlParser.parseDataType("TIMESTAMP_LTZ(-100)")
+        },
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'-'", "hint" -> ""))
+    }
   }
 }

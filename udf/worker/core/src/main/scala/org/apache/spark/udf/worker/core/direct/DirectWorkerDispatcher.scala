@@ -222,7 +222,8 @@ abstract class DirectWorkerDispatcher(
     if (!closed.compareAndSet(false, true)) {
       return
     }
-    // TODO: close workers in parallel -- today shutdown is serialised at
+    // TODO [SPARK-55278]: Cleanup sessions as well?
+    // TODO [SPARK-55278]: close workers in parallel -- today shutdown is serialised at
     //   N * gracefulTimeoutMs worst case.
     workers.values().iterator().asScala.foreach { w =>
       try {
@@ -373,7 +374,8 @@ abstract class DirectWorkerDispatcher(
       "DirectWorker.runner must have at least one entry in command or arguments")
     val workerId = UUID.randomUUID().toString
     val address = newEndpointAddress(workerId)
-    // Proto contract: the engine must pass --id and --connection.
+    // The engine injects --connection (the socket address it manages) and
+    // --id (an internal correlation identifier) into the worker command.
     val cmd = baseCmd ++ Seq("--id", workerId, "--connection", address)
     val env = runner.getEnvironmentVariablesMap.asScala.toMap
     val outputFile = Files.createTempFile("udf-worker-", ".log")

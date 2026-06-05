@@ -146,6 +146,7 @@ class FunctionsTestsMixin:
             "ByteType",  # should be imported from pyspark.sql.types
             "Column",  # should be imported from pyspark.sql
             "DataType",  # should be imported from pyspark.sql.types
+            "MapType",  # should be imported from pyspark.sql.types
             "NumericType",  # should be imported from pyspark.sql.types
             "PySparkTypeError",  # should be imported from pyspark.errors
             "PySparkValueError",  # should be imported from pyspark.errors
@@ -3277,11 +3278,15 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame(
             [("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"]
         )
+
         self.assertTrue(
             all(
                 df.select(
                     F.regexp_replace("str", r"(\d+)", "--") == "-----",
                     F.regexp_replace("str", F.col("pattern"), F.col("replacement")) == "-----",
+                    F.regexp_replace("str", r"(\d+)", "--", 5) == "100---",
+                    F.regexp_replace("str", F.col("pattern"), F.col("replacement"), F.lit(5))
+                    == "100---",
                 ).first()
             )
         )

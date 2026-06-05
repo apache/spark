@@ -499,7 +499,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client._release_session_on_exit = True
         client._closed = True
 
-        call_tracker = {"release_session": 0, "close": 0}
+        call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
+
+        def mock_cleanup_ml_cache():
+            call_tracker["cleanup_ml_cache"] += 1
 
         def mock_release_session():
             call_tracker["release_session"] += 1
@@ -507,11 +510,13 @@ class SparkConnectClientTestCase(unittest.TestCase):
         def mock_close():
             call_tracker["close"] += 1
 
+        client._cleanup_ml_cache = mock_cleanup_ml_cache
         client.release_session = mock_release_session
         client.close = mock_close
 
         client._on_exit()
 
+        self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
         self.assertEqual(call_tracker["release_session"], 0)
         self.assertEqual(call_tracker["close"], 0)
 

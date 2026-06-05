@@ -152,7 +152,7 @@ if in_spark:
 # python/docs/source/tutorial/sql/arrow_pandas.rst,
 # python/packaging/client/setup.py, and python/packaging/connect/setup.py
 _minimum_pandas_version = "2.2.0"
-_minimum_numpy_version = "1.21"
+_minimum_numpy_version = "1.23.2"
 _minimum_pyarrow_version = "18.0.0"
 _minimum_grpc_version = "1.76.0"
 _minimum_googleapis_common_protos_version = "1.71.0"
@@ -267,6 +267,8 @@ try:
             "pyspark",
             "pyspark.core",
             "pyspark.cloudpickle",
+            "pyspark.messages",
+            "pyspark.messages.socket",
             "pyspark.mllib",
             "pyspark.mllib.linalg",
             "pyspark.mllib.stat",
@@ -382,10 +384,9 @@ try:
                 "pyyaml>=%s" % _minimum_pyyaml_version,
             ],
         },
-        python_requires=">=3.10",
+        python_requires=">=3.11",
         classifiers=[
             "Development Status :: 5 - Production/Stable",
-            "Programming Language :: Python :: 3.10",
             "Programming Language :: Python :: 3.11",
             "Programming Language :: Python :: 3.12",
             "Programming Language :: Python :: 3.13",

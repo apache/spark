@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.util.geo.WkbParseException;
 import org.apache.spark.sql.catalyst.util.geo.WkbReader;
 import org.apache.spark.sql.catalyst.util.geo.WkbWriter;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.BinaryView;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -33,8 +33,8 @@ public final class Geometry implements Geo {
 
   /** Geometry internal implementation. */
 
-  // The Geometry type is implemented as an array of bytes stored inside a `GeometryVal` object.
-  protected final GeometryVal value;
+  // The GEOMETRY physical value is an opaque chunk of bytes, carried as a {@link BinaryView}.
+  protected final BinaryView value;
 
   /** Geometry constants. */
 
@@ -45,26 +45,26 @@ public final class Geometry implements Geo {
 
   // We make the constructors private. Use `fromBytes` or `fromValue` to create new instances.
   private Geometry(byte[] bytes) {
-    this.value = GeometryVal.fromBytes(bytes);
+    this.value = BinaryView.fromBytes(bytes);
   }
 
-  private Geometry(GeometryVal value) {
+  private Geometry(BinaryView value) {
     this.value = value;
   }
 
-  // Factory methods to create new Geometry instances from a byte array or a `GeometryVal`.
+  // Factory methods to create new Geometry instances from a byte array or a {@link BinaryView}.
   public static Geometry fromBytes(byte[] bytes) {
     return new Geometry(bytes);
   }
 
-  public static Geometry fromValue(GeometryVal value) {
+  public static Geometry fromValue(BinaryView value) {
     return new Geometry(value);
   }
 
   /** Geometry getters and instance methods. */
 
-  // Returns the underlying physical type value of this Geometry instance.
-  public GeometryVal getValue() {
+  // Returns the underlying physical-type value of this Geometry instance.
+  public BinaryView getValue() {
     return value;
   }
 
@@ -73,10 +73,11 @@ public final class Geometry implements Geo {
     return value.getBytes();
   }
 
-  // Returns a copy of this geometry.
+  // Returns a copy of this geometry that owns its own backing buffer. Required before
+  // calling mutating methods like {@link #setSrid(int)} on a value that was read directly
+  // from an UnsafeRow / ColumnVector buffer.
   public Geometry copy() {
-    byte[] bytes = getBytes();
-    return Geometry.fromBytes(Arrays.copyOf(bytes, bytes.length));
+    return new Geometry(value.copy());
   }
 
   /** Geometry WKB parsing. */
@@ -186,6 +187,13 @@ public final class Geometry implements Geo {
   @Override
   public void setSrid(int srid) {
     // This method sets the SRID value in the in-memory Geometry representation header.
+    // It mutates the backing buffer in place, which only writes through when this value owns
+    // a tight, on-heap array. For a sliced / sub-range / off-heap view, getBytes() (and hence
+    // getWrapper()) returns a throwaway copy and the write would be silently lost, so fail
+    // loudly and direct the caller to copy() first.
+    if (!value.hasTightOnHeapArray()) {
+      throw QueryExecutionErrors.cannotMutateReadOnlyGeoValueError();
+    }
     getWrapper().putInt(SRID_OFFSET, srid);
   }
 

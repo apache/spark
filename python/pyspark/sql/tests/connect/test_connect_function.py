@@ -26,6 +26,7 @@ from pyspark.sql.types import (
     StructField,
     ArrayType,
     IntegerType,
+    MapType,
 )
 from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
@@ -1825,6 +1826,7 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
             "MAP<STRING,INT>",
             StructType([StructField("a", IntegerType())]),
             ArrayType(StructType([StructField("a", IntegerType())])),
+            MapType(StringType(), IntegerType()),
         ]:
             self.compare_by_show(
                 cdf.select(CF.from_json(cdf.a, schema)),
@@ -2212,6 +2214,10 @@ class SparkConnectFunctionTests(ReusedMixedTestCase, PandasOnSparkTestUtils):
         self.assert_eq(
             cdf.select(CF.regexp_replace(cdf.b, "(a+)(b)?(c)", "--")).toPandas(),
             sdf.select(SF.regexp_replace(sdf.b, "(a+)(b)?(c)", "--")).toPandas(),
+        )
+        self.assert_eq(
+            cdf.select(CF.regexp_replace(cdf.b, "(a+)(b)?(c)", "--", 2)).toPandas(),
+            sdf.select(SF.regexp_replace(sdf.b, "(a+)(b)?(c)", "--", 2)).toPandas(),
         )
         self.assert_eq(
             cdf.select(CF.translate(cdf.b, "abc", "xyz")).toPandas(),
