@@ -1667,13 +1667,16 @@ class SparkConnectClient(object):
                         for batch in reader:
                             assert isinstance(batch, pa.RecordBatch)
                             num_records_in_batch += batch.num_rows
-                            if num_records_in_batch != b.arrow_batch.row_count:
-                                raise SparkConnectException(
-                                    f"Expected {b.arrow_batch.row_count} rows in arrow batch but "
-                                    + f"got {num_records_in_batch}."
-                                )
-                            num_records += num_records_in_batch
+                            num_records += batch.num_rows
                             yield batch
+                        # An Arrow IPC stream ([Schema][RecordBatch]*[EOS]) may carry
+                        # multiple RecordBatches, so validate row_count only once the
+                        # reader is fully consumed.
+                        if num_records_in_batch != b.arrow_batch.row_count:
+                            raise SparkConnectException(
+                                f"Expected {b.arrow_batch.row_count} rows in arrow batch but "
+                                + f"got {num_records_in_batch}."
+                            )
             if b.HasField("create_resource_profile_command_result"):
                 profile_id = b.create_resource_profile_command_result.profile_id
                 yield {"create_resource_profile_command_result": profile_id}

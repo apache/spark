@@ -277,6 +277,44 @@ class SparkConnectClientTestCase(unittest.TestCase):
             mock.req.client_type, r"^_SPARK_CONNECT_PYTHON spark/[^ ]+ os/[^ ]+ python/[^ ]+$"
         )
 
+    def test_multiple_record_batches_in_single_arrow_batch(self):
+        # An Arrow IPC stream may carry multiple RecordBatches; row_count is the total
+        # across them and must be validated only after the stream is fully consumed.
+        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+
+        class MultiBatchMockService:
+            def __init__(self, session_id: str):
+                self._session_id = session_id
+                self.req: Optional[proto.ExecutePlanRequest] = None
+
+            def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
+                self.req = req
+                resp = proto.ExecutePlanResponse()
+                resp.session_id = self._session_id
+                resp.operation_id = req.operation_id
+
+                pdf = pd.DataFrame(data={"col1": [1, 2, 3, 4]})
+                schema = pa.Schema.from_pandas(pdf)
+                table = pa.Table.from_pandas(pdf)
+                sink = pa.BufferOutputStream()
+                writer = pa.ipc.new_stream(sink, schema=schema)
+                # Two RecordBatches in one IPC stream.
+                for batch in table.to_batches(max_chunksize=2):
+                    writer.write_batch(batch)
+                writer.close()
+
+                resp.arrow_batch.data = sink.getvalue().to_pybytes()
+                # row_count is the total across all RecordBatches in the message.
+                resp.arrow_batch.row_count = 4
+                return [resp]
+
+        mock = MultiBatchMockService(client._session_id)
+        client._stub = mock
+
+        plan = proto.Plan()
+        table, _, _ = client.to_table(plan, {})
+        self.assertEqual(table.num_rows, 4)
+
     def test_properties(self):
         client = SparkConnectClient("sc://foo/;token=bar", use_reattachable_execute=False)
         self.assertEqual(client.token, "bar")
