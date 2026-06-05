@@ -111,8 +111,7 @@ object CSVDataSource extends Logging {
       Some(headerColumnNames => {
         parser.headerColumnNames = headerColumnNames.orElse {
           CSVUtils.readHeaderLine(file.toPath, parser.options, conf).map { line =>
-            UnivocityParser.parseLine(
-              new CsvParser(parser.options.asParserSettings), line)
+            new CsvParser(parser.options.asParserSettings).parseLine(line)
           }
         }
       })
@@ -163,7 +162,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       maybeFirstLine: Option[String],
       parsedOptions: CSVOptions): StructType = {
     val csvParser = new CsvParser(parsedOptions.asParserSettings)
-    maybeFirstLine.map(UnivocityParser.parseLine(csvParser, _)) match {
+    maybeFirstLine.map(csvParser.parseLine(_)) match {
       case Some(firstRow) if firstRow != null =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
@@ -173,6 +172,11 @@ object TextInputCSVDataSource extends CSVDataSource {
           val linesWithoutHeader =
             CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)
+          // Route data rows through UnivocityParser.parseLine so a row with more columns than
+          // maxColumns surfaces as MALFORMED_CSV_RECORD instead of a raw
+          // ArrayIndexOutOfBoundsException (SPARK-57195). The first-line parse above is left as the
+          // raw parser so an oversized single value still yields Univocity's TextParsingException
+          // with a bounded message (SPARK-28431).
           linesWithoutHeader.map(UnivocityParser.parseLine(parser, _))
         }
         SQLExecution.withSQLConfPropagated(csv.sparkSession) {
