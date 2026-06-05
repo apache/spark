@@ -8453,6 +8453,12 @@
     ],
     "sqlState" : "42K0E"
   },
+  "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA" : {
+    "message" : [
+      "Hive metastore version <version> requires Java <requiredJavaVersion> or later, but the current JVM is Java <currentJavaVersion>. Please upgrade your Java version or use an earlier Hive metastore version."
+    ],
+    "sqlState" : "0A000"
+  },
   "UNSUPPORTED_INSERT" : {
     "message" : [
       "Can't insert into the target."
