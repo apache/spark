@@ -736,8 +736,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
       lastReplacement = lastReplacementInUTF8.toString
     }
-    RegExpUtils.replace(pattern, s.asInstanceOf[UTF8String], lastReplacement,
-      p.asInstanceOf[UTF8String], r.asInstanceOf[UTF8String], i.asInstanceOf[Int])
+    RegExpUtils.replace(pattern, s.toString, lastReplacement, p.toString, i.asInstanceOf[Int])
   }
 
   override def dataType: DataType = subject.dataType
@@ -769,7 +768,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
           $termLastReplacement = $termLastReplacementInUTF8.toString();
         }
         ${ev.value} = $regExpUtils.replace(
-          $termPattern, $subject, $termLastReplacement, $regexp, $rep, $pos);
+          $termPattern, $subject.toString(), $termLastReplacement, $regexp.toString(), $pos);
         $setEvNotNull
       """
     })
@@ -1247,18 +1246,16 @@ object RegExpUtils {
   /**
    * Runs the regexp_replace loop shared by RegExpReplace's eval and codegen, so the generated
    * Java is a single call rather than an inline matcher build + match/replace loop + error
-   * construction. The matcher is built here from `pattern` so `subject.toString` is computed once.
-   * `subject` is returned unchanged when the start position is out of range; `regexp`/`rep`/`pos`
-   * are only used to build the error message on a failed replacement.
+   * construction. The matcher is built here from `pattern`. `source` is returned (as a new
+   * UTF8String) when the start position is out of range; `regexp`/`pos` are only used to build
+   * the error message on a failed replacement.
    */
   def replace(
       pattern: Pattern,
-      subject: UTF8String,
+      source: String,
       replacement: String,
-      regexp: UTF8String,
-      rep: UTF8String,
+      regexp: String,
       pos: Int): UTF8String = {
-    val source = subject.toString
     val position = pos - 1
     if (position == 0 || position < source.length) {
       val matcher = pattern.matcher(source)
@@ -1270,13 +1267,13 @@ object RegExpUtils {
         } catch {
           case NonFatal(e) =>
             throw QueryExecutionErrors.invalidRegexpReplaceError(
-              source, regexp.toString, rep.toString, pos, e)
+              source, regexp, replacement, pos, e)
         }
       }
       matcher.appendTail(result)
       UTF8String.fromString(result.toString)
     } else {
-      subject
+      UTF8String.fromString(source)
     }
   }
 }
