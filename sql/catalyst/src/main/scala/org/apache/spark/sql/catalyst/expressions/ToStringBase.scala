@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.ZoneOffset
+import java.time.{ZoneId, ZoneOffset}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.UTF8StringBuilder
-import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
@@ -66,11 +66,15 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case NoConstraint => castToString(from)
     }
 
+  // The Types Framework is the single integration point for framework types' cast-to-string. The
+  // nanosecond timestamp types render through the zone-aware hook, threading the session zoneId
+  // (zone-independent NTZ ignores it, LTZ renders in it). Other framework types (e.g. TimeType) are
+  // zone-independent and use the zone-less hook, so they never force a resolved zoneId
+  // (SPARK-57285).
   private def castToString(from: DataType): Any => UTF8String = from match {
-    // Nanosecond timestamp string formatting is zone-aware (LTZ renders in the session time zone),
-    // so it lives in castToStringDefault alongside the microsecond timestamp types rather than the
-    // zone-less Types Framework formatter (SPARK-57256).
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => castToStringDefault(from)
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+      val ops = TypeApiOps(from).get
+      acceptAny[Any](v => ops.formatUTF8(v, zoneId))
     case _ =>
       TypeApiOps(from)
         .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
@@ -87,12 +91,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
-    case t: TimestampLTZNanosType =>
-      acceptAny[TimestampNanosVal](v =>
-        UTF8String.fromString(timestampFormatter.formatNanos(v, t.precision)))
-    case t: TimestampNTZNanosType =>
-      acceptAny[TimestampNanosVal](v =>
-        UTF8String.fromString(timestampNTZFormatter.formatWithoutTimeZoneNanos(v, t.precision)))
     case _: TimeType =>
       acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
     case ArrayType(et, _) =>
@@ -246,18 +244,22 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
-      case t: TimestampLTZNanosType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
-          timestampFormatter.getClass)
-        (c, evPrim) =>
-          code"$evPrim = UTF8String.fromString($tf.formatNanos($c, ${t.precision}));"
-      case t: TimestampNTZNanosType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
-          timestampNTZFormatter.getClass)
-        (c, evPrim) =>
-          code"$evPrim = UTF8String.fromString($tf.formatWithoutTimeZoneNanos($c, ${t.precision}));"
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        // Route nanosecond timestamp cast-to-string through the Types Framework: emit a runtime
+        // call into the ops reference object, passing the session zoneId literal. This keeps the
+        // zone-aware formatting (zone-independent NTZ, session-zone LTZ) in TypeApiOps rather than
+        // inlining it here (SPARK-57285).
+        val ops = TypeApiOps(from).get
+        // Pin the reference-object cast types to the public TypeApiOps / ZoneId classes: the
+        // runtime zoneId is a package-private java.time.ZoneRegion, so letting addReferenceObj
+        // derive the cast from the concrete class would emit an inaccessible type in codegen.
+        val opsRef = JavaCode.global(
+          ctx.addReferenceObj("typeApiOps", ops, classOf[TypeApiOps].getName),
+          classOf[TypeApiOps])
+        val zoneIdRef = JavaCode.global(
+          ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName),
+          classOf[ZoneId])
+        (c, evPrim) => code"$evPrim = $opsRef.formatUTF8($c, $zoneIdRef);"
       case _: TimeType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timeFormatter", timeFormatter),

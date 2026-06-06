@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types.ops
 
+import java.time.ZoneId
+
 import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
@@ -68,6 +70,30 @@ trait TypeApiOps extends Serializable {
    * Default implementation wraps format(). Override for performance if needed.
    */
   def formatUTF8(v: Any): UTF8String = UTF8String.fromString(format(v))
+
+  /**
+   * Zone-aware variant of [[format]] used by CAST to STRING, where the session time zone is
+   * known.
+   *
+   * Zone-independent types (e.g. TimeType) ignore `zoneId` via this default, which delegates to
+   * the zone-less [[format]]. Zone-aware types (e.g. the nanosecond LTZ timestamp) override this
+   * to render in the session time zone. This is the single hook the codegen path calls into
+   * through the ops reference object, so `sql/api` needs no dependency on catalyst codegen
+   * classes.
+   *
+   * @param v
+   *   the internal value
+   * @param zoneId
+   *   the session time zone to render in
+   * @return
+   *   formatted string
+   */
+  def format(v: Any, zoneId: ZoneId): String = format(v)
+
+  /**
+   * Zone-aware variant of [[formatUTF8]]. Default wraps [[format(v, zoneId)]].
+   */
+  def formatUTF8(v: Any, zoneId: ZoneId): UTF8String = UTF8String.fromString(format(v, zoneId))
 
   /**
    * Formats an internal value as a SQL literal string.

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 
 import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.sql.types.ops.TypeApiOps
-import org.apache.spark.unsafe.types.TimestampNanosVal
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**
  * Tests for the Types Framework wiring of the nanosecond timestamp types (SPARK-57207).
@@ -162,10 +162,56 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("format and toSQLValue raise UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING") {
-    allCases.foreach { case (dt, _, value) =>
+  // SPARK-57285: a value with sub-precision (sub-nano) digits so flooring is exercised; built from
+  // a UTC wall clock so the rendered NTZ/LTZ strings are predictable.
+  private val nanosLdt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+
+  // Expected fractional second after flooring to the given nanos precision (trailing zeros are
+  // trimmed by the formatter, but 123456789 has none to trim at p in {7,8,9}).
+  private def expectedFraction(precision: Int): String = precision match {
+    case 7 => "1234567"
+    case 8 => "12345678"
+    case 9 => "123456789"
+  }
+
+  test("SPARK-57285: NTZ format renders zone-independently (no session zone needed)") {
+    precisions.foreach { p =>
+      val ops = TypeApiOps(TimestampNTZNanosType(p)).get
+      val v = DateTimeUtils.localDateTimeToTimestampNanos(nanosLdt, p)
+      val expected = s"2020-01-01 00:00:00.${expectedFraction(p)}"
+      // Zone-less callers (EXPLAIN, SQL-literal) format directly: NTZ is zone-independent.
+      assert(ops.format(v) === expected, s"NTZ format for precision $p")
+      assert(ops.formatUTF8(v) === UTF8String.fromString(expected))
+      assert(ops.toSQLValue(v) === s"TIMESTAMP_NTZ '$expected'")
+      // The zone-aware hook ignores the supplied zoneId for NTZ.
+      Seq(ZoneOffset.UTC, ZoneOffset.ofHours(5), ZoneId.of("America/Los_Angeles")).foreach { zid =>
+        assert(ops.format(v, zid) === expected, s"NTZ zone-aware format for $p in $zid")
+        assert(ops.formatUTF8(v, zid) === UTF8String.fromString(expected))
+      }
+    }
+  }
+
+  test("SPARK-57285: LTZ format renders in the session zone via the zone-aware hook") {
+    precisions.foreach { p =>
+      val ops = TypeApiOps(TimestampLTZNanosType(p)).get
+      // Physical value is the epoch instant of the UTC wall clock above.
+      val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
+      val frac = expectedFraction(p)
+      // UTC session zone: the wall clock matches the UTC instant.
+      assert(ops.format(v, ZoneOffset.UTC) === s"2020-01-01 00:00:00.$frac")
+      assert(ops.formatUTF8(v, ZoneOffset.UTC) ===
+        UTF8String.fromString(s"2020-01-01 00:00:00.$frac"))
+      // A +05:00 session zone shifts the rendered wall clock; the fraction is unaffected.
+      assert(ops.format(v, ZoneOffset.ofHours(5)) === s"2020-01-01 05:00:00.$frac")
+    }
+  }
+
+  test("SPARK-57285: LTZ zone-less format and toSQLValue still raise (no session zone)") {
+    precisions.foreach { p =>
+      val dt = TimestampLTZNanosType(p)
       val ops = TypeApiOps(dt).get
-      Seq[() => Any](() => ops.format(value), () => ops.toSQLValue(value)).foreach { call =>
+      val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
+      Seq[() => Any](() => ops.format(v), () => ops.toSQLValue(v)).foreach { call =>
         checkError(
           exception = intercept[SparkUnsupportedOperationException](call()),
           condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING",

@@ -17,24 +17,32 @@
 
 package org.apache.spark.sql.types.ops
 
+import java.time.{ZoneId, ZoneOffset}
+
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase}
 import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * Client-side (spark-api) operations shared by the nanosecond timestamp types
  * (TimestampNTZNanosType and TimestampLTZNanosType).
  *
  * Internal values are [[org.apache.spark.unsafe.types.TimestampNanosVal]] (epoch micros + nanos
- * within the micro). The two concrete subclasses differ only in their DataType and SQL-literal
- * prefix; storage and formatting are identical.
+ * within the micro). The two concrete subclasses differ only in their DataType, SQL-literal
+ * prefix, and time-zone handling; storage is identical.
  *
- * SCOPE (SPARK-57207): this issue wires physical representation, literals, row accessors, and
- * codegen class selection. CAST to STRING is implemented separately, zone-aware, in ToStringBase
- * (SPARK-57256). The zone-less, type-level format() here (and the toSQLValue() that delegates to
- * it) still raises the user-facing UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error, since LTZ
- * rendering needs the session time zone that this op does not have.
+ * CAST to STRING (SPARK-57285): the Types Framework is the single integration point for
+ * nanosecond timestamp cast-to-string. ToStringBase routes both the interpreted and codegen paths
+ * through the zone-aware [[format(v, zoneId)]] / [[formatUTF8(v, zoneId)]] hook here, passing the
+ * session time zone. NTZ rendering is zone-independent; LTZ rendering uses the session zone.
+ *
+ * The remaining zone-less callers (EXPLAIN plan output and SQL-literal rendering via toSQLValue)
+ * have no session zone: NTZ can still format directly, while LTZ raises the user-facing
+ * UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error rather than silently truncating or guessing
+ * a zone.
  *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
@@ -47,15 +55,10 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
   /** SQL literal prefix for this type, e.g. "TIMESTAMP_NTZ" or "TIMESTAMP_LTZ". */
   protected def sqlTypeName: String
 
-  // ==================== String Formatting ====================
+  /** The fractional-second precision in [7, 9] of this type. */
+  protected def precision: Int
 
-  // CAST to STRING for the nanosecond timestamp types is handled zone-aware by ToStringBase
-  // (SPARK-57256), alongside the microsecond timestamp types, because LTZ rendering depends on the
-  // session time zone that this zone-less, type-level formatter does not have. The remaining
-  // zone-less callers (EXPLAIN plan output and SQL-literal rendering via toSQLValue) still raise a
-  // user-facing unsupported-feature error here rather than silently truncating to microseconds.
-  override def format(v: Any): String =
-    throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
+  // ==================== String Formatting ====================
 
   // Row JSON (Row.json / Row.prettyJson) holds the external Row value (java.time.Instant for LTZ,
   // java.time.LocalDateTime for NTZ), but rendering nanosecond timestamps from this zone-less path
@@ -96,6 +99,16 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
 class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends TimestampNanosTypeApiOps {
   override def dataType: TimestampNTZNanosType = t
   override protected def sqlTypeName: String = "TIMESTAMP_NTZ"
+  override protected def precision: Int = t.precision
+
+  // NTZ rendering is zone-independent: the value is the UTC-grid wall clock, so a UTC formatter
+  // produces the same string regardless of the session zone.
+  @transient private lazy val formatter = TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
+
+  override def format(v: Any): String =
+    formatter.formatWithoutTimeZoneNanos(v.asInstanceOf[TimestampNanosVal], precision)
+
+  override def format(v: Any, zoneId: ZoneId): String = format(v)
 
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampNTZNanosType (SPARK-57033):
   // maps to java.time.LocalDateTime with the column precision.
@@ -112,6 +125,28 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
 class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType) extends TimestampNanosTypeApiOps {
   override def dataType: TimestampLTZNanosType = t
   override protected def sqlTypeName: String = "TIMESTAMP_LTZ"
+  override protected def precision: Int = t.precision
+
+  // LTZ rendering depends on the session time zone. The zoneId is fixed for a given cast
+  // expression, so cache the formatter and rebuild it only when the zone changes.
+  @transient private var cachedZone: ZoneId = _
+  @transient private var cachedFormatter: TimestampFormatter = _
+
+  private def formatterFor(zoneId: ZoneId): TimestampFormatter = {
+    if (cachedFormatter == null || cachedZone != zoneId) {
+      cachedZone = zoneId
+      cachedFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+    }
+    cachedFormatter
+  }
+
+  // Zone-less callers (EXPLAIN, SQL-literal) have no session zone to render LTZ in, so they still
+  // raise rather than guessing a default.
+  override def format(v: Any): String =
+    throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
+
+  override def format(v: Any, zoneId: ZoneId): String =
+    formatterFor(zoneId).formatNanos(v.asInstanceOf[TimestampNanosVal], precision)
 
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampLTZNanosType (SPARK-57033):
   // maps to java.time.Instant with the column precision.
