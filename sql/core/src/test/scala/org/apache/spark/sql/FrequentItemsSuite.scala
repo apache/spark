@@ -161,7 +161,11 @@ class FrequentItemsSuite extends SharedSparkSession {
           sql(s"SELECT $func(expr, 0) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_NON_POSITIVE_ARG",
-        parameters = Map("argName" -> "`k`", "argValue" -> "0", "functionName" -> "`approx_frequent_items`")
+        parameters = Map(
+          "argName" -> "`k`",
+          "argValue" -> "0",
+          "functionName" -> "`approx_frequent_items`"
+        )
       )
     }
 
@@ -189,7 +193,10 @@ class FrequentItemsSuite extends SharedSparkSession {
           sql(s"SELECT $func(expr, 5, NULL) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_NULL_ARG",
-        parameters = Map("argName" -> "`maxItemsTracked`", "functionName" -> "`approx_frequent_items`")
+        parameters = Map(
+          "argName" -> "`maxItemsTracked`",
+          "functionName" -> "`approx_frequent_items`"
+        )
       )
     }
 
@@ -199,7 +206,11 @@ class FrequentItemsSuite extends SharedSparkSession {
           sql(s"SELECT $func(expr, 5, 0) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_NON_POSITIVE_ARG",
-        parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "0", "functionName" -> "`approx_frequent_items`")
+        parameters = Map(
+          "argName" -> "`maxItemsTracked`",
+          "argValue" -> "0",
+          "functionName" -> "`approx_frequent_items`"
+        )
       )
     }
 
@@ -209,7 +220,11 @@ class FrequentItemsSuite extends SharedSparkSession {
           sql(s"SELECT $func(expr, 10, 1000001) FROM VALUES (0), (1) AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
-        parameters = Map("maxItemsTracked" -> "1000001", "limit" -> "1000000", "functionName" -> "`approx_frequent_items`")
+        parameters = Map(
+          "maxItemsTracked" -> "1000001",
+          "limit" -> "1000000",
+          "functionName" -> "`approx_frequent_items`"
+        )
       )
     }
 
@@ -219,7 +234,11 @@ class FrequentItemsSuite extends SharedSparkSession {
           sql(s"SELECT $func(expr, 10, 5) FROM VALUES (0), (1), (2) AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_LESS_THAN_K",
-        parameters = Map("maxItemsTracked" -> "5", "k" -> "10", "functionName" -> "`approx_frequent_items`")
+        parameters = Map(
+          "maxItemsTracked" -> "5",
+          "k" -> "10",
+          "functionName" -> "`approx_frequent_items`"
+        )
       )
     }
 
@@ -286,8 +305,12 @@ class FrequentItemsSuite extends SharedSparkSession {
   /////////////////////////////////
 
   val functionGroups = Seq(
-    ("approx_frequent_items_accumulate", "approx_frequent_items_estimate", "approx_frequent_items_combine"),
-    ("approx_heavy_hitters_accumulate", "approx_heavy_hitters_estimate", "approx_heavy_hitters_combine"),
+    ("approx_frequent_items_accumulate",
+      "approx_frequent_items_estimate",
+      "approx_frequent_items_combine"),
+    ("approx_heavy_hitters_accumulate",
+      "approx_heavy_hitters_estimate",
+      "approx_heavy_hitters_combine"),
     ("approx_top_k_accumulate", "approx_top_k_estimate", "approx_top_k_combine")
   )
 
@@ -325,7 +348,9 @@ class FrequentItemsSuite extends SharedSparkSession {
         Row(new java.math.BigDecimal("1.000"), 2))))
     }
 
-    gridTest(s"accumulate and estimate of different types: $accFunc, $estFunc")(itemsWithFrequentItems) {
+    gridTest(
+      s"accumulate and estimate of different types: $accFunc, $estFunc"
+    )(itemsWithFrequentItems) {
       case (input, expected) =>
         val res = sql(s"SELECT $estFunc($accFunc(expr)) " +
           s"FROM VALUES $input AS tab(expr);")
@@ -339,7 +364,10 @@ class FrequentItemsSuite extends SharedSparkSession {
             .collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_NULL_ARG",
-        parameters = Map("argName" -> "`maxItemsTracked`", "functionName" -> "`approx_frequent_items_accumulate`")
+        parameters = Map(
+          "argName" -> "`maxItemsTracked`",
+          "functionName" -> "`approx_frequent_items_accumulate`"
+        )
       )
     }
 
@@ -350,7 +378,11 @@ class FrequentItemsSuite extends SharedSparkSession {
             .collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_NON_POSITIVE_ARG",
-        parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "0", "functionName" -> "`approx_frequent_items_accumulate`")
+        parameters = Map(
+          "argName" -> "`maxItemsTracked`",
+          "argValue" -> "0",
+          "functionName" -> "`approx_frequent_items_accumulate`"
+        )
       )
     }
 
@@ -360,7 +392,11 @@ class FrequentItemsSuite extends SharedSparkSession {
           sql(s"SELECT $accFunc(expr, 1000001) FROM VALUES (0) AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
-        parameters = Map("maxItemsTracked" -> "1000001", "limit" -> "1000000", "functionName" -> "`approx_frequent_items_accumulate`")
+        parameters = Map(
+          "maxItemsTracked" -> "1000001",
+          "limit" -> "1000000",
+          "functionName" -> "`approx_frequent_items_accumulate`"
+        )
       )
     }
 
@@ -371,7 +407,10 @@ class FrequentItemsSuite extends SharedSparkSession {
             "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_NULL_ARG",
-        parameters = Map("argName" -> "`k`", "functionName" -> "`approx_frequent_items_estimate`")
+        parameters = Map(
+          "argName" -> "`k`",
+          "functionName" -> "`approx_frequent_items_estimate`"
+        )
       )
     }
 
@@ -382,7 +421,11 @@ class FrequentItemsSuite extends SharedSparkSession {
             "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_NON_POSITIVE_ARG",
-        parameters = Map("argName" -> "`k`", "argValue" -> "0", "functionName" -> "`approx_frequent_items_estimate`")
+        parameters = Map(
+          "argName" -> "`k`",
+          "argValue" -> "0",
+          "functionName" -> "`approx_frequent_items_estimate`"
+        )
       )
     }
 
@@ -412,7 +455,11 @@ class FrequentItemsSuite extends SharedSparkSession {
             "FROM VALUES 0, 1, 2 AS tab(expr);").collect()
         },
         condition = "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_LESS_THAN_K",
-        parameters = Map("maxItemsTracked" -> "5", "k" -> "10", "functionName" -> "`approx_frequent_items_estimate`")
+        parameters = Map(
+          "maxItemsTracked" -> "5",
+          "k" -> "10",
+          "functionName" -> "`approx_frequent_items_estimate`"
+        )
       )
     }
 
@@ -450,7 +497,9 @@ class FrequentItemsSuite extends SharedSparkSession {
           Row(null, 1))))
     }
 
-    test(s"accumulate and estimate work on typed column with only NULL values: $accFunc, $estFunc") {
+    test(
+      s"accumulate and estimate work on typed column with only NULL values: $accFunc, $estFunc"
+    ) {
       val res = sql(
         s"""SELECT $estFunc($accFunc(expr))
           |FROM VALUES cast(NULL AS INT), cast(NULL AS INT) AS tab(expr)""".stripMargin)
@@ -513,7 +562,9 @@ class FrequentItemsSuite extends SharedSparkSession {
     }
 
     // positive tests for combine on every type
-    gridTest(s"same type, same size, specified combine size - success: $combFunc, $estFunc")(itemsWithFrequentItems) {
+    gridTest(
+      s"same type, same size, specified combine size - success: $combFunc, $estFunc"
+    )(itemsWithFrequentItems) {
       case (input, expected) =>
         withView("accumulation1", "accumulation2", "combines") {
           sql(s"SELECT $accFunc(expr) AS acc FROM VALUES $input AS tab(expr);")
@@ -579,7 +630,11 @@ class FrequentItemsSuite extends SharedSparkSession {
             comb.collect()
           },
           condition = "APPROX_FREQUENT_ITEMS_SKETCH_SIZE_NOT_MATCH",
-          parameters = Map("size1" -> "10", "size2" -> "20", "functionName" -> "`approx_frequent_items_combine`")
+          parameters = Map(
+            "size1" -> "10",
+            "size2" -> "20",
+            "functionName" -> "`approx_frequent_items_combine`"
+          )
         )
       }
     }
@@ -593,7 +648,11 @@ class FrequentItemsSuite extends SharedSparkSession {
               sql(s"SELECT $combFunc(acc, 0) as com FROM unioned").collect()
             },
             condition = "APPROX_FREQUENT_ITEMS_NON_POSITIVE_ARG",
-            parameters = Map("argName" -> "`maxItemsTracked`", "argValue" -> "0", "functionName" -> "`approx_frequent_items_combine`")
+            parameters = Map(
+              "argName" -> "`maxItemsTracked`",
+              "argValue" -> "0",
+              "functionName" -> "`approx_frequent_items_combine`"
+            )
           )
         }
     }
@@ -611,7 +670,11 @@ class FrequentItemsSuite extends SharedSparkSession {
                   sql(s"SELECT $combFunc(acc, 30) as com FROM unioned;").collect()
                 },
                 condition = "APPROX_FREQUENT_ITEMS_SKETCH_TYPE_NOT_MATCH",
-                parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(type2), "functionName" -> "`approx_frequent_items_combine`")
+                parameters = Map(
+                  "type1" -> toSQLType(type1),
+                  "type2" -> toSQLType(type2),
+                  "functionName" -> "`approx_frequent_items_combine`"
+                )
               )
             }
           }
@@ -661,7 +724,11 @@ class FrequentItemsSuite extends SharedSparkSession {
               sql(s"SELECT $combFunc(acc, 30) as com FROM unioned;").collect()
             },
             condition = "APPROX_FREQUENT_ITEMS_SKETCH_TYPE_NOT_MATCH",
-            parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(StringType), "functionName" -> "`approx_frequent_items_combine`")
+            parameters = Map(
+              "type1" -> toSQLType(type1),
+              "type2" -> toSQLType(StringType),
+              "functionName" -> "`approx_frequent_items_combine`"
+            )
           )
         }
     }
@@ -702,7 +769,11 @@ class FrequentItemsSuite extends SharedSparkSession {
               sql(s"SELECT $combFunc(acc, 30) as com FROM unioned;").collect()
             },
             condition = "APPROX_FREQUENT_ITEMS_SKETCH_TYPE_NOT_MATCH",
-            parameters = Map("type1" -> toSQLType(type1), "type2" -> toSQLType(StringType), "functionName" -> "`approx_frequent_items_combine`")
+            parameters = Map(
+              "type1" -> toSQLType(type1),
+              "type2" -> toSQLType(StringType),
+              "functionName" -> "`approx_frequent_items_combine`"
+            )
           )
         }
     }
@@ -744,7 +815,11 @@ class FrequentItemsSuite extends SharedSparkSession {
               sql(s"SELECT $combFunc(acc, 30) as com FROM unioned;").collect()
             },
             condition = "APPROX_FREQUENT_ITEMS_SKETCH_TYPE_NOT_MATCH",
-            parameters = Map("type1" -> toSQLType(StringType), "type2" -> toSQLType(BooleanType), "functionName" -> "`approx_frequent_items_combine`")
+            parameters = Map(
+              "type1" -> toSQLType(StringType),
+              "type2" -> toSQLType(BooleanType),
+              "functionName" -> "`approx_frequent_items_combine`"
+            )
           )
         }
       }
@@ -801,7 +876,11 @@ class FrequentItemsSuite extends SharedSparkSession {
             sql(s"SELECT $combFunc(acc) as com FROM unioned").collect()
           },
           condition = "APPROX_FREQUENT_ITEMS_SKETCH_SIZE_NOT_MATCH",
-          parameters = Map("size1" -> "10", "size2" -> "20", "functionName" -> "`approx_frequent_items_combine`")
+          parameters = Map(
+            "size1" -> "10",
+            "size2" -> "20",
+            "functionName" -> "`approx_frequent_items_combine`"
+          )
         )
       }
     }

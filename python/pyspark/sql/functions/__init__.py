@@ -358,6 +358,9 @@ __all__ = [  # noqa: F405
     "approx_heavy_hitters_accumulate",
     "approx_heavy_hitters_combine",
     "approx_percentile",
+    "approx_top_k",
+    "approx_top_k_accumulate",
+    "approx_top_k_combine",
     "array_agg",
     "avg",
     "bit_and",
@@ -547,6 +550,7 @@ __all__ = [  # noqa: F405
     # Datasketch Functions
     "approx_frequent_items_estimate",
     "approx_heavy_hitters_estimate",
+    "approx_top_k_estimate",
     "hll_sketch_estimate",
     "hll_union",
     "kll_sketch_get_n_bigint",

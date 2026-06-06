@@ -2891,7 +2891,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function)))
   }
 
-  def approxFrequentItemsNonPositiveValue(functionName: String, argName: String, argValue: Int): Throwable = {
+  def approxFrequentItemsNonPositiveValue(
+      functionName: String,
+      argName: String,
+      argValue: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "APPROX_FREQUENT_ITEMS_NON_POSITIVE_ARG",
       messageParameters = Map(
@@ -2908,7 +2911,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "argName" -> toSQLId(argName)))
   }
 
-  def approxFrequentItemsMaxItemsTrackedLessThanK(functionName: String, maxItemsTracked: Int, k: Int): Throwable = {
+  def approxFrequentItemsMaxItemsTrackedLessThanK(
+      functionName: String,
+      maxItemsTracked: Int,
+      k: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_LESS_THAN_K",
       messageParameters = Map(
@@ -2917,7 +2923,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "k" -> toSQLValue(k, IntegerType)))
   }
 
-  def approxFrequentItemsMaxItemsTrackedExceedsLimit(functionName: String, maxItemsTracked: Int, limit: Int): Throwable = {
+  def approxFrequentItemsMaxItemsTrackedExceedsLimit(
+      functionName: String,
+      maxItemsTracked: Int,
+      limit: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "APPROX_FREQUENT_ITEMS_MAX_ITEMS_TRACKED_EXCEEDS_LIMIT",
       messageParameters = Map(
@@ -2926,7 +2935,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "limit" -> toSQLValue(limit, IntegerType)))
   }
 
-  def approxFrequentItemsSketchSizeNotMatch(functionName: String, size1: Int, size2: Int): Throwable = {
+  def approxFrequentItemsSketchSizeNotMatch(
+      functionName: String,
+      size1: Int,
+      size2: Int): Throwable = {
     new SparkRuntimeException(
       errorClass = "APPROX_FREQUENT_ITEMS_SKETCH_SIZE_NOT_MATCH",
       messageParameters = Map(
@@ -2935,7 +2947,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "size2" -> toSQLValue(size2, IntegerType)))
   }
 
-  def approxFrequentItemsSketchTypeNotMatch(functionName: String, type1: DataType, type2: DataType): Throwable = {
+  def approxFrequentItemsSketchTypeNotMatch(
+      functionName: String,
+      type1: DataType,
+      type2: DataType): Throwable = {
     new SparkRuntimeException(
       errorClass = "APPROX_FREQUENT_ITEMS_SKETCH_TYPE_NOT_MATCH",
       messageParameters = Map(

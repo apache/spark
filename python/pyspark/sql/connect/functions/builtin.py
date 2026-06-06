@@ -4716,6 +4716,53 @@ def approx_heavy_hitters_estimate(
 approx_heavy_hitters_estimate.__doc__ = pysparkfuncs.approx_heavy_hitters_estimate.__doc__
 
 
+def approx_top_k(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items instead.", FutureWarning)
+    return approx_frequent_items(col, k, maxItemsTracked)
+
+
+approx_top_k.__doc__ = pysparkfuncs.approx_top_k.__doc__
+
+
+def approx_top_k_accumulate(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    warnings.warn(
+        "Deprecated in 4.1.0, use approx_frequent_items_accumulate instead.", FutureWarning
+    )
+    return approx_frequent_items_accumulate(col, maxItemsTracked)
+
+
+approx_top_k_accumulate.__doc__ = pysparkfuncs.approx_top_k_accumulate.__doc__
+
+
+def approx_top_k_combine(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items_combine instead.", FutureWarning)
+    return approx_frequent_items_combine(col, maxItemsTracked)
+
+
+approx_top_k_combine.__doc__ = pysparkfuncs.approx_top_k_combine.__doc__
+
+
+def approx_top_k_estimate(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items_estimate instead.", FutureWarning)
+    return approx_frequent_items_estimate(col, k)
+
+
+approx_top_k_estimate.__doc__ = pysparkfuncs.approx_top_k_estimate.__doc__
+
+
 def hll_sketch_agg(
     col: "ColumnOrName",
     lgConfigK: Optional[Union[int, Column]] = None,

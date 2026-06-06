@@ -53,7 +53,8 @@ import org.apache.spark.unsafe.types.UTF8String
  *    can legitimately return an empty array, even if `k` is set to a large number.
  * 2. It utilizes `ErrorType.NO_FALSE_POSITIVES` under the hood. This means:
  *    - No False Positives: Every item returned is guaranteed to have a true frequency
- *      greater than the threshold. There will be no incorrect items (spurious results) in the output.
+ *      greater than the threshold. There will be no incorrect items (spurious
+ *      results) in the output.
  *    - Potential False Negatives: Some items whose true frequency is slightly above the threshold
  *      might be missed (omitted) due to the approximate nature of the sketch.
  *
@@ -110,7 +111,12 @@ case class ApproxFrequentItems(
     this(child, Literal(topK), Literal(ApproxFrequentItems.DEFAULT_MAX_ITEMS_TRACKED), 0, 0)
 
   def this(child: Expression) =
-    this(child, Literal(ApproxFrequentItems.DEFAULT_K), Literal(ApproxFrequentItems.DEFAULT_MAX_ITEMS_TRACKED), 0, 0)
+    this(
+      child,
+      Literal(ApproxFrequentItems.DEFAULT_K),
+      Literal(ApproxFrequentItems.DEFAULT_MAX_ITEMS_TRACKED),
+      0,
+      0)
 
   private lazy val itemDataType: DataType = expr.dataType
   private lazy val kVal: Int = {
@@ -174,7 +180,9 @@ case class ApproxFrequentItems(
     buffer.serialize(ApproxFrequentItems.genSketchSerDe(itemDataType))
 
   override def deserialize(storageFormat: Array[Byte]): ApproxFrequentItemsAggregateBuffer[Any] =
-    ApproxFrequentItemsAggregateBuffer.deserialize(storageFormat, ApproxFrequentItems.genSketchSerDe(itemDataType))
+    ApproxFrequentItemsAggregateBuffer.deserialize(
+      storageFormat,
+      ApproxFrequentItems.genSketchSerDe(itemDataType))
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -199,7 +207,8 @@ object ApproxFrequentItems {
   val DEFAULT_K: Int = 5
   val DEFAULT_MAX_ITEMS_TRACKED: Int = 10000
   val MAX_ITEMS_TRACKED_LIMIT: Int = 1000000
-  // A special value indicating no explicit maxItemsTracked input in function approx_frequent_items_combine
+  // A special value indicating no explicit maxItemsTracked input in function
+  // approx_frequent_items_combine
   val VOID_MAX_ITEMS_TRACKED = -1
 
   def checkExpressionNotNull(expr: Expression, exprName: String, functionName: String): Unit = {
@@ -220,14 +229,20 @@ object ApproxFrequentItems {
         functionName, maxItemsTracked, MAX_ITEMS_TRACKED_LIMIT)
     }
     if (maxItemsTracked <= 0) {
-      throw QueryExecutionErrors.approxFrequentItemsNonPositiveValue(functionName, "maxItemsTracked", maxItemsTracked)
+      throw QueryExecutionErrors.approxFrequentItemsNonPositiveValue(
+        functionName,
+        "maxItemsTracked",
+        maxItemsTracked)
     }
   }
 
   def checkMaxItemsTracked(maxItemsTracked: Int, k: Int, functionName: String): Unit = {
     checkMaxItemsTracked(maxItemsTracked, functionName)
     if (maxItemsTracked < k) {
-      throw QueryExecutionErrors.approxFrequentItemsMaxItemsTrackedLessThanK(functionName, maxItemsTracked, k)
+      throw QueryExecutionErrors.approxFrequentItemsMaxItemsTrackedLessThanK(
+        functionName,
+        maxItemsTracked,
+        k)
     }
   }
 
@@ -340,8 +355,12 @@ object ApproxFrequentItems {
  * @param sketch    the ItemsSketch instance for counting not-null items
  * @param nullCount the count of null items
  */
-class ApproxFrequentItemsAggregateBuffer[T](val sketch: ItemsSketch[T], private var nullCount: Long) {
-  def update(itemExpression: Expression, input: InternalRow): ApproxFrequentItemsAggregateBuffer[T] = {
+class ApproxFrequentItemsAggregateBuffer[T](
+    val sketch: ItemsSketch[T],
+    private var nullCount: Long) {
+  def update(
+      itemExpression: Expression,
+      input: InternalRow): ApproxFrequentItemsAggregateBuffer[T] = {
     val v = itemExpression.eval(input)
     if (v != null) {
       itemExpression.dataType match {
@@ -489,7 +508,8 @@ case class ApproxFrequentItemsAccumulate(
 
   def this(child: Expression, maxItemsTracked: Int) = this(child, Literal(maxItemsTracked), 0, 0)
 
-  def this(child: Expression) = this(child, Literal(ApproxFrequentItems.DEFAULT_MAX_ITEMS_TRACKED), 0, 0)
+  def this(child: Expression) =
+    this(child, Literal(ApproxFrequentItems.DEFAULT_MAX_ITEMS_TRACKED), 0, 0)
 
   private lazy val itemDataType: DataType = expr.dataType
 
@@ -551,7 +571,9 @@ case class ApproxFrequentItemsAccumulate(
     buffer.serialize(ApproxFrequentItems.genSketchSerDe(itemDataType))
 
   override def deserialize(storageFormat: Array[Byte]): ApproxFrequentItemsAggregateBuffer[Any] =
-    ApproxFrequentItemsAggregateBuffer.deserialize(storageFormat, ApproxFrequentItems.genSketchSerDe(itemDataType))
+    ApproxFrequentItemsAggregateBuffer.deserialize(
+      storageFormat,
+      ApproxFrequentItems.genSketchSerDe(itemDataType))
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
@@ -587,7 +609,10 @@ class CombineInternal[T](
 
   def getMaxItemsTracked: Int = maxItemsTracked
 
-  def updateMaxItemsTracked(combineSizeSpecified: Boolean, newMaxItemsTracked: Int, functionName: String): Unit = {
+  def updateMaxItemsTracked(
+      combineSizeSpecified: Boolean,
+      newMaxItemsTracked: Int,
+      functionName: String): Unit = {
     if (!combineSizeSpecified) {
       if (this.maxItemsTracked == ApproxFrequentItems.VOID_MAX_ITEMS_TRACKED) {
         this.maxItemsTracked = newMaxItemsTracked
@@ -611,7 +636,8 @@ class CombineInternal[T](
     }
   }
 
-  def updateSketchWithNullCount(otherSketchWithNullCount: ApproxFrequentItemsAggregateBuffer[T]): Unit =
+  def updateSketchWithNullCount(
+      otherSketchWithNullCount: ApproxFrequentItemsAggregateBuffer[T]): Unit =
     sketchWithNullCount.merge(otherSketchWithNullCount)
 
   def serialize(): Array[Byte] = {
@@ -687,7 +713,8 @@ case class ApproxFrequentItemsCombine(
 
   def this(child: Expression, maxItemsTracked: Int) = this(child, Literal(maxItemsTracked))
 
-  def this(child: Expression) = this(child, Literal(ApproxFrequentItems.VOID_MAX_ITEMS_TRACKED), 0, 0)
+  def this(child: Expression) =
+    this(child, Literal(ApproxFrequentItems.VOID_MAX_ITEMS_TRACKED), 0, 0)
 
   private lazy val uncheckedItemDataType: DataType =
     state.dataType.asInstanceOf[StructType](2).dataType
@@ -717,7 +744,8 @@ case class ApproxFrequentItemsCombine(
     }
   }
 
-  override def dataType: DataType = ApproxFrequentItems.getSketchStateDataType(uncheckedItemDataType)
+  override def dataType: DataType =
+    ApproxFrequentItems.getSketchStateDataType(uncheckedItemDataType)
 
   override def createAggregationBuffer(): CombineInternal[Any] = {
     if (combineSizeSpecified) {
@@ -727,7 +755,8 @@ case class ApproxFrequentItemsCombine(
         null,
         maxItemsTrackedVal)
     } else {
-      val maxMapSize = ApproxFrequentItems.calMaxMapSize(ApproxFrequentItems.MAX_ITEMS_TRACKED_LIMIT)
+      val maxMapSize =
+        ApproxFrequentItems.calMaxMapSize(ApproxFrequentItems.MAX_ITEMS_TRACKED_LIMIT)
       new CombineInternal[Any](
         new ApproxFrequentItemsAggregateBuffer[Any](new ItemsSketch[Any](maxMapSize), 0L),
         null,

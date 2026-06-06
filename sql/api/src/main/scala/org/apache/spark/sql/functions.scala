@@ -768,7 +768,8 @@ object functions {
   }
 
   /**
-   * Aggregate function: returns the approximate frequent items (heavy hitters) with their frequency.
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -777,7 +778,8 @@ object functions {
     Column.fn("approx_frequent_items", e, k, maxItemsTracked)
 
   /**
-   * Aggregate function: returns the approximate frequent items (heavy hitters) with their frequency.
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -786,7 +788,8 @@ object functions {
     Column.fn("approx_frequent_items", e, lit(k), lit(maxItemsTracked))
 
   /**
-   * Aggregate function: returns the approximate frequent items (heavy hitters) with their frequency.
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -795,7 +798,8 @@ object functions {
     approx_frequent_items(Column(columnName), k, maxItemsTracked)
 
   /**
-   * Aggregate function: returns the approximate frequent items (heavy hitters) with their frequency.
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -804,7 +808,8 @@ object functions {
     Column.fn("approx_frequent_items", e, k)
 
   /**
-   * Aggregate function: returns the approximate frequent items (heavy hitters) with their frequency.
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -813,7 +818,8 @@ object functions {
     Column.fn("approx_frequent_items", e, lit(k))
 
   /**
-   * Aggregate function: returns the approximate frequent items (heavy hitters) with their frequency.
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -822,7 +828,8 @@ object functions {
     approx_frequent_items(Column(columnName), k)
 
   /**
-   * Aggregate function: returns the approximate frequent items (heavy hitters) with their frequency.
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -831,7 +838,8 @@ object functions {
     Column.fn("approx_frequent_items", e)
 
   /**
-   * Aggregate function: returns the approximate frequent items (heavy hitters) with their frequency.
+   * Aggregate function: returns the approximate frequent items (heavy hitters) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -840,7 +848,8 @@ object functions {
     approx_frequent_items(Column(columnName))
 
   /**
-   * Aggregate function: returns the approximate heavy hitters (frequent items) with their frequency.
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -849,7 +858,8 @@ object functions {
     Column.fn("approx_heavy_hitters", e, k, maxItemsTracked)
 
   /**
-   * Aggregate function: returns the approximate heavy hitters (frequent items) with their frequency.
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -858,7 +868,8 @@ object functions {
     Column.fn("approx_heavy_hitters", e, lit(k), lit(maxItemsTracked))
 
   /**
-   * Aggregate function: returns the approximate heavy hitters (frequent items) with their frequency.
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -867,7 +878,8 @@ object functions {
     approx_heavy_hitters(Column(columnName), k, maxItemsTracked)
 
   /**
-   * Aggregate function: returns the approximate heavy hitters (frequent items) with their frequency.
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -876,7 +888,8 @@ object functions {
     Column.fn("approx_heavy_hitters", e, k)
 
   /**
-   * Aggregate function: returns the approximate heavy hitters (frequent items) with their frequency.
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -885,7 +898,8 @@ object functions {
     Column.fn("approx_heavy_hitters", e, lit(k))
 
   /**
-   * Aggregate function: returns the approximate heavy hitters (frequent items) with their frequency.
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -894,7 +908,8 @@ object functions {
     approx_heavy_hitters(Column(columnName), k)
 
   /**
-   * Aggregate function: returns the approximate heavy hitters (frequent items) with their frequency.
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0
@@ -903,7 +918,8 @@ object functions {
     Column.fn("approx_heavy_hitters", e)
 
   /**
-   * Aggregate function: returns the approximate heavy hitters (frequent items) with their frequency.
+   * Aggregate function: returns the approximate heavy hitters (frequent items) with their
+   * frequency.
    *
    * @group agg_funcs
    * @since 4.1.0

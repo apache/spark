@@ -29334,13 +29334,14 @@ def approx_frequent_items(
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([0, 0, 1, 1, 2, 3, 4, 4], "INT")
     >>> df.agg(sf.approx_frequent_items("value")).show(truncate=False)
-    +---------------------------------------------------------------------------------------------------------+
-    |approx_frequent_items(value, 5, 10000)                                                                   |
-    +---------------------------------------------------------------------------------------------------------+
-    |[{item -> 0, count -> 2}, {item -> 4, count -> 2}, {item -> 1, count -> 2}, {item -> 2, count -> 1}, ...] |
-    +---------------------------------------------------------------------------------------------------------+
+    +----------------------------------------+
+    |approx_frequent_items(value, 5, 10000)  |
+    +----------------------------------------+
+    |[{0, 2}, {4, 2}, {1, 2}, {2, 1}, {3, 1}]|
+    +----------------------------------------+
     """
     fn = "approx_frequent_items"
     if k is None and maxItemsTracked is None:
@@ -29379,13 +29380,14 @@ def approx_heavy_hitters(
 
     Examples
     --------
+    >>> import pyspark.sql.functions as sf
     >>> df = spark.createDataFrame([0, 0, 1, 1, 2, 3, 4, 4], "INT")
     >>> df.agg(sf.approx_heavy_hitters("value")).show(truncate=False)
-    +--------------------------------------------------------------------------------------------------------+
-    |approx_heavy_hitters(value, 5, 10000)                                                                   |
-    +--------------------------------------------------------------------------------------------------------+
-    |[{item -> 0, count -> 2}, {item -> 4, count -> 2}, {item -> 1, count -> 2}, {item -> 2, count -> 1}, ...] |
-    +--------------------------------------------------------------------------------------------------------+
+    +----------------------------------------+
+    |approx_heavy_hitters(value, 5, 10000)   |
+    +----------------------------------------+
+    |[{0, 2}, {4, 2}, {1, 2}, {2, 1}, {3, 1}]|
+    +----------------------------------------+
     """
     fn = "approx_heavy_hitters"
     if k is None and maxItemsTracked is None:
@@ -29562,6 +29564,73 @@ def approx_heavy_hitters_estimate(
         return _invoke_function_over_columns(fn, col)
     else:
         return _invoke_function_over_columns(fn, col, lit(k))
+
+
+@_try_remote_functions
+def approx_top_k(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: returns the approximate frequent items (heavy hitters) in a column.
+
+    .. versionadded:: 4.0.0
+    .. deprecated:: 4.1.0
+        Use :func:`approx_frequent_items` instead.
+    """
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items instead.", FutureWarning)
+    return approx_frequent_items(col, k, maxItemsTracked)
+
+
+@_try_remote_functions
+def approx_top_k_accumulate(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: accumulates items into a frequent items sketch.
+
+    .. versionadded:: 4.0.0
+    .. deprecated:: 4.1.0
+        Use :func:`approx_frequent_items_accumulate` instead.
+    """
+    warnings.warn(
+        "Deprecated in 4.1.0, use approx_frequent_items_accumulate instead.", FutureWarning
+    )
+    return approx_frequent_items_accumulate(col, maxItemsTracked)
+
+
+@_try_remote_functions
+def approx_top_k_combine(
+    col: "ColumnOrName",
+    maxItemsTracked: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Aggregate function: combines multiple frequent items sketches into a single sketch.
+
+    .. versionadded:: 4.0.0
+    .. deprecated:: 4.1.0
+        Use :func:`approx_frequent_items_combine` instead.
+    """
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items_combine instead.", FutureWarning)
+    return approx_frequent_items_combine(col, maxItemsTracked)
+
+
+@_try_remote_functions
+def approx_top_k_estimate(
+    col: "ColumnOrName",
+    k: Optional[Union[int, Column]] = None,
+) -> Column:
+    """
+    Returns the estimated frequent items from a frequent items sketch.
+
+    .. versionadded:: 4.0.0
+    .. deprecated:: 4.1.0
+        Use :func:`approx_frequent_items_estimate` instead.
+    """
+    warnings.warn("Deprecated in 4.1.0, use approx_frequent_items_estimate instead.", FutureWarning)
+    return approx_frequent_items_estimate(col, k)
 
 
 # ---------------------- Predicates functions ------------------------------
