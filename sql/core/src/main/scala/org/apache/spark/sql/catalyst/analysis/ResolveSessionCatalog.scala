@@ -37,7 +37,6 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Utils
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types.{DataType, MetadataBuilder, StringType, StructField, StructType}
-import org.apache.spark.util.SparkStringUtils
 
 /**
  * Converts resolved v2 commands to v1 if the catalog is the session catalog. Since the v2 commands
@@ -186,7 +185,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterDatabasePropertiesCommand(db, properties)
 
     case SetNamespaceLocation(ResolvedV1Database(db), location) if conf.useV1Command =>
-      if (SparkStringUtils.isEmpty(location)) {
+      if (CatalogV2Util.isBlankLocation(location)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location)
       }
       AlterDatabaseSetLocationCommand(db, location)
@@ -358,7 +357,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-      if (location.isDefined && location.get.isEmpty) {
+      if (location.exists(CatalogV2Util.isBlankLocation)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location.get)
       }
       CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
