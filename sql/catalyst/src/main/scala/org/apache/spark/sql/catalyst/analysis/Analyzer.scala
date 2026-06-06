@@ -3073,14 +3073,62 @@ class Analyzer(
         exprs: Seq[Expression],
         agg: Aggregate): (Seq[NamedExpression], Seq[Expression]) = {
       val extraAggExprs = new LinkedHashMap[Expression, NamedExpression]
+      val expandedToOriginalMap = buildExpandedToOriginalAttributeMap(agg)
       val transformed = exprs.map { e =>
         if (!e.resolved) {
           e
         } else {
-          buildAggExprList(e, agg, extraAggExprs)
+          val rewritten = if (expandedToOriginalMap.nonEmpty) {
+            rewriteExpandedAttributesInAggregates(e, expandedToOriginalMap)
+          } else {
+            e
+          }
+          buildAggExprList(rewritten, agg, extraAggExprs)
         }
       }
       (extraAggExprs.values().asScala.toSeq, transformed)
+    }
+
+    /**
+     * For GROUPING SETS / CUBE / ROLLUP, the plan below the Aggregate is
+     * Aggregate -> Expand -> Project -> child. The Project introduces aliases for the grouping
+     * columns, and the Expand produces new attributes that replace them. This method builds a
+     * mapping from expanded attribute ExprIds back to the original pre-expansion attributes, so
+     * that aggregate functions in HAVING / ORDER BY can reference the original columns rather than
+     * the expanded ones (which would fail to resolve against the Aggregate's child). Expression
+     * keys (e.g. `a + 1`) are safely skipped because aggregate functions reference the
+     * passthrough column, not the Expand-output expression attribute.
+     */
+    private def buildExpandedToOriginalAttributeMap(
+        agg: Aggregate): Map[ExprId, AttributeReference] = {
+      agg.child match {
+        case expand: Expand =>
+          expand.child match {
+            case project: Project =>
+              val groupByAliases = project.projectList.collect { case alias: Alias => alias }
+              groupByAliases.zip(agg.groupingExpressions).flatMap {
+                case (alias, expandedAttribute: AttributeReference)
+                    if alias.child.isInstanceOf[AttributeReference] =>
+                  Some(expandedAttribute.exprId ->
+                    alias.child.asInstanceOf[AttributeReference])
+                case _ => None
+              }.toMap
+            case _ => Map.empty
+          }
+        case _ => Map.empty
+      }
+    }
+
+    private def rewriteExpandedAttributesInAggregates(
+        expr: Expression,
+        mapping: Map[ExprId, AttributeReference]): Expression = {
+      expr.transformDown {
+        case ae: AggregateExpression =>
+          ae.transform {
+            case attr: AttributeReference if mapping.contains(attr.exprId) =>
+              mapping(attr.exprId)
+          }
+      }
     }
 
     private def buildAggExprList(
