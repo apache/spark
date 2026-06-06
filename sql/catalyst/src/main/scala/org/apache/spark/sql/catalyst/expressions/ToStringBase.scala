@@ -67,19 +67,12 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
     }
 
   // The Types Framework is the single integration point for framework types' cast-to-string. The
-  // nanosecond timestamp types render through the zone-aware hook, threading the session zoneId
-  // (zone-independent NTZ ignores it, LTZ renders in it). Other framework types (e.g. TimeType) are
-  // zone-independent and use the zone-less hook, so they never force a resolved zoneId
-  // (SPARK-57285).
-  private def castToString(from: DataType): Any => UTF8String = from match {
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-      val ops = TypeApiOps(from).get
-      acceptAny[Any](v => ops.formatUTF8(v, zoneId))
-    case _ =>
-      TypeApiOps(from)
-        .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
-        .getOrElse(castToStringDefault(from))
-  }
+  // session zone is threaded into the zone-aware hook; zone-independent types (e.g. TimeType,
+  // TIMESTAMP_NTZ nanos) ignore it while TIMESTAMP_LTZ nanos renders in it (SPARK-57285).
+  private def castToString(from: DataType): Any => UTF8String =
+    TypeApiOps(from)
+      .map(ops => acceptAny[Any](v => ops.formatUTF8(v, zoneId)))
+      .getOrElse(castToStringDefault(from))
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
