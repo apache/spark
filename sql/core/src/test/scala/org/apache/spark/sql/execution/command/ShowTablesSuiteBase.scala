@@ -40,6 +40,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
   override val command = "SHOW TABLES"
   protected def defaultNamespace: Seq[String]
   protected def expectedTableTypeInJson: String = "TABLE"
+  protected def expectsSessionTempViews: Boolean = true
 
   protected def runShowTablesSql(sqlText: String, expected: Seq[Row]): Unit = {
     val df = spark.sql(sqlText)
@@ -531,8 +532,12 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val names = tables.map(t => (t \ "name").extract[String])
         assert(names.distinct.length == names.length, s"Duplicate entries found: $names")
         val tempView = tables.find(t => (t \ "name").extract[String] == "tv")
-        assert(tempView.isDefined)
-        assert((tempView.get \ "isTemporary").extract[Boolean] == true)
+        if (expectsSessionTempViews) {
+          assert(tempView.isDefined)
+          assert((tempView.get \ "isTemporary").extract[Boolean] == true)
+        } else {
+          assert(tempView.isEmpty)
+        }
       }
     }
   }
@@ -551,20 +556,22 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
         val jsonStr = df.collect()(0).getString(0)
         val json = parse(jsonStr)
         val tables = (json \ "tables").asInstanceOf[JArray].arr
-        assert(tables.length == 2, s"Expected 2 entries (tbl + $localTmpViewName), got: $tables")
-
-        val names = tables.map(e => (e \ "name").extract[String])
-        assert(names.distinct.length == names.length, s"Duplicate entries found: $names")
 
         val tblEntry = tables.find(e => (e \ "name").extract[String] == "tbl")
         assert(tblEntry.isDefined)
         assert((tblEntry.get \ "isTemporary").extract[Boolean] == false)
         assert((tblEntry.get \ "type").extract[String] == expectedTableTypeInJson)
 
-        val tempViewEntry = tables.find(e => (e \ "name").extract[String] == localTmpViewName)
-        assert(tempViewEntry.isDefined)
-        assert((tempViewEntry.get \ "isTemporary").extract[Boolean] == true)
-        assert((tempViewEntry.get \ "type").extract[String] == "VIEW")
+        if (expectsSessionTempViews) {
+          assert(tables.length == 2)
+          val tempViewEntry =
+            tables.find(e => (e \ "name").extract[String] == localTmpViewName)
+          assert(tempViewEntry.isDefined)
+          assert((tempViewEntry.get \ "isTemporary").extract[Boolean] == true)
+          assert((tempViewEntry.get \ "type").extract[String] == "VIEW")
+        } else {
+          assert(tables.length == 1)
+        }
       }
     }
   }
@@ -685,7 +692,7 @@ trait ShowTablesSuiteBase extends QueryTest with DDLCommandTestUtils {
     }
   }
 
-  test("SHOW TABLES AS JSON with useV1Command") {
+  test("SHOW TABLES AS JSON produces same result for useV1Command true and false") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT) $defaultUsing")
       val query = s"SHOW TABLES IN $catalog.ns AS JSON"
