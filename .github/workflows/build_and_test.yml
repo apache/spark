@@ -1784,15 +1784,3 @@ jobs:
           cd ui-test
           npm install --save-dev
           node --experimental-vm-modules node_modules/.bin/jest
-
-  # TEMP for PR validation: exercise the python_hosted_runner_test.yml
-  # precompile changes on macos-26 as part of the PR builder. REVERT before
-  # marking this PR ready for review.
-  python-macos:
-    name: Python on macOS
-    uses: ./.github/workflows/python_hosted_runner_test.yml
-    with:
-      java: ${{ inputs.java }}
-      branch: ${{ inputs.branch }}
-      hadoop: ${{ inputs.hadoop }}
-      os: macos-26
