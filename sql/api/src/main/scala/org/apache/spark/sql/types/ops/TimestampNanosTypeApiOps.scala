@@ -31,11 +31,10 @@ import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
  * prefix; storage and formatting are identical.
  *
  * SCOPE (SPARK-57207): this issue wires physical representation, literals, row accessors, and
- * codegen class selection. Dedicated fractional-second string formatting is not implemented yet:
- * there is no TimestampFormatter for the nanos timestamp types. Until one lands, format() (and
- * the toSQLValue() that delegates to it) raises the user-facing
- * UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error rather than silently truncating to
- * microsecond precision.
+ * codegen class selection. CAST to STRING is implemented separately, zone-aware, in ToStringBase
+ * (SPARK-57256). The zone-less, type-level format() here (and the toSQLValue() that delegates to
+ * it) still raises the user-facing UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error, since LTZ
+ * rendering needs the session time zone that this op does not have.
  *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
@@ -50,10 +49,11 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
 
   // ==================== String Formatting ====================
 
-  // Fractional-second (nanosecond) string formatting is not implemented yet: there is no
-  // TimestampFormatter for the nanos timestamp types. Until one lands, formatting (CAST to STRING,
-  // EXPLAIN / SHOW output, and SQL-literal rendering via toSQLValue) raises a user-facing
-  // unsupported-feature error rather than silently truncating to microsecond precision.
+  // CAST to STRING for the nanosecond timestamp types is handled zone-aware by ToStringBase
+  // (SPARK-57256), alongside the microsecond timestamp types, because LTZ rendering depends on the
+  // session time zone that this zone-less, type-level formatter does not have. The remaining
+  // zone-less callers (EXPLAIN plan output and SQL-literal rendering via toSQLValue) still raise a
+  // user-facing unsupported-feature error here rather than silently truncating to microseconds.
   override def format(v: Any): String =
     throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
 

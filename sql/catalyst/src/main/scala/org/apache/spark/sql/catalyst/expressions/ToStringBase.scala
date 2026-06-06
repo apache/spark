@@ -24,13 +24,12 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharCodegenUtils, DateFormatter, FractionTimeFormatter, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
-import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.UTF8StringBuilder
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.SparkStringUtils
 
@@ -67,10 +66,16 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case NoConstraint => castToString(from)
     }
 
-  private def castToString(from: DataType): Any => UTF8String =
-    TypeApiOps(from)
-      .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
-      .getOrElse(castToStringDefault(from))
+  private def castToString(from: DataType): Any => UTF8String = from match {
+    // Nanosecond timestamp string formatting is zone-aware (LTZ renders in the session time zone),
+    // so it lives in castToStringDefault alongside the microsecond timestamp types rather than the
+    // zone-less Types Framework formatter (SPARK-57256).
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => castToStringDefault(from)
+    case _ =>
+      TypeApiOps(from)
+        .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
+        .getOrElse(castToStringDefault(from))
+  }
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
@@ -82,6 +87,12 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       acceptAny[Long](t => UTF8String.fromString(timestampFormatter.format(t)))
     case TimestampNTZType =>
       acceptAny[Long](t => UTF8String.fromString(timestampNTZFormatter.format(t)))
+    case t: TimestampLTZNanosType =>
+      acceptAny[TimestampNanosVal](v =>
+        UTF8String.fromString(timestampFormatter.formatNanos(v, t.precision)))
+    case t: TimestampNTZNanosType =>
+      acceptAny[TimestampNanosVal](v =>
+        UTF8String.fromString(timestampNTZFormatter.formatWithoutTimeZoneNanos(v, t.precision)))
     case _: TimeType =>
       acceptAny[Long](t => UTF8String.fromString(timeFormatter.format(t)))
     case ArrayType(et, _) =>
@@ -235,6 +246,18 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+      case t: TimestampLTZNanosType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
+          timestampFormatter.getClass)
+        (c, evPrim) =>
+          code"$evPrim = UTF8String.fromString($tf.formatNanos($c, ${t.precision}));"
+      case t: TimestampNTZNanosType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
+          timestampNTZFormatter.getClass)
+        (c, evPrim) =>
+          code"$evPrim = UTF8String.fromString($tf.formatWithoutTimeZoneNanos($c, ${t.precision}));"
       case _: TimeType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timeFormatter", timeFormatter),
@@ -306,13 +329,6 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString($c.toPlainString());"
       case _: StringType =>
         (c, evPrim) => code"$evPrim = $c;"
-      // Fractional-second (nanosecond) timestamp formatting is not implemented yet: there is no
-      // TimestampFormatter for the nanos timestamp types. The interpreted path raises this via the
-      // Types Framework (castToString -> TypeApiOps.format); the codegen path has no framework
-      // hook, so it raises the same user-facing error directly until a formatter lands
-      // (SPARK-57207).
-      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-        throw DataTypeErrors.cannotConvertNanosTimestampToStringError(from)
       case _ =>
         (c, evPrim) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
