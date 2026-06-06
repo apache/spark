@@ -127,26 +127,17 @@ class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType) extends Timestam
   override protected def sqlTypeName: String = "TIMESTAMP_LTZ"
   override protected def precision: Int = t.precision
 
-  // LTZ rendering depends on the session time zone. The zoneId is fixed for a given cast
-  // expression, so cache the formatter and rebuild it only when the zone changes.
-  @transient private var cachedZone: ZoneId = _
-  @transient private var cachedFormatter: TimestampFormatter = _
-
-  private def formatterFor(zoneId: ZoneId): TimestampFormatter = {
-    if (cachedFormatter == null || cachedZone != zoneId) {
-      cachedZone = zoneId
-      cachedFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-    }
-    cachedFormatter
-  }
-
   // Zone-less callers (EXPLAIN, SQL-literal) have no session zone to render LTZ in, so they still
   // raise rather than guessing a default.
   override def format(v: Any): String =
     throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
 
-  override def format(v: Any, zoneId: ZoneId): String =
-    formatterFor(zoneId).formatNanos(v.asInstanceOf[TimestampNanosVal], precision)
+  // LTZ rendering depends on the session time zone. The fraction formatter has its own internal
+  // cache, so build it per call rather than caching it here.
+  override def format(v: Any, zoneId: ZoneId): String = {
+    val formatter = TimestampFormatter.getFractionFormatter(zoneId)
+    formatter.formatNanos(v.asInstanceOf[TimestampNanosVal], precision)
+  }
 
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampLTZNanosType (SPARK-57033):
   // maps to java.time.Instant with the column precision.
