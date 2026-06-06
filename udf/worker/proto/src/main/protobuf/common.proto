@@ -26,7 +26,7 @@ option java_multiple_files = true;
 // The UDF in & output data format.
 enum UDFWorkerDataFormat {
     UDF_WORKER_DATA_FORMAT_UNSPECIFIED = 0;
-    
+
     // The worker accepts and produces Apache arrow batches.
     ARROW = 1;
 }
@@ -42,7 +42,7 @@ enum UDFWorkerDataFormat {
 enum UDFProtoCommunicationPattern {
     UDF_PROTO_COMMUNICATION_PATTERN_UNSPECIFIED = 0;
 
-    // Data exachanged as a bidrectional
+    // Data exchanged as a bidirectional
     // stream of bytes.
     BIDIRECTIONAL_STREAMING = 1;
 }

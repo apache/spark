@@ -37,3 +37,27 @@ DROP TABLE t1
 struct<>
 -- !query output
 
+
+
+-- !query
+SELECT col.a FROM (SELECT null AS col) t
+-- !query schema
+struct<a:void>
+-- !query output
+NULL
+
+
+-- !query
+SELECT col[0] FROM (SELECT null AS col) t
+-- !query schema
+struct<col[0]:void>
+-- !query output
+NULL
+
+
+-- !query
+SELECT col['key'] FROM (SELECT null AS col) t
+-- !query schema
+struct<col[key]:void>
+-- !query output
+NULL

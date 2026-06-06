@@ -347,6 +347,16 @@ class Dataset[T] private[sql] (
   }
 
   /** @inheritdoc */
+  def zip(other: sql.Dataset[_]): DataFrame = {
+    checkSameSparkSession(other)
+    sparkSession.newDataFrame { builder =>
+      builder.getZipBuilder
+        .setLeft(plan.getRoot)
+        .setRight(other.asInstanceOf[Dataset[_]].plan.getRoot)
+    }
+  }
+
+  /** @inheritdoc */
   def joinWith[U](other: sql.Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     val joinTypeValue = toJoinType(joinType, skipSemiAnti = true)
     val (leftNullable, rightNullable) = joinTypeValue match {

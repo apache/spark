@@ -22,7 +22,7 @@ import java.time.{Duration, LocalDate, LocalDateTime, LocalTime, Period}
 import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
@@ -82,7 +83,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     atomicTypes.foreach(dt => checkNullCast(NullType, dt))
-    (atomicTypes ++ timeTypes).foreach(dt => checkNullCast(dt, StringType))
+    val timestampNanosTypes = Seq(
+      TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION),
+      TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION),
+      TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION),
+      TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
+    (atomicTypes ++ timeTypes ++ timestampNanosTypes).foreach(dt => checkNullCast(dt, StringType))
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
@@ -1021,6 +1027,172 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     // The input string can contain date only
     checkEvaluation(cast("2021-06-17", TimestampNTZType),
       LocalDateTime.of(2021, 6, 17, 0, 0))
+  }
+
+  test("SPARK-57211: cast string to timestamp_ltz with nanosecond precision") {
+    foreachNanosPrecision { precision =>
+      val truncate = nanoOfSecTruncator(precision)
+      outstandingZoneIds.foreach { zid =>
+        specialNanosTs.foreach { s =>
+          val ldt = parseSpecialNanosNTZ(s).withNano(truncate(parseSpecialNanosNTZ(s).getNano))
+          val expected = instantToNanosVal(ldt.atZone(zid).toInstant)
+          checkEvaluation(
+            cast(Literal(s), TimestampLTZNanosType(precision), Option(zid.getId)),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57211: cast string to timestamp_ntz with nanosecond precision") {
+    foreachNanosPrecision { precision =>
+      val truncate = nanoOfSecTruncator(precision)
+      specialNanosTs.foreach { s =>
+        val ldt = parseSpecialNanosNTZ(s).withNano(truncate(parseSpecialNanosNTZ(s).getNano))
+        val expected = localDateTimeToNanosVal(ldt)
+        // NTZ result is independent of the session time zone.
+        checkEvaluation(cast(Literal(s), TimestampNTZNanosType(precision)), expected)
+        // A zone suffix is discarded (allowTimeZone = true), mirroring micro TIMESTAMP_NTZ.
+        checkEvaluation(cast(Literal(s + "Z"), TimestampNTZNanosType(precision)), expected)
+      }
+    }
+  }
+
+  test("SPARK-57211: nanosecond timestamp cast requires the preview flag") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      val expectedParams = Map(
+        "featureName" -> "Nanosecond-precision timestamp types",
+        "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+        "configValue" -> "true")
+      Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { to =>
+        checkError(
+          exception = intercept[SparkException] {
+            cast(Literal("2020-01-01 00:00:00"), to, UTC_OPT).checkInputDataTypes()
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = expectedParams)
+      }
+    }
+  }
+
+  test("SPARK-57256: cast timestamp_ntz with nanosecond precision to string") {
+    // NTZ rendering uses the UTC wall-clock grid and is independent of the session time zone.
+    def ntz(ldt: LocalDateTime, precision: Int, zoneId: Option[String]): Cast =
+      cast(Literal.create(localDateTimeToNanosVal(ldt), TimestampNTZNanosType(precision)),
+        StringType, zoneId)
+
+    outstandingZoneIds.foreach { zid =>
+      val tz = Option(zid.getId)
+      val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+      // Sub-precision digits are floored, then trailing zeros are trimmed.
+      checkEvaluation(ntz(ldt, 9, tz), "2020-01-01 00:00:00.123456789")
+      checkEvaluation(ntz(ldt, 8, tz), "2020-01-01 00:00:00.12345678")
+      checkEvaluation(ntz(ldt, 7, tz), "2020-01-01 00:00:00.1234567")
+
+      // nanosWithinMicro boundaries 0 and 999.
+      checkEvaluation(
+        ntz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456000), 9, tz),
+        "2020-01-01 00:00:00.123456")
+      checkEvaluation(
+        ntz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456999), 9, tz),
+        "2020-01-01 00:00:00.123456999")
+
+      // An all-zero fraction trims to no fractional part at all.
+      checkEvaluation(ntz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 0), 9, tz),
+        "2020-01-01 00:00:00")
+
+      // Pre-epoch and year-9999 boundaries.
+      checkEvaluation(
+        ntz(LocalDateTime.of(1969, 12, 31, 23, 59, 59, 123456789), 9, tz),
+        "1969-12-31 23:59:59.123456789")
+      checkEvaluation(
+        ntz(LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999), 9, tz),
+        "9999-12-31 23:59:59.999999999")
+
+      // Null input.
+      checkEvaluation(
+        cast(Literal.create(null, TimestampNTZNanosType(9)), StringType, tz), null)
+    }
+  }
+
+  test("SPARK-57256: cast timestamp_ltz with nanosecond precision to string") {
+    // The physical value is an epoch instant (built here from a UTC wall clock); the string is
+    // rendered in the session time zone.
+    def ltz(ldt: LocalDateTime, precision: Int, zoneId: String): Cast =
+      cast(Literal.create(localDateTimeToNanosVal(ldt), TimestampLTZNanosType(precision)),
+        StringType, Option(zoneId))
+
+    val ldt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+    // UTC session zone: the wall clock matches the UTC instant. Sub-precision digits are floored
+    // and trailing zeros trimmed.
+    checkEvaluation(ltz(ldt, 9, "UTC"), "2020-01-01 00:00:00.123456789")
+    checkEvaluation(ltz(ldt, 8, "UTC"), "2020-01-01 00:00:00.12345678")
+    checkEvaluation(ltz(ldt, 7, "UTC"), "2020-01-01 00:00:00.1234567")
+
+    // A non-UTC session zone shifts the wall clock; the fractional second is unaffected.
+    checkEvaluation(ltz(ldt, 9, "America/Los_Angeles"), "2019-12-31 16:00:00.123456789")
+    checkEvaluation(ltz(ldt, 9, "Asia/Kolkata"), "2020-01-01 05:30:00.123456789")
+
+    // DST spring-forward boundary in America/Los_Angeles: 2020-03-08 02:00 PST -> 03:00 PDT.
+    // The UTC instant 10:00:00 lands at 03:00:00 PDT (UTC-7); fractional part is unaffected.
+    checkEvaluation(
+      ltz(LocalDateTime.of(2020, 3, 8, 10, 0, 0, 123456789), 9, "America/Los_Angeles"),
+      "2020-03-08 03:00:00.123456789")
+
+    // nanosWithinMicro boundaries 0 and 999 (under UTC).
+    checkEvaluation(
+      ltz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456000), 9, "UTC"),
+      "2020-01-01 00:00:00.123456")
+    checkEvaluation(
+      ltz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456999), 9, "UTC"),
+      "2020-01-01 00:00:00.123456999")
+
+    // An all-zero fraction trims to no fractional part at all.
+    checkEvaluation(ltz(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 0), 9, "UTC"),
+      "2020-01-01 00:00:00")
+
+    // Pre-epoch and year-9999 boundaries (under UTC).
+    checkEvaluation(
+      ltz(LocalDateTime.of(1969, 12, 31, 23, 59, 59, 123456789), 9, "UTC"),
+      "1969-12-31 23:59:59.123456789")
+    checkEvaluation(
+      ltz(LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999), 9, "UTC"),
+      "9999-12-31 23:59:59.999999999")
+
+    // Null input.
+    checkEvaluation(
+      cast(Literal.create(null, TimestampLTZNanosType(9)), StringType, UTC_OPT), null)
+  }
+
+  test("SPARK-57256: cast complex types with nanosecond timestamps to string") {
+    val ntzElem = Literal.create(
+      localDateTimeToNanosVal(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)),
+      TimestampNTZNanosType(9))
+    val ltzElem = Literal.create(
+      localDateTimeToNanosVal(LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)),
+      TimestampLTZNanosType(9))
+
+    // array<timestamp_ntz_nanos> with a null element exercises the recursive element path
+    // (including nullString) in ToStringBase. NTZ is independent of the session time zone.
+    checkEvaluation(
+      cast(CreateArray(Seq(ntzElem, Literal.create(null, TimestampNTZNanosType(9)))), StringType),
+      "[2020-01-01 00:00:00.123456789, null]")
+
+    // array<timestamp_ltz_nanos> is rendered in the session time zone (here UTC).
+    checkEvaluation(
+      cast(
+        CreateArray(Seq(ltzElem, Literal.create(null, TimestampLTZNanosType(9)))),
+        StringType,
+        UTC_OPT),
+      "[2020-01-01 00:00:00.123456789, null]")
+
+    // A struct nesting both nanosecond timestamp variants.
+    checkEvaluation(
+      cast(
+        CreateNamedStruct(Seq(Literal("ntz"), ntzElem, Literal("ltz"), ltzElem)),
+        StringType,
+        UTC_OPT),
+      "{2020-01-01 00:00:00.123456789, 2020-01-01 00:00:00.123456789}")
   }
 
   test("SPARK-35112: Cast string to day-time interval") {

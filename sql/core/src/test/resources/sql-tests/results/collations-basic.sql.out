@@ -1784,3 +1784,1255 @@ drop table t4
 struct<>
 -- !query output
 
+
+
+-- !query
+select 'aaa' collate utf8_binary
+-- !query schema
+struct<collate(aaa, utf8_binary):string collate UTF8_BINARY>
+-- !query output
+aaa
+
+
+-- !query
+select 'aaa' collate utf8_lcase
+-- !query schema
+struct<collate(aaa, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+aaa
+
+
+-- !query
+select 'aaa' collate unicode
+-- !query schema
+struct<collate(aaa, unicode):string collate UNICODE>
+-- !query output
+aaa
+
+
+-- !query
+select 'aaa' collate unicode_ci
+-- !query schema
+struct<collate(aaa, unicode_ci):string collate UNICODE_CI>
+-- !query output
+aaa
+
+
+-- !query
+select 'aaa' collate uTf8_BiNaRy
+-- !query schema
+struct<collate(aaa, uTf8_BiNaRy):string collate UTF8_BINARY>
+-- !query output
+aaa
+
+
+-- !query
+select 'aaa' collate uNicOde
+-- !query schema
+struct<collate(aaa, uNicOde):string collate UNICODE>
+-- !query output
+aaa
+
+
+-- !query
+select 'aaa' collate UNICODE_ci
+-- !query schema
+struct<collate(aaa, UNICODE_ci):string collate UNICODE_CI>
+-- !query output
+aaa
+
+
+-- !query
+select 'aaa' collate UtF8_lCaSE_rtRIM
+-- !query schema
+struct<collate(aaa, UtF8_lCaSE_rtRIM):string collate UTF8_LCASE_RTRIM>
+-- !query output
+aaa
+
+
+-- !query
+select collation('aaa' collate utf8_binary)
+-- !query schema
+struct<collation(collate(aaa, utf8_binary)):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_BINARY
+
+
+-- !query
+select collation('aaa' collate utf8_lcase)
+-- !query schema
+struct<collation(collate(aaa, utf8_lcase)):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_LCASE
+
+
+-- !query
+select collation('aaa' collate unicode)
+-- !query schema
+struct<collation(collate(aaa, unicode)):string>
+-- !query output
+SYSTEM.BUILTIN.UNICODE
+
+
+-- !query
+select collation('aaa' collate unicode_ci)
+-- !query schema
+struct<collation(collate(aaa, unicode_ci)):string>
+-- !query output
+SYSTEM.BUILTIN.UNICODE_CI
+
+
+-- !query
+select collation('aaa' collate unicode_ci_rtrim)
+-- !query schema
+struct<collation(collate(aaa, unicode_ci_rtrim)):string>
+-- !query output
+SYSTEM.BUILTIN.UNICODE_CI_RTRIM
+
+
+-- !query
+select collation('aaa' collate utf8_lcase_rtrim)
+-- !query schema
+struct<collation(collate(aaa, utf8_lcase_rtrim)):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_LCASE_RTRIM
+
+
+-- !query
+select collation('aaa' collate utf8_binary_rtrim)
+-- !query schema
+struct<collation(collate(aaa, utf8_binary_rtrim)):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_BINARY_RTRIM
+
+
+-- !query
+select collation('aaa')
+-- !query schema
+struct<collation(aaa):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_BINARY
+
+
+-- !query
+select collate('aaa', 'utf8_binary')
+-- !query schema
+struct<collate(aaa, utf8_binary):string collate UTF8_BINARY>
+-- !query output
+aaa
+
+
+-- !query
+select collate('aaa', 'utf8_lcase')
+-- !query schema
+struct<collate(aaa, utf8_lcase):string collate UTF8_LCASE>
+-- !query output
+aaa
+
+
+-- !query
+select collate('aaa', 'utf8_binary_rtrim')
+-- !query schema
+struct<collate(aaa, utf8_binary_rtrim):string collate UTF8_BINARY_RTRIM>
+-- !query output
+aaa
+
+
+-- !query
+select collate('aaa', 'utf8_lcase_rtrim')
+-- !query schema
+struct<collate(aaa, utf8_lcase_rtrim):string collate UTF8_LCASE_RTRIM>
+-- !query output
+aaa
+
+
+-- !query
+select 'aaa' collate utf8_binary = 'AAA' collate utf8_binary
+-- !query schema
+struct<(collate(aaa, utf8_binary) = collate(AAA, utf8_binary)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate utf8_binary = 'aaa' collate utf8_binary
+-- !query schema
+struct<(collate(aaa, utf8_binary) = collate(aaa, utf8_binary)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate utf8_binary_rtrim = 'AAA' collate utf8_binary_rtrim
+-- !query schema
+struct<(collate(aaa, utf8_binary_rtrim) = collate(AAA, utf8_binary_rtrim)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate utf8_binary_rtrim = 'aaa  ' collate utf8_binary_rtrim
+-- !query schema
+struct<(collate(aaa, utf8_binary_rtrim) = collate(aaa  , utf8_binary_rtrim)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate utf8_lcase = 'aaa' collate utf8_lcase
+-- !query schema
+struct<(collate(aaa, utf8_lcase) = collate(aaa, utf8_lcase)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate utf8_lcase = 'AAA' collate utf8_lcase
+-- !query schema
+struct<(collate(aaa, utf8_lcase) = collate(AAA, utf8_lcase)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate utf8_lcase = 'bbb' collate utf8_lcase
+-- !query schema
+struct<(collate(aaa, utf8_lcase) = collate(bbb, utf8_lcase)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate utf8_lcase_rtrim = 'AAA  ' collate utf8_lcase_rtrim
+-- !query schema
+struct<(collate(aaa, utf8_lcase_rtrim) = collate(AAA  , utf8_lcase_rtrim)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate utf8_lcase_rtrim = 'bbb' collate utf8_lcase_rtrim
+-- !query schema
+struct<(collate(aaa, utf8_lcase_rtrim) = collate(bbb, utf8_lcase_rtrim)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate unicode = 'aaa' collate unicode
+-- !query schema
+struct<(collate(aaa, unicode) = collate(aaa, unicode)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate unicode = 'AAA' collate unicode
+-- !query schema
+struct<(collate(aaa, unicode) = collate(AAA, unicode)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa  ' collate unicode_rtrim = 'aaa ' collate unicode_rtrim
+-- !query schema
+struct<(collate(aaa  , unicode_rtrim) = collate(aaa , unicode_rtrim)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate unicode_rtrim = 'AAA' collate unicode_rtrim
+-- !query schema
+struct<(collate(aaa, unicode_rtrim) = collate(AAA, unicode_rtrim)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate unicode_CI = 'aaa' collate unicode_CI
+-- !query schema
+struct<(collate(aaa, unicode_CI) = collate(aaa, unicode_CI)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate unicode_CI = 'AAA' collate unicode_CI
+-- !query schema
+struct<(collate(aaa, unicode_CI) = collate(AAA, unicode_CI)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate unicode_CI = 'bbb' collate unicode_CI
+-- !query schema
+struct<(collate(aaa, unicode_CI) = collate(bbb, unicode_CI)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate unicode_CI_rtrim = 'aaa' collate unicode_CI_rtrim
+-- !query schema
+struct<(collate(aaa, unicode_CI_rtrim) = collate(aaa, unicode_CI_rtrim)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa ' collate unicode_CI_rtrim = 'AAA  ' collate unicode_CI_rtrim
+-- !query schema
+struct<(collate(aaa , unicode_CI_rtrim) = collate(AAA  , unicode_CI_rtrim)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate unicode_CI_rtrim = 'bbb' collate unicode_CI_rtrim
+-- !query schema
+struct<(collate(aaa, unicode_CI_rtrim) = collate(bbb, unicode_CI_rtrim)):boolean>
+-- !query output
+false
+
+
+-- !query
+select collate('aaa', 'utf8_binary') = collate('AAA', 'utf8_binary')
+-- !query schema
+struct<(collate(aaa, utf8_binary) = collate(AAA, utf8_binary)):boolean>
+-- !query output
+false
+
+
+-- !query
+select collate('aaa', 'utf8_lcase') = collate('AAA', 'utf8_lcase')
+-- !query schema
+struct<(collate(aaa, utf8_lcase) = collate(AAA, utf8_lcase)):boolean>
+-- !query output
+true
+
+
+-- !query
+select collate('aaa', 'unicode_CI') = collate('bbb', 'unicode_CI')
+-- !query schema
+struct<(collate(aaa, unicode_CI) = collate(bbb, unicode_CI)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'AAA' collate utf8_binary < 'aaa' collate utf8_binary
+-- !query schema
+struct<(collate(AAA, utf8_binary) < collate(aaa, utf8_binary)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate utf8_binary < 'aaa' collate utf8_binary
+-- !query schema
+struct<(collate(aaa, utf8_binary) < collate(aaa, utf8_binary)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate utf8_binary < 'BBB' collate utf8_binary
+-- !query schema
+struct<(collate(aaa, utf8_binary) < collate(BBB, utf8_binary)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa ' collate utf8_binary_rtrim < 'aaa  ' collate utf8_binary_rtrim
+-- !query schema
+struct<(collate(aaa , utf8_binary_rtrim) < collate(aaa  , utf8_binary_rtrim)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate utf8_lcase < 'aaa' collate utf8_lcase
+-- !query schema
+struct<(collate(aaa, utf8_lcase) < collate(aaa, utf8_lcase)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'AAA' collate utf8_lcase < 'aaa' collate utf8_lcase
+-- !query schema
+struct<(collate(AAA, utf8_lcase) < collate(aaa, utf8_lcase)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate utf8_lcase < 'bbb' collate utf8_lcase
+-- !query schema
+struct<(collate(aaa, utf8_lcase) < collate(bbb, utf8_lcase)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'AAA  ' collate utf8_lcase_rtrim < 'aaa' collate utf8_lcase_rtrim
+-- !query schema
+struct<(collate(AAA  , utf8_lcase_rtrim) < collate(aaa, utf8_lcase_rtrim)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate unicode < 'aaa' collate unicode
+-- !query schema
+struct<(collate(aaa, unicode) < collate(aaa, unicode)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate unicode < 'AAA' collate unicode
+-- !query schema
+struct<(collate(aaa, unicode) < collate(AAA, unicode)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa' collate unicode < 'BBB' collate unicode
+-- !query schema
+struct<(collate(aaa, unicode) < collate(BBB, unicode)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa ' collate unicode_rtrim < 'aaa' collate unicode_rtrim
+-- !query schema
+struct<(collate(aaa , unicode_rtrim) < collate(aaa, unicode_rtrim)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate unicode_CI < 'aaa' collate unicode_CI
+-- !query schema
+struct<(collate(aaa, unicode_CI) < collate(aaa, unicode_CI)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate unicode_CI < 'AAA' collate unicode_CI
+-- !query schema
+struct<(collate(aaa, unicode_CI) < collate(AAA, unicode_CI)):boolean>
+-- !query output
+false
+
+
+-- !query
+select 'aaa' collate unicode_CI < 'bbb' collate unicode_CI
+-- !query schema
+struct<(collate(aaa, unicode_CI) < collate(bbb, unicode_CI)):boolean>
+-- !query output
+true
+
+
+-- !query
+select 'aaa ' collate unicode_CI_rtrim < 'aaa' collate unicode_CI_rtrim
+-- !query schema
+struct<(collate(aaa , unicode_CI_rtrim) < collate(aaa, unicode_CI_rtrim)):boolean>
+-- !query output
+false
+
+
+-- !query
+select collate('AAA', 'utf8_binary') < collate('aaa', 'utf8_binary')
+-- !query schema
+struct<(collate(AAA, utf8_binary) < collate(aaa, utf8_binary)):boolean>
+-- !query output
+true
+
+
+-- !query
+select collate('aaa', 'utf8_lcase') < collate('bbb', 'utf8_lcase')
+-- !query schema
+struct<(collate(aaa, utf8_lcase) < collate(bbb, utf8_lcase)):boolean>
+-- !query output
+true
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('AAA'), ('aaa')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UTF8_BINARY>
+-- !query output
+1	AAA
+1	aaa
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('aaa'), ('aaa')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UTF8_BINARY>
+-- !query output
+2	aaa
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_binary') as c from values ('aaa'), ('bbb')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UTF8_BINARY>
+-- !query output
+1	aaa
+1	bbb
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_binary_rtrim') as c from values ('aaa'), ('aaa ')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UTF8_BINARY_RTRIM>
+-- !query output
+2	aaa
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('aaa'), ('aaa')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UTF8_LCASE>
+-- !query output
+2	aaa
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('AAA'), ('aaa')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UTF8_LCASE>
+-- !query output
+2	AAA
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_lcase') as c from values ('aaa'), ('bbb')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UTF8_LCASE>
+-- !query output
+1	aaa
+1	bbb
+
+
+-- !query
+select count(*), c from (select collate(col1, 'utf8_lcase_rtrim') as c from values ('aaa'), ('AAA  ')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UTF8_LCASE_RTRIM>
+-- !query output
+2	aaa
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode') as c from values ('AAA'), ('aaa')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UNICODE>
+-- !query output
+1	aaa
+1	AAA
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode') as c from values ('aaa'), ('aaa')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UNICODE>
+-- !query output
+2	aaa
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode') as c from values ('aaa'), ('bbb')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UNICODE>
+-- !query output
+1	aaa
+1	bbb
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_rtrim') as c from values ('aaa'), ('aaa ')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UNICODE_RTRIM>
+-- !query output
+2	aaa
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('aaa'), ('aaa')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UNICODE_CI>
+-- !query output
+2	aaa
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('AAA'), ('aaa')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UNICODE_CI>
+-- !query output
+2	AAA
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_CI') as c from values ('aaa'), ('bbb')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UNICODE_CI>
+-- !query output
+1	aaa
+1	bbb
+
+
+-- !query
+select count(*), c from (select collate(col1, 'unicode_CI_rtrim') as c from values ('aaa'), ('AAA ')) t group by c order by c
+-- !query schema
+struct<count(1):bigint,c:string collate UNICODE_CI_RTRIM>
+-- !query output
+2	aaa
+
+
+-- !query
+SELECT collation(cast('a' as string collate utf8_lcase))
+-- !query schema
+struct<collation(CAST(a AS STRING COLLATE UTF8_LCASE)):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_LCASE
+
+
+-- !query
+SELECT collation('a' :: string collate utf8_lcase)
+-- !query schema
+struct<collation(CAST(a AS STRING COLLATE UTF8_LCASE)):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_LCASE
+
+
+-- !query
+SELECT cast(1 as string)
+-- !query schema
+struct<CAST(1 AS STRING):string>
+-- !query output
+1
+
+
+-- !query
+SELECT cast('A' as string)
+-- !query schema
+struct<CAST(A AS STRING):string>
+-- !query output
+A
+
+
+-- !query
+select reverse('abc' collate utf8_lcase)
+-- !query schema
+struct<reverse(collate(abc, utf8_lcase)):string collate UTF8_LCASE>
+-- !query output
+cba
+
+
+-- !query
+select reverse(array('a' collate utf8_lcase, 'b' collate utf8_lcase))
+-- !query schema
+struct<reverse(array(collate(a, utf8_lcase), collate(b, utf8_lcase))):array<string collate UTF8_LCASE>>
+-- !query output
+["b","a"]
+
+
+-- !query
+select array_join(array('a' collate utf8_lcase, 'b' collate utf8_lcase), ', ' collate utf8_lcase)
+-- !query schema
+struct<array_join(array(collate(a, utf8_lcase), collate(b, utf8_lcase)), collate(, , utf8_lcase)):string collate UTF8_LCASE>
+-- !query output
+a, b
+
+
+-- !query
+select array_join(array('a' collate utf8_lcase, 'b' collate utf8_lcase, null), ', ' collate utf8_lcase, 'c' collate utf8_lcase)
+-- !query schema
+struct<array_join(array(collate(a, utf8_lcase), collate(b, utf8_lcase), NULL), collate(, , utf8_lcase), collate(c, utf8_lcase)):string collate UTF8_LCASE>
+-- !query output
+a, b, c
+
+
+-- !query
+select concat('a' collate utf8_lcase, 'b' collate utf8_lcase)
+-- !query schema
+struct<concat(collate(a, utf8_lcase), collate(b, utf8_lcase)):string collate UTF8_LCASE>
+-- !query output
+ab
+
+
+-- !query
+select concat(array('a' collate utf8_lcase, 'b' collate utf8_lcase))
+-- !query schema
+struct<concat(array(collate(a, utf8_lcase), collate(b, utf8_lcase))):array<string collate UTF8_LCASE>>
+-- !query output
+["a","b"]
+
+
+-- !query
+select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)['A' collate utf8_lcase]
+-- !query schema
+struct<map(collate(a, utf8_lcase), 1, collate(b, utf8_lcase), 2)[collate(A, utf8_lcase)]:int>
+-- !query output
+1
+
+
+-- !query
+select map('a' collate utf8_lcase, 1, 'b' collate utf8_lcase, 2)['A']
+-- !query schema
+struct<map(collate(a, utf8_lcase), 1, collate(b, utf8_lcase), 2)[A]:int>
+-- !query output
+1
+
+
+-- !query
+SELECT 'c' = 'ć' COLLATE SR_Latn_AI
+-- !query schema
+struct<('c' collate sr_Latn_AI = collate(ć, SR_Latn_AI)):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT 'c' = 'ć' COLLATE SR_AI
+-- !query schema
+struct<('c' collate sr_AI = collate(ć, SR_AI)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT 'ć' = 'č' COLLATE SR_Latn_AI
+-- !query schema
+struct<('ć' collate sr_Latn_AI = collate(č, SR_Latn_AI)):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT 'ć' = 'č' COLLATE SR_AI
+-- !query schema
+struct<('ć' collate sr_AI = collate(č, SR_AI)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT 'C' = 'Ć' COLLATE SR_Latn_AI
+-- !query schema
+struct<('C' collate sr_Latn_AI = collate(Ć, SR_Latn_AI)):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT 'C' = 'Ć' COLLATE SR_AI
+-- !query schema
+struct<('C' collate sr_AI = collate(Ć, SR_AI)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT 's' = 'š' COLLATE SR_Latn_AI
+-- !query schema
+struct<('s' collate sr_Latn_AI = collate(š, SR_Latn_AI)):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT 's' = 'š' COLLATE SR_AI
+-- !query schema
+struct<('s' collate sr_AI = collate(š, SR_AI)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT 'z' = 'ž' COLLATE SR_Latn_AI
+-- !query schema
+struct<('z' collate sr_Latn_AI = collate(ž, SR_Latn_AI)):boolean>
+-- !query output
+false
+
+
+-- !query
+SELECT 'z' = 'ž' COLLATE SR_AI
+-- !query schema
+struct<('z' collate sr_AI = collate(ž, SR_AI)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT collation('a' collate system.builtin.UTF8_BINARY)
+-- !query schema
+struct<collation(collate(a, UTF8_BINARY)):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_BINARY
+
+
+-- !query
+SELECT collation('a' collate system.builtin.UTF8_LCASE)
+-- !query schema
+struct<collation(collate(a, UTF8_LCASE)):string>
+-- !query output
+SYSTEM.BUILTIN.UTF8_LCASE
+
+
+-- !query
+SELECT collation('a' collate system.builtin.UNICODE)
+-- !query schema
+struct<collation(collate(a, UNICODE)):string>
+-- !query output
+SYSTEM.BUILTIN.UNICODE
+
+
+-- !query
+SELECT collation('a' collate system.builtin.UNICODE_CI_AI)
+-- !query schema
+struct<collation(collate(a, UNICODE_CI_AI)):string>
+-- !query output
+SYSTEM.BUILTIN.UNICODE_CI_AI
+
+
+-- !query
+SELECT 'a' collate sYstEm.bUiltIn.utf8_lCAse = 'A'
+-- !query schema
+struct<(collate(a, utf8_lCAse) = 'A' collate UTF8_LCASE):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT contains('a' collate system.builtin.UTF8_LCASE, 'A' collate UTF8_LCASE)
+-- !query schema
+struct<contains(collate(a, UTF8_LCASE), collate(A, UTF8_LCASE)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT startswith('a' collate system.builtin.UNICODE_CI, 'A' collate UNICODE_CI)
+-- !query schema
+struct<startswith(collate(a, UNICODE_CI), collate(A, UNICODE_CI)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT endswith('abc' collate system.builtin.UNICODE_CI, 'C' collate UNICODE_CI)
+-- !query schema
+struct<endswith(collate(abc, UNICODE_CI), collate(C, UNICODE_CI)):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT array_append(array('a', 'b'), 'c' COLLATE UNICODE)
+-- !query schema
+struct<array_append(array(a, b), collate(c, UNICODE)):array<string collate UNICODE>>
+-- !query output
+["a","b","c"]
+
+
+-- !query
+SELECT typeof(array('a' COLLATE UNICODE, 'b')[1])
+-- !query schema
+struct<typeof(array(collate(a, UNICODE), 'b' collate UNICODE)[1]):string>
+-- !query output
+string collate UNICODE
+
+
+-- !query
+select map('a' COLLATE UTF8_LCASE, 'b', 'c', 'c')
+-- !query schema
+struct<map(collate(a, UTF8_LCASE), b, 'c' collate UTF8_LCASE, c):map<string collate UTF8_LCASE,string>>
+-- !query output
+{"a":"b","c":"c"}
+
+
+-- !query
+select 'aaa' collate UTF8_BS
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "COLLATION_INVALID_NAME",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "collationName" : "UTF8_BS",
+    "proposals" : "UTF8_LCASE"
+  }
+}
+
+
+-- !query
+select collate('aaa', 'a', 'b')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2",
+    "functionName" : "`collate`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "collate('aaa', 'a', 'b')"
+  } ]
+}
+
+
+-- !query
+select collate('aaa')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "1",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2",
+    "functionName" : "`collate`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "collate('aaa')"
+  } ]
+}
+
+
+-- !query
+select collate()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "0",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2",
+    "functionName" : "`collate`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "collate()"
+  } ]
+}
+
+
+-- !query
+select collate('abc', 123)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`collate`",
+    "inputSql" : "\"123\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "collate('abc', 123)"
+  } ]
+}
+
+
+-- !query
+select collate('abc', cast(null as string))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "`collation`",
+    "sqlExpr" : "\"CAST(NULL AS STRING)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 43,
+    "fragment" : "collate('abc', cast(null as string))"
+  } ]
+}
+
+
+-- !query
+select collate(1, 'UTF8_BINARY')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"collate(1, UTF8_BINARY)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "collate(1, 'UTF8_BINARY')"
+  } ]
+}
+
+
+-- !query
+SELECT contains(collate('abc', 'UNICODE_CI'), collate('b', 'UNICODE'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE_CI\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+SELECT startsWith(collate('abc', 'UNICODE_CI'), collate('a', 'UNICODE'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE_CI\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+SELECT endsWith(collate('abc', 'UNICODE_CI'), collate('c', 'UNICODE'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE_CI\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+SELECT COLLATE('a', 'UTF8_BINARY') = COLLATE('a', 'UNICODE')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UTF8_BINARY\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE\", \"STRING COLLATE UNICODE_CI\""
+  }
+}
+
+
+-- !query
+SELECT array('A', 'a' COLLATE UNICODE) == array('b' COLLATE UNICODE_CI_RTRIM)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE\", \"STRING COLLATE UNICODE_CI_RTRIM\""
+  }
+}
+
+
+-- !query
+SELECT array_join(array('a', 'b' collate UNICODE), 'c' collate UNICODE_CI)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UNICODE\", \"STRING COLLATE UNICODE_CI\""
+  }
+}
+
+
+-- !query
+SELECT 'a' COLLATE system.builtin2.UTF8_BINARY
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "COLLATION_INVALID_NAME",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "collationName" : "UTF8_BINARY",
+    "proposals" : "UTF8_BINARY"
+  }
+}
+
+
+-- !query
+SELECT 'a' COLLATE system.UTF8_BINARY
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "COLLATION_INVALID_NAME",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "collationName" : "UTF8_BINARY",
+    "proposals" : "UTF8_BINARY"
+  }
+}
+
+
+-- !query
+SELECT 'a' COLLATE builtin.UTF8_LCASE
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "COLLATION_INVALID_NAME",
+  "sqlState" : "42704",
+  "messageParameters" : {
+    "collationName" : "UTF8_LCASE",
+    "proposals" : "UTF8_LCASE"
+  }
+}
+
+
+-- !query
+SELECT * FROM VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_INLINE_TABLE.INCOMPATIBLE_TYPES_IN_INLINE_TABLE",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "colName" : "`c1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 77,
+    "fragment" : "VALUES ('a' COLLATE UTF8_LCASE), ('b' COLLATE UNICODE) AS T(c1)"
+  } ]
+}
+
+
+-- !query
+select map('a' COLLATE UTF8_LCASE, 'b', 'c' COLLATE UNICODE, 'c')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "COLLATION_MISMATCH.EXPLICIT",
+  "sqlState" : "42P21",
+  "messageParameters" : {
+    "explicitTypes" : "\"STRING COLLATE UTF8_LCASE\", \"STRING COLLATE UNICODE\""
+  }
+}
+
+
+-- !query
+select map('a' COLLATE UTF8_LCASE, 'b', 'c')
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "3",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "2n (n > 0)",
+    "functionName" : "`map`"
+  }
+}

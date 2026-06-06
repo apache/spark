@@ -188,9 +188,12 @@ class StringFunctionsSuite extends SharedSparkSession {
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
         regexp_replace($"a", $"b", $"c"),
+        regexp_replace($"a", "(\\d+)", "num", 5),
+        regexp_replace($"a", $"b", $"c", lit(5)),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
-        Row("num-num", "400-400", "100") :: Nil)
+      Row("num-num", "300", "100-num", "100-200", "100") ::
+        Row("num-num", "400", "100-num", "100-200", "100") ::
+        Row("num-num", "400-400", "100-num", "100-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,

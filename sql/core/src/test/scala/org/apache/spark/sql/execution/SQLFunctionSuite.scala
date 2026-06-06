@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -113,6 +116,127 @@ class SQLFunctionSuite extends SharedSparkSession {
     }
   }
 
+  test("describe SQL scalar functions") {
+    withUserDefinedFunction("foo" -> true, "bar" -> true, "area" -> false) {
+      // Temporary function
+      sql(
+        """
+          |CREATE TEMPORARY FUNCTION foo() RETURNS int
+          |COMMENT 'function foo' RETURN 1
+          |""".stripMargin)
+      checkKeywordsExist(sql("describe function foo"),
+        "Function:", "foo",
+        "Type:", "SCALAR",
+        "Input:", "()",
+        "Returns:", "INT")
+      checkKeywordsExist(sql("describe function extended foo"),
+        "Deterministic: true",
+        "Data Access:", "CONTAINS SQL",
+        "Comment:", "function foo",
+        "Create Time:",
+        "Body:", "1")
+      sql(
+        """
+          |CREATE TEMPORARY FUNCTION bar(x int default 8,
+          |y int default substr('8hello', 1, 1) comment 'var_y')
+          |RETURNS int COMMENT 'function bar' RETURN x + y
+          |""".stripMargin)
+      checkKeywordsExist(sql("describe function bar"),
+        "Function:", "bar",
+        "Input:", "x INT", "y INT",
+        "Returns:", "INT")
+      checkKeywordsExist(sql("describe function extended bar"),
+        "Input:", "x INT DEFAULT 8", "y INT DEFAULT substr('8hello', 1, 1) 'var_y'",
+        "Comment:", "function bar",
+        "Deterministic: true",
+        "Data Access:", "CONTAINS SQL",
+        "Body:", "x + y")
+      // Permanent function
+      val beforeMs = System.currentTimeMillis()
+      sql(
+        """
+          |CREATE FUNCTION area(width double comment 'width', height double comment 'height')
+          |RETURNS double
+          |COMMENT 'compute area'
+          |DETERMINISTIC
+          |RETURN width * height
+          |""".stripMargin)
+      val afterMs = System.currentTimeMillis()
+      checkKeywordsExist(sql("describe function area"),
+        "Function:", "default.area",
+        "Type:", "SCALAR",
+        "Input:", "width  DOUBLE", "height DOUBLE",
+        "Returns:", "DOUBLE")
+      val extendedRows = sql("describe function extended area").collect()
+      checkKeywordsExist(sql("describe function extended area"),
+        "Input:", "width  DOUBLE 'width'", "height DOUBLE 'height'",
+        "Comment:", "compute area",
+        "Deterministic: true",
+        "Data Access:", "CONTAINS SQL",
+        "Create Time:",
+        "Body:", "width * height")
+      // Verify the rendered Create Time falls within a small window around the
+      // CREATE FUNCTION call, i.e. the timestamp set at CREATE time was preserved
+      // (and not silently overwritten by a later cache-build / metadata-load).
+      val createTimeRow = extendedRows.map(_.getString(0))
+        .find(_.startsWith("Create Time:"))
+        .getOrElse(fail("DESCRIBE FUNCTION EXTENDED is missing the Create Time row"))
+      val tsStr = createTimeRow.split("Create Time:", 2)(1).trim
+      // Date.toString() format -- explicit Locale.ENGLISH avoids parser drift on
+      // build hosts whose default locale is not English.
+      val sdf = new SimpleDateFormat("EEE MMM dd HH:mm:ss zzz yyyy", Locale.ENGLISH)
+      val parsedMs = sdf.parse(tsStr).getTime
+      // Date.toString() truncates to seconds; use a 2-second slop on each side.
+      val slopMs = 2000L
+      assert(parsedMs >= beforeMs - slopMs,
+        s"Create Time '$tsStr' is before CREATE FUNCTION (beforeMs=$beforeMs)")
+      assert(parsedMs <= afterMs + slopMs,
+        s"Create Time '$tsStr' is after DESCRIBE FUNCTION (afterMs=$afterMs)")
+    }
+  }
+
+  test("describe SQL table functions") {
+    withUserDefinedFunction("foo" -> false) {
+      sql(
+        """
+          |CREATE FUNCTION foo(x INT) RETURNS TABLE (a INT, b STRING)
+          |COMMENT 'table function foo' RETURN SELECT x, x
+          |""".stripMargin)
+      checkKeywordsExist(sql("describe function foo"),
+        "Function:", "foo",
+        "Type:", "TABLE",
+        "Input:", "x INT",
+        "Returns:", "a INT", "b STRING")
+      checkKeywordsExist(sql("describe function extended foo"),
+        "Comment:", "table function foo",
+        "Deterministic: true",
+        "Data Access:", "CONTAINS SQL",
+        "Create Time:",
+        "Body:", "SELECT x, x")
+    }
+  }
+
+  test("describe SQL functions with derived routine characteristics") {
+    withUserDefinedFunction("foo" -> false, "bar" -> false, "baz" -> false) {
+      withTable("tbl_for_describe") {
+        sql("CREATE TABLE tbl_for_describe AS SELECT 1 AS x")
+        sql("CREATE FUNCTION foo() RETURNS TABLE(x INT) RETURN SELECT * FROM tbl_for_describe")
+        sql("CREATE FUNCTION bar() RETURNS DOUBLE RETURN SELECT SUM(x) + rand() FROM foo()")
+        sql("CREATE FUNCTION baz() RETURNS INT NOT DETERMINISTIC READS SQL DATA RETURN 1")
+        checkKeywordsExist(sql("DESCRIBE FUNCTION EXTENDED foo"),
+          "Deterministic: true",
+          "Data Access:", "READS SQL DATA")
+        checkKeywordsExist(sql("DESCRIBE FUNCTION EXTENDED bar"),
+          "Deterministic: false",
+          "Data Access:", "READS SQL DATA")
+        // Do not overwrite user-specified routine characteristics.
+        checkKeywordsExist(sql("DESCRIBE FUNCTION EXTENDED baz"),
+          "Deterministic: false",
+          "Data Access:", "READS SQL DATA")
+      }
+    }
+  }
+
   test("SPARK-56639: SQL function uses frozen SQL path") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       withDatabase("path_func_db_a", "path_func_db_b") {
@@ -135,6 +259,15 @@ class SQLFunctionSuite extends SharedSparkSession {
 
               checkAnswer(sql("SELECT MAX(id) FROM frozen_t"), Row(20))
               checkAnswer(sql("SELECT default.frozen_fn()"), Row(10))
+              // DESCRIBE FUNCTION EXTENDED renders the frozen creator path,
+              // not the invoker's current PATH. SqlPathFormat.formatForDisplay
+              // back-ticks identifiers only when needed, so plain ASCII
+              // identifiers appear unquoted.
+              checkKeywordsExist(sql("DESCRIBE FUNCTION EXTENDED default.frozen_fn"),
+                "SQL Path:",
+                "spark_catalog.path_func_db_a, system.builtin")
+              checkKeywordsNotExist(sql("DESCRIBE FUNCTION EXTENDED default.frozen_fn"),
+                "path_func_db_b")
             } finally {
               sql("SET PATH = DEFAULT_PATH")
             }

@@ -389,14 +389,14 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
 
     // DataFrame API
     spark.read.option("startingVersion", "1").changes(fullTableName).collect()
-    val info1 = catalog.lastChangelogInfo.get
-    assert(info1.deduplicationMode() === ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    val info1 = catalog.lastChangelogContext.get
+    assert(info1.deduplicationMode() === ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(info1.computeUpdates() === false)
 
     // SQL (no WITH clause = defaults)
     sql(s"SELECT * FROM $fullTableName CHANGES FROM VERSION 1").collect()
-    val info2 = catalog.lastChangelogInfo.get
-    assert(info2.deduplicationMode() === ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    val info2 = catalog.lastChangelogContext.get
+    assert(info2.deduplicationMode() === ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(info2.computeUpdates() === false)
   }
 
@@ -410,14 +410,14 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       .option("deduplicationMode", "none")
       .changes(fullTableName)
       .collect()
-    assert(catalog.lastChangelogInfo.get.deduplicationMode() ===
-      ChangelogInfo.DeduplicationMode.NONE)
+    assert(catalog.lastChangelogContext.get.deduplicationMode() ===
+      ChangelogContext.DeduplicationMode.NONE)
 
     // SQL
     sql(s"SELECT * FROM $fullTableName CHANGES FROM VERSION 1 " +
       "WITH (deduplicationMode = 'none')").collect()
-    assert(catalog.lastChangelogInfo.get.deduplicationMode() ===
-      ChangelogInfo.DeduplicationMode.NONE)
+    assert(catalog.lastChangelogContext.get.deduplicationMode() ===
+      ChangelogContext.DeduplicationMode.NONE)
   }
 
   test("changes() passes computeUpdates to catalog") {
@@ -430,12 +430,12 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       .option("computeUpdates", "true")
       .changes(fullTableName)
       .collect()
-    assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
+    assert(catalog.lastChangelogContext.get.computeUpdates() === true)
 
     // SQL
     sql(s"SELECT * FROM $fullTableName CHANGES FROM VERSION 1 " +
       "WITH (computeUpdates = 'true')").collect()
-    assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
+    assert(catalog.lastChangelogContext.get.computeUpdates() === true)
   }
 
   // ---------- Batch: timestamp range ----------
@@ -450,14 +450,14 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       .option("endingTimestamp", "2024-12-31 23:59:59")
       .changes(fullTableName)
       .collect()
-    assert(catalog.lastChangelogInfo.get.range()
+    assert(catalog.lastChangelogContext.get.range()
       .isInstanceOf[ChangelogRange.TimestampRange])
 
     // SQL
     sql(s"SELECT * FROM $fullTableName " +
       "CHANGES FROM TIMESTAMP '2024-01-01 00:00:00' " +
       "TO TIMESTAMP '2024-12-31 23:59:59'").collect()
-    assert(catalog.lastChangelogInfo.get.range()
+    assert(catalog.lastChangelogContext.get.range()
       .isInstanceOf[ChangelogRange.TimestampRange])
   }
 
@@ -599,7 +599,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       .format("memory").queryName("cdc_stream_opts_df").start()
     try {
       q1.processAllAvailable()
-      assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
+      assert(catalog.lastChangelogContext.get.computeUpdates() === true)
     } finally {
       q1.stop()
     }
@@ -612,7 +612,7 @@ class ChangelogEndToEndSuite extends SharedSparkSession {
       .format("memory").queryName("cdc_stream_opts_sql").start()
     try {
       q2.processAllAvailable()
-      assert(catalog.lastChangelogInfo.get.computeUpdates() === true)
+      assert(catalog.lastChangelogContext.get.computeUpdates() === true)
     } finally {
       q2.stop()
     }

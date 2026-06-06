@@ -457,9 +457,12 @@ trait HashJoin extends JoinCodegenSupport {
     val buildVars = genOneSideJoinVars(ctx, matched, buildPlan, setDefaultValue = true)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    // filter the output via condition
-    val conditionPassed = ctx.freshName("conditionPassed")
-    val checkCondition = if (condition.isDefined) {
+    // filter the output via condition. When there is no condition, skip the `conditionPassed`
+    // variable and the wrapping `if (!conditionPassed)` / `if (conditionPassed)` branches that
+    // would always be dead / unconditional.
+    val hasCondition = condition.isDefined
+    val conditionPassed = if (hasCondition) ctx.freshName("conditionPassed") else ""
+    val checkCondition = if (hasCondition) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
       val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
@@ -475,7 +478,7 @@ trait HashJoin extends JoinCodegenSupport {
          |}
        """.stripMargin
     } else {
-      s"final boolean $conditionPassed = true;"
+      ""
     }
 
     val resultVars = buildSide match {
@@ -484,17 +487,24 @@ trait HashJoin extends JoinCodegenSupport {
     }
 
     if (keyIsUnique) {
+      val resetWhenConditionFails = if (hasCondition) {
+        s"""
+           |if (!$conditionPassed) {
+           |  $matched = null;
+           |  // reset the variables those are already evaluated.
+           |  ${buildVars.filter(_.code.isEmpty).map(v => s"${v.isNull} = true;").mkString("\n")}
+           |}
+         """.stripMargin
+      } else {
+        ""
+      }
       s"""
          |// generate join key for stream side
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |${checkCondition.trim}
-         |if (!$conditionPassed) {
-         |  $matched = null;
-         |  // reset the variables those are already evaluated.
-         |  ${buildVars.filter(_.code.isEmpty).map(v => s"${v.isNull} = true;").mkString("\n")}
-         |}
+         |$resetWhenConditionFails
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
        """.stripMargin
@@ -514,6 +524,9 @@ trait HashJoin extends JoinCodegenSupport {
         ""
       }
 
+      val (conditionGuardOpen, conditionGuardClose) =
+        if (hasCondition) (s"if ($conditionPassed) {", "}") else ("", "")
+
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -525,12 +538,12 @@ trait HashJoin extends JoinCodegenSupport {
          |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
          |    (UnsafeRow) $matches.next() : null;
          |  ${checkCondition.trim}
-         |  if ($conditionPassed) {
+         |  $conditionGuardOpen
          |    $evaluateSingleCheck
          |    $found = true;
          |    $numOutput.add(1);
          |    ${consume(ctx, resultVars)}
-         |  }
+         |  $conditionGuardClose
          |}
        """.stripMargin
     }

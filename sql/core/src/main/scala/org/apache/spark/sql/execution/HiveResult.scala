@@ -131,6 +131,16 @@ object HiveResult extends SQLConfHelper {
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
+    // Nanosecond-precision timestamps. The external values are `Instant` (LTZ) and
+    // `LocalDateTime` (NTZ); convert to the physical `TimestampNanosVal` at the column precision
+    // and render via the same formatter methods as the cast-to-string path (SPARK-57256), so the
+    // output stays consistent. LTZ uses the session zone; NTZ is zone-independent.
+    case (i: Instant, t: TimestampLTZNanosType) =>
+      formatters.timestamp.formatNanos(
+        DateTimeUtils.instantToTimestampNanos(i, t.precision), t.precision)
+    case (l: LocalDateTime, t: TimestampNTZNanosType) =>
+      formatters.timestamp.formatWithoutTimeZoneNanos(
+        DateTimeUtils.localDateTimeToTimestampNanos(l, t.precision), t.precision)
     case (bin: Array[Byte], BinaryType) => binaryFormatter(bin)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString
@@ -163,11 +173,11 @@ object HiveResult extends SQLConfHelper {
     case (v: VariantVal, VariantType) => v.toString
     case (g: Geometry, dt: GeometryType) =>
       val internalGeom = STUtils.serializeGeomFromWKB(g, dt)
-      val s = STUtils.stAsEwkt(internalGeom).toString
+      val s = STUtils.stGeomAsEwkt(internalGeom).toString
       if (nested) "\"" + s + "\"" else s
     case (g: Geography, dt: GeographyType) =>
       val internalGeog = STUtils.serializeGeogFromWKB(g, dt)
-      val s = STUtils.stAsEwkt(internalGeog).toString
+      val s = STUtils.stGeogAsEwkt(internalGeog).toString
       if (nested) "\"" + s + "\"" else s
     case (other, u: UserDefinedType[_]) => u.stringifyValue(other)
   }

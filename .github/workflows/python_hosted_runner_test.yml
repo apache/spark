@@ -137,9 +137,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/coursier
-          key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            pyspark-coursier-
+            ${{ runner.os }}-coursier-
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v5
         with:
@@ -171,7 +171,7 @@ jobs:
       - name: Upload test results to report
         env: ${{ fromJSON(inputs.envs) }}
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
           path: |
@@ -180,7 +180,7 @@ jobs:
       - name: Upload unit tests log files
         env: ${{ fromJSON(inputs.envs) }}
         if: ${{ !success() }}
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: unit-tests-log-${{ inputs.os }}-${{ matrix.modules }}--${{ matrix.java }}-${{ inputs.hadoop }}-hive2.3-${{ env.PYTHON_TO_TEST }}
           path: "**/target/unit-tests.log"
