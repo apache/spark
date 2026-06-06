@@ -170,9 +170,7 @@ object SQLExecution extends Logging {
       val desc = Option(sc.getLocalProperty(SPARK_JOB_DESCRIPTION))
         .filter(_ => truncateLength > 0)
         .map { sqlStr =>
-          val redactedStr = Utils
-            .redact(sparkSession.sessionState.conf.stringRedactionPattern, sqlStr)
-          redactedStr.substring(0, Math.min(truncateLength, redactedStr.length))
+          sqlStr.substring(0, Math.min(truncateLength, sqlStr.length))
         }.getOrElse(callSite.shortForm)
 
       val globalConfigs = sparkSession.sharedState.conf.getAll.toMap
