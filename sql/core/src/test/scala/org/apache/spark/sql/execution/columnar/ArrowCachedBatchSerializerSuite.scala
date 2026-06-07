@@ -1962,6 +1962,48 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
       cached.unpersist()
     }
   }
+
+  test("columnar read with prefetch does not release the in-use batch's buffers") {
+    // With prefetch enabled, the next batch is deserialized on a background thread while the
+    // current batch is consumed. The previous root must only be closed on the consumer thread
+    // (in next()), never by the background prefetch; otherwise the ArrowColumnVectors backing the
+    // batch currently held by the consumer point at released memory. Reading the held batch after
+    // giving the background prefetch time to run reproduces that use-after-free if reintroduced.
+    withSQLConf(SQLConf.ARROW_CACHE_PREFETCH_ENABLED.key -> "true") {
+      val schema = Seq(AttributeReference("v", IntegerType, nullable = true)())
+      val conf = spark.sessionState.conf
+      val ser = new ArrowCachedBatchSerializer
+      val batchRdd = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+        (0 until 5).iterator.map { x =>
+          val alloc = ArrowUtils.rootAllocator.newChildAllocator(s"prefetch-$x", 0, Long.MaxValue)
+          val iv = new IntVector("v", alloc)
+          iv.allocateNew(1)
+          iv.setSafe(0, x * 10)
+          iv.setValueCount(1)
+          new ColumnarBatch(Array[ColumnVector](new ArrowColumnVector(iv)), 1)
+        }
+      }
+      val cached = ser.convertColumnarBatchToCachedBatch(
+        batchRdd, schema, StorageLevel.MEMORY_ONLY, conf)
+      cached.persist()
+      try {
+        val values = ser.convertCachedBatchToColumnarBatch(cached, schema, schema, conf)
+          .mapPartitions { it =>
+            val out = scala.collection.mutable.ArrayBuffer[Int]()
+            while (it.hasNext) {
+              val batch = it.next() // hold exactly one batch, per the ColumnarBatch contract
+              Thread.sleep(20) // give the background prefetch a chance to run before reading
+              out += batch.getRow(0).getInt(0)
+            }
+            out.iterator
+          }.collect()
+        assert(values.sorted.sameElements(Array(0, 10, 20, 30, 40)),
+          s"expected [0, 10, 20, 30, 40] but got [${values.sorted.mkString(", ")}]")
+      } finally {
+        cached.unpersist()
+      }
+    }
+  }
 }
 
 /**

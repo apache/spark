@@ -137,17 +137,13 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
     val prefetchEnabled = conf.arrowCachePrefetchEnabled
 
     input.mapPartitionsInternal { batchIterator =>
-      val baseIter = new ArrowCachedBatchToColumnarBatchIterator(
+      new ArrowCachedBatchToColumnarBatchIterator(
         batchIterator,
         cacheSchema,
         selectedSchema,
         columnIndices,
-        timeZoneId)
-      if (prefetchEnabled) {
-        new ArrowPrefetchColumnarBatchIterator(baseIter)
-      } else {
-        baseIter
-      }
+        timeZoneId,
+        prefetchEnabled)
     }
   }
 
@@ -955,19 +951,47 @@ private class ArrowCachedBatchToColumnarBatchIterator(
     cacheSchema: StructType,
     selectedSchema: StructType,
     columnIndices: Array[Int],
-    timeZoneId: String) extends Iterator[ColumnarBatch] {
+    timeZoneId: String,
+    prefetchEnabled: Boolean = false) extends Iterator[ColumnarBatch] {
+
+  import java.util.concurrent.{Callable, ExecutionException, Executors, ExecutorService, Future}
 
   private val allocator = ArrowUtils.rootAllocator.newChildAllocator(
     s"ArrowCachedBatchToColumnarBatchIterator-${TaskContext.get().taskAttemptId()}",
     0,
     Long.MaxValue)
 
+  private val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
+
   // Track only the previous root to close it when next batch is produced
   private var previousRoot: VectorSchemaRoot = null
+
+  // Prefetch support: deserialize the next batch into its own root in a background thread while
+  // the current batch is being consumed. Only the deserialization (IPC read + decompression +
+  // loading into a fresh root) happens off-thread; closing the previous root stays on the
+  // consumer thread in next(), so the vectors backing a returned ColumnarBatch are never released
+  // while the consumer may still read them.
+  private val prefetchExecutor: ExecutorService = if (prefetchEnabled) {
+    Executors.newSingleThreadExecutor(r => {
+      val t = new Thread(r, "arrow-cache-prefetch")
+      t.setDaemon(true)
+      t
+    })
+  } else {
+    null
+  }
+  private var prefetchFuture: Future[VectorSchemaRoot] = _
 
   // Register cleanup - close remaining root and allocator when task completes
   Option(TaskContext.get()).foreach { tc =>
     tc.addTaskCompletionListener[Unit] { _ =>
+      if (prefetchFuture != null) {
+        prefetchFuture.cancel(true)
+        prefetchFuture = null
+      }
+      if (prefetchExecutor != null) {
+        prefetchExecutor.shutdownNow()
+      }
       if (previousRoot != null) {
         previousRoot.close()
         previousRoot = null
@@ -976,46 +1000,64 @@ private class ArrowCachedBatchToColumnarBatchIterator(
     }
   }
 
-  override def hasNext: Boolean = batchIter.hasNext
+  override def hasNext: Boolean = prefetchFuture != null || batchIter.hasNext
 
   override def next(): ColumnarBatch = {
-    // Close the previous root since it's been consumed
+    // Close the previous root since the consumer has moved on from the batch it backed.
     if (previousRoot != null) {
       previousRoot.close()
       previousRoot = null
     }
 
-    val cachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
+    val root = if (prefetchFuture != null) {
+      val r = try {
+        prefetchFuture.get()
+      } catch {
+        case e: ExecutionException => throw e.getCause
+      }
+      prefetchFuture = null
+      r
+    } else {
+      deserializeToRoot(batchIter.next().asInstanceOf[ArrowCachedBatch])
+    }
 
-    // Deserialize Arrow IPC data
-    val arrowData = cachedBatch.arrowData
-    val in = new ByteArrayInputStream(arrowData)
+    previousRoot = root
+
+    // Wrap vectors in ArrowColumnVector and project to selected columns.
+    val allColumns = root.getFieldVectors.asScala.map { vector =>
+      new ArrowColumnVector(vector)
+    }.toArray[ColumnVector]
+    val selectedColumns = columnIndices.map(allColumns(_))
+    val batch = new ColumnarBatch(selectedColumns, root.getRowCount)
+
+    // Start prefetching the next batch while this one is being consumed.
+    submitPrefetch()
+
+    batch
+  }
+
+  /** Deserialize a cached batch into its own freshly-created root. Does not touch other roots. */
+  private def deserializeToRoot(cachedBatch: ArrowCachedBatch): VectorSchemaRoot = {
+    val in = new ByteArrayInputStream(cachedBatch.arrowData)
     val readChannel = new ReadChannel(Channels.newChannel(in))
-
-    // Deserialize the RecordBatch
     val recordBatch = MessageSerializer.deserializeRecordBatch(readChannel, allocator)
-
     Utils.tryWithSafeFinally {
-      // Create root and load batch
-      val arrowSchema = ArrowUtils.toArrowSchema(cacheSchema, timeZoneId, false, false)
       val root = VectorSchemaRoot.create(arrowSchema, allocator)
-
-      // Track this root as the current/previous root
-      previousRoot = root
-
       val loader = new VectorLoader(root)
       loader.load(recordBatch)
-
-      // Wrap vectors in ArrowColumnVector and project to selected columns
-      val allColumns = root.getFieldVectors.asScala.map { vector =>
-        new ArrowColumnVector(vector)
-      }.toArray[ColumnVector]
-
-      val selectedColumns = columnIndices.map(allColumns(_))
-
-      new ColumnarBatch(selectedColumns, cachedBatch.numRows)
+      root
     } {
       recordBatch.close()
+    }
+  }
+
+  /** Submit deserialization of the next batch to the background thread, if prefetch is enabled. */
+  private def submitPrefetch(): Unit = {
+    if (prefetchEnabled && batchIter.hasNext) {
+      val nextCachedBatch = batchIter.next().asInstanceOf[ArrowCachedBatch]
+      prefetchFuture = prefetchExecutor.submit(new Callable[VectorSchemaRoot] {
+        override def call(): VectorSchemaRoot = deserializeToRoot(nextCachedBatch)
+      })
     }
   }
 }
@@ -1327,71 +1369,5 @@ private class ArrowCachedBatchToInternalRowIterator(
 
     // Start prefetching the next batch while this one is being consumed
     submitPrefetch()
-  }
-}
-
-/**
- * Wraps an ArrowCachedBatchToColumnarBatchIterator with background prefetching.
- * While the current ColumnarBatch is being consumed, the next batch is deserialized
- * and decompressed in a background thread. This overlaps decompression with consumption
- * and is most beneficial for compressed Arrow caches (e.g. ZSTD).
- *
- * Uses a single-thread executor to avoid per-batch thread creation overhead.
- *
- * Enabled via spark.sql.execution.arrow.cache.prefetch.enabled=true.
- */
-private class ArrowPrefetchColumnarBatchIterator(
-    underlying: ArrowCachedBatchToColumnarBatchIterator) extends Iterator[ColumnarBatch] {
-
-  import java.util.concurrent.{Callable, ExecutionException, Future, Executors}
-
-  private val executor = Executors.newSingleThreadExecutor(r => {
-    val t = new Thread(r, "arrow-cache-prefetch")
-    t.setDaemon(true)
-    t
-  })
-
-  // The prefetched result (null means no more batches)
-  private var prefetchFuture: Future[ColumnarBatch] = _
-
-  // Register cleanup
-  Option(TaskContext.get()).foreach { tc =>
-    tc.addTaskCompletionListener[Unit] { _ =>
-      executor.shutdownNow()
-    }
-  }
-
-  // Kick off prefetch of the first batch immediately
-  submitPrefetch()
-
-  override def hasNext: Boolean = prefetchFuture != null
-
-  override def next(): ColumnarBatch = {
-    if (!hasNext) {
-      throw new NoSuchElementException("No more batches")
-    }
-
-    // Wait for the prefetched batch
-    val batch = try {
-      prefetchFuture.get()
-    } catch {
-      case e: ExecutionException => throw e.getCause
-    }
-
-    // Start prefetching the next batch
-    submitPrefetch()
-
-    batch
-  }
-
-  private def submitPrefetch(): Unit = {
-    if (underlying.hasNext) {
-      prefetchFuture = executor.submit(new Callable[ColumnarBatch] {
-        override def call(): ColumnarBatch = underlying.next()
-      })
-    } else {
-      prefetchFuture = null
-      executor.shutdown()
-    }
   }
 }
