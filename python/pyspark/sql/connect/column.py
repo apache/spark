@@ -104,7 +104,12 @@ def _bin_op(
         # If comparison yields NULL, fill with False for most ops, True for "!="
         filler = True if name == "!=" else False
         isnull_expr = UnresolvedFunction("isnull", [base_expr])
-        return Column(CaseWhen(branches=[(isnull_expr, LiteralExpression._from_value(filler))], else_value=base_expr))  # type: ignore[list-item]
+        return Column(
+            CaseWhen(
+                branches=[(isnull_expr, LiteralExpression._from_value(filler))],
+                else_value=base_expr,
+            )
+        )  # type: ignore[list-item]
 
     return Column(base_expr)  # type: ignore[list-item]
 
