@@ -1870,7 +1870,8 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
           try {
             val rows = df.collect()
             assert(rows.length == 2, s"$dt (vectorized=$vectorized)")
-            assert(rows.count(_.get(0) != null) == 1, s"$dt non-null count (vectorized=$vectorized)")
+            assert(rows.count(_.get(0) != null) == 1,
+              s"$dt non-null count (vectorized=$vectorized)")
             // Stats: geometry/geography reuse BinaryColumnStats, so no min/max bounds but a
             // null count of 1.
             val stats = cachedStats(df)
