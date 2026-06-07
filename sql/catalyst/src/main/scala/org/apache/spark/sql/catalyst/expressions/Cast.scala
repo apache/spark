@@ -410,6 +410,11 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, _: StringType) => true
     case (_: CalendarIntervalType, _: StringType) => true
+    // SPARK-57293: narrowing a nanosecond-precision timestamp to its microsecond counterpart
+    // drops the sub-microsecond digits, so it is not allowed as a (silent) store assignment.
+    // This conversion stays explicit-only.
+    case (_: TimestampNTZNanosType, TimestampNTZType) => false
+    case (_: TimestampLTZNanosType, TimestampType) => false
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -1862,7 +1867,7 @@ case class Cast(
         }
     case TimestampType =>
       (c, evPrim, evNull) =>
-        code"$evPrim = org.apache.spark.unsafe.types.TimestampNanosVal.fromParts($c, (short) 0);"
+        code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
   }
 
   private[this] def castToTimestampNTZNanosCode(
@@ -1891,7 +1896,7 @@ case class Cast(
         }
     case TimestampNTZType =>
       (c, evPrim, evNull) =>
-        code"$evPrim = org.apache.spark.unsafe.types.TimestampNanosVal.fromParts($c, (short) 0);"
+        code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
   }
 
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
