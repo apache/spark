@@ -206,6 +206,8 @@ case class CollectSet(
 
   override lazy val bufferElementType = child.dataType match {
     case BinaryType => ArrayType(ByteType)
+    case DoubleType => LongType
+    case FloatType => IntegerType
     case other => other
   }
 
@@ -229,6 +231,12 @@ case class CollectSet(
      * so we need to use a different catalyst value for arrays
      */
     case BinaryType => UnsafeArrayData.fromPrimitiveArray(value.asInstanceOf[Array[Byte]])
+    case DoubleType =>
+      val d = value.asInstanceOf[Double]
+      java.lang.Double.doubleToLongBits(if (d == 0.0d) 0.0d else d)
+    case FloatType =>
+      val f = value.asInstanceOf[Float]
+      java.lang.Float.floatToIntBits(if (f == 0.0f) 0.0f else f)
     case _ => InternalRow.copyValue(value)
   }
 
@@ -238,6 +246,16 @@ case class CollectSet(
         buffer.iterator.map {
           case null => null
           case v => v.asInstanceOf[ArrayData].toByteArray()
+        }.toArray[Any]
+      case DoubleType =>
+        buffer.iterator.map {
+          case null => null
+          case v => java.lang.Double.longBitsToDouble(v.asInstanceOf[Long])
+        }.toArray[Any]
+      case FloatType =>
+        buffer.iterator.map {
+          case null => null
+          case v => java.lang.Float.intBitsToFloat(v.asInstanceOf[Int])
         }.toArray[Any]
       case _ => buffer.toArray
     }
