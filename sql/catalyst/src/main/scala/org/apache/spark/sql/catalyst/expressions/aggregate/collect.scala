@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils, UnsafeRowUtils}
@@ -224,6 +225,12 @@ case class CollectSet(
     buffer
   }
 
+  @transient private lazy val complexNormalizer: Any => Any = {
+    val ref = BoundReference(0, child.dataType, nullable = true)
+    val proj = UnsafeProjection.create(NormalizeFloatingNumbers.normalize(ref))
+    (value: Any) => InternalRow.copyValue(proj(InternalRow(value)).get(0, child.dataType))
+  }
+
   override def convertToBufferElement(value: Any): Any = child.dataType match {
     /*
      * collect_set() of BinaryType should not return duplicate elements,
@@ -232,11 +239,12 @@ case class CollectSet(
      */
     case BinaryType => UnsafeArrayData.fromPrimitiveArray(value.asInstanceOf[Array[Byte]])
     case DoubleType =>
-      val d = value.asInstanceOf[Double]
-      java.lang.Double.doubleToLongBits(if (d == 0.0d) 0.0d else d)
+      java.lang.Double.doubleToLongBits(
+        NormalizeFloatingNumbers.DOUBLE_NORMALIZER(value).asInstanceOf[Double])
     case FloatType =>
-      val f = value.asInstanceOf[Float]
-      java.lang.Float.floatToIntBits(if (f == 0.0f) 0.0f else f)
+      java.lang.Float.floatToIntBits(
+        NormalizeFloatingNumbers.FLOAT_NORMALIZER(value).asInstanceOf[Float])
+    case dt if NormalizeFloatingNumbers.needNormalize(dt) => complexNormalizer(value)
     case _ => InternalRow.copyValue(value)
   }
 
