@@ -1850,8 +1850,15 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
           "maxOffsetsBehindLatest" -> "4",
           "avgOffsetsBehindLatest" -> "3.0").asJava)
 
-    // test null latestAvailablePartitionOffsets
+    // test inRealTimeMode is true and latestConsumedOffset is not present
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), None).isEmpty)
+
+    // test that Some(null) — previously produced by the unfixed instance metrics() when
+    // latestPartitionOffsets was null — causes NPE. The fix (Option() instead of Some())
+    // converts null to None in the instance method, preventing this path from being reached.
+    intercept[NullPointerException] {
+      KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), Some(null))
+    }
   }
 }
 
