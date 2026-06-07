@@ -138,23 +138,23 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("orderChronologicallyPerKeyWindow places tails before non-tails, then open intervals " +
-    "before closed intervals, when effective recordStartAt ties") {
+  test("orderChronologicallyPerKeyWindow tiebreakers: tails before non-tails, then " +
+    "upsert-representing rows before tombstones, when effective recordStartAt ties") {
     val processor = processorWithKeys(Seq("id"))
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
-    // Three rows all at effective recordStartAt = 10:
-    //   - decomposition tail: recordStartAt = null, endAt = 10
-    //   - open upsert:        recordStartAt = 10,   endAt = null
-    //   - tombstone:          recordStartAt = 10,   endAt = 10
-    // Expected order:
-    //   1. tail (tail-first tiebreaker)
-    //   2. open upsert (open-before-closed tiebreaker among non-tails)
-    //   3. tombstone
+    // Each key isolates one tiebreaker rule under test. All rows in a partition tie at
+    // effective recordStartAt = 10, so only the tiebreakers determine order.
+    //   key=1: tails-first - tail vs tombstone, tail must come first.
+    //   key=2: upsert-representing-first (open variant)   - open upsert vs tombstone.
+    //   key=3: upsert-representing-first (closed variant) - closed run head vs tombstone.
     val df = targetTableOf(userSchema)(
-      Row(1, "tomb", 10L,  10L,  Row(10L)),
-      Row(1, "tail", null, 10L,  Row(null)),
-      Row(1, "open", 10L,  null, Row(10L))
+      Row(1, "tomb",   10L,  10L,  Row(10L)),
+      Row(1, "tail",   null, 10L,  Row(null)),
+      Row(2, "tomb",   10L,  10L,  Row(10L)),
+      Row(2, "open",   10L,  null, Row(10L)),
+      Row(3, "tomb",   10L,  10L,  Row(10L)),
+      Row(3, "closed", 10L,  20L,  Row(10L))
     )
 
     val withRn = df.withColumn(
@@ -164,9 +164,12 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = withRn,
       expectedAnswer = Seq(
-        Row(1, "tail", null, 10L,  Row(null), 1),
-        Row(1, "open", 10L,  null, Row(10L),  2),
-        Row(1, "tomb", 10L,  10L,  Row(10L),  3)
+        Row(1, "tail",   null, 10L,  Row(null), 1),
+        Row(1, "tomb",   10L,  10L,  Row(10L),  2),
+        Row(2, "open",   10L,  null, Row(10L),  1),
+        Row(2, "tomb",   10L,  10L,  Row(10L),  2),
+        Row(3, "closed", 10L,  20L,  Row(10L),  1),
+        Row(3, "tomb",   10L,  10L,  Row(10L),  2)
       )
     )
   }
@@ -1634,11 +1637,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val processor = processorWithKeys(Seq("id"))
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
-    // Two open upserts with identical sequencing dimensions
-    // (effectiveRecordStartAt=10, startAt=10, endAt=null). The chronologically-leading
-    // copy is dropped by Rule 1; exactly one copy survives. We do not assert which user-data
-    // variant survives because the window's tiebreaker among truly-identical rows is
-    // intentionally undefined.
+    // Two open upserts tied on effective recordStartAt = 10. The chronologically-leading
+    // copy is dropped; exactly one copy survives. We do not assert which user-data variant
+    // survives because the window's tiebreaker among truly-identical rows is intentionally
+    // undefined.
     val df = targetTableOf(userSchema)(
       Row(1, "first",  10L, null, Row(10L)),
       Row(1, "second", 10L, null, Row(10L))
@@ -1657,8 +1659,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // Open upsert at recordStartAt=10 followed by a tombstone at the same instant
     // (effectiveRecordStartAt=10). The upsert opens at an instant the tombstone already
-    // overtakes, leaving it 0-width: Rule 2 drops it. The tombstone (last in partition)
-    // survives.
+    // overtakes, leaving it 0-width: it ties with its successor on effective sequence
+    // and is dropped. The tombstone (last in partition) survives.
     val df = targetTableOf(userSchema)(
       Row(1, "open", 10L, null, Row(10L)),
       Row(1, "tomb", 10L, 10L,  Row(10L))
@@ -1680,8 +1682,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
     // Decomposition tail closing at endAt=30 followed by a non-tail event at
-    // recordStartAt=30. The synthetic delete the tail encodes is already represented by
-    // the coincident event, so Rule 3 drops the tail. The event survives.
+    // recordStartAt=30. Both have effective recordStartAt = 30. The synthetic delete the
+    // tail encodes is already represented by the coincident event, so the leading tail is
+    // dropped. The event survives.
     val df = targetTableOf(userSchema)(
       Row(1, "tail",  null, 30L,  Row(null)),
       Row(1, "event", 30L,  null, Row(30L))
@@ -1703,9 +1706,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
     // Open upsert at recordStartAt=10 and decomposition tail closing at endAt=30 are each
-    // followed by a row at a strictly later effective sequence. None of Rule 2 or Rule 3
-    // fires (their equality conditions don't hold), and Rule 1 doesn't fire (sequencing
-    // dimensions differ). Every row survives.
+    // followed by a row at a strictly later effective sequence. No row ties with its
+    // successor on effective recordStartAt, so the redundancy filter doesn't fire. Every
+    // row survives.
     val df = targetTableOf(userSchema)(
       Row(1, "open",  10L,  null, Row(10L)),
       Row(1, "next1", 15L,  null, Row(15L)),
@@ -1730,10 +1733,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val processor = processorWithKeys(Seq("id"))
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
-    // Each key has a single row; LEAD(1) is null at the end of every partition and all
-    // three rules are vacuous. If per-key isolation were broken, key 1's row would see
-    // key 2's row as its successor and trigger Rule 1 (the rows are identical on
-    // sequencing dimensions); proper partitioning preserves both.
+    // Each key has a single row; LEAD(1) is null at the end of every partition, so the
+    // redundancy filter is vacuous. If per-key isolation were broken, key 1's row would
+    // see key 2's row as its successor and tie on effective sequence; proper partitioning
+    // preserves both.
     val df = targetTableOf(userSchema)(
       Row(1, "v10", 10L, null, Row(10L)),
       Row(2, "v10", 10L, null, Row(10L))
@@ -1754,10 +1757,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val processor = processorWithKeys(Seq("id"))
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
-    // Three identical open upserts followed by a distinct event. Each adjacent same-event
-    // pair triggers Rule 1: the chronologically-leading two copies are dropped, leaving
-    // exactly one duplicate plus the distinct event. We don't assert which user-data
-    // variant of the duplicate survives.
+    // Three identical open upserts followed by a distinct event. Each adjacent same-effective
+    // pair ties: the chronologically-leading two copies are dropped, leaving exactly one
+    // duplicate plus the distinct event. We don't assert which user-data variant of the
+    // duplicate survives.
     val df = targetTableOf(userSchema)(
       Row(1, "dup1",     5L,  null, Row(5L)),
       Row(1, "dup2",     5L,  null, Row(5L)),
@@ -1775,19 +1778,56 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     assert(survivors.exists(r => r.getString(1) == "different"))
   }
 
-  test("dropRedundantRowsPostDecomposition applies different rules to different rows " +
-    "in one partition") {
+  test("dropRedundantRowsPostDecomposition: same-class collisions reduce to exactly one row") {
     val processor = processorWithKeys(Seq("id"))
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
-    // All three rows tie at effectiveRecordStartAt=10. Window tiebreakers order them as:
-    //   1. tail (tails-first)
-    //   2. open upsert (open-before-closed among non-tails)
-    //   3. tombstone
-    // Then:
-    //   - tail.endAt=10 == next.effective=10 -> Rule 3 drops the tail
-    //   - open is an open upsert with effective=next.effective -> Rule 2 drops the upsert
-    //   - tombstone is the last row in the partition -> survives
+    // Each key encodes one same-class collision at effective recordStartAt = 10. The window
+    // does not sub-order rows within a class, so which row survives is undefined. Hence we only
+    // assert: (a) exactly one row survives per key, and (b) the survivor is indeed one of the
+    // inputs.
+    //   key=1: two open upsert rows
+    //   key=2: open upsert + closed run head (both upsert-representing).
+    //   key=3: two closed run heads (structurally impossible under SCD2 invariants but defensively
+    //          covered).
+    //   key=4: two tombstones.
+    val df = targetTableOf(userSchema)(
+      Row(1, "openA",   10L, null, Row(10L)),
+      Row(1, "openB",   10L, null, Row(10L)),
+      Row(2, "open",    10L, null, Row(10L)),
+      Row(2, "closed",  10L, 20L,  Row(10L)),
+      Row(3, "closedA", 10L, 20L,  Row(10L)),
+      Row(3, "closedB", 10L, 20L,  Row(10L)),
+      Row(4, "tombA",   10L, 10L,  Row(10L)),
+      Row(4, "tombB",   10L, 10L,  Row(10L))
+    )
+
+    val expectedSurvivorsPerKey: Map[Int, Set[String]] = Map(
+      1 -> Set("openA", "openB"),
+      2 -> Set("open", "closed"),
+      3 -> Set("closedA", "closedB"),
+      4 -> Set("tombA", "tombB")
+    )
+
+    val survivors = processor.dropRedundantRowsPostDecomposition(df).collect()
+    assert(survivors.length == 4)
+    
+    expectedSurvivorsPerKey.foreach { case (k, validValues) =>
+      val perKey = survivors.filter(_.getInt(0) == k)
+      assert(perKey.length == 1)
+      assert(validValues.contains(perKey.head.getString(1)))
+    }
+  }
+
+  test("dropRedundantRowsPostDecomposition collapses many rows tied on effective " +
+    "recordStartAt to the trailing one") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // All three rows tie at effectiveRecordStartAt=10. Window tiebreakers order them as
+    // tail (tails-first), open upsert (upsert-representing-first), tombstone. The
+    // redundancy filter then drops every row whose successor shares its effective sequence,
+    // leaving only the trailing tombstone.
     val df = targetTableOf(userSchema)(
       Row(1, "tail", null, 10L,  Row(null)),
       Row(1, "open", 10L,  null, Row(10L)),

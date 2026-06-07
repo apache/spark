@@ -58,6 +58,7 @@ case class Scd2BatchProcessor(
     val recordStartAtCol = Scd2BatchProcessor.recordStartAtOf(
       F.col(AutoCdcReservedNames.cdcMetadataColName)
     )
+    val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
     val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
 
     // All rows except decomposition tails have a non-null recordStartAt. Tails use their
@@ -69,23 +70,42 @@ case class Scd2BatchProcessor(
     val orderDecompositionTailsFirst =
       RowClassifier.isDecompositionTail(recordStartAtCol).desc
 
-    val isClosedInterval = endAtCol.isNotNull
-    val orderOpenIntervalsFirst = isClosedInterval.asc
+    val orderUpsertRepresentingRowsFirst = RowClassifier.isUpsertRepresentingRow(
+      recordStartAt = recordStartAtCol,
+      startAt = startAtCol,
+      endAt = endAtCol
+    ).desc
 
     Window
       .partitionBy(keysQuoted.map(F.col): _*)
       .orderBy(
-        // recordStartAt is the source timeline for CDC events.
+        // Primary sort key: the source-CDC sequence time. Users are required to guarantee
+        // events emitted by their source have a unique sequence per key; violating this is
+        // publicly documented as undefined behavior.
+        //
+        // Decomposition tails are synthetic rows created during reconciliation; they have a
+        // null recordStartAt and use their endAt as their _effective_ recordStartAt. Under
+        // a compliant source they are the only rows that may legitimately tie with another
+        // row on effective recordStartAt: a tail inherits its endAt from its parent closed
+        // row, and that endAt is by construction the recordStartAt of the event that
+        // originally closed the run, so the tail ties with that closing event whenever
+        // both appear in the same partition.
         effectiveRecordStartAt,
-        // If a decomposition tail shares an effective recordStartAt with a non-tail, then its
-        // redundant - another delete/upsert event immediately overtakes the delete that this
-        // synthetic tail encodes. Intentionally order such redundant tails first, so that a
-        // decomposition tail can check its own redundancy by looking at its immediate next
-        // neighbor with LEAD(1).
+        // Among rows tied on effective recordStartAt, decomposition tails sort first so a
+        // tail can detect its own redundancy via LEAD(1): if the next row is a non-tail at
+        // the same instant, the synthetic close the tail encodes is already represented by
+        // that event and the tail is dropped downstream.
+        //
+        // Any tiebreaking beyond this rule only meaningfully fires when the user's source
+        // has emitted two or more events at the same sequence, violating the uniqueness
+        // contract above. Behavior in that case is publicly undefined and the remaining
+        // tiebreaker clauses exist as a best-effort to keep retries and replays deterministic.
         orderDecompositionTailsFirst,
-        // Open intervals sort first so they can match a same-recordStartAt tombstone
-        // during LEAD(1) reconciliation. For decomposition tails this is a no-op.
-        orderOpenIntervalsFirst
+        // Upsert-representing rows sort before tombstones because rows detect if they are being
+        // bisected by LEAD(1). This allows upserts to match against same-sequence deletes, an
+        // arbitrary but deterministic convention. When this happens, the delete event will survive
+        // and persist as a tombstone in the auxiliary table.
+        orderUpsertRepresentingRowsFirst
       )
   }
 
@@ -392,7 +412,7 @@ case class Scd2BatchProcessor(
    *     data columns are inherited from the parent as-is.
    *
    * Decomposition tails are uniquely identified by [[recordStartAtFieldName]] = null and
-   * are transient: downstream reconciliation drops them when a coincident non-tail row
+   * are temporary: downstream reconciliation drops them when a coincident non-tail row
    * already represents the same closure, or promotes them to tombstones in the aux table
    * otherwise.
    *
@@ -416,7 +436,7 @@ case class Scd2BatchProcessor(
    * @param rowsToDecomposePerKey
    *   a dataframe conforming to the canonical SCD2 row schema
    *   `[user_cols..., [[startAtColName]], [[endAtColName]], [[cdcMetadataColName]]]`, where
-   *   [[cdcMetadataColName]] conforms to [[targetCdcMetadataColSchema]]. Decomposition tails
+   *   [[cdcMetadataColName]] conforms to [[cdcMetadataColSchema]]. Decomposition tails
    *   (rows with [[recordStartAtFieldName]] = null) MUST NOT be present on input - they are
    *   produced exclusively by this function.
    * @return
@@ -442,15 +462,14 @@ case class Scd2BatchProcessor(
       Scd2BatchProcessor.nextRecordStartAtColName
     )
 
-    val isClosedNonTombstoneRow = RowClassifier.isClosedRow(
+    val isClosedUpsertRow = RowClassifier.isClosedUpsert(
       recordStartAt = recordStartAtField,
       startAt = startAtCol,
-      endAt = endAtCol,
-      includeTombstones = false
+      endAt = endAtCol
     )
     val nextRowBisectsCurrentRow =
       nextRecordStartAt.isNotNull && nextRecordStartAt < endAtCol
-    val rowShouldDecompose = isClosedNonTombstoneRow && nextRowBisectsCurrentRow
+    val rowShouldDecompose = isClosedUpsertRow && nextRowBisectsCurrentRow
 
     val originalCols: Seq[String] = rowsToDecomposePerKey.columns.toSeq
     val originalSchema: StructType = rowsToDecomposePerKey.schema
@@ -482,7 +501,7 @@ case class Scd2BatchProcessor(
         case colName if colName == AutoCdcReservedNames.cdcMetadataColName =>
           withOriginalSchemaPreserved(
             colName,
-            Scd2BatchProcessor.constructTargetCdcMetadataCol(
+            Scd2BatchProcessor.constructCdcMetadataCol(
               recordStartAt = F.lit(null).cast(resolvedSequencingType),
               sequencingType = resolvedSequencingType
             )
@@ -521,98 +540,49 @@ case class Scd2BatchProcessor(
 
   /**
    * Drops rows that are redundant within the per-key chronological window output by
-   * [[decomposeOutOfOrderRows]]. Three classes of redundant rows are removed:
+   * [[decomposeOutOfOrderRows]]. The redundancy criterion is a single rule:
    *
-   *   1. Same-event duplicates (defensive): two rows whose
-   *      `(effectiveRecordStartAt, startAt, endAt)` null-safe-match represent the same
-   *      event at the same sequence. The chronologically-leading copy is dropped. Should
-   *      not fire in well-formed CDC streams where sequences are unique per key, but can
-   *      occur when streaming from a distributed system source like Kafka and should still
-   *      be graciously handled, since the resulting target table is still deterministic
-   *      and well-defined if the user data columns are identical for both. If the user data
-   *      columns are not identical, then behavior for which row is kept is publicly
-   *      documented as undefined.
+   *   A row is redundant whenever it sorts before some other row with the same effective
+   *   recordStartAt under [[orderChronologicallyPerKeyWindow]]; equivalently, only the
+   *   trailing row in any such tie survives.
    *
-   *   2. Upsert overtaken at the same instant (defensive): an open upsert whose next
-   *      window-order neighbor shares its `effectiveRecordStartAt`. The upsert opens at
-   *      an instant the next event already overtakes, leaving it with no effective
-   *      duration. In practice this arises only from sequence collisions for the same
-   *      key (a violation of the SCD2 sequencing-uniqueness contract); behavior for
-   *      which upsert is kept is publicly documented as undefined.
-   *
-   *   3. Deletion overtaken at the same instant (routine): a decomposition tail (synthetic
-   *      delete-at-`endAt` produced by [[decomposeOutOfOrderRows]]) whose `endAt` equals
-   *      the next row's `effectiveRecordStartAt`. The synthetic delete is already encoded
-   *      by the coincident event, so the tail is redundant. Fires whenever a microbatch
-   *      event lands on an existing close boundary in the target.
+   * The window's tiebreakers (see [[orderChronologicallyPerKeyWindow]]) put the more
+   * informative row last in every meaningful collision: a decomposition tail drops in
+   * favor of the coincident real event that already encodes the same closure, and an
+   * upsert drops in favor of a same-sequence tombstone (delete wins over upsert at the
+   * same instant).
    *
    * @param decomposedRowsPerKey
    *   the output of [[decomposeOutOfOrderRows]]: a dataframe conforming to the canonical
    *   SCD2 row schema `[user_cols..., [[startAtColName]], [[endAtColName]],
    *   [[cdcMetadataColName]]]`.
    * @return
-   *   a dataframe with the same schema, with redundant rows filtered out.
+   *   a dataframe conforming to the same schema as the input. Per key, no two rows in the
+   *   returned dataframe will share the same effective record-start-at.
    */
   private[autocdc] def dropRedundantRowsPostDecomposition(
       decomposedRowsPerKey: DataFrame): DataFrame = {
     val recordStartAtField =
       Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
-    val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
     val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
     val effectiveRecordStartAt = F.coalesce(recordStartAtField, endAtCol)
 
-    // Compute next-row window values into temporary columns before filtering on them.
-    val withWindowCols = decomposedRowsPerKey
-      .withColumn(
-        Scd2BatchProcessor.nextEffectiveRecordStartAtColName,
-        F.lead(effectiveRecordStartAt, 1).over(orderChronologicallyPerKeyWindow)
-      )
-      .withColumn(
-        Scd2BatchProcessor.nextStartAtColName,
-        F.lead(startAtCol, 1).over(orderChronologicallyPerKeyWindow)
-      )
-      .withColumn(
-        Scd2BatchProcessor.nextEndAtColName,
-        F.lead(endAtCol, 1).over(orderChronologicallyPerKeyWindow)
-      )
+    val withNextEffectiveRecordStartAt = decomposedRowsPerKey.withColumn(
+      Scd2BatchProcessor.nextEffectiveRecordStartAtColName,
+      F.lead(effectiveRecordStartAt, 1).over(orderChronologicallyPerKeyWindow)
+    )
     val nextEffectiveRecordStartAt =
-      withWindowCols.col(Scd2BatchProcessor.nextEffectiveRecordStartAtColName)
-    val nextStartAt = withWindowCols.col(Scd2BatchProcessor.nextStartAtColName)
-    val nextEndAt = withWindowCols.col(Scd2BatchProcessor.nextEndAtColName)
+      withNextEffectiveRecordStartAt.col(Scd2BatchProcessor.nextEffectiveRecordStartAtColName)
 
-    // Rule 1: full sequencing-dimension match (same event at same sequence).
-    val isSequencingDimensionDuplicate =
-      effectiveRecordStartAt <=> nextEffectiveRecordStartAt &&
-        startAtCol <=> nextStartAt &&
-        endAtCol <=> nextEndAt
+    // A row is redundant whenever it ties with its immediate window-order successor on
+    // effective recordStartAt. Window tiebreakers ensure the *leading* row in any such tie
+    // is the one to drop.
+    val isRedundantAtSameEffectiveSequence =
+      effectiveRecordStartAt <=> nextEffectiveRecordStartAt
 
-    // Rule 2: open upsert whose effective sequence ties with the next row's.
-    val isOpenUpsertOvertakenAtSameInstant = RowClassifier.isOpenUpsert(
-      recordStartAt = recordStartAtField,
-      startAt = startAtCol,
-      endAt = endAtCol
-    ) && (effectiveRecordStartAt <=> nextEffectiveRecordStartAt)
-
-    // Rule 3: decomposition tail whose endAt coincides with the next row's effective
-    // sequence. The explicit `nextEffectiveRecordStartAt.isNotNull` is redundant given
-    // the strict `===` against a non-null tail endAt, but kept for clarity.
-    val isDecompositionTailOvertakenAtSameInstant =
-      RowClassifier.isDecompositionTail(recordStartAtField) &&
-        nextEffectiveRecordStartAt.isNotNull &&
-        endAtCol === nextEffectiveRecordStartAt
-
-    withWindowCols
-      .filter(!(
-        isSequencingDimensionDuplicate ||
-          isOpenUpsertOvertakenAtSameInstant ||
-          isDecompositionTailOvertakenAtSameInstant
-      ))
-      // Drop the temporary window columns so the output schema matches the input.
-      .drop(
-        Scd2BatchProcessor.nextEffectiveRecordStartAtColName,
-        Scd2BatchProcessor.nextStartAtColName,
-        Scd2BatchProcessor.nextEndAtColName
-      )
+    withNextEffectiveRecordStartAt
+      .filter(!isRedundantAtSameEffectiveSequence)
+      .drop(Scd2BatchProcessor.nextEffectiveRecordStartAtColName)
   }
 }
 
@@ -660,7 +630,9 @@ case class Scd2BatchProcessor(
  * representation of the CDC flow's source table.
  *
  * Lifetime invariant: As per the SCD2 contract, the target table should never have overlapping
- * rows by [startAt, endAt) intervals.
+ * rows by [startAt, endAt) intervals. The target table also never persists a zero-width
+ * upsert-representing row (a non-tombstone with `startAt == endAt`); such rows are dropped
+ * during reconciliation.
  *
  * -------------
  * Concept: aux table.
@@ -796,13 +768,11 @@ object Scd2BatchProcessor {
   val decompositionExplodedColName = s"${{AutoCdcReservedNames.prefix}}decompose_output"
 
   /**
-   * Names of temporary columns used by [[dropRedundantRowsPostDecomposition]] to reference CDC
-   * metadata for successor rows in chronologically sorted order.
+   * Name of temporary column used by [[dropRedundantRowsPostDecomposition]] to reference the
+   * next row's effective recordStartAt in chronologically sorted order.
    *
    * Transient in that the column has no observable side affect or persistence across microbatches.
    */
-  private[autocdc] val nextStartAtColName: String = s"${AutoCdcReservedNames.prefix}next_start_at"
-  private[autocdc] val nextEndAtColName: String = s"${AutoCdcReservedNames.prefix}next_end_at"
   private[autocdc] val nextEffectiveRecordStartAtColName: String =
     s"${AutoCdcReservedNames.prefix}next_effective_record_start_at"
   /**
@@ -879,18 +849,30 @@ object RowClassifier {
       endAt.isNull
 
   /**
-   * Any row with a closed interval. When `includeTombstones` is true, this
-   * includes instantaneous delete boundaries; otherwise it only matches
-   * visible historical upsert rows.
+   * Upsert row whose visible interval has already been closed by a strictly later event;
+   * the historical counterpart to [[isOpenUpsert]].
    */
-  def isClosedRow(
+  def isClosedUpsert(
       recordStartAt: Column,
       startAt: Column,
-      endAt: Column,
-      includeTombstones: Boolean
+      endAt: Column
   ): Column =
     recordStartAt.isNotNull &&
       startAt.isNotNull &&
       endAt.isNotNull &&
-      (if (includeTombstones) startAt <= endAt else startAt < endAt)
+      startAt < endAt
+
+  /**
+   * Any row that encodes an upsert event - either currently open ([[isOpenUpsert]]) or
+   * already closed by a later event ([[isClosedUpsert]]). Excludes tombstones,
+   * decomposition tails, and any other row whose shape doesn't match one of the two
+   * canonical upsert encodings.
+   */
+  def isUpsertRepresentingRow(
+      recordStartAt: Column,
+      startAt: Column,
+      endAt: Column
+  ): Column =
+    isOpenUpsert(recordStartAt, startAt, endAt) ||
+      isClosedUpsert(recordStartAt, startAt, endAt)
 }
