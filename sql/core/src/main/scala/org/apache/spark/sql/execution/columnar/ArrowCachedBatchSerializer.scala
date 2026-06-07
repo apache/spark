@@ -172,6 +172,9 @@ class ArrowCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
         case _: ArrayType | _: StructType | _: MapType => true
         case CalendarIntervalType | VariantType | NullType => true
         case _: UserDefinedType[_] => true
+        // Geometry/Geography are represented as an Arrow struct (srid + wkb); the fast-path
+        // ArrowColumnReader does not handle them, so route them through the fallback.
+        case _: GeometryType | _: GeographyType => true
         case _ => false
       }
     }
@@ -264,6 +267,10 @@ private object ArrowCachedBatchSerializer {
       case _: DayTimeIntervalType => new LongColumnStats  // stored as Long
       case _: TimeType => new LongColumnStats  // Time is stored as Long (nanoseconds)
       case VariantType => new VariantColumnStats
+      // Geometry/Geography are stored as binary (WKB) internally, so reuse BinaryColumnStats
+      // to collect size/count without min/max bounds. They are AtomicTypes that ColumnType
+      // (used by ObjectColumnStats) does not handle, so they must be matched explicitly here.
+      case _: GeometryType | _: GeographyType => new BinaryColumnStats
       case _ => new ObjectColumnStats(dataType)
     }
   }

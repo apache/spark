@@ -1802,6 +1802,88 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(stats.getUTF8String(1).toString == "Cherry")  // semantic max (case-insensitive)
     df.unpersist()
   }
+
+  // A WKB-encoded POINT(1 2), used to build Geometry/Geography test values.
+  private val wkbPoint = "0101000000000000000000F03F0000000000000040"
+    .grouped(2).map(Integer.parseInt(_, 16).toByte).toArray
+
+  // Representative value for each top-level type the serializer claims to support. This drives the
+  // data-driven alignment test below: every type here is both asserted supported by
+  // isSupportedByArrow AND actually cached and read back, so a type that is claimed supported but
+  // fails during stats collection or read (as top-level geometry/geography once did) is caught.
+  private val topLevelTypeSamples: Seq[(DataType, Any)] = Seq(
+    (BooleanType, true),
+    (ByteType, 1.toByte),
+    (ShortType, 1.toShort),
+    (IntegerType, 1),
+    (LongType, 1L),
+    (FloatType, 1.0f),
+    (DoubleType, 1.0),
+    (StringType, "x"),
+    (BinaryType, Array[Byte](1, 2, 3)),
+    (DateType, Date.valueOf("2020-01-01")),
+    (TimestampType, Timestamp.valueOf("2020-01-01 00:00:00")),
+    (TimestampNTZType, LocalDateTime.parse("2020-01-01T00:00:00")),
+    (TimeType(6), LocalTime.parse("12:00:00")),
+    (DecimalType(10, 2), BigDecimal("1.23").bigDecimal),
+    (YearMonthIntervalType(), Period.ofMonths(3)),
+    (DayTimeIntervalType(), Duration.ofSeconds(5)),
+    (CalendarIntervalType, new CalendarInterval(1, 2, 3L)),
+    (ArrayType(IntegerType), Seq(1, 2, 3)),
+    (StructType(Seq(StructField("a", IntegerType))), Row(1)),
+    (MapType(StringType, IntegerType), Map("a" -> 1)),
+    (GeometryType(4326), Geometry.fromWKB(wkbPoint, 4326)),
+    (GeographyType(4326), Geography.fromWKB(wkbPoint, 4326)))
+
+  test("every type claimed supported by isSupportedByArrow can be cached and read back") {
+    // Guards against the failure mode where a type is added to isSupportedByArrow but the stats
+    // collector (createColumnStats) or read path (needsFallback/ArrowColumnReader) is not updated
+    // to match. Driven by isSupportedByArrow itself rather than a hand-maintained list, so the
+    // claim and the implementation are cross-checked on the same set of types.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        topLevelTypeSamples.foreach { case (dt, value) =>
+          assert(ArrowUtils.isSupportedByArrow(dt),
+            s"test sample type $dt is expected to be claimed supported by isSupportedByArrow")
+          val df = singlePartDf(Seq(value), dt).cache()
+          try {
+            // Exercise both the row read (collect) and the cache materialization (count).
+            assert(df.count() == 1, s"count mismatch for $dt (vectorized=$vectorized)")
+            assert(df.collect().length == 1, s"collect mismatch for $dt (vectorized=$vectorized)")
+          } finally {
+            df.unpersist()
+            InMemoryRelation.clearSerializer()
+          }
+        }
+      }
+    }
+  }
+
+  test("top-level geometry and geography roundtrip through the cache") {
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        Seq[(DataType, Any)](
+          (GeometryType(4326), Geometry.fromWKB(wkbPoint, 4326)),
+          (GeographyType(4326), Geography.fromWKB(wkbPoint, 4326))).foreach { case (dt, value) =>
+          val df = singlePartDf(Seq(value, null), dt).cache()
+          try {
+            val rows = df.collect()
+            assert(rows.length == 2, s"$dt (vectorized=$vectorized)")
+            assert(rows.count(_.get(0) != null) == 1, s"$dt non-null count (vectorized=$vectorized)")
+            // Stats: geometry/geography reuse BinaryColumnStats, so no min/max bounds but a
+            // null count of 1.
+            val stats = cachedStats(df)
+            assert(stats.isNullAt(0), s"$dt should have null lower bound")
+            assert(stats.isNullAt(1), s"$dt should have null upper bound")
+            assert(stats.getInt(2) == 1, s"$dt null count should be 1")
+          } finally {
+            df.unpersist()
+            InMemoryRelation.clearSerializer()
+          }
+        }
+      }
+    }
+  }
 }
 
 /**
