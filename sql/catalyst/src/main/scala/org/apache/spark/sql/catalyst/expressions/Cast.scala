@@ -342,8 +342,9 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, TimestampNTZType) => true
     case (TimestampNTZType, TimestampType) => true
     // NTZ string is zone-independent (mirroring micro TIMESTAMP_NTZ, which is not listed); only
-    // the LTZ string parse depends on the session time zone.
+    // the LTZ string parse/render depends on the session time zone.
     case (_: StringType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, _: StringType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
     case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
       needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)

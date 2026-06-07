@@ -163,6 +163,26 @@ object SelectedField {
             val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
             selectField(left, opt)
         }
+      case ArrayFilter(argument, _: LambdaFunction) =>
+        selectField(argument, dataTypeOpt)
+      case ArraySort(argument, _: LambdaFunction, _) =>
+        selectField(argument, dataTypeOpt)
+      case Reverse(child) =>
+        selectField(child, dataTypeOpt)
+      case Shuffle(child, _) =>
+        selectField(child, dataTypeOpt)
+      case Slice(x, start, length) if start.foldable && length.foldable =>
+        selectField(x, dataTypeOpt)
+      case KnownNotContainsNull(child) =>
+        val ArrayType(_, containsNull) = child.dataType
+        val opt = dataTypeOpt.map {
+          case ArrayType(dataType, _) => ArrayType(dataType, containsNull)
+          case x =>
+            // This should not happen.
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(
+              x, "KnownNotContainsNull")
+        }
+        selectField(child, opt)
       case _ =>
         None
     }
