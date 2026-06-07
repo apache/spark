@@ -755,8 +755,10 @@ private class InternalRowToArrowCachedBatchIterator(
     }
 
     Utils.tryWithSafeFinally {
-      // Write rows to Arrow vectors and collect statistics incrementally
-      while (rowIter.hasNext && rowCount < maxRecordsPerBatch) {
+      // Write rows to Arrow vectors and collect statistics incrementally.
+      // A nonpositive maxRecordsPerBatch means unlimited (one batch per partition), matching
+      // ArrowConverters; without the `<= 0` guard the loop would emit empty batches forever.
+      while (rowIter.hasNext && (maxRecordsPerBatch <= 0 || rowCount < maxRecordsPerBatch)) {
         val row = rowIter.next()
         arrowWriter.write(row)
 
@@ -832,9 +834,19 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     val batch = batchIter.next()
     val rowCount = batch.numRows()
 
-    // Check if batch is already Arrow-based for zero-copy path
+    // Check if batch is already Arrow-based for zero-copy path. The zero-copy path reuses the
+    // input vectors but serializes them under a schema built with largeVarTypes=false, and the
+    // read path reconstructs that same non-large schema. Large var-width vectors use 64-bit
+    // offsets, so reading them back under a 32-bit-offset schema would silently corrupt data.
+    // Fall back to the row-based conversion (which always produces standard var-width vectors)
+    // whenever any input vector is, or nests, a large var-width vector.
     val vectors = (0 until batch.numCols()).map(batch.column)
-    if (vectors.forall(_.isInstanceOf[ArrowColumnVector])) {
+    val zeroCopyEligible = vectors.forall {
+      case acv: ArrowColumnVector =>
+        !ColumnarBatchToArrowCachedBatchIterator.containsLargeVarType(acv.getValueVector)
+      case _ => false
+    }
+    if (zeroCopyEligible) {
       // Fast path: zero-copy extraction of Arrow RecordBatch
       convertArrowBatchZeroCopy(batch, rowCount, schema, vectors)
     } else {
@@ -916,6 +928,22 @@ private class ColumnarBatchToArrowCachedBatchIterator(
       arrowWriter.reset()
       root.close()
     }
+  }
+}
+
+private object ColumnarBatchToArrowCachedBatchIterator {
+  import org.apache.arrow.vector.{FieldVector, LargeVarBinaryVector, LargeVarCharVector}
+
+  /**
+   * Whether the vector is, or nests, a large var-width vector (64-bit offsets). These are not
+   * eligible for the zero-copy path because that path serializes and reloads under a schema built
+   * with largeVarTypes=false; reinterpreting 64-bit offset buffers as 32-bit would corrupt data.
+   */
+  def containsLargeVarType(vector: org.apache.arrow.vector.ValueVector): Boolean = vector match {
+    case _: LargeVarCharVector | _: LargeVarBinaryVector => true
+    case fv: FieldVector =>
+      fv.getChildrenFromFields.asScala.exists(containsLargeVarType)
+    case _ => false
   }
 }
 
@@ -1197,11 +1225,15 @@ private class ArrowCachedBatchToInternalRowIterator(
   }
 
   override def hasNext: Boolean = {
+    // Keep loading batches until the current one has rows or the input is exhausted. A cached
+    // batch can legitimately have zero rows (e.g. an empty ColumnarBatch from a columnar source);
+    // without this loop an empty batch would make hasNext return false and silently drop all
+    // remaining, non-empty batches.
+    while (currentRowIndex >= currentRowCount && (prefetchFuture != null || batchIter.hasNext)) {
+      loadNextBatch()
+    }
     if (currentRowIndex < currentRowCount) {
       true
-    } else if (prefetchFuture != null || batchIter.hasNext) {
-      loadNextBatch()
-      currentRowIndex < currentRowCount
     } else {
       if (currentRoot != null) {
         currentRoot.close()

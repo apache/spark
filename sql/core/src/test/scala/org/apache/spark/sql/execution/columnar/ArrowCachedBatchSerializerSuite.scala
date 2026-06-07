@@ -22,7 +22,7 @@ import java.time.{Duration, LocalDateTime, LocalTime, Period}
 
 import org.apache.arrow.vector.{
   BigIntVector, BitVector, DateDayVector, DecimalVector,
-  Float4Vector, Float8Vector, IntVector, SmallIntVector,
+  Float4Vector, Float8Vector, IntVector, LargeVarCharVector, SmallIntVector,
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot}
 
@@ -33,6 +33,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -1882,6 +1883,83 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
           }
         }
       }
+    }
+  }
+
+  test("columnar input backed by LargeVarCharVector roundtrips via the slow path") {
+    // ArrowColumnVector accepts LargeVarCharVector (64-bit offsets) for StringType. The zero-copy
+    // path serializes/reloads under a largeVarTypes=false schema (32-bit offsets), which would
+    // corrupt such data, so the serializer must fall back to the row-based slow path. Build the
+    // ColumnarBatch inside the task to avoid serializing it to executors.
+    val schema = Seq(AttributeReference("v", StringType, nullable = true)())
+    val conf = spark.sessionState.conf
+    val ser = new ArrowCachedBatchSerializer
+    val batchRdd = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+      val alloc = ArrowUtils.rootAllocator.newChildAllocator("test-large-varchar", 0, Long.MaxValue)
+      val lv = new LargeVarCharVector("v", alloc)
+      lv.allocateNew(2)
+      lv.setSafe(0, "hello".getBytes("UTF-8"))
+      lv.setSafe(1, "world".getBytes("UTF-8"))
+      lv.setValueCount(2)
+      Iterator(new ColumnarBatch(Array[ColumnVector](new ArrowColumnVector(lv)), 2))
+    }
+    val cached = ser.convertColumnarBatchToCachedBatch(
+      batchRdd, schema, StorageLevel.MEMORY_ONLY, conf)
+    cached.persist()
+    try {
+      val values = ser.convertCachedBatchToInternalRow(cached, schema, schema, conf)
+        .map(_.getString(0)).collect()
+      assert(values.sorted.sameElements(Array("hello", "world")),
+        s"expected [hello, world] but got [${values.mkString(", ")}]")
+    } finally {
+      cached.unpersist()
+    }
+  }
+
+  test("nonpositive maxRecordsPerBatch caches all rows in a single batch") {
+    // A nonpositive maxRecordsPerBatch means unlimited; without the `<= 0` guard the write
+    // iterator would emit zero-row batches forever instead of finishing.
+    Seq("0", "-1").foreach { v =>
+      withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> v) {
+        val df = spark.range(0, 100).repartition(1).cache()
+        try {
+          assert(df.count() == 100, s"maxRecordsPerBatch=$v")
+          assert(df.collect().length == 100, s"maxRecordsPerBatch=$v")
+        } finally {
+          df.unpersist()
+          InMemoryRelation.clearSerializer()
+        }
+      }
+    }
+  }
+
+  test("row read does not drop rows after an empty cached batch") {
+    // A zero-row cached batch (legal input from a columnar source) must not terminate the row
+    // iterator early: subsequent non-empty batches must still be read.
+    val schema = Seq(AttributeReference("v", IntegerType, nullable = true)())
+    val conf = spark.sessionState.conf
+    val ser = new ArrowCachedBatchSerializer
+    // One empty ColumnarBatch followed by a one-row batch, each built inside the task.
+    val batchRdd = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+      def intBatch(values: Int*): ColumnarBatch = {
+        val alloc = ArrowUtils.rootAllocator.newChildAllocator("test-empty", 0, Long.MaxValue)
+        val iv = new IntVector("v", alloc)
+        iv.allocateNew(values.length)
+        values.zipWithIndex.foreach { case (x, i) => iv.setSafe(i, x) }
+        iv.setValueCount(values.length)
+        new ColumnarBatch(Array[ColumnVector](new ArrowColumnVector(iv)), values.length)
+      }
+      Iterator(intBatch(), intBatch(42))
+    }
+    val cached = ser.convertColumnarBatchToCachedBatch(
+      batchRdd, schema, StorageLevel.MEMORY_ONLY, conf)
+    cached.persist()
+    try {
+      val values = ser.convertCachedBatchToInternalRow(cached, schema, schema, conf)
+        .map(_.getInt(0)).collect()
+      assert(values.sameElements(Array(42)), s"expected [42] but got [${values.mkString(", ")}]")
+    } finally {
+      cached.unpersist()
     }
   }
 }
