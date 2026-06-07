@@ -1852,12 +1852,36 @@ abstract class KafkaMicroBatchV2SourceSuite extends KafkaMicroBatchSourceSuiteBa
 
     // test inRealTimeMode is true and latestConsumedOffset is not present
     assert(KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), None).isEmpty)
+  }
 
-    // test that Some(null) — previously produced by the unfixed instance metrics() when
-    // latestPartitionOffsets was null — causes NPE. The fix (Option() instead of Some())
-    // converts null to None in the instance method, preventing this path from being reached.
-    intercept[NullPointerException] {
-      KafkaMicroBatchStream.metrics(Optional.ofNullable(offset), Some(null))
+  test("instance metrics() does not NPE before latestOffset() is called") {
+    val topic = newTopic()
+    testUtils.createTopic(topic, partitions = 1)
+
+    SparkSession.setActiveSession(spark)
+    withTempDir { dir =>
+      val provider = new KafkaSourceProvider()
+      val dsOptions = new CaseInsensitiveStringMap(Map(
+        "kafka.bootstrap.servers" -> testUtils.brokerAddress,
+        "subscribe" -> topic
+      ).asJava)
+      val stream = provider.getTable(dsOptions)
+        .newScanBuilder(dsOptions)
+        .build()
+        .toMicroBatchStream(dir.getAbsolutePath)
+        .asInstanceOf[KafkaMicroBatchStream]
+
+      try {
+        // latestPartitionOffsets is null (= _) because latestOffset() has not been called yet.
+        // Before the fix, the instance metrics() used Some(latestPartitionOffsets) = Some(null),
+        // which caused an NPE inside the companion object metrics(). After the fix,
+        // Option(latestPartitionOffsets) = None, so metrics() returns an empty map.
+        val tp = new TopicPartition(topic, 0)
+        val consumedOffset = KafkaSourceOffset(Map(tp -> 0L))
+        assert(stream.metrics(Optional.of(consumedOffset)).isEmpty)
+      } finally {
+        stream.stop()
+      }
     }
   }
 }
