@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.types.ops
 
+import java.time.ZoneId
+
 import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -172,17 +175,24 @@ object TypeApiOps {
    *
    * @param dt
    *   the DataType to get operations for
+   * @param zoneId
+   *   the session time zone for zone-aware rendering (TIMESTAMP_LTZ nanos). CAST passes the
+   *   cast's resolved zone; zone-less callers (EXPLAIN / SQL-literal / Row JSON) accept the
+   *   default, the session-local time zone config. By-name so it is forced only when LTZ is
+   *   constructed: zone-independent and unsupported types never evaluate it, which matters
+   *   because a CAST's zone is unresolved (`None.get`) until the time zone is assigned.
    * @return
    *   Some(TypeApiOps) if supported, None otherwise
    */
-  def apply(dt: DataType): Option[TypeApiOps] = {
+  def apply(
+      dt: DataType,
+      zoneId: => ZoneId = SparkDateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone))
+      : Option[TypeApiOps] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     dt match {
       case tt: TimeType => Some(new TimeTypeApiOps(tt))
       case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeApiOps(t))
-      // No cast zone here (EXPLAIN / SQL-literal / Row JSON), so LTZ defaults to the session-local
-      // time zone config. CAST constructs the LTZ ops directly with the cast's resolved zone.
-      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t))
+      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t, zoneId))
       // Add new types here - single registration point
       case _ => None
     }

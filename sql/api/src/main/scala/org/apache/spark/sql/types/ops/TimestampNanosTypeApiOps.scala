@@ -21,9 +21,8 @@ import java.time.{ZoneId, ZoneOffset}
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
-import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.TimestampFormatter
 import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase}
-import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
@@ -39,9 +38,9 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * nanosecond timestamp cast-to-string, via the zone-less [[format]] / [[formatUTF8]]. NTZ
  * rendering is zone-independent (the value is the UTC-grid wall clock). LTZ rendering depends on
  * the session time zone, so the LTZ ops carries a ZoneId and builds its formatter once per
- * instance: ToStringBase constructs it with the cast's resolved session zone, while the zone-less
- * framework lookup (TypeApiOps.apply, used by EXPLAIN / SQL-literal toSQLValue / Row JSON)
- * defaults the zone to the session-local time zone config.
+ * instance. The zone is threaded in via TypeApiOps.apply(dt, zoneId): CAST passes the cast's
+ * resolved session zone, while zone-less callers (EXPLAIN / SQL-literal toSQLValue / Row JSON)
+ * accept the default, the session-local time zone config.
  *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
@@ -117,11 +116,13 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
  *
  * @param t
  *   The TimestampLTZNanosType with precision information
+ * @param zoneId
+ *   The time zone LTZ values are rendered in (LTZ is zone-aware). [[TypeApiOps.apply]] threads in
+ *   the session zone: the cast's resolved zone for CAST, or the session-local time zone config
+ *   for zone-less render callers (EXPLAIN / SQL-literal / Row JSON).
  * @since 4.3.0
  */
-class TimestampLTZNanosTypeApiOps(
-    val t: TimestampLTZNanosType,
-    zoneId: ZoneId = SparkDateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone))
+class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: ZoneId)
     extends TimestampNanosTypeApiOps {
   override def dataType: TimestampLTZNanosType = t
   override protected def sqlTypeName: String = "TIMESTAMP_LTZ"
