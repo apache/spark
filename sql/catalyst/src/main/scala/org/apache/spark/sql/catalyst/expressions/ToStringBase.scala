@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.time.{ZoneId, ZoneOffset}
+import java.time.ZoneOffset
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
+import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TypeApiOps}
 import org.apache.spark.unsafe.UTF8StringBuilder
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
@@ -66,13 +66,19 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case NoConstraint => castToString(from)
     }
 
-  // The Types Framework is the single integration point for framework types' cast-to-string. The
-  // session zone is threaded into the zone-aware hook; zone-independent types (e.g. TimeType,
-  // TIMESTAMP_NTZ nanos) ignore it while TIMESTAMP_LTZ nanos renders in it (SPARK-57285).
-  private def castToString(from: DataType): Any => UTF8String =
-    TypeApiOps(from)
-      .map(ops => acceptAny[Any](v => ops.formatUTF8(v, zoneId)))
+  // The Types Framework is the single integration point for framework types' cast-to-string, via
+  // the zone-less formatUTF8. Zone-independent types (TimeType, TIMESTAMP_NTZ nanos) render the
+  // same regardless of zone; TIMESTAMP_LTZ nanos renders in the cast's session zone, so it is
+  // constructed directly with that zone rather than looked up zone-less (SPARK-57285).
+  private def castToString(from: DataType): Any => UTF8String = {
+    val opsOpt = from match {
+      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t, zoneId))
+      case _ => TypeApiOps(from)
+    }
+    opsOpt
+      .map(ops => acceptAny[Any](ops.formatUTF8))
       .getOrElse(castToStringDefault(from))
+  }
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
     case CalendarIntervalType =>
@@ -238,21 +244,19 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
       case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
-        // Route nanosecond timestamp cast-to-string through the Types Framework: emit a runtime
-        // call into the ops reference object, passing the session zoneId literal. This keeps the
-        // zone-aware formatting (zone-independent NTZ, session-zone LTZ) in TypeApiOps rather than
-        // inlining it here (SPARK-57285).
-        val ops = TypeApiOps(from).get
-        // Pin the reference-object cast types to the public TypeApiOps / ZoneId classes: the
-        // runtime zoneId is a package-private java.time.ZoneRegion, so letting addReferenceObj
-        // derive the cast from the concrete class would emit an inaccessible type in codegen.
+        // Route nanosecond timestamp cast-to-string through the Types Framework: build the ops and
+        // emit a runtime call into it. LTZ carries the cast's session zone (constructed directly);
+        // NTZ is zone-independent (SPARK-57285).
+        val ops = from match {
+          case t: TimestampLTZNanosType => new TimestampLTZNanosTypeApiOps(t, zoneId)
+          case _ => TypeApiOps(from).get
+        }
+        // Pin the reference-object cast type to the public TypeApiOps class; the runtime ops class
+        // lives in sql/api, so the inferred concrete-class cast would be unnecessarily specific.
         val opsRef = JavaCode.global(
           ctx.addReferenceObj("typeApiOps", ops, classOf[TypeApiOps].getName),
           classOf[TypeApiOps])
-        val zoneIdRef = JavaCode.global(
-          ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName),
-          classOf[ZoneId])
-        (c, evPrim) => code"$evPrim = $opsRef.formatUTF8($c, $zoneIdRef);"
+        (c, evPrim) => code"$evPrim = $opsRef.formatUTF8($c);"
       case _: TimeType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timeFormatter", timeFormatter),

@@ -21,8 +21,9 @@ import java.time.{ZoneId, ZoneOffset}
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
-import org.apache.spark.sql.catalyst.util.TimestampFormatter
+import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{DataTypeErrors, DataTypeErrorsBase}
+import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
@@ -35,14 +36,12 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * prefix, and time-zone handling; storage is identical.
  *
  * CAST to STRING (SPARK-57285): the Types Framework is the single integration point for
- * nanosecond timestamp cast-to-string. ToStringBase routes both the interpreted and codegen paths
- * through the zone-aware [[format(v, zoneId)]] / [[formatUTF8(v, zoneId)]] hook here, passing the
- * session time zone. NTZ rendering is zone-independent; LTZ rendering uses the session zone.
- *
- * The remaining zone-less callers (EXPLAIN plan output and SQL-literal rendering via toSQLValue)
- * have no session zone: NTZ can still format directly, while LTZ raises the user-facing
- * UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error rather than silently truncating or guessing
- * a zone.
+ * nanosecond timestamp cast-to-string, via the zone-less [[format]] / [[formatUTF8]]. NTZ
+ * rendering is zone-independent (the value is the UTC-grid wall clock). LTZ rendering depends on
+ * the session time zone, so the LTZ ops carries a ZoneId and builds its formatter once per
+ * instance: ToStringBase constructs it with the cast's resolved session zone, while the zone-less
+ * framework lookup (TypeApiOps.apply, used by EXPLAIN / SQL-literal toSQLValue / Row JSON)
+ * defaults the zone to the session-local time zone config.
  *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
@@ -108,8 +107,6 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
   override def format(v: Any): String =
     formatter.formatWithoutTimeZoneNanos(v.asInstanceOf[TimestampNanosVal], precision)
 
-  override def format(v: Any, zoneId: ZoneId): String = format(v)
-
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampNTZNanosType (SPARK-57033):
   // maps to java.time.LocalDateTime with the column precision.
   override protected def nanosEncoder: AgnosticEncoder[_] = LocalDateTimeNanosEncoder(t.precision)
@@ -122,22 +119,21 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
  *   The TimestampLTZNanosType with precision information
  * @since 4.3.0
  */
-class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType) extends TimestampNanosTypeApiOps {
+class TimestampLTZNanosTypeApiOps(
+    val t: TimestampLTZNanosType,
+    zoneId: ZoneId = SparkDateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone))
+    extends TimestampNanosTypeApiOps {
   override def dataType: TimestampLTZNanosType = t
   override protected def sqlTypeName: String = "TIMESTAMP_LTZ"
   override protected def precision: Int = t.precision
 
-  // Zone-less callers (EXPLAIN, SQL-literal) have no session zone to render LTZ in, so they still
-  // raise rather than guessing a default.
-  override def format(v: Any): String =
-    throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
+  // LTZ rendering depends on the session time zone, carried by this ops instance (the cast's
+  // resolved zone, or the session-local time zone config for the zone-less framework lookup). The
+  // fraction formatter is built once here (per cast / per ops) rather than per row.
+  @transient private lazy val formatter = TimestampFormatter.getFractionFormatter(zoneId)
 
-  // LTZ rendering depends on the session time zone. The fraction formatter has its own internal
-  // cache, so build it per call rather than caching it here.
-  override def format(v: Any, zoneId: ZoneId): String = {
-    val formatter = TimestampFormatter.getFractionFormatter(zoneId)
+  override def format(v: Any): String =
     formatter.formatNanos(v.asInstanceOf[TimestampNanosVal], precision)
-  }
 
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampLTZNanosType (SPARK-57033):
   // maps to java.time.Instant with the column precision.

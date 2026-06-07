@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
-import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDateTime, ZoneOffset}
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder, OptionEncoder}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampL
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
-import org.apache.spark.sql.types.ops.TypeApiOps
+import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TypeApiOps}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**
@@ -179,43 +179,40 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
       val ops = TypeApiOps(TimestampNTZNanosType(p)).get
       val v = DateTimeUtils.localDateTimeToTimestampNanos(nanosLdt, p)
       val expected = s"2020-01-01 00:00:00.${expectedFraction(p)}"
-      // Zone-less callers (EXPLAIN, SQL-literal) format directly: NTZ is zone-independent.
+      // NTZ is zone-independent: it renders the same regardless of the session zone.
       assert(ops.format(v) === expected, s"NTZ format for precision $p")
       assert(ops.formatUTF8(v) === UTF8String.fromString(expected))
       assert(ops.toSQLValue(v) === s"TIMESTAMP_NTZ '$expected'")
-      // The zone-aware hook ignores the supplied zoneId for NTZ.
-      Seq(ZoneOffset.UTC, ZoneOffset.ofHours(5), ZoneId.of("America/Los_Angeles")).foreach { zid =>
-        assert(ops.format(v, zid) === expected, s"NTZ zone-aware format for $p in $zid")
-        assert(ops.formatUTF8(v, zid) === UTF8String.fromString(expected))
-      }
     }
   }
 
-  test("SPARK-57285: LTZ format renders in the session zone via the zone-aware hook") {
+  test("SPARK-57285: LTZ format renders in the zone carried by the ops instance") {
     precisions.foreach { p =>
-      val ops = TypeApiOps(TimestampLTZNanosType(p)).get
+      val t = TimestampLTZNanosType(p)
       // Physical value is the epoch instant of the UTC wall clock above.
       val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
       val frac = expectedFraction(p)
-      // UTC session zone: the wall clock matches the UTC instant.
-      assert(ops.format(v, ZoneOffset.UTC) === s"2020-01-01 00:00:00.$frac")
-      assert(ops.formatUTF8(v, ZoneOffset.UTC) ===
-        UTF8String.fromString(s"2020-01-01 00:00:00.$frac"))
-      // A +05:00 session zone shifts the rendered wall clock; the fraction is unaffected.
-      assert(ops.format(v, ZoneOffset.ofHours(5)) === s"2020-01-01 05:00:00.$frac")
+      // UTC zone: the rendered wall clock matches the UTC instant.
+      val utcOps = new TimestampLTZNanosTypeApiOps(t, ZoneOffset.UTC)
+      assert(utcOps.format(v) === s"2020-01-01 00:00:00.$frac")
+      assert(utcOps.formatUTF8(v) === UTF8String.fromString(s"2020-01-01 00:00:00.$frac"))
+      assert(utcOps.toSQLValue(v) === s"TIMESTAMP_LTZ '2020-01-01 00:00:00.$frac'")
+      // A +05:00 zone shifts the rendered wall clock; the fraction is unaffected.
+      val offsetOps = new TimestampLTZNanosTypeApiOps(t, ZoneOffset.ofHours(5))
+      assert(offsetOps.format(v) === s"2020-01-01 05:00:00.$frac")
     }
   }
 
-  test("SPARK-57285: LTZ zone-less format and toSQLValue still raise (no session zone)") {
-    precisions.foreach { p =>
-      val dt = TimestampLTZNanosType(p)
-      val ops = TypeApiOps(dt).get
-      val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
-      Seq[() => Any](() => ops.format(v), () => ops.toSQLValue(v)).foreach { call =>
-        checkError(
-          exception = intercept[SparkUnsupportedOperationException](call()),
-          condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING",
-          parameters = Map("dataType" -> ("\"" + dt.sql + "\"")))
+  test("SPARK-57285: LTZ zone-less lookup renders in the session-local time zone config") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      precisions.foreach { p =>
+        val dt = TimestampLTZNanosType(p)
+        // TypeApiOps.apply has no cast zone, so it defaults to the session-local time zone config.
+        val ops = TypeApiOps(dt).get
+        val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
+        val frac = expectedFraction(p)
+        assert(ops.format(v) === s"2020-01-01 00:00:00.$frac")
+        assert(ops.toSQLValue(v) === s"TIMESTAMP_LTZ '2020-01-01 00:00:00.$frac'")
       }
     }
   }
