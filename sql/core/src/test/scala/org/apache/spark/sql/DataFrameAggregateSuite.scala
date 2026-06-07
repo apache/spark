@@ -688,6 +688,20 @@ class DataFrameAggregateSuite extends SharedSparkSession
     checkAnswer(
       sql("SELECT collect_set(a) FROM VALUES (array(float(-0.0))), (array(float(0.0))) AS t(a)"),
       Row(Seq(Seq(0.0f))))
+
+    // Nested NaN already deduplicates today, included as a guardrail against regressions.
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM " +
+        "VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Row(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(double('NaN'))), (array(double('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(float('NaN'))), (array(float('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Float.NaN))))
   }
 
   test("collect functions structs") {
