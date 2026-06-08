@@ -561,6 +561,7 @@ class Analyzer(
       ResolveTimeZone ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
+      ResolveTimestampNanosExpressions ::
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
       ResolveZip ::
@@ -640,6 +641,35 @@ class Analyzer(
       plan.resolveExpressionsUpWithPruning(_.containsPattern(BINARY_ARITHMETIC), ruleId) {
         case expr @ (_: Add | _: Subtract | _: Multiply | _: Divide) if expr.childrenResolved =>
           BinaryArithmeticWithDatetimeResolver.resolve(expr)
+      }
+  }
+
+  /**
+   * Enables expressions that only accept the microsecond timestamp types to operate on the
+   * nanosecond-precision timestamp types (TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p)) by casting the
+   * nanosecond child down to the matching microsecond type and reusing the existing expression.
+   *
+   * The cast keeps `epochMicros` and drops the sub-microsecond digits, so it is only applied to
+   * expressions whose result does not depend on those digits. Currently this covers the integer
+   * time-of-day extractors `Hour`, `Minute` and `Second`. `SecondWithFraction` (the
+   * `extract(SECOND)` path returning `DECIMAL(8, 6)`) is intentionally excluded because its result
+   * does depend on the sub-microsecond digits.
+   */
+  object ResolveTimestampNanosExpressions extends Rule[LogicalPlan] {
+    // Maps a nanosecond-precision timestamp type to the matching microsecond timestamp type.
+    private def microTimestampType(dt: DataType): Option[DataType] = dt match {
+      case _: TimestampNTZNanosType => Some(TimestampNTZType)
+      case _: TimestampLTZNanosType => Some(TimestampType)
+      case _ => None
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan =
+      plan.resolveExpressionsUpWithPruning(_.containsPattern(GET_TIME_FIELD), ruleId) {
+        case e @ (_: Hour | _: Minute | _: Second) if e.childrenResolved =>
+          val child = e.children.head
+          microTimestampType(child.dataType)
+            .map(t => e.withNewChildren(Seq(Cast(child, t))))
+            .getOrElse(e)
       }
   }
 

@@ -57,6 +57,7 @@ object TreePattern extends Enumeration  {
   val EXTRACT_VALUE: Value = Value
   val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
   val GENERATOR: Value = Value
+  val GET_TIME_FIELD: Value = Value
   val GROUPING_ANALYTICS: Value = Value
   val HIGH_ORDER_FUNCTION: Value = Value
   val IF: Value = Value

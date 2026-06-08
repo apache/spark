@@ -397,6 +397,8 @@ trait GetTimeField extends UnaryExpression
 
   @transient protected lazy val zoneIdInEval: ZoneId = zoneIdForType(child.dataType)
 
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(GET_TIME_FIELD)
+
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType)
 
   override def dataType: DataType = IntegerType

@@ -133,3 +133,51 @@ SELECT named_struct('f', CAST(NULL AS timestamp_ltz(9)))
 struct<named_struct(f, CAST(NULL AS TIMESTAMP_LTZ(9))):struct<f:timestamp_ltz(9)>>
 -- !query output
 {"f":null}
+
+
+-- !query
+SELECT hour(CAST('2020-01-01 13:24:35.123456789' AS timestamp_ltz(9)))
+-- !query schema
+struct<hour(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(9))):int>
+-- !query output
+13
+
+
+-- !query
+SELECT minute(CAST('2020-01-01 13:24:35.123456789' AS timestamp_ltz(9)))
+-- !query schema
+struct<minute(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(9))):int>
+-- !query output
+24
+
+
+-- !query
+SELECT second(CAST('2020-01-01 13:24:35.123456789' AS timestamp_ltz(9)))
+-- !query schema
+struct<second(CAST(2020-01-01 13:24:35.123456789 AS TIMESTAMP_LTZ(9))):int>
+-- !query output
+35
+
+
+-- !query
+SELECT hour(CAST('2020-01-01 13:24:35.999999999' AS timestamp_ltz(7)))
+-- !query schema
+struct<hour(CAST(2020-01-01 13:24:35.999999999 AS TIMESTAMP_LTZ(7))):int>
+-- !query output
+13
+
+
+-- !query
+SELECT second(CAST('2020-01-01 13:24:35.999999999' AS timestamp_ltz(8)))
+-- !query schema
+struct<second(CAST(2020-01-01 13:24:35.999999999 AS TIMESTAMP_LTZ(8))):int>
+-- !query output
+35
+
+
+-- !query
+SELECT hour(CAST(NULL AS timestamp_ltz(9)))
+-- !query schema
+struct<hour(CAST(NULL AS TIMESTAMP_LTZ(9))):int>
+-- !query output
+NULL
