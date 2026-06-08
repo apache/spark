@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
-import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimeType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, ByteType, DataType, DayTimeIntervalType, DecimalType, IntegerType, IntegralType, LongType, NumericType, ObjectType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -157,6 +157,24 @@ object TimePart {
     }
 }
 
+private[expressions] object NanosTimestampCast {
+  /**
+   * Casts a nanosecond-precision timestamp (`TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)`, `p` in
+   * `[7, 9]`) down to the matching microsecond timestamp type so that expressions accepting only
+   * the microsecond timestamp types can reuse it:
+   *   - TimestampNTZNanosType(p) -> TimestampNTZType
+   *   - TimestampLTZNanosType(p) -> TimestampType
+   *
+   * The cast keeps `epochMicros` and drops the sub-microsecond digits, which is lossless for the
+   * integer time-of-day fields (hour/minute/second). Inputs of any other type are returned as is.
+   */
+  def castToMicros(child: Expression): Expression = child.dataType match {
+    case _: TimestampNTZNanosType => Cast(child, TimestampNTZType)
+    case _: TimestampLTZNanosType => Cast(child, TimestampType)
+    case _ => child
+  }
+}
+
 /**
  * * Parses a column to a time based on the supplied format.
  */
@@ -240,11 +258,18 @@ case class MinutesOfTime(child: Expression)
 
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the minute of that timestamp.
+    If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
+    with p in [7, 9] (since 4.2.0), it returns the minute of that timestamp, ignoring the
+    sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the minute of the time-of-day.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
+       58
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2009-07-30 12:58:59.123456789');
+       58
+      > SELECT _FUNC_(TIMESTAMP_LTZ '2009-07-30 12:58:59.123456789');
        58
       > SELECT _FUNC_(TIME'23:59:59.999999');
        59
@@ -262,7 +287,9 @@ object MinuteExpressionBuilder extends ExpressionBuilder {
         case _: TimeType =>
           MinutesOfTime(child)
         case _ =>
-          Minute(child)
+          // Casts nanosecond-precision timestamps down to the microsecond timestamp type;
+          // other types are passed through unchanged.
+          Minute(NanosTimestampCast.castToMicros(child))
       }
     }
   }
@@ -298,11 +325,18 @@ case class HoursOfTime(child: Expression)
 
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the hour of that timestamp.
+    If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
+    with p in [7, 9] (since 4.2.0), it returns the hour of that timestamp, ignoring the
+    sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the hour of the time-of-day.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('2018-02-14 12:58:59');
+       12
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2018-02-14 12:58:59.123456789');
+       12
+      > SELECT _FUNC_(TIMESTAMP_LTZ '2018-02-14 12:58:59.123456789');
        12
       > SELECT _FUNC_(TIME'13:59:59.999999');
        13
@@ -319,7 +353,9 @@ object HourExpressionBuilder extends ExpressionBuilder {
         case _: TimeType =>
           HoursOfTime(child)
         case _ =>
-          Hour(child)
+          // Casts nanosecond-precision timestamps down to the microsecond timestamp type;
+          // other types are passed through unchanged.
+          Hour(NanosTimestampCast.castToMicros(child))
       }
     }
   }
@@ -381,11 +417,18 @@ case class SecondsOfTime(child: Expression)
 
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the second of that timestamp.
+    If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
+    with p in [7, 9] (since 4.2.0), it returns the second of that timestamp, ignoring the
+    sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the second of the time-of-day.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('2018-02-14 12:58:59');
+       59
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2018-02-14 12:58:59.123456789');
+       59
+      > SELECT _FUNC_(TIMESTAMP_LTZ '2018-02-14 12:58:59.123456789');
        59
       > SELECT _FUNC_(TIME'13:25:59.999999');
        59
@@ -402,7 +445,9 @@ object SecondExpressionBuilder extends ExpressionBuilder {
         case _: TimeType =>
           SecondsOfTime(child)
         case _ =>
-          Second(child)
+          // Casts nanosecond-precision timestamps down to the microsecond timestamp type;
+          // other types are passed through unchanged.
+          Second(NanosTimestampCast.castToMicros(child))
       }
     }
   }
