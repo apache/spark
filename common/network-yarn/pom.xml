@@ -184,6 +184,12 @@
                   tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_kqueue_aarch_64.jnilib" />
                 <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_epoll_riscv64.so"
                   tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_epoll_riscv64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_io_uring42_x86_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_io_uring42_x86_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_io_uring42_aarch_64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_io_uring42_aarch_64.so" />
+                <move file="${project.build.directory}/exploded/META-INF/native/libnetty_transport_native_io_uring42_riscv64.so"
+                  tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_transport_native_io_uring42_riscv64.so" />
                 <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_linux_x86_64.so"
                   tofile="${project.build.directory}/exploded/META-INF/native/lib${spark.shade.native.packageName}_netty_tcnative_linux_x86_64.so" />
                 <move file="${project.build.directory}/exploded/META-INF/native/libnetty_tcnative_linux_aarch_64.so"

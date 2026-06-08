@@ -20,7 +20,7 @@ package org.apache.spark
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
-import org.apache.spark.network.util.IOMode
+import org.apache.spark.network.util.{IOMode, NettyUtils}
 import org.apache.spark.util.Utils
 
 abstract class ShuffleNettySuite extends ShuffleSuite {
@@ -54,6 +54,11 @@ class ShuffleNettyEpollSuite extends ShuffleNettySuite {
 class ShuffleNettyKQueueSuite extends ShuffleNettySuite {
   override def shouldRunTests: Boolean = Utils.isMac
   override def ioMode: IOMode = IOMode.KQUEUE
+}
+
+class ShuffleNettyIoUringSuite extends ShuffleNettySuite {
+  override def shouldRunTests: Boolean = Utils.isLinux && NettyUtils.isIoUringUsable
+  override def ioMode: IOMode = IOMode.IO_URING
 }
 
 class ShuffleNettyAutoSuite extends ShuffleNettySuite {

@@ -279,10 +279,13 @@ object NettyTransportBenchmark extends BenchmarkBase {
   }
 
   /**
-   * Suite 3: IOMode Comparison (NIO vs AUTO).
+   * Suite 3: IOMode Comparison (NIO vs AUTO, plus IO_URING when usable).
    * AUTO selects the best native transport via NettyUtils.createEventLoop
-   * (EPOLL on Linux, KQUEUE on macOS, NIO fallback), so comparing NIO vs AUTO
-   * shows the benefit of native transport without needing manual probing.
+   * (EPOLL on Linux, KQUEUE on macOS, NIO fallback). IO_URING is opt-in only and is
+   * appended to the comparison when {@code NettyUtils.isIoUringUsable} reports true
+   * -- on CI runners with low {@code RLIMIT_MEMLOCK} the IO_URING case will skip,
+   * so recorded results may omit it. Run locally on Linux 5.10+ with
+   * {@code prlimit --memlock=unlimited} to capture the io_uring numbers.
    * Uses concurrent load (8 clients) to amplify transport-level differences.
    */
   private def ioModeComparisonBenchmark(): Unit = {
@@ -297,7 +300,9 @@ object NettyTransportBenchmark extends BenchmarkBase {
         minNumIters = 3,
         output = output)
 
-      Seq("NIO", "AUTO").foreach { mode =>
+      val modes = Seq("NIO", "AUTO") ++
+        (if (NettyUtils.isIoUringUsable) Seq("IO_URING") else Seq.empty)
+      modes.foreach { mode =>
         benchmark.addTimerCase(s"$mode ($numClients clients)", numIters = 3) { timer =>
           withTransport(mode) { (clientFactory, port) =>
             val messagesPerClient = (totalMessages / numClients).toInt
@@ -562,8 +567,11 @@ object NettyTransportBenchmark extends BenchmarkBase {
    * and fetches them using client.fetchChunk(). This exercises the DefaultFileRegion
    * zero-copy sendfile/splice path.
    *
-   * Compares NIO vs AUTO to verify that native transports (EPOLL/KQUEUE) use sendfile()
-   * for file-backed transfers. AUTO should be equal to or faster than NIO.
+   * Compares NIO vs AUTO -- and IO_URING when {@code NettyUtils.isIoUringUsable}
+   * reports true -- to verify that native transports use the kernel zero-copy path
+   * for file-backed transfers (sendfile() for EPOLL/KQUEUE, splice() for io_uring on
+   * supported kernels). AUTO should be equal to or faster than NIO. On CI runners
+   * with low {@code RLIMIT_MEMLOCK} the IO_URING case will skip.
    */
   private def fileBackedShuffleBenchmark(): Unit = {
     val numFiles = 100
@@ -591,14 +599,16 @@ object NettyTransportBenchmark extends BenchmarkBase {
     }
 
     try {
-      runBenchmark(s"File-Backed Shuffle Block Fetch (NIO vs AUTO, ${numFiles}x16MB)") {
+      runBenchmark(s"File-Backed Shuffle Block Fetch (${numFiles}x16MB)") {
         val benchmark = new Benchmark(
           "File-Backed Shuffle Fetch",
           numFiles.toLong,
           minNumIters = 3,
           output = output)
 
-        Seq("NIO", "AUTO").foreach { mode =>
+        val modes = Seq("NIO", "AUTO") ++
+          (if (NettyUtils.isIoUringUsable) Seq("IO_URING") else Seq.empty)
+        modes.foreach { mode =>
           benchmark.addTimerCase(s"$mode, sequential fetch", numIters = 3) { timer =>
             val conf = createConf(mode)
             val streamManager = createFileStreamManager(conf, files)
