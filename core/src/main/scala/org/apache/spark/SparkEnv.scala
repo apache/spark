@@ -159,7 +159,9 @@ class SparkEnv (
         // Get or Else synchronized to protect
         // against concurrent creation requests.
         udfDispatcherManager.getOrElse {
-          createUDFDispatcherManager()
+          val created = createUDFDispatcherManager()
+          udfDispatcherManager = Some(created)
+          created
         }
       }
     }
