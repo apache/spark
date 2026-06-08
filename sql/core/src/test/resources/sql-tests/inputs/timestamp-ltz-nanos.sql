@@ -39,3 +39,18 @@ SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789');
 SELECT hour('2020-01-01 13:24:35.999999999' :: timestamp_ltz(7));
 SELECT second('2020-01-01 13:24:35.999999999' :: timestamp_ltz(8));
 SELECT hour(NULL :: timestamp_ltz(9));
+
+-- Pre-epoch nanosecond values exercise the negative-epoch path; HOUR/MINUTE/SECOND
+-- read the wall-clock fields in the session time zone.
+SELECT hour(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789');
+SELECT minute(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789');
+SELECT second(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789');
+
+-- LTZ nanos: the literal's time zone defines the instant, which is then extracted in the
+-- session time zone (America/Los_Angeles, UTC-08:00). A source zone with a sub-hour offset
+-- (Asia/Kolkata is UTC+05:30) shifts both the hour and the minute fields.
+SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata');
+SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata');
+SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata');
+SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');
+SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');

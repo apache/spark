@@ -181,3 +181,27 @@ SELECT hour(NULL :: timestamp_ntz(9))
 struct<hour(CAST(NULL AS TIMESTAMP_NTZ(9))):int>
 -- !query output
 NULL
+
+
+-- !query
+SELECT hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
+-- !query schema
+struct<hour(TimestampNanosVal(-315570924876544, 789)):int>
+-- !query output
+13
+
+
+-- !query
+SELECT minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
+-- !query schema
+struct<minute(TimestampNanosVal(-315570924876544, 789)):int>
+-- !query output
+24
+
+
+-- !query
+SELECT second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
+-- !query schema
+struct<second(TimestampNanosVal(-315570924876544, 789)):int>
+-- !query output
+35
