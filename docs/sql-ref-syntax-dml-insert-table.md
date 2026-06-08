@@ -267,6 +267,32 @@ SELECT * FROM students WHERE student_id = 11215017;
 +------------+----------------------+----------+
 ```
 
+##### Insert With Schema Evolution
+
+```sql
+CREATE TABLE students (student_id INT, name STRING);
+CREATE TABLE new_students (student_id INT, name STRING, address STRING);
+
+INSERT INTO students VALUES (444444, 'Bob Brown'), (555555, 'Cathy Johnson');
+INSERT INTO new_students VALUES
+    (111111, 'Ashua Hill', '456 Erica Ct, Cupertino'),
+    (222222, 'Dora Williams', '134 Forest Ave, Melo Park');
+
+-- Evolve the students table schema to add the new address column from the query.
+INSERT WITH SCHEMA EVOLUTION INTO TABLE students
+    SELECT * FROM new_students;
+
+SELECT * FROM students;
++----------+-------------+-------------------------+
+|student_id|         name|                  address|
++----------+-------------+-------------------------+
+|    444444|    Bob Brown|                     null|
+|    555555|Cathy Johnson|                     null|
+|    111111|   Ashua Hill|  456 Erica Ct, Cupertino|
+|    222222|Dora Williams|134 Forest Ave, Melo Park|
++----------+-------------+-------------------------+
+```
+
 #### Insert Overwrite
 
 ##### Insert Using a VALUES Clause
