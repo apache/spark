@@ -35,7 +35,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.types.variant.VariantBuilder
+import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 
 /** UDT whose sqlType is Arrow-supported (ArrayType(DoubleType)). */
 private class SupportedUDT extends UserDefinedType[Array[Double]] {
@@ -1812,6 +1813,11 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
   // data-driven alignment test below: every type here is both asserted supported by
   // isSupportedByArrow AND actually cached and read back, so a type that is claimed supported but
   // fails during stats collection or read (as top-level geometry/geography once did) is caught.
+  private val sampleVariant = {
+    val v = VariantBuilder.parseJson("""{"a":1}""", false)
+    new VariantVal(v.getValue, v.getMetadata)
+  }
+
   private val topLevelTypeSamples: Seq[(DataType, Any)] = Seq(
     (BooleanType, true),
     (ByteType, 1.toByte),
@@ -1822,6 +1828,7 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     (DoubleType, 1.0),
     (StringType, "x"),
     (BinaryType, Array[Byte](1, 2, 3)),
+    (NullType, null),
     (DateType, Date.valueOf("2020-01-01")),
     (TimestampType, Timestamp.valueOf("2020-01-01 00:00:00")),
     (TimestampNTZType, LocalDateTime.parse("2020-01-01T00:00:00")),
@@ -1833,13 +1840,87 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     (ArrayType(IntegerType), Seq(1, 2, 3)),
     (StructType(Seq(StructField("a", IntegerType))), Row(1)),
     (MapType(StringType, IntegerType), Map("a" -> 1)),
+    (new ExamplePointUDT(), new ExamplePoint(1.0, 2.0)),
+    (VariantType, sampleVariant),
     (GeometryType(4326), Geometry.fromWKB(wkbPoint, 4326)),
     (GeographyType(4326), Geography.fromWKB(wkbPoint, 4326)))
+
+  // Maps a DataType to a stable key identifying which isSupportedByArrow branch claims it. Two
+  // types share a key iff they are accepted by the same case arm. Used by the coverage test below
+  // to assert topLevelTypeSamples exercises every branch, so the hand-written sample list stays in
+  // sync with isSupportedByArrow as new branches are added.
+  private def supportedBranchKey(dt: DataType): String = dt match {
+    case BooleanType => "boolean"
+    case ByteType => "byte"
+    case ShortType => "short"
+    case IntegerType => "integer"
+    case LongType => "long"
+    case FloatType => "float"
+    case DoubleType => "double"
+    case _: StringType => "string"
+    case BinaryType => "binary"
+    case NullType => "null"
+    case _: DecimalType => "decimal"
+    case DateType => "date"
+    case TimestampType => "timestamp"
+    case TimestampNTZType => "timestampNTZ"
+    case _: TimeType => "time"
+    case _: YearMonthIntervalType => "yearMonthInterval"
+    case _: DayTimeIntervalType => "dayTimeInterval"
+    case CalendarIntervalType => "calendarInterval"
+    case _: ArrayType => "array"
+    case _: StructType => "struct"
+    case _: MapType => "map"
+    case _: UserDefinedType[_] => "udt"
+    case _: GeometryType => "geometry"
+    case _: GeographyType => "geography"
+    case _: VariantType => "variant"
+    case _ => s"UNSUPPORTED($dt)"
+  }
+
+  // One representative type per isSupportedByArrow branch. supportedBranchKey must return a
+  // distinct, non-UNSUPPORTED key for each, mirroring the match arms in isSupportedByArrow. When a
+  // branch is added to isSupportedByArrow, add its representative here; the assertions below then
+  // force a matching entry in topLevelTypeSamples.
+  private val supportedBranchRepresentatives: Seq[DataType] = Seq(
+    BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType,
+    StringType, BinaryType, NullType, DecimalType(10, 2), DateType, TimestampType,
+    TimestampNTZType, TimeType(6), YearMonthIntervalType(), DayTimeIntervalType(),
+    CalendarIntervalType, ArrayType(IntegerType), StructType(Seq(StructField("a", IntegerType))),
+    MapType(StringType, IntegerType), new ExamplePointUDT(), GeometryType(4326),
+    GeographyType(4326), VariantType)
+
+  test("topLevelTypeSamples covers every isSupportedByArrow branch") {
+    // Cross-checks the hand-written sample list against isSupportedByArrow so the two cannot drift:
+    // every representative type is actually claimed supported, and every branch it represents has
+    // at least one sample exercising the cache+read path in the test below.
+    val representativeKeys = supportedBranchRepresentatives.map { dt =>
+      assert(ArrowUtils.isSupportedByArrow(dt),
+        s"representative type $dt is expected to be claimed supported by isSupportedByArrow")
+      val key = supportedBranchKey(dt)
+      assert(!key.startsWith("UNSUPPORTED"),
+        s"supportedBranchKey has no branch for representative type $dt; mirror the new " +
+          "isSupportedByArrow case here")
+      key
+    }
+    // No two representatives may collapse to the same branch, or a branch could go uncovered while
+    // appearing covered.
+    assert(representativeKeys.distinct.size == representativeKeys.size,
+      s"representatives map to duplicate branch keys: " +
+        s"${representativeKeys.diff(representativeKeys.distinct).distinct.mkString(", ")}")
+
+    val sampleKeys = topLevelTypeSamples.map { case (dt, _) => supportedBranchKey(dt) }.toSet
+    val uncovered = representativeKeys.filterNot(sampleKeys.contains)
+    assert(uncovered.isEmpty,
+      s"isSupportedByArrow branches with no entry in topLevelTypeSamples: " +
+        s"${uncovered.mkString(", ")}. Add a representative value to topLevelTypeSamples.")
+  }
 
   test("every type claimed supported by isSupportedByArrow can be cached and read back") {
     // Guards against the failure mode where a type is added to isSupportedByArrow but the stats
     // collector (createColumnStats) or read path (needsFallback/ArrowColumnReader) is not updated
-    // to match. Driven by isSupportedByArrow itself rather than a hand-maintained list, so the
+    // to match. Driven by isSupportedByArrow itself rather than a hand-maintained list (the
+    // coverage test above enforces that every isSupportedByArrow branch appears here), so the
     // claim and the implementation are cross-checked on the same set of types.
     Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
