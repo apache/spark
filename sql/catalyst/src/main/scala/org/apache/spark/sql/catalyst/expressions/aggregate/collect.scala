@@ -207,6 +207,8 @@ case class CollectSet(
 
   override lazy val bufferElementType = child.dataType match {
     case BinaryType => ArrayType(ByteType)
+    // Float/double are keyed by their bit pattern (see convertToBufferElement), so the
+    // buffer holds the integral bits; eval() converts them back to float/double.
     case DoubleType => LongType
     case FloatType => IntegerType
     case other => other
@@ -238,6 +240,10 @@ case class CollectSet(
      * so we need to use a different catalyst value for arrays
      */
     case BinaryType => UnsafeArrayData.fromPrimitiveArray(value.asInstanceOf[Array[Byte]])
+    // mutable.HashSet[Any] compares boxed Double/Float with IEEE equality, where NaN != NaN,
+    // so normalizing the value alone wouldn't collapse NaNs - keying on doubleToLongBits/
+    // floatToIntBits does (and the NORMALIZER step keeps -0.0/0.0 deduped). Complex types
+    // instead dedup on a normalized UnsafeRow's binary form.
     case DoubleType =>
       java.lang.Double.doubleToLongBits(
         NormalizeFloatingNumbers.DOUBLE_NORMALIZER(value).asInstanceOf[Double])
