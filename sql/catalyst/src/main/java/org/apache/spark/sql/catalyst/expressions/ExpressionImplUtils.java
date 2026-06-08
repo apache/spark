@@ -22,6 +22,7 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 import java.text.BreakIterator;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -347,6 +348,51 @@ public class ExpressionImplUtils {
   }
 
   /**
+   * Inverse hyperbolic sine for the {@code asinh} expression, using the fdlibm
+   * {@code s_asinh.c} algorithm (odd function, so the sign of {@code x} is
+   * preserved). Shared by the eval and codegen paths so the generated Java is a
+   * single call rather than an inline five-branch if/else.
+   */
+  public static double asinh(double x) {
+    double ax = Math.abs(x);
+    double w;
+    if (Double.isInfinite(ax) || Double.isNaN(ax)) {
+      w = ax;
+    } else if (ax < 1.0 / (1 << 28)) {
+      w = ax;
+    } else if (ax > (1 << 28)) {
+      w = StrictMath.log(ax) + StrictMath.log(2.0);
+    } else if (ax > 2.0) {
+      w = StrictMath.log(2.0 * ax + 1.0 / (Math.sqrt(x * x + 1.0) + ax));
+    } else {
+      double t = x * x;
+      w = StrictMath.log1p(ax + t / (1.0 + Math.sqrt(1.0 + t)));
+    }
+    return Math.copySign(w, x);
+  }
+
+  /**
+   * Inverse hyperbolic cosine for the {@code acosh} expression, using the
+   * fdlibm {@code e_acosh.c} algorithm (returns {@code NaN} for {@code x < 1}).
+   * Shared by the eval and codegen paths so the generated Java is a single call
+   * rather than an inline five-branch if/else.
+   */
+  public static double acosh(double x) {
+    if (x < 1.0) {
+      return Double.NaN;
+    } else if (x >= (1 << 28)) {
+      return StrictMath.log(x) + StrictMath.log(2.0);
+    } else if (x == 1.0) {
+      return 0.0;
+    } else if (x > 2.0) {
+      return StrictMath.log(2.0 * x - 1.0 / (x + Math.sqrt(x * x - 1.0)));
+    } else {
+      double t = x - 1.0;
+      return StrictMath.log1p(t + Math.sqrt(2.0 * t + t * t));
+    }
+  }
+
+  /**
    * Returns the single-character string for the {@code chr} expression: the
    * ASCII/Latin-1 character for {@code longVal & 0xFF}. A negative argument
    * yields the empty string. Shared by the eval and codegen paths so the
@@ -402,5 +448,23 @@ public class ExpressionImplUtils {
     } else {
       return 0;
     }
+  }
+
+  /**
+   * Builds the number pattern for the given scale (the default grouping pattern followed by
+   * {@code scale} decimal places) and applies it to the given {@link DecimalFormat}. Shared by the
+   * FormatNumber expression's eval and codegen paths so the generated Java is a single call and
+   * the pattern buffer does not need to be threaded through mutable state.
+   */
+  public static void applyNumberFormatScale(
+      DecimalFormat numberFormat, String defaultFormat, int scale) {
+    StringBuilder pattern = new StringBuilder(defaultFormat);
+    if (scale > 0) {
+      pattern.append('.');
+      for (int i = 0; i < scale; i++) {
+        pattern.append('0');
+      }
+    }
+    numberFormat.applyLocalizedPattern(pattern.toString());
   }
 }

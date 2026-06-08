@@ -48,6 +48,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     tzdata \
     software-properties-common \
+    zstd \
     zlib1g-dev \
     && apt-get autoremove --purge -y \
     && apt-get clean \
