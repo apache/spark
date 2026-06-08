@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util
-import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, LinkedBlockingQueue}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -86,12 +86,10 @@ case class AdaptiveSparkPlanExec(
   @transient private val optimizer = new AQEOptimizer(conf,
     context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
 
-  // The tracker to record physical preparation rules into. Only the outer (non-subquery)
-  // `AdaptiveSparkPlanExec` records into the shared `context.qe.tracker`; sub-AQE replanning
-  // happens on `SubqueryExec.executionContext` and writing to the outer tracker from there
-  // would break `QueryPlanningTracker`'s thread-local single-threaded contract.
-  @transient private val mainQueryTracker: Option[QueryPlanningTracker] =
-    if (isSubquery) None else Some(context.qe.tracker)
+  // Each `AdaptiveSparkPlanExec` records the physical-planning rules it runs into its own tracker.
+  // The main node folds them all into the shared `context.qe.tracker` once the final plan is ready.
+  @transient private val tracker = new QueryPlanningTracker()
+  context.planningTrackers.add(tracker)
 
   // `EnsureRequirements` may remove user-specified repartition and assume the query plan won't
   // change its output partitioning. This assumption is not true in AQE. Here we check the
@@ -204,17 +202,17 @@ case class AdaptiveSparkPlanExec(
     applyPhysicalRules(
       plan,
       context.session.sessionState.adaptiveRulesHolder.queryPostPlannerStrategyRules,
-      Some((planChangeLogger, "AQE Query Post Planner Strategy Rules")),
-      mainQueryTracker
+      "AQE Query Post Planner Strategy Rules"
     )
   }
 
   @transient val initialPlan = context.session.withActive {
-    applyPhysicalRules(
-      applyQueryPostPlannerStrategyRules(inputPlan),
-      queryStagePreparationRules,
-      Some((planChangeLogger, "AQE Preparations")),
-      mainQueryTracker)
+    QueryPlanningTracker.withTracker(tracker) {
+      applyPhysicalRules(
+        applyQueryPostPlannerStrategyRules(inputPlan),
+        queryStagePreparationRules,
+        "AQE Preparations")
+    }
   }
 
   @volatile private var currentPhysicalPlan = initialPlan
@@ -281,119 +279,124 @@ case class AdaptiveSparkPlanExec(
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
     context.session.withActive {
-      val executionId = getExecutionId
-      // Use inputPlan logicalLink here in case some top level physical nodes may be removed
-      // during `initialPlan`
-      var currentLogicalPlan = inputPlan.logicalLink.get
-      var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
-      val events = new LinkedBlockingQueue[StageMaterializationEvent]()
-      val errors = new mutable.ArrayBuffer[Throwable]()
-      var stagesToReplace = Seq.empty[QueryStageExec]
-      while (!result.allChildStagesMaterialized) {
-        currentPhysicalPlan = result.newPlan
-        if (result.newStages.nonEmpty) {
-          stagesToReplace = result.newStages ++ stagesToReplace
-          executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
+      // Record this node's planning rules into its own tracker; merged into the query's tracker by
+      // the main node in `finalPlanUpdate`.
+      QueryPlanningTracker.withTracker(tracker) {
+        val executionId = getExecutionId
+        // Use inputPlan logicalLink here in case some top level physical nodes may be removed
+        // during `initialPlan`
+        var currentLogicalPlan = inputPlan.logicalLink.get
+        var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
+        val events = new LinkedBlockingQueue[StageMaterializationEvent]()
+        val errors = new mutable.ArrayBuffer[Throwable]()
+        var stagesToReplace = Seq.empty[QueryStageExec]
+        while (!result.allChildStagesMaterialized) {
+          currentPhysicalPlan = result.newPlan
+          if (result.newStages.nonEmpty) {
+            stagesToReplace = result.newStages ++ stagesToReplace
+            executionId.foreach(onUpdatePlan(_, result.newStages.map(_.plan)))
 
-          // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
-          // for tasks to be scheduled and leading to broadcast timeout.
-          // This partial fix only guarantees the start of materialization for BroadcastQueryStage
-          // is prior to others, but because the submission of collect job for broadcasting is
-          // running in another thread, the issue is not completely resolved.
-          val reorderedNewStages = result.newStages
-            .sortWith {
-              case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
-              case (_: BroadcastQueryStageExec, _) => true
-              case _ => false
-            }
+            // SPARK-33933: we should submit tasks of broadcast stages first, to avoid waiting
+            // for tasks to be scheduled and leading to broadcast timeout.
+            // This partial fix only guarantees the start of materialization for BroadcastQueryStage
+            // is prior to others, but because the submission of collect job for broadcasting is
+            // running in another thread, the issue is not completely resolved.
+            val reorderedNewStages = result.newStages
+              .sortWith {
+                case (_: BroadcastQueryStageExec, _: BroadcastQueryStageExec) => false
+                case (_: BroadcastQueryStageExec, _) => true
+                case _ => false
+              }
 
-          // Start materialization of all new stages and fail fast if any stages failed eagerly
-          reorderedNewStages.foreach { stage =>
-            try {
-              stage.materialize().onComplete { res =>
-                if (res.isSuccess) {
-                  // record shuffle IDs for successful stages for cleanup
-                  stage.plan.collect {
-                    case s: ShuffleExchangeLike =>
-                      context.shuffleIds.put(s.shuffleId, true)
+            // Start materialization of all new stages and fail fast if any stages failed eagerly
+            reorderedNewStages.foreach { stage =>
+              try {
+                stage.materialize().onComplete { res =>
+                  if (res.isSuccess) {
+                    // record shuffle IDs for successful stages for cleanup
+                    stage.plan.collect {
+                      case s: ShuffleExchangeLike =>
+                        context.shuffleIds.put(s.shuffleId, true)
+                    }
+                    events.offer(StageSuccess(stage, res.get))
+                  } else {
+                    events.offer(StageFailure(stage, res.failed.get))
                   }
-                  events.offer(StageSuccess(stage, res.get))
-                } else {
-                  events.offer(StageFailure(stage, res.failed.get))
-                }
-                // explicitly clean up the resources in this stage
-                stage.cleanupResources()
-              }(AdaptiveSparkPlanExec.executionContext)
-            } catch {
-              case e: Throwable =>
-                stage.error.set(Some(e))
-                cleanUpAndThrowException(Seq(e), Some(stage.id))
+                  // explicitly clean up the resources in this stage
+                  stage.cleanupResources()
+                }(AdaptiveSparkPlanExec.executionContext)
+              } catch {
+                case e: Throwable =>
+                  stage.error.set(Some(e))
+                  cleanUpAndThrowException(Seq(e), Some(stage.id))
+              }
             }
           }
-        }
 
-        // Wait on the next completed stage, which indicates new stats are available and probably
-        // new stages can be created. There might be other stages that finish at around the same
-        // time, so we process those stages too in order to reduce re-planning.
-        val nextMsg = events.take()
-        val rem = new util.ArrayList[StageMaterializationEvent]()
-        events.drainTo(rem)
-        (Seq(nextMsg) ++ rem.asScala).foreach {
-          case StageSuccess(stage, res) =>
-            stage.resultOption.set(Some(res))
-          case StageFailure(stage, ex) =>
-            stage.error.set(Some(ex))
-            errors.append(ex)
-        }
+          // Wait on the next completed stage, which indicates new stats are available and probably
+          // new stages can be created. There might be other stages that finish at around the same
+          // time, so we process those stages too in order to reduce re-planning.
+          val nextMsg = events.take()
+          val rem = new util.ArrayList[StageMaterializationEvent]()
+          events.drainTo(rem)
+          (Seq(nextMsg) ++ rem.asScala).foreach {
+            case StageSuccess(stage, res) =>
+              stage.resultOption.set(Some(res))
+            case StageFailure(stage, ex) =>
+              stage.error.set(Some(ex))
+              errors.append(ex)
+          }
 
-        // In case of errors, we cancel all running stages and throw exception.
-        if (errors.nonEmpty) {
-          cleanUpAndThrowException(errors.toSeq, None)
-        }
-        val testTriggerForceCancellation = AQETestHelper.shouldForceCancellation(this)
+          // In case of errors, we cancel all running stages and throw exception.
+          if (errors.nonEmpty) {
+            cleanUpAndThrowException(errors.toSeq, None)
+          }
+          val testTriggerForceCancellation = AQETestHelper.shouldForceCancellation(this)
 
-        if (!currentPhysicalPlan.isInstanceOf[ResultQueryStageExec]) {
-          // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
-          // than that of the current plan; otherwise keep the current physical plan together with
-          // the current logical plan since the physical plan's logical links point to the logical
-          // plan it has originated from.
-          // Meanwhile, we keep a list of the query stages that have been created since last plan
-          // update, which stands for the "semantic gap" between the current logical and physical
-          // plans. And each time before re-planning, we replace the corresponding nodes in the
-          // current logical plan with logical query stages to make it semantically in sync with
-          // the current physical plan. Once a new plan is adopted and both logical and physical
-          // plans are updated, we can clear the query stage list because at this point the two
-          // plans are semantically and physically in sync again.
-          var logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-          if (testTriggerForceCancellation) {
-            // Force unwrap all LogicalQueryStage so they get replanned.
-            logicalPlan = logicalPlan.transformDown {
-              case LogicalQueryStage(logical, _) => logical
+          if (!currentPhysicalPlan.isInstanceOf[ResultQueryStageExec]) {
+            // Try re-optimizing and re-planning. Adopt the new plan if its cost is equal to or less
+            // than that of the current plan; otherwise keep the current physical plan together with
+            // the current logical plan since the physical plan's logical links point to the logical
+            // plan it has originated from.
+            // Meanwhile, we keep a list of the query stages that have been created since last plan
+            // update, which stands for the "semantic gap" between the current logical and physical
+            // plans. And each time before re-planning, we replace the corresponding nodes in the
+            // current logical plan with logical query stages to make it semantically in sync with
+            // the current physical plan. Once a new plan is adopted and both logical and physical
+            // plans are updated, we can clear the query stage list because at this point the two
+            // plans are semantically and physically in sync again.
+            var logicalPlan =
+              replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
+            if (testTriggerForceCancellation) {
+              // Force unwrap all LogicalQueryStage so they get replanned.
+              logicalPlan = logicalPlan.transformDown {
+                case LogicalQueryStage(logical, _) => logical
+              }
+            }
+            val afterReOptimize = reOptimize(logicalPlan)
+            if (afterReOptimize.isDefined) {
+              val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
+              val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
+              val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
+              if (newCost < origCost ||
+                (newCost == origCost && currentPhysicalPlan != newPhysicalPlan) ||
+                testTriggerForceCancellation) {
+                lazy val plans = sideBySide(
+                  currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
+                logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
+                cleanUpTempTags(newPhysicalPlan)
+                currentPhysicalPlan = newPhysicalPlan
+                currentLogicalPlan = newLogicalPlan
+                stagesToReplace = Seq.empty[QueryStageExec]
+              }
+            }
+            if (testTriggerForceCancellation) {
+              AQETestHelper.markForcedCancellationTriggeredForPlan(this)
             }
           }
-          val afterReOptimize = reOptimize(logicalPlan)
-          if (afterReOptimize.isDefined) {
-            val (newPhysicalPlan, newLogicalPlan) = afterReOptimize.get
-            val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
-            val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
-            if (newCost < origCost ||
-              (newCost == origCost && currentPhysicalPlan != newPhysicalPlan) ||
-              testTriggerForceCancellation) {
-              lazy val plans = sideBySide(
-                currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
-              logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
-              cleanUpTempTags(newPhysicalPlan)
-              currentPhysicalPlan = newPhysicalPlan
-              currentLogicalPlan = newLogicalPlan
-              stagesToReplace = Seq.empty[QueryStageExec]
-            }
-          }
-          if (testTriggerForceCancellation) {
-            AQETestHelper.markForcedCancellationTriggeredForPlan(this)
-          }
+          // Now that some stages have finished, we can try creating new stages.
+          result = createQueryStages(fun, currentPhysicalPlan, firstRun = false)
         }
-        // Now that some stages have finished, we can try creating new stages.
-        result = createQueryStages(fun, currentPhysicalPlan, firstRun = false)
       }
     }
     _isFinalPlan = true
@@ -410,6 +413,12 @@ case class AdaptiveSparkPlanExec(
     // Do final plan update after result stage has materialized.
     if (shouldUpdatePlan) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
+    }
+    // The main query node folds every `AdaptiveSparkPlanExec`'s tracker (its own and all sub-query
+    // plans, which were planned on separate threads) into the shared query tracker. This runs on
+    // the main query thread once the final plan is ready and all sub-queries have completed.
+    if (!isSubquery) {
+      context.planningTrackers.asScala.foreach(context.qe.tracker.merge)
     }
     logOnLevel(log"Final plan:\n${MDC(QUERY_PLAN, currentPhysicalPlan)}")
   }
@@ -677,8 +686,7 @@ case class AdaptiveSparkPlanExec(
     val optimizedRootPlan = applyPhysicalRules(
       optimizeQueryStage(plan, isFinalStage = true),
       postStageCreationRules(supportsColumnar),
-      Some((planChangeLogger, "AQE Post Stage Creation")),
-      mainQueryTracker)
+      "AQE Post Stage Creation")
     val resultStage = ResultQueryStageExec(currentStageId, optimizedRootPlan, resultHandler)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(resultStage, plan)
@@ -692,8 +700,7 @@ case class AdaptiveSparkPlanExec(
         val newPlan = applyPhysicalRules(
           optimized,
           postStageCreationRules(outputsColumnar = plan.supportsColumnar),
-          Some((planChangeLogger, "AQE Post Stage Creation")),
-          mainQueryTracker)
+          "AQE Post Stage Creation")
         if (e.isInstanceOf[ShuffleExchangeLike]) {
           if (!newPlan.isInstanceOf[ShuffleExchangeLike]) {
             throw SparkException.internalError(
@@ -817,16 +824,12 @@ case class AdaptiveSparkPlanExec(
   private def reOptimize(logicalPlan: LogicalPlan): Option[(SparkPlan, LogicalPlan)] = {
     try {
       logicalPlan.invalidateStatsCache()
-      val optimized = mainQueryTracker match {
-        case Some(t) => optimizer.executeAndTrack(logicalPlan, t)
-        case None => optimizer.execute(logicalPlan)
-      }
+      val optimized = optimizer.execute(logicalPlan)
       val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
       val newPlan = applyPhysicalRules(
         applyQueryPostPlannerStrategyRules(sparkPlan),
         preprocessingRules ++ queryStagePreparationRules,
-        Some((planChangeLogger, "AQE Replanning")),
-        mainQueryTracker)
+        "AQE Replanning")
 
       // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
       // add the `BroadcastExchangeExec` node manually in the DPP subquery,
@@ -955,23 +958,8 @@ object AdaptiveSparkPlanExec {
   def applyPhysicalRules(
       plan: SparkPlan,
       rules: Seq[Rule[SparkPlan]],
-      loggerAndBatchName: Option[(PlanChangeLogger[SparkPlan], String)] = None,
-      tracker: Option[QueryPlanningTracker] = None): SparkPlan = {
-    val newPlan = rules.foldLeft(plan) { case (sp, rule) =>
-      val startTime = System.nanoTime()
-      val result = rule.apply(sp)
-      val runTime = System.nanoTime() - startTime
-      val effective = !result.fastEquals(sp)
-      tracker.foreach(_.recordRuleInvocation(rule.ruleName, runTime, effective))
-      loggerAndBatchName.foreach { case (logger, _) =>
-        logger.logRule(rule.ruleName, sp, result)
-      }
-      result
-    }
-    loggerAndBatchName.foreach { case (logger, batchName) =>
-      logger.logBatch(batchName, plan, newPlan)
-    }
-    newPlan
+      batchName: String): SparkPlan = {
+    new QueryExecution.PhysicalRuleExecutor(batchName, rules).execute(plan)
   }
 }
 
@@ -993,6 +981,14 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
 
   val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
+
+  /**
+   * The per-`AdaptiveSparkPlanExec` planning trackers for this query: the main query plan and every
+   * sub-query plan, which are planned on separate threads. The main node merges these into
+   * `qe.tracker` once its final plan is ready (see `AdaptiveSparkPlanExec.finalPlanUpdate`).
+   */
+  val planningTrackers: ConcurrentLinkedQueue[QueryPlanningTracker] =
+    new ConcurrentLinkedQueue[QueryPlanningTracker]()
 }
 
 /**
