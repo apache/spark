@@ -502,7 +502,7 @@ object Scd2BatchProcessor {
   private[autocdc] val minSequenceColName: String = s"${AutoCdcReservedNames.prefix}min_sequence"
 
   /**
-   * Name of temporary column projected used to identify the sequence associated with the anchor
+   * Name of the temporary column used to identify the sequence associated with the anchor
    * row found in the auxiliary table for the incoming microbatch. Since sequences must be unique
    * amongst all rows for a key (or risk undefined behavior), this sequence value uniquely
    * identifies an exact row in the aux.
