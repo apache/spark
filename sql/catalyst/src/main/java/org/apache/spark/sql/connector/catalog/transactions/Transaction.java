@@ -73,10 +73,12 @@ public interface Transaction extends Closeable {
    * An example use case is cache reuse. Spark passes the scans of a candidate cached subtree
    * for the transaction's catalog and the connector decides whether to accept them.
    * <p>
-   * The connector must either accept (returning {@code true} after adding any relevant scans
-   * to the read set) or refuse (returning {@code false} without modifying the read set).
+   * The connector must either accept all passed scans (returning {@code true} after adding
+   * the scans to the read set) or refuse (returning {@code false} without modifying
+   * the read set).
    *
-   * @param scans the scans to register.
+   * @param scans the materialized scans Spark offers for registration against
+   *              this transaction's read set.
    * @return true if the connector accepts the scans; false otherwise.
    */
   boolean registerScans(Scan[] scans);

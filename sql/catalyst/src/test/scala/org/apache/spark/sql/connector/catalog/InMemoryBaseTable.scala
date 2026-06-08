@@ -117,7 +117,7 @@ abstract class InMemoryBaseTable(
   }
 
   // Version-aware equality: two tables refer to the same metastore entity at the same state.
-  // Fallback to reference equality when `id()` is null (no metastore identity).
+  // Fall back to reference equality when `id()` is null (no metastore identity).
   override def equals(obj: Any): Boolean = obj match {
     case other: InMemoryBaseTable =>
       if (this eq other) true

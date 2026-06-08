@@ -495,16 +495,19 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   // Decides whether the cached entry can be substituted into a plan being executed inside
   // the given transaction. Collects only the scans whose table belongs to the transaction's
   // catalog and asks the connector whether reusing the cached snapshot is compatible with its
-  // isolation contract.
+  // isolation contract. Note, this function has a side effect of mutating the read set of the
+  // connector.
   private def validateCachedEntryForTransaction(cd: CachedData, txn: Transaction): Boolean = {
     val txnCatalogName = txn.catalog().name()
     val txnTables = cd.cachedRepresentation.cacheBuilder.logicalPlan.collectWithSubqueries {
       case r: DataSourceV2Relation if r.catalog.exists(_.name() == txnCatalogName) => r.table
     }.toSet
+    if (txnTables.isEmpty) return true
+
     val scans = collectWithSubqueries(cd.cachedRepresentation.cacheBuilder.cachedPlan) {
       case b: BatchScanExec if txnTables.contains(b.table) => b.scan
     }
-    scans.isEmpty || txn.registerScans(scans.toArray)
+    scans.nonEmpty && txn.registerScans(scans.toArray)
   }
 
   /**
