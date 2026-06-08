@@ -43,16 +43,16 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-spark-connect-python-only-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: build-spark-connect-python-only-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-spark-connect-python-only-
+            build-spark-connect-python-only-${{ runner.os }}-
       - name: Cache Coursier local repository
         uses: actions/cache@v5
         with:
           path: ~/.cache/coursier
-          key: coursier-build-spark-connect-python-only-${{ hashFiles('**/pom.xml') }}
+          key: coursier-build-spark-connect-python-only-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            coursier-build-spark-connect-python-only-
+            coursier-build-spark-connect-python-only-${{ runner.os }}-
       - name: Install Java 17
         uses: actions/setup-java@v5
         with:
