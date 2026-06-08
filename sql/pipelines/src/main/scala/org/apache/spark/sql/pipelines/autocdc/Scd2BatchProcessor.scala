@@ -23,7 +23,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.util.QuotingUtils
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -67,8 +67,11 @@ case class Scd2BatchProcessor(
     val sequencingIfDecompositionTail = endAtCol
     val effectiveRecordStartAt = F.coalesce(recordStartAtCol, sequencingIfDecompositionTail).asc
 
-    val orderDecompositionTailsFirst =
-      RowClassifier.isDecompositionTail(recordStartAtCol).desc
+    val orderDecompositionTailsFirst = RowClassifier.isDecompositionTail(
+      recordStartAt = recordStartAtCol,
+      startAt = startAtCol,
+      endAt = endAtCol
+    ).desc
 
     val orderUpsertRepresentingRowsFirst = RowClassifier.isUpsertRepresentingRow(
       recordStartAt = recordStartAtCol,
@@ -539,6 +542,58 @@ case class Scd2BatchProcessor(
   }
 
   /**
+   * Asserts that every row in `decomposedRowsPerKey` conforms to one of the four canonical
+   * post-decomposition shapes - tombstone, open upsert, closed upsert, or decomposition
+   * tail - and is otherwise a structural identity transform.
+   *
+   * @param decomposedRowsPerKey
+   *   the output of [[decomposeOutOfOrderRows]]: a dataframe conforming to the canonical
+   *   SCD2 row schema `[user_cols..., [[startAtColName]], [[endAtColName]],
+   *   [[cdcMetadataColName]]]`.
+   * @return
+   *   a dataframe with the exact same schema and rows as the input. Throws at execution
+   *   time on the first non-canonical row encountered with an internal error.
+   */
+  private[autocdc] def assertWellFormedRowsPostDecomposition(
+      decomposedRowsPerKey: DataFrame,
+      batchId: Long
+  ): DataFrame = {
+    val recordStartAtField =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
+    val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
+
+    val isWellFormedRow =
+      RowClassifier.isDecompositionTail(recordStartAtField, startAtCol, endAtCol) ||
+        RowClassifier.isTombstone(recordStartAtField, startAtCol, endAtCol) ||
+        RowClassifier.isUpsertRepresentingRow(recordStartAtField, startAtCol, endAtCol)
+
+    def stringOrNullLit(c: Column): Column = F.coalesce(c.cast(StringType), F.lit("null"))
+    val malformedRowDiagnostic = F.concat(
+      F.lit(
+        s"Internal error during SCD2 reconciliation of microbatch [id=${batchId}]. " +
+        "Encountered a post-decomposition of unexpected shape:"
+      ),
+      F.lit(s" ${Scd2BatchProcessor.recordStartAtFieldName}="),
+      stringOrNullLit(recordStartAtField),
+      F.lit(s", ${Scd2BatchProcessor.startAtColName}="),
+      stringOrNullLit(startAtCol),
+      F.lit(s", ${Scd2BatchProcessor.endAtColName}="),
+      stringOrNullLit(endAtCol),
+      F.lit(".")
+    )
+
+    // F.assert_true returns null on success and throws on failure, so wrapping it in
+    // .isNull yields a Boolean predicate that's true on every well-formed row and aborts
+    // execution on the first malformed row. Putting the assertion inside Filter (rather
+    // than e.g. withColumn(...).drop(...)) prevents Catalyst from pruning it: filter
+    // predicates can't be removed without changing query semantics.
+    decomposedRowsPerKey.filter(
+      F.assert_true(isWellFormedRow, malformedRowDiagnostic).isNull
+    )
+  }
+
+  /**
    * Drops rows that are redundant within the per-key chronological window output by
    * [[decomposeOutOfOrderRows]]. The redundancy criterion is a single rule:
    *
@@ -825,19 +880,19 @@ object Scd2BatchProcessor {
 object RowClassifier {
 
   /**
-   * Synthetic right boundary created by splitting a closed row; identified by
-   * `recordStartAt = null`. Never shows up in the target or aux tables.
+   * Synthetic right boundary created by splitting a closed row, temporarily present during
+   * microbatch reconciliation but never materializes in the target or aux tables.
    */
-  def isDecompositionTail(recordStartAt: Column): Column = recordStartAt.isNull
+  def isDecompositionTail(
+      recordStartAt: Column,
+      startAt: Column,
+      endAt: Column
+  ): Column =
+    recordStartAt.isNull && startAt.isNull && endAt.isNotNull
 
   /**
    * Upsert row that is currently open in the visible timeline. Hidden no-op upserts are
    * also open until reconciliation decides whether they should stay hidden.
-   *
-   * Defined positively rather than as the composition of row-kind negations so that
-   * any future row kind fails closed: a row whose shape doesn't match the canonical
-   * open-upsert invariants gets classified as not-an-open-upsert, surfacing as missing
-   * rows downstream rather than silently leaking through upsert-conditional logic.
    */
   def isOpenUpsert(
       recordStartAt: Column,
@@ -846,11 +901,16 @@ object RowClassifier {
   ): Column =
     recordStartAt.isNotNull &&
       startAt.isNotNull &&
-      endAt.isNull
+      endAt.isNull &&
+      // startAt < recordStartAt implies this row belongs to but is not the head of some
+      // upsert-run, else this is the head of a run.
+      startAt <= recordStartAt
 
   /**
    * Upsert row whose visible interval has already been closed by a strictly later event;
    * the historical counterpart to [[isOpenUpsert]].
+   * 
+   * Notably, a zero-width [startAt, endAt) interval is not considered a valid closed upsert.
    */
   def isClosedUpsert(
       recordStartAt: Column,
@@ -860,13 +920,13 @@ object RowClassifier {
     recordStartAt.isNotNull &&
       startAt.isNotNull &&
       endAt.isNotNull &&
-      startAt < endAt
+      startAt < endAt &&
+      // startAt < recordStartAt implies this row belongs to but is not the head of some
+      // upsert-run, else this is the head of a run.
+      startAt <= recordStartAt
 
   /**
-   * Any row that encodes an upsert event - either currently open ([[isOpenUpsert]]) or
-   * already closed by a later event ([[isClosedUpsert]]). Excludes tombstones,
-   * decomposition tails, and any other row whose shape doesn't match one of the two
-   * canonical upsert encodings.
+   * Any row that semantically encodes an upsert event.
    */
   def isUpsertRepresentingRow(
       recordStartAt: Column,
@@ -875,4 +935,25 @@ object RowClassifier {
   ): Column =
     isOpenUpsert(recordStartAt, startAt, endAt) ||
       isClosedUpsert(recordStartAt, startAt, endAt)
+
+  /**
+   * Tombstone (delete-boundary) row, encoded as an instantaneous interval at
+   * `recordStartAt`. Never materializes in the target table, only in the aux table.
+   *
+   * User-data column values on tombstones are not part of the SCD2 contract: they may
+   * reflect the originating delete event, the values of the upsert whose closed-interval
+   * row was bisected (when the tombstone was promoted from a decomposition tail), or be
+   * null altogether. Reconciliation does not consume these values for any semantic
+   * decision.
+   */
+  def isTombstone(
+      recordStartAt: Column,
+      startAt: Column,
+      endAt: Column
+  ): Column =
+    recordStartAt.isNotNull &&
+      startAt.isNotNull &&
+      endAt.isNotNull &&
+      startAt === recordStartAt &&
+      endAt === recordStartAt
 }

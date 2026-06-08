@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{functions => F, Column, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
@@ -1605,6 +1606,69 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       assert(in.nullable == out.nullable)
       assert(in.metadata == out.metadata)
     }
+  }
+
+  // =============== assertWellFormedRowsPostDecomposition tests ===============
+
+  test("assertWellFormedRowsPostDecomposition passes through a dataframe whose rows match all " +
+    "four canonical shapes") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // One row of each canonical shape.
+    //   tombstone:           startAt = endAt = recordStartAt
+    //   open upsert:         endAt is null, startAt and recordStartAt non-null
+    //   closed upsert:       startAt < endAt, recordStartAt non-null
+    //   decomposition tail:  startAt and recordStartAt null, endAt non-null
+    val df = targetTableOf(userSchema)(
+      Row(1, "tomb",   10L,  10L,  Row(10L)),
+      Row(2, "open",   20L,  null, Row(20L)),
+      Row(3, "closed", 30L,  40L,  Row(30L)),
+      Row(4, "tail",   null, 50L,  Row(null))
+    )
+
+    checkAnswer(
+      df = processor.assertWellFormedRowsPostDecomposition(df, batchId = 0),
+      expectedAnswer = Seq(
+        Row(1, "tomb",   10L,  10L,  Row(10L)),
+        Row(2, "open",   20L,  null, Row(20L)),
+        Row(3, "closed", 30L,  40L,  Row(30L)),
+        Row(4, "tail",   null, 50L,  Row(null))
+      )
+    )
+  }
+
+  test("assertWellFormedRowsPostDecomposition throws when fed a malformed row") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // recordStartAt = null + startAt = 5 + endAt = 10 matches none of the canonical shapes:
+    // tail rejects on startAt non-null; tombstone, open, and closed upsert all reject on
+    // recordStartAt null.
+    val df = targetTableOf(userSchema)(
+      Row(1, "open",      10L,  null, Row(10L)),
+      Row(1, "malformed", 5L,   10L,  Row(null))
+    )
+
+    val ex = intercept[SparkRuntimeException] {
+      processor.assertWellFormedRowsPostDecomposition(df, batchId = 0).collect()
+    }
+    assert(ex.getMessage.contains("post-decomposition"))
+    assert(ex.getMessage.contains(Scd2BatchProcessor.startAtColName))
+    assert(ex.getMessage.contains(Scd2BatchProcessor.endAtColName))
+  }
+
+  test("assertWellFormedRowsPostDecomposition does not introduce extra columns") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    val df = targetTableOf(userSchema)(
+      Row(1, "open", 10L, null, Row(10L))
+    )
+
+    val result = processor.assertWellFormedRowsPostDecomposition(df, batchId = 0)
+
+    assert(result.schema == df.schema)
   }
 
   // =============== dropRedundantRowsPostDecomposition tests ===============
