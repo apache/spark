@@ -117,7 +117,7 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
  * @param t
  *   The TimestampLTZNanosType with precision information
  * @param zoneId
- *   The time zone LTZ values are rendered in (LTZ is zone-aware). [[TypeApiOps.apply]] threads in
+ *   The time zone LTZ values are rendered in (LTZ is zone-aware). `TypeApiOps.apply` threads in
  *   the session zone: the cast's resolved zone for CAST, or the session-local time zone config
  *   for zone-less render callers (EXPLAIN / SQL-literal / Row JSON).
  * @since 4.3.0
