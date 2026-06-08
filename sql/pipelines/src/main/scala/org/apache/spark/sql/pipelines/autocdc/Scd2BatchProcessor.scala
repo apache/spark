@@ -20,10 +20,11 @@ package org.apache.spark.sql.pipelines.autocdc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
+import org.apache.spark.sql.catalyst.expressions.{CreateMap, If, Literal, RaiseError}
 import org.apache.spark.sql.catalyst.util.QuotingUtils
-import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.classic.{DataFrame, ExpressionUtils}
 import org.apache.spark.sql.expressions.{Window, WindowSpec}
-import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, StringType, StructField, StructType}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -453,16 +454,14 @@ case class Scd2BatchProcessor(
   private[autocdc] def decomposeOutOfOrderRows(rowsToDecomposePerKey: DataFrame): DataFrame = {
     val recordStartAtField =
       Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
-    val startAtCol = rowsToDecomposePerKey.col(Scd2BatchProcessor.startAtColName)
-    val endAtCol = rowsToDecomposePerKey.col(Scd2BatchProcessor.endAtColName)
+    val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
+    val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
+    val nextRecordStartAt = F.col(Scd2BatchProcessor.nextRecordStartAtColName)
 
     // Track the next (in sorted order) row's recordStartAt in a temporary column.
     val rowsToDecomposeWithWindowCols = rowsToDecomposePerKey.withColumn(
       Scd2BatchProcessor.nextRecordStartAtColName,
       F.lead(recordStartAtField, 1).over(orderChronologicallyPerKeyWindow)
-    )
-    val nextRecordStartAt = rowsToDecomposeWithWindowCols.col(
-      Scd2BatchProcessor.nextRecordStartAtColName
     )
 
     val isClosedUpsertRow = RowClassifier.isClosedUpsert(
@@ -489,7 +488,7 @@ case class Scd2BatchProcessor(
           // original parent row.
           withOriginalSchemaPreserved(colName, F.lit(null))
         case colName =>
-          withOriginalSchemaPreserved(colName, rowsToDecomposeWithWindowCols.col(colName))
+          withOriginalSchemaPreserved(colName, F.col(colName))
       }
       F.struct(fields: _*)
     }
@@ -510,7 +509,7 @@ case class Scd2BatchProcessor(
             )
           )
         case colName =>
-          withOriginalSchemaPreserved(colName, rowsToDecomposeWithWindowCols.col(colName))
+          withOriginalSchemaPreserved(colName, F.col(colName))
       }
       F.struct(fields: _*)
     }
@@ -518,13 +517,13 @@ case class Scd2BatchProcessor(
     // No-op decomposition carries over the row exactly as-is.
     def constructNoopDecomposedRow: Column = {
       val fields = originalCols.map(colName =>
-        withOriginalSchemaPreserved(colName, rowsToDecomposeWithWindowCols.col(colName))
+        withOriginalSchemaPreserved(colName, F.col(colName))
       )
       F.struct(fields: _*)
     }
 
-    // If a row is bisected by the proceeding row, decompose it into a head + tail pair.
-    // Otherwise pass through as a single-element array so the explode below is uniform.
+    // If a row is bisected by its window-order successor, decompose it into a head + tail
+    // pair. Otherwise pass through as a single-element array so the explode below is uniform.
     val perRowDecompositionResults = F
       .when(
         rowShouldDecompose,
@@ -551,8 +550,9 @@ case class Scd2BatchProcessor(
    *   SCD2 row schema `[user_cols..., [[startAtColName]], [[endAtColName]],
    *   [[cdcMetadataColName]]]`.
    * @return
-   *   a dataframe with the exact same schema and rows as the input. Throws at execution
-   *   time on the first non-canonical row encountered with an internal error.
+   *   a dataframe with the exact same schema and rows as the input. Failing the
+   *   well-formedness check is treated as an internal-invariant violation: at execution
+   *   time, the first ill-formed row encountered aborts the query with a SparkRuntimeException
    */
   private[autocdc] def assertWellFormedRowsPostDecomposition(
       decomposedRowsPerKey: DataFrame,
@@ -571,8 +571,8 @@ case class Scd2BatchProcessor(
     def stringOrNullLit(c: Column): Column = F.coalesce(c.cast(StringType), F.lit("null"))
     val malformedRowDiagnostic = F.concat(
       F.lit(
-        s"Internal error during SCD2 reconciliation of microbatch [id=${batchId}]. " +
-        "Encountered a post-decomposition of unexpected shape:"
+        s"During SCD2 reconciliation of microbatch [id=${batchId}], encountered a " +
+        "post-decomposition row of unexpected shape:"
       ),
       F.lit(s" ${Scd2BatchProcessor.recordStartAtFieldName}="),
       stringOrNullLit(recordStartAtField),
@@ -583,14 +583,21 @@ case class Scd2BatchProcessor(
       F.lit(".")
     )
 
-    // F.assert_true returns null on success and throws on failure, so wrapping it in
-    // .isNull yields a Boolean predicate that's true on every well-formed row and aborts
-    // execution on the first malformed row. Putting the assertion inside Filter (rather
-    // than e.g. withColumn(...).drop(...)) prevents Catalyst from pruning it: filter
-    // predicates can't be removed without changing query semantics.
-    decomposedRowsPerKey.filter(
-      F.assert_true(isWellFormedRow, malformedRowDiagnostic).isNull
+    val internalErrorOnMalformed = ExpressionUtils.column(
+      If(
+        predicate = ExpressionUtils.expression(isWellFormedRow),
+        trueValue = Literal(null, BooleanType),
+        falseValue = RaiseError(
+          Literal("INTERNAL_ERROR"),
+          CreateMap(Seq(
+            Literal("message"),
+            ExpressionUtils.expression(malformedRowDiagnostic)
+          )),
+          BooleanType
+        )
+      )
     )
+    decomposedRowsPerKey.filter(internalErrorOnMalformed.isNull)
   }
 
   /**
@@ -705,7 +712,7 @@ case class Scd2BatchProcessor(
  * -------------
  * Concept: decomposition tail.
  *
- * A transient and synthetic row produced by the batch processor during reconciliation (not
+ * A temporary and synthetic row produced by the batch processor during reconciliation (not
  * from the CDC source) when a previously-closed historical row [START_AT=X, END_AT=Y] is
  * bisected by a late-arriving event. The bisected row is split into a head
  * [START_AT=X, END_AT=null] - inheriting the original row's data and `__RECORD_START_AT` -
@@ -800,7 +807,7 @@ object Scd2BatchProcessor {
    * Name of temporary column projected onto microbatch to compute the min sequencing value per
    * key within the microbatch.
    *
-   * Transient in that the column has no observable side affect or persistence across microbatches.
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
   private[autocdc] val minSequenceColName: String = s"${AutoCdcReservedNames.prefix}min_sequence"
 
@@ -809,7 +816,7 @@ object Scd2BatchProcessor {
    * the next row's record start at when in sorted in chronological order as per
    * [[orderChronologicallyPerKeyWindow]].
    *
-   * Transient in that the column has no observable side affect or persistence across microbatches.
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
   private[autocdc] val nextRecordStartAtColName: String =
     s"${AutoCdcReservedNames.prefix}next_record_start_at"
@@ -818,15 +825,16 @@ object Scd2BatchProcessor {
    * Name of temporary column projected onto intermediary dataframe during decomposition that
    * stores the child rows that result from decomposing a parent row.
    *
-   * Transient in that the column has no observable side affect or persistence across microbatches.
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
-  val decompositionExplodedColName = s"${{AutoCdcReservedNames.prefix}}decompose_output"
+  private[autocdc] val decompositionExplodedColName: String =
+    s"${AutoCdcReservedNames.prefix}decompose_output"
 
   /**
    * Name of temporary column used by [[dropRedundantRowsPostDecomposition]] to reference the
    * next row's effective recordStartAt in chronologically sorted order.
    *
-   * Transient in that the column has no observable side affect or persistence across microbatches.
+   * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
   private[autocdc] val nextEffectiveRecordStartAtColName: String =
     s"${AutoCdcReservedNames.prefix}next_effective_record_start_at"
@@ -849,7 +857,7 @@ object Scd2BatchProcessor {
     StructType(
       Seq(
         // The sequence value of the originating CDC event for this row. Nullable because
-        // decomposition tails, which are transient and synthetically constructed during
+        // decomposition tails, which are temporarily and synthetically constructed during
         // reconciliation, have a null record start at.
         StructField(recordStartAtFieldName, sequencingType, nullable = true)
       )
@@ -883,7 +891,7 @@ object RowClassifier {
    * Synthetic right boundary created by splitting a closed row, temporarily present during
    * microbatch reconciliation but never materializes in the target or aux tables.
    */
-  def isDecompositionTail(
+  private[autocdc] def isDecompositionTail(
       recordStartAt: Column,
       startAt: Column,
       endAt: Column
@@ -894,7 +902,7 @@ object RowClassifier {
    * Upsert row that is currently open in the visible timeline. Hidden no-op upserts are
    * also open until reconciliation decides whether they should stay hidden.
    */
-  def isOpenUpsert(
+  private[autocdc] def isOpenUpsert(
       recordStartAt: Column,
       startAt: Column,
       endAt: Column
@@ -912,7 +920,7 @@ object RowClassifier {
    * 
    * Notably, a zero-width [startAt, endAt) interval is not considered a valid closed upsert.
    */
-  def isClosedUpsert(
+  private[autocdc] def isClosedUpsert(
       recordStartAt: Column,
       startAt: Column,
       endAt: Column
@@ -920,15 +928,16 @@ object RowClassifier {
     recordStartAt.isNotNull &&
       startAt.isNotNull &&
       endAt.isNotNull &&
+      recordStartAt < endAt &&
       startAt < endAt &&
-      // startAt < recordStartAt implies this row belongs to but is not the head of some
-      // upsert-run, else this is the head of a run.
+      // startAt <= recordStartAt covers both the run-head case (startAt == recordStartAt)
+      // and the no-op-continuation case (startAt < recordStartAt).
       startAt <= recordStartAt
 
   /**
    * Any row that semantically encodes an upsert event.
    */
-  def isUpsertRepresentingRow(
+  private[autocdc] def isUpsertRepresentingRow(
       recordStartAt: Column,
       startAt: Column,
       endAt: Column
@@ -946,7 +955,7 @@ object RowClassifier {
    * null altogether. Reconciliation does not consume these values for any semantic
    * decision.
    */
-  def isTombstone(
+  private[autocdc] def isTombstone(
       recordStartAt: Column,
       startAt: Column,
       endAt: Column

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{functions => F, Column, QueryTest, Row}
 import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.internal.SQLConf
@@ -1638,24 +1638,27 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
-  test("assertWellFormedRowsPostDecomposition throws when fed a malformed row") {
+  test("assertWellFormedRowsPostDecomposition throws on invalid row shape") {
     val processor = processorWithKeys(Seq("id"))
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
     // recordStartAt = null + startAt = 5 + endAt = 10 matches none of the canonical shapes:
-    // tail rejects on startAt non-null; tombstone, open, and closed upsert all reject on
-    // recordStartAt null.
+    // the decomposition-tail kind rejects on startAt non-null, while the tombstone, open
+    // upsert, and closed upsert kinds all reject on recordStartAt null.
     val df = targetTableOf(userSchema)(
-      Row(1, "open",      10L,  null, Row(10L)),
-      Row(1, "malformed", 5L,   10L,  Row(null))
+      Row(1, "malformed", 5L, 10L, Row(null))
     )
 
-    val ex = intercept[SparkRuntimeException] {
+    val wrapper = intercept[SparkException] {
       processor.assertWellFormedRowsPostDecomposition(df, batchId = 0).collect()
     }
-    assert(ex.getMessage.contains("post-decomposition"))
-    assert(ex.getMessage.contains(Scd2BatchProcessor.startAtColName))
-    assert(ex.getMessage.contains(Scd2BatchProcessor.endAtColName))
+    assert(wrapper.getCause.isInstanceOf[SparkRuntimeException],
+      s"Expected SparkRuntimeException cause, got ${wrapper.getCause}")
+    val cause = wrapper.getCause.asInstanceOf[SparkRuntimeException]
+    assert(cause.getCondition == "INTERNAL_ERROR")
+    assert(cause.getMessage.contains("post-decomposition"))
+    assert(cause.getMessage.contains(Scd2BatchProcessor.startAtColName))
+    assert(cause.getMessage.contains(Scd2BatchProcessor.endAtColName))
   }
 
   test("assertWellFormedRowsPostDecomposition does not introduce extra columns") {
