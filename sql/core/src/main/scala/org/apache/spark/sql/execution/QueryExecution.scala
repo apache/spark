@@ -291,15 +291,13 @@ class QueryExecution(
       assertAnalyzed()
       assertSupported()
 
-      // During a transaction, skip cache substitution. This is to avoid replacing relations
-      // loaded by the transactional catalog with potentially stale relations cached before
-      // the transaction was active.
-      if (transactionOpt.isDefined) {
-        normalized
-      } else {
-        // Clone the plan to avoid sharing the plan instance between different stages like
-        // analyzing, optimizing and planning.
-        sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+      // Clone the plan to avoid sharing the plan instance between different stages like
+      // analyzing, optimizing and planning.
+      val planToRewrite = normalized.clone()
+      val cacheManager = sparkSession.sharedState.cacheManager
+      transactionOpt match {
+        case Some(txn) => cacheManager.useCachedData(planToRewrite, txn)
+        case None => cacheManager.useCachedData(planToRewrite)
       }
     }
   }
