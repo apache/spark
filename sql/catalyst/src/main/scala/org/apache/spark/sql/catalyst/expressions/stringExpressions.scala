@@ -2737,35 +2737,24 @@ case class Levenshtein(
   group = "string_funcs")
 // scalastyle:on line.size.limit
 case class JaroWinkler(left: Expression, right: Expression)
-  extends BinaryExpression
-  with ImplicitCastInputTypes {
+  extends RuntimeReplaceable with ImplicitCastInputTypes with BinaryLike[Expression] {
 
-  override def nullIntolerant: Boolean = true
+  override lazy val replacement: Expression = StaticInvoke(
+    classOf[ExpressionImplUtils],
+    DoubleType,
+    "jaroWinklerSimilarity",
+    Seq(left, right),
+    inputTypes)
 
   override def inputTypes: Seq[AbstractDataType] = Seq(
     StringTypeWithCollation(supportsTrimCollation = true),
     StringTypeWithCollation(supportsTrimCollation = true))
 
-  override def dataType: DataType = DoubleType
-
   override def prettyName: String = "jaro_winkler_similarity"
 
   override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): JaroWinkler =
+      newLeft: Expression, newRight: Expression): Expression =
     copy(left = newLeft, right = newRight)
-
-  // Note: This implementation uses String.charAt() which operates on UTF-16 code units.
-  // Strings containing supplementary characters (surrogate pairs) may produce
-  // inaccurate results. Unlike levenshtein() which iterates UTF-8 byte boundaries
-  // directly, this decodes to a Java String for character-level comparison.
-  override def nullSafeEval(input1: Any, input2: Any): Any = {
-    input1.asInstanceOf[UTF8String].jaroWinklerSimilarity(
-      input2.asInstanceOf[UTF8String])
-  }
-
-  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    defineCodeGen(ctx, ev, (l, r) => s"$l.jaroWinklerSimilarity($r)")
-  }
 }
 
 /**
