@@ -1716,11 +1716,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Cast(Literal(time), StringType), expectedStr)
     }
 
-    // Cast to string now routes through the zone-aware Types Framework hook (SPARK-57285), which
-    // evaluates the (zone-independent for TimeType) session zone, so resolve a time zone like a
-    // real cast rather than leaving the TimeZoneAwareExpression unresolved.
     checkConsistencyBetweenInterpretedAndCodegen(
-      (child: Expression) => Cast(child, StringType, UTC_OPT), TimeType())
+      (child: Expression) => Cast(child, StringType), TimeType())
   }
 
   test("Casting geospatial data types to/from other data types") {
