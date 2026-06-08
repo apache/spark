@@ -116,6 +116,11 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, _: TimestampNTZNanosType) => true
     case (_: StringType, _: TimestampLTZNanosType) => true
 
+    case (TimestampNTZType, _: TimestampNTZNanosType) => true
+    case (_: TimestampNTZNanosType, TimestampNTZType) => true
+    case (TimestampType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, TimestampType) => true
+
     case (_: StringType, _: CalendarIntervalType) => true
     case (_: StringType, _: AnsiIntervalType) => true
 
@@ -253,6 +258,11 @@ object Cast extends QueryErrorsBase {
 
     case (_: StringType, _: TimestampNTZNanosType) => true
     case (_: StringType, _: TimestampLTZNanosType) => true
+
+    case (TimestampNTZType, _: TimestampNTZNanosType) => true
+    case (_: TimestampNTZNanosType, TimestampNTZType) => true
+    case (TimestampType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, TimestampType) => true
 
     case (_: StringType, DateType) => true
     case (_: StringType, _: TimeType) => true
@@ -400,6 +410,11 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, _: StringType) => true
     case (_: CalendarIntervalType, _: StringType) => true
+    // SPARK-57293: narrowing a nanosecond-precision timestamp to its microsecond counterpart
+    // drops the sub-microsecond digits, so it is not allowed as a (silent) store assignment.
+    // This conversion stays explicit-only.
+    case (_: TimestampNTZNanosType, TimestampNTZType) => false
+    case (_: TimestampLTZNanosType, TimestampType) => false
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -762,6 +777,8 @@ case class Cast(
       buildCast[Int](_, d => daysToMicros(d, zoneId))
     case TimestampNTZType =>
       buildCast[Long](_, ts => convertTz(ts, zoneId, ZoneOffset.UTC))
+    case _: TimestampLTZNanosType =>
+      buildCast[TimestampNanosVal](_, v => v.epochMicros)
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -794,6 +811,8 @@ case class Cast(
       buildCast[Int](_, d => daysToMicros(d, ZoneOffset.UTC))
     case TimestampType =>
       buildCast[Long](_, ts => convertTz(ts, ZoneOffset.UTC, zoneId))
+    case _: TimestampNTZNanosType =>
+      buildCast[TimestampNanosVal](_, v => v.epochMicros)
   }
 
   private[this] def castToTimestampLTZNanos(
@@ -806,6 +825,8 @@ case class Cast(
         } else {
           DateTimeUtils.stringToTimestampLTZNanos(utfs, precision, zoneId).orNull
         })
+    case TimestampType =>
+      buildCast[Long](_, m => TimestampNanosVal.fromParts(m, 0.toShort))
   }
 
   private[this] def castToTimestampNTZNanos(
@@ -818,6 +839,8 @@ case class Cast(
         } else {
           DateTimeUtils.stringToTimestampNTZNanos(utfs, precision, allowTimeZone = true).orNull
         })
+    case TimestampNTZType =>
+      buildCast[Long](_, m => TimestampNanosVal.fromParts(m, 0.toShort))
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
@@ -1745,6 +1768,8 @@ case class Cast(
         zoneIdClass)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, $zid, java.time.ZoneOffset.UTC);"
+    case _: TimestampLTZNanosType =>
+      (c, evPrim, evNull) => code"$evPrim = $c.epochMicros;"
     case DecimalType() =>
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
@@ -1808,6 +1833,8 @@ case class Cast(
         zoneIdClass)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, java.time.ZoneOffset.UTC, $zid);"
+    case _: TimestampNTZNanosType =>
+      (c, evPrim, evNull) => code"$evPrim = $c.epochMicros;"
   }
 
   private[this] def castToTimestampLTZNanosCode(
@@ -1838,6 +1865,9 @@ case class Cast(
             }
            """
         }
+    case TimestampType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
   }
 
   private[this] def castToTimestampNTZNanosCode(
@@ -1864,6 +1894,9 @@ case class Cast(
             }
            """
         }
+    case TimestampNTZType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
   }
 
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {
