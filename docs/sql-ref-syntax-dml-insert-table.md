@@ -26,13 +26,21 @@ The `INSERT` statement inserts new rows into a table or overwrites the existing 
 ### Syntax
 
 ```sql
-INSERT [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) | [BY NAME] ]
+INSERT [ WITH SCHEMA EVOLUTION ] [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) | [BY NAME] ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 
-INSERT INTO [ TABLE ] table_identifier REPLACE WHERE boolean_expression query
+INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier REPLACE WHERE boolean_expression query
 ```
 
 ### Parameters
+
+* **WITH SCHEMA EVOLUTION**
+
+    An optional clause that enables automatic schema evolution for this `INSERT` operation.
+    When specified, the target data source may evolve the table schema to accommodate columns
+    or widened types present in the input query that differ from the existing table schema.
+    Schema evolution applies only to this single statement and must be supported by the target
+    data source; built-in file-based sources do not support it.
 
 * **table_identifier**
 
