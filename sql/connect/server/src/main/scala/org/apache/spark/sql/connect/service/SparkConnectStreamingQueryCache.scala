@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
@@ -59,13 +59,20 @@ private[connect] class SparkConnectStreamingQueryCache(
       query: StreamingQuery,
       tags: Set[String],
       operationId: String): Unit = {
+    // If the query is already inactive by the time it is registered (e.g. a Trigger.AvailableNow
+    // query that already finished, or a query that was stopped right after start()), set its
+    // expiry time immediately so that it is reaped on the regular schedule, instead of lingering
+    // in the cache as a falsely "active" entry until a later maintenance cycle notices it stopped.
+    val expiresAtMs =
+      if (query.isActive) None
+      else Some(clock.getTimeMillis() + stoppedQueryInactivityTimeout.toMillis)
     val value = QueryCacheValue(
       userId = sessionHolder.userId,
       sessionId = sessionHolder.sessionId,
       session = sessionHolder.session,
       query = query,
       operationId = operationId,
-      expiresAtMs = None)
+      expiresAtMs = expiresAtMs)
 
     val queryKey = QueryCacheKey(query.id.toString, query.runId.toString)
     tags.foreach { tag => addTaggedQuery(tag, queryKey) }
@@ -86,6 +93,67 @@ private[connect] class SparkConnectStreamingQueryCache(
       })
 
     schedulePeriodicChecks() // Start the scheduler thread if it has not been started.
+
+    // Guard against a race with session shutdown. SessionHolder.close() stops all of a session's
+    // streaming queries through cleanupRunningQueries(), which iterates over this cache. A query
+    // registered *after* that iteration would otherwise be missed and left running, holding a
+    // strong reference to the now-closed session so that the driver can never exit.
+    //
+    // We publish the entry with queryCache.compute() *first* and only then read
+    // sessionHolder.isClosing. close() writes the volatile closedTimeMs *before* it iterates this
+    // cache in cleanupRunningQueries(). Correctness rests on ConcurrentHashMap's per-key
+    // linearizability of our compute() against the cleanup forEach -- not on the volatile read in
+    // isolation, which on its own would be StoreLoad/Dekker-vulnerable:
+    //   - if the cleanup forEach observes our entry, cleanupRunningQueries() stops the query;
+    //   - otherwise the forEach missed it, which means our compute() linearized *after* close()'s
+    //     read of that key's bin. Since closedTimeMs was written before that bin read (program
+    //     order in close()) and our compute() precedes the isClosing read (program order here),
+    //     transitivity guarantees we observe isClosing == true and stop the query ourselves.
+    // Either one or both sides stop the query. StreamingQuery.stop() and the cache removal below
+    // are idempotent and isActive-guarded, so both sides firing is harmless.
+    if (sessionHolder.isClosing) {
+      logWarning(
+        log"Stopping streaming query registered for a closing session. " +
+          log"Query Id: ${MDC(QUERY_ID, query.id)}, " +
+          log"runId: ${MDC(QUERY_RUN_ID, query.runId)}, " +
+          log"session ${MDC(SESSION_ID, sessionHolder.sessionId)}.")
+      // Stop asynchronously (stop() may block) and drop the cache entry only after the query has
+      // actually been stopped. Removing it before the stop succeeds would discard the only
+      // server-side handle to a query that might still be running, re-introducing the leak this
+      // guards against. If the stop fails we keep the entry cached so periodicMaintenance can reap
+      // it once the query becomes inactive (and so cleanupRunningQueries can still find it).
+      Future {
+        try {
+          if (query.isActive) query.stop()
+          // Drop only the entry we inserted, matched by query identity. Identity (rather than
+          // queryCache.remove(queryKey, value) by case-class equality) ensures we still remove the
+          // entry if the maintenance thread concurrently rewrote its expiresAtMs after observing
+          // the just-stopped query, while still never evicting a later replacement for the same key
+          // (queryCache.compute allows replacement, though it is not expected).
+          val removed = new AtomicBoolean(false)
+          queryCache.computeIfPresent(
+            queryKey,
+            (_, current) => {
+              if (current.query eq query) {
+                removed.set(true)
+                null
+              } else {
+                current
+              }
+            })
+          if (removed.get()) {
+            tags.foreach { tag => removeTaggedQuery(tag, queryKey) }
+          }
+        } catch {
+          case NonFatal(ex) =>
+            logWarning(
+              log"Failed to stop streaming query ${MDC(QUERY_ID, query.id)} " +
+                log"runId: ${MDC(QUERY_RUN_ID, query.runId)} " +
+                log"for a closing session; leaving it cached for later cleanup.",
+              ex)
+        }
+      }(ExecutionContext.global)
+    }
   }
 
   /**
@@ -224,6 +292,15 @@ private[connect] class SparkConnectStreamingQueryCache(
         } else {
           v
         }
+      })
+  }
+
+  private def removeTaggedQuery(tag: String, queryKey: QueryCacheKey): Unit = {
+    taggedQueries.computeIfPresent(
+      tag,
+      (k, v) => {
+        // removeKey returns true once the set is empty; drop the tag entry in that case.
+        if (v.removeKey(queryKey)) null else v
       })
   }
 

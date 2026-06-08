@@ -229,6 +229,14 @@ object StreamingForeachBatchHelper extends Logging {
         query: StreamingQuery,
         cleaner: AutoCloseable): Unit = {
 
+      // Fast path: if the session is already closing, do not even register the listener (it is
+      // added to session.streams and is not removed by SessionHolder.close(), so it would leak and
+      // keep the closed session reachable). Just close the runner and return.
+      if (sessionHolder.isClosing) {
+        cleaner.close()
+        return
+      }
+
       streamingListener // Access to initialize
       val key = CacheKey(query.id.toString, query.runId.toString)
 
@@ -236,6 +244,17 @@ object StreamingForeachBatchHelper extends Logging {
         case Some(_) =>
           throw IllegalStateErrors.cleanerAlreadySet(sessionHolder.key.toString, key.toString)
         case None => // Inserted. Normal.
+      }
+
+      // Guard against the same shutdown race that SparkConnectStreamingQueryCache handles for
+      // queries: SessionHolder.close() reaps runners via cleanUpAll(), and a cleaner registered
+      // after that pass (for a query started concurrently with close()) would be missed by it. The
+      // onQueryTerminated listener is the other reaper, but it too can miss a cleaner whose query
+      // already terminated before this registration. So after inserting we re-check isClosing; if
+      // the session started closing in the meantime we clean the runner up here to avoid stranding
+      // a Python worker.
+      if (sessionHolder.isClosing) {
+        cleanupStreamingRunner(key)
       }
     }
 

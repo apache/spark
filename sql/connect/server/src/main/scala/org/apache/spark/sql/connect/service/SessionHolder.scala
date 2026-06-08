@@ -89,6 +89,13 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   // Set only by close(), and only once.
   @volatile private var closedTimeMs: Option[Long] = None
 
+  /**
+   * Whether this session is closing or already closed. closedTimeMs is set at the very beginning
+   * of [[close]], before any session resources (e.g. running streaming queries) are cleaned up, so
+   * this can be used to detect a session shutdown that races with newly started operations.
+   */
+  private[connect] def isClosing: Boolean = closedTimeMs.isDefined
+
   // Custom timeout after a session expires due to inactivity.
   // Used by SparkConnectSessionManager instead of default timeout if set.
   // Setting it to -1 indicated forever.

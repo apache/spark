@@ -78,4 +78,27 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     // No more entries left in it now.
     assert(cache.listEntriesForTesting().isEmpty)
   }
+
+  test("CleanerCache: a runner registered for a closing session is cleaned up immediately") {
+    // Mirrors the SparkConnectStreamingQueryCache shutdown-race guard. A runner registered after
+    // SessionHolder.close() has already run cleanUpAll() (for a query started concurrently with
+    // close()) would otherwise be missed by both reapers and strand a Python worker.
+    val cleaner = mock[AutoCloseable]
+    val query = mockQuery()
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val cache = new StreamingForeachBatchHelper.CleanerCache(sessionHolder)
+
+    // Mark the session as closing before the runner is registered.
+    sessionHolder.close()
+    assert(sessionHolder.isClosing)
+
+    val listenersBefore = spark.streams.listListeners().length
+    cache.registerCleanerForQuery(query, cleaner)
+
+    // The runner must not be stranded: it is closed and never cached.
+    verify(cleaner, times(1)).close()
+    assert(cache.listEntriesForTesting().isEmpty)
+    // The fast path must not register a (leaking) listener on the closing session's streams.
+    assert(spark.streams.listListeners().length == listenersBefore)
+  }
 }
