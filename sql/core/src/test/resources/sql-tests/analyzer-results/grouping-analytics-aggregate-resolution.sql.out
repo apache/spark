@@ -288,6 +288,26 @@ Sort [s#xL ASC NULLS FIRST, ak#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
 
 
 -- !query
+SELECT a, b, SUM(b) AS sb
+FROM t
+WHERE a > 0
+GROUP BY GROUPING SETS ((a, b), (a))
+ORDER BY SUM(b), a, b
+-- !query analysis
+Sort [sb#xL ASC NULLS FIRST, a#x ASC NULLS FIRST, b#x ASC NULLS FIRST], true
++- Aggregate [a#x, b#x, spark_grouping_id#xL], [a#x, b#x, sum(b#x) AS sb#xL]
+   +- Expand [[a#x, b#x, a#x, b#x, 0], [a#x, b#x, a#x, null, 1]], [a#x, b#x, a#x, b#x, spark_grouping_id#xL]
+      +- Project [a#x, b#x, a#x AS a#x, b#x AS b#x]
+         +- Filter (a#x > 0)
+            +- SubqueryAlias t
+               +- View (`t`, [a#x, b#x])
+                  +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+                     +- Project [a#x, b#x]
+                        +- SubqueryAlias t
+                           +- LocalRelation [a#x, b#x]
+
+
+-- !query
 DROP VIEW t
 -- !query analysis
 DropTempViewCommand t, false

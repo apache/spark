@@ -98,5 +98,12 @@ GROUP BY GROUPING SETS ((a + 1, b), (a + 1))
 HAVING SUM(a + 1) > 3
 ORDER BY SUM(a + 1), ak, b;
 
+-- WHERE filter with ORDER BY aggregate - filter is below Project, not between Aggregate and Expand
+SELECT a, b, SUM(b) AS sb
+FROM t
+WHERE a > 0
+GROUP BY GROUPING SETS ((a, b), (a))
+ORDER BY SUM(b), a, b;
+
 -- Clean up
 DROP VIEW t;
