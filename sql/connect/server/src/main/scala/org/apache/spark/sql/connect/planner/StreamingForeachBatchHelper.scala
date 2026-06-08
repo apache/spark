@@ -215,14 +215,30 @@ object StreamingForeachBatchHelper extends Logging {
     // Mapping from streaming (queryId, runId) to runner cleaner. Used for Python foreachBatch.
     private val cleanerCache: ConcurrentMap[CacheKey, AutoCloseable] = new ConcurrentHashMap()
 
+    // Tracks whether streamingListener has been initialized (and thus added to session.streams).
+    // Lets removeListenerIfRegistered() drop the listener without initializing it as a side effect.
+    @volatile private var listenerRegistered = false
+
     private lazy val streamingListener = { // Initialized on first registered query
       val listener = new StreamingRunnerCleanerListener
       sessionHolder.session.streams.addListener(listener)
+      listenerRegistered = true
       logInfo(
         log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
           log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] " +
           log"Registered runner clean up listener.")
       listener
+    }
+
+    // Removes streamingListener from session.streams if it was ever registered. SessionHolder.close()
+    // does not remove this listener (it is not tracked in the session's listenerCache), so the cache
+    // must drop it on cleanup; otherwise the listener keeps this CleanerCache / SessionHolder
+    // reachable after the session is closed.
+    private def removeListenerIfRegistered(): Unit = {
+      if (listenerRegistered) {
+        sessionHolder.session.streams.removeListener(streamingListener)
+        listenerRegistered = false
+      }
     }
 
     private[connect] def registerCleanerForQuery(
@@ -252,9 +268,11 @@ object StreamingForeachBatchHelper extends Logging {
       // onQueryTerminated listener is the other reaper, but it too can miss a cleaner whose query
       // already terminated before this registration. So after inserting we re-check isClosing; if
       // the session started closing in the meantime we clean the runner up here to avoid stranding
-      // a Python worker.
+      // a Python worker. We also drop the listener: it was just added above (possibly after close()
+      // ran cleanUpAll()), and close() does not remove it, so it would otherwise leak.
       if (sessionHolder.isClosing) {
         cleanupStreamingRunner(key)
+        removeListenerIfRegistered()
       }
     }
 
@@ -262,6 +280,8 @@ object StreamingForeachBatchHelper extends Logging {
     private[connect] def cleanUpAll(): Unit = {
       // Clean up all remaining registered runners.
       cleanerCache.keySet().asScala.foreach(cleanupStreamingRunner(_))
+      // Drop the listener as well; close() does not remove it otherwise.
+      removeListenerIfRegistered()
     }
 
     private def cleanupStreamingRunner(key: CacheKey): Unit = {
