@@ -14207,6 +14207,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         _f = self._build_fallback_method("set_axis")
         return _f(*args, **kwargs)
 
+    def _combine_fallback(self, *args: Any, **kwargs: Any) -> "DataFrame":
+        _f = self._build_fallback_method("combine")
+        return _f(*args, **kwargs)
+
     def __getattr__(self, key: str) -> Any:
         if key.startswith("__"):
             raise AttributeError(key)

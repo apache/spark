@@ -986,6 +986,7 @@ pyspark_pandas = Module(
         # fallback
         "pyspark.pandas.tests.frame.test_asfreq",
         "pyspark.pandas.tests.frame.test_asof",
+        "pyspark.pandas.tests.frame.test_combine",
     ],
 )
 
@@ -1418,6 +1419,7 @@ pyspark_pandas_connect = Module(
         # fallback
         "pyspark.pandas.tests.connect.frame.test_parity_asfreq",
         "pyspark.pandas.tests.connect.frame.test_parity_asof",
+        "pyspark.pandas.tests.connect.frame.test_parity_combine",
     ],
 )
 
