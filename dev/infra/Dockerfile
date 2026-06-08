@@ -70,6 +70,7 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    zstd \
     && rm -rf /var/lib/apt/lists/*
 
 

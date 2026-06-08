@@ -47,7 +47,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     tzdata \
     software-properties-common \
-    zlib1g-dev
+    zlib1g-dev \
+    zstd
 
 # Install Python 3.10
 RUN add-apt-repository ppa:deadsnakes/ppa
