@@ -2133,6 +2133,15 @@ class RocksDB(
       nativeStats.close()
       rocksDbOptions.close()
       dbLogger.close()
+      // In unbounded memory mode each RocksDB instance owns its LRUCache. Without explicit
+      // close() the native C++ cache object is only freed when the JVM GC finalizes the Java
+      // wrapper -- which rarely happens under low heap pressure. Closing explicitly here
+      // ensures native memory is reclaimed deterministically when the instance is released.
+      // In bounded mode the cache is a shared singleton managed by RocksDBMemoryManager
+      // and must not be closed here.
+      if (!conf.boundedMemoryUsage && lruCache != null) {
+        lruCache.close()
+      }
 
       var snapshot = snapshotsToUploadQueue.poll()
       while (snapshot != null) {
