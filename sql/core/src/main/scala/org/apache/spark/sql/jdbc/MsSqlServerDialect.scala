@@ -100,14 +100,22 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
         case _ => super.visitSQLFunction(funcName, inputs)
       }
 
+    private def isBinaryComparison(e: Expression): Boolean = e match {
+      case p: Predicate => p.name() match {
+        case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" => true
+        case _ => false
+      }
+      case _ => false
+    }
+
     override def build(expr: Expression): String = {
       // MsSqlServer does not support boolean comparison using standard comparison operators
       // We shouldn't propagate these queries to MsSqlServer
       expr match {
         case e: Predicate => e.name() match {
-          case "IS_NULL" | "IS_NOT_NULL" if e.children().head.isInstanceOf[Predicate] =>
-            // For MsSqlServer the syntax `(a = b) IS NULL` is not valid.
-            // Give up the push down so Spark evaluates it.
+          case "IS_NULL" | "IS_NOT_NULL" if isBinaryComparison(e.children().head) =>
+            // For MsSqlServer the syntax `(a = b) IS NULL` is not valid, since a comparison
+            // does not produce a value. Give up the push down so Spark evaluates it.
             visitUnexpectedExpr(expr)
           case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" =>
             val Array(l, r) = e.children().map(inputToSQLNoBool)
