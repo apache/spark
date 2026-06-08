@@ -161,6 +161,7 @@ class SparkConnectPlanner(
         case proto.Relation.RelTypeCase.LATERAL_JOIN => transformLateralJoin(rel.getLateralJoin)
         case proto.Relation.RelTypeCase.NEAREST_BY_JOIN =>
           transformNearestByJoin(rel.getNearestByJoin)
+        case proto.Relation.RelTypeCase.ZIP => transformZip(rel.getZip)
         case proto.Relation.RelTypeCase.DEDUPLICATE => transformDeduplicate(rel.getDeduplicate)
         case proto.Relation.RelTypeCase.SET_OP => transformSetOperation(rel.getSetOp)
         case proto.Relation.RelTypeCase.SORT => transformSort(rel.getSort)
@@ -2589,6 +2590,11 @@ class SparkConnectPlanner(
         rel.getDirection,
         rel.getJoinType)
       .logicalPlan
+  }
+
+  private def transformZip(rel: proto.Zip): LogicalPlan = {
+    assertPlan(rel.hasLeft && rel.hasRight, "Both zip sides must be present")
+    logical.Zip(transformRelation(rel.getLeft), transformRelation(rel.getRight))
   }
 
   private def transformSort(sort: proto.Sort): LogicalPlan = {

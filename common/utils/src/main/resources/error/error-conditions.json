@@ -4944,9 +4944,15 @@
     ],
     "sqlState" : "42K0F"
   },
+  "INVALID_TIMESTAMP_LITERAL_PRECISION" : {
+    "message" : [
+      "The timestamp literal <value> has more than 9 fractional-second digits. The maximum supported fractional-second precision of a timestamp literal is 9 (nanoseconds)."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_TIMESTAMP_PRECISION" : {
     "message" : [
-      "The seconds precision <precision> of <type> is invalid. Expected an integer in [7, 9], or parameterless <type> for precision <= 6."
+      "The seconds precision <precision> of <type> is invalid. Expected an integer in [7, 9] for nanosecond precision; use precision 6 or parameterless <type> for the standard microsecond type."
     ],
     "sqlState" : "22023"
   },
@@ -7205,6 +7211,18 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_SHUFFLE_INCORRECT_SEQUENCE_NUMBER" : {
+    "message" : [
+      "Streaming shuffle <messageType> between writer <writerId> and reader <readerId> expected to have sequence number <expSeqNum>, but the actual sequence number is <actSeqNum>. Please verify that the messages are sent in order."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_SHUFFLE_UNEXPECTED_MESSAGE_TYPE" : {
+    "message" : [
+      "Unexpected message type <messageType> encountered during streaming shuffle."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
     "message" : [
       "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
@@ -8365,6 +8383,16 @@
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
         ]
       },
+      "TIMESTAMP_NANOS_TO_STRING" : {
+        "message" : [
+          "Converting values of the nanosecond timestamp type <dataType> to a string."
+        ]
+      },
+      "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {
+        "message" : [
+          "Parsing or formatting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) under the LEGACY time parser policy. Set <config> to CORRECTED."
+        ]
+      },
       "TIME_TRAVEL" : {
         "message" : [
           "Time travel on the relation: <relationId>."
@@ -8436,6 +8464,12 @@
       "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup."
     ],
     "sqlState" : "42K0E"
+  },
+  "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA" : {
+    "message" : [
+      "Hive metastore version <version> requires Java <requiredJavaVersion> or later, but the current JVM is Java <currentJavaVersion>. Please upgrade your Java version or use an earlier Hive metastore version."
+    ],
+    "sqlState" : "0A000"
   },
   "UNSUPPORTED_INSERT" : {
     "message" : [
