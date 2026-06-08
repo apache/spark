@@ -78,7 +78,8 @@ class CommitLog(
    * Factory for creating a [[CommitMetadataBase]] for the requested wire format version.
    * Defaults to the version configured via [[SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION]].
    *
-   * For [[VERSION_3]], [[sinkMetadataMap]] must be non-empty.
+   * For [[VERSION_3]], [[sinkMetadataMap]] must be non-empty and contain exactly one active
+   * sink; [[CommitMetadataV3]] enforces this invariant.
    */
   def createMetadata(
       nextBatchWatermarkMs: Long = 0,
@@ -87,8 +88,6 @@ class CommitLog(
       commitLogFormatVersion: Int = defaultVersion): CommitMetadataBase = {
     commitLogFormatVersion match {
       case VERSION_3 =>
-        require(sinkMetadataMap.nonEmpty,
-          "VERSION_3 commit log requires a non-empty sinkMetadataMap")
         CommitMetadataV3(nextBatchWatermarkMs, stateUniqueIds, sinkMetadataMap)
       case VERSION_2 =>
         CommitMetadataV2(nextBatchWatermarkMs, stateUniqueIds)
@@ -223,21 +222,27 @@ object CommitMetadataV2 {
  *
  * @param nextBatchWatermarkMs The watermark of the next batch.
  * @param stateUniqueIds Per-operator state store unique ids (see [[CommitMetadataV2]]).
- * @param sinkMetadataMap Map keyed by sink name. There is at most one active entry per
+ * @param sinkMetadataMap Non-empty map keyed by sink name with exactly one active entry per
  *                       commit; deactivated sinks are retained to detect reuse of a sink name.
  */
 case class CommitMetadataV3(
     nextBatchWatermarkMs: Long = 0,
     stateUniqueIds: Option[Map[Long, Array[Array[String]]]] = None,
-    sinkMetadataMap: Map[String, SinkMetadataInfo] = Map.empty) extends CommitMetadataBase {
+    sinkMetadataMap: Map[String, SinkMetadataInfo]) extends CommitMetadataBase {
+  require(sinkMetadataMap.nonEmpty,
+    "VERSION_3 commit log requires a non-empty sinkMetadataMap")
+  require(sinkMetadataMap.values.count(_.isActive) == 1,
+    "VERSION_3 commit log requires exactly one active sink, but found " +
+      s"${sinkMetadataMap.values.count(_.isActive)} in sinkMetadataMap")
+
   override def version: Int = CommitLog.VERSION_3
 
   override def withStateUniqueIds(
       stateUniqueIds: Option[Map[Long, Array[Array[String]]]]): CommitMetadataV3 =
     copy(stateUniqueIds = stateUniqueIds)
 
-  /** Returns the currently active sink's metadata, if any. */
-  def activeSinkMetadataInfoOpt: Option[SinkMetadataInfo] = sinkMetadataMap.values.find(_.isActive)
+  /** Returns the currently active sink's metadata; exactly one always exists (see require). */
+  def activeSinkMetadataInfo: SinkMetadataInfo = sinkMetadataMap.values.find(_.isActive).get
 }
 
 object CommitMetadataV3 {
@@ -255,6 +260,7 @@ object CommitMetadataV3 {
  *                     (i.e. [[OffsetV2.json()]]), or [[OffsetSeqLog.SERIALIZED_VOID_OFFSET]] if
  *                     no offset is available.
  * @param providerName Identifies the sink implementation (e.g. fully-qualified class name).
+ * @param apiVersion The API version for the sink - whether it is DSv1 or DSv2.
  * @param isActive Whether this sink is the active sink for the current batch. Historical sinks
  *                 are retained with `isActive = false`.
  */
@@ -262,6 +268,7 @@ case class SinkMetadataInfo(
     sinkName: String,
     commitOffset: String,
     providerName: String,
+    apiVersion: String,
     isActive: Boolean = true) {
   def json: String = Serialization.write(this)(SinkMetadataInfo.format)
 }
@@ -273,11 +280,12 @@ object SinkMetadataInfo {
       sinkName: String,
       commitOffset: Option[OffsetV2],
       providerName: String,
+      apiVersion: String,
       isActive: Boolean): SinkMetadataInfo = {
     val offsetString = commitOffset match {
       case Some(off) => off.json
       case None => OffsetSeqLog.SERIALIZED_VOID_OFFSET
     }
-    new SinkMetadataInfo(sinkName, offsetString, providerName, isActive)
+    new SinkMetadataInfo(sinkName, offsetString, providerName, apiVersion, isActive)
   }
 }

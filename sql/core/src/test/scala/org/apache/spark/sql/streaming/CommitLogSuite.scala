@@ -121,6 +121,7 @@ class CommitLogSuite extends SharedSparkSession {
         sinkName = "sink-0",
         commitOffset = OffsetSeqLog.SERIALIZED_VOID_OFFSET,
         providerName = "memory",
+        apiVersion = "v2",
         isActive = true)
       val metadata = commitLog.createMetadata(
         nextBatchWatermarkMs = 42,
@@ -133,7 +134,7 @@ class CommitLogSuite extends SharedSparkSession {
       assert(read.nextBatchWatermarkMs === 42)
       val readV3 = read.asInstanceOf[CommitMetadataV3]
       assert(readV3.sinkMetadataMap === Map("sink-0" -> sinkInfo))
-      assert(readV3.activeSinkMetadataInfoOpt === Some(sinkInfo))
+      assert(readV3.activeSinkMetadataInfo === sinkInfo)
     }
   }
 
@@ -144,11 +145,13 @@ class CommitLogSuite extends SharedSparkSession {
         sinkName = "sink-0",
         commitOffset = """{"offset":3}""",
         providerName = "memory",
+        apiVersion = "v2",
         isActive = false)
       val active = SinkMetadataInfo(
         sinkName = "sink-1",
         commitOffset = """{"offset":7}""",
         providerName = "memory",
+        apiVersion = "v2",
         isActive = true)
       val metadata = commitLog.createMetadata(
         nextBatchWatermarkMs = 100,
@@ -157,7 +160,7 @@ class CommitLogSuite extends SharedSparkSession {
       assert(commitLog.add(0, metadata))
 
       val readV3 = commitLog.get(0).get.asInstanceOf[CommitMetadataV3]
-      assert(readV3.activeSinkMetadataInfoOpt === Some(active))
+      assert(readV3.activeSinkMetadataInfo === active)
       assert(readV3.sinkMetadataMap("sink-0") === historical)
       assert(readV3.sinkMetadataMap("sink-1") === active)
     }
@@ -172,6 +175,31 @@ class CommitLogSuite extends SharedSparkSession {
           sinkMetadataMap = Map.empty,
           commitLogFormatVersion = CommitLog.VERSION_3)
       }
+    }
+  }
+
+  test("CommitMetadataV3 requires exactly one active sink") {
+    val historical = SinkMetadataInfo(
+      sinkName = "sink-0",
+      commitOffset = OffsetSeqLog.SERIALIZED_VOID_OFFSET,
+      providerName = "memory",
+      apiVersion = "v2",
+      isActive = false)
+    val active = SinkMetadataInfo(
+      sinkName = "sink-1",
+      commitOffset = OffsetSeqLog.SERIALIZED_VOID_OFFSET,
+      providerName = "memory",
+      apiVersion = "v2",
+      isActive = true)
+
+    // No active sink.
+    intercept[IllegalArgumentException] {
+      CommitMetadataV3(sinkMetadataMap = Map("sink-0" -> historical))
+    }
+    // More than one active sink.
+    intercept[IllegalArgumentException] {
+      CommitMetadataV3(sinkMetadataMap =
+        Map("sink-0" -> active.copy(sinkName = "sink-0"), "sink-1" -> active))
     }
   }
 
