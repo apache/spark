@@ -701,20 +701,38 @@ private[v2] trait V2JDBCTest
     assert(rows12(5).getString(0) === "special_character_underscorenot_present")
   }
 
-  test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
-    // salary is non-null for every row, so (salary = 10000) is never null: IS NOT NULL matches
-    // all rows and IS NULL matches none. The composite operand must be parenthesized in the
-    // pushed SQL, otherwise dialects that bind IS NULL tighter than = misparse it.
-    val df1 = sql(s"SELECT name FROM $catalogAndNamespace.${caseConvert("employee")} " +
-      "WHERE (salary = 10000) IS NOT NULL")
-    checkFilterPushed(df1)
-    assert(df1.collect().map(_.getString(0)).sorted ===
-      Array("alex", "amy", "cathy", "david", "jen"))
+  // Whether the dialect can push down IS [NOT] NULL over a predicate operand, e.g.
+  // `(a = 10000) IS NULL`. MsSqlServer has no boolean type, so it cannot and Spark evaluates it.
+  protected def supportsIsNullOverPredicate: Boolean = true
 
-    val df2 = sql(s"SELECT name FROM $catalogAndNamespace.${caseConvert("employee")} " +
-      "WHERE (salary = 10000) IS NULL")
-    checkFilterPushed(df2)
-    assert(df2.collect().isEmpty)
+  test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
+    val tbl = s"$catalogName.composite_is_null"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (a INT, b INT)")
+      Seq[(Option[Int], Int)]((Some(10000), 1), (Some(20000), 2), (None, 3))
+        .toDF("a", "b").write.insertInto(tbl)
+
+      // Binary comparison operand must be parenthesized as `(a = 10000) IS [NOT] NULL`.
+      // The NULL row exercises the IS NULL branch: (NULL = 10000) is NULL, so it matches
+      // IS NULL and not IS NOT NULL. Dialects without a boolean type (e.g. SQL Server) cannot
+      // push this, but Spark evaluates it and returns the same rows.
+      val df1 = sql(s"SELECT b FROM $tbl WHERE (a = 10000) IS NOT NULL")
+      checkFilterPushed(df1, supportsIsNullOverPredicate)
+      assert(df1.collect().map(_.getInt(0)).sorted === Array(1, 2))
+
+      val df2 = sql(s"SELECT b FROM $tbl WHERE (a = 10000) IS NULL")
+      checkFilterPushed(df2, supportsIsNullOverPredicate)
+      assert(df2.collect().map(_.getInt(0)) === Array(3))
+
+      // An arithmetic operand is not a predicate, so it is pushed down by every dialect.
+      val df3 = sql(s"SELECT b FROM $tbl WHERE (a + 10000) IS NOT NULL")
+      checkFilterPushed(df3)
+      assert(df3.collect().map(_.getInt(0)).sorted === Array(1, 2))
+
+      val df4 = sql(s"SELECT b FROM $tbl WHERE (a + 10000) IS NULL")
+      checkFilterPushed(df4)
+      assert(df4.collect().map(_.getInt(0)) === Array(3))
+    }
   }
 
   test("SPARK-57040: TABLESAMPLE with replacement is not pushed down") {
