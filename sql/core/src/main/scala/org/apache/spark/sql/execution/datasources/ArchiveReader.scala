@@ -146,16 +146,17 @@ class TarArchiveReader(path: Path) extends ArchiveReader(path) {
 
   /**
    * Whether an entry is not a real data file and must be skipped: a directory, or a name Spark's
-   * own file listing would filter out. Reusing [[HadoopFSUtils.shouldFilterOutPathName]] (the
-   * `InMemoryFileIndex` filter) keeps archive reads in parity with reading the same entries as
-   * loose files: `.`-prefixed sidecars (macOS `._x`, `.DS_Store`) and `_`-prefixed markers
-   * (`_SUCCESS`, `_committed_*`) are skipped, while data files are kept.
+   * own file listing would filter out. Applying [[HadoopFSUtils.shouldFilterOutPathName]] (the
+   * `InMemoryFileIndex` filter) to every path component keeps archive reads in parity with reading
+   * the same entries as loose files: `.`-prefixed sidecars (macOS `._x`, `.DS_Store`), `_`-prefixed
+   * markers (`_SUCCESS`, `_committed_*`), and anything under a `.`/`_`-prefixed directory (e.g. a
+   * leftover `_temporary/` from a failed write) are skipped, while data files are kept. The
+   * per-component check matters because `InMemoryFileIndex` never recurses into such directories,
+   * so a basename-only filter would read `_temporary/part-0.csv` that a loose-file scan drops.
    */
   private def shouldSkipEntry(entry: TarArchiveEntry): Boolean = {
     if (entry.isDirectory) return true
-    val name = entry.getName
-    val basename = name.substring(name.lastIndexOf('/') + 1)
-    HadoopFSUtils.shouldFilterOutPathName(basename)
+    entry.getName.split("/").exists(c => c.nonEmpty && HadoopFSUtils.shouldFilterOutPathName(c))
   }
 
   /** Opens the archive as a tar stream, transparently decompressing `.tar.gz` / `.tgz`. */

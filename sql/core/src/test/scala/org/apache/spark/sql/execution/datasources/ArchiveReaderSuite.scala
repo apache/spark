@@ -153,14 +153,16 @@ class ArchiveReaderSuite extends SparkFunSuite {
     }
   }
 
-  test("readEntries: dotfile entries (e.g. macOS ._foo) are skipped") {
+  test("readEntries: dotfile, underscore-marker, and prefixed-dir entries are skipped") {
     withTempDir { dir =>
-      val tar = new File(dir, "dots.tar")
+      val tar = new File(dir, "skipped.tar")
       writeTar(tar, Seq(
-        textEntry("._real.csv", "junk"),          // macOS AppleDouble sidecar
-        textEntry(".hidden", "ignored"),          // bare dotfile
+        textEntry("._real.csv", "junk"),           // macOS AppleDouble sidecar
+        textEntry(".hidden", "ignored"),           // bare dotfile
+        textEntry("_SUCCESS", "marker"),           // _-prefixed marker (InMemoryFileIndex skips it)
+        textEntry("_temporary/part-0.csv", "tmp"), // entry under a _-prefixed dir (skipped whole)
         textEntry("real.csv", "kept"),
-        textEntry("nested/._sidecar", "junk2")))  // dotfile in a subdir
+        textEntry("nested/._sidecar", "junk2")))   // dotfile in a subdir
       assert(collect(tar) == Seq("real.csv" -> "kept"))
     }
   }
