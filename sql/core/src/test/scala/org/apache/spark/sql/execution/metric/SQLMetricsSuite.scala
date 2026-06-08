@@ -125,6 +125,22 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("SPARK-57313: Sample numOutputRows metric") {
+    Seq("false", "true").foreach { enableWholeStage =>
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage) {
+        val df = spark.range(0, 1000, 1, 1)
+          .sample(withReplacement = false, fraction = 0.5, seed = 1)
+        val expectedRows = df.collect().length
+        sparkContext.listenerBus.waitUntilEmpty()
+        val sample = df.queryExecution.executedPlan.collect {
+          case s: SampleExec => s
+        }
+        assert(sample.size == 1)
+        assert(sample.head.metrics("numOutputRows").value == expectedRows)
+      }
+    }
+  }
+
 
   test("Recursive CTEs metrics") {
     withSQLConf(SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "") {
