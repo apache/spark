@@ -43,7 +43,4 @@ import org.apache.spark.sql.columnar.SimpleMetricsCachedBatch
 case class ArrowCachedBatch(
     numRows: Int,
     arrowData: Array[Byte],
-    stats: InternalRow) extends SimpleMetricsCachedBatch {
-
-  override def sizeInBytes: Long = arrowData.length
-}
+    stats: InternalRow) extends SimpleMetricsCachedBatch
