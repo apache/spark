@@ -917,7 +917,7 @@ object RowClassifier {
   /**
    * Upsert row whose visible interval has already been closed by a strictly later event;
    * the historical counterpart to [[isOpenUpsert]].
-   * 
+   *
    * Notably, a zero-width [startAt, endAt) interval is not considered a valid closed upsert.
    */
   private[autocdc] def isClosedUpsert(
