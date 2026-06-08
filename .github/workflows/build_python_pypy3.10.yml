@@ -17,11 +17,9 @@
 # under the License.
 #
 
-name: "Build / Python-only (master, PyPy 3.10)"
+name: "Build / Python-only (PyPy 3.10)"
 
 on:
-  schedule:
-    - cron: '0 15 * * *'
   workflow_dispatch:
 
 jobs:
@@ -33,7 +31,6 @@ jobs:
     if: github.repository == 'apache/spark'
     with:
       java: 17
-      branch: master
       hadoop: hadoop3
       envs: >-
         {
