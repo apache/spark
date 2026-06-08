@@ -2785,6 +2785,17 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val LIST_HIDDEN_FILES = buildConf("spark.sql.files.listHiddenFiles")
+    .doc("Whether to list and read files and directories whose names start with '_' or '.' " +
+      "(hidden files), which are skipped by default. When true, such files participate in file " +
+      "listing, partition discovery, and reads. This configuration is effective only when using " +
+      "file-based sources such as Parquet, JSON and ORC. It can be overridden per read by the " +
+      "'listHiddenFiles' data source option.")
+    .version("5.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")
     .doc("Whether to ignore invalid partition paths that do not match <column>=<value>. When " +
       "the option is enabled, table with two partition directories 'table/invalid' and " +
@@ -7852,6 +7863,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
+
+  def listHiddenFiles: Boolean = getConf(LIST_HIDDEN_FILES)
 
   def ignoreInvalidPartitionPaths: Boolean = getConf(IGNORE_INVALID_PARTITION_PATHS)
 

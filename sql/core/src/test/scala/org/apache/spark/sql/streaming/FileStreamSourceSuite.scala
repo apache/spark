@@ -2619,6 +2619,65 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       }
     }
   }
+
+  test("listHiddenFiles option: hidden files are not streamed by default") {
+    withTempDirs { case (src, tmp) =>
+      val textStream = createFileStream("text", src.getCanonicalPath)
+      val filtered = textStream.filter($"value" contains "keep")
+
+      // The '_'-prefixed file is a hidden file and must not be picked up by the stream.
+      testStream(filtered)(
+        AddTextFileData("drop1\nkeep2", src, tmp, tmpFilePrefix = "_hidden"),
+        AddTextFileData("keep3", src, tmp),
+        CheckAnswer("keep3")
+      )
+    }
+  }
+
+  test("listHiddenFiles option: hidden files are streamed when the option is set") {
+    withTempDirs { case (src, tmp) =>
+      val textStream = createFileStream(
+        "text", src.getCanonicalPath, options = Map("listHiddenFiles" -> "true"))
+      val filtered = textStream.filter($"value" contains "keep")
+
+      // With listHiddenFiles=true, the '_'-prefixed file participates in streaming.
+      testStream(filtered)(
+        AddTextFileData("drop1\nkeep2", src, tmp, tmpFilePrefix = "_hidden"),
+        CheckAnswer("keep2"),
+        AddTextFileData("keep3", src, tmp),
+        CheckAnswer("keep2", "keep3")
+      )
+    }
+  }
+
+  test("listHiddenFiles option does not surface another query's _spark_metadata as data") {
+    // Regression: listHiddenFiles must not change _spark_metadata handling -- a reader on a sink's
+    // output dir still consults the metadata log rather than surfacing the log files as data.
+    withSQLConf(SQLConf.FILESTREAM_SINK_METADATA_IGNORED.key -> "false") {
+      withTempDirs { case (outputDir, checkpointDir) =>
+        val source = MemoryStream[String]
+        val writer = source
+          .toDF()
+          .writeStream
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .format("parquet")
+          .start(outputDir.getCanonicalPath)
+        try {
+          source.addData("keep1", "keep2")
+          writer.processAllAvailable()
+        } finally {
+          writer.stop()
+        }
+
+        // The sink must have created a _spark_metadata directory.
+        assert(new File(outputDir, FileStreamSink.metadataDir).exists())
+
+        // listHiddenFiles=true returns the sink's data, not the _spark_metadata log files.
+        val df = spark.read.option("listHiddenFiles", "true").parquet(outputDir.getCanonicalPath)
+        checkAnswer(df, Seq(Row("keep1"), Row("keep2")))
+      }
+    }
+  }
 }
 
 @SlowSQLTest

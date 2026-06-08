@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES}
+import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES, LIST_HIDDEN_FILES}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
@@ -53,9 +53,13 @@ class FileSourceOptions(
    * executors. Only the CSV data source currently honors this.
    */
   val archiveFormatEnabled: Boolean = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
+
+  val listHiddenFiles: Boolean = parameters.get(LIST_HIDDEN_FILES).map(_.toBoolean)
+    .getOrElse(SQLConf.get.listHiddenFiles)
 }
 
 object FileSourceOptions {
   val IGNORE_CORRUPT_FILES = "ignoreCorruptFiles"
   val IGNORE_MISSING_FILES = "ignoreMissingFiles"
+  val LIST_HIDDEN_FILES = "listHiddenFiles"
 }

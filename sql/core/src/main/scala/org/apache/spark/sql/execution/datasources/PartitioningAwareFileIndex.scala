@@ -78,6 +78,13 @@ abstract class PartitioningAwareFileIndex(
       .getOrElse(sparkSession.sessionState.conf.ignoreInvalidPartitionPaths)
   }
 
+  protected lazy val listHiddenFiles: Boolean = {
+    caseInsensitiveMap
+      .get(FileIndexOptions.LIST_HIDDEN_FILES)
+      .map(_.toBoolean)
+      .getOrElse(sparkSession.sessionState.conf.listHiddenFiles)
+  }
+
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
     def isNonEmptyFile(f: FileStatus): Boolean = {
@@ -264,6 +271,7 @@ abstract class PartitioningAwareFileIndex(
   // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
   // counted as data files, so that they shouldn't participate partition discovery.
   private def isDataPath(path: Path): Boolean = {
+    if (listHiddenFiles) return true
     val name = path.getName
     !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
   }

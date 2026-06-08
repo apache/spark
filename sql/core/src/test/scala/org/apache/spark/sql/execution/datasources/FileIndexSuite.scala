@@ -646,9 +646,10 @@ class FileIndexSuite extends SharedSparkSession {
   }
 
   test("SPARK-40667: validate FileIndex Options") {
-    assert(FileIndexOptions.getAllOptions.size == 8)
+    assert(FileIndexOptions.getAllOptions.size == 9)
     // Please add validation on any new FileIndex options here
     assert(FileIndexOptions.isValidOption("ignoreMissingFiles"))
+    assert(FileIndexOptions.isValidOption("listHiddenFiles"))
     assert(FileIndexOptions.isValidOption("ignoreInvalidPartitionPaths"))
     assert(FileIndexOptions.isValidOption("timeZone"))
     assert(FileIndexOptions.isValidOption("recursiveFileLookup"))
@@ -701,6 +702,77 @@ class FileIndexSuite extends SharedSparkSession {
       val fileIndex2b = new InMemoryFileIndex(spark, Seq(path1, path1, path1),
         Map.empty, Some(schema))
       assert(fileIndex2a != fileIndex2b)
+    }
+  }
+
+  test("InMemoryFileIndex: listHiddenFiles option surfaces hidden files in allFiles()") {
+    withTempDir { dir =>
+      stringToFile(new File(dir, "data.txt"), "data")
+      stringToFile(new File(dir, "_hidden"), "hidden")
+      stringToFile(new File(dir, ".dot"), "dot")
+      stringToFile(new File(dir, "x._COPYING_"), "copying")
+      val path = new Path(dir.getCanonicalPath)
+
+      // Default: hidden files are filtered out, only the regular file is listed.
+      val defaultIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+      assert(defaultIndex.allFiles().map(_.getPath.getName).toSet === Set("data.txt"))
+
+      // With the option set, the hidden file, dot file and copying file all surface.
+      val hiddenIndex = new InMemoryFileIndex(
+        spark, Seq(path), Map("listHiddenFiles" -> "true"), None)
+      assert(hiddenIndex.allFiles().map(_.getPath.getName).toSet ===
+        Set("data.txt", "_hidden", ".dot", "x._COPYING_"))
+    }
+  }
+
+  test("InMemoryFileIndex: listHiddenFiles option controls partition dirs with hidden data files") {
+    withTempDir { dir =>
+      // 'part=1' holds a single hidden ('_'-prefixed) file: filtered out by default (so no
+      // partition is discovered), but surfaced and counted as data when listHiddenFiles=true.
+      val partitionDir = new File(dir, "part=1")
+      assert(partitionDir.mkdir())
+      stringToFile(new File(partitionDir, "_data.txt"), "data")
+      val path = new Path(dir.getCanonicalPath)
+
+      // Default: the hidden data file is filtered out, so no files / partitions.
+      val defaultIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+      assert(defaultIndex.allFiles().isEmpty)
+      assert(defaultIndex.partitionSpec().partitions.isEmpty)
+
+      // With the option set, '_data.txt' is a data file (covers isDataPath) and 'part=1' is a
+      // partition directory.
+      val hiddenIndex = new InMemoryFileIndex(
+        spark, Seq(path), Map("listHiddenFiles" -> "true"), None)
+      assert(hiddenIndex.allFiles().map(_.getPath.getName).toSet === Set("_data.txt"))
+      val partitionValues = hiddenIndex.partitionSpec().partitions.map(_.values)
+      assert(partitionValues.length == 1)
+      assert(partitionValues(0).numFields == 1)
+      assert(partitionValues(0).getInt(0) == 1)
+      assert(hiddenIndex.partitionSpec().partitionColumns.fieldNames.toSeq === Seq("part"))
+    }
+  }
+
+  test("InMemoryFileIndex: listHiddenFiles option overrides the listHiddenFiles SQL conf") {
+    withTempDir { dir =>
+      stringToFile(new File(dir, "data.txt"), "data")
+      stringToFile(new File(dir, "_hidden"), "hidden")
+      val path = new Path(dir.getCanonicalPath)
+
+      def hiddenListed(sqlConf: String, options: Map[String, String]): Boolean = {
+        withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> sqlConf) {
+          val index = new InMemoryFileIndex(spark, Seq(path), options, None)
+          index.allFiles().map(_.getPath.getName).contains("_hidden")
+        }
+      }
+
+      // conf=false, option=true -> option wins, hidden file listed.
+      assert(hiddenListed("false", Map("listHiddenFiles" -> "true")))
+      // conf=true, option=false -> option wins, hidden file not listed.
+      assert(!hiddenListed("true", Map("listHiddenFiles" -> "false")))
+      // conf=true, no option -> conf takes effect, hidden file listed.
+      assert(hiddenListed("true", Map.empty))
+      // conf=false, no option -> default, hidden file not listed.
+      assert(!hiddenListed("false", Map.empty))
     }
   }
 }

@@ -17,9 +17,43 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.SparkFunSuite
+import java.io.File
+import java.nio.file.Files
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
+
+import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.LocalSparkContext.withSpark
 
 class HadoopFSUtilsSuite extends SparkFunSuite {
+
+  // Accept everything; hidden-file filtering is exercised via the listHiddenFiles flag.
+  private val acceptAllFilter: PathFilter = AcceptAllPathFilter
+
+  // Builds a tree with one regular file, hidden entries ('_'-, '.'-, '._COPYING_'-named) and a
+  // hidden subdir with its own file. Returns (rootPath, regularFileName).
+  private def createHiddenFileTree(root: File): (Path, String) = {
+    def writeFile(parent: File, name: String): Unit = {
+      val file = new File(parent, name)
+      Files.write(file.toPath, "content".getBytes)
+    }
+    writeFile(root, "data.parquet")
+    writeFile(root, "_hidden")
+    writeFile(root, ".dot")
+    writeFile(root, "x._COPYING_")
+    val hiddenDir = new File(root, "_tmp")
+    assert(hiddenDir.mkdir())
+    writeFile(hiddenDir, "nested.parquet")
+    // Use getCanonicalPath, not toURI: toURI's trailing slash breaks HadoopFSUtils' prefix
+    // stripping and defeats shouldFilterOutPath's leading-'/' match.
+    (new Path(root.getCanonicalPath), "data.parquet")
+  }
+
+  // The set of leaf-file names surfaced for the root path.
+  private def leafFileNames(listing: Seq[(Path, Seq[FileStatus])]): Set[String] =
+    listing.flatMap(_._2).map(_.getPath.getName).toSet
+
   test("HadoopFSUtils - file filtering") {
     assert(!HadoopFSUtils.shouldFilterOutPathName("abcd"))
     assert(HadoopFSUtils.shouldFilterOutPathName(".ab"))
@@ -62,4 +96,55 @@ class HadoopFSUtilsSuite extends SparkFunSuite {
     assert(HadoopFSUtils.shouldFilterOutPath("/_ab_metadata"))
     assert(HadoopFSUtils.shouldFilterOutPath("/_cd_common_metadata"))
   }
+
+  test("listFiles - listHiddenFiles=false filters hidden files and dirs") {
+    withTempDir { root =>
+      val (path, regularFile) = createHiddenFileTree(root)
+      val hadoopConf = new Configuration()
+      val names = leafFileNames(
+        HadoopFSUtils.listFiles(path, hadoopConf, acceptAllFilter, listHiddenFiles = false))
+      // Only the regular file survives; every hidden entry is filtered out.
+      assert(names === Set(regularFile))
+    }
+  }
+
+  test("listFiles - listHiddenFiles=true surfaces hidden files and dirs") {
+    withTempDir { root =>
+      val (path, regularFile) = createHiddenFileTree(root)
+      val hadoopConf = new Configuration()
+      val names = leafFileNames(
+        HadoopFSUtils.listFiles(path, hadoopConf, acceptAllFilter, listHiddenFiles = true))
+      assert(names === Set(regularFile, "_hidden", ".dot", "x._COPYING_", "nested.parquet"))
+    }
+  }
+
+  test("parallelListLeafFiles - listHiddenFiles toggles hidden file visibility") {
+    withTempDir { root =>
+      val (path, regularFile) = createHiddenFileTree(root)
+      val hadoopConf = new Configuration()
+      withSpark(new SparkContext("local", "HadoopFSUtilsSuite")) { sc =>
+        def listNames(listHiddenFiles: Boolean): Set[String] =
+          leafFileNames(HadoopFSUtils.parallelListLeafFiles(
+            sc,
+            Seq(path),
+            hadoopConf,
+            acceptAllFilter,
+            ignoreMissingFiles = false,
+            listHiddenFiles = listHiddenFiles,
+            ignoreLocality = true,
+            // Use 0 so the parallel (Spark job) code path is exercised rather than the
+            // serial short-circuit.
+            parallelismThreshold = 0,
+            parallelismMax = 1))
+
+        assert(listNames(listHiddenFiles = false) === Set(regularFile))
+        assert(listNames(listHiddenFiles = true) ===
+          Set(regularFile, "_hidden", ".dot", "x._COPYING_", "nested.parquet"))
+      }
+    }
+  }
+}
+
+private object AcceptAllPathFilter extends PathFilter with Serializable {
+  override def accept(path: Path): Boolean = true
 }

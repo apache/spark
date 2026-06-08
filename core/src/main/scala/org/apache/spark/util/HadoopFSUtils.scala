@@ -49,6 +49,8 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param filter Path filter used to exclude leaf files from result
    * @param ignoreMissingFiles Ignore missing files that happen during recursive listing
    *                           (e.g., due to race conditions)
+   * @param listHiddenFiles When true, include files and directories whose names start with '_' or
+   *                        '.' (hidden files), which are skipped by default.
    * @param ignoreLocality Whether to fetch data locality info when listing leaf files. If false,
    *                       this will return `FileStatus` without `BlockLocation` info.
    * @param parallelismThreshold The threshold to enable parallelism. If the number of input paths
@@ -65,11 +67,12 @@ private[spark] object HadoopFSUtils extends Logging {
     hadoopConf: Configuration,
     filter: PathFilter,
     ignoreMissingFiles: Boolean,
+    listHiddenFiles: Boolean,
     ignoreLocality: Boolean,
     parallelismThreshold: Int,
     parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
     parallelListLeafFilesInternal(sc, paths, hadoopConf, filter, isRootLevel = true,
-      ignoreMissingFiles, ignoreLocality, parallelismThreshold, parallelismMax)
+      ignoreMissingFiles, listHiddenFiles, ignoreLocality, parallelismThreshold, parallelismMax)
   }
 
   /**
@@ -81,12 +84,15 @@ private[spark] object HadoopFSUtils extends Logging {
    * @param path a path to list
    * @param hadoopConf Hadoop configuration
    * @param filter Path filter used to exclude leaf files from result
+   * @param listHiddenFiles When true, include files and directories whose names start with '_' or
+   *                        '.' (hidden files), which are skipped by default.
    * @return  the set of discovered files for the path
    */
   def listFiles(
       path: Path,
       hadoopConf: Configuration,
-      filter: PathFilter): Seq[(Path, Seq[FileStatus])] = {
+      filter: PathFilter,
+      listHiddenFiles: Boolean): Seq[(Path, Seq[FileStatus])] = {
     logInfo(log"Listing ${MDC(PATH, path)} with listFiles API")
     try {
       val prefixLength = path.toString.length
@@ -94,7 +100,8 @@ private[spark] object HadoopFSUtils extends Logging {
       val statues = new Iterator[LocatedFileStatus]() {
         def next(): LocatedFileStatus = remoteIter.next
         def hasNext: Boolean = remoteIter.hasNext
-      }.filterNot(status => shouldFilterOutPath(status.getPath.toString.substring(prefixLength)))
+      }.filterNot(status =>
+          !listHiddenFiles && shouldFilterOutPath(status.getPath.toString.substring(prefixLength)))
         .filter(f => filter.accept(f.getPath))
         .toArray
       Seq((path, statues.toImmutableArraySeq))
@@ -113,6 +120,7 @@ private[spark] object HadoopFSUtils extends Logging {
       filter: PathFilter,
       isRootLevel: Boolean,
       ignoreMissingFiles: Boolean,
+      listHiddenFiles: Boolean,
       ignoreLocality: Boolean,
       parallelismThreshold: Int,
       parallelismMax: Int): Seq[(Path, Seq[FileStatus])] = {
@@ -126,6 +134,7 @@ private[spark] object HadoopFSUtils extends Logging {
           filter,
           Some(sc),
           ignoreMissingFiles = ignoreMissingFiles,
+          listHiddenFiles = listHiddenFiles,
           ignoreLocality = ignoreLocality,
           isRootPath = isRootLevel,
           parallelismThreshold = parallelismThreshold,
@@ -166,6 +175,7 @@ private[spark] object HadoopFSUtils extends Logging {
               filter = filter,
               contextOpt = None, // Can't execute parallel scans on workers
               ignoreMissingFiles = ignoreMissingFiles,
+              listHiddenFiles = listHiddenFiles,
               ignoreLocality = ignoreLocality,
               isRootPath = isRootLevel,
               parallelismThreshold = Int.MaxValue,
@@ -193,6 +203,7 @@ private[spark] object HadoopFSUtils extends Logging {
       filter: PathFilter,
       contextOpt: Option[SparkContext],
       ignoreMissingFiles: Boolean,
+      listHiddenFiles: Boolean,
       ignoreLocality: Boolean,
       isRootPath: Boolean,
       parallelismThreshold: Int,
@@ -251,7 +262,8 @@ private[spark] object HadoopFSUtils extends Logging {
     }
 
     val filteredStatuses =
-      statuses.filterNot(status => shouldFilterOutPathName(status.getPath.getName))
+      statuses.filterNot(status =>
+        !listHiddenFiles && shouldFilterOutPathName(status.getPath.getName))
 
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
@@ -264,6 +276,7 @@ private[spark] object HadoopFSUtils extends Logging {
             filter = filter,
             isRootLevel = false,
             ignoreMissingFiles = ignoreMissingFiles,
+            listHiddenFiles = listHiddenFiles,
             ignoreLocality = ignoreLocality,
             parallelismThreshold = parallelismThreshold,
             parallelismMax = parallelismMax
@@ -276,6 +289,7 @@ private[spark] object HadoopFSUtils extends Logging {
               filter = filter,
               contextOpt = contextOpt,
               ignoreMissingFiles = ignoreMissingFiles,
+              listHiddenFiles = listHiddenFiles,
               ignoreLocality = ignoreLocality,
               isRootPath = false,
               parallelismThreshold = parallelismThreshold,

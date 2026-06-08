@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 
 object FileIndexOptions extends DataSourceOptions {
   val IGNORE_MISSING_FILES = newOption(FileSourceOptions.IGNORE_MISSING_FILES)
+  val LIST_HIDDEN_FILES = newOption(FileSourceOptions.LIST_HIDDEN_FILES)
   val IGNORE_INVALID_PARTITION_PATHS = newOption("ignoreInvalidPartitionPaths")
   val TIME_ZONE = newOption(DateTimeUtils.TIMEZONE_OPTION)
   val RECURSIVE_FILE_LOOKUP = newOption("recursiveFileLookup")

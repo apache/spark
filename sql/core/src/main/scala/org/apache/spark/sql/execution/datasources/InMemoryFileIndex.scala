@@ -154,8 +154,9 @@ object InMemoryFileIndex extends Logging {
       parameters: Map[String, String] = Map.empty): Seq[(Path, Seq[FileStatus])] = {
     val fileSystemList =
       sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
-    val ignoreMissingFiles =
-      new FileSourceOptions(CaseInsensitiveMap(parameters)).ignoreMissingFiles
+    val fileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(parameters))
+    val ignoreMissingFiles = fileSourceOptions.ignoreMissingFiles
+    val listHiddenFiles = fileSourceOptions.listHiddenFiles
     val useListFiles = try {
       val scheme = paths.head.getFileSystem(hadoopConf).getScheme
       paths.size == 1 && fileSystemList.contains(scheme)
@@ -166,14 +167,16 @@ object InMemoryFileIndex extends Logging {
       HadoopFSUtils.listFiles(
         path = paths.head,
         hadoopConf = hadoopConf,
-        filter = new PathFilterWrapper(filter))
+        filter = new PathFilterWrapper(filter, listHiddenFiles),
+        listHiddenFiles = listHiddenFiles)
     } else {
       HadoopFSUtils.parallelListLeafFiles(
         sc = sparkSession.sparkContext,
         paths = paths,
         hadoopConf = hadoopConf,
-        filter = new PathFilterWrapper(filter),
+        filter = new PathFilterWrapper(filter, listHiddenFiles),
         ignoreMissingFiles = ignoreMissingFiles,
+        listHiddenFiles = listHiddenFiles,
         ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
         parallelismThreshold = sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold,
         parallelismMax = sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism)
@@ -182,8 +185,11 @@ object InMemoryFileIndex extends Logging {
 
 }
 
-private class PathFilterWrapper(val filter: PathFilter) extends PathFilter with Serializable {
+private class PathFilterWrapper(
+    val filter: PathFilter,
+    val listHiddenFiles: Boolean) extends PathFilter with Serializable {
   override def accept(path: Path): Boolean = {
-    (filter == null || filter.accept(path)) && !HadoopFSUtils.shouldFilterOutPathName(path.getName)
+    (filter == null || filter.accept(path)) &&
+      (listHiddenFiles || !HadoopFSUtils.shouldFilterOutPathName(path.getName))
   }
 }

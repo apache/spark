@@ -1429,6 +1429,73 @@ class FileBasedDataSourceSuite extends SharedSparkSession
       }
     }
   }
+
+  // Asserts the listHiddenFiles contract for `format`: default hides the '_'-prefixed file; the
+  // per-read option and the session conf each surface it; the option overrides the conf.
+  private def checkListHiddenFilesContract(format: String, basePath: String): Unit = {
+    // Default: the hidden file is filtered out.
+    checkAnswer(spark.read.format(format).load(basePath), Seq(Row("visible")))
+
+    // Per-read option surfaces the hidden data.
+    checkAnswer(
+      spark.read.option("listHiddenFiles", "true").format(format).load(basePath),
+      Seq(Row("visible"), Row("hidden")))
+
+    // Session conf surfaces the hidden data too.
+    withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> "true") {
+      checkAnswer(
+        spark.read.format(format).load(basePath),
+        Seq(Row("visible"), Row("hidden")))
+    }
+
+    // Precedence: the per-read option overrides the session conf in both directions.
+    withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> "false") {
+      checkAnswer(
+        spark.read.option("listHiddenFiles", "true").format(format).load(basePath),
+        Seq(Row("visible"), Row("hidden")))
+    }
+    withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> "true") {
+      checkAnswer(
+        spark.read.option("listHiddenFiles", "false").format(format).load(basePath),
+        Seq(Row("visible")))
+    }
+  }
+
+  test("Option listHiddenFiles: surfaces hidden files only when enabled - json") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      // Write JSON files directly: a visible record and a '_'-prefixed hidden record.
+      Files.write(new File(dir, "visible.json").toPath, """{"a":"visible"}""".getBytes)
+      Files.write(new File(dir, "_hidden.json").toPath, """{"a":"hidden"}""".getBytes)
+
+      checkListHiddenFilesContract("json", basePath)
+    }
+  }
+
+  test("Option listHiddenFiles: surfaces hidden files only when enabled - parquet") {
+    withTempDir { dir =>
+      // Copy only the part-*.parquet from a scratch write into basePath -- this drops Spark's own
+      // _SUCCESS / _temporary marker files, so listHiddenFiles surfaces only the intended hidden
+      // file. Flat layout (files directly under basePath) mirrors the JSON test.
+      val basePath = dir.getCanonicalPath
+
+      def copyPartFile(value: String, destName: String): Unit = {
+        withTempDir { scratch =>
+          // withTempDir pre-creates the directory, so overwrite to avoid PATH_ALREADY_EXISTS.
+          Seq(value).toDF("a").write.format("parquet").mode("overwrite")
+            .save(scratch.getCanonicalPath)
+          val partFile = scratch.listFiles()
+            .find(f => f.isFile && f.getName.startsWith("part-") && f.getName.endsWith(".parquet"))
+            .getOrElse(fail(s"no part file produced under ${scratch.getCanonicalPath}"))
+          Files.copy(partFile.toPath, new File(dir, destName).toPath)
+        }
+      }
+      copyPartFile("visible", "visible.parquet")
+      copyPartFile("hidden", "_hidden.parquet")
+
+      checkListHiddenFilesContract("parquet", basePath)
+    }
+  }
 }
 
 object TestingUDT {
