@@ -1013,6 +1013,7 @@ class FunctionsTestsMixin:
         sum_result = df3.select(F.vector_sum("v")).first()[0]
         self.assertAlmostEqual(sum_result[0], 4.0, places=4)
         self.assertAlmostEqual(sum_result[1], 6.0, places=4)
+
     def test_jaro_winkler_similarity_function(self):
         df = self.spark.createDataFrame([("MARTHA", "MARHTA")], ["l", "r"])
         result = df.select(F.jaro_winkler_similarity(df.l, df.r)).first()[0]
