@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.util
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -278,6 +279,7 @@ case class AdaptiveSparkPlanExec(
       var result = createQueryStages(fun, currentPhysicalPlan, firstRun = true)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
+      val obsoleteCancelledStageIds = new mutable.HashSet[Int]
       var stagesToReplace = Seq.empty[QueryStageExec]
       while (!result.allChildStagesMaterialized) {
         currentPhysicalPlan = result.newPlan
@@ -333,7 +335,9 @@ case class AdaptiveSparkPlanExec(
             stage.resultOption.set(Some(res))
           case StageFailure(stage, ex) =>
             stage.error.set(Some(ex))
-            errors.append(ex)
+            if (!obsoleteCancelledStageIds.contains(stage.id)) {
+              errors.append(ex)
+            }
         }
 
         // In case of errors, we cancel all running stages and throw exception.
@@ -373,6 +377,8 @@ case class AdaptiveSparkPlanExec(
                 currentPhysicalPlan.treeString, newPhysicalPlan.treeString).mkString("\n")
               logOnLevel(log"Plan changed:\n${MDC(QUERY_PLAN, plans)}")
               cleanUpTempTags(newPhysicalPlan)
+              obsoleteCancelledStageIds ++=
+                cancelObsoleteStages(newPhysicalPlan, stagesToReplace)
               currentPhysicalPlan = newPhysicalPlan
               currentLogicalPlan = newLogicalPlan
               stagesToReplace = Seq.empty[QueryStageExec]
@@ -393,6 +399,39 @@ case class AdaptiveSparkPlanExec(
     // `withFinalPlanUpdate` and pass another result handler and we will create a new result stage.
     currentPhysicalPlan.asInstanceOf[ResultQueryStageExec].resultOption.getAndUpdate(_ => None)
       .get.asInstanceOf[T]
+  }
+
+  private def cancelObsoleteStages(
+      newPhysicalPlan: SparkPlan,
+      stagesToReplace: Seq[QueryStageExec]): Seq[Int] = {
+    val newStages = newPhysicalPlan.collect {
+      case stage: QueryStageExec => stage
+    }
+    val obsoleteStages = stagesToReplace.collect {
+      case stage: ExchangeQueryStageExec
+          if !newStages.exists(newStage =>
+            newStage.id == stage.id || newStage.resultOption.eq(stage.resultOption)) => stage
+    }
+    obsoleteStages.foreach { stage =>
+      if (!stage.isMaterialized && !context.isSharedStageResult(stage.resultOption)) {
+        removeStageFromCache(stage)
+        try {
+          stage.cancel("The query stage is no longer referenced by the current adaptive plan.")
+        } catch {
+          case NonFatal(t) =>
+            logError(s"Exception in cancelling obsolete query stage: ${stage.treeString}", t)
+        }
+      }
+    }
+    obsoleteStages.map(_.id)
+  }
+
+  private def removeStageFromCache(stage: ExchangeQueryStageExec): Unit = {
+    context.stageCache.foreach { case (plan, cachedStage) =>
+      if (cachedStage.resultOption.eq(stage.resultOption)) {
+        context.stageCache.remove(plan)
+      }
+    }
   }
 
   // Use a lazy val to avoid this being called more than once.
@@ -715,6 +754,7 @@ case class AdaptiveSparkPlanExec(
   private def reuseQueryStage(
       existing: ExchangeQueryStageExec,
       exchange: Exchange): ExchangeQueryStageExec = {
+    context.markSharedStageResult(existing.resultOption)
     val queryStage = existing.newReuseInstance(currentStageId, exchange.output)
     currentStageId += 1
     setLogicalLinkForNewQueryStage(queryStage, exchange)
@@ -959,7 +999,6 @@ object AdaptiveSparkPlanExec {
  * The execution context shared between the main query and all sub-queries.
  */
 case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
-
   /**
    * The subquery-reuse map shared across the entire query.
    */
@@ -971,6 +1010,17 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    */
   val stageCache: TrieMap[SparkPlan, ExchangeQueryStageExec] =
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
+
+  private val sharedStageResults =
+    new ConcurrentHashMap[AtomicReference[Option[Any]], Boolean]()
+
+  def markSharedStageResult(resultOption: AtomicReference[Option[Any]]): Unit = {
+    sharedStageResults.put(resultOption, true)
+  }
+
+  def isSharedStageResult(resultOption: AtomicReference[Option[Any]]): Boolean = {
+    sharedStageResults.containsKey(resultOption)
+  }
 
   val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
 }

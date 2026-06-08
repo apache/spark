@@ -19,13 +19,17 @@ package org.apache.spark.sql.execution.adaptive
 
 import java.io.File
 import java.net.URI
+import java.util.Locale
+
+import scala.collection.mutable
+import scala.concurrent.Future
 
 import org.apache.logging.log4j.Level
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
+import org.apache.spark.scheduler.{JobFailed, SparkListener, SparkListenerEvent, SparkListenerJobEnd, SparkListenerJobStart}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -350,6 +354,88 @@ class AdaptiveQueryExecSuite
         assert(coalescedReads.length == 3, s"$plan")
         coalescedReads.foreach(r => assert(r.isLocalRead || r.partitionSpecs.length == 1))
       }
+    }
+  }
+
+  test("empty materialized stage short-circuits AQE through sort wrappers") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      val jobEndEvents = new mutable.ArrayBuffer[SparkListenerJobEnd]
+      val listener = new SparkListener {
+        override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = jobEndEvents.synchronized {
+          jobEndEvents += jobEnd
+        }
+      }
+      spark.sparkContext.addSparkListener(listener)
+      try {
+        val left = spark.range(0, 1, 1, 1).where("id < 0").select($"id".as("k"))
+        val right = spark.range(0, 200, 1, 20).as[Long].map { id =>
+          Thread.sleep(200)
+          id
+        }.select($"value".as("k"))
+        val df = left.join(right, Seq("k"))
+
+        checkAnswer(df, Seq.empty)
+
+        val finalPlan = df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        assert(collect(finalPlan) { case s: SortMergeJoinExec => s }.isEmpty)
+
+        spark.sparkContext.listenerBus.waitUntilEmpty()
+        assert(jobEndEvents.synchronized {
+          jobEndEvents.exists {
+            case SparkListenerJobEnd(_, _, JobFailed(e)) =>
+              e.getMessage.toLowerCase(Locale.ROOT).contains("cancel")
+            case _ => false
+          }
+        })
+      } finally {
+        spark.sparkContext.removeSparkListener(listener)
+      }
+    }
+  }
+
+  test("empty filtered global aggregate stage is not treated as non-empty") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
+      withTempView("empty_rows") {
+        spark.range(1).where("id < 0").createOrReplaceTempView("empty_rows")
+
+        val df = sql(
+          "SELECT * FROM testData LEFT ANTI JOIN " +
+            "(SELECT count(*) c FROM empty_rows HAVING c < 0) r")
+
+        checkAnswer(df, testData.collect().toSeq)
+      }
+    }
+  }
+
+  test("obsolete stage cancellation preserves shared reused exchange stages") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val df = spark.sql("SELECT * FROM testData join testData2 ON key = a")
+      val adaptivePlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val cancelObsoleteStages =
+        PrivateMethod[Seq[Int]](Symbol("cancelObsoleteStages"))
+      val replacementPlan = LocalTableScanExec(Nil, Nil, None)
+
+      val sharedStage = TestExchangeQueryStageExec(
+        0, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
+      adaptivePlan.context.markSharedStageResult(sharedStage.resultOption)
+
+      val sharedCancelledIds = adaptivePlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(sharedStage)))
+      assert(sharedCancelledIds == Seq(sharedStage.id))
+      assert(!sharedStage.cancelled)
+
+      val unsharedStage = TestExchangeQueryStageExec(
+        1, LocalTableScanExec(Nil, Nil, None), LocalTableScanExec(Nil, Nil, None))
+      val unsharedCancelledIds = adaptivePlan.invokePrivate(
+        cancelObsoleteStages(replacementPlan, Seq(unsharedStage)))
+      assert(unsharedCancelledIds == Seq(unsharedStage.id))
+      assert(unsharedStage.cancelled)
     }
   }
 
@@ -3613,6 +3699,31 @@ class AdaptiveQueryExecSuite
         }
       }
     }
+  }
+}
+
+private case class TestExchangeQueryStageExec(
+    override val id: Int,
+    override val plan: SparkPlan,
+    override val _canonicalized: SparkPlan) extends ExchangeQueryStageExec {
+  @volatile var cancelled: Boolean = false
+
+  override protected def doMaterialize(): Future[Any] = Future.successful(())
+
+  override def getRuntimeStatistics: org.apache.spark.sql.catalyst.plans.logical.Statistics =
+    org.apache.spark.sql.catalyst.plans.logical.Statistics(sizeInBytes = BigInt(0))
+
+  override protected def doCancel(reason: String): Unit = {
+    cancelled = true
+  }
+
+  override def newReuseInstance(
+      newStageId: Int,
+      newOutput: Seq[Attribute]): ExchangeQueryStageExec = {
+    val reuse = copy(id = newStageId)
+    reuse._resultOption = this._resultOption
+    reuse._error = this._error
+    reuse
   }
 }
 
