@@ -101,6 +101,14 @@ class ResolveBinBySuite extends AnalysisTest {
     // A foldable but null origin is rejected as a null argument.
     expectError(
       unresolved(originExpr = Some(Literal(null, TimestampType))), "BIN_BY_NULL_ARGUMENT")
+    // A foldable CAST that throws on eval (ANSI) surfaces cleanly, not as a raw exception.
+    // TimestampType cast needs a resolved time zone, mirroring the post-ResolveTimeZone state.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      expectError(
+        unresolved(originExpr =
+          Some(Cast(Literal.create("not a ts", StringType), TimestampType, Some("UTC")))),
+        "BIN_BY_INVALID_ALIGN_TO")
+    }
   }
 
   test("rejects invalid BIN WIDTH") {

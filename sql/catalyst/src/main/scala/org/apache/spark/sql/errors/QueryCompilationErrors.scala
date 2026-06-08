@@ -335,6 +335,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("columnName" -> toSQLId(columnName)))
   }
 
+  def binByInvalidAlignToError(expr: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "BIN_BY_INVALID_ALIGN_TO",
+      messageParameters = Map("expr" -> toSQLExpr(expr)))
+  }
+
   def binByInvalidBinWidthError(expr: Expression): Throwable = {
     new AnalysisException(
       errorClass = "BIN_BY_INVALID_BIN_WIDTH",

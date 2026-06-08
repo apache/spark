@@ -254,6 +254,12 @@
     ],
     "sqlState" : "42701"
   },
+  "BIN_BY_INVALID_ALIGN_TO" : {
+    "message" : [
+      "The ALIGN TO expression could not be evaluated to a constant value. Got: <expr>."
+    ],
+    "sqlState" : "42K09"
+  },
   "BIN_BY_INVALID_BIN_WIDTH" : {
     "message" : [
       "The BIN WIDTH expression must be a positive DAY-TIME INTERVAL. Got: <expr>."

@@ -107,7 +107,12 @@ object ResolveBinBy extends Rule[LogicalPlan] {
           throw QueryCompilationErrors.binByAlignToTypeMismatchError(o.dataType, rangeType)
         }
         // Fold the origin to micros.
-        val v = o.eval(EmptyRow)
+        val v = try {
+          o.eval(EmptyRow)
+        } catch {
+          case NonFatal(_) =>
+            throw QueryCompilationErrors.binByInvalidAlignToError(o)
+        }
         if (v == null) {
           throw QueryCompilationErrors.binByNullArgumentError("ALIGN TO")
         }
