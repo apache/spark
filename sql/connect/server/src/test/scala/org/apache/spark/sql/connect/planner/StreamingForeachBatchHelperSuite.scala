@@ -17,7 +17,9 @@
 package org.apache.spark.sql.connect.planner
 
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
 
+import org.mockito.Mockito.atLeastOnce
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.when
@@ -118,5 +120,43 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
 
     verify(cleaner, times(1)).close()
     assert(!spark.streams.listListeners().contains(cache.listenerForTesting))
+  }
+
+  test("CleanerCache: registration racing with session shutdown strands no runner or listener") {
+    // Mirrors the SparkConnectStreamingQueryCache race test for the foreachBatch cleaner:
+    // registration runs concurrently with the shutdown sequence (close() marks the session closing,
+    // then cleanUpAll() reaps runners and the listener). Whatever the interleaving, the runner must
+    // be closed and no listener may be left registered on session.streams.
+    val baselineListeners = spark.streams.listListeners().length
+    val numIterations = 200
+    (1 to numIterations).foreach { _ =>
+      val cleaner = mock[AutoCloseable]
+      val query = mockQuery()
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      val cache = new StreamingForeachBatchHelper.CleanerCache(sessionHolder)
+
+      val startLatch = new CountDownLatch(1)
+      val closeThread = new Thread(() => {
+        startLatch.await()
+        sessionHolder.close() // Marks the session closing.
+        cache.cleanUpAll() // Mirrors close()'s runner + listener reaping.
+      })
+      val registerThread = new Thread(() => {
+        startLatch.await()
+        cache.registerCleanerForQuery(query, cleaner)
+      })
+      closeThread.start()
+      registerThread.start()
+      startLatch.countDown()
+      closeThread.join()
+      registerThread.join()
+
+      // The runner must be closed by one of the paths: the fast path, the post-insert guard, or
+      // cleanUpAll(). registerCleanerForQuery and cleanUpAll are synchronous, so this is settled
+      // once both threads have joined.
+      verify(cleaner, atLeastOnce()).close()
+    }
+    // No iteration may leave a listener registered on the shared streams manager.
+    assert(spark.streams.listListeners().length == baselineListeners)
   }
 }
