@@ -279,6 +279,10 @@ class SharedTablesInMemoryRowLevelOperationTableCatalog
     super.initialize(name, options)
     tables = SharedTablesInMemoryRowLevelOperationTableCatalog.sharedTables
   }
+
+  // Return the live table instance (not a snapshot copy) so that TRUNCATE and DROP
+  // mutations affect the shared catalog state immediately.
+  override def loadTable(ident: Identifier): Table = liveTable(ident)
 }
 
 object SharedTablesInMemoryRowLevelOperationTableCatalog {
