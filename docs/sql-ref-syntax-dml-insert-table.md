@@ -40,7 +40,7 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier REPLACE WHERE b
     When specified, the target data source may evolve the table schema to accommodate new
     columns present in the input query that are not in the existing table schema.
     Schema evolution applies only to this single statement and must be supported by the target
-    data source; built-in file-based sources do not support it.
+    data source.
 
 * **table_identifier**
 
