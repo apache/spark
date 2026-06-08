@@ -2859,8 +2859,10 @@ class Analyzer(
           j.copy(left = newLeft, right = newRight)
         }
 
-      // Allow scalar SQL UDFs in SQL table function inputs. They will be resolved
-      // when ResolveSQLTableFunctions expands the table function via executeSameContext.
+      // Defer to a later iteration: once ResolveSQLTableFunctions expands the
+      // table function, the SQLFunctionExpression sits inside the expanded
+      // plan's input-cast Project and is rewritten by a subsequent iteration
+      // of this rule.
       case f: SQLTableFunction if hasSQLFunctionExpression(f.expressions) => f
 
       case o: LogicalPlan if o.resolved && hasSQLFunctionExpression(o.expressions) =>
