@@ -913,6 +913,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.data_type_ops.test_string_ops",
         "pyspark.pandas.tests.data_type_ops.test_udt_ops",
         "pyspark.pandas.tests.data_type_ops.test_timedelta_ops",
+        "pyspark.pandas.tests.data_type_ops.test_decimal_float_arithmetic",
         "pyspark.pandas.tests.plot.test_frame_plot",
         "pyspark.pandas.tests.plot.test_frame_plot_matplotlib",
         "pyspark.pandas.tests.plot.test_frame_plot_plotly",
