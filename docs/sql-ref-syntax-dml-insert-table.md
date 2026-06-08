@@ -36,11 +36,9 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier REPLACE WHERE b
 
 * **WITH SCHEMA EVOLUTION**
 
-    An optional clause that enables automatic schema evolution for this `INSERT` operation.
-    When specified, the target data source may evolve the table schema to accommodate new
-    columns present in the input query that are not in the existing table schema.
-    Schema evolution applies only to this single statement and must be supported by the target
-    data source.
+    Enables automatic schema evolution for this `INSERT` operation. When enabled, the schema
+    of the target table is automatically updated to accommodate additional columns of the
+    source query.
 
 * **table_identifier**
 
