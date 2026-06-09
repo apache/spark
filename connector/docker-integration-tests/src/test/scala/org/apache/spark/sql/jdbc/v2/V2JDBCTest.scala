@@ -708,8 +708,10 @@ private[v2] trait V2JDBCTest
   test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
     val tbl = s"$catalogName.composite_is_null"
     withTable(tbl) {
-      sql(s"CREATE TABLE $tbl (a INT, b INT)")
-      Seq[(Option[Int], Int)]((Some(10000), 1), (Some(20000), 2), (None, 3))
+      // b is a string label so the result type is the same across dialects (an INT column
+      // comes back as BigDecimal on some engines such as Oracle).
+      sql(s"CREATE TABLE $tbl (a INT, b VARCHAR(8))")
+      Seq[(Option[Int], String)]((Some(10000), "x"), (Some(20000), "y"), (None, "z"))
         .toDF("a", "b").write.insertInto(tbl)
 
       // Binary comparison operand must be parenthesized as `(a = 10000) IS [NOT] NULL`.
@@ -718,20 +720,20 @@ private[v2] trait V2JDBCTest
       // push this, but Spark evaluates it and returns the same rows.
       val df1 = sql(s"SELECT b FROM $tbl WHERE (a = 10000) IS NOT NULL")
       checkFilterPushed(df1, supportsIsNullOverPredicate)
-      assert(df1.collect().map(_.getInt(0)).sorted === Array(1, 2))
+      assert(df1.collect().map(_.getString(0)).sorted === Array("x", "y"))
 
       val df2 = sql(s"SELECT b FROM $tbl WHERE (a = 10000) IS NULL")
       checkFilterPushed(df2, supportsIsNullOverPredicate)
-      assert(df2.collect().map(_.getInt(0)) === Array(3))
+      assert(df2.collect().map(_.getString(0)) === Array("z"))
 
       // An arithmetic operand is not a predicate, so it is pushed down by every dialect.
       val df3 = sql(s"SELECT b FROM $tbl WHERE (a + 10000) IS NOT NULL")
       checkFilterPushed(df3)
-      assert(df3.collect().map(_.getInt(0)).sorted === Array(1, 2))
+      assert(df3.collect().map(_.getString(0)).sorted === Array("x", "y"))
 
       val df4 = sql(s"SELECT b FROM $tbl WHERE (a + 10000) IS NULL")
       checkFilterPushed(df4)
-      assert(df4.collect().map(_.getInt(0)) === Array(3))
+      assert(df4.collect().map(_.getString(0)) === Array("z"))
     }
   }
 
