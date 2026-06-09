@@ -257,9 +257,8 @@ class AutoCdcMergeFlow(
   protected val caseSensitiveAnalysis: Boolean = spark.sessionState.conf.caseSensitiveAnalysis
 
   /**
-   * The effective CDC configuration for this flow. The base flow uses the user-provided
-   * [[ChangeArgs]] unchanged; [[ChangelogAutoCdcMergeFlow]] augments it with a derived delete
-   * condition and metadata-column exclusions.
+   * The effective CDC configuration for this flow.
+   * Subclasses can override this method to return derived ChangeArgs.
    */
   def changeArgs: ChangeArgs = flow.changeArgs
 
