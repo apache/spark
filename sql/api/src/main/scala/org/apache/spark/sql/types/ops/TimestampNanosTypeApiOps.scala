@@ -57,6 +57,13 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
   override def format(v: Any): String =
     throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
 
+  // Row JSON (Row.json / Row.prettyJson) holds the external Row value (java.time.Instant for LTZ,
+  // java.time.LocalDateTime for NTZ), but rendering nanosecond timestamps from this zone-less path
+  // is not supported yet (same reason as format above), so raise the user-facing
+  // UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error here rather than silently truncating.
+  override def formatExternal(value: Any): Option[String] =
+    throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
+
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
 
   // ==================== Row Encoding ====================

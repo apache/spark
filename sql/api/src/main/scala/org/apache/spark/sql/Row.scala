@@ -634,12 +634,12 @@ trait Row extends Serializable {
       } else {
         // A public Row holds external values (e.g. java.time.LocalTime for TimeType), so render
         // through the framework's formatExternal rather than format, which expects the internal
-        // representation and would otherwise fail the value cast. A framework type without an
-        // external formatter falls back to format, preserving its existing behavior (e.g. the
-        // nanosecond timestamp types still raise their unsupported-rendering error here); types
-        // outside the framework fall back to the legacy rendering.
+        // representation and would otherwise fail the value cast. A framework type either returns a
+        // rendered string or raises its own error (e.g. the nanosecond timestamp types raise the
+        // unsupported-rendering error); types outside the framework fall back to legacy rendering.
         TypeApiOps(dataType)
-          .map(ops => JString(ops.formatExternal(value).getOrElse(ops.format(value))))
+          .flatMap(_.formatExternal(value))
+          .map(JString(_))
           .getOrElse(toJsonDefault(value, dataType))
       }
 

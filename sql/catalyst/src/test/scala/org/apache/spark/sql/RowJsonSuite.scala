@@ -155,8 +155,8 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
   }
 
   // Routing the external value through formatExternal must not silently change the nanosecond
-  // timestamp behavior: those ops have no external formatter yet, so Row JSON falls back to format
-  // and keeps raising the clean unsupported-rendering error instead of mis-rendering as micros.
+  // timestamp behavior: those ops raise the clean unsupported-rendering error directly from
+  // formatExternal instead of mis-rendering the external value as a microsecond timestamp.
   test("SPARK-57338: nanosecond timestamp column raises the unsupported-rendering error in JSON") {
     withSQLConf(
         SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true",
