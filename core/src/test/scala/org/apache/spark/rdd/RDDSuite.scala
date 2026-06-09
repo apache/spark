@@ -974,6 +974,103 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     assert(count === 10)
   }
 
+  test("zipWithIndex reuses startIndices from ancestor zipWithIndex through size-preserving maps") {
+    import scala.language.reflectiveCalls
+    val n = 10
+    val numPartitions = 3
+    val data = sc.parallelize(0 until n, numPartitions)
+    val zipped = data.zipWithIndex()
+
+    val jobCountListener = new SparkListener {
+      private val count: AtomicInteger = new AtomicInteger(0)
+      def getCount: Int = count.get
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = count.incrementAndGet()
+    }
+    sc.addSparkListener(jobCountListener)
+
+    // map is size-preserving, so the second zipWithIndex should reuse startIndices
+    // from the ancestor ZippedWithIndexRDD without an extra counting job
+    val doubleZipped = zipped.map(identity).zipWithIndex()
+    sc.listenerBus.waitUntilEmpty()
+    assert(jobCountListener.getCount === 0,
+      "second zipWithIndex should not trigger a counting job")
+
+    // correctness: the second index must equal the first index
+    doubleZipped.collect().foreach { case ((_, firstIdx), secondIdx) =>
+      assert(firstIdx === secondIdx)
+    }
+  }
+
+  test("zipWithIndex reuses startIndices: direct chaining (no intermediate transform)") {
+    import scala.language.reflectiveCalls
+    val data = sc.parallelize(0 until 10, 3)
+    val zipped = data.zipWithIndex()
+
+    val listener = new SparkListener {
+      private val count: AtomicInteger = new AtomicInteger(0)
+      def getCount: Int = count.get
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = count.incrementAndGet()
+    }
+    sc.addSparkListener(listener)
+
+    val doubleZipped = zipped.zipWithIndex()
+    sc.listenerBus.waitUntilEmpty()
+    assert(listener.getCount === 0,
+      "direct zipWithIndex.zipWithIndex must not trigger a counting job")
+
+    doubleZipped.collect().foreach { case ((_, firstIdx), secondIdx) =>
+      assert(firstIdx === secondIdx)
+    }
+  }
+
+  test("zipWithIndex reuses startIndices: multiple size-preserving maps in between") {
+    import scala.language.reflectiveCalls
+    val data = sc.parallelize(0 until 10, 3)
+    val zipped = data.zipWithIndex()
+
+    val listener = new SparkListener {
+      private val count: AtomicInteger = new AtomicInteger(0)
+      def getCount: Int = count.get
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = count.incrementAndGet()
+    }
+    sc.addSparkListener(listener)
+
+    val result = zipped.map(identity).map(identity).map(identity).zipWithIndex()
+    sc.listenerBus.waitUntilEmpty()
+    assert(listener.getCount === 0,
+      "zipWithIndex.map.map.map.zipWithIndex must not trigger a counting job")
+
+    result.collect().foreach { case ((_, firstIdx), secondIdx) =>
+      assert(firstIdx === secondIdx)
+    }
+  }
+
+  test("zipWithIndex recomputes startIndices when chain is broken by non-size-preserving op") {
+    import scala.language.reflectiveCalls
+    // filter removes elements, so partition sizes change — the optimization must NOT apply and
+    // a fresh counting job must be submitted for the second zipWithIndex.
+    val data = sc.parallelize(0 until 10, 3)
+    val zipped = data.zipWithIndex()
+
+    val listener = new SparkListener {
+      private val count: AtomicInteger = new AtomicInteger(0)
+      def getCount: Int = count.get
+      override def onJobStart(jobStart: SparkListenerJobStart): Unit = count.incrementAndGet()
+    }
+    sc.addSparkListener(listener)
+
+    val filtered = zipped.filter(_._1 % 2 == 0)
+    val reindexed = filtered.zipWithIndex()
+    sc.listenerBus.waitUntilEmpty()
+    assert(listener.getCount > 0, "broken chain must trigger a counting job for startIndices")
+
+    // correctness: reindexed produces a fresh 0-based index over the filtered elements
+    val results = reindexed.sortBy(_._2).collect()
+    results.zipWithIndex.foreach { case ((_, idx), pos) =>
+      assert(idx === pos)
+    }
+  }
+
   test("zipWithUniqueId") {
     val n = 10
     val data = sc.parallelize(0 until n, 3)
