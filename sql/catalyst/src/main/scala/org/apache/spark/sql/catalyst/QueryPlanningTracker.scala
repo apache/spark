@@ -72,8 +72,11 @@ object QueryPlanningTracker {
   }
 
   /**
-   * A thread local variable to implicitly pass the tracker around. This assumes the query planner
-   * is single-threaded, and avoids passing the same tracker context in every function call.
+   * A thread local variable to implicitly pass the tracker around, avoiding passing the same
+   * tracker context in every function call. The same tracker may be shared across threads -- e.g.
+   * AQE plans scalar / IN / DPP subqueries on separate threads, all recording into the query's
+   * tracker -- so the recording path ([[QueryPlanningTracker.recordRuleInvocation]] and the
+   * reporting accessors) is synchronized.
    */
   private val localTracker = new ThreadLocal[QueryPlanningTracker]() {
     override def initialValue: QueryPlanningTracker = null
@@ -82,7 +85,7 @@ object QueryPlanningTracker {
   /** Returns the current tracker in scope, based on the thread local variable. */
   def get: Option[QueryPlanningTracker] = Option(localTracker.get())
 
-  /** Sets the current tracker for the execution of function f. We assume f is single-threaded. */
+  /** Sets the current tracker for the execution of function f. */
   def withTracker[T](tracker: QueryPlanningTracker)(f: => T): T = {
     val originalTracker = localTracker.get()
     localTracker.set(tracker)
@@ -194,11 +197,17 @@ class QueryPlanningTracker(
   /**
    * Record a specific invocation of a rule.
    *
+   * `synchronized` because the same tracker can be written from multiple threads: AQE plans
+   * scalar / IN / DPP subqueries on separate threads, all recording into the query's tracker.
+   * Recording is one `HashMap` put against ms-scale planning, so the lock is uncontended on the
+   * single-threaded analyzer / optimizer path and contended only by the rare concurrent
+   * subquery-planning threads.
+   *
    * @param rule name of the rule
    * @param timeNs time taken to run this invocation
    * @param effective whether the invocation has resulted in a plan change
    */
-  def recordRuleInvocation(rule: String, timeNs: Long, effective: Boolean): Unit = {
+  def recordRuleInvocation(rule: String, timeNs: Long, effective: Boolean): Unit = synchronized {
     var s = rulesMap.get(rule)
     if (s eq null) {
       s = new RuleSummary
@@ -210,22 +219,11 @@ class QueryPlanningTracker(
     s.numEffectiveInvocations += (if (effective) 1 else 0)
   }
 
-  /**
-   * Merge the per-rule statistics from `other` into this tracker. [[RuleSummary]]'s fields are
-   * additive, so the totals are simply accumulated.
-   */
-  def merge(other: QueryPlanningTracker): Unit = {
-    other.rulesMap.forEach { (rule, otherSummary) =>
-      val s = rulesMap.computeIfAbsent(rule, _ => new RuleSummary)
-      s.totalTimeNs += otherSummary.totalTimeNs
-      s.numInvocations += otherSummary.numInvocations
-      s.numEffectiveInvocations += otherSummary.numEffectiveInvocations
-    }
-  }
-
   // ------------ reporting functions below ------------
 
-  def rules: Map[String, RuleSummary] = rulesMap.asScala.toMap
+  // `rules` and `topRulesByTime` are `synchronized` to read a consistent snapshot of `rulesMap`
+  // while concurrent subquery-planning threads may still be recording (see `recordRuleInvocation`).
+  def rules: Map[String, RuleSummary] = synchronized { rulesMap.asScala.toMap }
 
   def phases: Map[String, PhaseSummary] = phasesMap.asScala.toMap
 
@@ -233,7 +231,7 @@ class QueryPlanningTracker(
    * Returns the top k most expensive rules (as measured by time). If k is larger than the rules
    * seen so far, return all the rules. If there is no rule seen so far or k <= 0, return empty seq.
    */
-  def topRulesByTime(k: Int): Seq[(String, RuleSummary)] = {
+  def topRulesByTime(k: Int): Seq[(String, RuleSummary)] = synchronized {
     if (k <= 0) {
       Seq.empty
     } else {
