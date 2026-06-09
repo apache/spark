@@ -210,6 +210,19 @@ class QueryPlanningTracker(
     s.numEffectiveInvocations += (if (effective) 1 else 0)
   }
 
+  /**
+   * Merge the per-rule statistics from `other` into this tracker. [[RuleSummary]]'s fields are
+   * additive, so the totals are simply accumulated.
+   */
+  def merge(other: QueryPlanningTracker): Unit = {
+    other.rulesMap.forEach { (rule, otherSummary) =>
+      val s = rulesMap.computeIfAbsent(rule, _ => new RuleSummary)
+      s.totalTimeNs += otherSummary.totalTimeNs
+      s.numInvocations += otherSummary.numInvocations
+      s.numEffectiveInvocations += otherSummary.numEffectiveInvocations
+    }
+  }
+
   // ------------ reporting functions below ------------
 
   def rules: Map[String, RuleSummary] = rulesMap.asScala.toMap

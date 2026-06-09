@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 
 class QueryPlanningTrackerEndToEndSuite extends StreamTest {
@@ -56,6 +57,43 @@ class QueryPlanningTrackerEndToEndSuite extends StreamTest {
       AddData(inputData, 1, 2, 3),
       Execute(assertStatus),
       StopStream)
+  }
+
+  test("SPARK-57212: Track preparation rules") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.range(1000).selectExpr("count(*)")
+      df.collect()
+      val ruleNames = df.queryExecution.tracker.rules.keySet
+      assert(ruleNames.contains(classOf[
+        org.apache.spark.sql.execution.exchange.EnsureRequirements].getName))
+      assert(ruleNames.contains(classOf[
+        org.apache.spark.sql.execution.CollapseCodegenStages].getName))
+    }
+  }
+
+  test("SPARK-57212: Track AQE-internal preparation rules") {
+    // Run a query with a shuffle so AQE creates a query stage and runs preparation rules.
+    val df = spark.range(1000).repartition(4).selectExpr("count(*)")
+    df.collect()
+    val ruleNames = df.queryExecution.tracker.rules.keySet
+    // AQE-only rules in queryStagePreparationRules; only reachable via
+    // AdaptiveSparkPlanExec.applyPhysicalRules.
+    assert(ruleNames.contains(
+      "org.apache.spark.sql.execution.adaptive.AdjustShuffleExchangePosition"))
+    assert(ruleNames.contains(
+      "org.apache.spark.sql.execution.adaptive.ValidateSparkPlan"))
+  }
+
+  test("SPARK-57212: Track sub-query AQE rules") {
+    // The main query has no shuffle, so its AQE never re-optimizes and thus never runs the AQE
+    // logical optimizer. The scalar sub-query does have a shuffle, so its sub-AQE (planned on a
+    // separate thread) re-optimizes and runs `DynamicJoinSelection`. That rule is only visible in
+    // the query tracker if every `AdaptiveSparkPlanExec`'s tracker is merged back into it.
+    val df = spark.sql("SELECT id FROM range(10) WHERE id > (SELECT count(*) FROM range(1000))")
+    df.collect()
+    val ruleNames = df.queryExecution.tracker.rules.keySet
+    assert(ruleNames.contains(
+      "org.apache.spark.sql.execution.adaptive.DynamicJoinSelection"))
   }
 
   test("The start times should be in order: parsing <= analysis <= optimization <= planning") {
