@@ -122,18 +122,18 @@ jobs:
           # and the connect entry rebuilds it via `mvn install -pl assembly`.
           find . \( -path './build' -o -path './.git' -o -path './assembly' \) -prune \
             -o -type d -name target -print0 \
-            | tar --null -czf compile-target.tar.gz -T -
+            | tar --null -cf - -T - | zstd -c -T0 > compile-target.tar.zst
           if [ -d "$HOME/.m2/repository/org/apache/spark" ]; then
-            tar -C "$HOME/.m2/repository/org/apache" -czf compile-m2-spark.tar.gz spark
+            tar -C "$HOME/.m2/repository/org/apache" -cf - spark | zstd -c -T0 > compile-m2-spark.tar.zst
           fi
-          ls -lh compile-target.tar.gz compile-m2-spark.tar.gz
+          ls -lh compile-target.tar.zst compile-m2-spark.tar.zst
       - name: Upload compile artifact
         uses: actions/upload-artifact@v6
         with:
           name: spark-maven-compile-${{ inputs.branch }}-java${{ inputs.java }}-${{ github.run_id }}
           path: |
-            compile-target.tar.gz
-            compile-m2-spark.tar.gz
+            compile-target.tar.zst
+            compile-m2-spark.tar.zst
           retention-days: 1
           if-no-files-found: error
 
@@ -283,12 +283,12 @@ jobs:
         if: steps.download-precompiled.outcome == 'success'
         continue-on-error: true
         run: |
-          tar -xzf compile-target.tar.gz
-          rm compile-target.tar.gz
-          if [ -f compile-m2-spark.tar.gz ]; then
+          zstd -dc compile-target.tar.zst | tar -xf -
+          rm compile-target.tar.zst
+          if [ -f compile-m2-spark.tar.zst ]; then
             mkdir -p "$HOME/.m2/repository/org/apache"
-            tar -C "$HOME/.m2/repository/org/apache" -xzf compile-m2-spark.tar.gz
-            rm compile-m2-spark.tar.gz
+            zstd -dc compile-m2-spark.tar.zst | tar -C "$HOME/.m2/repository/org/apache" -xf -
+            rm compile-m2-spark.tar.zst
           fi
       # Run the tests using script command.
       # BSD's script command doesn't support -c option, and the usage is different from Linux's one.
