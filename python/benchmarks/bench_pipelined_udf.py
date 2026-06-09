@@ -185,9 +185,7 @@ class WideRowUDFTimeBench(_PipelinedUDFBenchBase):
     def setup(self, pipelined, shape):
         n_rows, payload_chars, records_per_batch = shape
         self._setup_spark(pipelined)
-        self.spark.conf.set(
-            "spark.sql.execution.arrow.maxRecordsPerBatch", str(records_per_batch)
-        )
+        self.spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", str(records_per_batch))
         self._n_rows = n_rows
         self._payload_chars = payload_chars
 
@@ -209,9 +207,7 @@ class WideRowUDFTimeBench(_PipelinedUDFBenchBase):
         def _make_payload(x: pd.Series) -> pd.Series:
             return pd.Series(["x" * chars] * len(x))
 
-        return self.spark.range(self._n_rows).select(
-            _make_payload(col("id")).alias("payload")
-        )
+        return self.spark.range(self._n_rows).select(_make_payload(col("id")).alias("payload"))
 
     def time_wide_row_udf(self, pipelined, shape):
         self._make_df().select(self._wide_udf(col("payload")).alias("result")).write.format(
