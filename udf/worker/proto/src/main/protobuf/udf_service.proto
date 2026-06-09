@@ -1,0 +1,79 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+syntax = "proto3";
+
+import "udf_message.proto";
+
+package org.apache.spark.udf.worker;
+
+option java_package = "org.apache.spark.udf.worker";
+option java_multiple_files = true;
+
+// =====================================================================
+// gRPC service definition for the language-agnostic UDF protocol.
+//
+// The service is intentionally kept in its own file, separate from the
+// protocol's message definitions (udf_message.proto), so the gRPC
+// service stubs can be generated independently in the dedicated
+// udf-worker-grpc module while the message classes are generated once in
+// udf-worker-proto. This keeps the gRPC stack off the classpath of every
+// consumer of the message types (core, catalyst, sql/core).
+// =====================================================================
+
+// The default UDF gRPC service. A worker that exposes this service
+// MUST do so over the default connection of the worker specification.
+//
+// Future revisions of the worker specification may introduce additional
+// dedicated connections for specific purposes (e.g. a separate channel
+// for streaming state store access in stateful UDFs).
+service UdfWorker {
+    // Per-execution stream. See [[UdfControlRequest]] for the complete
+    // wire protocol and ordering invariants.
+    //
+    // Error contract: a gRPC error on this stream signals a transport or
+    // connection failure. Application-level errors (user code exceptions,
+    // worker errors, protocol violations) are reported via [[ErrorResponse]]
+    // or [[InitResponse.error]] so the stream lifecycle remains intact.
+    //
+    // Hanging UDFs: this protocol does not define what constitutes a
+    // hanging UDF -- the protocol cannot distinguish user code that is
+    // genuinely stuck from code that is merely slow or intentionally
+    // long-running. In-band [[Cancel]] is also not a reliable remedy:
+    // a Cancel queued behind a blocked batch (or behind a full sender
+    // buffer) is never delivered to the worker. Detection and recovery
+    // are layered on top of this protocol -- typically via worker-side
+    // watchdog timers configurable at the session or UDF level.
+    //
+    // Stream lifecycle: the engine MUST half-close the request stream
+    // (call onCompleted() on the gRPC request side) only after the session
+    // outcome is known: on receiving [[FinishResponse]] or [[CancelResponse]]
+    // (clean termination), or on receiving a gRPC error. Deferring the
+    // half-close keeps the stream open long enough for [[Cancel]] to follow
+    // [[Finish]] when needed (see [[Finish]] for the full contract).
+    //
+    // For stateful execution, the state is maintained per bi-directional
+    // stream, mapping to a `WorkerSession` on the engine side.
+    rpc Execute(stream UdfRequest) returns (stream UdfResponse);
+
+    // Worker-scoped management RPC for heartbeat, capability query, and
+    // graceful shutdown. Workers MUST ensure this RPC remains serviceable
+    // regardless of how many [[Execute]] streams are in flight; failing to
+    // do so can prevent the engine from detecting a hung worker or
+    // initiating a clean shutdown.
+    rpc Manage(WorkerRequest) returns (WorkerResponse);
+}

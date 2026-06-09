@@ -29,50 +29,12 @@ option java_multiple_files = true;
 //
 // The Spark engine acts as the gRPC client; a UDF worker (in any
 // language) acts as the gRPC server.
-// =====================================================================
-
-// The default UDF gRPC service. A worker that exposes this service
-// MUST do so over the default connection of the worker specification.
 //
-// Future revisions of the worker specification may introduce additional
-// dedicated connections for specific purposes (e.g. a separate channel
-// for streaming state store access in stateful UDFs).
-service UdfWorker {
-    // Per-execution stream. See [[UdfControlRequest]] for the complete
-    // wire protocol and ordering invariants.
-    //
-    // Error contract: a gRPC error on this stream signals a transport or
-    // connection failure. Application-level errors (user code exceptions,
-    // worker errors, protocol violations) are reported via [[ErrorResponse]]
-    // or [[InitResponse.error]] so the stream lifecycle remains intact.
-    //
-    // Hanging UDFs: this protocol does not define what constitutes a
-    // hanging UDF -- the protocol cannot distinguish user code that is
-    // genuinely stuck from code that is merely slow or intentionally
-    // long-running. In-band [[Cancel]] is also not a reliable remedy:
-    // a Cancel queued behind a blocked batch (or behind a full sender
-    // buffer) is never delivered to the worker. Detection and recovery
-    // are layered on top of this protocol -- typically via worker-side
-    // watchdog timers configurable at the session or UDF level.
-    //
-    // Stream lifecycle: the engine MUST half-close the request stream
-    // (call onCompleted() on the gRPC request side) only after the session
-    // outcome is known: on receiving [[FinishResponse]] or [[CancelResponse]]
-    // (clean termination), or on receiving a gRPC error. Deferring the
-    // half-close keeps the stream open long enough for [[Cancel]] to follow
-    // [[Finish]] when needed (see [[Finish]] for the full contract).
-    //
-    // For stateful execution, the state is maintained per bi-directional
-    // stream, mapping to a `WorkerSession` on the engine side.
-    rpc Execute(stream UdfRequest) returns (stream UdfResponse);
-
-    // Worker-scoped management RPC for heartbeat, capability query, and
-    // graceful shutdown. Workers MUST ensure this RPC remains serviceable
-    // regardless of how many [[Execute]] streams are in flight; failing to
-    // do so can prevent the engine from detecting a hung worker or
-    // initiating a clean shutdown.
-    rpc Manage(WorkerRequest) returns (WorkerResponse);
-}
+// This file defines only the protocol's message types. The gRPC service
+// that carries them ([[UdfWorker]]) lives in udf_service.proto so its
+// stubs can be generated separately in the udf-worker-grpc module,
+// keeping gRPC off the classpath of the message types' consumers.
+// =====================================================================
 
 // =====================================================================
 // Execute stream -- envelope
