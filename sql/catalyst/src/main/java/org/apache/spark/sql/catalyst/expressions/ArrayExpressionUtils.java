@@ -39,7 +39,7 @@ public class ArrayExpressionUtils {
    * @return        the resolved 0-based position
    */
   public static int resolveArrayIndex(int length, int index, QueryContext context) {
-    if (length < Math.abs(index)) {
+    if (length < Math.abs((long) index)) {
       throw QueryExecutionErrors.invalidElementAtIndexError(index, length, context);
     }
     if (index == 0) {
