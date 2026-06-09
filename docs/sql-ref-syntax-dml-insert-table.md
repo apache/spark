@@ -307,7 +307,7 @@ SELECT * FROM target;
 -- A source column whose name does not match any target column is an error.
 INSERT INTO target BY NAME
     SELECT array(named_struct('a', 1, 'b', 2)) AS arr, 0 AS badname;
-Error
+Error: INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS
 ```
 
 ##### Insert With Schema Evolution
@@ -477,7 +477,6 @@ SELECT * FROM persons;
 |         name|                   address|      ssn|
 +-------------+--------------------------+---------+
 |Dora Williams|134 Forest Ave, Menlo Park|123456789|
-+-------------+--------------------------+---------+
 |  Eddie Davis|   245 Market St, Milpitas|345678901|
 +-------------+--------------------------+---------+
 
@@ -498,7 +497,6 @@ SELECT * FROM persons;
 |       name|                address|      ssn|
 +-----------+-----------------------+---------+
 |Eddie Davis|245 Market St, Milpitas|345678901|
-+-----------+-----------------------+---------+
 | Ashua Hill|456 Erica Ct, Cupertino|432795921|
 +-----------+-----------------------+---------+
 ```
