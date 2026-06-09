@@ -27,8 +27,6 @@ import scala.collection.mutable.{Queue => MQueue}
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
-import com.google.common.annotations.VisibleForTesting
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.{ProcessCallable, UDFWorkerSpecification}
 import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerDispatcher, WorkerHandle,
@@ -231,8 +229,11 @@ abstract class DirectWorkerDispatcher(
    *
    * Implementations MAY block. They run on the createSession caller's
    * thread.
+   *
+   * Visible for testing only: `protected` so tests in this package can
+   * override it; production code should not. (The Guava annotation for this
+   * is banned by scalastyle per SPARK-11615, so the intent is noted here.)
    */
-  @VisibleForTesting
   protected def afterWorkerRegistered(worker: DirectWorkerProcess): Unit = ()
 
   override def createSession(

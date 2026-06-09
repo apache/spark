@@ -17,7 +17,7 @@
 package org.apache.spark.udf.worker.core.direct
 
 import java.nio.file.{Files, Path}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CopyOnWriteArrayList, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.util.control.NonFatal
@@ -192,10 +192,11 @@ private[direct] final class WorkerArtifacts(
   private[this] val closed = new AtomicBoolean(false)
 
   // Resource-cleanup callbacks run during close(), in registration order, after
-  // the process is reaped. Guarded by `this` so registration and the close-time
-  // drain do not race; in practice all hooks are registered at spawn time,
-  // before the bundle is exposed to any close path.
-  private[this] val cleanupHooks = scala.collection.mutable.ArrayBuffer.empty[() => Unit]
+  // the process is reaped. A CopyOnWriteArrayList gives thread-safe registration
+  // and lock-free iteration at close without an explicit lock; in practice all
+  // hooks are registered at spawn time, before the bundle is exposed to any
+  // close path.
+  private[this] val cleanupHooks = new CopyOnWriteArrayList[() => Unit]()
 
   /**
    * Registers a resource-cleanup callback to run during [[close]], in
@@ -208,12 +209,12 @@ private[direct] final class WorkerArtifacts(
    * Must be called before [[close]]; registering on an already-closed bundle is
    * a dispatcher-side bug and throws `IllegalStateException`.
    */
-  def registerCleanup(hook: () => Unit): Unit = synchronized {
+  def registerCleanup(hook: () => Unit): Unit = {
     if (closed.get()) {
       throw new IllegalStateException(
         "cannot register a cleanup hook on an already-closed WorkerArtifacts")
     }
-    cleanupHooks += hook
+    cleanupHooks.add(hook)
   }
 
   /**
@@ -232,10 +233,10 @@ private[direct] final class WorkerArtifacts(
 
     DirectWorkerDispatcher.destroyForciblyAndReap(process, logger, "worker artifacts")
 
-    // Snapshot under the lock; registration after this point is rejected by
-    // registerCleanup (closed is already set), so no hook is silently dropped.
-    val hooks = synchronized { cleanupHooks.toList }
-    hooks.foreach { hook =>
+    // `closed` is already set, so registerCleanup rejects any further hook;
+    // every hook registered before close is iterated here (CopyOnWriteArrayList
+    // iteration needs no lock and no snapshot copy).
+    cleanupHooks.forEach { hook =>
       try hook() catch {
         case NonFatal(e) =>
           logger.warn("Error running worker resource-cleanup hook", e)
