@@ -3762,7 +3762,21 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                         input_queue.get_nowait()
                 except Exception:
                     pass
+                # If the reader is still blocked in infile.read(), the stop_event check
+                # only fires between put attempts -- it cannot interrupt a syscall.
+                # Force-closing infile here would break worker reuse (the next task uses
+                # the same socket fd), so we settle for a bounded join and a loud warning
+                # so an undetected leak shows up in the worker log.
                 t.join(timeout=5)
+                if t.is_alive():
+                    import warnings
+                    warnings.warn(
+                        "pipelined reader thread did not exit within 5s; "
+                        "it may still be blocked in infile.read() and could read data "
+                        "intended for a subsequent reused-worker task. "
+                        "Consider disabling spark.python.worker.reuse if this recurs.",
+                        RuntimeWarning,
+                    )
 
         is_pipelined = os.environ.get("SPARK_PIPELINED_UDF") == "1"
         if is_pipelined and hasattr(serializer, "_flush_per_batch"):

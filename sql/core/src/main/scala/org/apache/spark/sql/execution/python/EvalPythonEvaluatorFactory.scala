@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
@@ -70,8 +71,7 @@ abstract class EvalPythonEvaluatorFactory(
       // In pipelined mode, add() runs in the writer thread and remove() in the task thread.
       // Use lock-free mode to avoid synchronized overhead (memory visibility is guaranteed
       // by the blocking socket I/O between the two threads).
-      val pipelined = SparkEnv.get.conf.get(
-        org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION)
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(
         context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)),

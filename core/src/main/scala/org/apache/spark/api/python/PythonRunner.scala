@@ -532,13 +532,18 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       partitionIndex: Int,
       context: TaskContext) {
 
-    @volatile private[python] var _exception: Throwable = _
+    @volatile private var _exception: Throwable = _
 
     private val pythonIncludes = funcs.flatMap(_.funcs.flatMap(_.pythonIncludes.asScala)).toSet
     private val broadcastVars = funcs.flatMap(_.funcs.flatMap(_.broadcastVars.asScala))
 
     /** Contains the throwable thrown while writing the parent iterator to the Python process. */
     def exception: Option[Throwable] = Option(_exception)
+
+    /** Records a throwable observed by an external collaborator (e.g. the pipelined writer). */
+    private[python] def setException(t: Throwable): Unit = {
+      _exception = t
+    }
 
     /**
      * Writes a command section to the stream connected to the Python worker.
@@ -1199,8 +1204,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
           // automatically closed by the JVM, which will cause Python to receive
           // EOF and the reader thread to get IOException.
           Thread.currentThread().interrupt()
-        case t: Throwable if NonFatal(t) || t.isInstanceOf[Exception] =>
-          writer._exception = t
+        case NonFatal(t) =>
+          // InterruptedException and ClosedByInterruptException are matched above; what
+          // remains here is genuine non-fatal failure that needs to be propagated to the
+          // reader through writer.exception + a socket EOF.
+          writer.setException(t)
           // Shut down the socket output so Python receives EOF and terminates.
           // This unblocks the reader thread which is waiting on socket input:
           // Python will exit, closing its end of the socket, causing the reader's

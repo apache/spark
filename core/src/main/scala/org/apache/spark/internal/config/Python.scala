@@ -156,8 +156,9 @@ private[spark] object Python {
       .doc("When true, enables pipelined (asynchronous) data transfer between JVM and Python " +
         "UDF workers. In pipelined mode, input serialization runs in a separate writer thread " +
         "while the main task thread reads output from the Python worker, allowing the two " +
-        "directions to overlap for improved throughput. " +
-        "This is particularly beneficial for compute-heavy UDFs (e.g., ML inference).")
+        "directions to overlap. This can improve throughput for some workloads " +
+        "(e.g., multi-column UDFs or compute-heavy UDFs like ML inference); for light, " +
+        "single-column UDFs the overhead of the extra thread may offset the gain.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
