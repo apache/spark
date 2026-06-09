@@ -2876,6 +2876,12 @@ class Analyzer(
           j.copy(left = newLeft, right = newRight)
         }
 
+      // Defer to a later iteration: once ResolveSQLTableFunctions expands the
+      // table function, the SQLFunctionExpression sits inside the expanded
+      // plan's input-cast Project and is rewritten by a subsequent iteration
+      // of this rule.
+      case f: SQLTableFunction if hasSQLFunctionExpression(f.expressions) => f
+
       case o: LogicalPlan if o.resolved && hasSQLFunctionExpression(o.expressions) =>
         o.transformExpressionsWithPruning(_.containsPattern(SQL_FUNCTION_EXPRESSION)) {
           case f: SQLFunctionExpression =>
