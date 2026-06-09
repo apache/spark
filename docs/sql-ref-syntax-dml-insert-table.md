@@ -270,6 +270,51 @@ SELECT * FROM students WHERE student_id = 11215017;
 +------------+----------------------+----------+
 ```
 
+##### Insert By Name Using a SELECT Statement
+
+```sql
+CREATE TABLE target (n INT, text STRING, s STRUCT<a INT, b INT>);
+
+-- BY NAME matches the top-level columns by name, so they may be listed in any order.
+-- Nested struct fields are matched by position, so the struct field order in the query
+-- must match the target schema (STRUCT<a INT, b INT>).
+INSERT INTO target BY NAME
+    SELECT named_struct('a', 1, 'b', 2) AS s, 0 AS n, 'data' AS text;
+
+SELECT * FROM target;
++---+----+------+
+|  n|text|     s|
++---+----+------+
+|  0|data|{1, 2}|
++---+----+------+
+
+CREATE OR REPLACE TABLE target (n INT, arr ARRAY<STRUCT<a INT, b INT>>);
+
+-- A missing top-level column is filled with its default value (NULL here).
+INSERT INTO target BY NAME
+    SELECT array(named_struct('a', 1, 'b', 2)) AS arr, 0 AS n;
+INSERT INTO target BY NAME
+    SELECT array(named_struct('a', 1, 'b', 2)) AS arr;
+
+SELECT * FROM target;
++----+----------+
+|   n|       arr|
++----+----------+
+|   0|[{1, 2}]|
+|NULL|[{1, 2}]|
++----+----------+
+
+-- A source column whose name does not match any target column is an error.
+INSERT INTO target BY NAME
+    SELECT array(named_struct('a', 1, 'b', 2)) AS arr, 0 AS badname;
+Error
+
+-- Duplicate source column names that resolve to the same target column are an error.
+INSERT INTO target BY NAME
+    SELECT array(named_struct('a', 1, 'b', 2)) AS arr, 0 AS n, 1 AS n;
+Error: INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS
+```
+
 ##### Insert With Schema Evolution
 
 ```sql
