@@ -67,6 +67,7 @@ public class V2ExpressionSQLBuilder {
       switch (c) {
         case '_' -> builder.append("\\_");
         case '%' -> builder.append("\\%");
+        case '\\' -> builder.append("\\\\");
         default -> builder.append(c);
       }
     }
