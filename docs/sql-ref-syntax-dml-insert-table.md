@@ -471,7 +471,7 @@ SELECT * FROM persons;
 ##### Insert By Name Using a REPLACE WHERE Statement
 
 ```sql
--- Assuming the persons and persons3 table has already been created and populated.
+-- Assuming the persons and new_persons table has already been created and populated.
 SELECT * FROM persons;
 +-------------+--------------------------+---------+
 |         name|                   address|      ssn|
@@ -480,8 +480,8 @@ SELECT * FROM persons;
 |  Eddie Davis|   245 Market St, Milpitas|345678901|
 +-------------+--------------------------+---------+
 
--- persons3 lists the columns in a different order than the target table.
-SELECT * FROM persons3;
+-- new_persons lists the columns in a different order than the target table.
+SELECT * FROM new_persons;
 +-----------------------+---------+----------+
 |                address|      ssn|      name|
 +-----------------------+---------+----------+
@@ -490,7 +490,7 @@ SELECT * FROM persons3;
 
 -- BY NAME matches the query fields to the target columns by name instead of by position,
 -- so the column order mismatch is resolved automatically.
-INSERT INTO persons BY NAME REPLACE WHERE ssn = 123456789 SELECT * FROM persons3;
+INSERT INTO persons BY NAME REPLACE WHERE ssn = 123456789 SELECT * FROM new_persons;
 
 SELECT * FROM persons;
 +-----------+-----------------------+---------+
