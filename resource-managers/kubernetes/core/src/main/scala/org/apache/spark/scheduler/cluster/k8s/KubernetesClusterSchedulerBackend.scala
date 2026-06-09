@@ -21,6 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.Future
+import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.api.model.PodBuilder
@@ -98,6 +99,35 @@ private[spark] class KubernetesClusterSchedulerBackend(
     kubernetesClient.configMaps().inNamespace(namespace).resource(configMap).create()
   }
 
+  private def cleanTerminalExecutorPodsOnStart(): Unit = {
+    val appNameLabel = KubernetesConf.getAppNameLabel(sc.appName)
+    logInfo(s"Checking for orphaned Failed/Completed executor pods " +
+      s"with app name '$appNameLabel'")
+    try {
+      val terminalPhases = Set("Failed", "Completed")
+      val terminalPods = kubernetesClient
+        .pods()
+        .inNamespace(namespace)
+        .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+        .withLabel(SPARK_APP_NAME_LABEL, appNameLabel)
+        .list()
+        .getItems
+        .asScala
+        .filter(pod => terminalPhases.contains(pod.getStatus.getPhase))
+      if (terminalPods.nonEmpty) {
+        logInfo(s"Deleting ${terminalPods.size} orphaned Failed/Completed executor pods " +
+          s"with app name '$appNameLabel'")
+        kubernetesClient.resourceList(terminalPods.asJava).inNamespace(namespace).delete()
+      } else {
+        logInfo(s"No orphaned Failed/Completed executor pods found with app name '$appNameLabel'")
+      }
+    } catch {
+      case e: Exception =>
+        logWarning(s"Failed to clean orphaned Failed/Completed executor pods " +
+          s"with app name '$appNameLabel'", e)
+    }
+  }
+
   /**
    * Get an application ID associated with the job.
    * This returns the string value of spark.app.id if set, otherwise
@@ -109,6 +139,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def start(): Unit = {
     super.start()
+    if (conf.get(KUBERNETES_CLEAN_FAILED_PODS_ON_START)) {
+      cleanTerminalExecutorPodsOnStart()
+    }
     // Must be called before setting the executors
     podAllocator.start(applicationId(), this)
     val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
