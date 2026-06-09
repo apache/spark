@@ -440,7 +440,7 @@ class ColumnTestsMixin:
             s = str(sf.lit(delta))
 
             # Parse the ISO string representation and compare
-            self.assertTrue(pd.Timedelta(s[8:-2]).to_pytimedelta() == delta)
+            self.assertEqual(pd.Timedelta(s[8:-2]).to_pytimedelta(), delta)
 
     def test_enum_literals(self):
         class IntEnum(Enum):
@@ -528,30 +528,30 @@ class ColumnTestsMixin:
         df1 = self.spark.range(10).withColumn("a", sf.lit(0))
         df2 = df1.withColumnRenamed("a", "b")
         df = df1.join(df2, df1["a"] == df2["b"])
-        self.assertTrue(df.count() == 100)
+        self.assertEqual(df.count(), 100)
         df = df2.join(df1, df2["b"] == df1["a"])
-        self.assertTrue(df.count() == 100)
+        self.assertEqual(df.count(), 100)
 
     def test_self_join_II(self):
         df = self.spark.createDataFrame([(1, 2), (3, 4)], schema=["a", "b"])
         df2 = df.select(df.a.alias("aa"), df.b)
         df3 = df2.join(df, df2.b == df.b)
         self.assertTrue(df3.columns, ["aa", "b", "a", "b"])
-        self.assertTrue(df3.count() == 2)
+        self.assertEqual(df3.count(), 2)
 
     def test_self_join_III(self):
         df1 = self.spark.range(10).withColumn("value", sf.lit(1))
         df2 = df1.union(df1)
         df3 = df1.join(df2, df1.id == df2.id, "left")
         self.assertTrue(df3.columns, ["id", "value", "id", "value"])
-        self.assertTrue(df3.count() == 20)
+        self.assertEqual(df3.count(), 20)
 
     def test_self_join_IV(self):
         df1 = self.spark.range(10).withColumn("value", sf.lit(1))
         df2 = df1.withColumn("value", sf.lit(2)).union(df1.withColumn("value", sf.lit(3)))
         df3 = df1.join(df2, df1.id == df2.id, "right")
         self.assertTrue(df3.columns, ["id", "value", "id", "value"])
-        self.assertTrue(df3.count() == 20)
+        self.assertEqual(df3.count(), 20)
 
     def test_select_join_keys(self):
         df1 = self.spark.range(10).withColumn("v1", sf.lit(1))
