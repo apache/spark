@@ -1091,6 +1091,35 @@ class DataFrameAggregateSuite extends SharedSparkSession
     )
   }
 
+  test("SPARK-57329: mode normalizes -0.0/0.0 in the frequency buffer") {
+    checkAnswer(
+      Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d, 9.0d, 9.0d).toDF("d").select(expr("mode(d)")),
+      Row(0.0d))
+    checkAnswer(
+      Seq(0.0f, 0.0f, -0.0f, -0.0f, 9.0f, 9.0f, 9.0f).toDF("f").select(expr("mode(f)")),
+      Row(0.0f))
+
+    checkAnswer(
+      Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d),
+          Array(9.0d), Array(9.0d), Array(9.0d)).toDF("a").select(expr("mode(a)")),
+      Row(Seq(0.0d)))
+
+    // pandas_mode shares the same normalization path; cover it explicitly. It is an
+    // internal expression, so invoke it via Column.internalFn rather than SQL.
+    checkAnswer(
+      Seq(0.0d, 0.0d, -0.0d, -0.0d, 9.0d).toDF("d")
+        .select(Column.internalFn("pandas_mode", col("d"), lit(true))),
+      Row(Seq(0.0d)))
+    checkAnswer(
+      Seq(0.0f, 0.0f, -0.0f, -0.0f, 9.0f).toDF("f")
+        .select(Column.internalFn("pandas_mode", col("f"), lit(true))),
+      Row(Seq(0.0f)))
+    checkAnswer(
+      Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d), Array(9.0d)).toDF("a")
+        .select(Column.internalFn("pandas_mode", col("a"), lit(true))),
+      Row(Seq(Seq(0.0d))))
+  }
+
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
     val df = sql("select id % 100 from range(100000)")
     val distinctCount1 = df.select(expr("count(distinct(*))"))
