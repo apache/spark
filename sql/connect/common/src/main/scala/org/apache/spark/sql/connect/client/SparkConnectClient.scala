@@ -54,7 +54,7 @@ private[sql] class SparkConnectClient(
 
   private val userContext: UserContext = configuration.userContext
 
-  private[this] val stubState = new SparkConnectStubState(channel, configuration.retryPolicies)
+  private[this] val stubState = new SparkConnectStubState(channel, configuration)
   private[this] val bstub =
     new CustomSparkConnectBlockingStub(channel, stubState)
   private[this] val stub =
@@ -804,6 +804,11 @@ object SparkConnectClient {
       retryPolicy(List(policy))
     }
 
+    def rpcDeadlines(deadlines: RpcDeadlines): Builder = {
+      _configuration = _configuration.copy(rpcDeadlines = deadlines)
+      this
+    }
+
     private object URIParams {
       val PARAM_USER_ID = "user_id"
       val PARAM_USE_SSL = "use_ssl"
@@ -1037,6 +1042,7 @@ object SparkConnectClient {
       userAgent: String = genUserAgent(
         sys.env.getOrElse("SPARK_CONNECT_USER_AGENT", DEFAULT_USER_AGENT)),
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies(),
+      rpcDeadlines: RpcDeadlines = RpcDeadlines(),
       useReattachableExecute: Boolean = true,
       interceptors: List[ClientInterceptor] = List.empty,
       sessionId: Option[String] = None,
