@@ -83,16 +83,31 @@ class FlowPlanner(
             val flowMetadata = FlowSystemMetadata(updateContext, acmf, graph)
             output match {
               case o: Table =>
-                new Scd1MergeStreamingWrite(
-                  identifier = acmf.identifier,
-                  flow = acmf,
-                  graph = graph,
-                  updateContext = updateContext,
-                  checkpointPath = flowMetadata.latestCheckpointLocation,
-                  trigger = triggerFor(acmf),
-                  destination = o,
-                  sqlConf = acmf.sqlConf
-                )
+                acmf match {
+                  case changelogFlow: ChangelogAutoCdcMergeFlow =>
+                    new ChangelogScd1MergeStreamingWrite(
+                      identifier = changelogFlow.identifier,
+                      flow = changelogFlow,
+                      graph = graph,
+                      updateContext = updateContext,
+                      checkpointPath = flowMetadata.latestCheckpointLocation,
+                      trigger = triggerFor(changelogFlow),
+                      destination = o,
+                      sqlConf = changelogFlow.sqlConf,
+                      changeTypeColumn = changelogFlow.changeTypeColumn
+                    )
+                  case _ =>
+                    new Scd1MergeStreamingWrite(
+                      identifier = acmf.identifier,
+                      flow = acmf,
+                      graph = graph,
+                      updateContext = updateContext,
+                      checkpointPath = flowMetadata.latestCheckpointLocation,
+                      trigger = triggerFor(acmf),
+                      destination = o,
+                      sqlConf = acmf.sqlConf
+                    )
+                }
               case _ => unsupportedDestinationType(acmf, output)
             }
           case ScdType.Type2 =>

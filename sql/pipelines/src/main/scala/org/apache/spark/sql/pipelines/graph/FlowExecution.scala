@@ -33,11 +33,12 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsRowLevelOperations, Table => CatalogTable, TableCatalog, TableInfo}
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   ChangeArgs,
+  ChangelogAutoCdcBridge,
   Scd1BatchProcessor,
   Scd1ForeachBatchHandler
 }
@@ -628,7 +629,7 @@ class Scd1MergeStreamingWrite(
   override protected def changeArgs: ChangeArgs = flow.changeArgs
 
   override def startStream(): StreamingQuery = {
-    val sourceChangeDataFeed = graph.reanalyzeFlow(flow).df
+    val sourceChangeDataFeed = transformSourceFeed(graph.reanalyzeFlow(flow).df)
 
     // The auxiliary table is created here (at flow execution) rather than during flow resolution
     // or dataset materialization for two reasons:
@@ -657,6 +658,12 @@ class Scd1MergeStreamingWrite(
       })
       .start()
   }
+
+  /**
+   * Transforms the reanalyzed live source feed before it is written.
+   * Subclasses can override this method to apply additional transformations to the source feed.
+   */
+  protected def transformSourceFeed(reanalyzedFeed: DataFrame): DataFrame = reanalyzedFeed
 
   override protected lazy val auxiliaryTableSchema: StructType =
     // SCD1's auxiliary table is just keys + the CDC metadata struct; no user data columns. Keys
@@ -696,4 +703,33 @@ class Scd1MergeStreamingWrite(
         )
       )
   }
+}
+
+/**
+ * A [[Scd1MergeStreamingWrite]] whose source is a native CDC changelog read. It drops
+ * `update_preimage` rows from the live source feed so that only inserts and update post-images are
+ * treated as upserts; deletes are detected via the derived delete condition in `changeArgs`.
+ */
+class ChangelogScd1MergeStreamingWrite(
+    identifier: TableIdentifier,
+    flow: AutoCdcMergeFlow,
+    graph: DataflowGraph,
+    updateContext: PipelineUpdateContext,
+    checkpointPath: String,
+    trigger: Trigger,
+    destination: Table,
+    sqlConf: Map[String, String],
+    changeTypeColumn: String
+) extends Scd1MergeStreamingWrite(
+      identifier,
+      flow,
+      graph,
+      updateContext,
+      checkpointPath,
+      trigger,
+      destination,
+      sqlConf) {
+
+  override protected def transformSourceFeed(reanalyzedFeed: DataFrame): DataFrame =
+    ChangelogAutoCdcBridge.filterOutPreimages(reanalyzedFeed, changeTypeColumn)
 }

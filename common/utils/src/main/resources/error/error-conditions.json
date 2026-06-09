@@ -197,6 +197,24 @@
     ],
     "sqlState" : "42613"
   },
+  "AUTOCDC_CHANGELOG_REQUIRES_CARRYOVER_REMOVAL" : {
+    "message" : [
+      "AutoCDC flow on table <tableName> reads from a native CDC changelog that may surface copy-on-write carry-over rows, but the changelog read uses `deduplicationMode` `none`, which keeps them. A carry-over emits an identical insert and delete for an unchanged row at the same `_commit_version`, and AutoCDC cannot tell the delete apart from a real delete. Read the changelog with `deduplicationMode` set to `dropCarryovers` (the default) or `netChanges` so that carry-over pairs are removed."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_CHANGELOG_REQUIRES_COMMIT_VERSION_SEQUENCING" : {
+    "message" : [
+      "AutoCDC flow on table <tableName> reads from a native CDC changelog but its sequencing expression does not reference `_commit_version`. The native CDC contract only guarantees that `_commit_version` orders changes in commit order; any other column (including `_commit_timestamp`, which is only strictly increasing across micro-batches) may tie or mis-order two changes to the same key and make AutoCDC reconciliation non-deterministic. Sequence the flow by `_commit_version`."
+    ],
+    "sqlState" : "22023"
+  },
+  "AUTOCDC_CHANGELOG_REQUIRES_COMPUTE_UPDATES" : {
+    "message" : [
+      "AutoCDC flow on table <tableName> reads from a native CDC changelog that represents updates as separate delete and insert rows, but the changelog read does not enable `computeUpdates`. AutoCDC cannot unambiguously order the delete and insert halves of an update because they share the same `_commit_version`. Read the changelog with the `computeUpdates` option set to `true` so that updates are materialized as `update_preimage`/`update_postimage` rows."
+    ],
+    "sqlState" : "22023"
+  },
   "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA" : {
     "message" : [
       "Using <caseSensitivity> column name comparison, the following columns are not present in the <schemaName> schema: <missingColumns>. Available columns: <availableColumns>."

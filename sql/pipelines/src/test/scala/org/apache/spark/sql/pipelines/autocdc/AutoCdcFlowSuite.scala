@@ -17,18 +17,25 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
-import java.util.Locale
+import java.util.{HashMap => JHashMap, Locale}
 
 import scala.util.Success
 
 import org.apache.spark.sql.{functions => F, AnalysisException, Column, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.DataFrame
+import org.apache.spark.sql.connector.catalog.{
+  ChangelogProperties,
+  Column => V2Column,
+  Identifier,
+  InMemoryChangelogCatalog
+}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.{
   AutoCdcFlow,
   AutoCdcMergeFlow,
+  ChangelogAutoCdcMergeFlow,
   FlowFunction,
   FlowFunctionResult,
   Input,
@@ -165,16 +172,25 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
       keys: Seq[UnqualifiedColumnName] = Seq(UnqualifiedColumnName("id")),
       sequencing: Column = F.col("seq"),
       storedAsScdType: ScdType = ScdType.Type1,
-      columnSelection: Option[ColumnSelection] = None): AutoCdcMergeFlow = {
+      columnSelection: Option[ColumnSelection] = None,
+      deleteCondition: Option[Column] = None): AutoCdcMergeFlow = {
     val flow = newAutoCdcFlow(
       changeArgs = ChangeArgs(
         keys = keys,
         sequencing = sequencing,
         storedAsScdType = storedAsScdType,
-        columnSelection = columnSelection
+        columnSelection = columnSelection,
+        deleteCondition = deleteCondition
       )
     )
-    new AutoCdcMergeFlow(flow, successfulFuncResult(sourceDf))
+    val funcResult = successfulFuncResult(sourceDf)
+    val caseSensitive = sourceDf.sparkSession.sessionState.conf.caseSensitiveAnalysis
+    ChangelogAutoCdcBridge.analyzeSource(sourceDf, caseSensitive) match {
+      case Some(changelogSource) =>
+        new ChangelogAutoCdcMergeFlow(flow, funcResult, changelogSource)
+      case None =>
+        new AutoCdcMergeFlow(flow, funcResult)
+    }
   }
 
   /** A stable 3-column source streaming dataframe used across most schema tests. */
@@ -563,6 +579,255 @@ class AutoCdcFlowSuite extends QueryTest with SharedSparkSession {
         "caseSensitivity" -> CaseSensitivityLabels.CaseInsensitive,
         "keyColumnName" -> "id"
       )
+    )
+  }
+
+  // ===========================================================================================
+  // Native CDC changelog source auto-detection tests (ChangelogAutoCdcBridge wiring)
+  //
+  // These exercise the analysis-time behaviour of [[AutoCdcMergeFlow]] when its source is a
+  // native CDC changelog read (`DataStreamReader.changes`): delete-condition derivation,
+  // metadata-column exclusion, explicit-override precedence, and the computeUpdates validation.
+  // They do not run a pipeline, so no streaming execution is involved.
+  // ===========================================================================================
+
+  private val changelogCatalogName = "cdc_unit"
+  private val changelogNamespace = "cdcns"
+
+  /**
+   * Register an [[InMemoryChangelogCatalog]], create a changelog source table with the given data
+   * columns and properties, and pass a streaming `changes()` DataFrame over it to `f`. The
+   * catalog config and cached catalog instances are cleaned up afterwards.
+   */
+  private def withChangelogSource(
+      tableName: String,
+      dataColumns: Seq[V2Column],
+      properties: ChangelogProperties = ChangelogProperties(),
+      options: Map[String, String] = Map.empty)(f: DataFrame => Unit): Unit = {
+    withSQLConf(
+      s"spark.sql.catalog.$changelogCatalogName" -> classOf[InMemoryChangelogCatalog].getName
+    ) {
+      try {
+        spark.sql(s"CREATE NAMESPACE IF NOT EXISTS $changelogCatalogName.$changelogNamespace")
+        val cat = spark.sessionState.catalogManager
+          .catalog(changelogCatalogName)
+          .asInstanceOf[InMemoryChangelogCatalog]
+        val ident = Identifier.of(Array(changelogNamespace), tableName)
+        cat.createTable(ident, dataColumns.toArray, Array.empty, new JHashMap[String, String]())
+        cat.setChangelogProperties(ident, properties)
+        val reader = (Map("startingVersion" -> "1") ++ options).foldLeft(spark.readStream) {
+          case (r, (k, v)) => r.option(k, v)
+        }
+        f(reader.changes(s"$changelogCatalogName.$changelogNamespace.$tableName"))
+      } finally {
+        spark.sessionState.catalogManager.reset()
+      }
+    }
+  }
+
+  /** Standard `(id BIGINT, name STRING)` changelog data columns. */
+  private def idNameColumns: Seq[V2Column] =
+    Seq(V2Column.create("id", LongType), V2Column.create("name", StringType))
+
+  test("AutoCdcMergeFlow auto-detects a changelog source: derives delete condition and " +
+    "excludes metadata columns") {
+    withChangelogSource("src", idNameColumns) { sourceDf =>
+      val resolvedFlow = newAutoCdcMergeFlow(
+        sourceDf = sourceDf,
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("_commit_version")
+      )
+
+      // The three native CDC metadata columns are excluded; only user data columns plus the
+      // AutoCDC metadata struct remain.
+      assert(
+        resolvedFlow.schema.fieldNames.toSeq ==
+        Seq("id", "name", AutoCdcReservedNames.cdcMetadataColName)
+      )
+      // A delete condition is derived from `_change_type`.
+      val derived = resolvedFlow.changeArgs.deleteCondition
+      assert(derived.isDefined)
+      assert(derived.get.toString.contains("_change_type"))
+    }
+  }
+
+  test("AutoCdcMergeFlow lets an explicit delete condition override the derived one for a " +
+    "changelog source") {
+    withChangelogSource("src", idNameColumns) { sourceDf =>
+      val explicit = F.lit(false)
+      val resolvedFlow = newAutoCdcMergeFlow(
+        sourceDf = sourceDf,
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("_commit_version"),
+        deleteCondition = Some(explicit)
+      )
+      // The user-supplied condition is preserved verbatim, not replaced by the derived one.
+      assert(resolvedFlow.changeArgs.deleteCondition.contains(explicit))
+      assert(!resolvedFlow.changeArgs.deleteCondition.get.toString.contains("_change_type"))
+    }
+  }
+
+  test("AutoCdcMergeFlow merges metadata exclusions with a user ExcludeColumns selection") {
+    withChangelogSource(
+      "src",
+      Seq(
+        V2Column.create("id", LongType),
+        V2Column.create("name", StringType),
+        V2Column.create("note", StringType)
+      )
+    ) { sourceDf =>
+      val resolvedFlow = newAutoCdcMergeFlow(
+        sourceDf = sourceDf,
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("_commit_version"),
+        columnSelection = Some(ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("note"))))
+      )
+      // Both the user-excluded `note` and the derived metadata columns are dropped.
+      assert(
+        resolvedFlow.schema.fieldNames.toSeq ==
+        Seq("id", "name", AutoCdcReservedNames.cdcMetadataColName)
+      )
+    }
+  }
+
+  test("AutoCdcMergeFlow rejects a delete+insert changelog without computeUpdates") {
+    withChangelogSource(
+      "src",
+      Seq(
+        V2Column.create("id", LongType),
+        V2Column.create("name", StringType),
+        V2Column.create("row_version", LongType)
+      ),
+      properties = ChangelogProperties(
+        representsUpdateAsDeleteAndInsert = true,
+        rowIdNames = Seq("id"),
+        rowVersionName = Some("row_version")
+      )
+    ) { sourceDf =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          newAutoCdcMergeFlow(
+            sourceDf = sourceDf,
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = F.col("_commit_version")
+          )
+        },
+        condition = "AUTOCDC_CHANGELOG_REQUIRES_COMPUTE_UPDATES",
+        sqlState = "22023",
+        parameters = Map("tableName" -> testIdentifier.quotedString)
+      )
+    }
+  }
+
+  test("AutoCdcMergeFlow accepts a delete+insert changelog when computeUpdates is enabled") {
+    withChangelogSource(
+      "src",
+      Seq(
+        V2Column.create("id", LongType),
+        V2Column.create("name", StringType),
+        V2Column.create("row_version", LongType)
+      ),
+      properties = ChangelogProperties(
+        representsUpdateAsDeleteAndInsert = true,
+        rowIdNames = Seq("id"),
+        rowVersionName = Some("row_version")
+      ),
+      options = Map("computeUpdates" -> "true")
+    ) { sourceDf =>
+      // No exception: computeUpdates materializes pre/post-images, so the configuration is valid.
+      val resolvedFlow = newAutoCdcMergeFlow(
+        sourceDf = sourceDf,
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("_commit_version")
+      )
+      assert(resolvedFlow.changeArgs.deleteCondition.isDefined)
+    }
+  }
+
+  test("AutoCdcMergeFlow rejects a carry-over changelog read with deduplicationMode=none") {
+    withChangelogSource(
+      "src",
+      Seq(
+        V2Column.create("id", LongType),
+        V2Column.create("name", StringType),
+        V2Column.create("row_version", LongType)
+      ),
+      properties = ChangelogProperties(
+        containsCarryoverRows = true,
+        rowIdNames = Seq("id"),
+        rowVersionName = Some("row_version")
+      ),
+      options = Map("deduplicationMode" -> "none")
+    ) { sourceDf =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          newAutoCdcMergeFlow(
+            sourceDf = sourceDf,
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = F.col("_commit_version")
+          )
+        },
+        condition = "AUTOCDC_CHANGELOG_REQUIRES_CARRYOVER_REMOVAL",
+        sqlState = "22023",
+        parameters = Map("tableName" -> testIdentifier.quotedString)
+      )
+    }
+  }
+
+  test("AutoCdcMergeFlow accepts a carry-over changelog read with carry-over removal enabled") {
+    withChangelogSource(
+      "src",
+      Seq(
+        V2Column.create("id", LongType),
+        V2Column.create("name", StringType),
+        V2Column.create("row_version", LongType)
+      ),
+      properties = ChangelogProperties(
+        containsCarryoverRows = true,
+        rowIdNames = Seq("id"),
+        rowVersionName = Some("row_version")
+      )
+      // deduplicationMode defaults to dropCarryovers, which removes carry-over pairs.
+    ) { sourceDf =>
+      val resolvedFlow = newAutoCdcMergeFlow(
+        sourceDf = sourceDf,
+        keys = Seq(UnqualifiedColumnName("id")),
+        sequencing = F.col("_commit_version")
+      )
+      assert(resolvedFlow.changeArgs.deleteCondition.isDefined)
+    }
+  }
+
+  test("AutoCdcMergeFlow rejects a changelog source not sequenced by _commit_version") {
+    withChangelogSource("src", idNameColumns) { sourceDf =>
+      // `_commit_timestamp` is only strictly increasing across micro-batches, not within one, so
+      // it is not a safe per-key sequencer and is rejected just like any other non-version column.
+      checkError(
+        exception = intercept[AnalysisException] {
+          newAutoCdcMergeFlow(
+            sourceDf = sourceDf,
+            keys = Seq(UnqualifiedColumnName("id")),
+            sequencing = F.col("_commit_timestamp")
+          )
+        },
+        condition = "AUTOCDC_CHANGELOG_REQUIRES_COMMIT_VERSION_SEQUENCING",
+        sqlState = "22023",
+        parameters = Map("tableName" -> testIdentifier.quotedString)
+      )
+    }
+  }
+
+  test("AutoCdcMergeFlow leaves a non-changelog source unchanged") {
+    // A plain source that happens to carry a `_commit_version` column is not a changelog: no
+    // delete condition is derived and no columns are excluded.
+    val resolvedFlow = newAutoCdcMergeFlow(
+      sourceDf = sourceDfWithExtraColumns("_commit_version" -> LongType),
+      sequencing = F.col("_commit_version")
+    )
+    assert(resolvedFlow.changeArgs.deleteCondition.isEmpty)
+    assert(
+      resolvedFlow.schema.fieldNames.toSeq ==
+      Seq("id", "seq", "_commit_version", AutoCdcReservedNames.cdcMetadataColName)
     )
   }
 }
