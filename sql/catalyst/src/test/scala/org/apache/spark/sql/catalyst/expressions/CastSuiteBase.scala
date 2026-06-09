@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearM
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.UpCastRule.numericPrecedence
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -89,6 +89,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION),
       TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
     (atomicTypes ++ timeTypes ++ timestampNanosTypes).foreach(dt => checkNullCast(dt, StringType))
+    Seq(TimestampNTZNanosType.MIN_PRECISION, TimestampNTZNanosType.MAX_PRECISION).foreach { p =>
+      checkNullCast(TimestampNTZType, TimestampNTZNanosType(p))
+      checkNullCast(TimestampNTZNanosType(p), TimestampNTZType)
+    }
+    Seq(TimestampLTZNanosType.MIN_PRECISION, TimestampLTZNanosType.MAX_PRECISION).foreach { p =>
+      checkNullCast(TimestampType, TimestampLTZNanosType(p))
+      checkNullCast(TimestampLTZNanosType(p), TimestampType)
+    }
     checkNullCast(StringType, BinaryType)
     checkNullCast(StringType, BooleanType)
     numericTypes.foreach(dt => checkNullCast(dt, BooleanType))
@@ -723,6 +731,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57293: nanos<->micros store-assignment and up-cast contract") {
+    foreachNanosPrecision { p =>
+      // Explicit-only: neither direction is an up-cast, so STRICT store assignment rejects both.
+      assert(!Cast.canUpCast(TimestampNTZType, TimestampNTZNanosType(p)))
+      assert(!Cast.canUpCast(TimestampNTZNanosType(p), TimestampNTZType))
+      assert(!Cast.canUpCast(TimestampType, TimestampLTZNanosType(p)))
+      assert(!Cast.canUpCast(TimestampLTZNanosType(p), TimestampType))
+
+      // ANSI store assignment allows the lossless widening micros -> nanos(p) ...
+      assert(Cast.canANSIStoreAssign(TimestampNTZType, TimestampNTZNanosType(p)))
+      assert(Cast.canANSIStoreAssign(TimestampType, TimestampLTZNanosType(p)))
+      // ... but blocks the lossy narrowing nanos(p) -> micros to avoid silent truncation.
+      assert(!Cast.canANSIStoreAssign(TimestampNTZNanosType(p), TimestampNTZType))
+      assert(!Cast.canANSIStoreAssign(TimestampLTZNanosType(p), TimestampType))
+    }
+  }
+
   test("SPARK-40389: canUpCast: return false if casting decimal to integral types can cause" +
     " overflow") {
     Seq(ByteType, ShortType, IntegerType, LongType).foreach { integralType =>
@@ -1193,6 +1218,75 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         StringType,
         UTC_OPT),
       "{2020-01-01 00:00:00.123456789, 2020-01-01 00:00:00.123456789}")
+  }
+
+  test("SPARK-57293: cast between timestamp_ntz and timestamp_ntz with nanosecond precision") {
+    // Sub-microsecond part is 0 and independent of the target precision p.
+    val micros = localDateTimeToNanosVal(LocalDateTime.of(2020, 1, 1, 12, 30, 15, 123456000))
+      .epochMicros
+    foreachNanosPrecision { precision =>
+      // Widening: micros -> nanos(p) sets nanosWithinMicro to 0 (lossless).
+      checkEvaluation(
+        cast(Literal.create(micros, TimestampNTZType), TimestampNTZNanosType(precision)),
+        TimestampNanosVal.fromParts(micros, 0.toShort))
+      // Narrowing: nanos(p) -> micros drops the sub-microsecond digits (floor toward the past).
+      // A non-zero nanosWithinMicro proves the truncation.
+      checkEvaluation(
+        cast(Literal.create(nanosVal(micros, 789), TimestampNTZNanosType(precision)),
+          TimestampNTZType),
+        micros)
+      // Narrowing also floors toward the past for negative epochMicros (pre-1970): the stored
+      // epochMicros is already the floor, and the sub-microsecond part is dropped, not rounded.
+      val ntzPreEpoch =
+        localDateTimeToNanosVal(LocalDateTime.of(1969, 12, 31, 23, 59, 59, 999999789))
+      checkEvaluation(
+        cast(Literal.create(ntzPreEpoch, TimestampNTZNanosType(precision)), TimestampNTZType),
+        ntzPreEpoch.epochMicros)
+      // Round-trip micros -> nanos(p) -> micros is the identity.
+      checkEvaluation(
+        cast(cast(Literal.create(micros, TimestampNTZType), TimestampNTZNanosType(precision)),
+          TimestampNTZType),
+        micros)
+      // Null input in both directions.
+      checkEvaluation(
+        cast(Literal.create(null, TimestampNTZType), TimestampNTZNanosType(precision)), null)
+      checkEvaluation(
+        cast(Literal.create(null, TimestampNTZNanosType(precision)), TimestampNTZType), null)
+    }
+  }
+
+  test("SPARK-57293: cast between timestamp_ltz and timestamp_ltz with nanosecond precision") {
+    // LTZ(p) and LTZ share the same epoch-micros instant; no timezone conversion is involved.
+    val micros = instantToMicros(timestampLTZ(2020, 1, 1, 12, 30, 15, 123456000))
+    foreachNanosPrecision { precision =>
+      // Widening: micros -> nanos(p) sets nanosWithinMicro to 0 (lossless).
+      checkEvaluation(
+        cast(Literal.create(micros, TimestampType), TimestampLTZNanosType(precision), UTC_OPT),
+        TimestampNanosVal.fromParts(micros, 0.toShort))
+      // Narrowing: nanos(p) -> micros drops the sub-microsecond digits (floor toward the past).
+      checkEvaluation(
+        cast(Literal.create(nanosVal(micros, 789), TimestampLTZNanosType(precision)),
+          TimestampType, UTC_OPT),
+        micros)
+      // Narrowing also floors toward the past for negative epochMicros (pre-1970): the stored
+      // epochMicros is already the floor, and the sub-microsecond part is dropped, not rounded.
+      val ltzPreEpoch = instantToNanosVal(timestampLTZ(1969, 12, 31, 23, 59, 59, 999999789))
+      checkEvaluation(
+        cast(Literal.create(ltzPreEpoch, TimestampLTZNanosType(precision)), TimestampType,
+          UTC_OPT),
+        ltzPreEpoch.epochMicros)
+      // Round-trip micros -> nanos(p) -> micros is the identity.
+      checkEvaluation(
+        cast(
+          cast(Literal.create(micros, TimestampType), TimestampLTZNanosType(precision), UTC_OPT),
+          TimestampType, UTC_OPT),
+        micros)
+      // Null input in both directions.
+      checkEvaluation(
+        cast(Literal.create(null, TimestampType), TimestampLTZNanosType(precision), UTC_OPT), null)
+      checkEvaluation(
+        cast(Literal.create(null, TimestampLTZNanosType(precision)), TimestampType, UTC_OPT), null)
+    }
   }
 
   test("SPARK-35112: Cast string to day-time interval") {

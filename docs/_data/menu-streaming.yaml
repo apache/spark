@@ -39,6 +39,29 @@
       url: streaming/apis-on-dataframes-and-datasets.html#recovering-from-failures-with-checkpointing
     - text: Recovery Semantics after Changes in a Streaming Query
       url: streaming/apis-on-dataframes-and-datasets.html#recovery-semantics-after-changes-in-a-streaming-query
+- text: Real-time Mode
+  url: streaming/real-time-mode.html
+  subitems:
+    - text: How Real-time Mode Works
+      url: streaming/real-time-mode.html#how-real-time-mode-works
+    - text: Batch Duration Is a Checkpoint Interval
+      url: streaming/real-time-mode.html#batch-duration-is-a-checkpoint-interval
+    - text: Comparison with Other Modes
+      url: streaming/real-time-mode.html#comparison-with-other-modes
+    - text: Enabling Real-time Mode
+      url: streaming/real-time-mode.html#enabling-real-time-mode
+    - text: Supported Queries
+      url: streaming/real-time-mode.html#supported-queries
+    - text: Fault Tolerance
+      url: streaming/real-time-mode.html#fault-tolerance
+    - text: Examples
+      url: streaming/real-time-mode.html#examples
+    - text: Configuration
+      url: streaming/real-time-mode.html#configuration
+    - text: Best Practices
+      url: streaming/real-time-mode.html#best-practices
+    - text: Caveats
+      url: streaming/real-time-mode.html#caveats
 - text: Performance Tips
   url: streaming/performance-tips.html
   subitems:

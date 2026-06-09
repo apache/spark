@@ -180,6 +180,7 @@ String Functions
     initcap
     instr
     is_valid_utf8
+    jaro_winkler_similarity
     lcase
     left
     length
@@ -723,6 +724,20 @@ Geospatial ST Functions
     st_geomfromwkb
     st_setsrid
     st_srid
+
+
+Vector Functions
+----------------
+.. autosummary::
+    :toctree: api/
+
+    vector_cosine_similarity
+    vector_inner_product
+    vector_l2_distance
+    vector_norm
+    vector_normalize
+    vector_avg
+    vector_sum
 
 
 UDF, UDTF and UDT

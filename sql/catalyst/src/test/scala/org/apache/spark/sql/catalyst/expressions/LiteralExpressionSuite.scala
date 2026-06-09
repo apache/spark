@@ -27,8 +27,9 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -132,6 +133,41 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
           }
         }
       }
+    }
+  }
+
+  test("SPARK-57317: create literals from external nanosecond timestamp values") {
+    val instant = Instant.parse("2020-12-31T23:59:59.123456789Z")
+    val ldt = LocalDateTime.parse("2020-12-31T23:59:59.123456789")
+    TimestampNanosTestUtils.foreachNanosPrecision { precision =>
+      val ltzType = TimestampLTZNanosType(precision)
+      val ntzType = TimestampNTZNanosType(precision)
+      val ltzVal = DateTimeUtils.instantToTimestampNanos(instant, precision)
+      val ntzVal = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision)
+
+      // Scalar external values (java.time.Instant / LocalDateTime) must be converted to the
+      // internal TimestampNanosVal, not kept as epoch micros (a Long) by the schema-less path.
+      val ltzLit = Literal.create(instant, ltzType)
+      assert(ltzLit.dataType === ltzType)
+      assert(ltzLit.value === ltzVal)
+      val ntzLit = Literal.create(ldt, ntzType)
+      assert(ntzLit.dataType === ntzType)
+      assert(ntzLit.value === ntzVal)
+
+      // Arrays of external nanosecond timestamp values are converted element-wise.
+      val arrayLit = Literal.create(Seq(instant), ArrayType(ltzType))
+      val array = arrayLit.value.asInstanceOf[ArrayData]
+      assert(array.numElements() === 1)
+      assert(array.get(0, ltzType) === ltzVal)
+
+      // Structs containing nanosecond timestamp fields are converted field-wise.
+      val structType = new StructType().add("c", ntzType)
+      val structLit = Literal.create(Row(ldt), structType)
+      assert(structLit.value.asInstanceOf[InternalRow].get(0, ntzType) === ntzVal)
+
+      // Values already in Catalyst internal form and nulls keep using the schema-less path.
+      assert(Literal.create(ltzVal, ltzType).value === ltzVal)
+      assert(Literal.create(null, ltzType).value === null)
     }
   }
 

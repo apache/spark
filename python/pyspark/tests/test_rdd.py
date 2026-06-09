@@ -638,6 +638,36 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEqual(result.getNumPartitions(), 5)
         self.assertEqual(result.count(), 3)
 
+    def test_count_approx_respects_timeout(self):
+        def slow(x):
+            time.sleep(1)
+            return x
+
+        rdd = self.sc.parallelize(range(20), 20).map(slow)
+        start = time.time()
+        rdd.countApprox(timeout=100)
+        elapsed = time.time() - start
+        self.assertLess(elapsed, 2)
+        # Cancel the background approximate job before subsequent tests run.
+        self.sc.cancelAllJobs()
+
+    def test_count_approx_returns_exact_when_completed(self):
+        rdd = self.sc.parallelize(range(1000), 8)
+        self.assertEqual(rdd.countApprox(timeout=5000), 1000)
+
+    def test_mean_approx_respects_timeout(self):
+        def slow(x):
+            time.sleep(1)
+            return float(x)
+
+        rdd = self.sc.parallelize(range(20), 20).map(slow)
+        start = time.time()
+        rdd.meanApprox(timeout=100)
+        elapsed = time.time() - start
+        self.assertLess(elapsed, 2)
+        # Cancel the background approximate job before subsequent tests run.
+        self.sc.cancelAllJobs()
+
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
         N = 2000001

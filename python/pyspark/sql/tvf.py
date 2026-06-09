@@ -551,11 +551,11 @@ class TableValuedFunction:
         Examples
         --------
         >>> spark.tvf.sql_keywords().show()
-        +-------------+--------+
-        |      keyword|reserved|
-        +-------------+--------+
+        +----------+--------+
+        |   keyword|reserved|
+        +----------+--------+
         ...
-        +-------------+--------+...
+        +----------+--------+...
         """
         return self._fn("sql_keywords")
 
