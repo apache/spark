@@ -3315,14 +3315,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df: => DataFrame,
       expected: Int): Unit = {
     val configurations = Seq(
-      Seq.empty[(String, String)], // hash aggregate is used by default
+      Seq(SQLConf.USE_HASH_AGG.key -> "true"),
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 10"),
       Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
       Seq(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
-      Seq(SQLConf.USE_HASH_AGG.key -> "false")
+      Seq(SQLConf.USE_HASH_AGG.key -> "false"),
+      Seq(
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false")
     )
 
     // Make tests faster

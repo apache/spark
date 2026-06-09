@@ -3798,14 +3798,15 @@ object SQLConf {
 
   val USE_OBJECT_HASH_AGG = buildConf("spark.sql.execution.useObjectHashAggregateExec")
     .internal()
-    .doc("Decides if we use ObjectHashAggregateExec")
+    .doc("Decides if we use ObjectHashAggregateExec when possible.")
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
 
   val USE_HASH_AGG = buildConf("spark.sql.execution.useHashAggregateExec")
     .internal()
-    .doc("Decides if we use HashAggregateExec")
+    .doc("Decides if we use HashAggregateExec when possible, the rule takes precedence " +
+      s"over ${USE_OBJECT_HASH_AGG.key}.")
     .version("4.3.0")
     .booleanConf
     .createWithDefault(true)
