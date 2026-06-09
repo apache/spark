@@ -290,9 +290,9 @@ SELECT * FROM target;
 
 CREATE OR REPLACE TABLE target (n INT, arr ARRAY<STRUCT<a INT, b INT>>);
 
--- A missing top-level column is filled with its default value (NULL here).
 INSERT INTO target BY NAME
     SELECT array(named_struct('a', 1, 'b', 2)) AS arr, 0 AS n;
+-- A missing top-level column is filled with its default value (NULL here).
 INSERT INTO target BY NAME
     SELECT array(named_struct('a', 1, 'b', 2)) AS arr;
 
@@ -308,11 +308,6 @@ SELECT * FROM target;
 INSERT INTO target BY NAME
     SELECT array(named_struct('a', 1, 'b', 2)) AS arr, 0 AS badname;
 Error
-
--- Duplicate source column names that resolve to the same target column are an error.
-INSERT INTO target BY NAME
-    SELECT array(named_struct('a', 1, 'b', 2)) AS arr, 0 AS n, 1 AS n;
-Error: INSERT_COLUMN_ARITY_MISMATCH.TOO_MANY_DATA_COLUMNS
 ```
 
 ##### Insert With Schema Evolution
@@ -488,24 +483,24 @@ SELECT * FROM persons;
 
 -- persons3 lists the columns in a different order than the target table.
 SELECT * FROM persons3;
-+--------------------------+---------+-----------+
-|                   address|      ssn|       name|
-+--------------------------+---------+-----------+
-|   456 Erica Ct, Cupertino|432795921| Ashua Hill|
-+--------------------------+---------+-----------+
++-----------------------+---------+----------+
+|                address|      ssn|      name|
++-----------------------+---------+----------+
+|456 Erica Ct, Cupertino|432795921|Ashua Hill|
++-----------------------+---------+----------+
 
 -- BY NAME matches the query fields to the target columns by name instead of by position,
 -- so the column order mismatch is resolved automatically.
 INSERT INTO persons BY NAME REPLACE WHERE ssn = 123456789 SELECT * FROM persons3;
 
 SELECT * FROM persons;
-+-------------+--------------------------+---------+
-|         name|                   address|      ssn|
-+-------------+--------------------------+---------+
-|  Eddie Davis|   245 Market St, Milpitas|345678901|
-+-------------+--------------------------+---------+
-|   Ashua Hill|   456 Erica Ct, Cupertino|432795921|
-+-------------+--------------------------+---------+
++-----------+-----------------------+---------+
+|       name|                address|      ssn|
++-----------+-----------------------+---------+
+|Eddie Davis|245 Market St, Milpitas|345678901|
++-----------+-----------------------+---------+
+| Ashua Hill|456 Erica Ct, Cupertino|432795921|
++-----------+-----------------------+---------+
 ```
 
 ##### Insert Using a TABLE Statement
