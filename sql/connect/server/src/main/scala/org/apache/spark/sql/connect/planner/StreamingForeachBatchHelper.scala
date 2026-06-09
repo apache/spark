@@ -322,6 +322,10 @@ object StreamingForeachBatchHelper extends Logging {
         .toMap
     }
 
-    private[connect] def listenerForTesting: StreamingQueryListener = streamingListener
+    // Reads the listener under the same lock that guards registration/removal so concurrent tests
+    // see a consistent value rather than a stale/torn read of the field.
+    private[connect] def listenerForTesting: StreamingQueryListener = synchronized {
+      streamingListener
+    }
   }
 }
