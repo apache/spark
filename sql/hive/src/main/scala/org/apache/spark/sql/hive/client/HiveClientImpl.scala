@@ -426,6 +426,8 @@ private[hive] class HiveClientImpl(
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
         .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
     } catch {
+      case _: NoSuchObjectException if shim.databaseExists(client, dbName) =>
+        tableNames.flatMap(getRawTableOption(dbName, _))
       case ex: Exception =>
         throw QueryExecutionErrors.cannotFetchTablesOfDatabaseError(dbName, ex)
     }
