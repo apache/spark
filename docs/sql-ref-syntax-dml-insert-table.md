@@ -319,21 +319,21 @@ CREATE TABLE new_students (student_id INT, name STRING, address STRING);
 INSERT INTO students VALUES (444444, 'Bob Brown'), (555555, 'Cathy Johnson');
 INSERT INTO new_students VALUES
     (111111, 'Ashua Hill', '456 Erica Ct, Cupertino'),
-    (222222, 'Dora Williams', '134 Forest Ave, Melo Park');
+    (222222, 'Dora Williams', '134 Forest Ave, Menlo Park');
 
 -- Evolve the students table schema to add the new address column from the query.
 INSERT WITH SCHEMA EVOLUTION INTO TABLE students
     SELECT * FROM new_students;
 
 SELECT * FROM students;
-+----------+-------------+-------------------------+
-|student_id|         name|                  address|
-+----------+-------------+-------------------------+
-|    444444|    Bob Brown|                     NULL|
-|    555555|Cathy Johnson|                     NULL|
-|    111111|   Ashua Hill|  456 Erica Ct, Cupertino|
-|    222222|Dora Williams|134 Forest Ave, Melo Park|
-+----------+-------------+-------------------------+
++----------+-------------+--------------------------+
+|student_id|         name|                   address|
++----------+-------------+--------------------------+
+|    444444|    Bob Brown|                      NULL|
+|    555555|Cathy Johnson|                      NULL|
+|    111111|   Ashua Hill|   456 Erica Ct, Cupertino|
+|    222222|Dora Williams|134 Forest Ave, Menlo Park|
++----------+-------------+--------------------------+
 ```
 
 #### Insert Overwrite
