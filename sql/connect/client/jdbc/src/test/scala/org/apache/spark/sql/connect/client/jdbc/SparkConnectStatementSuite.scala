@@ -173,31 +173,4 @@ class SparkConnectStatementSuite extends ConnectFunSuite with RemoteSparkSession
       }
     }
   }
-
-  test("createStatement with result set type and concurrency") {
-    withConnection { conn =>
-      Using.resource(
-        conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)) { stmt =>
-        assert(stmt.getResultSetType === ResultSet.TYPE_FORWARD_ONLY)
-      }
-
-      // the holdability overload is not supported
-      intercept[SQLFeatureNotSupportedException] {
-        conn.createStatement(
-          ResultSet.TYPE_FORWARD_ONLY,
-          ResultSet.CONCUR_READ_ONLY,
-          ResultSet.CLOSE_CURSORS_AT_COMMIT)
-      }
-
-      // only TYPE_FORWARD_ONLY and CONCUR_READ_ONLY are supported
-      intercept[SQLFeatureNotSupportedException] {
-        conn.createStatement(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_UPDATABLE)
-      }
-      Seq(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.TYPE_SCROLL_SENSITIVE).foreach { typ =>
-        intercept[SQLFeatureNotSupportedException] {
-          conn.createStatement(typ, ResultSet.CONCUR_READ_ONLY)
-        }
-      }
-    }
-  }
 }

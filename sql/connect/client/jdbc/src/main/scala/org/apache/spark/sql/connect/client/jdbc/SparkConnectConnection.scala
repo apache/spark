@@ -128,26 +128,8 @@ class SparkConnectConnection(val url: String, val info: Properties) extends Conn
     throw new SQLFeatureNotSupportedException
 
   override def createStatement(
-      resultSetType: Int, resultSetConcurrency: Int): Statement = {
-    checkSupportedResultSet(resultSetType, resultSetConcurrency)
-    createStatement()
-  }
-
-  // Spark Connect results are forward-only and server-paginated, so only
-  // TYPE_FORWARD_ONLY result sets are supported.
-  private def checkSupportedResultSet(
-      resultSetType: Int, resultSetConcurrency: Int): Unit = {
-    if (resultSetType != ResultSet.TYPE_FORWARD_ONLY) {
-      throw new SQLFeatureNotSupportedException(
-        s"ResultSet type ${stringifyResultSetType(resultSetType)} is not supported; " +
-          "only TYPE_FORWARD_ONLY.")
-    }
-    if (resultSetConcurrency != ResultSet.CONCUR_READ_ONLY) {
-      throw new SQLFeatureNotSupportedException(
-        s"ResultSet concurrency ${stringifyResultSetConcurrency(resultSetConcurrency)} " +
-          "is not supported; only CONCUR_READ_ONLY.")
-    }
-  }
+      resultSetType: Int, resultSetConcurrency: Int): Statement =
+    throw new SQLFeatureNotSupportedException
 
   override def prepareStatement(
       sql: String,

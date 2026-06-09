@@ -46,13 +46,6 @@ private[jdbc] object JdbcErrorUtils {
       throw new IllegalArgumentException(s"Invalid ResultSet type: $typ")
   }
 
-  def stringifyResultSetConcurrency(concurrency: Int): String = concurrency match {
-    case ResultSet.CONCUR_READ_ONLY => "CONCUR_READ_ONLY"
-    case ResultSet.CONCUR_UPDATABLE => "CONCUR_UPDATABLE"
-    case _ =>
-      throw new IllegalArgumentException(s"Invalid ResultSet concurrency: $concurrency")
-  }
-
   def stringifyFetchDirection(direction: Int): String = direction match {
     case ResultSet.FETCH_FORWARD => "FETCH_FORWARD"
     case ResultSet.FETCH_REVERSE => "FETCH_REVERSE"
