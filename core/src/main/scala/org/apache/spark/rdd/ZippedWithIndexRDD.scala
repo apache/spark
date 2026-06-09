@@ -42,6 +42,9 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
 
   private def getAncestorWithSamePartitionSizes(rdd: RDD[_], depth: Int): (RDD[_], Int) = {
     rdd match {
+      // A ZippedWithIndexRDD ancestor has startIndices already computed; stop here so the
+      // caller can reuse them directly instead of running a counting job.
+      case z: ZippedWithIndexRDD[_] => (z, depth)
       case c: RDD[_] if c.getStorageLevel != StorageLevel.NONE => (c, depth)
       case m: MapPartitionsRDD[_, _] if m.preservesPartitionSizes =>
         getAncestorWithSamePartitionSizes(m.prev, depth + 1)
@@ -64,11 +67,15 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
       Array(0L)
     } else {
       val (ancestor, _) = getAncestorWithSamePartitionSizes(prev, 0)
-      ancestor.context.runJob(
-        ancestor,
-        Utils.getIteratorSize _,
-        0 until n - 1 // do not need to count the last partition
-      ).scanLeft(0L)(_ + _)
+      ancestor match {
+        case z: ZippedWithIndexRDD[_] => z.startIndices
+        case _ =>
+          ancestor.context.runJob(
+            ancestor,
+            Utils.getIteratorSize _,
+            0 until n - 1 // do not need to count the last partition
+          ).scanLeft(0L)(_ + _)
+      }
     }
   }
 
