@@ -108,9 +108,8 @@ private[spark] class StreamingShuffleManager extends ShuffleManager with Logging
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    // Implementation is added in a follow-up commit that introduces StreamingShuffleReader.
-    throw new UnsupportedOperationException(
-      "StreamingShuffleManager.getReader is not yet implemented")
+    val streamingShuffleHandle = handle.asInstanceOf[StreamingShuffleHandle[K, _, C]]
+    new StreamingShuffleReader[K, C](streamingShuffleHandle, context)
   }
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {

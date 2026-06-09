@@ -1796,6 +1796,17 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val STREAMING_SHUFFLE_READER_MAX_MEMORY =
+    ConfigBuilder("spark.shuffle.streaming.readerMaxMemory")
+      .doc("Best-effort memory limit in bytes for data buffered in a streaming shuffle reader " +
+        "task. The per-writer byte quota is derived from this value divided by the number of " +
+        "shuffle writers. When the quota is exhausted the reader applies TCP back-pressure.")
+      .version("4.3.0")
+      .internal()
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .createWithDefault(32 << 20) // 32 MB
+
   private[spark] val SHUFFLE_DETECT_CORRUPT =
     ConfigBuilder("spark.shuffle.detectCorrupt")
       .doc("Whether to detect any corruption in fetched blocks.")

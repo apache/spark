@@ -7314,6 +7314,12 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_SHUFFLE_CHECKSUM_VERIFICATION_FAILED" : {
+    "message" : [
+      "Checksum verification failed for buffer from writer <writerId>. Expected: <expectedChecksum>, Calculated: <calculatedChecksum>, Data length: <dataLength>."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_SHUFFLE_INCORRECT_SEQUENCE_NUMBER" : {
     "message" : [
       "Streaming shuffle <messageType> between writer <writerId> and reader <readerId> expected to have sequence number <expSeqNum>, but the actual sequence number is <actSeqNum>. Please verify that the messages are sent in order."
