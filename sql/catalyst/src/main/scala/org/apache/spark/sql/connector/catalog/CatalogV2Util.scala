@@ -79,17 +79,6 @@ private[sql] object CatalogV2Util {
       SupportsNamespaces.PROP_OWNER)
 
   /**
-   * Checks if a location string is blank (empty or contains only whitespace characters).
-   * This validation is used to reject invalid database/namespace locations.
-   *
-   * @param location the location string to validate
-   * @return true if the location is null, empty, or contains only whitespace
-   */
-  def isBlankLocation(location: String): Boolean = {
-    location == null || location.trim.isEmpty
-  }
-
-  /**
    * Apply properties changes to a map and return the result.
    */
   def applyNamespaceChanges(
