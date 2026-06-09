@@ -928,6 +928,99 @@ class ColumnTestsMixin:
         rows = df1.intersect(df2).select(df1.c).collect()
         self.assertEqual([r.c for r in rows], [2])
 
+    def test_resolve_through_zip(self):
+        # zip merges two column-projected DataFrames side by side. Classic
+        # resolves the tagged left/right reference by attribute id, which
+        # ResolveZip preserves in the merged Project, so it succeeds. Connect
+        # resolves by plan id, but ResolveZip collapses the two sides into one
+        # plan and drops the per-DataFrame plan-id tags, so the tagged
+        # reference is never found and it raises (overridden in the parity suite).
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select((df.a + 1).alias("x"))
+        right = df.select((df.b * 2).alias("y"))
+        zipped = left.zip(right)
+        self.assertEqual(zipped.columns, ["x", "y"])
+        self.assertEqual(sorted(r.x for r in zipped.select(left.x).collect()), [2, 3, 4])
+        self.assertEqual(sorted(r.y for r in zipped.select(right.y).collect()), [20, 40, 60])
+        self.assertEqual(
+            sorted((r.x, r.y) for r in zipped.select(left.x, right.y).collect()),
+            [(2, 20), (3, 40), (4, 60)],
+        )
+
+    def test_resolve_through_zip_reordered(self):
+        # The originating DataFrame controls which side each column reads, in
+        # any order. Classic resolves by attribute id; Connect raises.
+        df = self.spark.createDataFrame([(1, 10), (2, 20)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        zipped = left.zip(right)
+        self.assertEqual(
+            sorted((r.y, r.x) for r in zipped.select(right.y, left.x).collect()),
+            [(10, 1), (20, 2)],
+        )
+
+    def test_resolve_through_zip_duplicate_names(self):
+        # Both sides expose a column named "v" from different sources, so the
+        # merged schema has two "v"s. A bare "v" is ambiguous, but the tagged
+        # left/right reference disambiguates by attribute id on Classic.
+        # Connect raises (no plan-id node survives the merge).
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
+        left = df.select(df.a.alias("v"))
+        right = df.select(df.b.alias("v"))
+        zipped = left.zip(right)
+        self.assertEqual(zipped.columns, ["v", "v"])
+        self.assertEqual(sorted(r.v for r in zipped.select(left.v).collect()), [1, 3])
+        self.assertEqual(sorted(r.v for r in zipped.select(right.v).collect()), [2, 4])
+
+    def test_resolve_through_zip_shared_producer(self):
+        # Both sides project the same producer under the same name "v";
+        # ResolveZip dedups the producer but keeps one output column per side,
+        # each still selectable by its originating DataFrame on Classic.
+        df = self.spark.createDataFrame([(1, 2), (3, 4)], ["a", "b"])
+        left = df.select(df.a.alias("v"))
+        right = df.select(df.a.alias("v"))
+        zipped = left.zip(right)
+        self.assertEqual(zipped.columns, ["v", "v"])
+        self.assertEqual(sorted(r.v for r in zipped.select(left.v).collect()), [1, 3])
+        self.assertEqual(sorted(r.v for r in zipped.select(right.v).collect()), [1, 3])
+
+    def test_resolve_through_zip_in_expression(self):
+        # A tagged reference from each side can be combined in one expression.
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        zipped = left.zip(right)
+        self.assertEqual(
+            sorted(r.s for r in zipped.select((left.x + right.y).alias("s")).collect()),
+            [11, 22, 33],
+        )
+
+    def test_resolve_through_zip_in_filter(self):
+        # A tagged reference resolves in a filter over the zip result too.
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        left = df.select(df.a.alias("x"))
+        right = df.select(df.b.alias("y"))
+        zipped = left.zip(right)
+        result = zipped.filter(left.x >= 2).select(left.x, right.y)
+        self.assertEqual(
+            sorted((r.x, r.y) for r in result.collect()),
+            [(2, 20), (3, 30)],
+        )
+
+    def test_resolve_through_zip_chained(self):
+        # Each side is its own chain of projections off the shared base; the
+        # tagged reference still resolves on Classic.
+        df = self.spark.createDataFrame([(1, 2, 3), (4, 5, 6)], ["a", "b", "c"])
+        left0 = df.select("a", "b")
+        left = left0.select((left0.a + 1).alias("x"))
+        right0 = df.select("b", "c")
+        right = right0.select((right0.c * 2).alias("y"))
+        zipped = left.zip(right)
+        self.assertEqual(
+            sorted((r.x, r.y) for r in zipped.select(left.x, right.y).collect()),
+            [(2, 6), (5, 12)],
+        )
+
     def test_resolve_self_join_alias(self):
         # Both self-join sides originate from the same plan-id-tagged
         # ancestor, yielding two equal-depth candidates with the same
