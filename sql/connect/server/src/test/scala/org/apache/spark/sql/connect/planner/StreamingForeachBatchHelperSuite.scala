@@ -26,11 +26,21 @@ import org.mockito.Mockito.when
 import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.sql.connect.SparkConnectTestUtils
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.streaming.StreamingQuery
 import org.apache.spark.sql.streaming.StreamingQueryListener
 import org.apache.spark.sql.test.SharedSparkSession
 
 class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSugar {
+
+  // A session holder that is NOT registered in the global SparkConnectService.sessionManager
+  // (unlike SparkConnectTestUtils.createDummySessionHolder). The closing-session tests below call
+  // sessionHolder.close() directly, bypassing the manager; a holder registered in the manager's
+  // store at that point would stay there as a closed entry, and a later suite's
+  // invalidateAllSessions() would fail closing it a second time (SESSION_ALREADY_CLOSED).
+  private def unregisteredSessionHolder(): SessionHolder = {
+    SessionHolder(userId = "testUser", sessionId = UUID.randomUUID().toString, session = spark)
+  }
 
   private def mockQuery(): StreamingQuery = {
     val query = mock[StreamingQuery]
@@ -87,7 +97,7 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     // close()) would otherwise be missed by both reapers and strand a Python worker.
     val cleaner = mock[AutoCloseable]
     val query = mockQuery()
-    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val sessionHolder = unregisteredSessionHolder()
     val cache = new StreamingForeachBatchHelper.CleanerCache(sessionHolder)
 
     // Mark the session as closing before the runner is registered.
@@ -155,7 +165,7 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
     (1 to numIterations).foreach { _ =>
       val cleaner = mock[AutoCloseable]
       val query = mockQuery()
-      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      val sessionHolder = unregisteredSessionHolder()
       val cache = new StreamingForeachBatchHelper.CleanerCache(sessionHolder)
 
       val startLatch = new CountDownLatch(1)
