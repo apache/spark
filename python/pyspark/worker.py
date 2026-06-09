@@ -26,6 +26,7 @@ import time
 import inspect
 import itertools
 import json
+import warnings
 from collections.abc import Iterator
 from typing import (
     Any,
@@ -3769,7 +3770,6 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 # so an undetected leak shows up in the worker log.
                 t.join(timeout=5)
                 if t.is_alive():
-                    import warnings
                     warnings.warn(
                         "pipelined reader thread did not exit within 5s; "
                         "it may still be blocked in infile.read() and could read data "
