@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalShortType}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns, STUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeConstants, DateTimeUtils, GenericArrayData, ResolveDefaultColumns, STUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -43,7 +43,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -481,6 +481,33 @@ private[parquet] class ParquetRowConverter(
           override def addLong(value: Long): Unit = {
             val micros = DateTimeUtils.millisToMicros(value)
             this.updater.setLong(micros)
+          }
+        }
+
+      case _: TimestampLTZNanosType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.NANOS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
+            val nanosWithinMicro =
+              Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toShort
+            this.updater.set(
+              TimestampNanosVal.fromParts(timestampRebaseFunc(epochMicros), nanosWithinMicro))
+          }
+        }
+
+      case _: TimestampNTZNanosType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.NANOS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
+            val nanosWithinMicro =
+              Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toShort
+            this.updater.set(TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro))
           }
         }
 
