@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import java.util
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, LinkedBlockingQueue}
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -85,11 +85,6 @@ case class AdaptiveSparkPlanExec(
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf,
     context.session.sessionState.adaptiveRulesHolder.runtimeOptimizerRules)
-
-  // Each `AdaptiveSparkPlanExec` records the physical-planning rules it runs into its own tracker.
-  // The main node folds them all into the shared `context.qe.tracker` once the final plan is ready.
-  @transient private val tracker = new QueryPlanningTracker()
-  context.planningTrackers.add(tracker)
 
   // `EnsureRequirements` may remove user-specified repartition and assume the query plan won't
   // change its output partitioning. This assumption is not true in AQE. Here we check the
@@ -207,7 +202,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   @transient val initialPlan = context.session.withActive {
-    QueryPlanningTracker.withTracker(tracker) {
+    QueryPlanningTracker.withTracker(context.qe.tracker) {
       applyPhysicalRules(
         applyQueryPostPlannerStrategyRules(inputPlan),
         queryStagePreparationRules,
@@ -279,9 +274,9 @@ case class AdaptiveSparkPlanExec(
     // `plan.queryExecution.rdd`, we need to set active session here as new plan nodes can be
     // created in the middle of the execution.
     context.session.withActive {
-      // Record this node's planning rules into its own tracker; merged into the query's tracker by
-      // the main node in `finalPlanUpdate`.
-      QueryPlanningTracker.withTracker(tracker) {
+      // Record this node's planning rules into the query's shared tracker. Subquery plans are
+      // planned on separate threads, so `recordRuleInvocation` is synchronized.
+      QueryPlanningTracker.withTracker(context.qe.tracker) {
         val executionId = getExecutionId
         // Use inputPlan logicalLink here in case some top level physical nodes may be removed
         // during `initialPlan`
@@ -413,12 +408,6 @@ case class AdaptiveSparkPlanExec(
     // Do final plan update after result stage has materialized.
     if (shouldUpdatePlan) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
-    }
-    // The main query node folds every `AdaptiveSparkPlanExec`'s tracker (its own and all sub-query
-    // plans, which were planned on separate threads) into the shared query tracker. This runs on
-    // the main query thread once the final plan is ready and all sub-queries have completed.
-    if (!isSubquery) {
-      context.planningTrackers.asScala.foreach(context.qe.tracker.merge)
     }
     logOnLevel(log"Final plan:\n${MDC(QUERY_PLAN, currentPhysicalPlan)}")
   }
@@ -981,14 +970,6 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
     new TrieMap[SparkPlan, ExchangeQueryStageExec]()
 
   val shuffleIds: ConcurrentHashMap[Int, Boolean] = new ConcurrentHashMap[Int, Boolean]()
-
-  /**
-   * The per-`AdaptiveSparkPlanExec` planning trackers for this query: the main query plan and every
-   * sub-query plan, which are planned on separate threads. The main node merges these into
-   * `qe.tracker` once its final plan is ready (see `AdaptiveSparkPlanExec.finalPlanUpdate`).
-   */
-  val planningTrackers: ConcurrentLinkedQueue[QueryPlanningTracker] =
-    new ConcurrentLinkedQueue[QueryPlanningTracker]()
 }
 
 /**
