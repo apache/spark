@@ -559,6 +559,7 @@ class Analyzer(
       ResolveInlineTables ::
       ResolveLambdaVariables ::
       ResolveTimeZone ::
+      ResolveTimestampNanosCast ::
       ResolveRandomSeed ::
       ResolveBinaryArithmetic ::
       new ResolveIdentifierClause(earlyBatches) ::

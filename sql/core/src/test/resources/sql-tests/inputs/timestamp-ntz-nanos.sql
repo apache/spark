@@ -46,3 +46,15 @@ SELECT hour(NULL :: timestamp_ntz(9));
 SELECT hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
 SELECT minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
 SELECT second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
+
+-- DATE <-> TIMESTAMP_NTZ(p) casts (SPARK-57323): midnight UTC / date extraction (zone-independent).
+-- Nanosecond typed literals derive precision from the fractional digits (SPARK-57250).
+SELECT DATE '2020-01-01'::timestamp_ntz(9);
+SELECT DATE '2020-01-01'::timestamp_ntz(7);
+SELECT TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789'::date;
+SELECT TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001'::date;
+-- Round trip date -> ntz(p) -> date.
+SELECT DATE '2020-01-01'::timestamp_ntz(9)::date;
+-- NULLs in both directions.
+SELECT (NULL::date)::timestamp_ntz(9);
+SELECT (NULL::timestamp_ntz(9))::date;

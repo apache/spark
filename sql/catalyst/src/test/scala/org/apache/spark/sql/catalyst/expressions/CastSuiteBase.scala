@@ -745,6 +745,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // ... but blocks the lossy narrowing nanos(p) -> micros to avoid silent truncation.
       assert(!Cast.canANSIStoreAssign(TimestampNTZNanosType(p), TimestampNTZType))
       assert(!Cast.canANSIStoreAssign(TimestampLTZNanosType(p), TimestampType))
+
+      // SPARK-57323: DATE <-> nanos requires an explicit CAST in both directions (the explicit
+      // cast is rewritten through the microsecond type by ResolveTimestampNanosCast), so STRICT
+      // store assignment and ANSI store assignment both reject it.
+      assert(!Cast.canANSIStoreAssign(DateType, TimestampNTZNanosType(p)))
+      assert(!Cast.canANSIStoreAssign(TimestampNTZNanosType(p), DateType))
+      assert(!Cast.canANSIStoreAssign(DateType, TimestampLTZNanosType(p)))
+      assert(!Cast.canANSIStoreAssign(TimestampLTZNanosType(p), DateType))
     }
   }
 

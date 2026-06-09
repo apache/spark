@@ -55,3 +55,15 @@ SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata');
 SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');
 SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');
 SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');
+
+-- DATE <-> TIMESTAMP_LTZ(p) casts (SPARK-57323): midnight in the session zone / date extraction.
+-- Nanosecond typed literals derive precision from the fractional digits (SPARK-57250).
+SELECT DATE '2020-01-01'::timestamp_ltz(9);
+SELECT DATE '2020-01-01'::timestamp_ltz(7);
+SELECT TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'::date;
+SELECT TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001'::date;
+-- Round trip date -> ltz(p) -> date.
+SELECT DATE '2020-01-01'::timestamp_ltz(9)::date;
+-- NULLs in both directions.
+SELECT (NULL::date)::timestamp_ltz(9);
+SELECT (NULL::timestamp_ltz(9))::date;

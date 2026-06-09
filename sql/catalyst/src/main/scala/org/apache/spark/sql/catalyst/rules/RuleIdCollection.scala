@@ -103,6 +103,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableSpec" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveTimestampNanosCast" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTimeZone" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUnresolvedHaving" ::

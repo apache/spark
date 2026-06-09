@@ -415,6 +415,13 @@ object Cast extends QueryErrorsBase {
     // This conversion stays explicit-only.
     case (_: TimestampNTZNanosType, TimestampNTZType) => false
     case (_: TimestampLTZNanosType, TimestampType) => false
+    // SPARK-57323: casting DATE <-> nanosecond-precision timestamp drops time-of-day and
+    // sub-microsecond digits (or fabricates them), so it requires an explicit CAST and is
+    // not allowed as a (silent) store assignment in either direction.
+    case (DateType, _: TimestampLTZNanosType) => false
+    case (DateType, _: TimestampNTZNanosType) => false
+    case (_: TimestampLTZNanosType, DateType) => false
+    case (_: TimestampNTZNanosType, DateType) => false
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
