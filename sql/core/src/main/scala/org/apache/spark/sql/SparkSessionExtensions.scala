@@ -319,8 +319,8 @@ class SparkSessionExtensions {
   /**
    * Inject an optimizer `Rule` builder into the [[SparkSession]]. The injected rules will be
    * executed in a single pass (Once) before the main operator optimization fixed-point batch.
-   * Use this for rules that must observe the pre-optimization plan shape before built-in rules
-   * like FoldablePropagation or ConstantFolding transform it.
+   * Use this for rules that need to observe the plan as it enters the operator-optimization
+   * fixed point, before built-in rules like FoldablePropagation or ConstantFolding transform it.
    */
   def injectPreOperatorOptimizationRule(builder: RuleBuilder): Unit = {
     preOperatorOptimizationRuleBuilders += builder

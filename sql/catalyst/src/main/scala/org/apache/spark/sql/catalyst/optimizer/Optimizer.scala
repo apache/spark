@@ -228,6 +228,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions),
+    // Injected rules run once here, before the operator-optimization fixed point, so they
+    // can observe the plan before FoldablePropagation/ConstantFolding rewrite it.
     Batch("Pre Operator Optimization", Once,
       preOperatorOptimizationRules: _*),
     operatorOptimizationBatch,
@@ -511,8 +513,9 @@ abstract class Optimizer(catalogManager: CatalogManager)
 
   /**
    * Override to provide additional rules that run in a single pass before the main
-   * operator optimization fixed-point batch. Use this for rules that must observe the
-   * pre-optimization plan shape (e.g., before FoldablePropagation rewrites predicates).
+   * operator optimization fixed-point batch. Use this for rules that need to observe the plan
+   * as it enters the operator-optimization fixed point (e.g., before FoldablePropagation or
+   * ConstantFolding rewrite predicates).
    */
   def preOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
 
