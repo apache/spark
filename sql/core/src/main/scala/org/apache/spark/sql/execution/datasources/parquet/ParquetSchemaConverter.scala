@@ -331,10 +331,7 @@ class ParquetToSparkSchemaConverter(
           case time: TimeLogicalTypeAnnotation
             if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
             TimeType(TimeType.MICROS_PRECISION)
-          case _ =>
-            // Types Framework: reverse lookup for framework types.
-            ParquetTypeOps.fromParquetPrimitive(INT64, typeAnnotation)
-              .getOrElse(illegalType())
+          case _ => illegalType()
         }
 
       case INT96 =>
@@ -504,13 +501,7 @@ class ParquetToSparkSchemaConverter(
             valueContainsNull = valueOptional),
           groupColumn, Seq(convertedKey, convertedValue))
       case _ =>
-        // Types Framework: reverse lookup for framework group types.
-        ParquetTypeOps.fromParquetGroup(
-          field.getLogicalTypeAnnotation
-        ).map { dt =>
-          ParquetColumn(dt, groupColumn,
-            (0 until groupColumn.getChildrenCount).map(i => convertField(groupColumn.getChild(i))))
-        }.getOrElse(throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString))
+        throw QueryCompilationErrors.unrecognizedParquetTypeError(field.toString)
     }
   }
 

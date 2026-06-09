@@ -177,8 +177,17 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   }
 
   private def writeFields(
-      row: InternalRow, schema: StructType, fieldWriters: Array[ValueWriter]): Unit =
-    ParquetWriteSupport.writeFields(recordConsumer, row, schema, fieldWriters)
+      row: InternalRow, schema: StructType, fieldWriters: Array[ValueWriter]): Unit = {
+    var i = 0
+    while (i < row.numFields) {
+      if (!row.isNullAt(i)) {
+        consumeField(schema(i).name, i) {
+          fieldWriters(i).apply(row, i)
+        }
+      }
+      i += 1
+    }
+  }
 
   // `inShredded` indicates whether the current traversal is nested within a shredded Variant
   // schema. This affects how timestamp values are written.
@@ -560,8 +569,11 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     recordConsumer.endMessage()
   }
 
-  private def consumeGroup(f: => Unit): Unit =
-    ParquetWriteSupport.consumeGroup(recordConsumer)(f)
+  private def consumeGroup(f: => Unit): Unit = {
+    recordConsumer.startGroup()
+    f
+    recordConsumer.endGroup()
+  }
 
   private def consumeField(field: String, index: Int)(f: => Unit): Unit = {
     recordConsumer.startField(field, index)
@@ -571,42 +583,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 }
 
 object ParquetWriteSupport {
-
-  // ==================== Parquet Writing Utilities ====================
-  // Generic utilities for writing Parquet groups and struct fields. Extracted as
-  // static methods so both the existing infrastructure (ParquetWriteSupport instance)
-  // and framework ops (ParquetTypeOps implementations) can use the same code.
-
-  /**
-   * Wraps a block in Parquet group start/end markers.
-   * Used for writing struct, array, and map group structures.
-   */
-  private[parquet] def consumeGroup(rc: RecordConsumer)(f: => Unit): Unit = {
-    rc.startGroup()
-    f
-    rc.endGroup()
-  }
-
-  /**
-   * Writes the non-null fields of an InternalRow to a RecordConsumer.
-   * Each field is bracketed with startField/endField and written by the corresponding writer.
-   */
-  private[parquet] def writeFields(
-      rc: RecordConsumer,
-      row: InternalRow,
-      schema: StructType,
-      fieldWriters: Array[(SpecializedGetters, Int) => Unit]): Unit = {
-    var i = 0
-    while (i < row.numFields) {
-      if (!row.isNullAt(i)) {
-        rc.startField(schema(i).name, i)
-        fieldWriters(i).apply(row, i)
-        rc.endField(schema(i).name, i)
-      }
-      i += 1
-    }
-  }
-
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
   // A version of `SPARK_ROW_SCHEMA`, where one or more Variant attributes have been replace with a
   // shredded struct schema.

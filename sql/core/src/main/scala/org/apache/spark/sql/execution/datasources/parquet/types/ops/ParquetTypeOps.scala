@@ -17,21 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
-import java.lang.{Boolean => JBoolean, Long => JLong}
-import java.util.HashSet
-import javax.annotation.Nullable
-
-import org.apache.parquet.column.ColumnDescriptor
-import org.apache.parquet.filter2.predicate.{FilterApi, FilterPredicate}
-import org.apache.parquet.filter2.predicate.SparkFilterApi._
 import org.apache.parquet.io.api.RecordConsumer
-import org.apache.parquet.schema.{LogicalTypeAnnotation, Type}
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
+import org.apache.parquet.schema.Type
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetVectorUpdater}
+import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType, TimeType}
 
@@ -103,10 +95,6 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * For primitive types: directly calls recordConsumer.addLong/addBinary/etc. with any
    * necessary conversion (e.g., nanos to micros for TimeType).
    *
-   * For struct-backed types: uses ParquetWriteSupport companion utilities (consumeGroup,
-   * writeFields) to write the struct fields. These utilities are private[parquet] static
-   * methods shared between existing infrastructure and framework ops.
-   *
    * @param recordConsumer lazy supplier for the Parquet output stream (null during init)
    * @param makeFieldWriter callback into ParquetWriteSupport for recursive field writer creation
    *                        (struct-backed types use this to create writers for sub-fields)
@@ -169,97 +157,6 @@ private[parquet] trait ParquetTypeOps extends Serializable {
     with HasParentContainerUpdater =
     newConverter(parquetType, updater)
 
-  // ==================== Vectorized Read ====================
-
-  /**
-   * Creates a vectorized updater for batch reading this type from Parquet.
-   *
-   * The updater is used by VectorizedColumnReader to read batches of values directly into
-   * ColumnVectors, bypassing row-by-row conversion for better performance.
-   *
-   * @param descriptor the Parquet column descriptor
-   * @param annotation the Parquet logical type annotation
-   * @return a ParquetVectorUpdater for batch reading
-   */
-  def getVectorUpdater(
-      descriptor: ColumnDescriptor,
-      annotation: LogicalTypeAnnotation): Option[ParquetVectorUpdater] = None
-
-  /**
-   * Whether lazy dictionary decoding is supported for this type.
-   *
-   * Lazy decoding skips dictionary expansion when values can be read directly from the
-   * dictionary page. Types that need value conversion (e.g., TimeType converts micros to
-   * nanos) must return false to ensure values are properly converted.
-   *
-   * @param typeName the Parquet primitive type name
-   * @param annotation the Parquet logical type annotation
-   * @return true if lazy decoding is supported (default), false if conversion is needed
-   */
-  def isLazyDecodingSupported(
-      typeName: PrimitiveTypeName,
-      annotation: LogicalTypeAnnotation): Boolean = true
-
-  // ==================== Filter Pushdown ====================
-  //
-  // ParquetSchemaType is a private inner class of ParquetFilters - it cannot be referenced
-  // from outside that class. The ops declares its Parquet filter identity as a tuple of raw
-  // top-level Parquet library types (LogicalTypeAnnotation, PrimitiveTypeName). The
-  // infrastructure inside ParquetFilters destructures its inner ParquetSchemaType to extract
-  // these components and matches against registered ops.
-  //
-  // Filter predicates are type-specific - the ops handles the backing type (Long/Int/Binary)
-  // internally. The infrastructure passes a ParquetFilterOp enum and gets back a
-  // FilterPredicate, without knowing what column type or value conversion is used.
-
-  /**
-   * Parquet filter identity for this type: the logical type annotation and primitive type
-   * that identify this type's columns in Parquet file schemas. Returns None if this type
-   * does not support filter pushdown (e.g., struct-backed types where primitive filters
-   * are not applicable).
-   */
-  def parquetFilterType: Option[(LogicalTypeAnnotation, PrimitiveTypeName)] = None
-
-  /**
-   * Creates a Parquet filter predicate for a comparison operation.
-   *
-   * The implementation handles the backing type internally - for Long-backed types, it uses
-   * FilterApi with longColumn; for Int-backed types, intColumn; etc. The infrastructure
-   * only needs the operation enum and the column path + value.
-   *
-   * IMPORTANT: Filter values must be converted to the Parquet storage representation, NOT
-   * Spark's internal representation. For TimeType: LocalTime -> micros (MICRO_OF_DAY),
-   * matching Parquet's TIME(MICROS). Using nanos would cause filters to be off by 1000x.
-   *
-   * @param op the comparison operation (Eq, NotEq, Lt, LtEq, Gt, GtEq)
-   * @param columnPath the dotted column path in the Parquet schema
-   * @param value the filter value (in external representation, e.g., LocalTime)
-   * @return a Parquet FilterPredicate
-   */
-  def makeFilterPredicate(
-      op: ParquetFilterOp,
-      columnPath: Array[String],
-      @Nullable value: Any): Option[FilterPredicate] = None
-
-  /**
-   * Creates a Parquet IN filter predicate for multiple values.
-   *
-   * @param columnPath the dotted column path in the Parquet schema
-   * @param values the filter values (in external representation)
-   * @return Some(FilterPredicate) if supported, None otherwise
-   */
-  def makeInFilterPredicate(
-      columnPath: Array[String],
-      values: Array[Any]): Option[FilterPredicate] = None
-
-  /**
-   * Whether a value can be used in a filter predicate for this type.
-   *
-   * @param value the filter value to check
-   * @return true if the value is of the correct type for filtering
-   */
-  def isFilterableValue(value: Any): Boolean = false
-
   // ==================== Type Gates ====================
 
   /**
@@ -271,8 +168,8 @@ private[parquet] trait ParquetTypeOps extends Serializable {
   /**
    * Whether vectorized (batch) reading is supported for this type.
    * Used by ParquetUtils.isBatchReadSupported. Default is false - types must opt in
-   * by overriding to true and implementing getVectorUpdater. When false, Spark uses
-   * the row-based read path (newConverter) which is always available.
+   * by overriding to true. When false, Spark uses the row-based read path (newConverter)
+   * which is always available.
    *
    * @param sqlConf the active SQL configuration
    */
@@ -300,10 +197,8 @@ private[parquet] trait ParquetTypeOps extends Serializable {
  * Factory object for creating ParquetTypeOps instances.
  *
  * Provides forward lookup (DataType -> ops) for framework-first dispatch at Parquet
- * integration sites, and reverse lookups for read-path schema conversion (Parquet
- * annotation -> Spark DataType) and filter dispatch (Parquet filter type -> ops).
- *
- * Feature flag gating is inside apply() - callers don't check it separately.
+ * integration sites. Feature flag gating is inside apply() - callers don't check it
+ * separately.
  */
 private[parquet] object ParquetTypeOps {
 
@@ -321,180 +216,4 @@ private[parquet] object ParquetTypeOps {
       case _ => None
     }
   }
-
-  // ==================== Reverse Lookups for Read-Path Schema Conversion ====================
-  //
-  // Read-path schema conversion goes from Parquet annotations to Spark DataTypes (the
-  // reverse direction from write). The dispatch key is the Parquet annotation, not a Spark
-  // DataType, so we can't use apply(). These methods follow the same pattern as
-  // ProtoTypeOps.opsForKindCase in Phase 1c.
-
-  /**
-   * Maps a Parquet primitive type annotation to a Spark DataType.
-   * Used by ParquetToSparkSchemaConverter.convertPrimitiveField.
-   *
-   * @param typeName the Parquet primitive type name (INT32, INT64, BINARY, etc.)
-   * @param annotation the Parquet logical type annotation (may be null)
-   * @return Some(DataType) if a framework type matches, None otherwise
-   */
-  def fromParquetPrimitive(
-      typeName: PrimitiveTypeName,
-      @Nullable annotation: LogicalTypeAnnotation): Option[DataType] = {
-    if (!SQLConf.get.typesFrameworkEnabled) return None
-    (typeName, annotation) match {
-      case (PrimitiveTypeName.INT64, time: LogicalTypeAnnotation.TimeLogicalTypeAnnotation)
-          if time.getUnit == LogicalTypeAnnotation.TimeUnit.MICROS &&
-            !time.isAdjustedToUTC =>
-        Some(TimeType(TimeType.MICROS_PRECISION))
-      // Add new primitive type mappings here
-      case _ => None
-    }
-  }
-
-  /**
-   * Maps a Parquet group type annotation to a Spark DataType.
-   * Used by ParquetToSparkSchemaConverter.convertGroupField.
-   *
-   * @param annotation the Parquet logical type annotation on the group
-   * @return Some(DataType) if a framework type matches, None otherwise
-   */
-  def fromParquetGroup(
-      @Nullable annotation: LogicalTypeAnnotation): Option[DataType] = {
-    if (!SQLConf.get.typesFrameworkEnabled) return None
-    annotation match {
-      // Add new group type mappings here
-      case _ => None
-    }
-  }
-
-  // ==================== Java-Friendly Wrappers ====================
-  //
-  // ParquetVectorUpdaterFactory.java and VectorizedColumnReader.java are Java files that
-  // need to call into ParquetTypeOps. These wrappers return null/boxed types instead of
-  // Option for clean Java interop. Null means "not handled by framework, fall through to
-  // default code."
-
-  /**
-   * Java-friendly wrapper for getVectorUpdater.
-   * Returns null if no framework ops or the type has no vectorized updater.
-   */
-  def getVectorUpdaterOrNull(
-      dt: DataType,
-      descriptor: ColumnDescriptor,
-      annotation: LogicalTypeAnnotation): ParquetVectorUpdater = {
-    apply(dt).flatMap(_.getVectorUpdater(descriptor, annotation)).orNull
-  }
-
-  /**
-   * Java-friendly wrapper for isLazyDecodingSupported.
-   * Returns boxed Boolean (null = not handled, TRUE/FALSE = framework result).
-   */
-  def isLazyDecodingSupportedFor(
-      dt: DataType,
-      typeName: PrimitiveTypeName,
-      annotation: LogicalTypeAnnotation): JBoolean = {
-    apply(dt).map(ops =>
-      JBoolean.valueOf(ops.isLazyDecodingSupported(typeName, annotation))
-    ).orNull
-  }
-
-  // ==================== Filter Helpers ====================
-  //
-  // Type-specific helpers for building Parquet filter predicates. Ops implementations
-  // delegate to these rather than calling FilterApi directly, reducing boilerplate.
-  // Each helper handles one backing type (Long, Int, Binary, etc.).
-
-  /**
-   * Creates a Parquet comparison filter for a Long-backed type.
-   * Reusable by any type stored as INT64 in Parquet (TimeType, future types).
-   *
-   * @param op the comparison operation
-   * @param path the column path components
-   * @param value the filter value (in external representation)
-   * @param valueToLong converts the external value to Long for Parquet filter comparison
-   * @return a Parquet FilterPredicate
-   */
-  def makeLongFilter(
-      op: ParquetFilterOp,
-      path: Array[String],
-      @Nullable value: Any,
-      valueToLong: Any => JLong): FilterPredicate = {
-    val column = longColumn(path)
-    val converted: JLong = Option(value).map(valueToLong).orNull
-    op match {
-      case ParquetFilterOp.Eq => FilterApi.eq(column, converted)
-      case ParquetFilterOp.NotEq => FilterApi.notEq(column, converted)
-      case ParquetFilterOp.Lt => FilterApi.lt(column, converted)
-      case ParquetFilterOp.LtEq => FilterApi.ltEq(column, converted)
-      case ParquetFilterOp.Gt => FilterApi.gt(column, converted)
-      case ParquetFilterOp.GtEq => FilterApi.gtEq(column, converted)
-    }
-  }
-
-  /**
-   * Creates a Parquet IN filter for a Long-backed type.
-   *
-   * @param path the column path components
-   * @param values the filter values (in external representation)
-   * @param valueToLong converts each external value to Long
-   * @return a Parquet FilterPredicate for the IN operation
-   */
-  def makeLongInFilter(
-      path: Array[String],
-      values: Array[Any],
-      valueToLong: Any => JLong): FilterPredicate = {
-    val column = longColumn(path)
-    val set = new HashSet[JLong]()
-    for (v <- values) {
-      set.add(Option(v).map(valueToLong).orNull)
-    }
-    FilterApi.in(column, set)
-  }
-
-  // Future: makeIntFilter, makeBinaryFilter, etc. for other backing types.
-
-  // ==================== Filter Reverse Lookup ====================
-
-  /**
-   * Finds a ParquetTypeOps by its Parquet filter type (annotation + primitive type).
-   *
-   * Used by the framework dispatch code inside ParquetFilters to match a Parquet column's
-   * schema type to a registered framework ops. The match is on raw Parquet library types
-   * because ParquetSchemaType is a private inner class of ParquetFilters.
-   *
-   * @param annotation the Parquet logical type annotation
-   * @param primitiveType the Parquet primitive type name
-   * @return Some(ops) if a framework type matches, None otherwise
-   */
-  def findByParquetFilter(
-      @Nullable annotation: LogicalTypeAnnotation,
-      primitiveType: PrimitiveTypeName): Option[ParquetTypeOps] = {
-    if (!SQLConf.get.typesFrameworkEnabled) return None
-    // Reverse lookup: given a Parquet annotation + primitive type, find the
-    // framework DataType, then get its ops. Uses fromParquetPrimitive for the
-    // DataType lookup (same reverse mapping as the read-path schema conversion),
-    // then apply() for the ops lookup. This avoids maintaining a separate
-    // registration list and ensures consistency with the other lookup paths.
-    fromParquetPrimitive(primitiveType, annotation)
-      .flatMap(apply)
-      .filter(_.parquetFilterType.isDefined)
-  }
-}
-
-/**
- * Enumeration of Parquet comparison filter operations.
- *
- * Used by [[ParquetTypeOps.makeFilterPredicate]] so the infrastructure can request any
- * comparison filter without knowing the type's backing Parquet column type. The ops
- * implementation handles the type-specific FilterApi call internally.
- */
-sealed trait ParquetFilterOp
-
-object ParquetFilterOp {
-  case object Eq extends ParquetFilterOp
-  case object NotEq extends ParquetFilterOp
-  case object Lt extends ParquetFilterOp
-  case object LtEq extends ParquetFilterOp
-  case object Gt extends ParquetFilterOp
-  case object GtEq extends ParquetFilterOp
 }
