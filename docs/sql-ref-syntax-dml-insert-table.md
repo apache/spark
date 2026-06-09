@@ -37,8 +37,11 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier REPLACE WHERE b
 * **WITH SCHEMA EVOLUTION**
 
     Enables automatic schema evolution for this `INSERT` operation. When enabled, the schema
-    of the target table is automatically updated to accommodate additional columns of the
-    source query.
+    of the target table is automatically evolved to add new columns and widen data types based
+    on the source query, subject to the capabilities of the underlying connector.
+
+    Columns and nested fields are matched by position between the source query and the target
+    table, unless `BY NAME` is specified, in which case columns and fields are matched by name.
 
 * **table_identifier**
 
