@@ -232,7 +232,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
   test("SQL string splitter") {
     // semicolon shouldn't delimit if in quotes
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         """
           |SELECT "string;with;semicolons";
           |USE DATABASE db""".stripMargin,
@@ -244,7 +244,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
 
     // semicolon shouldn't delimit if in backticks
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         """
           |SELECT `escaped;sequence;with;semicolons`;
           |USE DATABASE db""".stripMargin,
@@ -256,7 +256,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
 
     // white space around command is included in split string
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         s"""
           |-- comment 1
           |-- comment 2
@@ -274,7 +274,7 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
 
     // SQL procedures are respected and not split, if configured
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         """CREATE PROCEDURE p() BEGIN
           | SELECT 1;
           | SELECT 2;
@@ -290,63 +290,63 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
 
     // SPARK-54876: statement after semicolon ending with block comment should not be dropped
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "SELECT 1; SELECT 2 /* comment */",
         enableSqlScripting = false) == Seq("SELECT 1", " SELECT 2 /* comment */")
     )
 
     // SPARK-54876: line comment followed by block comment should produce empty result
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "-- foo\n/* bar */",
         enableSqlScripting = false) == Seq()
     )
 
     // SPARK-54876: line comment before block comment after semicolon
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "SELECT 1; -- foo\n /* bar */",
         enableSqlScripting = false) == Seq("SELECT 1")
     )
 
     // SPARK-54876: nested block comments
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "SELECT 1; /* outer /* inner */ */",
         enableSqlScripting = false) == Seq("SELECT 1")
     )
 
     // SPARK-54876: preceding closed block comment + line comment (no SQL statement)
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "/* a */ -- foo\n/* b */",
         enableSqlScripting = false) == Seq()
     )
 
     // SPARK-54876: unterminated block comment at EOF
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "SELECT 1; /* unterminated",
         enableSqlScripting = false) == Seq("SELECT 1", " /* unterminated")
     )
 
     // SPARK-54876: unterminated string literal (single input, no semicolon)
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "'unterminated",
         enableSqlScripting = false) == Seq("'unterminated")
     )
 
     // SPARK-54876: unterminated string literal after semicolon
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "SELECT 1; 'unterminated string",
         enableSqlScripting = false) == Seq("SELECT 1", " 'unterminated string")
     )
 
     // SPARK-54876: unterminated block comment (single input, no semicolon)
     assert(
-      splitSemiColonWithIndex(
+      splitSemiColon(
         "/* only a comment that never closes",
         enableSqlScripting = false) == Seq("/* only a comment that never closes")
     )
