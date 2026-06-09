@@ -18,6 +18,8 @@ package org.apache.spark.udf.worker.core
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataResponse,
   ExecutionError, Finish, FinishResponse, Init, InitResponse}
@@ -66,16 +68,31 @@ import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataRes
  * outcome -- so there is one source of truth rather than separate lifecycle and
  * wire machines:
  * {{{
- *   Created --init()--> Initializing --(InitResponse ok)--> Initialized
- *                            |                                    |
- *                            | init failure / transport           | process()
- *                            v                                    v
- *                        (terminal)                            Streaming --(input exhausted)--> Finishing
- *                                                                 |                                |
- *           any non-terminal --close()/cancel/ErrorResponse--> Cancelling                          |
- *                                                                 \------------ terminator --------/--> (terminal)
- *   terminal := Finished(FinishResponse) | Cancelled(CancelResponse)
- *             | Failed(ExecutionError)   | TransportFailed(Throwable)
+ *   Created
+ *     | init()
+ *     v
+ *   Initializing --(InitResponse ok)--> Initialized
+ *     |                                     | process()
+ *     | init failure / transport            v
+ *     |                                   Streaming
+ *     |                                     | input exhausted (Finish sent)
+ *     |                                     v
+ *     |                                   Finishing
+ *     |                                     | terminator
+ *     |                                     v
+ *     +---------------------------------> (terminal)
+ *                                           ^
+ *                                           | terminator
+ *                                         Cancelling
+ *                                           ^
+ *                                           | close() / cancel / ErrorResponse
+ *                                           |   (from any non-terminal state)
+ * }}}
+ * The clean path (via Finishing) and the cancel path (via Cancelling) settle the
+ * same `(terminal)`. The four terminals are:
+ * {{{
+ *   Finished(FinishResponse) | Cancelled(CancelResponse)
+ *   Failed(ExecutionError)   | TransportFailed(Throwable)
  * }}}
  * The two clean terminals carry the worker's `FinishResponse` / `CancelResponse`
  * (metrics + finish/cancel callback `data`/`error`); the failure terminals carry
@@ -204,11 +221,13 @@ abstract class WorkerSession(
    * callback is carried -- waits for the terminator, and returns it. The
    * `cancel` thunk is invoked only when a cancel actually needs to be sent.
    *
-   * Never throws: a failure is reported through the returned [[Termination]],
-   * not raised. An execution error yields [[Termination.Failed]] and a transport
-   * failure / timeout yields [[Termination.TransportFailed]], each carrying the
-   * cause. A data-phase failure also surfaces while the [[process]] result
-   * iterator is consumed, but a failure that occurs during finish/close -- after
+   * Does not raise application or transport failures -- they are reported through
+   * the returned [[Termination]], not thrown (though a thread interruption, or
+   * another fatal error, may still propagate). An execution error yields
+   * [[Termination.Failed]] and a transport failure / timeout yields
+   * [[Termination.TransportFailed]], each carrying the cause. A data-phase
+   * failure also surfaces while the [[process]] result iterator is consumed, but
+   * a failure that occurs during finish/close -- after
    * the data is drained -- is reported only here, so the caller must inspect the
    * [[Termination]]. After the terminator is settled the worker handle's ref
    * count is decremented; if [[isWorkerSalvageable]] is false the handle is
@@ -224,7 +243,7 @@ abstract class WorkerSession(
   final def close(cancel: () => Cancel = () => Cancel.getDefaultInstance): Termination = {
     val firstClose = closeInvoked.compareAndSet(false, true)
     try {
-      val termination = doClose(cancel)
+      doClose(cancel)
       // Enforce the doClose post-condition: it must leave the session terminal,
       // because isWorkerSalvageable (read below) classifies the worker off the
       // settled SessionState. A non-terminal state here is a subclass contract
@@ -239,13 +258,33 @@ abstract class WorkerSession(
         logger.warn(
           "doClose did not settle a terminal; treating the worker as unsalvageable")
       }
-      termination
+      // Derive the result from the settled terminal rather than trusting
+      // doClose's return value, so the Termination always agrees with the state
+      // close() classified the worker on -- in particular when the guard above
+      // had to override a misbehaving doClose. On the normal path this equals
+      // what doClose returned.
+      settledTermination
     } finally {
       if (firstClose) {
+        // close() is a finalizer (commonly invoked from a task-completion
+        // listener), so it avoids throwing: a misbehaving handle is logged via
+        // NonFatal, not propagated (a thread interrupt may still escape).
         // isWorkerSalvageable reads the settled terminal (doClose, or the guard
-        // above, leaves the session terminal), so this is correct.
-        if (!isWorkerSalvageable) workerHandle.markInvalid()
-        workerHandle.releaseSession()
+        // above, leaves the session terminal). releaseSession is still attempted
+        // even if markInvalid fails, so the ref count is not leaked; markInvalid
+        // runs first so a released worker is never recycled.
+        try {
+          if (!isWorkerSalvageable) workerHandle.markInvalid()
+        } catch {
+          case NonFatal(e) =>
+            logger.warn(s"markInvalid for worker ${workerHandle.id} on close() failed", e)
+        }
+        try {
+          workerHandle.releaseSession()
+        } catch {
+          case NonFatal(e) =>
+            logger.warn(s"releaseSession for worker ${workerHandle.id} on close() failed", e)
+        }
       }
     }
   }
@@ -295,17 +334,20 @@ abstract class WorkerSession(
 
   /**
    * Whether the underlying worker is in a state safe to reuse after this
-   * session ends. The default reads the settled [[SessionState]]: a clean
-   * [[SessionState.Finished]] or a cooperative [[SessionState.Cancelled]]
-   * (the worker ran its cleanup and acknowledged) is salvageable; a failure
-   * terminal or a session that never settled leaves the worker in an unknown
-   * state and is not. A `false` result tells [[close]] to mark `workerHandle`
-   * invalid so no reuse pool recycles the worker. Subclasses may override for
-   * protocol-specific nuances.
+   * session ends. The default treats only a dead or unknown transport as
+   * unsafe: a [[SessionState.TransportFailed]] terminal (transport failure,
+   * timeout, or interrupt) -- or a session that never settled -- leaves the
+   * worker in an unknown state and is not salvageable. Every other terminal is
+   * salvageable: a clean [[SessionState.Finished]], a cooperative
+   * [[SessionState.Cancelled]], and also an execution [[SessionState.Failed]],
+   * which is typically a user-code (UDF) error reported by a still-healthy
+   * worker rather than a worker fault. A `false` result tells [[close]] to mark
+   * `workerHandle` invalid so no reuse pool recycles the worker. Subclasses may
+   * override for protocol-specific nuances.
    */
   protected def isWorkerSalvageable: Boolean = state.get() match {
-    case _: SessionState.Finished => true
-    case _: SessionState.Cancelled => true
+    case _: SessionState.TransportFailed => false
+    case t if t.isTerminal => true
     case _ => false
   }
 

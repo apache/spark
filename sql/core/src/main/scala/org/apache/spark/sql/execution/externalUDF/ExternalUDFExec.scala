@@ -81,9 +81,10 @@ trait ExternalUDFExec extends UnaryExecNode {
     // resolves to whichever terminator the stream reached:
     //
     //  - Task completed and the result iterator was fully consumed: process()
-    //    already sent Finish (input exhausted) and the worker's FinishResponse
-    //    arrived while draining, so the stream is already Finished. close()
-    //    sends nothing and returns that Finished termination.
+    //    sent Finish (input exhausted) and the data drained. close() then
+    //    typically returns the Finished termination -- but a failure during the
+    //    finish/cleanup phase (raised after the data drained, so it reached no one
+    //    through the iterator) is surfaced here too, as Failed / TransportFailed.
     //  - Task failed, was killed, or stopped before draining (e.g. a downstream
     //    LIMIT or exception): the stream has not finished, so close() sends a
     //    Cancel, the worker runs its cleanup, and its CancelResponse is returned
@@ -91,8 +92,9 @@ trait ExternalUDFExec extends UnaryExecNode {
     //    no extra information to convey to the worker on cancellation -- so we
     //    rely on close()'s default and pass no cancel thunk.
     //  - The stream died without a terminator (transport failure / timeout):
-    //    close() never throws and returns a best-effort Cancelled termination;
-    //    the underlying failure has already surfaced through the result iterator.
+    //    close() returns a best-effort TransportFailed termination rather than
+    //    raising it (a thread interrupt may still propagate); the underlying
+    //    failure has already surfaced through the result iterator.
     //
     // The returned Termination (per-execution metrics, finish/cancel callback
     // result) is not consumed yet -- TODO [SPARK-57324] surface it once metrics

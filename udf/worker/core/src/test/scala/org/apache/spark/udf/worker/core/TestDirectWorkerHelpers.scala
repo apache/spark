@@ -58,8 +58,13 @@ class NoOpWorkerSession(
       input: Iterator[DataRequest],
       finish: () => Finish): Iterator[DataResponse] =
     Iterator.empty[DataResponse]
-  override protected def doClose(cancel: () => Cancel): Termination =
-    Termination.Finished(FinishResponse.getDefaultInstance)
+  override protected def doClose(cancel: () => Cancel): Termination = {
+    // Settle the clean terminal so close() does not fall through to its
+    // contract-violation recovery path. A no-op session has no in-flight work,
+    // so the cancel thunk is never needed.
+    completeTerminal(WorkerSession.SessionState.Finished(FinishResponse.getDefaultInstance))
+    settledTermination
+  }
 }
 
 /**

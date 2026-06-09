@@ -141,10 +141,10 @@ class WorkerSessionSuite extends AnyFunSuite {
     assert(h.invalidated == 0)
   }
 
-  test("close marks an unsalvageable worker invalid") {
+  test("close marks a transport-failed worker invalid") {
     val h = new RecordingHandle
     val s = new FakeWorkerSession(handle = h, onCloseHook = (self, _) => {
-      self.settle(SessionState.Failed(ExecutionError.getDefaultInstance))
+      self.settle(SessionState.TransportFailed(new RuntimeException("transport down")))
       self.term
     })
     s.close()
@@ -152,16 +152,69 @@ class WorkerSessionSuite extends AnyFunSuite {
     assert(h.released == 1)
   }
 
+  test("close leaves a worker salvageable after an execution Failed") {
+    val h = new RecordingHandle
+    val err = ExecutionError.getDefaultInstance
+    // A Failed terminal is typically a user-code (UDF) error, not a worker fault,
+    // so the worker stays reusable: markInvalid must NOT be called.
+    val s = new FakeWorkerSession(handle = h, onCloseHook = (self, _) => {
+      self.settle(SessionState.Failed(err))
+      self.term
+    })
+    assert(s.close() == Termination.Failed(err))
+    assert(h.invalidated == 0)
+    assert(h.released == 1)
+  }
+
   test("close enforces the doClose terminal post-condition") {
     val h = new RecordingHandle
-    // doClose returns without settling any terminal -- a subclass contract
-    // violation. close() must settle a TransportFailed terminal and treat the
-    // worker as unsalvageable.
+    // doClose returns a Termination without settling any terminal -- a subclass
+    // contract violation. close() must settle a TransportFailed terminal, treat
+    // the worker as unsalvageable, and return a Termination consistent with that
+    // settled state rather than the (untrustworthy) value doClose produced.
     val s = new FakeWorkerSession(handle = h,
       onCloseHook = (_, _) => Termination.Finished(FinishResponse.getDefaultInstance))
-    s.close()
+    val termination = s.close()
     assert(s.state.isInstanceOf[SessionState.TransportFailed])
+    assert(termination.isInstanceOf[Termination.TransportFailed])
     assert(h.invalidated == 1)
+  }
+
+  test("close swallows a non-fatal worker-handle failure") {
+    val throwingHandle = new WorkerHandle {
+      override def id: String = "boom"
+      override def markInvalid(): Unit = throw new RuntimeException("markInvalid boom")
+      override def releaseSession(): Unit = throw new RuntimeException("releaseSession boom")
+    }
+    val cause = new RuntimeException("transport down")
+    // A TransportFailed terminal makes the worker unsalvageable, so close()
+    // attempts both markInvalid() and releaseSession() -- here both throw.
+    // close() must swallow them and still return the settled termination.
+    val s = new FakeWorkerSession(handle = throwingHandle, onCloseHook = (self, _) => {
+      self.settle(SessionState.TransportFailed(cause))
+      self.term
+    })
+    assert(s.close() == Termination.TransportFailed(cause))
+  }
+
+  test("close still releases the worker when markInvalid throws") {
+    // markInvalid throws but releaseSession succeeds: close() must swallow the
+    // markInvalid failure and still attempt releaseSession, so the ref count is
+    // not leaked. A TransportFailed terminal makes the worker unsalvageable, so
+    // markInvalid is reached on the way to releaseSession.
+    var released = 0
+    val handle = new WorkerHandle {
+      override def id: String = "throws-on-invalidate"
+      override def markInvalid(): Unit = throw new RuntimeException("markInvalid boom")
+      override def releaseSession(): Unit = released += 1
+    }
+    val cause = new RuntimeException("transport down")
+    val s = new FakeWorkerSession(handle = handle, onCloseHook = (self, _) => {
+      self.settle(SessionState.TransportFailed(cause))
+      self.term
+    })
+    assert(s.close() == Termination.TransportFailed(cause))
+    assert(released == 1, "releaseSession must be attempted even when markInvalid throws")
   }
 
   test("completeTerminal is first-wins and runs onTerminalSettled once") {
