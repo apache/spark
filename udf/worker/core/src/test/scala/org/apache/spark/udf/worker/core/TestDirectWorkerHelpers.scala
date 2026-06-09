@@ -16,64 +16,221 @@
  */
 package org.apache.spark.udf.worker.core
 
-import java.io.File
+import java.io.{File, IOException}
+import java.nio.file.{FileVisitResult, Files, Path, SimpleFileVisitor}
+import java.nio.file.attribute.{BasicFileAttributes, PosixFilePermissions}
 
-import org.apache.spark.udf.worker.{Init, UDFWorkerSpecification}
-import org.apache.spark.udf.worker.core.direct.{
-  DirectUnixSocketWorkerDispatcher, DirectWorkerProcess,
-  DirectWorkerSession}
-
-/**
- * A [[WorkerConnection]] test implementation that considers the
- * connection active as long as the socket file exists on disk.
- * Inherits socket-file deletion from
- * [[UnixSocketWorkerConnection.close]].
- */
-class SocketFileConnection(socketPath: String)
-    extends UnixSocketWorkerConnection(socketPath) {
-  override def isActive: Boolean = new File(socketPath).exists()
-}
+import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse,
+  Init, InitResponse, UDFProtoCommunicationPattern, UDFWorkerSpecification, WorkerConnectionSpec}
+import org.apache.spark.udf.worker.core.direct.{DirectWorkerDispatcher, DirectWorkerException,
+  DirectWorkerTimeoutException}
+import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.SOCKET_POLL_INTERVAL_MS
 
 /**
- * A stub [[DirectWorkerSession]] for process-lifecycle tests
- * that don't need actual data transmission.
+ * A [[WorkerConnection]] test implementation that treats the connection as
+ * active as long as the worker's UDS file exists on disk. The socket file is
+ * removed on close.
  *
- * TODO: [[cancel]] is a no-op here. Once a concrete
- * [[DirectWorkerSession]] with real data-plane wiring lands, add
- * tests exercising cancel() in particular: cancel from a
- * different thread than process(), cancel after process() has
- * returned, and cancel before init (should be a no-op). See the
- * thread-safety contract in the docstring on
- * [[org.apache.spark.udf.worker.core.WorkerSession.cancel]].
+ * Suitable for dispatcher-lifecycle tests that don't need to drive a wire
+ * protocol -- e.g. verifying that a worker spec spawns a real worker process
+ * that creates the expected socket.
  */
-class StubWorkerSession(workerProcess: DirectWorkerProcess)
-    extends DirectWorkerSession(workerProcess) {
-
-  override protected def doInit(message: Init): Unit = {}
-
-  override protected def doProcess(
-      input: Iterator[Array[Byte]]
-  ): Iterator[Array[Byte]] =
-    Iterator.empty
-
-  override def cancel(): Unit = {}
+class SocketFileConnection(val socketPath: String) extends WorkerConnection {
+  override def isActive: Boolean = new File(socketPath).exists()
+  override def close(): Unit = {
+    val f = new File(socketPath)
+    if (f.exists()) f.delete()
+  }
 }
 
 /**
- * A [[DirectUnixSocketWorkerDispatcher]] subclass for testing
- * that uses a socket-file connection and stub sessions instead
- * of a real protocol implementation.
+ * No-op [[WorkerSession]] for lifecycle-only tests. All protocol methods are
+ * inert (init/finish report empty responses); tests that exercise the actual
+ * wire protocol use a concrete transport-backed session.
  */
-class TestDirectWorkerDispatcher(spec: UDFWorkerSpecification)
-    extends DirectUnixSocketWorkerDispatcher(spec) {
+class NoOpWorkerSession(
+    workerHandle: WorkerHandle,
+    logger: WorkerLogger = WorkerLogger.NoOp)
+  extends WorkerSession(workerHandle, logger) {
 
-  override protected def createConnection(
-      socketPath: String
-  ): UnixSocketWorkerConnection =
-    new SocketFileConnection(socketPath)
+  override protected def doInit(message: Init): InitResponse = InitResponse.getDefaultInstance
+  override protected def doProcess(
+      input: Iterator[DataRequest],
+      finish: () => Finish): Iterator[DataResponse] =
+    Iterator.empty[DataResponse]
+  override protected def doClose(cancel: () => Cancel): Termination =
+    Termination.Finished(FinishResponse.getDefaultInstance)
+}
 
-  override protected def createSessionForWorker(
-      worker: DirectWorkerProcess
-  ): WorkerSession =
-    new StubWorkerSession(worker)
+/**
+ * A concrete [[DirectWorkerDispatcher]] for tests that spawns workers over a
+ * Unix domain socket and yields [[SocketFileConnection]]s / [[NoOpWorkerSession]]s,
+ * so lifecycle tests exercise the dispatcher's spawn / wait-for-ready / cleanup
+ * machinery without driving a wire protocol. Allocates a private 0700 socket
+ * directory at construction; each worker is given a UDS path inside it.
+ *
+ * Reusable across modules: callers in `sql/core` (or anywhere with a test-jar
+ * dependency on `udf-worker-core`) can drop this in for tests that only need to
+ * verify a worker spec produces a spawnable worker.
+ */
+class TestDirectWorkerDispatcher(
+    workerSpec: UDFWorkerSpecification,
+    logger: WorkerLogger = WorkerLogger.NoOp)
+  extends DirectWorkerDispatcher(workerSpec, logger) {
+
+  // Upper bound on the rename-on-collision retry loop in newEndpointAddress.
+  private val MAX_SOCKET_LEAF_RETRIES = 16
+
+  // The private 0700 socket directory, created in [[initialize]] (after the
+  // base class has validated the spec) and removed in [[closeTransport]].
+  private lazy val socketDir: Path = createPrivateTempDirectory()
+
+  override protected def initialize(): Unit = {
+    super.initialize()
+    // Force the lazy val now so the directory is created (and any failure
+    // surfaces) at construction time, after spec validation has passed.
+    socketDir
+  }
+
+  /**
+   * Returns the UDS path the worker should bind. Uses a short 16-hex-char leaf
+   * (the worker's full UUID still travels via `--id`) to stay within the
+   * 108-byte UDS `sun_path` limit.
+   */
+  override protected def newEndpointAddress(workerId: String): String = {
+    val short = workerId.replace("-", "").take(16)
+    var candidate = socketDir.resolve(s"w-$short.sock")
+    var suffix = 0
+    while (Files.exists(candidate) && suffix < MAX_SOCKET_LEAF_RETRIES) {
+      suffix += 1
+      candidate = socketDir.resolve(s"w-$short-$suffix.sock")
+    }
+    if (Files.exists(candidate)) {
+      throw new IllegalStateException(
+        s"could not allocate a free UDS path under $socketDir after " +
+          s"$MAX_SOCKET_LEAF_RETRIES retries (truncated id=$short)")
+    }
+    candidate.toString
+  }
+
+  override protected def waitForReady(
+      address: String,
+      process: Process,
+      outputFile: File): Unit = {
+    val file = new File(address)
+    // At least one poll so very small initTimeouts don't trip a premature
+    // timeout before the worker has any chance to create the socket.
+    val maxAttempts = math.max(1, (initTimeoutMs / SOCKET_POLL_INTERVAL_MS).toInt)
+    var attempts = 0
+    while (!file.exists() && attempts < maxAttempts) {
+      if (!process.isAlive) throwWorkerExitedBeforeSocket(process, address, outputFile)
+      Thread.sleep(SOCKET_POLL_INTERVAL_MS)
+      attempts += 1
+    }
+    if (!file.exists()) {
+      if (process.isAlive) {
+        DirectWorkerDispatcher.destroyForciblyAndReap(
+          process, logger, s"init timeout $address")
+        val tail = readOutputTail(outputFile)
+        throw new DirectWorkerTimeoutException(
+          s"Worker did not create socket at $address within ${initTimeoutMs}ms\n$tail")
+      } else {
+        // Worker exited after the last poll without creating the socket;
+        // prefer the exit-code message over the ambiguous "did not create".
+        throwWorkerExitedBeforeSocket(process, address, outputFile)
+      }
+    }
+  }
+
+  override protected def cleanupEndpointAddress(address: String): Unit = {
+    Files.deleteIfExists(new File(address).toPath)
+  }
+
+  override protected def closeTransport(): Unit = {
+    if (!Files.exists(socketDir)) return
+    // Recursive post-order delete: today socketDir contains only socket files
+    // at the top level, but a future change that namespaces workers into
+    // subdirectories should not silently leak them.
+    Files.walkFileTree(socketDir, new SimpleFileVisitor[Path] {
+      override def visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult = {
+        try Files.deleteIfExists(file) catch { case _: IOException => () }
+        FileVisitResult.CONTINUE
+      }
+      override def postVisitDirectory(dir: Path, exc: IOException): FileVisitResult = {
+        try Files.deleteIfExists(dir) catch { case _: IOException => () }
+        FileVisitResult.CONTINUE
+      }
+    })
+  }
+
+  // `spec` is the same object as the `workerSpec` field but passed explicitly:
+  // at the point this runs (parent constructor body), `this` is only partially
+  // constructed and reading subclass fields is unsafe.
+  override protected def validateTransportSupport(spec: UDFWorkerSpecification): Unit = {
+    val props = spec.getDirect.getProperties
+    require(props.hasConnection,
+      "DirectWorker.properties.connection must be set")
+    val conn = props.getConnection
+    require(conn.getTransportCase == WorkerConnectionSpec.TransportCase.UNIX_DOMAIN_SOCKET,
+      "TestDirectWorkerDispatcher requires UNIX domain socket transport, " +
+        s"got ${conn.getTransportCase}")
+    require(spec.hasCapabilities,
+      "TestDirectWorkerDispatcher requires WorkerCapabilities declaring " +
+        "BIDIRECTIONAL_STREAMING in supported_communication_patterns")
+    val patterns = spec.getCapabilities.getSupportedCommunicationPatternsList
+    val supportsBidi = (0 until patterns.size()).exists { i =>
+      patterns.get(i) == UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING
+    }
+    require(supportsBidi,
+      "TestDirectWorkerDispatcher requires BIDIRECTIONAL_STREAMING " +
+        "in WorkerCapabilities.supported_communication_patterns")
+  }
+
+  override protected def newConnection(address: String): WorkerConnection =
+    new SocketFileConnection(address)
+
+  override protected def newSession(
+      workerHandle: WorkerHandle,
+      connection: WorkerConnection): WorkerSession =
+    new NoOpWorkerSession(workerHandle, logger)
+
+  private def throwWorkerExitedBeforeSocket(
+      process: Process,
+      address: String,
+      outputFile: File): Nothing = {
+    val tail = readOutputTail(outputFile)
+    throw new DirectWorkerException(
+      s"Worker exited with code ${process.exitValue()} " +
+        s"before creating socket at $address\n$tail")
+  }
+
+  /**
+   * Creates a private (owner-only, 0700) temp directory for worker sockets.
+   * On POSIX filesystems the permissions are applied atomically at creation;
+   * the non-POSIX branch tightens best-effort after creation.
+   */
+  private def createPrivateTempDirectory(): Path = {
+    val attr = PosixFilePermissions.asFileAttribute(
+      PosixFilePermissions.fromString("rwx------"))
+    try {
+      Files.createTempDirectory("spark-udf-worker", attr)
+    } catch {
+      case _: UnsupportedOperationException =>
+        val dir = Files.createTempDirectory("spark-udf-worker")
+        val f = dir.toFile
+        // Bit-wise AND (NOT &&): all six setters must run even if an earlier
+        // one returns false, so the final permission state matches owner-only.
+        val applied =
+          f.setReadable(false, false) & f.setWritable(false, false) &
+            f.setExecutable(false, false) & f.setReadable(true, true) &
+            f.setWritable(true, true) & f.setExecutable(true, true)
+        if (!applied) {
+          logger.warn(
+            s"Could not fully restrict permissions on $dir; socket " +
+              s"directory may be accessible to other local users on this " +
+              s"filesystem")
+        }
+        dir
+    }
+  }
 }
