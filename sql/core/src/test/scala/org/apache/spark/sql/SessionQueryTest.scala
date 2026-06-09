@@ -15,8 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect
+package org.apache.spark.sql
 
-import org.apache.spark.sql
+import org.apache.spark.SparkFunSuite
 
-class ExampleConnectSuite extends sql.ExampleSuite with SessionQueryTest
+/**
+ * Provides classic/connect-agnostic test utils
+ *
+ * {{{
+ *   // in sql/core
+ *   FooSuite extends SessionQueryTest {
+ *     test("") { ... }
+ *   }
+ *
+ *   // in sql/connect
+ *   FooConnectSuite extends connect.SessionQueryTest
+ * }}}
+ */
+trait SessionQueryTest
+  extends SparkFunSuite
+  with SessionQueryTestBase
+  with SparkSessionBinder {
+  override def isDfSorted(df: DataFrame): Boolean = true // TODO
+}

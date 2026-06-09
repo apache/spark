@@ -15,8 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect
+package org.apache.spark.sql.classic
 
 import org.apache.spark.sql
 
-class ExampleConnectSuite extends sql.ExampleSuite with SessionQueryTest
+/**
+ * Override of [[sql.SessionQueryTest]] that provides [[SparkSession classic.SparkSession]].
+ *
+ * Can be used to declare classic-specific tests:
+ * {{{
+ *   class FooSuite extends sql.SessionQueryTest {
+ *     // shared classic/connect-agnostic testcases
+ *   }
+ *
+ *   // no need to extend FooSuite as sql.SessionQueryTest
+ *   // already executes shared tests via classic internally.
+ *   class FooClassicSuite extends classic.SessionQueryTest {
+ *     test("classic-only test") {
+ *       // classic-only APIs are visible here
+ *       spark.sessionState.conf
+ *     }
+ *   }
+ * }}}
+ */
+trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder
+

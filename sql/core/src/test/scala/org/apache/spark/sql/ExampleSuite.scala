@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-class ExampleSuite extends SparkSessionBinder {
+class ExampleSuite extends SessionQueryTest {
 
   test("replaceWhere with partitioned table preserves all partitions") {
     withTable("foo") {

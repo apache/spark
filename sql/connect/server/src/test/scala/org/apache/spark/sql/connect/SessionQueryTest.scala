@@ -14,9 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql.connect
 
 import org.apache.spark.sql
 
-class ExampleConnectSuite extends sql.ExampleSuite with SessionQueryTest
+/**
+ * TODO write docstring
+ */
+trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
+  override def isDfSorted(df: sql.DataFrame): Boolean = false // TODO
+}

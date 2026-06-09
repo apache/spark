@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMe
  * this class only provides the Connect-specific session, catalog access, and result comparison.
  */
 class DataSourceV2DataFrameConnectSuite
-    extends SparkSessionBinder
+    extends SessionQueryTest
     with DSv2TempViewWithStoredPlanTests
     with DSv2RepeatedTableAccessTests
     with DSv2IncrementallyConstructedQueryTests
@@ -53,7 +53,6 @@ class DataSourceV2DataFrameConnectSuite
     .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
 
   override protected def testPrefix: String = "[connect] "
-  override protected def isConnect: Boolean = true
 
   override protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,

@@ -59,7 +59,12 @@ trait QueryTestBase
   extends Eventually
   with BeforeAndAfterAll
   with SQLTestData
+  with CheckAnswerHelper
+  with QueryCleanupHelper
   with PlanTestBase { self: Suite =>
+
+  override protected def isDfSorted(df: DataFrame): Boolean =
+    df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords.
@@ -156,7 +161,7 @@ trait QueryTestBase
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    */
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
     val analyzedDF = try df catch {
       case ae: ExtendedAnalysisException =>
         if (ae.plan.isDefined) {
@@ -177,11 +182,11 @@ trait QueryTestBase
     QueryTest.checkAnswer(analyzedDF, expectedAnswer)
   }
 
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
     checkAnswer(df, expectedAnswer.collect().toImmutableArraySeq)
   }
 
@@ -191,7 +196,7 @@ trait QueryTestBase
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Array]] of [[Row]]s.
    */
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
+  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
     checkAnswer(df, expectedAnswer.toImmutableArraySeq)
   }
 
@@ -202,6 +207,7 @@ trait QueryTestBase
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    * @param absTol the absolute tolerance between actual and expected answers.
    */
+  @deprecated("rarely used")
   protected def checkAggregatesWithTol(dataFrame: DataFrame,
       expectedAnswer: Seq[Row],
       absTol: Double): Unit = {
@@ -216,6 +222,7 @@ trait QueryTestBase
     }
   }
 
+  @deprecated("rarely used")
   protected def checkAggregatesWithTol(dataFrame: DataFrame,
       expectedAnswer: Row,
       absTol: Double): Unit = {
@@ -323,25 +330,6 @@ trait QueryTestBase
   }
 
   /**
-   * Drops functions after calling `f`. A function is represented by (functionName, isTemporary).
-   */
-  protected def withUserDefinedFunction(functions: (String, Boolean)*)(f: => Unit): Unit = {
-    try {
-      f
-    } catch {
-      case cause: Throwable => throw cause
-    } finally {
-      functions.foreach { case (functionName, isTemporary) =>
-        val withTemporary = if (isTemporary) "TEMPORARY" else ""
-        spark.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
-        assert(
-          !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
-          s"Function $functionName should have been dropped. But, it still exists.")
-      }
-    }
-  }
-
-  /**
    * Drops temporary view `viewNames` after calling `f`.
    */
   protected def withTempView(viewNames: String*)(f: => Unit): Unit = {
@@ -365,28 +353,6 @@ trait QueryTestBase
         }
       }
     }
-  }
-
-  /**
-   * Drops table `tableName` after calling `f`.
-   */
-  protected def withTable(tableNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f) {
-      tableNames.foreach { name =>
-        spark.sql(s"DROP TABLE IF EXISTS $name")
-      }
-    }
-  }
-
-  /**
-   * Drops view `viewName` after calling `f`.
-   */
-  protected def withView(viewNames: String*)(f: => Unit): Unit = {
-    Utils.tryWithSafeFinally(f)(
-      viewNames.foreach { name =>
-        spark.sql(s"DROP VIEW IF EXISTS $name")
-      }
-    )
   }
 
   /**
@@ -463,6 +429,7 @@ trait QueryTestBase
   /**
    * Restores the current catalog/database after calling `f`.
    */
+  @deprecated("rarely used")
   protected def withCurrentCatalogAndNamespace(f: => Unit): Unit = {
     val curCatalog = sql("select current_catalog()").head().getString(0)
     val curDatabase = sql("select current_database()").head().getString(0)
@@ -535,6 +502,7 @@ trait QueryTestBase
    * does not contain a scheme, this path will not be changed after the default
    * FileSystem is changed.
    */
+  @deprecated("Classic-only method, use classic.QueryTest", "4.2.0")
   def makeQualifiedPath(path: String): URI = {
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
@@ -825,7 +793,8 @@ trait QueryTest extends SparkFunSuite with QueryTestBase {
   }
 }
 
-object QueryTest extends Assertions {
+@deprecated("superseded by CheckAnswerHelper", since = "4.2")
+object QueryTest extends CheckAnswerHelper {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    *
@@ -834,11 +803,17 @@ object QueryTest extends Assertions {
    * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
   def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean = true): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer, checkToRDD) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
+    if (checkToRDD) {
+      SQLExecution.withSQLConfPropagated(df.sparkSession) {
+        df.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
+      }
     }
+
+    super.checkAnswer(df, expectedAnswer)
   }
+
+  override protected def isDfSorted(df: DataFrame): Boolean =
+    df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
@@ -1053,13 +1028,6 @@ object QueryTest extends Assertions {
           s"actual answer $actual not within $absTol of correct answer $expected")
       case (actual, expected) =>
         assert(actual == expected, s"$actual did not equal $expected")
-    }
-  }
-
-  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
     }
   }
 

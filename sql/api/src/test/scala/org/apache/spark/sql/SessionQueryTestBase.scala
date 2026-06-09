@@ -15,27 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connect
+package org.apache.spark.sql
 
-import org.apache.spark.{sql => sqlApi}
+// scalastyle:off funsuite
+import org.scalatest.funsuite.AnyFunSuite
+// scalastyle:on
 
-/**
- * Extends [[sqlApi.QueryTest]] to provide connect-specific overrides to helpers like
- * [[checkAnswer]] that avoid classic-only APIs.
- *
- * Can be used together with [[SparkSessionBinder connect.SparkSessionBinder]] to create a
- * 'connect variant' of a test.
- *
- * Note: broader use will require more overrides.
- */
-trait QueryTest extends sqlApi.QueryTest with SparkSessionProvider {
-
-  override protected def checkAnswer(
-    df: => sqlApi.DataFrame, expectedAnswer: Seq[sqlApi.Row]): Unit = {
-    val sparkAnswer = df.collect().toSeq
-    sqlApi.QueryTest.sameRows(expectedAnswer, sparkAnswer) match {
-      case Some(errorMessage) => fail(errorMessage)
-      case None =>
-    }
-  }
-}
+trait SessionQueryTestBase
+  extends AnyFunSuite
+    with SparkSessionProvider
+    with CheckAnswerHelper
+    with QueryCleanupHelper

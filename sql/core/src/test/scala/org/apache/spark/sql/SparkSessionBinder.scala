@@ -29,6 +29,11 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.TestSparkSession
 
+/**
+ * Provides a [[spark]] implementation by creating a [[classic.SparkSession]].
+ *
+ * counterpart to [[SparkSessionProvider]], used in [[org.apache.spark.sql.test.SharedSparkSession]]
+ */
 trait SparkSessionBinder extends SparkSessionBinderBase { self: SparkFunSuite =>
 
   /**

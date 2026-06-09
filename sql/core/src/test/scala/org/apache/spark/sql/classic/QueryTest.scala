@@ -24,12 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.FilterExec
 
 /**
- * Extends [[org.apache.spark.sql.QueryTest sql.QueryTest]] to explicitly provide
- * a [[SparkSession classic.SparkSession]] and corresponding helpers.
- *
- * Use this trait to indicate that a test is classic-only,
- * i.e it is not intended to run this test with a
- * [[org.apache.spark.sql.connect.QueryTest connect.QueryTest]] override.
+ * Extends [[org.apache.spark.sql.QueryTest sql.QueryTest]] to provide classic-only helpers.
  */
 trait QueryTest extends sql.QueryTest with SparkSessionProvider {
 

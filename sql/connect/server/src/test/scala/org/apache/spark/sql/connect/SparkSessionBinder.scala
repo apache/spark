@@ -19,7 +19,7 @@ package org.apache.spark.sql.connect
 
 import java.util.UUID
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkEnv, SparkFunSuite}
 import org.apache.spark.sql
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.connect.client.SparkConnectClient
@@ -31,15 +31,8 @@ import org.apache.spark.sql.connect.service.SparkConnectService
  * Extends [[sql.SparkSessionBinder sql.SparkSessionBinder]] (which creates a
  * [[classic.SparkSession classic.SparkSession]] and SparkContext), then layers a Connect client
  * session on top by starting the gRPC service in-process.
- *
- * Mix in this trait to exercise existing sql/core test suites through the Connect path:
- * {{{
- * class FooWithConnectSuite
- *   extends FooSuite
- *   with connect.SparkSessionBinder
- * }}}
  */
-trait SparkSessionBinder extends sql.SparkSessionBinder with QueryTest {
+trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
 
   private var _connectSpark: SparkSession = _
 
