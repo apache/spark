@@ -5221,6 +5221,15 @@ object functions {
   def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
 
   /**
+   * Computes the Jaro-Winkler similarity between the two given string columns. The result is a
+   * double between 0.0 (no similarity) and 1.0 (identical).
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def jaro_winkler_similarity(l: Column, r: Column): Column =
+    Column.fn("jaro_winkler_similarity", l, r)
+
+  /**
    * Locate the position of the first occurrence of substr.
    *
    * @note

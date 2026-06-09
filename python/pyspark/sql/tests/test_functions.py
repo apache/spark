@@ -1014,6 +1014,14 @@ class FunctionsTestsMixin:
         self.assertAlmostEqual(sum_result[0], 4.0, places=4)
         self.assertAlmostEqual(sum_result[1], 6.0, places=4)
 
+    def test_jaro_winkler_similarity_function(self):
+        df = self.spark.createDataFrame([("MARTHA", "MARHTA")], ["l", "r"])
+        result = df.select(F.jaro_winkler_similarity(df.l, df.r)).first()[0]
+        self.assertAlmostEqual(result, 0.9611111111111111, places=10)
+        # Null handling
+        null_result = df.select(F.jaro_winkler_similarity(df.l, F.lit(None))).first()[0]
+        self.assertIsNone(null_result)
+
     def test_between_function(self):
         df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
