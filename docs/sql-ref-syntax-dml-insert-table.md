@@ -29,7 +29,7 @@ The `INSERT` statement inserts new rows into a table or overwrites the existing 
 INSERT [ WITH SCHEMA EVOLUTION ] [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) | [BY NAME] ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 
-INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier REPLACE WHERE boolean_expression query
+INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier [ BY NAME ] REPLACE WHERE boolean_expression query
 ```
 
 ### Parameters
@@ -415,8 +415,43 @@ SELECT * FROM persons2;
 |   Ashua Hill|   456 Erica Ct, Cupertino|432795921|
 +-------------+--------------------------+---------+
 
--- in an atomic operation, 1) delete rows with ssn = 123456789 and 2) insert rows from persons2 
+-- in an atomic operation, 1) delete rows with ssn = 123456789 and 2) insert rows from persons2
 INSERT INTO persons REPLACE WHERE ssn = 123456789 SELECT * FROM persons2;
+
+SELECT * FROM persons;
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|  Eddie Davis|   245 Market St, Milpitas|345678901|
++-------------+--------------------------+---------+
+|   Ashua Hill|   456 Erica Ct, Cupertino|432795921|
++-------------+--------------------------+---------+
+```
+
+##### Insert By Name Using a REPLACE WHERE Statement
+
+```sql
+-- Assuming the persons and persons3 table has already been created and populated.
+SELECT * FROM persons;
++-------------+--------------------------+---------+
+|         name|                   address|      ssn|
++-------------+--------------------------+---------+
+|Dora Williams|134 Forest Ave, Menlo Park|123456789|
++-------------+--------------------------+---------+
+|  Eddie Davis|   245 Market St, Milpitas|345678901|
++-------------+--------------------------+---------+
+
+-- persons3 lists the columns in a different order than the target table.
+SELECT * FROM persons3;
++--------------------------+---------+-----------+
+|                   address|      ssn|       name|
++--------------------------+---------+-----------+
+|   456 Erica Ct, Cupertino|432795921| Ashua Hill|
++--------------------------+---------+-----------+
+
+-- BY NAME matches the query fields to the target columns by name instead of by position,
+-- so the column order mismatch is resolved automatically.
+INSERT INTO persons BY NAME REPLACE WHERE ssn = 123456789 SELECT * FROM persons3;
 
 SELECT * FROM persons;
 +-------------+--------------------------+---------+
