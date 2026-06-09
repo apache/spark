@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * mode, resolution is deferred until execution, so both sides of a join always see the
  * latest table state.
  *
- * NOTE: All `session.sql(...)` calls append `.collect()` because Connect client DataFrames
+ * NOTE: All `spark.sql(...)` calls append `.collect()` because Connect client DataFrames
  * are lazy and require an action to trigger execution. In classic mode `.collect()` on
  * eager statements (DDL, INSERT) is a no-op, so this is harmless.
  */
@@ -45,44 +45,40 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
   test(s"${testPrefix}SPARK-54157: join refreshes both sides after external insert" +
       " (table with both table and column ID support)") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+      withTable(testTable) {
+        spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(testTable)
+        val df1 = spark.table(testTable)
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
         externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
-        val df2 = session.table(testTable)
+        val df2 = spark.table(testTable)
 
-        checkRows(
+        checkAnswer(
           df1.join(df2, df1("id") === df2("id")),
           Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
       }
     }
-  }
 
   test(s"${testPrefix}SPARK-54157: join refreshes both sides after same-session insert" +
       " (table with both table and column ID support)") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+      withTable(testTable) {
+        spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(testTable)
+        val df1 = spark.table(testTable)
 
-        session.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (2, 200)").collect()
 
-        val df2 = session.table(testTable)
+        val df2 = spark.table(testTable)
 
-        checkRows(
+        checkAnswer(
           df1.join(df2, df1("id") === df2("id")),
           Seq(Row(1, 100, 1, 100), Row(2, 200, 2, 200)))
       }
     }
-  }
 
   // ---------------------------------------------------------------------------
   // Scenario 2: join after ADD COLUMN.
@@ -92,70 +88,66 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
   test(s"${testPrefix}SPARK-54157: join after external ADD COLUMN" +
       " (table with both table and column ID support)") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+      withTable(testTable) {
+        spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(testTable)
+        val df1 = spark.table(testTable)
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
         catalog.alterTable(
           testIdent, TableChange.addColumn(Array("new_column"), IntegerType, true))
         externalAppend(
           catalog = catalog, ident = testIdent, row = InternalRow(2, 200, -1))
 
-        val df2 = session.table(testTable)
+        val df2 = spark.table(testTable)
         val selfJoin = df1.join(df2, df1("id") === df2("id"))
 
         if (isConnect) {
           // Connect re-resolves df1 with the new 3-column schema (id, salary, new_column).
           assert(selfJoin.columns.length == 6,
             s"Expected 6 columns (3 + 3) but got: ${selfJoin.columns.mkString(", ")}")
-          checkRows(selfJoin,
+          checkAnswer(selfJoin,
             Seq(Row(1, 100, null, 1, 100, null), Row(2, 200, -1, 2, 200, -1)))
         } else {
           // Classic: df1 keeps its original 2-column schema (id, salary).
           assert(selfJoin.columns.length == 5,
             s"Expected 5 columns (2 + 3) but got: ${selfJoin.columns.mkString(", ")}")
-          checkRows(selfJoin,
+          checkAnswer(selfJoin,
             Seq(Row(1, 100, 1, 100, null), Row(2, 200, 2, 200, -1)))
         }
       }
     }
-  }
 
   test(s"${testPrefix}SPARK-54157: join after same-session ADD COLUMN" +
       " (table with both table and column ID support)") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+      withTable(testTable) {
+        spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(testTable)
+        val df1 = spark.table(testTable)
 
-        session.sql(s"ALTER TABLE $testTable ADD COLUMN new_column INT").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (2, 200, -1)").collect()
+        spark.sql(s"ALTER TABLE $testTable ADD COLUMN new_column INT").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (2, 200, -1)").collect()
 
-        val df2 = session.table(testTable)
+        val df2 = spark.table(testTable)
         val selfJoin = df1.join(df2, df1("id") === df2("id"))
 
         if (isConnect) {
           // Connect re-resolves df1 with the new 3-column schema (id, salary, new_column).
           assert(selfJoin.columns.length == 6,
             s"Expected 6 columns (3 + 3) but got: ${selfJoin.columns.mkString(", ")}")
-          checkRows(selfJoin,
+          checkAnswer(selfJoin,
             Seq(Row(1, 100, null, 1, 100, null), Row(2, 200, -1, 2, 200, -1)))
         } else {
           // Classic: df1 keeps its original 2-column schema (id, salary).
           assert(selfJoin.columns.length == 5,
             s"Expected 5 columns (2 + 3) but got: ${selfJoin.columns.mkString(", ")}")
-          checkRows(selfJoin,
+          checkAnswer(selfJoin,
             Seq(Row(1, 100, 1, 100, null), Row(2, 200, 2, 200, -1)))
         }
       }
     }
-  }
 
   // ---------------------------------------------------------------------------
   // Scenario 3: join after DROP COLUMN.
@@ -165,23 +157,22 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
   test(s"${testPrefix}SPARK-54157: join after external DROP COLUMN" +
       " (table with both table and column ID support)") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+      withTable(testTable) {
+        spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(testTable)
+        val df1 = spark.table(testTable)
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
         catalog.alterTable(
           testIdent, TableChange.deleteColumn(Array("salary"), false))
         externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2))
 
-        val df2 = session.table(testTable)
+        val df2 = spark.table(testTable)
 
         if (isConnect) {
           // Connect re-resolves df1 without the dropped column.
-          checkRows(
+          checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
             Seq(Row(1, 1), Row(2, 2)))
         } else {
@@ -196,25 +187,23 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         }
       }
     }
-  }
 
   test(s"${testPrefix}SPARK-54157: join after same-session DROP COLUMN" +
       " (table with both table and column ID support)") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+      withTable(testTable) {
+        spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(testTable)
+        val df1 = spark.table(testTable)
 
-        session.sql(s"ALTER TABLE $testTable DROP COLUMN salary").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (2)").collect()
+        spark.sql(s"ALTER TABLE $testTable DROP COLUMN salary").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (2)").collect()
 
-        val df2 = session.table(testTable)
+        val df2 = spark.table(testTable)
 
         if (isConnect) {
           // Connect re-resolves df1 without the dropped column.
-          checkRows(
+          checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
             Seq(Row(1, 1), Row(2, 2)))
         } else {
@@ -229,7 +218,6 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         }
       }
     }
-  }
 
   // ---------------------------------------------------------------------------
   // Scenario 4: external drop and recreate table.
@@ -240,13 +228,12 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
   test(s"${testPrefix}SPARK-54157: join after external table drop and recreate" +
       " (table with both table and column ID support)") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+      withTable(testTable) {
+        spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(testTable)
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val df1 = spark.table(testTable)
+        val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
         val originTableId = catalog.loadTable(testIdent).id
 
         catalog.dropTable(testIdent)
@@ -259,13 +246,13 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             .build())
         externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
-        val df2 = session.table(testTable)
+        val df2 = spark.table(testTable)
         val newTableId = catalog.loadTable(testIdent).id
         assert(originTableId != newTableId)
 
         if (isConnect) {
           // Connect re-resolves both sides to the recreated table.
-          checkRows(
+          checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
             Seq(Row(2, 200, 2, 200)))
         } else {
@@ -283,18 +270,16 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         }
       }
     }
-  }
 
   test(s"${testPrefix}SPARK-54157: join after external drop/recreate" +
       " (table without table ID support, but with column ID support)") {
     val nullIdT = "nullidcat.ns1.ns2.tbl"
-    withTestSession { session =>
-      withTestTableAndViews(session, nullIdT) {
-        session.sql(s"CREATE TABLE $nullIdT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $nullIdT VALUES (1, 100)").collect()
+      withTable(nullIdT) {
+        spark.sql(s"CREATE TABLE $nullIdT (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $nullIdT VALUES (1, 100)").collect()
 
-        val df1 = session.table(nullIdT)
-        val catalog = getTableCatalog[TableCatalog](session, "nullidcat")
+        val df1 = spark.table(nullIdT)
+        val catalog = getTableCatalog[TableCatalog](spark, "nullidcat")
         assert(catalog.loadTable(testIdent).id == null,
           "NullTableIdInMemoryTableCatalog should produce null table IDs")
 
@@ -308,11 +293,11 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             .build())
         externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
-        val df2 = session.table(nullIdT)
+        val df2 = spark.table(nullIdT)
 
         if (isConnect) {
           // Connect re-resolves both sides to the recreated table.
-          checkRows(
+          checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
             Seq(Row(2, 200, 2, 200)))
         } else {
@@ -327,19 +312,17 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         }
       }
     }
-  }
 
   test(s"${testPrefix}SPARK-54157: join does not detect external table drop and recreate" +
       " (table without table ID support and without column ID support)") {
     val nullBothT = "nullbothidscat.ns1.ns2.tbl"
-    withTestSession { session =>
-      withTestTableAndViews(session, nullBothT) {
-        session.sql(s"CREATE TABLE $nullBothT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $nullBothT VALUES (1, 100)").collect()
+      withTable(nullBothT) {
+        spark.sql(s"CREATE TABLE $nullBothT (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $nullBothT VALUES (1, 100)").collect()
 
-        val df1 = session.table(nullBothT)
+        val df1 = spark.table(nullBothT)
         val catalog = getTableCatalog[TableCatalog](
-          session, "nullbothidscat")
+          spark, "nullbothidscat")
         assert(catalog.loadTable(testIdent).id == null,
           "NullTableIdAndNullColumnIdInMemoryTableCatalog should produce null table IDs")
         assert(catalog.loadTable(testIdent).columns().forall(_.id() == null),
@@ -355,12 +338,12 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
             .build())
         externalAppend(catalog = catalog, ident = testIdent, row = InternalRow(2, 200))
 
-        val df2 = session.table(nullBothT)
+        val df2 = spark.table(nullBothT)
 
         if (isConnect) {
           // Connect re-resolves both sides to the recreated table, so the join
           // sees the row appended after recreate.
-          checkRows(
+          checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
             Seq(Row(2, 200, 2, 200)))
         } else {
@@ -368,13 +351,12 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
           // drop and recreate goes undetected. df1 keeps its pre-drop snapshot
           // (1, 100) while df2 reads the recreated table (2, 200), so the join finds
           // no matching ids and returns no rows.
-          checkRows(
+          checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
             Seq.empty)
         }
       }
     }
-  }
 
   // ---------------------------------------------------------------------------
   // Scenario 5: external drop+re-add column.
@@ -385,24 +367,23 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
   test(s"${testPrefix}SPARK-54157: join after external drop+re-add column" +
       " (table without table ID support, but with column ID support)") {
     val nullIdT = "nullidcat.ns1.ns2.tbl"
-    withTestSession { session =>
-      withTestTableAndViews(session, nullIdT) {
-        session.sql(s"CREATE TABLE $nullIdT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $nullIdT VALUES (1, 100)").collect()
+      withTable(nullIdT) {
+        spark.sql(s"CREATE TABLE $nullIdT (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $nullIdT VALUES (1, 100)").collect()
 
-        val df1 = session.table(nullIdT)
+        val df1 = spark.table(nullIdT)
 
-        val catalog = getTableCatalog[TableCatalog](session, "nullidcat")
+        val catalog = getTableCatalog[TableCatalog](spark, "nullidcat")
         catalog.alterTable(
           testIdent, TableChange.deleteColumn(Array("salary"), false))
         catalog.alterTable(
           testIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
 
-        val df2 = session.table(nullIdT)
+        val df2 = spark.table(nullIdT)
 
         if (isConnect) {
           // Connect re-resolves both sides with the new column ID.
-          checkRows(
+          checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
             Seq(Row(1, null, 1, null)))
         } else {
@@ -417,35 +398,31 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         }
       }
     }
-  }
 
   test(s"${testPrefix}SPARK-54157: join does not detect external drop+re-add column" +
       " (table without table ID support and without column ID support)") {
     val nullBothT = "nullbothidscat.ns1.ns2.tbl"
-    withTestSession { session =>
-      withTestTableAndViews(session, nullBothT) {
-        session.sql(s"CREATE TABLE $nullBothT (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $nullBothT VALUES (1, 100)").collect()
+      withTable(nullBothT) {
+        spark.sql(s"CREATE TABLE $nullBothT (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $nullBothT VALUES (1, 100)").collect()
 
-        val df1 = session.table(nullBothT)
+        val df1 = spark.table(nullBothT)
 
-        val catalog = getTableCatalog[TableCatalog](
-          session, "nullbothidscat")
+        val catalog = getTableCatalog[TableCatalog](spark, "nullbothidscat")
         catalog.alterTable(
           testIdent, TableChange.deleteColumn(Array("salary"), false))
         catalog.alterTable(
           testIdent, TableChange.addColumn(Array("salary"), IntegerType, true))
 
-        val df2 = session.table(nullBothT)
+        val df2 = spark.table(nullBothT)
 
         // Neither TABLE_ID_MISMATCH nor COLUMN_ID_MISMATCH fires.
         // The change goes undetected and the join succeeds.
-        checkRows(
+        checkAnswer(
           df1.join(df2, df1("id") === df2("id")),
           Seq(Row(1, null, 1, null)))
       }
     }
-  }
 
   // ---------------------------------------------------------------------------
   // Scenario 6: external type change (drop INT column, add STRING column).
@@ -457,14 +434,13 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
 
   test(s"${testPrefix}SPARK-54157: join after external drop+re-add different-type column" +
       " (table with both table and column ID support)") {
-    withTestSession { session =>
-      withTestTableAndViews(session, testTable) {
-        session.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
-        session.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
+      withTable(testTable) {
+        spark.sql(s"CREATE TABLE $testTable (id INT, salary INT) USING foo").collect()
+        spark.sql(s"INSERT INTO $testTable VALUES (1, 100)").collect()
 
-        val df1 = session.table(testTable)
+        val df1 = spark.table(testTable)
 
-        val catalog = getTableCatalog[InMemoryTableCatalog](session, "testcat")
+        val catalog = getTableCatalog[InMemoryTableCatalog](spark, "testcat")
         catalog.alterTable(
           testIdent, TableChange.deleteColumn(Array("salary"), false))
         catalog.alterTable(
@@ -472,11 +448,11 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         externalAppend(catalog = catalog, ident = testIdent,
           row = InternalRow(2, UTF8String.fromString("high")))
 
-        val df2 = session.table(testTable)
+        val df2 = spark.table(testTable)
 
         if (isConnect) {
           // Connect re-resolves both sides with the new column type.
-          checkRows(
+          checkAnswer(
             df1.join(df2, df1("id") === df2("id")),
             Seq(Row(1, null, 1, null), Row(2, "high", 2, "high")))
         } else {
@@ -491,5 +467,4 @@ trait DSv2IncrementallyConstructedQueryTests extends DSv2ExternalMutationTestBas
         }
       }
     }
-  }
 }
