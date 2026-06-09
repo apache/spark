@@ -206,4 +206,23 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
       }
     }
   }
+
+  test("SPARK-57102: nanos timestamps round-trip via the V2 file source") {
+    withNanosEnabled {
+      withSQLConf(
+        SQLConf.USE_V1_SOURCE_LIST.key -> "",
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          val df = spark.sql(
+            "SELECT TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789' AS ntz, " +
+            "TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789' AS ltz")
+          df.write.parquet(dir.getCanonicalPath)
+          val read = spark.read.parquet(dir.getCanonicalPath)
+          assert(read.schema("ntz").dataType === TimestampNTZNanosType(9))
+          assert(read.schema("ltz").dataType === TimestampLTZNanosType(9))
+          checkAnswer(read, df.collect().toSeq)
+        }
+      }
+    }
+  }
 }

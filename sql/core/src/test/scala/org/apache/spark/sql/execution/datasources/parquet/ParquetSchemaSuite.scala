@@ -1111,13 +1111,15 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
   test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.read.parquet(testDataPath).collect()
-      },
-      condition = "PARQUET_TYPE_ILLEGAL",
-      parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
-    )
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.parquet(testDataPath).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
+      )
+    }
   }
 
   test("SPARK-47261: parquet file with unsupported type") {
