@@ -672,6 +672,19 @@ private[spark] class DAGScheduler(
         log"shuffle ${MDC(SHUFFLE_ID, shuffleDep.shuffleId)}")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length,
         shuffleDep.partitioner.numPartitions)
+      // This is used for streaming shuffle.  The query that uses streaming shuffle
+      // can also be registered to the mapOutputTracker but it will essentially be a no-op
+      sc.env.streamingShuffleOutputTracker.foreach(tracker => {
+        logInfo(s"Registering RDD ${rdd.id} (${rdd.getCreationSite}) as input to " +
+          s"streaming shuffle ${shuffleDep.shuffleId}")
+        tracker
+          .asInstanceOf[StreamingShuffleOutputTrackerMaster]
+          .registerShuffle(
+            shuffleDep.shuffleId,
+            rdd.partitions.length,
+            shuffleDep.partitioner.numPartitions,
+            jobId)
+      })
     }
     stage
   }

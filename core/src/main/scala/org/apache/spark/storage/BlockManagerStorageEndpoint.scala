@@ -60,6 +60,10 @@ class BlockManagerStorageEndpoint(
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
+        // Unregister the shuffle with the streaming shuffle output tracker if streaming shuffle
+        // is enabled. The map output tracker unregister above is a no-op in that case.
+        SparkEnv.get.streamingShuffleOutputTracker.foreach(
+          tracker => tracker.unregisterShuffle(shuffleId))
         val shuffleManager = SparkEnv.get.shuffleManager
         if (shuffleManager != null) {
           shuffleManager.unregisterShuffle(shuffleId)
