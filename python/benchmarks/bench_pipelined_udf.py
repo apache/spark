@@ -28,7 +28,7 @@ import pandas as pd
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf
-from pyspark.sql.types import LongType
+from pyspark.sql.types import LongType, StringType
 
 
 class _PipelinedUDFBenchBase:
@@ -159,5 +159,66 @@ class LargeDataUDFTimeBench(_PipelinedUDFBenchBase):
 
     def peakmem_large_data(self, pipelined):
         self.spark.range(5000000).select(self._add_one(col("id")).alias("result")).write.format(
+            "noop"
+        ).mode("overwrite").save()
+
+
+class WideRowUDFTimeBench(_PipelinedUDFBenchBase):
+    """Benchmark scalar UDF with larger per-batch in-memory size.
+
+    Each row carries a wide string payload and the Arrow batch size is bumped so
+    one batch is ~10-50 MB rather than ~80 KB. This exercises the regime that
+    Yicong-Huang asked about in the SPARK-56642 review: how does pipelined mode
+    behave when each batch is large enough that the queue's memory overhead is
+    no longer negligible?
+    """
+
+    # (pipelined, n_rows, payload_chars, records_per_batch)
+    # 50_000 rows * 1024 chars = ~50 MB raw per dataset; with records_per_batch
+    # = 10_000 that's ~10 MB per Arrow batch.
+    params = [
+        [False, True],
+        [(50_000, 1024, 10_000), (50_000, 4096, 5_000)],
+    ]
+    param_names = ["pipelined", "shape"]
+
+    def setup(self, pipelined, shape):
+        n_rows, payload_chars, records_per_batch = shape
+        self._setup_spark(pipelined)
+        self.spark.conf.set(
+            "spark.sql.execution.arrow.maxRecordsPerBatch", str(records_per_batch)
+        )
+        self._n_rows = n_rows
+        self._payload_chars = payload_chars
+
+        @pandas_udf(StringType())
+        def _wide_passthrough(s: pd.Series) -> pd.Series:
+            # Non-trivial work proportional to row width so the UDF actually
+            # holds a batch for a measurable amount of time.
+            return s.str.upper()
+
+        self._wide_udf = _wide_passthrough
+
+    def teardown(self, pipelined, shape):
+        self._teardown_spark()
+
+    def _make_df(self):
+        chars = self._payload_chars
+
+        @pandas_udf(StringType())
+        def _make_payload(x: pd.Series) -> pd.Series:
+            return pd.Series(["x" * chars] * len(x))
+
+        return self.spark.range(self._n_rows).select(
+            _make_payload(col("id")).alias("payload")
+        )
+
+    def time_wide_row_udf(self, pipelined, shape):
+        self._make_df().select(self._wide_udf(col("payload")).alias("result")).write.format(
+            "noop"
+        ).mode("overwrite").save()
+
+    def peakmem_wide_row_udf(self, pipelined, shape):
+        self._make_df().select(self._wide_udf(col("payload")).alias("result")).write.format(
             "noop"
         ).mode("overwrite").save()
