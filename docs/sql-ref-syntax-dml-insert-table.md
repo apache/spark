@@ -334,8 +334,8 @@ SELECT * FROM students;
 +----------+-------------+-------------------------+
 |student_id|         name|                  address|
 +----------+-------------+-------------------------+
-|    444444|    Bob Brown|                     null|
-|    555555|Cathy Johnson|                     null|
+|    444444|    Bob Brown|                     NULL|
+|    555555|Cathy Johnson|                     NULL|
 |    111111|   Ashua Hill|  456 Erica Ct, Cupertino|
 |    222222|Dora Williams|134 Forest Ave, Melo Park|
 +----------+-------------+-------------------------+
