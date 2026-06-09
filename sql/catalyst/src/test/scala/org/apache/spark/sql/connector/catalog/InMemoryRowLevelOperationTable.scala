@@ -79,6 +79,18 @@ class InMemoryRowLevelOperationTable private (
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
 
+  private var truncationTarget: InMemoryRowLevelOperationTable = _
+
+  override def truncateTable(): Boolean = {
+    if (truncationTarget != null) {
+      // SPARK-56995: loadTable returns snapshot copies for cache-staleness tests. DDL TRUNCATE
+      // must still mutate the catalog's live table, not only the resolved snapshot.
+      truncationTarget.truncateTable()
+    } else {
+      super.truncateTable()
+    }
+  }
+
   override def copy(): Table = {
     val copied = InMemoryRowLevelOperationTable.withColumns(
       name = name,
@@ -87,6 +99,7 @@ class InMemoryRowLevelOperationTable private (
       properties = properties,
       constraints = constraints,
       tableId = id)
+    copied.truncationTarget = Option(truncationTarget).getOrElse(this)
     dataMap.synchronized {
       dataMap.foreach { case (key, splits) =>
         val copiedSplits = splits.map { bufferedRows =>
