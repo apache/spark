@@ -322,7 +322,7 @@ INSERT INTO new_students VALUES
     (222222, 'Dora Williams', '134 Forest Ave, Menlo Park');
 
 -- Evolve the students table schema to add the new address column from the query.
-INSERT WITH SCHEMA EVOLUTION INTO TABLE students
+INSERT WITH SCHEMA EVOLUTION INTO students
     SELECT * FROM new_students;
 
 SELECT * FROM students;
