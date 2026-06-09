@@ -105,9 +105,9 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
   }
 
   test("CleanerCache.cleanUpAll unregisters the streaming listener") {
-    // close() does not remove the StreamingRunnerCleanerListener (it is not tracked in the session's
-    // listenerCache), so cleanUpAll() must drop it; otherwise the listener keeps the cache / session
-    // reachable after the session is closed.
+    // close() does not remove the StreamingRunnerCleanerListener (it is not tracked in the
+    // session's listenerCache), so cleanUpAll() must drop it; otherwise the listener keeps the
+    // cache / session reachable after the session is closed.
     val cleaner = mock[AutoCloseable]
     val query = mockQuery()
     val cache = new StreamingForeachBatchHelper.CleanerCache(

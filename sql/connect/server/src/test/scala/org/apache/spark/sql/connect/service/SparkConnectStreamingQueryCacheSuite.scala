@@ -192,8 +192,8 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
     // The cleanup removes the entry by query identity (computeIfPresent matching current.query eq
     // query), not by case-class value equality, so removal still succeeds even if the maintenance
     // thread concurrently rewrites the entry's expiresAtMs after seeing the just-stopped query.
-    // That specific maintenance-vs-cleanup interleaving is not exercised as a separate test because
-    // it is not deterministically reproducible; the identity match makes it correct by construction.
+    // That specific maintenance-vs-cleanup interleaving is not exercised as a separate test
+    // because it is not deterministically reproducible; the identity match makes it correct.
     eventually(timeout(1.minute)) {
       verify(mockQuery).stop()
       assert(sessionMgr.getCachedValue(queryId, runId).isEmpty)
@@ -238,9 +238,9 @@ class SparkConnectStreamingQueryCacheSuite extends SparkFunSuite with MockitoSug
 
   test("Query registration racing with session shutdown leaves no query running") {
     // Exercises the actual race: registerNewStreamingQuery runs concurrently with the session
-    // shutdown sequence (close() sets closedTimeMs, then cleanupRunningQueries() stops the session's
-    // queries by iterating the cache). Whatever the interleaving, the query must end up stopped and
-    // never stranded (left running while holding a reference to the closed session).
+    // shutdown sequence (close() sets closedTimeMs, then cleanupRunningQueries() stops the
+    // session's queries by iterating the cache). Whatever the interleaving, the query must end up
+    // stopped and never stranded (left running while holding a reference to the closed session).
     val sessionMgr = createSessionManager()
     val numIterations = 200
     try {

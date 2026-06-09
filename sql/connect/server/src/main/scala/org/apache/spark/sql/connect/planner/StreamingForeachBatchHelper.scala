@@ -215,11 +215,11 @@ object StreamingForeachBatchHelper extends Logging {
     // Mapping from streaming (queryId, runId) to runner cleaner. Used for Python foreachBatch.
     private val cleanerCache: ConcurrentMap[CacheKey, AutoCloseable] = new ConcurrentHashMap()
 
-    // The runner clean-up listener, registered on first use and removed on cleanup. Both operations
-    // are guarded by `this`, and the field is recoverable: after removal a later registration re-adds
-    // a fresh listener, so cleanUpAll() does not permanently disable the cache if it is reused.
-    // (Today cleanUpAll() is only called on the close path, after which registration fast-paths on
-    // isClosing -- but correctness no longer depends on that being the only caller.)
+    // The runner clean-up listener, registered on first use and removed on cleanup. Both
+    // operations are guarded by `this`, and the field is recoverable: after removal a later
+    // registration re-adds a fresh listener, so cleanUpAll() does not permanently disable the cache
+    // if it is reused. (Today cleanUpAll() is only called on the close path, after which
+    // registration fast-paths on isClosing -- but correctness no longer depends on that.)
     private var streamingListener: StreamingRunnerCleanerListener = _
 
     private def ensureListenerRegistered(): Unit = synchronized {
@@ -234,10 +234,10 @@ object StreamingForeachBatchHelper extends Logging {
       }
     }
 
-    // Removes the listener from session.streams if it is currently registered. SessionHolder.close()
-    // does not remove this listener (it is not tracked in the session's listenerCache), so the cache
-    // must drop it on cleanup; otherwise the listener keeps this CleanerCache / SessionHolder
-    // reachable after the session is closed.
+    // Removes the listener from session.streams if it is currently registered.
+    // SessionHolder.close() does not remove this listener (it is not tracked in the session's
+    // listenerCache), so the cache must drop it on cleanup; otherwise the listener keeps this
+    // CleanerCache / SessionHolder reachable after the session is closed.
     private def removeListenerIfRegistered(): Unit = synchronized {
       if (streamingListener != null) {
         sessionHolder.session.streams.removeListener(streamingListener)
