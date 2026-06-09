@@ -116,13 +116,6 @@ class SQLLastAttemptMetricPlanShapesSuite
 
     def isAQE: Boolean = SQLConf.get.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
 
-    def hasStageRetries: Boolean = spark.sparkContext.conf
-      .getOption(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key).contains("true")
-
-    def hasChecksumMismatch: Boolean = spark.sparkContext.conf
-      .getOption(config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key)
-      .contains("true")
-
     def hasAQEReplans: Boolean = AQETestHelper.isForcedCancellationEnabled
   }
 
