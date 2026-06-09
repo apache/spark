@@ -3707,11 +3707,11 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
 
             def _reader_thread():
                 try:
-                    for batch in deserializer.load_stream(infile):
+                    for batch in deserializer.load_stream(input_data_stream):
                         # Some serializers (e.g., ArrowStreamGroupSerializer,
                         # ArrowStreamAggPandasUDFSerializer) yield lazy iterators
-                        # that still read from infile. Materialize them here so the
-                        # main thread can consume them without touching infile.
+                        # that still read from the input stream. Materialize them here so
+                        # the main thread can consume them without touching the stream.
                         if hasattr(batch, "__next__"):
                             batch = list(batch)
                         # Block on put, but wake up when stop_event is set.
@@ -3749,7 +3749,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                         return
                     yield item
 
-            out_iter = func(split_index, _queued_iter())
+            out_iter = func(init_info.split_index, _queued_iter())
             try:
                 serializer.dump_stream(out_iter, outfile)
             finally:
@@ -3763,17 +3763,17 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                         input_queue.get_nowait()
                 except Exception:
                     pass
-                # If the reader is still blocked in infile.read(), the stop_event check
-                # only fires between put attempts -- it cannot interrupt a syscall.
-                # Force-closing infile here would break worker reuse (the next task uses
+                # If the reader is still blocked in input_data_stream.read(), the stop_event
+                # check only fires between put attempts -- it cannot interrupt a syscall.
+                # Force-closing the stream here would break worker reuse (the next task uses
                 # the same socket fd), so we settle for a bounded join and a loud warning
                 # so an undetected leak shows up in the worker log.
                 t.join(timeout=5)
                 if t.is_alive():
                     warnings.warn(
                         "pipelined reader thread did not exit within 5s; "
-                        "it may still be blocked in infile.read() and could read data "
-                        "intended for a subsequent reused-worker task. "
+                        "it may still be blocked in input_data_stream.read() and could "
+                        "read data intended for a subsequent reused-worker task. "
                         "Consider disabling spark.python.worker.reuse if this recurs.",
                         RuntimeWarning,
                     )
