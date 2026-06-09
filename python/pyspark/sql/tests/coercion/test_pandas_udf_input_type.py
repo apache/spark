@@ -234,8 +234,13 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         ]
 
     def test_pandas_input_type_coercion_vanilla(self):
+        # Pandas >= 3.0 reports the dedicated 'str' dtype for string columns,
+        # whereas earlier versions report 'object', which changes the recorded
+        # Python types. Keep a dedicated golden file per major pandas version
+        # instead of patching the pandas-2 golden in memory.
+        suffix = "_pandas3" if LooseVersion(pd.__version__) >= LooseVersion("3.0.0") else ""
         self._run_pandas_udf_input_type_coercion(
-            golden_file=f"{self.prefix}_base",
+            golden_file=f"{self.prefix}_base{suffix}",
             test_name="Pandas UDF",
         )
 
@@ -251,14 +256,6 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         golden = None
         if not generating:
             golden = self.load_golden_csv(golden_csv)
-            # Pandas >= 3.0 reports the dedicated 'str' dtype for string columns,
-            # whereas earlier versions report 'object'. Patch the in-memory golden
-            # so the same file works under both versions.
-            if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
-                str_rows = golden["Spark Type"] == "string"
-                golden.loc[str_rows, "Python Type"] = golden.loc[
-                    str_rows, "Python Type"
-                ].str.replace("'object'", "'str'")
 
         results = []
         for idx, (case_name, spark_type, data_func) in enumerate(self.test_cases):
