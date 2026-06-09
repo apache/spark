@@ -217,7 +217,14 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       }
     }
 
-    a.groupingExpressions.foreach(checkValidGroupingExprs)
+    // Skip grouping-expression validation when unexpanded BaseGroupingSets are present:
+    // calling .dataType on them would throw. They are validated post-expansion instead.
+    // Aggregate-expression validation (nested agg, missing group-by, etc.) still runs.
+    val skipGroupingChecks =
+      a.groupingExpressions.exists(_.isInstanceOf[BaseGroupingSets])
+    if (!skipGroupingChecks) {
+      a.groupingExpressions.foreach(checkValidGroupingExprs)
+    }
     a.aggregateExpressions.foreach(checkValidAggregateExpression)
   }
 }

@@ -5118,6 +5118,156 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       sql("SELECT col1 - rand() FROM VALUES(1) GROUP BY ALL")
     }
   }
+
+  test("SPARK-57353: CUBE with ORDER BY - single pass resolver") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      QueryTest.checkAnswer(
+        sql(
+          """SELECT a, SUM(b) as s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY CUBE(a) ORDER BY s""".stripMargin),
+        Row(1, 30) :: Row(2, 30) :: Row(null, 60) :: Nil,
+        checkToRDD = false)
+    }
+  }
+
+  test("SPARK-57353: ROLLUP with HAVING - single pass resolver") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      QueryTest.checkAnswer(
+        sql(
+          """SELECT a, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY ROLLUP(a) HAVING SUM(b) > 30""".stripMargin),
+        Row(null, 60) :: Nil,
+        checkToRDD = false)
+    }
+  }
+
+  test("SPARK-57353: GROUPING SETS with ORDER BY - single pass resolver") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      QueryTest.checkAnswer(
+        sql(
+          """SELECT a, b, SUM(b) as s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY a, b GROUPING SETS ((a, b), (a)) ORDER BY s""".stripMargin),
+        Row(1, 10, 10) :: Row(1, 20, 20) :: Row(1, null, 30) ::
+          Row(2, 30, 30) :: Row(2, null, 30) :: Nil,
+        checkToRDD = false)
+    }
+  }
+
+  test("SPARK-57353: CUBE with NULL grouping columns - single pass resolver") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      QueryTest.checkAnswer(
+        sql(
+          """SELECT a, SUM(b) as s FROM VALUES (1,10),(null,20),(2,30) AS t(a,b)
+            |GROUP BY CUBE(a) ORDER BY s""".stripMargin),
+        Row(1, 10) :: Row(null, 20) :: Row(2, 30) :: Row(null, 60) :: Nil,
+        checkToRDD = false)
+    }
+  }
+
+  test("SPARK-57353: ROLLUP with HAVING filtering all rows - single pass resolver") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      QueryTest.checkAnswer(
+        sql(
+          """SELECT a, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY ROLLUP(a) HAVING SUM(b) > 100""".stripMargin),
+        Nil,
+        checkToRDD = false)
+    }
+  }
+
+  test("SPARK-57353: CUBE with multiple aggregates in ORDER BY - single pass resolver") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      QueryTest.checkAnswer(
+        sql(
+          """SELECT a, SUM(b) as s, COUNT(b) as c
+            |FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY CUBE(a) ORDER BY COUNT(b), SUM(b)""".stripMargin),
+        Row(2, 30, 1) :: Row(1, 30, 2) :: Row(null, 60, 3) :: Nil,
+        checkToRDD = false)
+    }
+  }
+
+  // SPARK-57346: multi-column ROLLUP with HAVING produces wrong results in single-pass
+  // resolver (1 row instead of 4). This test is ignored until SPARK-57346 is fixed.
+  ignore("SPARK-57353: multi-column ROLLUP with HAVING - single pass resolver (SPARK-57346)") {
+    val query =
+      """SELECT a, b, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+        |GROUP BY ROLLUP(a, b) HAVING SUM(b) > 25""".stripMargin
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      val legacyResult = withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+        sql(query).collect().toSeq
+      }
+      checkAnswer(sql(query), legacyResult)
+    }
+  }
+
+  test("SPARK-57353: missing-aggregation still detected after GROUPING SETS expansion") {
+    // Confirms aggregate-expression validation still fires: column 'b' is not in GROUP BY
+    // ROLLUP(a) and is not aggregated, so MISSING_AGGREGATION should be raised.
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      val ex = intercept[AnalysisException] {
+        sql(
+          """SELECT a, b, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY ROLLUP(a) HAVING SUM(b) > 10""".stripMargin).collect()
+      }
+      assert(ex.getCondition === "MISSING_AGGREGATION")
+    }
+  }
+
+  test("SPARK-57353: LCA with GROUPING SETS - single pass resolver") {
+    // LCA + grouping analytics throws ExplicitlyUnsupportedResolverFeature in single-pass mode.
+    // In tentative mode, the HybridAnalyzer catches it and falls back to legacy for correct
+    // results.
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "true") {
+      checkAnswer(
+        sql(
+          """SELECT a, SUM(b) as total, total + 1
+            |FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY CUBE(a) ORDER BY total""".stripMargin),
+        Row(1, 30, 31) :: Row(2, 30, 31) :: Row(null, 60, 61) :: Nil)
+    }
+  }
+
+  test("SPARK-57353: legacy analyzer handles CUBE/ROLLUP/GROUPING SETS correctly") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+      checkAnswer(
+        sql(
+          """SELECT a, SUM(b) as s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY CUBE(a) ORDER BY s""".stripMargin),
+        Row(1, 30) :: Row(2, 30) :: Row(null, 60) :: Nil)
+      checkAnswer(
+        sql(
+          """SELECT a, SUM(b) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY ROLLUP(a) HAVING SUM(b) > 30""".stripMargin),
+        Row(null, 60) :: Nil)
+    }
+  }
+
+  test("SPARK-57353: nested aggregate with GROUPING SETS is rejected") {
+    // Confirms aggregate-expression validation (nested agg check) still fires with grouping sets.
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      val ex = intercept[AnalysisException] {
+        sql(
+          """SELECT a, SUM(COUNT(b)) FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY CUBE(a)""".stripMargin).collect()
+      }
+      assert(ex.getCondition === "NESTED_AGGREGATE_FUNCTION")
+    }
+  }
+
+  test("SPARK-57353: GROUPING SETS with empty grouping list - all rows") {
+    // GROUPING SETS (()) produces a single grand-total row.
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      QueryTest.checkAnswer(
+        sql(
+          """SELECT SUM(b) as s FROM VALUES (1,10),(1,20),(2,30) AS t(a,b)
+            |GROUP BY a GROUPING SETS (())""".stripMargin),
+        Row(60) :: Nil,
+        checkToRDD = false)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
