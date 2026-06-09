@@ -22,6 +22,7 @@ import java.util.Arrays;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -116,18 +117,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNulls(int rowId, int count) {
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
-    for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)1;
-    }
+    Arrays.fill(nulls, rowId, rowId + count, (byte) 1);
     numNulls += count;
   }
 
   @Override
   public void putNotNulls(int rowId, int count) {
     if (!hasNull()) return;
-    for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)0;
-    }
+    Arrays.fill(nulls, rowId, rowId + count, (byte) 0);
   }
 
   @Override
@@ -233,6 +230,11 @@ public final class OnHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
+  protected BinaryView getBytesAsBinaryView(int rowId, int count) {
+    return BinaryView.fromBytes(byteData, rowId, count);
+  }
+
+  @Override
   public ByteBuffer getByteBuffer(int rowId, int count) {
     return ByteBuffer.wrap(byteData, rowId, count);
   }
@@ -313,9 +315,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putInts(int rowId, int count, int value) {
-    for (int i = 0; i < count; ++i) {
-      intData[i + rowId] = value;
-    }
+    Arrays.fill(intData, rowId, rowId + count, value);
   }
 
   @Override

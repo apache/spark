@@ -2032,7 +2032,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_bigint", e, k)
@@ -2044,7 +2044,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_bigint", e, lit(k))
@@ -2056,7 +2056,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(columnName: String, k: Int): Column =
     kll_merge_agg_bigint(Column(columnName), k)
@@ -2067,7 +2067,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column): Column =
     Column.fn("kll_merge_agg_bigint", e)
@@ -2078,7 +2078,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(columnName: String): Column =
     kll_merge_agg_bigint(Column(columnName))
@@ -2089,7 +2089,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_float", e, k)
@@ -2100,7 +2100,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_float", e, lit(k))
@@ -2111,7 +2111,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(columnName: String, k: Int): Column =
     kll_merge_agg_float(Column(columnName), k)
@@ -2121,7 +2121,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column): Column =
     Column.fn("kll_merge_agg_float", e)
@@ -2131,7 +2131,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(columnName: String): Column =
     kll_merge_agg_float(Column(columnName))
@@ -2142,7 +2142,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_double", e, k)
@@ -2153,7 +2153,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_double", e, lit(k))
@@ -2164,7 +2164,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(columnName: String, k: Int): Column =
     kll_merge_agg_double(Column(columnName), k)
@@ -2174,7 +2174,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column): Column =
     Column.fn("kll_merge_agg_double", e)
@@ -2184,7 +2184,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(columnName: String): Column =
     kll_merge_agg_double(Column(columnName))
@@ -5221,6 +5221,15 @@ object functions {
   def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
 
   /**
+   * Computes the Jaro-Winkler similarity between the two given string columns. The result is a
+   * double between 0.0 (no similarity) and 1.0 (identical).
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def jaro_winkler_similarity(l: Column, r: Column): Column =
+    Column.fn("jaro_winkler_similarity", l, r)
+
+  /**
    * Locate the position of the first occurrence of substr.
    *
    * @note
@@ -5393,6 +5402,16 @@ object functions {
     regexp_replace(e, lit(pattern), lit(replacement))
 
   /**
+   * Replace all substrings of the specified string value that match regexp with rep, starting at
+   * the specified position `pos`.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def regexp_replace(e: Column, pattern: String, replacement: String, pos: Int): Column =
+    regexp_replace(e, lit(pattern), lit(replacement), lit(pos))
+
+  /**
    * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs
@@ -5400,6 +5419,16 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement)
+
+  /**
+   * Replace all substrings of the specified string value that match regexp with rep, starting at
+   * the specified position `pos`.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def regexp_replace(e: Column, pattern: Column, replacement: Column, pos: Column): Column =
+    Column.fn("regexp_replace", e, pattern, replacement, pos)
 
   /**
    * Returns the substring that matches the regular expression `regexp` within the string `str`.
@@ -11880,6 +11909,78 @@ object functions {
    * @since 3.4.0
    */
   def unwrap_udt(column: Column): Column = Column.internalFn("unwrap_udt", column)
+
+  // ---------------------- Vector Functions ----------------------
+
+  /**
+   * Returns the cosine similarity between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_cosine_similarity(left: Column, right: Column): Column =
+    Column.fn("vector_cosine_similarity", left, right)
+
+  /**
+   * Returns the inner product (dot product) between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_inner_product(left: Column, right: Column): Column =
+    Column.fn("vector_inner_product", left, right)
+
+  /**
+   * Returns the Euclidean (L2) distance between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_l2_distance(left: Column, right: Column): Column =
+    Column.fn("vector_l2_distance", left, right)
+
+  /**
+   * Returns the Lp norm of a float vector. Degree defaults to 2.0 if unspecified.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_norm(vector: Column, degree: Column): Column =
+    Column.fn("vector_norm", vector, degree)
+
+  /**
+   * Returns the Lp norm of a float vector using degree 2.0 (Euclidean norm).
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_norm(vector: Column): Column =
+    Column.fn("vector_norm", vector)
+
+  /**
+   * Normalizes a float vector to unit length. Degree defaults to 2.0 if unspecified.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_normalize(vector: Column, degree: Column): Column =
+    Column.fn("vector_normalize", vector, degree)
+
+  /**
+   * Normalizes a float vector to unit length using degree 2.0 (Euclidean norm).
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_normalize(vector: Column): Column =
+    Column.fn("vector_normalize", vector)
+
+  /**
+   * Aggregate function: returns the element-wise mean of float vectors in a group.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_avg(col: Column): Column = Column.fn("vector_avg", col)
+
+  /**
+   * Aggregate function: returns the element-wise sum of float vectors in a group.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_sum(col: Column): Column = Column.fn("vector_sum", col)
 
   // scalastyle:off
   // TODO(SPARK-45970): Use @static annotation so Java can access to those

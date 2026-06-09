@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, LocalDateTime, LocalTime, Period}
+import java.time.{Duration, LocalDateTime, LocalTime, Period, ZoneOffset}
 import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
@@ -261,8 +261,8 @@ class ExpressionParserSuite extends AnalysisTest {
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a like $quantifier()"),
-        condition = "_LEGACY_ERROR_TEMP_0064",
-        parameters = Map("msg" -> "Expected something between '(' and ')'."),
+        condition = "INVALID_SQL_SYNTAX.EMPTY_QUANTIFIED_PATTERN",
+        parameters = Map.empty,
         context = ExpectedContext(
           fragment = s"like $quantifier()",
           start = 2,
@@ -461,8 +461,8 @@ class ExpressionParserSuite extends AnalysisTest {
     // We cannot use an arbitrary expression.
     checkError(
       exception = parseException("foo(*) over (partition by a order by b rows exp(b) preceding)"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Frame bound value must be a literal."),
+      condition = "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND",
+      parameters = Map.empty,
       context = ExpectedContext(
         fragment = "exp(b) preceding",
         start = 44,
@@ -1184,6 +1184,98 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
+  test("SPARK-57250: nanosecond timestamp typed literals") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+
+    // Expected NTZ / LTZ nanos literals from readable components. The session time zone is fixed
+    // to UTC below so the wall-clock fields of the LTZ literal map to the same instant.
+    def ntz(p: Int, y: Int, mo: Int, d: Int, h: Int, mi: Int, s: Int, nanoOfSec: Int): Literal =
+      Literal(localDateTimeToNanosVal(timestampNTZ(y, mo, d, h, mi, s, nanoOfSec)),
+        TimestampNTZNanosType(p))
+    def ltz(p: Int, y: Int, mo: Int, d: Int, h: Int, mi: Int, s: Int, nanoOfSec: Int): Literal =
+      Literal(instantToNanosVal(timestampLTZ(y, mo, d, h, mi, s, nanoOfSec)),
+        TimestampLTZNanosType(p))
+
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      // Precision is derived from the number of fractional digits (ANSI SQL Subclause 5.3 SR 27).
+      assertEqual("TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567'",
+        ntz(7, 2020, 1, 1, 0, 0, 0, 123456700))
+      assertEqual("TIMESTAMP_NTZ '2020-01-01 00:00:00.12345678'",
+        ntz(8, 2020, 1, 1, 0, 0, 0, 123456780))
+      assertEqual("TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789'",
+        ntz(9, 2020, 1, 1, 0, 0, 0, 123456789))
+
+      // TIMESTAMP_LTZ: value interpreted in the session time zone (UTC here).
+      assertEqual("TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789'",
+        ltz(9, 2020, 1, 1, 0, 0, 0, 123456789))
+
+      // TIMESTAMP_LTZ with an explicit zone offset in the literal: the offset takes precedence
+      // over the session timezone. '2020-01-01 00:00:00.123456789+05:00' is the instant
+      // 2019-12-31 19:00:00.123456789 UTC.
+      assertEqual("TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789+05:00'",
+        Literal(
+          instantToNanosVal(timestampLTZ(2020, 1, 1, 0, 0, 0, 123456789, ZoneOffset.of("+05:00"))),
+          TimestampLTZNanosType(9)))
+
+      // Bare TIMESTAMP keyword resolves to LTZ nanos by default (TIMESTAMP_TYPE = LTZ).
+      assertEqual("TIMESTAMP '2020-01-01 00:00:00.123456789'",
+        ltz(9, 2020, 1, 1, 0, 0, 0, 123456789))
+
+      // Under the NTZ default, bare TIMESTAMP resolves to NTZ nanos, unless the string carries a
+      // time-zone offset, which flips it to LTZ nanos.
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+        assertEqual("TIMESTAMP '2020-01-01 00:00:00.123456789'",
+          ntz(9, 2020, 1, 1, 0, 0, 0, 123456789))
+        assertEqual("TIMESTAMP '2020-01-01 00:00:00.123456789+00:00'",
+          ltz(9, 2020, 1, 1, 0, 0, 0, 123456789))
+      }
+
+      // Boundary values: nanosWithinMicro 0 and 999; pre-epoch (1582) and the max year (9999).
+      assertEqual("TIMESTAMP_NTZ '1970-01-01 00:00:00.000000000'",
+        ntz(9, 1970, 1, 1, 0, 0, 0, 0))
+      assertEqual("TIMESTAMP_NTZ '1970-01-01 00:00:00.000000999'",
+        ntz(9, 1970, 1, 1, 0, 0, 0, 999))
+      assertEqual("TIMESTAMP_NTZ '1582-10-15 23:59:59.123456789'",
+        ntz(9, 1582, 10, 15, 23, 59, 59, 123456789))
+      assertEqual("TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999'",
+        ntz(9, 9999, 12, 31, 23, 59, 59, 999999999))
+
+      // Exactly 6 fractional digits stays a microsecond literal.
+      assertEqual("TIMESTAMP_NTZ '2020-01-01 00:00:00.123456'",
+        Literal(LocalDateTime.parse("2020-01-01T00:00:00.123456")))
+
+      // More than 9 fractional digits is rejected.
+      checkError(
+        exception = parseException("TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567890'"),
+        condition = "INVALID_TIMESTAMP_LITERAL_PRECISION",
+        parameters = Map("value" -> "'2020-01-01 00:00:00.1234567890'"),
+        context = ExpectedContext(
+          fragment = "TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567890'",
+          start = 0,
+          stop = 45))
+
+      // Special values have no fractional part, so nanosLiteralOpt returns None and the
+      // existing special-value path handles them, producing plain microsecond literals.
+      assertEqual("TIMESTAMP_NTZ 'epoch'", Literal(0L, TimestampNTZType))
+    }
+
+    // With the preview flag off, 7-9 digit literals narrow to microseconds (legacy behavior).
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      assertEqual("TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789'",
+        Literal(LocalDateTime.parse("2020-01-01T00:00:00.123456")))
+
+      // More than 9 fractional digits is NOT rejected when the flag is off; the strict
+      // INVALID_TIMESTAMP_LITERAL_PRECISION validation is intentionally flag-gated, so the
+      // literal silently narrows to microseconds via the legacy fall-through path.
+      assertEqual("TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567890'",
+        Literal(LocalDateTime.parse("2020-01-01T00:00:00.123456")))
+    }
+  }
+
   test("date literals") {
     DateTimeTestUtils.outstandingTimezonesIds.foreach { timeZone =>
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
@@ -1232,8 +1324,8 @@ class ExpressionParserSuite extends AnalysisTest {
     Seq("any", "some", "all").foreach { quantifier =>
       checkError(
         exception = parseException(s"a ilike $quantifier()"),
-        condition = "_LEGACY_ERROR_TEMP_0064",
-        parameters = Map("msg" -> "Expected something between '(' and ')'."),
+        condition = "INVALID_SQL_SYNTAX.EMPTY_QUANTIFIED_PATTERN",
+        parameters = Map.empty,
         context = ExpectedContext(
           fragment = s"ilike $quantifier()",
           start = 2,
@@ -1254,5 +1346,16 @@ class ExpressionParserSuite extends AnalysisTest {
         fragment = "time '12-13.14'",
         start = 0,
         stop = 14))
+  }
+
+  test("collate expression origin") {
+    val sql = "a COLLATE utf8_lcase"
+    val parsed = defaultParser.parseExpression(sql)
+    val collation = parsed.collect { case u: UnresolvedCollation => u }
+    assert(collation.length == 1)
+    val origin = collation.head.origin
+    assert(origin.startIndex.isDefined)
+    assert(origin.stopIndex.isDefined)
+    assert(sql.substring(origin.startIndex.get, origin.stopIndex.get + 1) == "utf8_lcase")
   }
 }

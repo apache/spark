@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampWithoutTimeZone}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, ChangelogContext, PathElement, SupportsNamespaces, TableCatalog, TableWritePrivilege}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -1883,10 +1883,9 @@ class AstBuilder extends DataTypeAstBuilder
       entry("TOK_TABLEROWFORMATNULL", ctx.nullDefinedAs) ++
       Option(ctx.linesSeparatedBy).toSeq.map { stringLitCtx =>
         val value = string(visitStringLit(stringLitCtx))
-        validate(
-          value == "\n",
-          s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
-          ctx)
+        if (value != "\n") {
+          throw QueryParsingErrors.unsupportedRowFormatLinesTerminatedByError(value, ctx)
+        }
         "TOK_TABLEROWFORMATLINES" -> value
       }
 
@@ -2319,6 +2318,40 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
   /**
+   * Add an [[UnresolvedBinBy]] to a logical plan; the analyzer rewrites it to [[BinBy]] during
+   * analysis.
+   */
+  private def withBinBy(
+      ctx: BinByClauseContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val binWidth = expression(ctx.binWidth)
+    val originExpr = Option(ctx.origin).map(expression)
+    val rangeStart = UnresolvedAttribute(visitMultipartIdentifier(ctx.rangeStart))
+    val rangeEnd = UnresolvedAttribute(visitMultipartIdentifier(ctx.rangeEnd))
+    val distributeColumns = ctx.distributeCol.asScala
+      .map(c => UnresolvedAttribute(visitMultipartIdentifier(c))).toSeq
+    val outputAliases = BinByOutputAliases(
+      binStart = Option(ctx.binStartAlias).map(getIdentifierText),
+      binEnd = Option(ctx.binEndAlias).map(getIdentifierText),
+      binRatio = Option(ctx.binRatioAlias).map(getIdentifierText))
+
+    val binBy = UnresolvedBinBy(
+      binWidthExpr = binWidth,
+      rangeStartCol = rangeStart,
+      rangeEndCol = rangeEnd,
+      originExpr = originExpr,
+      distributeColumns = distributeColumns,
+      outputAliases = outputAliases,
+      child = query)
+
+    if (ctx.tblAlias != null) {
+      SubqueryAlias(getIdentifierText(ctx.tblAlias), binBy)
+    } else {
+      binBy
+    }
+  }
+
+  /**
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
@@ -2381,9 +2414,11 @@ class AstBuilder extends DataTypeAstBuilder
         withJoinRelation(extension.joinRelation(), left)
       } else if (extension.pivotClause() != null) {
         withPivot(extension.pivotClause(), left)
-      } else {
-        assert(extension.unpivotClause() != null)
+      } else if (extension.unpivotClause() != null) {
         withUnpivot(extension.unpivotClause(), left)
+      } else {
+        assert(extension.binByClause() != null)
+        withBinBy(extension.binByClause(), left)
       }
     }
   }
@@ -2513,9 +2548,9 @@ class AstBuilder extends DataTypeAstBuilder
       // function takes X PERCENT as the input and the range of X is [0, 100], we need to
       // adjust the fraction.
       val eps = RandomSampler.roundingEpsilon
-      validate(fraction >= 0.0 - eps && fraction <= 1.0 + eps,
-        s"Sampling fraction ($fraction) must be on interval [0, 1]",
-        ctx)
+      if (fraction < 0.0 - eps || fraction > 1.0 + eps) {
+        throw QueryParsingErrors.invalidTableSampleFractionError(fraction, ctx)
+      }
       val method = if (isSystem) SampleMethod.System else SampleMethod.Bernoulli
       Sample(0.0, fraction, withReplacement = false, seed, query, method)
     }
@@ -2753,15 +2788,7 @@ class AstBuilder extends DataTypeAstBuilder
    */
   private def resolveChangelogOptions(
       options: CaseInsensitiveStringMap): (ChangelogContext.DeduplicationMode, Boolean) = {
-    val deduplicationModeStr = Option(options.get("deduplicationMode"))
-      .getOrElse("dropCarryovers").toLowerCase(Locale.ROOT)
-    val deduplicationMode = deduplicationModeStr match {
-      case "none" => ChangelogContext.DeduplicationMode.NONE
-      case "dropcarryovers" => ChangelogContext.DeduplicationMode.DROP_CARRYOVERS
-      case "netchanges" => ChangelogContext.DeduplicationMode.NET_CHANGES
-      case other =>
-        throw QueryCompilationErrors.invalidCdcOptionInvalidDeduplicationMode(other)
-    }
+    val deduplicationMode = ChangelogContextUtils.parseDeduplicationMode(options)
     val computeUpdates = options.getBoolean("computeUpdates", false)
     (deduplicationMode, computeUpdates)
   }
@@ -2799,30 +2826,17 @@ class AstBuilder extends DataTypeAstBuilder
       }
       partitionByExpressions = p.partition.asScala.map(expression).toSeq
       orderByExpressions = p.sortItem.asScala.map(visitSortItem).toSeq
-      def invalidPartitionOrOrderingExpression(clause: String): String = {
-        "The table function call includes a table argument with an invalid " +
-          s"partitioning/ordering specification: the $clause clause included multiple " +
-          "expressions without parentheses surrounding them; please add parentheses around " +
-          "these expressions and then retry the query again"
+      Option(p.invalidMultiPartitionExpression).foreach { invalidCtx =>
+        throw QueryParsingErrors.invalidTableFunctionTableArgumentPartitioningError(
+          "PARTITION BY",
+          invalidCtx)
       }
-      validate(
-        Option(p.invalidMultiPartitionExpression).isEmpty,
-        message = invalidPartitionOrOrderingExpression("PARTITION BY"),
-        ctx = p.invalidMultiPartitionExpression)
-      validate(
-        Option(p.invalidMultiSortItem).isEmpty,
-        message = invalidPartitionOrOrderingExpression("ORDER BY"),
-        ctx = p.invalidMultiSortItem)
+      Option(p.invalidMultiSortItem).foreach { invalidCtx =>
+        throw QueryParsingErrors.invalidTableFunctionTableArgumentPartitioningError(
+          "ORDER BY",
+          invalidCtx)
+      }
     }
-    validate(
-      !(withSinglePartition && partitionByExpressions.nonEmpty),
-      message = "WITH SINGLE PARTITION cannot be specified if PARTITION BY is also present",
-      ctx = ctx.tableArgumentPartitioning)
-    validate(
-      !(orderByExpressions.nonEmpty && partitionByExpressions.isEmpty && !withSinglePartition),
-      message = "ORDER BY cannot be specified unless either " +
-        "PARTITION BY or WITH SINGLE PARTITION is also present",
-      ctx = ctx.tableArgumentPartitioning)
     FunctionTableSubqueryArgumentExpression(
       plan = p,
       partitionByExpressions = partitionByExpressions,
@@ -3423,7 +3437,9 @@ class AstBuilder extends DataTypeAstBuilder
       case SqlBaseParser.LIKE | SqlBaseParser.ILIKE =>
         Option(ctx.quantifier).map(_.getType) match {
           case Some(SqlBaseParser.ANY) | Some(SqlBaseParser.SOME) =>
-            validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
+            if (ctx.expression.isEmpty) {
+              throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
+            }
             val expressions = expressionList(ctx.expression)
             if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
               // If there are many pattern expressions, will throw StackOverflowError.
@@ -3439,7 +3455,9 @@ class AstBuilder extends DataTypeAstBuilder
                 .map(p => invertIfNotDefined(getLike(e, p))).toSeq.reduceLeft(Or)
             }
           case Some(SqlBaseParser.ALL) =>
-            validate(!ctx.expression.isEmpty, "Expected something between '(' and ')'.", ctx)
+            if (ctx.expression.isEmpty) {
+              throw QueryParsingErrors.emptyQuantifiedPatternError(ctx)
+            }
             val expressions = expressionList(ctx.expression)
             if (expressions.forall(_.foldable) && expressions.forall(_.dataType == StringType)) {
               // If there are many pattern expressions, will throw StackOverflowError.
@@ -3594,8 +3612,10 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitCollate(ctx: CollateContext): Expression = withOrigin(ctx) {
     val collationName = visitCollateClause(ctx.collateClause())
-
-    Collate(expression(ctx.primaryExpression), UnresolvedCollation(collationName))
+    val unresolvedCollation = withOrigin(ctx.collateClause().collationName) {
+      UnresolvedCollation(collationName)
+    }
+    Collate(expression(ctx.primaryExpression), unresolvedCollation)
   }
 
   override def visitCollateClause(ctx: CollateClauseContext): Seq[String] = withOrigin(ctx) {
@@ -3862,9 +3882,9 @@ class AstBuilder extends DataTypeAstBuilder
   override def visitFrameBound(ctx: FrameBoundContext): Expression = withOrigin(ctx) {
     def value: Expression = {
       val e = expression(ctx.expression)
-      validate(
-        e.resolved && e.foldable || e.isInstanceOf[Parameter],
-        "Frame bound value must be a literal.", ctx)
+      if (!(e.resolved && e.foldable || e.isInstanceOf[Parameter])) {
+        throw QueryParsingErrors.invalidWindowFrameBoundError(ctx)
+      }
       e
     }
 
@@ -4078,6 +4098,39 @@ class AstBuilder extends DataTypeAstBuilder
       specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
     }
 
+    // ANSI SQL (ISO/IEC 9075-2, Subclause 5.3, Syntax Rule 27): the fractional-seconds precision
+    // of a typed timestamp literal is the number of digits in its `<seconds fraction>`. When the
+    // nanosecond preview is enabled and the literal carries 7-9 fractional digits, build a
+    // nanosecond-capable literal with precision `p` equal to that digit count. Literals with <= 6
+    // fractional digits keep the microsecond behavior; more than 9 digits is rejected.
+    def constructTimestampNTZNanosLiteral(p: Int): Literal =
+      toLiteral(stringToTimestampNTZNanos(_, p), TimestampNTZNanosType(p))
+
+    def constructTimestampLTZNanosLiteral(p: Int): Literal = {
+      val zoneId = getZoneId(conf.sessionLocalTimeZone)
+      toLiteral(stringToTimestampLTZNanos(_, p, zoneId), TimestampLTZNanosType(p))
+    }
+
+    // Returns Some(literal) when the nanos preview flag is on and the literal has 7-9 fractional
+    // digits; throws when there are more than 9; returns None (fall back to the micro path) when
+    // the flag is off or there are <= 6 fractional digits.
+    def nanosLiteralOpt(construct: Int => Literal): Option[Literal] = {
+      if (!SQLConf.get.timestampNanosTypesEnabled) {
+        None
+      } else {
+        val p = fractionalSecondsDigits(value)
+        // With the flag off, >9 fractional digits silently truncate to microseconds via
+        // the fall-through path. Strict validation is intentionally flag-gated.
+        if (p > TimestampNTZNanosType.MAX_PRECISION) {
+          throw QueryParsingErrors.timestampLiteralPrecisionExceedsMaxError(value, ctx)
+        } else if (p >= TimestampNTZNanosType.MIN_PRECISION) {
+          Some(construct(p))
+        } else {
+          None
+        }
+      }
+    }
+
     valueType match {
       case DATE =>
         val zoneId = getZoneId(conf.sessionLocalTimeZone)
@@ -4085,11 +4138,14 @@ class AstBuilder extends DataTypeAstBuilder
         specialDate.getOrElse(toLiteral(stringToDate, DateType))
       case TIME => toLiteral(stringToTime, TimeType())
       case TIMESTAMP_NTZ =>
-        convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
-          .map(Literal(_, TimestampNTZType))
-          .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+        nanosLiteralOpt(constructTimestampNTZNanosLiteral).getOrElse {
+          convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
+            .map(Literal(_, TimestampNTZType))
+            .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+        }
       case TIMESTAMP_LTZ =>
-        constructTimestampLTZLiteral(value)
+        nanosLiteralOpt(constructTimestampLTZNanosLiteral)
+          .getOrElse(constructTimestampLTZLiteral(value))
       case TIMESTAMP =>
         SQLConf.get.timestampType match {
           case TimestampNTZType =>
@@ -4101,14 +4157,17 @@ class AstBuilder extends DataTypeAstBuilder
                 // If the input string contains time zone part, return a timestamp with local time
                 // zone literal.
                 if (containsTimeZonePart) {
-                  constructTimestampLTZLiteral(value)
+                  nanosLiteralOpt(constructTimestampLTZNanosLiteral)
+                    .getOrElse(constructTimestampLTZLiteral(value))
                 } else {
-                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+                  nanosLiteralOpt(constructTimestampNTZNanosLiteral)
+                    .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
                 }
               }
 
           case TimestampType =>
-            constructTimestampLTZLiteral(value)
+            nanosLiteralOpt(constructTimestampLTZNanosLiteral)
+              .getOrElse(constructTimestampLTZLiteral(value))
         }
 
       case INTERVAL =>
@@ -4837,11 +4896,15 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
   /**
-   * Create a generation expression string.
+   * Create a generation expression.
    */
-  override def visitGeneratedColumn(ctx: GeneratedColumnContext): String =
+  override def visitGeneratedColumn(ctx: GeneratedColumnContext): GeneratedColumnExpression =
     withOrigin(ctx) {
-      getDefaultExpression(ctx.expression(), "GENERATED").originalSQL
+      val expr = expression(ctx.expression())
+      if (expr.containsPattern(PARAMETER)) {
+        throw QueryParsingErrors.parameterMarkerNotAllowed("GENERATED", expr.origin)
+      }
+      GeneratedColumnExpression(expr, getOriginalText(ctx.expression()))
     }
 
   /**
@@ -5458,10 +5521,9 @@ class AstBuilder extends DataTypeAstBuilder
           entry("mapkey.delim", ctx.keysTerminatedBy) ++
           Option(ctx.linesSeparatedBy).toSeq.map { token =>
             val value = string(visitStringLit(token))
-            validate(
-              value == "\n",
-              s"LINES TERMINATED BY only supports newline '\\n' right now: $value",
-              ctx)
+            if (value != "\n") {
+              throw QueryParsingErrors.unsupportedRowFormatLinesTerminatedByError(value, ctx)
+            }
             "line.delim" -> value
           }
     SerdeInfo(serdeProperties = entries.toMap)
@@ -7403,6 +7465,8 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
       }
       withUnpivot(c, left)
+    }.getOrElse(Option(ctx.binByClause()).map { c =>
+      withBinBy(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
     }.getOrElse(Option(ctx.joinRelation()).map { c =>
@@ -7414,7 +7478,7 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, PipeOperator(left), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    ))))))))))))
+    )))))))))))))
   }
 
   private def visitOperatorPipeSet(

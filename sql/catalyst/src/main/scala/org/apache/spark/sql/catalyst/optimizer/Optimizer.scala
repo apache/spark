@@ -214,13 +214,17 @@ abstract class Optimizer(catalogManager: CatalogManager)
       OptimizeSubqueries,
       OptimizeOneRowRelationSubquery),
     Batch("Replace Operators", fixedPoint,
+      // SPARK-51262: ReplaceDeduplicateWithAggregate must run before RewriteExceptAll because
+      // it replaces Deduplicate with Aggregate(First(...)), creating new attribute exprIds.
+      // If RewriteExceptAll runs first, its Generate node captures stale exprIds that no
+      // longer exist after the Deduplicate-to-Aggregate rewrite.
+      ReplaceDeduplicateWithAggregate,
       RewriteExceptAll,
       RewriteIntersectAll,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
-      ReplaceDistinctWithAggregate,
-      ReplaceDeduplicateWithAggregate),
+      ReplaceDistinctWithAggregate),
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions),
@@ -328,6 +332,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView,
       EliminateSQLFunctionNode,
       ReplaceExpressions,
+      NormalizeFloatingNumbers,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       // Put `InsertMapSortInGroupingExpressions` after `PullOutGroupingExpressions`,

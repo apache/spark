@@ -82,7 +82,7 @@ class DataSource(ABC):
     After implementing this interface, you can start to load your data source using
     ``spark.read.format(...).load()`` and save data using ``df.write.format(...).save()``.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def __init__(self, options: MutableMapping[str, str]) -> None:
@@ -268,7 +268,7 @@ A tuple of strings representing a column reference.
 
 For example, `("a", "b", "c")` represents the column `a.b.c`.
 
-.. versionadded: 4.1.0
+.. versionadded:: 4.1.0
 """
 
 
@@ -277,7 +277,7 @@ class Filter(ABC):
     """
     The base class for filters used for filter pushdown.
 
-    .. versionadded: 4.1.0
+    .. versionadded:: 4.1.0
 
     Notes
     -----
@@ -476,7 +476,7 @@ class InputPartition:
     A base class representing an input partition returned by the `partitions()`
     method of :class:`DataSourceReader`.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
 
     Notes
     -----
@@ -514,7 +514,7 @@ class DataSourceReader(ABC):
     A base class for data source readers. Data source readers are responsible for
     outputting data from a data source.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def pushFilters(self, filters: List["Filter"]) -> Iterable["Filter"]:
@@ -534,7 +534,7 @@ class DataSourceReader(ABC):
         It's recommended to implement this method only for data sources that natively
         support filtering, such as databases and GraphQL APIs.
 
-        .. versionadded: 4.1.0
+        .. versionadded:: 4.1.0
 
         Parameters
         ----------
@@ -686,7 +686,7 @@ class DataSourceStreamReader(ABC):
     A base class for streaming data source readers. Data source stream readers are responsible
     for outputting data from a streaming data source.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def initialOffset(self) -> dict:
@@ -894,7 +894,7 @@ class SimpleDataSourceStreamReader(ABC):
     Use :class:`DataSourceStreamReader` when read throughput is high and can't be handled
     by a single process.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def initialOffset(self) -> dict:
@@ -982,7 +982,7 @@ class DataSourceWriter(ABC):
     A base class for data source writers. Data source writers are responsible for saving
     the data to the data source.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     @abstractmethod
@@ -1052,7 +1052,7 @@ class DataSourceArrowWriter(DataSourceWriter):
     is optimized for using the Arrow format when writing data. It can offer better performance
     when interfacing with systems or libraries that natively support Arrow.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     @abstractmethod
@@ -1100,7 +1100,7 @@ class DataSourceStreamWriter(ABC):
     A base class for data stream writers. Data stream writers are responsible for writing
     the data to the streaming sink.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     @abstractmethod
@@ -1175,7 +1175,7 @@ class DataSourceStreamArrowWriter(DataSourceStreamWriter):
     performance when interfacing with systems or libraries that natively support Arrow for
     streaming use cases.
 
-    .. versionadded: 4.1.0
+    .. versionadded:: 4.1.0
     """
 
     @abstractmethod
@@ -1225,7 +1225,7 @@ class WriterCommitMessage:
     sent back to the driver side as input parameter of :meth:`DataSourceWriter.commit`
     or :meth:`DataSourceWriter.abort` method.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
 
     Notes
     -----
@@ -1240,7 +1240,7 @@ class DataSourceRegistration:
     Wrapper for data source registration. This instance can be accessed by
     :attr:`spark.dataSource`.
 
-    .. versionadded: 4.0.0
+    .. versionadded:: 4.0.0
     """
 
     def __init__(self, sparkSession: "SparkSession"):

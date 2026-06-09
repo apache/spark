@@ -298,9 +298,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         } while (currentBufferIdx < bufEnd
             && currentBuffer[currentBufferIdx] != maxDefLevel);
         int runLen = currentBufferIdx - runStart;
-        for (int k = 0; k < runLen; k++) {
-          nulls.putNull(valueOff + k);
-        }
+        nulls.putNulls(valueOff, runLen);
         valueOff += runLen;
       }
     }
@@ -714,14 +712,10 @@ public final class VectorizedRleValuesReader extends ValuesReader
           updater.readValues(runLen, valueOff, values, valueReader);
         }
       } else {
-        for (int k = 0; k < runLen; k++) {
-          nulls.putNull(valueOff + k);
-        }
+        nulls.putNulls(valueOff, runLen);
       }
       valueOff += runLen;
-      for (int k = 0; k < runLen; k++) {
-        defLevels.putInt(levelIdx + k, runValue);
-      }
+      defLevels.putInts(levelIdx, runLen, runValue);
       levelIdx += runLen;
     }
     state.valueOffset = valueOff;

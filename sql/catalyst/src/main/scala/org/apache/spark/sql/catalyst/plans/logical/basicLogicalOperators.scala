@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -746,7 +747,10 @@ case class Join(
     }
   }
 
-  override def output: Seq[Attribute] = Join.computeOutput(joinType, left.output, right.output)
+  override def output: Seq[Attribute] = {
+    val base = Join.computeOutput(joinType, left.output, right.output)
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {
@@ -829,6 +833,30 @@ case class Join(
     newLeft: LogicalPlan, newRight: LogicalPlan): Join = copy(left = newLeft, right = newRight)
 
   override def isStateful: Boolean = left.isStreaming && right.isStreaming
+}
+
+/**
+ * A logical plan that combines the columns of two DataFrames that derive from the same
+ * base plan through chains of Project nodes. This node is always unresolved and must be
+ * rewritten by [[ResolveZip]] into a chain of Project nodes over the shared base plan
+ * during analysis. If the two children do not share the same base plan (after stripping
+ * outer Projects), or if either side contains a non-scalar Python UDF, analysis will fail
+ * with ZIP_PLANS_NOT_MERGEABLE.
+ */
+case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  override def output: Seq[Attribute] = left.output ++ right.output
+
+  override def maxRows: Option[Long] = left.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = left.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ZIP)
+
+  // Always unresolved -- must be rewritten by ResolveZip during analysis.
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): Zip = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -1225,7 +1253,10 @@ case class Aggregate(
     expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
-  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = {
+    val base = aggregateExpressions.map(_.toAttribute)
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
@@ -1705,6 +1736,124 @@ case class Unpivot(
 }
 
 /**
+ * Optional user-supplied names for the three columns appended by [[BinBy]]. A `None` falls back
+ * to the default name (`bin_start`, `bin_end`, `bin_distribute_ratio`) when the output schema is
+ * constructed during analysis.
+ */
+case class BinByOutputAliases(
+    binStart: Option[String] = None,
+    binEnd: Option[String] = None,
+    binRatio: Option[String] = None) {
+  def effectiveBinStart: String = binStart.getOrElse("bin_start")
+  def effectiveBinEnd: String = binEnd.getOrElse("bin_end")
+  def effectiveBinRatio: String = binRatio.getOrElse("bin_distribute_ratio")
+}
+
+object BinByOutputAliases {
+  val empty: BinByOutputAliases = BinByOutputAliases()
+}
+
+/**
+ * Unresolved counterpart of [[BinBy]] produced by the parser. `ResolveBinBy` enforces type and
+ * foldability constraints and rewrites this into a resolved [[BinBy]].
+ *
+ * @param binWidthExpr       Bin-width expression (DAY-TIME INTERVAL).
+ * @param rangeStartCol      Reference to the row's measurement-window start column.
+ * @param rangeEndCol        Reference to the row's measurement-window end column.
+ * @param originExpr         Optional alignment anchor expression (`ALIGN TO` clause). `None`
+ *                           when the clause is omitted; `ResolveBinBy` defaults the resolved
+ *                           plan's origin to `1970-01-01 00:00:00`.
+ * @param distributeColumns  Columns whose values are proportionally redistributed across sub-rows.
+ * @param outputAliases      Optional renames for the three appended output columns.
+ * @param child              Input relation.
+ */
+case class UnresolvedBinBy(
+    binWidthExpr: Expression,
+    rangeStartCol: Expression,
+    rangeEndCol: Expression,
+    originExpr: Option[Expression],
+    distributeColumns: Seq[Expression],
+    outputAliases: BinByOutputAliases,
+    child: LogicalPlan) extends UnresolvedUnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_BIN_BY)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedBinBy =
+    copy(child = newChild)
+}
+
+/**
+ * Aligns range-typed rows to fixed-width bin boundaries by splitting any row whose
+ * `[range_start, range_end)` crosses a boundary and proportionally redistributing values in
+ * `distributeColumns` across the resulting sub-ranges. Emits one or more output rows per input row
+ * plus three appended columns with default names `bin_start`, `bin_end`, `bin_distribute_ratio`.
+ * The names come from the resolved `appendedAttributes`.
+ *
+ * Bin boundaries align to `originMicros + k * binWidthMicros` for integer `k`.
+ * For `TIMESTAMP` (LTZ) inputs the boundary arithmetic uses civil-time in the session zone for
+ * multi-day bins; sub-day LTZ bins and `TIMESTAMP_NTZ` bins use UTC microsecond arithmetic.
+ *
+ * Construction invariants (bin width is positive day-time, range columns are timestamps and share
+ * a type, origin matches the range column type, distribute columns are numeric and distinct) are
+ * enforced by `ResolveBinBy`. Code paths that construct `BinBy` outside the analyzer are
+ * responsible for upholding the same invariants; only the `timeZoneId`-vs-range-type pairing is
+ * checked in the constructor itself (raises `INTERNAL_ERROR`). The three appended-column names
+ * are not checked for collisions with `child.output`; a colliding name surfaces as
+ * `AMBIGUOUS_REFERENCE` when the output is referenced downstream rather than at the BIN BY clause
+ * itself.
+ *
+ * @param binWidthMicros      Bin width in microseconds: the folded value of the day-time interval
+ *                            `BIN WIDTH` expression. Always positive.
+ * @param rangeStart          Resolved attribute holding each row's window-start timestamp.
+ * @param rangeEnd            Resolved attribute holding each row's window-end timestamp.
+ * @param originMicros        Alignment anchor in microseconds since the epoch: the folded value of
+ *                            `ALIGN TO`, or the type-specific default when the clause is omitted.
+ * @param distributeColumns   Resolved columns to proportionally redistribute.
+ * @param appendedAttributes  The three output attributes appended after `child.output`. Provided
+ *                            by the analyzer; held in the case class so the attribute `ExprId`s
+ *                            remain stable across `.output` calls and `withNewChildInternal`.
+ * @param child               Input relation.
+ * @param timeZoneId          Captured session local time zone for LTZ inputs; `None` for NTZ.
+ *                            Required when `rangeStart.dataType` is `TimestampType`; must be
+ *                            `None` when it is `TimestampNTZType`.
+ */
+case class BinBy(
+    binWidthMicros: Long,
+    rangeStart: Attribute,
+    rangeEnd: Attribute,
+    originMicros: Long,
+    distributeColumns: Seq[Attribute],
+    appendedAttributes: Seq[Attribute],
+    child: LogicalPlan,
+    timeZoneId: Option[String])
+  extends UnaryNode {
+
+  if (timeZoneId.isDefined != rangeStart.dataType.isInstanceOf[TimestampType]) {
+    throw SparkException.internalError(
+      s"timeZoneId must be set iff rangeStart is TIMESTAMP (LTZ); got rangeStart.dataType=" +
+        s"${rangeStart.dataType}, timeZoneId=$timeZoneId")
+  }
+
+  override def output: Seq[Attribute] = child.output ++ appendedAttributes
+
+  override def producedAttributes: AttributeSet = AttributeSet(appendedAttributes)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BIN_BY)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): BinBy =
+    copy(child = newChild)
+}
+
+object BinBy {
+  def appendedAttributesWithAliases(
+      rangeType: DataType,
+      aliases: BinByOutputAliases): Seq[Attribute] = Seq(
+    AttributeReference(aliases.effectiveBinStart, rangeType, nullable = true)(),
+    AttributeReference(aliases.effectiveBinEnd, rangeType, nullable = true)(),
+    AttributeReference(aliases.effectiveBinRatio, DoubleType, nullable = true)())
+}
+
+/**
  * A logical plan node for creating a logical limit, which is split into two separate logical nodes:
  * a [[LocalLimit]], which is a partition local limit, followed by a [[GlobalLimit]].
  *
@@ -1749,7 +1898,10 @@ object Limit {
  * order.
  */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -2004,7 +2156,10 @@ case class Sample(
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
@@ -2174,7 +2329,10 @@ case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
@@ -2186,7 +2344,10 @@ case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) 
   override def references: AttributeSet = AttributeSet(keys) ++
     AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): DeduplicateWithinWatermark =
     copy(child = newChild)

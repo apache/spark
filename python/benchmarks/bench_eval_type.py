@@ -35,7 +35,7 @@ import numpy as np
 import pyarrow as pa
 
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
-from pyspark.serializers import write_int, write_long
+from pyspark.serializers import write_int, write_long, SpecialLengths
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -128,6 +128,46 @@ class MockProtocolWriter:
         write_int(0, buf)  # num_broadcast_variables
 
     @classmethod
+    def write_init_message(
+        cls,
+        eval_type: int,
+        write_udf: Callable[[io.BufferedIOBase], None],
+        target_buffer: io.BytesIO,
+        runner_conf: dict[str, str] | None = None,
+        eval_conf: dict[str, str] | None = None,
+    ) -> None:
+        """Write the initial message with header, length + its data."""
+
+        # Write everything to a seperate buffer so we can
+        # determine the length of the initial message.
+        buf = io.BytesIO()
+        cls.write_preamble(buf)
+        write_int(eval_type, buf)
+        if runner_conf:
+            write_int(len(runner_conf), buf)
+            for k, v in runner_conf.items():
+                cls.write_utf8(k, buf)
+                cls.write_utf8(v, buf)
+        else:
+            write_int(0, buf)  # RunnerConf  (0 key-value pairs)
+        if eval_conf:
+            write_int(len(eval_conf), buf)
+            for k, v in eval_conf.items():
+                cls.write_utf8(k, buf)
+                cls.write_utf8(v, buf)
+        else:
+            write_int(0, buf)  # EvalConf    (0 key-value pairs)
+        write_udf(buf)
+
+        # Write the actual data
+        # header...
+        write_int(SpecialLengths.START_OF_INIT_MESSAGE, target_buffer)
+        write_int(buf.getbuffer().nbytes, target_buffer)
+        # ... + previously buffered data
+        buf.seek(0)
+        target_buffer.write(buf.read())
+
+    @classmethod
     def write_udf_payload(
         cls,
         udf_func: Callable[..., Any],
@@ -165,25 +205,11 @@ class MockProtocolWriter:
         eval_conf: dict[str, str] | None = None,
     ) -> None:
         """Write the full worker binary stream: preamble + command + data + end."""
-        cls.write_preamble(buf)
-        write_int(eval_type, buf)
-        if runner_conf:
-            write_int(len(runner_conf), buf)
-            for k, v in runner_conf.items():
-                cls.write_utf8(k, buf)
-                cls.write_utf8(v, buf)
-        else:
-            write_int(0, buf)  # RunnerConf  (0 key-value pairs)
-        if eval_conf:
-            write_int(len(eval_conf), buf)
-            for k, v in eval_conf.items():
-                cls.write_utf8(k, buf)
-                cls.write_utf8(v, buf)
-        else:
-            write_int(0, buf)  # EvalConf    (0 key-value pairs)
-        write_udf(buf)
+        cls.write_init_message(
+            eval_type, write_udf, buf, runner_conf=runner_conf, eval_conf=eval_conf
+        )
         write_data(buf)
-        write_int(-4, buf)  # SpecialLengths.END_OF_STREAM
+        write_int(SpecialLengths.END_OF_STREAM, buf)
 
     @classmethod
     def write_arrow_udtf_payload(
@@ -235,11 +261,9 @@ class MockDataFactory:
 
     NAMED_TYPE_POOLS: dict[str, list[tuple[Callable, Any]]] = {
         "mixed": MIXED_TYPES,
-        "pure_ints": [
-            (lambda r: pa.array(np.random.randint(0, 1000, r, dtype=np.int64)), IntegerType())
-        ],
-        "pure_floats": [(lambda r: pa.array(np.random.rand(r)), DoubleType())],
-        "pure_strings": [(lambda r: pa.array([f"s{j}" for j in range(r)]), StringType())],
+        "pure_ints": [TYPE_REGISTRY["int"]],
+        "pure_floats": [TYPE_REGISTRY["double"]],
+        "pure_strings": [TYPE_REGISTRY["string"]],
         "pure_ts": [
             (
                 lambda r: pa.array(
@@ -730,21 +754,19 @@ class _CogroupedMapArrowBenchMixin:
         "few_groups_lg": (50, 50_000, 1, 4),
         "many_groups_sm": (2_000, 500, 1, 4),
         "many_groups_lg": (500, 10_000, 1, 4),
-        "wide_values": (200, 5_000, 1, 20),
+        "wide_cols": (200, 5_000, 1, 20),
         "multi_key": (200, 5_000, 3, 5),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a cogroup scenario: two DataFrames with the same grouping structure.
 
         Unlike grouped map (which wraps columns in a struct), cogroup batches
         have flat columns: [key_col_0, ..., key_col_k, val_col_0, ..., val_col_v].
         """
         np.random.seed(42)
-        num_groups, rows_per_group, num_key_cols, num_value_cols = (
-            _CogroupedMapArrowBenchMixin._scenario_configs[name]
-        )
+        num_groups, rows_per_group, num_key_cols, num_value_cols = cls._scenario_configs[name]
         n_cols = num_key_cols + num_value_cols
         type_pool = MockDataFactory.MIXED_TYPES[:n_cols]
         while len(type_pool) < n_cols:
@@ -760,22 +782,27 @@ class _CogroupedMapArrowBenchMixin:
         return_type = StructType(schema.fields[num_key_cols:])
         return (cogroups, return_type, num_key_cols, num_value_cols)
 
+    _eval_type = PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF
+    # Each UDF entry: (func, n_args). n_args=2 -> func(left, right);
+    # n_args=3 -> func(key, left, right). The Arrow path has no 3-arg variant,
+    # but the tuple shape is shared with the Pandas sibling so ``_write_scenario``
+    # can be inherited unchanged.
     _udfs = {
-        "identity_udf": _cogrouped_map_arrow_identity,
-        "concat_udf": _cogrouped_map_arrow_concat,
-        "left_semi_udf": _cogrouped_map_arrow_left_semi,
+        "identity_udf": (_cogrouped_map_arrow_identity, 2),
+        "concat_udf": (_cogrouped_map_arrow_concat, 2),
+        "left_semi_udf": (_cogrouped_map_arrow_left_semi, 2),
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         groups, schema, num_key_cols, num_value_cols = self._build_scenario(scenario)
-        udf_func = self._udfs[udf_name]
+        udf_func, _ = self._udfs[udf_name]
         left_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, num_value_cols)
         right_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, num_value_cols)
         arg_offsets = left_offsets + right_offsets
         MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+            self._eval_type,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
             lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
@@ -795,8 +822,15 @@ class CogroupedMapArrowUDFPeakmemBench(_CogroupedMapArrowBenchMixin, _PeakmemBen
 # ``pandas.DataFrame``. Optional 3-arg variant ``(key, left, right)``.
 
 
-class _CogroupedMapPandasBenchMixin:
-    """Provides _write_scenario for SQL_COGROUPED_MAP_PANDAS_UDF."""
+class _CogroupedMapPandasBenchMixin(_CogroupedMapArrowBenchMixin):
+    """Provides _write_scenario for SQL_COGROUPED_MAP_PANDAS_UDF.
+
+    Inherits ``_build_scenario`` and ``_write_scenario`` from the Arrow
+    sibling; only the eval type, the UDFs, and the per-scenario row counts
+    differ. Adds a 3-arg ``key_identity_udf`` variant the Arrow path lacks
+    (``_write_scenario`` ignores the ``n_args`` slot, so the extra entry is
+    handled by the inherited writer).
+    """
 
     def _cogrouped_map_pandas_identity(left, right):
         """Identity cogroup UDF: returns left DataFrame as-is."""
@@ -824,36 +858,11 @@ class _CogroupedMapPandasBenchMixin:
         "few_groups_lg": (50, 10_000, 1, 4),
         "many_groups_sm": (500, 200, 1, 4),
         "many_groups_lg": (200, 2_000, 1, 4),
-        "wide_values": (100, 1_000, 1, 20),
+        "wide_cols": (100, 1_000, 1, 20),
         "multi_key": (100, 1_000, 3, 5),
     }
 
-    @staticmethod
-    def _build_scenario(name):
-        """Build a cogroup scenario: two DataFrames with the same grouping structure.
-
-        Like cogrouped arrow, batches have flat columns:
-        [key_col_0, ..., key_col_k, val_col_0, ..., val_col_v].
-        """
-        np.random.seed(42)
-        num_groups, rows_per_group, num_key_cols, num_value_cols = (
-            _CogroupedMapPandasBenchMixin._scenario_configs[name]
-        )
-        n_cols = num_key_cols + num_value_cols
-        type_pool = MockDataFactory.MIXED_TYPES[:n_cols]
-        while len(type_pool) < n_cols:
-            type_pool = type_pool + MockDataFactory.MIXED_TYPES[: n_cols - len(type_pool)]
-
-        cogroups, schema = MockDataFactory.make_cogrouped_batches(
-            num_groups=num_groups,
-            num_rows=rows_per_group,
-            num_cols=n_cols,
-            spark_type_pool=type_pool,
-            batch_size=rows_per_group,
-        )
-        return_type = StructType(schema.fields[num_key_cols:])
-        return (cogroups, return_type, num_key_cols, num_value_cols)
-
+    _eval_type = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
     # Each UDF entry: (func, n_args). n_args=2 -> func(left, right);
     # n_args=3 -> func(key, left, right).
     _udfs = {
@@ -864,19 +873,6 @@ class _CogroupedMapPandasBenchMixin:
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, schema, num_key_cols, num_value_cols = self._build_scenario(scenario)
-        udf_func, _ = self._udfs[udf_name]
-        left_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, num_value_cols)
-        right_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, num_value_cols)
-        arg_offsets = left_offsets + right_offsets
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-            lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
-            buf,
-        )
 
 
 class CogroupedMapPandasUDFTimeBench(_CogroupedMapPandasBenchMixin, _TimeBenchBase):
@@ -914,11 +910,11 @@ class _GroupedAggArrowBenchMixin:
         "wide_cols": (200, 5_000, 20),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        num_groups, rows_per_group, n_cols = _GroupedAggArrowBenchMixin._scenario_configs[name]
+        num_groups, rows_per_group, n_cols = cls._scenario_configs[name]
         return MockDataFactory.make_grouped_batches(
             num_groups=num_groups,
             num_rows=rows_per_group,
@@ -927,6 +923,7 @@ class _GroupedAggArrowBenchMixin:
             batch_size=rows_per_group,
         )
 
+    _eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
     _udfs = {
         "sum_udf": _grouped_agg_arrow_sum,
         "mean_multi_udf": _grouped_agg_arrow_mean_multi,
@@ -950,7 +947,7 @@ class _GroupedAggArrowBenchMixin:
             MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
 
         MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
+            self._eval_type,
             write_udf,
             lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
@@ -986,34 +983,13 @@ class _GroupedAggArrowIterBenchMixin(_GroupedAggArrowBenchMixin):
             total += (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
         return total
 
+    _eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
     _udfs = {
         "sum_udf": _grouped_agg_arrow_iter_sum,
         "mean_multi_udf": _grouped_agg_arrow_iter_mean_multi,
     }
     params = [list(_GroupedAggArrowBenchMixin._scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, _schema = self._build_scenario(scenario)
-        udf_func = self._udfs[udf_name]
-
-        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
-        if "multi" in udf_name:
-            arg_offsets = [0, 1]
-        else:
-            arg_offsets = [0]
-
-        return_type = DoubleType()
-
-        def write_udf(b):
-            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
-
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
-            write_udf,
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
-            buf,
-        )
 
 
 class GroupedAggArrowIterUDFTimeBench(_GroupedAggArrowIterBenchMixin, _TimeBenchBase):
@@ -1028,8 +1004,15 @@ class GroupedAggArrowIterUDFPeakmemBench(_GroupedAggArrowIterBenchMixin, _Peakme
 # UDF receives ``pd.Series`` columns per group, returns scalar.
 
 
-class _GroupedAggPandasBenchMixin:
-    """Provides _write_scenario for SQL_GROUPED_AGG_PANDAS_UDF."""
+class _GroupedAggPandasBenchMixin(_GroupedAggArrowBenchMixin):
+    """Provides _write_scenario for SQL_GROUPED_AGG_PANDAS_UDF.
+
+    Inherits ``_build_scenario`` and ``_write_scenario`` from the Arrow
+    sibling; only the eval type and the UDFs differ. ``_scenario_configs``
+    is intentionally identical to the Arrow variant for apples-to-apples
+    comparison (the aggregations are cheap enough that pandas conversion
+    is not the bottleneck here).
+    """
 
     def _grouped_agg_pandas_sum(col):
         """Sum a single Pandas Series."""
@@ -1039,55 +1022,13 @@ class _GroupedAggPandasBenchMixin:
         """Mean of two Pandas Series combined."""
         return (col0.mean() or 0) + (col1.mean() or 0)
 
-    _scenario_configs = {
-        "few_groups_sm": (50, 5_000, 5),
-        "few_groups_lg": (50, 50_000, 5),
-        "many_groups_sm": (2_000, 500, 5),
-        "many_groups_lg": (500, 10_000, 5),
-        "wide_cols": (200, 5_000, 20),
-    }
-
-    @staticmethod
-    def _build_scenario(name):
-        """Build a single scenario by name."""
-        np.random.seed(42)
-        num_groups, rows_per_group, n_cols = _GroupedAggPandasBenchMixin._scenario_configs[name]
-        return MockDataFactory.make_grouped_batches(
-            num_groups=num_groups,
-            num_rows=rows_per_group,
-            num_cols=n_cols,
-            spark_type_pool=MockDataFactory.NUMERIC_TYPES,
-            batch_size=rows_per_group,
-        )
-
+    _eval_type = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
     _udfs = {
         "sum_udf": _grouped_agg_pandas_sum,
         "mean_multi_udf": _grouped_agg_pandas_mean_multi,
     }
-    params = [list(_scenario_configs), list(_udfs)]
+    params = [list(_GroupedAggArrowBenchMixin._scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, _schema = self._build_scenario(scenario)
-        udf_func = self._udfs[udf_name]
-
-        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
-        if "multi" in udf_name:
-            arg_offsets = [0, 1]
-        else:
-            arg_offsets = [0]
-
-        return_type = DoubleType()
-
-        def write_udf(b):
-            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
-
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-            write_udf,
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
-            buf,
-        )
 
 
 class GroupedAggPandasUDFTimeBench(_GroupedAggPandasBenchMixin, _TimeBenchBase):
@@ -1124,7 +1065,7 @@ class _GroupedMapArrowBenchMixin:
         "few_groups_lg": (50, 50_000, 1, 4),
         "many_groups_sm": (2_000, 500, 1, 4),
         "many_groups_lg": (500, 10_000, 1, 4),
-        "wide_values": (200, 5_000, 1, 20),
+        "wide_cols": (200, 5_000, 1, 20),
         "multi_key": (200, 5_000, 3, 5),
     }
 
@@ -1431,7 +1372,10 @@ class _MapArrowIterBenchMixin:
         batches, schema = self._build_scenario(scenario)
         udf_func, ret_type, arg_offsets = self._udfs[udf_name]
         if ret_type is None:
-            ret_type = schema.fields[0].dataType.fields[0].dataType
+            # mapInArrow UDFs return an Iterator[pa.RecordBatch] with the same
+            # schema as the input row (the inner struct, since make_batches
+            # wraps the row schema in a single struct column for the wire).
+            ret_type = schema.fields[0].dataType
         MockProtocolWriter.write_worker_input(
             PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
@@ -1560,11 +1504,11 @@ class _ScalarArrowBenchMixin:
         "mixed_types": ("mixed", 5_000_000, 10, 5_000),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        type_key, num_rows, num_cols, batch_size = _ScalarArrowBenchMixin._scenario_configs[name]
+        type_key, num_rows, num_cols, batch_size = cls._scenario_configs[name]
         pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
         return MockDataFactory.make_batches(
             num_rows=num_rows,
@@ -1649,8 +1593,13 @@ class ScalarArrowIterUDFPeakmemBench(_ScalarArrowIterBenchMixin, _PeakmemBenchBa
 # Measures the full Arrow-to-Pandas-to-Arrow round-trip.
 
 
-class _ScalarPandasBenchMixin:
-    """Mixin for SQL_SCALAR_PANDAS_UDF benchmarks."""
+class _ScalarPandasBenchMixin(_ScalarArrowBenchMixin):
+    """Mixin for SQL_SCALAR_PANDAS_UDF benchmarks.
+
+    Inherits ``_build_scenario`` and ``_write_scenario`` from the Arrow
+    sibling; only the eval type, the UDFs, and the per-scenario row counts
+    differ (pandas conversion is more expensive, so smaller batches).
+    """
 
     def _scalar_pandas_sort(s):
         return s.sort_values().reset_index(drop=True)
@@ -1670,19 +1619,6 @@ class _ScalarPandasBenchMixin:
         "mixed_types": ("mixed", 1_000_000, 10, 5_000),
     }
 
-    @staticmethod
-    def _build_scenario(name):
-        """Build a single scenario by name."""
-        np.random.seed(42)
-        type_key, num_rows, num_cols, batch_size = _ScalarPandasBenchMixin._scenario_configs[name]
-        pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
-        return MockDataFactory.make_batches(
-            num_rows=num_rows,
-            num_cols=num_cols,
-            spark_type_pool=pool,
-            batch_size=batch_size,
-        )
-
     _eval_type = PythonEvalType.SQL_SCALAR_PANDAS_UDF
     # ret_type=None means "use schema.fields[0].dataType from the scenario"
     _udfs = {
@@ -1692,18 +1628,6 @@ class _ScalarPandasBenchMixin:
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        batches, schema = self._build_scenario(scenario)
-        udf_func, ret_type, arg_offsets = self._udfs[udf_name]
-        if ret_type is None:
-            ret_type = schema.fields[0].dataType
-        MockProtocolWriter.write_worker_input(
-            self._eval_type,
-            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
-            buf,
-        )
 
 
 class ScalarPandasUDFTimeBench(_ScalarPandasBenchMixin, _TimeBenchBase):
@@ -1769,86 +1693,6 @@ class _WindowAggArrowBenchMixin:
 
         return (pc.mean(col0).as_py() or 0) + (pc.mean(col1).as_py() or 0)
 
-    def _build_scenarios():
-        """Build scenarios for SQL_WINDOW_AGG_ARROW_UDF.
-
-        Returns a dict mapping scenario name to ``(groups, schema)``.
-        """
-        scenarios = {}
-
-        for name, (num_groups, rows_per_group, n_cols) in {
-            "few_groups_sm": (50, 5_000, 5),
-            "few_groups_lg": (50, 50_000, 5),
-            "many_groups_sm": (2_000, 500, 5),
-            "many_groups_lg": (500, 10_000, 5),
-            "wide_cols": (200, 5_000, 20),
-        }.items():
-            groups, schema = MockDataFactory.make_grouped_batches(
-                num_groups=num_groups,
-                num_rows=rows_per_group,
-                num_cols=n_cols,
-                spark_type_pool=MockDataFactory.NUMERIC_TYPES,
-                batch_size=rows_per_group,
-            )
-            scenarios[name] = (groups, schema)
-
-        return scenarios
-
-    _scenarios = _build_scenarios()
-    _udfs = {
-        "sum_udf": _window_agg_arrow_sum,
-        "mean_multi_udf": _window_agg_arrow_mean_multi,
-    }
-    params = [list(_scenarios), list(_udfs)]
-    param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, _schema = self._scenarios[scenario]
-        udf_func = self._udfs[udf_name]
-
-        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
-        if "multi" in udf_name:
-            arg_offsets = [0, 1]
-        else:
-            arg_offsets = [0]
-
-        return_type = DoubleType()
-
-        def write_udf(b):
-            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
-
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
-            write_udf,
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
-            buf,
-            runner_conf={"window_bound_types": "unbounded"},
-        )
-
-
-class WindowAggArrowUDFTimeBench(_WindowAggArrowBenchMixin, _TimeBenchBase):
-    pass
-
-
-class WindowAggArrowUDFPeakmemBench(_WindowAggArrowBenchMixin, _PeakmemBenchBase):
-    pass
-
-
-# -- SQL_WINDOW_AGG_PANDAS_UDF -----------------------------------------------
-# UDF receives ``pd.Series`` columns for the entire window partition, returns scalar.
-
-
-class _WindowAggPandasBenchMixin:
-    """Provides _write_scenario for SQL_WINDOW_AGG_PANDAS_UDF."""
-
-    def _window_agg_pandas_sum(col):
-        """Sum a single Pandas Series."""
-        return col.sum()
-
-    def _window_agg_pandas_mean_multi(col0, col1):
-        """Mean of two Pandas Series combined."""
-        return (col0.mean() or 0) + (col1.mean() or 0)
-
     _scenario_configs = {
         "few_groups_sm": (50, 5_000, 5),
         "few_groups_lg": (50, 50_000, 5),
@@ -1857,11 +1701,11 @@ class _WindowAggPandasBenchMixin:
         "wide_cols": (200, 5_000, 20),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        num_groups, rows_per_group, n_cols = _WindowAggPandasBenchMixin._scenario_configs[name]
+        num_groups, rows_per_group, n_cols = cls._scenario_configs[name]
         return MockDataFactory.make_grouped_batches(
             num_groups=num_groups,
             num_rows=rows_per_group,
@@ -1870,9 +1714,10 @@ class _WindowAggPandasBenchMixin:
             batch_size=rows_per_group,
         )
 
+    _eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
     _udfs = {
-        "sum_udf": _window_agg_pandas_sum,
-        "mean_multi_udf": _window_agg_pandas_mean_multi,
+        "sum_udf": _window_agg_arrow_sum,
+        "mean_multi_udf": _window_agg_arrow_mean_multi,
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
@@ -1893,12 +1738,51 @@ class _WindowAggPandasBenchMixin:
             MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
 
         MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+            self._eval_type,
             write_udf,
             lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
             runner_conf={"window_bound_types": "unbounded"},
         )
+
+
+class WindowAggArrowUDFTimeBench(_WindowAggArrowBenchMixin, _TimeBenchBase):
+    pass
+
+
+class WindowAggArrowUDFPeakmemBench(_WindowAggArrowBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_WINDOW_AGG_PANDAS_UDF -----------------------------------------------
+# UDF receives ``pd.Series`` columns for the entire window partition, returns scalar.
+
+
+class _WindowAggPandasBenchMixin(_WindowAggArrowBenchMixin):
+    """Provides _write_scenario for SQL_WINDOW_AGG_PANDAS_UDF.
+
+    Inherits ``_build_scenario`` and ``_write_scenario`` from the Arrow
+    sibling; only the eval type and the UDFs differ. ``_scenario_configs``
+    is intentionally identical to the Arrow variant for apples-to-apples
+    comparison (the aggregations are cheap enough that pandas conversion
+    is not the bottleneck here).
+    """
+
+    def _window_agg_pandas_sum(col):
+        """Sum a single Pandas Series."""
+        return col.sum()
+
+    def _window_agg_pandas_mean_multi(col0, col1):
+        """Mean of two Pandas Series combined."""
+        return (col0.mean() or 0) + (col1.mean() or 0)
+
+    _eval_type = PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
+    _udfs = {
+        "sum_udf": _window_agg_pandas_sum,
+        "mean_multi_udf": _window_agg_pandas_mean_multi,
+    }
+    params = [list(_WindowAggArrowBenchMixin._scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
 
 
 class WindowAggPandasUDFTimeBench(_WindowAggPandasBenchMixin, _TimeBenchBase):

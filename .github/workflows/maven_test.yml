@@ -89,18 +89,18 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-
+            build-${{ runner.os }}-
       - name: Cache Maven local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
         uses: actions/cache@v5
         with:
           path: ~/.m2/repository
-          key: java${{ inputs.java }}-maven-${{ hashFiles('**/pom.xml') }}
+          key: maven-${{ runner.os }}-java${{ inputs.java }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            java${{ inputs.java }}-maven-
+            maven-${{ runner.os }}-java${{ inputs.java }}-
       - name: Install Java ${{ inputs.java }}
         uses: actions/setup-java@v5
         with:
@@ -122,18 +122,18 @@ jobs:
           # and the connect entry rebuilds it via `mvn install -pl assembly`.
           find . \( -path './build' -o -path './.git' -o -path './assembly' \) -prune \
             -o -type d -name target -print0 \
-            | tar --null -czf compile-target.tar.gz -T -
+            | tar --null -cf - -T - | zstd -c -T0 > compile-target.tar.zst
           if [ -d "$HOME/.m2/repository/org/apache/spark" ]; then
-            tar -C "$HOME/.m2/repository/org/apache" -czf compile-m2-spark.tar.gz spark
+            tar -C "$HOME/.m2/repository/org/apache" -cf - spark | zstd -c -T0 > compile-m2-spark.tar.zst
           fi
-          ls -lh compile-target.tar.gz compile-m2-spark.tar.gz
+          ls -lh compile-target.tar.zst compile-m2-spark.tar.zst
       - name: Upload compile artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: spark-maven-compile-${{ inputs.branch }}-java${{ inputs.java }}-${{ github.run_id }}
           path: |
-            compile-target.tar.gz
-            compile-m2-spark.tar.gz
+            compile-target.tar.zst
+            compile-m2-spark.tar.zst
           retention-days: 1
           if-no-files-found: error
 
@@ -240,18 +240,18 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-
+            build-${{ runner.os }}-
       - name: Cache Maven local repository
         # TODO(SPARK-54466): https://github.com/actions/runner-images/issues/13341
         if: ${{ runner.os != 'macOS' }}
         uses: actions/cache@v5
         with:
           path: ~/.m2/repository
-          key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
+          key: maven-${{ runner.os }}-java${{ matrix.java }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
-            java${{ matrix.java }}-maven-
+            maven-${{ runner.os }}-java${{ matrix.java }}-
       - name: Install Java ${{ matrix.java }}
         uses: actions/setup-java@v5
         with:
@@ -275,7 +275,7 @@ jobs:
         id: download-precompiled
         if: needs.precompile-maven.result == 'success'
         continue-on-error: true
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: spark-maven-compile-${{ inputs.branch }}-java${{ matrix.java }}-${{ github.run_id }}
       - name: Extract precompiled artifact
@@ -283,12 +283,12 @@ jobs:
         if: steps.download-precompiled.outcome == 'success'
         continue-on-error: true
         run: |
-          tar -xzf compile-target.tar.gz
-          rm compile-target.tar.gz
-          if [ -f compile-m2-spark.tar.gz ]; then
+          zstd -dc compile-target.tar.zst | tar -xf -
+          rm compile-target.tar.zst
+          if [ -f compile-m2-spark.tar.zst ]; then
             mkdir -p "$HOME/.m2/repository/org/apache"
-            tar -C "$HOME/.m2/repository/org/apache" -xzf compile-m2-spark.tar.gz
-            rm compile-m2-spark.tar.gz
+            zstd -dc compile-m2-spark.tar.zst | tar -C "$HOME/.m2/repository/org/apache" -xf -
+            rm compile-m2-spark.tar.zst
           fi
       # Run the tests using script command.
       # BSD's script command doesn't support -c option, and the usage is different from Linux's one.
@@ -359,7 +359,7 @@ jobs:
           rm -rf ~/.m2/repository/org/apache/spark
       - name: Upload test results to report
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: |
@@ -367,7 +367,7 @@ jobs:
             **/target/surefire-reports/*.xml
       - name: Upload unit tests log files
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: unit-tests-log-${{ matrix.modules }}-${{ matrix.comment }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ matrix.hive }}
           path: "**/target/unit-tests.log"

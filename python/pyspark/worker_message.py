@@ -18,13 +18,14 @@
 import dataclasses
 import json
 import sys
-from typing import Optional, Union, IO
+from typing import Optional, TypeAlias, Union, IO, Any
 
 from pyspark.errors import PySparkValueError
 from pyspark.serializers import read_bool, read_int, read_long, SpecialLengths
 from pyspark.taskcontext import BarrierTaskContext, ResourceInformation, TaskContext
 from pyspark.util import PythonEvalType
 from pyspark.worker_util import utf8_deserializer
+from pyspark.messages import ZeroCopyByteStream
 
 
 @dataclasses.dataclass
@@ -46,7 +47,7 @@ class TaskContextInfo:
     local_properties: dict[str, str]
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "TaskContextInfo":
+    def from_stream(cls, stream: ZeroCopyByteStream) -> "TaskContextInfo":
         task_context_json = json.loads(utf8_deserializer.loads(stream))
         return cls(
             is_barrier=task_context_json["isBarrier"],
@@ -100,7 +101,7 @@ class BroadcastInfo:
     variables: list[tuple[int, Optional[str]]]
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "BroadcastInfo":
+    def from_stream(cls, stream: Union[ZeroCopyByteStream, IO[Any]]) -> "BroadcastInfo":
         needs_broadcast_decryption_server = read_bool(stream)
         num_broadcast_variables = read_int(stream)
         conn_info = None
@@ -125,13 +126,13 @@ class BroadcastInfo:
 
 @dataclasses.dataclass
 class UDFInfo:
-    udfs: list[bytes]
+    udfs: list[memoryview]
     args: list[int]
     kwargs: dict[str, int]
     result_id: int
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "UDFInfo":
+    def from_stream(cls, stream: ZeroCopyByteStream) -> "UDFInfo":
         num_args = read_int(stream)
         udfs = []
         args = []
@@ -167,13 +168,13 @@ class UDTFInfo:
     args: list[int]
     kwargs: dict[str, int]
     partition_child_indexes: list[int]
-    pickled_analyze_result: Optional[bytes]
-    handler: bytes
+    pickled_analyze_result: Optional[memoryview]
+    handler: memoryview
     return_type: str
     name: str
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "UDTFInfo":
+    def from_stream(cls, stream: ZeroCopyByteStream) -> "UDTFInfo":
         # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
         args = []
         kwargs = {}
@@ -204,6 +205,9 @@ class UDTFInfo:
         )
 
 
+UDFInfoType: TypeAlias = Union[memoryview, UDTFInfo, list[UDFInfo]]
+
+
 @dataclasses.dataclass
 class WorkerInitInfo:
     split_index: int
@@ -215,10 +219,10 @@ class WorkerInitInfo:
     eval_type: int
     runner_conf: dict[str, str]
     eval_conf: dict[str, str]
-    udf_info: Union[bytes, UDTFInfo, list[UDFInfo]]
+    udf_info: UDFInfoType
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "WorkerInitInfo":
+    def from_stream(cls, stream: ZeroCopyByteStream) -> "WorkerInitInfo":
         split_index = read_int(stream)
         if split_index == -1:
             sys.exit(-1)
@@ -243,9 +247,10 @@ class WorkerInitInfo:
             v = utf8_deserializer.loads(stream)
             eval_conf[k] = v
 
-        udf_info: Union[bytes, UDTFInfo, list[UDFInfo]]
+        udf_info: UDFInfoType
 
         if eval_type == PythonEvalType.NON_UDF:
+            # Returns memoryview; see assertion in worker.py if changing this type.
             udf_info = stream.read(read_int(stream))
         elif eval_type in (
             PythonEvalType.SQL_TABLE_UDF,

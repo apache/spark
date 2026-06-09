@@ -485,7 +485,7 @@ case class KllSketchAggDouble(
        6
   """,
   group = "agg_funcs",
-  since = "4.1.0")
+  since = "4.1.2")
 // scalastyle:on line.size.limit
 case class KllMergeAggBigint(
     child: Expression,
@@ -558,7 +558,7 @@ case class KllMergeAggBigint(
        6
   """,
   group = "agg_funcs",
-  since = "4.1.0")
+  since = "4.1.2")
 // scalastyle:on line.size.limit
 case class KllMergeAggFloat(
     child: Expression,
@@ -631,7 +631,7 @@ case class KllMergeAggFloat(
        6
   """,
   group = "agg_funcs",
-  since = "4.1.0")
+  since = "4.1.2")
 // scalastyle:on line.size.limit
 case class KllMergeAggDouble(
     child: Expression,

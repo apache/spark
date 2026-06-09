@@ -144,10 +144,12 @@
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-impl</artifactId>
+      <scope>${jjwt.deps.scope}</scope>
     </dependency>
     <dependency>
       <groupId>io.jsonwebtoken</groupId>
       <artifactId>jjwt-jackson</artifactId>
+      <scope>${jjwt.deps.scope}</scope>
     </dependency>
 
     <!-- Jetty dependencies promoted to compile here so they are shaded
