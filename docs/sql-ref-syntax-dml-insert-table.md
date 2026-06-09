@@ -40,9 +40,6 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier REPLACE WHERE b
     of the target table is automatically evolved to add new columns and widen data types based
     on the source query, subject to the capabilities of the underlying connector.
 
-    Columns and nested fields are matched by position between the source query and the target
-    table, unless `BY NAME` is specified, in which case columns and fields are matched by name.
-
 * **table_identifier**
 
     Specifies a table name, which may be optionally qualified with a database name.
@@ -63,6 +60,11 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier REPLACE WHERE b
     **Note:**The current behaviour has some limitations:
     - All specified columns should exist in the table and not be duplicated from each other. It includes all columns except the static partition columns.
     - The size of the column list should be exactly the size of the data from `VALUES` clause or query.
+
+* **BY NAME**
+
+    Columns and nested fields are matched by position between the source query and the target
+    table, unless `BY NAME` is specified, in which case columns and fields are matched by name.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
