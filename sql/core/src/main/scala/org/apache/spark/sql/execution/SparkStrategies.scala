@@ -450,10 +450,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     /**
      * Extract equi-join key pairs and residual (non-equi) condition
      * from a conjunction. Only EqualTo is treated as equi-key;
-     * EqualNullSafe is excluded because the Scanner uses
-     * ClusteredDistribution which co-partitions by hash -- null keys
-     * hash to the same partition but the Scanner's BaseOrdering treats
-     * nulls as equal, which would incorrectly match null-keyed rows.
+     * EqualNullSafe is excluded because the scanner implements EqualTo
+     * null semantics (left rows with any null equi-key never match and
+     * are skipped or null-padded), whereas EqualNullSafe requires null
+     * keys to match. Such predicates fall through to the residual
+     * condition, which evaluates them per candidate pair.
      */
     private def extractEquiJoinKeys(
         condition: Expression,
