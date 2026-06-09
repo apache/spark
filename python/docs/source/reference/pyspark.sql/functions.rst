@@ -180,6 +180,7 @@ String Functions
     initcap
     instr
     is_valid_utf8
+    jaro_winkler_similarity
     lcase
     left
     length

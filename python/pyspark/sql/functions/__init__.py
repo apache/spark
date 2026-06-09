@@ -141,6 +141,7 @@ __all__ = [  # noqa: F405
     "initcap",
     "instr",
     "is_valid_utf8",
+    "jaro_winkler_similarity",
     "lcase",
     "left",
     "length",
