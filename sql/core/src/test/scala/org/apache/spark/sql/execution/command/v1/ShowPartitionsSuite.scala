@@ -116,8 +116,8 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       checkAnswer(
         df,
         Row(
-          """{"partitions":["year=2015/month=1","year=2015/month=2",""" +
-            """"year=2016/month=2","year=2016/month=3"]}"""))
+          """{"partitions":[{"year":"2015","month":"1"},{"year":"2015","month":"2"},""" +
+            """{"year":"2016","month":"2"},{"year":"2016","month":"3"}]}"""))
     }
   }
 
@@ -126,13 +126,13 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       createDateTable(t)
       checkAnswer(
         spark.sql(s"SHOW PARTITIONS $t PARTITION(year=2015) AS JSON"),
-        Row("""{"partitions":["year=2015/month=1","year=2015/month=2"]}"""))
+        Row("""{"partitions":[{"year":"2015","month":"1"},{"year":"2015","month":"2"}]}"""))
       checkAnswer(
         spark.sql(s"SHOW PARTITIONS $t PARTITION(year=2015, month=1) AS JSON"),
-        Row("""{"partitions":["year=2015/month=1"]}"""))
+        Row("""{"partitions":[{"year":"2015","month":"1"}]}"""))
       checkAnswer(
         spark.sql(s"SHOW PARTITIONS $t PARTITION(month=2) AS JSON"),
-        Row("""{"partitions":["year=2015/month=2","year=2016/month=2"]}"""))
+        Row("""{"partitions":[{"year":"2015","month":"2"},{"year":"2016","month":"2"}]}"""))
     }
   }
 
@@ -152,10 +152,10 @@ trait ShowPartitionsSuiteBase extends command.ShowPartitionsSuiteBase {
       sql(s"INSERT INTO TABLE $t PARTITION (p1 = null) SELECT 0")
       checkAnswer(
         sql(s"SHOW PARTITIONS $t AS JSON"),
-        Row("""{"partitions":["p1=__HIVE_DEFAULT_PARTITION__"]}"""))
+        Row("""{"partitions":[{"p1":"__HIVE_DEFAULT_PARTITION__"}]}"""))
       checkAnswer(
         sql(s"SHOW PARTITIONS $t PARTITION (p1 = null) AS JSON"),
-        Row("""{"partitions":["p1=__HIVE_DEFAULT_PARTITION__"]}"""))
+        Row("""{"partitions":[{"p1":"__HIVE_DEFAULT_PARTITION__"}]}"""))
     }
   }
 
@@ -265,7 +265,13 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
       createNullPartTable(t, "parquet")
       checkAnswer(
         sql(s"SHOW PARTITIONS $t AS JSON"),
-        Row("""{"partitions":["part=__HIVE_DEFAULT_PARTITION__"]}"""))
+        Row("""{"partitions":[{"part":"__HIVE_DEFAULT_PARTITION__"}]}"""))
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t PARTITION (part = '') AS JSON"),
+        Row("""{"partitions":[{"part":"__HIVE_DEFAULT_PARTITION__"}]}"""))
+      checkAnswer(
+        sql(s"SHOW PARTITIONS $t PARTITION (part = null) AS JSON"),
+        Row("""{"partitions":[{"part":"__HIVE_DEFAULT_PARTITION__"}]}"""))
     }
   }
 }

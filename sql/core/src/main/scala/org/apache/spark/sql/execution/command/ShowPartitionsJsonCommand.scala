@@ -35,7 +35,8 @@ import org.apache.spark.sql.types.{MetadataBuilder, StringType}
  * returned.
  *
  * The output is a single row with a `json_metadata` column containing a JSON object of the form:
- * `{"partitions": ["col=val/col=val", ...]}`.
+ * `{"partitions": [{"col": "val", ...}, ...]}`, where each element of the array is a JSON object
+ * mapping partition column names to their string values.
  *
  * This command is the AS JSON variant of [[ShowPartitions]] and is produced by the parser
  * when `SHOW PARTITIONS ... AS JSON` is issued. Only V1 (session catalog / Hive metastore) tables
@@ -57,13 +58,28 @@ case class ShowPartitionsJsonCommand(
         new MetadataBuilder().putString("comment", "Partition list of the table").build())()))
     extends UnaryRunnableCommand {
 
+  /**
+   * Converts a partition name string (e.g. `"year=2015/month=1"`) into a [[JObject]] where each
+   * path segment becomes a key-value pair (e.g. `{"year":"2015","month":"1"}`).
+   */
+  private def partitionNameToJson(partName: String): JObject = {
+    JObject(partName.split("/").map { segment =>
+      val eqIdx = segment.indexOf('=')
+      if (eqIdx >= 0) {
+        segment.substring(0, eqIdx) -> JString(segment.substring(eqIdx + 1))
+      } else {
+        segment -> JString("")
+      }
+    }.toList)
+  }
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     child match {
       case ResolvedTable(_, _, t: V1Table, _) =>
         val partNames = ShowPartitionsHelper.listV1PartitionNames(
           sparkSession, t.catalogTable, spec, "SHOW PARTITIONS AS JSON")
         Seq(Row(compact(render(JObject("partitions" ->
-          JArray(partNames.map(JString(_)).toList))))))
+          JArray(partNames.map(partitionNameToJson).toList))))))
 
       // Non-V1 tables are currently not supported.
       case _ =>
