@@ -43,7 +43,7 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  *   - Read path: micros -> nanos (DateTimeUtils.microsToNanos)
  *
  * @param t the TimeType with precision information
- * @since 4.2.0
+ * @since 4.3.0
  */
 case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
 
