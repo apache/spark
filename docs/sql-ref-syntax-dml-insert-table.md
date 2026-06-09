@@ -275,11 +275,11 @@ SELECT * FROM students WHERE student_id = 11215017;
 ```sql
 CREATE TABLE target (n INT, text STRING, s STRUCT<a INT, b INT>);
 
--- BY NAME matches the top-level columns by name, so they may be listed in any order.
--- Nested struct fields are matched by position, so the struct field order in the query
--- must match the target schema (STRUCT<a INT, b INT>).
+-- BY NAME matches both top-level columns and nested struct fields by name,
+-- so they may be listed in any order in the source query.
 INSERT INTO target BY NAME
-    SELECT named_struct('a', 1, 'b', 2) AS s, 0 AS n, 'data' AS text;
+    SELECT named_struct('b', 2, 'a', 1) AS s, 0 AS n, 'data' AS text;
+-- s is {1, 2}: nested fields matched by name, not position.
 
 SELECT * FROM target;
 +---+----+------+
@@ -297,12 +297,12 @@ INSERT INTO target BY NAME
     SELECT array(named_struct('a', 1, 'b', 2)) AS arr;
 
 SELECT * FROM target;
-+----+----------+
-|   n|       arr|
-+----+----------+
++----+--------+
+|   n|     arr|
++----+--------+
 |   0|[{1, 2}]|
 |NULL|[{1, 2}]|
-+----+----------+
++----+--------+
 
 -- A source column whose name does not match any target column is an error.
 INSERT INTO target BY NAME
@@ -460,7 +460,7 @@ SELECT * FROM persons2;
 |   Ashua Hill|   456 Erica Ct, Cupertino|432795921|
 +-------------+--------------------------+---------+
 
--- in an atomic operation, 1) delete rows with ssn = 123456789 and 2) insert rows from persons2
+-- in an atomic operation, 1) delete rows with ssn = 123456789 and 2) insert rows from persons2 
 INSERT INTO persons REPLACE WHERE ssn = 123456789 SELECT * FROM persons2;
 
 SELECT * FROM persons;
