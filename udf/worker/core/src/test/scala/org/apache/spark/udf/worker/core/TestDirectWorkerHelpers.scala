@@ -17,7 +17,7 @@
 package org.apache.spark.udf.worker.core
 
 import java.io.{File, IOException}
-import java.nio.file.{FileVisitResult, Files, Path, SimpleFileVisitor}
+import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
 import java.nio.file.attribute.{BasicFileAttributes, PosixFilePermissions}
 
 import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse,
