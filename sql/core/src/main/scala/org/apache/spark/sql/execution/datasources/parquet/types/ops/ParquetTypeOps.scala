@@ -56,7 +56,7 @@ import org.apache.spark.sql.types.{DataType, StructType, TimeType}
  * recursive field conversion) and declare parquetStructSchema for column pruning.
  *
  * @see TimeTypeParquetOps for a reference implementation (primitive Long-backed type)
- * @since 4.2.0
+ * @since 4.3.0
  */
 private[parquet] trait ParquetTypeOps extends Serializable {
 
