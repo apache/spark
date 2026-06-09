@@ -602,9 +602,9 @@ class SortMergeAsOfJoinSuite extends QueryTest
     )
   }
 
-  test("residual condition") {
-    // Test that a post-join filter (simulating a residual predicate)
-    // works correctly with the sort-merge AS-OF join operator.
+  test("residual condition via joinExprs") {
+    // Test that pair-correlated residual predicates are routed into the
+    // scanner's residualCondition (not a post-join FilterExec).
     val schema1 = StructType(
       StructField("grp", StringType) ::
         StructField("ts", IntegerType) ::
@@ -619,20 +619,20 @@ class SortMergeAsOfJoinSuite extends QueryTest
       List(
         Row("A", 5, 40), Row("A", 8, 60), Row("A", 15, 25)
       ).asJava, schema2)
-    // Backward join picks nearest right.ts <= left.ts per group:
-    //   left(A,10,50) -> right(A,8,60) (nearest ts<=10)
-    //   left(A,20,30) -> right(A,15,25) (nearest ts<=20)
-    // Post-filter left.amount > right.threshold:
-    //   50 > 60? No -> filtered out
-    //   30 > 25? Yes -> kept
+    // joinExprs includes equi-key (grp) + residual (amount > threshold).
+    // The strategy splits into equi-key + residual inside the scanner.
+    // Backward join with residual amount > threshold:
+    //   left(A,10,50): scan right ts<=10: (8,60) 50>60? No; (5,40) 50>40? Yes -> match (5,40)
+    //   left(A,20,30): scan right ts<=20: (15,25) 30>25? Yes -> match (15,25)
     checkAnswer(
       df1.joinAsOf(
         df2, df1.col("ts"), df2.col("ts"),
-        usingColumns = Seq("grp"),
+        joinExprs = (df1.col("grp") === df2.col("grp")) &&
+          (df1.col("amount") > df2.col("threshold")),
         joinType = "inner", tolerance = null,
-        allowExactMatches = true, direction = "backward")
-        .where(df1.col("amount") > df2.col("threshold")),
+        allowExactMatches = true, direction = "backward"),
       Seq(
+        Row("A", 10, 50, "A", 5, 40),
         Row("A", 20, 30, "A", 15, 25)
       )
     )
