@@ -91,8 +91,8 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
   /**
    * Whether this session is closing or already closed. closedTimeMs is set at the very beginning
-   * of [[close]], before any session resources (e.g. running streaming queries) are cleaned up, so
-   * this can be used to detect a session shutdown that races with newly started operations.
+   * of [[close]], before any session resources (e.g. running streaming queries) are cleaned up,
+   * so this can be used to detect a session shutdown that races with newly started operations.
    */
   private[connect] def isClosing: Boolean = closedTimeMs.isDefined
 
