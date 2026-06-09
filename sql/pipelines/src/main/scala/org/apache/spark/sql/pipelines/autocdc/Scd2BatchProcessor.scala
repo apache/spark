@@ -646,6 +646,240 @@ case class Scd2BatchProcessor(
       .filter(!isRedundantAtSameEffectiveSequence)
       .drop(Scd2BatchProcessor.nextEffectiveRecordStartAtColName)
   }
+
+  /**
+   * Recompute every row's [[startAtColName]] and [[endAtColName]] over the per-key chronological
+   * window so the dataframe reflects the canonical SCD2 timeline that the downstream aux- and
+   * target-table merges consume.
+   *
+   * Decomposition tails and tombstones round-trip unchanged. An open upsert may close at its
+   * successor's effective sequence (becoming closed); a closed upsert may have its endAt cleared
+   * when absorbed into a run as a no-op continuation (becoming open). [[recordStartAtFieldName]]
+   * is never modified.
+   *
+   * @param decomposedAndCleanedDf
+   *   the output of [[dropRedundantRowsPostDecomposition]]: a dataframe conforming to the
+   *   canonical SCD2 row schema `[user_cols..., [[startAtColName]], [[endAtColName]],
+   *   [[cdcMetadataColName]]]` where every row is in one of the four canonical post-
+   *   decomposition shapes (decomposition tail, tombstone, open upsert, closed upsert).
+   *   If a row is a closed upsert in the input, it is assumed to not be bisected by any other
+   *   row in the input.
+   * @return
+   *   a dataframe with the same schema and row count as the input, with each row's
+   *   [[startAtColName]] / [[endAtColName]] replaced by their reconciled values.
+   */
+  private[autocdc] def reconcileStartAndEndAt(
+      decomposedAndCleanedDf: DataFrame): DataFrame = {
+    val trackedHistoryColumns = computeTrackedHistoryColumns(decomposedAndCleanedDf)
+
+    val recordStartAtField =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
+    val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
+
+    // Decomposition tails carry no recordStartAt of their own, so they take the closing
+    // sequence (`endAt`) as their effective ordering position - the same convention used by
+    // [[orderChronologicallyPerKeyWindow]] and [[dropRedundantRowsPostDecomposition]].
+    val effectiveRecordStartAt = F.coalesce(recordStartAtField, endAtCol)
+
+    val previousRecordStartAt =
+      F.lag(recordStartAtField, 1).over(orderChronologicallyPerKeyWindow)
+    val previousStartAt = F.lag(startAtCol, 1).over(orderChronologicallyPerKeyWindow)
+    val previousEndAt = F.lag(endAtCol, 1).over(orderChronologicallyPerKeyWindow)
+    val previousEffectiveRecordStartAt =
+      F.lag(effectiveRecordStartAt, 1).over(orderChronologicallyPerKeyWindow)
+
+    val nextRecordStartAt =
+      F.lead(recordStartAtField, 1).over(orderChronologicallyPerKeyWindow)
+    val nextStartAt = F.lead(startAtCol, 1).over(orderChronologicallyPerKeyWindow)
+    val nextEndAt = F.lead(endAtCol, 1).over(orderChronologicallyPerKeyWindow)
+    val nextEffectiveRecordStartAt =
+      F.lead(effectiveRecordStartAt, 1).over(orderChronologicallyPerKeyWindow)
+
+    // A row is the last in its per-key window when `LEAD(1)` has no successor; a constant
+    // literal is sufficient since we only care whether one exists.
+    val isLastRowInKeyWindow =
+      F.lead(F.lit(true), 1).over(orderChronologicallyPerKeyWindow).isNull
+
+    // The current row's tracked-history equality is computed against both its predecessor and
+    // its successor so the same window scan can decide both run-head start (LAG-side) and no-op
+    // continuation closure (LEAD-side) without an extra pass. The comparison is null-safe
+    // (`<=>`), so two rows with matching null values in the same tracked column register as
+    // equal. An empty tracked-history column set collapses to a constant `true`, which makes
+    // every consecutive upsert pair a no-op continuation - the correct degenerate behavior when
+    // the user tracks nothing.
+    val areTrackedColumnsEqualInPreviousRow = trackedHistoryColumns
+      .map { c =>
+        F.col(c) <=> F.lag(F.col(c), 1).over(orderChronologicallyPerKeyWindow)
+      }
+      .reduceOption(_ && _)
+      .getOrElse(F.lit(true))
+
+    val areTrackedColumnsEqualInNextRow = trackedHistoryColumns
+      .map { c =>
+        F.col(c) <=> F.lead(F.col(c), 1).over(orderChronologicallyPerKeyWindow)
+      }
+      .reduceOption(_ && _)
+      .getOrElse(F.lit(true))
+
+    // Reconciliation of start/end at is dependent on the class of row being reconciled. Build
+    // row classification predicates.
+    val isDecompositionTail = RowClassifier.isDecompositionTail(
+      recordStartAt = recordStartAtField,
+      startAt = startAtCol,
+      endAt = endAtCol
+    )
+    val isUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(
+      recordStartAt = recordStartAtField,
+      startAt = startAtCol,
+      endAt = endAtCol
+    )
+    val previousIsUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(
+      recordStartAt = previousRecordStartAt,
+      startAt = previousStartAt,
+      endAt = previousEndAt
+    )
+    val nextIsUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(
+      recordStartAt = nextRecordStartAt,
+      startAt = nextStartAt,
+      endAt = nextEndAt
+    )
+
+    def rowClosesStrictlyBeforeNextRow(
+        rowEndAt: Column,
+        nextEffective: Column): Column = {
+      rowEndAt.isNotNull && rowEndAt < nextEffective
+    }
+
+    def rowIsNoOpUpsertWithNext(
+        rowIsUpsertRepresenting: Column,
+        rowEndAt: Column,
+        nextRowIsUpsertRepresenting: Column,
+        nextEffective: Column,
+        areTrackedColumnsEqualInNextRow: Column): Column = {
+      rowIsUpsertRepresenting &&
+        nextRowIsUpsertRepresenting &&
+        !rowClosesStrictlyBeforeNextRow(rowEndAt, nextEffective) &&
+        areTrackedColumnsEqualInNextRow
+    }
+
+    val previousIsNoOpUpsertWithCurrent =
+      rowIsNoOpUpsertWithNext(
+        rowIsUpsertRepresenting = previousIsUpsertRepresentingRow,
+        rowEndAt = previousEndAt,
+        nextRowIsUpsertRepresenting = isUpsertRepresentingRow,
+        nextEffective = effectiveRecordStartAt,
+        areTrackedColumnsEqualInNextRow = areTrackedColumnsEqualInPreviousRow
+      )
+
+    // "Window-local run head" means the current row begins a new run within the affected
+    // window. The first row in the window is automatically considered local-run-head since
+    // there's no predecessor to coalesce with. A non-first row is a local run head iff its
+    // predecessor is not a no-op continuation that absorbs it.
+    val isWindowLocalUpsertRunHead =
+      isUpsertRepresentingRow && !previousIsNoOpUpsertWithCurrent
+    val isFirstRowInKeyWindow = previousEffectiveRecordStartAt.isNull
+    val runHeadStartAt =
+      F.when(
+        isWindowLocalUpsertRunHead,
+        // The first row in the window may be a window-local run head but not a global run
+        // head (e.g., an aux anchor row pulled in for left context). In that case, `startAt`
+        // may be strictly less than `recordStartAt`, encoding the true global run start, and
+        // we propagate it forward to later in-window continuations of the same run.
+        // For every later window-local upsert run head, `recordStartAt` is the run start.
+        F.when(isFirstRowInKeyWindow, startAtCol).otherwise(recordStartAtField)
+      )
+
+    // Propagate the run head's `startAt` forward to every row in the run via a running
+    // `last(...)` over `[unboundedPreceding, currentRow]`. `runHeadStartAt` is non-null
+    // only on run heads, and `ignoreNulls = true` makes intermediate rows inherit the most
+    // recent head's value.
+    val runStartAt =
+      F.last(runHeadStartAt, ignoreNulls = true).over(
+        orderChronologicallyPerKeyWindow.rowsBetween(
+          Window.unboundedPreceding,
+          Window.currentRow
+        )
+      )
+
+    val currentIsNoOpUpsertWithNext =
+      rowIsNoOpUpsertWithNext(
+        rowIsUpsertRepresenting = isUpsertRepresentingRow,
+        rowEndAt = endAtCol,
+        nextRowIsUpsertRepresenting = nextIsUpsertRepresentingRow,
+        nextEffective = nextEffectiveRecordStartAt,
+        areTrackedColumnsEqualInNextRow = areTrackedColumnsEqualInNextRow
+      )
+
+    val finalStartAt =
+      F.when(isDecompositionTail, F.lit(null).cast(resolvedSequencingType))
+        .when(isUpsertRepresentingRow, runStartAt)
+        .otherwise(startAtCol)
+
+    val finalEndAt =
+      F.when(isDecompositionTail, endAtCol)
+        .when(isLastRowInKeyWindow, endAtCol)
+        // A no-op continuation collapses into its run head, so the row's visible interval
+        // disappears and `endAt` is reset to null to route the row to the aux table.
+        .when(currentIsNoOpUpsertWithNext, F.lit(null).cast(resolvedSequencingType))
+        // The row already closes strictly before the next event (e.g., a tombstone or a
+        // closed upsert that ended before the next event arrived), so there is nothing to
+        // re-close.
+        .when(rowClosesStrictlyBeforeNextRow(endAtCol, nextEffectiveRecordStartAt), endAtCol)
+        .otherwise(nextEffectiveRecordStartAt)
+
+    // Stage the recomputed start/end values into temporary columns first, then project them
+    // back over the originals via `select`. Both staged values reference the original
+    // `startAt`/`endAt`, so we cannot replace the originals in a single `withColumn` step.
+    val staged = decomposedAndCleanedDf
+      .withColumn(Scd2BatchProcessor.finalStartAtColName, finalStartAt)
+      .withColumn(Scd2BatchProcessor.finalEndAtColName, finalEndAt)
+
+    // Determine columns for selection from staged dataframe using the original input dataframe's
+    // schema. The final startAt/endAt should be remapped, all other columns should pass through
+    // as-is.
+    val outputColumns = decomposedAndCleanedDf.columns.map {
+      case col if col == Scd2BatchProcessor.startAtColName =>
+        val startAtMetadata = decomposedAndCleanedDf.schema(col).metadata
+        F.col(Scd2BatchProcessor.finalStartAtColName)
+          .as(Scd2BatchProcessor.startAtColName, startAtMetadata)
+      case col if col == Scd2BatchProcessor.endAtColName =>
+        val endAtMetadata = decomposedAndCleanedDf.schema(col).metadata
+        F.col(Scd2BatchProcessor.finalEndAtColName)
+          .as(Scd2BatchProcessor.endAtColName, endAtMetadata)
+      case col =>
+        F.col(col)
+    }
+    staged.select(outputColumns.toImmutableArraySeq: _*)
+  }
+
+  /**
+   * Return the schema field names of columns selected for history-tracking on `df`:
+   * the eligible user-data columns (those not in [[ChangeArgs.keys]] or the framework
+   * reserved set) filtered through [[ChangeArgs.trackHistorySelection]].
+   */
+  private def computeTrackedHistoryColumns(df: DataFrame): Seq[String] = {
+    val conf = df.sparkSession.sessionState.conf
+    val resolver = conf.resolver
+
+    val keyColNames = changeArgs.keys.map(_.name)
+    val reservedColNames = Scd2BatchProcessor.reservedFrameworkColNames
+
+    val eligibleSchema = StructType(df.schema.fields.filterNot { field =>
+      reservedColNames.exists(resolver(_, field.name)) ||
+        keyColNames.exists(resolver(_, field.name))
+    })
+
+    ColumnSelection
+      .applyToSchema(
+        schemaName = "trackHistorySelection",
+        schema = eligibleSchema,
+        columnSelection = changeArgs.trackHistorySelection,
+        caseSensitive = conf.caseSensitiveAnalysis
+      )
+      .fieldNames
+      .toImmutableArraySeq
+  }
 }
 
 /**
@@ -838,6 +1072,19 @@ object Scd2BatchProcessor {
    */
   private[autocdc] val nextEffectiveRecordStartAtColName: String =
     s"${AutoCdcReservedNames.prefix}next_effective_record_start_at"
+
+  /**
+   * Names of temporary columns used by [[reconcileStartAndEndAt]] to stage the recomputed
+   * [[startAtColName]] / [[endAtColName]] values before projecting them back over the originals.
+   *
+   * Temporary in that the columns have no observable side effect or persistence across
+   * microbatches.
+   */
+  private[autocdc] val finalStartAtColName: String =
+    s"${AutoCdcReservedNames.prefix}final_start_at"
+  private[autocdc] val finalEndAtColName: String =
+    s"${AutoCdcReservedNames.prefix}final_end_at"
+
   /**
    * Name of the temporary column used to identify the sequence associated with the anchor
    * row found in the auxiliary table for the incoming microbatch. Since sequences must be unique
