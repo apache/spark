@@ -160,6 +160,20 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  // With the Types Framework off (the production default), TypeApiOps returns None and Row JSON
+  // falls back to the legacy toJsonDefault, which must still render the external LocalTime that a
+  // public Row holds for a TIME column - matching HiveResult's legacy fallback - rather than
+  // failing with FAILED_ROW_TO_JSON.
+  test("SPARK-57338: TIME column renders via the legacy path with the framework disabled") {
+    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
+      assert(timeRowJson(LocalTime.of(12, 13, 14), TimeType.MICROS_PRECISION) ===
+        JObject("a" -> JString("12:13:14")))
+      assert(timeRowJson(LocalTime.of(1, 2, 3, 123456000), TimeType.MICROS_PRECISION) ===
+        JObject("a" -> JString("01:02:03.123456")))
+      assert(timeRowJson(null, TimeType.MICROS_PRECISION) === JObject("a" -> JNull))
+    }
+  }
+
   // Routing the external value through formatExternal must not silently change the nanosecond
   // timestamp behavior: those ops raise the clean unsupported-rendering error directly from
   // formatExternal instead of mis-rendering the external value as a microsecond timestamp.

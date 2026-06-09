@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.{Instant, LocalDate, LocalDateTime, LocalTime}
 import java.util.Base64
 
 import scala.collection.mutable
@@ -648,6 +648,11 @@ trait Row extends Serializable {
       case (b: Byte, _) => JLong(b)
       case (s: Short, _) => JLong(s)
       case (i: Int, _) => JLong(i)
+      // A public Row holds the external java.time.LocalTime for a TimeType column (SPARK-54451).
+      // With the Types Framework off, TypeApiOps returns None and we land here, so render the
+      // LocalTime directly, mirroring HiveResult's legacy fallback. The Long case below is the
+      // internal representation that a public Row never holds; it stays for non-Row callers.
+      case (lt: LocalTime, _: TimeType) => JString(timeFormatter.format(lt))
       case (nanos: Long, _: TimeType) => JString(timeFormatter.format(nanos))
       case (l: Long, _) => JLong(l)
       case (f: Float, _) => JDouble(f)
