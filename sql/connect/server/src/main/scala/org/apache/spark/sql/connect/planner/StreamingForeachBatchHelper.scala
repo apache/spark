@@ -215,29 +215,33 @@ object StreamingForeachBatchHelper extends Logging {
     // Mapping from streaming (queryId, runId) to runner cleaner. Used for Python foreachBatch.
     private val cleanerCache: ConcurrentMap[CacheKey, AutoCloseable] = new ConcurrentHashMap()
 
-    // Tracks whether streamingListener has been initialized (and thus added to session.streams).
-    // Lets removeListenerIfRegistered() drop the listener without initializing it as a side effect.
-    @volatile private var listenerRegistered = false
+    // The runner clean-up listener, registered on first use and removed on cleanup. Both operations
+    // are guarded by `this`, and the field is recoverable: after removal a later registration re-adds
+    // a fresh listener, so cleanUpAll() does not permanently disable the cache if it is reused.
+    // (Today cleanUpAll() is only called on the close path, after which registration fast-paths on
+    // isClosing -- but correctness no longer depends on that being the only caller.)
+    private var streamingListener: StreamingRunnerCleanerListener = _
 
-    private lazy val streamingListener = { // Initialized on first registered query
-      val listener = new StreamingRunnerCleanerListener
-      sessionHolder.session.streams.addListener(listener)
-      listenerRegistered = true
-      logInfo(
-        log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
-          log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] " +
-          log"Registered runner clean up listener.")
-      listener
+    private def ensureListenerRegistered(): Unit = synchronized {
+      if (streamingListener == null) {
+        val listener = new StreamingRunnerCleanerListener
+        sessionHolder.session.streams.addListener(listener)
+        streamingListener = listener
+        logInfo(
+          log"[session: ${MDC(SESSION_ID, sessionHolder.sessionId)}] " +
+            log"[userId: ${MDC(USER_ID, sessionHolder.userId)}] " +
+            log"Registered runner clean up listener.")
+      }
     }
 
-    // Removes streamingListener from session.streams if it was ever registered. SessionHolder.close()
+    // Removes the listener from session.streams if it is currently registered. SessionHolder.close()
     // does not remove this listener (it is not tracked in the session's listenerCache), so the cache
     // must drop it on cleanup; otherwise the listener keeps this CleanerCache / SessionHolder
     // reachable after the session is closed.
-    private def removeListenerIfRegistered(): Unit = {
-      if (listenerRegistered) {
+    private def removeListenerIfRegistered(): Unit = synchronized {
+      if (streamingListener != null) {
         sessionHolder.session.streams.removeListener(streamingListener)
-        listenerRegistered = false
+        streamingListener = null
       }
     }
 
@@ -253,7 +257,7 @@ object StreamingForeachBatchHelper extends Logging {
         return
       }
 
-      streamingListener // Access to initialize
+      ensureListenerRegistered() // Register the runner clean-up listener if not already.
       val key = CacheKey(query.id.toString, query.runId.toString)
 
       Option(cleanerCache.putIfAbsent(key, cleaner)) match {

@@ -114,12 +114,35 @@ class StreamingForeachBatchHelperSuite extends SharedSparkSession with MockitoSu
       SparkConnectTestUtils.createDummySessionHolder(spark))
 
     cache.registerCleanerForQuery(query, cleaner)
-    assert(spark.streams.listListeners().contains(cache.listenerForTesting))
+    val listener = cache.listenerForTesting
+    assert(spark.streams.listListeners().contains(listener))
 
     cache.cleanUpAll()
 
     verify(cleaner, times(1)).close()
-    assert(!spark.streams.listListeners().contains(cache.listenerForTesting))
+    assert(!spark.streams.listListeners().contains(listener))
+  }
+
+  test("CleanerCache: listener is recoverable -- re-registered after cleanUpAll") {
+    // streamingListener is no longer a one-shot lazy val: after cleanUpAll() removes it, a later
+    // registration must re-add a working listener so the cache is safe to reuse.
+    val cache = new StreamingForeachBatchHelper.CleanerCache(
+      SparkConnectTestUtils.createDummySessionHolder(spark))
+
+    cache.registerCleanerForQuery(mockQuery(), mock[AutoCloseable])
+    val firstListener = cache.listenerForTesting
+    assert(spark.streams.listListeners().contains(firstListener))
+
+    cache.cleanUpAll()
+    assert(!spark.streams.listListeners().contains(firstListener))
+
+    // Reuse: a new registration re-registers a listener on session.streams.
+    cache.registerCleanerForQuery(mockQuery(), mock[AutoCloseable])
+    val secondListener = cache.listenerForTesting
+    assert(spark.streams.listListeners().contains(secondListener))
+
+    cache.cleanUpAll()
+    assert(!spark.streams.listListeners().contains(secondListener))
   }
 
   test("CleanerCache: registration racing with session shutdown strands no runner or listener") {
