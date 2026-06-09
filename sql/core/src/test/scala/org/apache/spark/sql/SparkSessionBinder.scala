@@ -19,17 +19,17 @@ package org.apache.spark.sql
 
 import scala.concurrent.duration._
 
-import org.scalatest.{BeforeAndAfterEach, Suite}
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Suite}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.{DebugFilesystem, SparkConf}
+import org.apache.spark.{DebugFilesystem, SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config.UNSAFE_EXCEPTION_ON_MEMORY_LEAK
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.TestSparkSession
 
-trait SparkSessionBinder extends QueryTest with SparkSessionBinderBase {
+trait SparkSessionBinder extends SparkSessionBinderBase { self: SparkFunSuite =>
 
   /**
    * Suites extending this trait are sharing resources (e.g. SparkSession) in their
@@ -56,9 +56,9 @@ trait SparkSessionBinder extends QueryTest with SparkSessionBinderBase {
 }
 
 trait SparkSessionBinderBase
-  extends QueryTestBase
-  with SparkSessionProvider
+  extends SparkSessionProvider
   with BeforeAndAfterEach
+  with BeforeAndAfterAll
   with Eventually { self: Suite =>
 
   protected def sparkConf = {
