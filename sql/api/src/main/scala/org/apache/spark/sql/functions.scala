@@ -7719,7 +7719,7 @@ object functions {
   /**
    * Extracts the hours as an integer from a given date/time/timestamp/string. The input may also
    * be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
-   * `[7, 9]`, since 4.2.0), in which case the sub-microsecond digits are ignored.
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -7794,7 +7794,7 @@ object functions {
   /**
    * Extracts the minutes as an integer from a given date/time/timestamp/string. The input may
    * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
-   * `[7, 9]`, since 4.2.0), in which case the sub-microsecond digits are ignored.
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -7902,7 +7902,7 @@ object functions {
   /**
    * Extracts the seconds as an integer from a given date/time/timestamp/string. The input may
    * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
-   * `[7, 9]`, since 4.2.0), in which case the sub-microsecond digits are ignored.
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs

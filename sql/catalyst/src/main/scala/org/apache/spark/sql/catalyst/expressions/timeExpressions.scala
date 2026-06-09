@@ -259,7 +259,7 @@ case class MinutesOfTime(child: Expression)
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the minute of that timestamp.
     If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
-    with p in [7, 9] (since 4.2.0), it returns the minute of that timestamp, ignoring the
+    with p in [7, 9] (since 4.3.0), it returns the minute of that timestamp, ignoring the
     sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the minute of the time-of-day.
   """,
@@ -326,7 +326,7 @@ case class HoursOfTime(child: Expression)
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the hour of that timestamp.
     If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
-    with p in [7, 9] (since 4.2.0), it returns the hour of that timestamp, ignoring the
+    with p in [7, 9] (since 4.3.0), it returns the hour of that timestamp, ignoring the
     sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the hour of the time-of-day.
   """,
@@ -418,7 +418,7 @@ case class SecondsOfTime(child: Expression)
     If `expr` is a TIMESTAMP or a string that can be cast to timestamp,
     it returns the second of that timestamp.
     If `expr` is a nanosecond-precision timestamp TIMESTAMP_NTZ(p) or TIMESTAMP_LTZ(p)
-    with p in [7, 9] (since 4.2.0), it returns the second of that timestamp, ignoring the
+    with p in [7, 9] (since 4.3.0), it returns the second of that timestamp, ignoring the
     sub-microsecond digits.
     If `expr` is a TIME type (since 4.1.0), it returns the second of the time-of-day.
   """,
