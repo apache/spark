@@ -131,7 +131,7 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
   private def timeRowJson(value: LocalTime, precision: Int): JValue =
     new GenericRowWithSchema(Array(value), new StructType().add("a", TimeType(precision))).jsonValue
 
-  test("TIME column renders the external LocalTime in JSON") {
+  test("SPARK-57338: TIME column renders the external LocalTime in JSON") {
     withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true") {
       assert(timeRowJson(LocalTime.of(12, 13, 14), TimeType.MICROS_PRECISION) ===
         JObject("a" -> JString("12:13:14")))
@@ -145,7 +145,7 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("TIME column JSON rendering is independent of the column precision") {
+  test("SPARK-57338: TIME column JSON rendering is independent of the column precision") {
     withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true") {
       val time = LocalTime.of(1, 2, 3, 123456000)
       (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
@@ -157,7 +157,7 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
   // Routing the external value through formatExternal must not silently change the nanosecond
   // timestamp behavior: those ops have no external formatter yet, so Row JSON falls back to format
   // and keeps raising the clean unsupported-rendering error instead of mis-rendering as micros.
-  test("nanosecond timestamp column raises the unsupported-rendering error in JSON") {
+  test("SPARK-57338: nanosecond timestamp column raises the unsupported-rendering error in JSON") {
     withSQLConf(
         SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true",
         SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
