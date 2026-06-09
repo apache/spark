@@ -1781,6 +1781,20 @@ package object config {
       .intConf
       .createWithDefault(8)
 
+  // ---------------------------------------------------------------------------
+  // Streaming shuffle writer configs
+  // ---------------------------------------------------------------------------
+
+  private[spark] val STREAMING_SHUFFLE_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.shuffle.streaming.checksum.enabled")
+      .doc("Whether to append a CRC32C checksum to each streaming shuffle data buffer. " +
+        "When enabled, the writer computes the checksum and embeds it in the DataMessage header; " +
+        "the reader recomputes and compares. A mismatch fails the task, providing early " +
+        "detection of data corruption in transit.")
+      .version("4.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val SHUFFLE_DETECT_CORRUPT =
     ConfigBuilder("spark.shuffle.detectCorrupt")
       .doc("Whether to detect any corruption in fetched blocks.")

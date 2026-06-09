@@ -29,7 +29,9 @@ import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.util.concurrent.SettableFuture;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
 
@@ -38,6 +40,7 @@ import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.internal.LogKeys;
 import org.apache.spark.internal.MDC;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.protocol.*;
 import org.apache.spark.network.util.JavaUtils;
@@ -301,8 +304,12 @@ public class TransportClient implements Closeable {
    *
    * @param message The message to send.
    */
-  public void send(ByteBuffer message) {
-    channel.writeAndFlush(new OneWayMessage(new NioManagedBuffer(message)));
+  public ChannelFuture send(ByteBuffer message) {
+    return channel.writeAndFlush(new OneWayMessage(new NioManagedBuffer(message)));
+  }
+
+  public ChannelFuture send(ByteBuf message) {
+    return channel.writeAndFlush(new OneWayMessage(new NettyManagedBuffer(message)));
   }
 
   /**
