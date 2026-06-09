@@ -1989,18 +1989,32 @@ class _TransformWithStatePandasBenchMixin:
 
     Each scenario emits one plain Arrow stream pre-sorted by the leading int
     key column. UDFs receive an iterator of value-only Pandas DataFrames per
-    group plus phantom ``PROCESS_TIMER``/``COMPLETE`` calls (empty iterator).
+    group (the grouping key is projected out before the UDF, mirroring
+    ``worker.py``'s ``values_gen``) plus phantom ``PROCESS_TIMER``/``COMPLETE``
+    calls (empty iterator).
     """
 
-    # Each scenario: (num_groups, rows_per_group, num_value_cols).
+    # Per-scenario value-column type pool. ``mixed_cols`` exercises the
+    # string/binary/boolean encode paths and ``nested_struct`` exercises the
+    # struct (dict) conversion path; the rest stay numeric to keep encode cost
+    # dominated by row volume rather than per-value Python work.
+    _MIXED_POOL = MockDataFactory.MIXED_TYPES
+    _NESTED_POOL = [
+        MockDataFactory.TYPE_REGISTRY["int"],
+        MockDataFactory.make_struct_type(num_fields=3, base_types=MockDataFactory.MIXED_TYPES),
+    ]
+
+    # Each scenario: (num_groups, rows_per_group, num_value_cols, value_pool).
     # Row counts are scaled so identity_udf (full pdf passthrough -> ~equal
     # input and output volume) stays under ASV's 60s per-sample timeout.
     _scenario_configs = {
-        "few_groups_sm": (50, 5_000, 5),
-        "few_groups_lg": (50, 50_000, 5),
-        "many_groups_sm": (2_000, 500, 5),
-        "many_groups_lg": (500, 2_000, 5),
-        "wide_cols": (200, 5_000, 20),
+        "few_groups_sm": (50, 5_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "few_groups_lg": (50, 50_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "many_groups_sm": (2_000, 500, 5, MockDataFactory.NUMERIC_TYPES),
+        "many_groups_lg": (500, 2_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "wide_cols": (200, 5_000, 20, MockDataFactory.NUMERIC_TYPES),
+        "mixed_cols": (200, 5_000, 5, _MIXED_POOL),
+        "nested_struct": (200, 5_000, 4, _NESTED_POOL),
     }
 
     @staticmethod
@@ -2011,7 +2025,7 @@ class _TransformWithStatePandasBenchMixin:
         RecordBatches with rows pre-sorted by the leading int32 key column.
         """
         np.random.seed(42)
-        num_groups, rows_per_group, num_value_cols = (
+        num_groups, rows_per_group, num_value_cols, value_pool = (
             _TransformWithStatePandasBenchMixin._scenario_configs[name]
         )
         total_rows = num_groups * rows_per_group
@@ -2019,7 +2033,6 @@ class _TransformWithStatePandasBenchMixin:
             np.repeat(np.arange(num_groups, dtype=np.int32), rows_per_group),
             type=pa.int32(),
         )
-        value_pool = MockDataFactory.NUMERIC_TYPES
         value_arrays = [
             value_pool[i % len(value_pool)][0](total_rows) for i in range(num_value_cols)
         ]
@@ -2064,13 +2077,23 @@ class _TransformWithStatePandasBenchMixin:
 
         if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
             total = sum(len(pdf) for pdf in pdfs)
-            yield pd.DataFrame({"col_1": [total]})
+            # The input pdfs are value-only, so an aggregating UDF reconstructs
+            # the grouping key from the ``key`` arg to keep it in the output --
+            # the common shape for transformWithState (see the
+            # transformWithStateInPandas docstring example).
+            yield pd.DataFrame({"col_0": [key[0]], "col_1": [total]})
 
-    # ret_type=None means "use all value columns of the input schema".
+    # ret_type=None means "use all value columns of the input schema" (identity
+    # and sort are pure value-column passthroughs, so their output omits the
+    # key, which the input pdf never carries). count_udf re-emits the key, so it
+    # declares an explicit output schema of (key, count).
     _udfs = {
         "identity_udf": (_tws_pandas_identity, None),
         "sort_udf": (_tws_pandas_sort, None),
-        "count_udf": (_tws_pandas_count, StructType([StructField("col_1", IntegerType())])),
+        "count_udf": (
+            _tws_pandas_count,
+            StructType([StructField("col_0", IntegerType()), StructField("col_1", IntegerType())]),
+        ),
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
