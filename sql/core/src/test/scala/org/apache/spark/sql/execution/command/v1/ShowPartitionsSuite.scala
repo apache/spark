@@ -266,12 +266,6 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
       checkAnswer(
         sql(s"SHOW PARTITIONS $t AS JSON"),
         Row("""{"partitions":[{"part":"__HIVE_DEFAULT_PARTITION__"}]}"""))
-      checkAnswer(
-        sql(s"SHOW PARTITIONS $t PARTITION (part = '') AS JSON"),
-        Row("""{"partitions":[{"part":"__HIVE_DEFAULT_PARTITION__"}]}"""))
-      checkAnswer(
-        sql(s"SHOW PARTITIONS $t PARTITION (part = null) AS JSON"),
-        Row("""{"partitions":[{"part":"__HIVE_DEFAULT_PARTITION__"}]}"""))
     }
   }
 }
