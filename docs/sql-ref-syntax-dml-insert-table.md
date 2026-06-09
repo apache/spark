@@ -63,8 +63,8 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier [ BY NAME ] REP
 
 * **BY NAME**
 
-    Columns and nested fields are matched by position between the source query and the target
-    table, unless `BY NAME` is specified, in which case columns and fields are matched by name.
+    By default, columns and nested fields are matched by position between the source query and the target
+    table. With `BY NAME`, columns and nested fields are matched by name, allowing them to be ordered differently in the source query and target table.
 
 * **VALUES ( { value `|` NULL } [ , ... ] ) [ , ( ... ) ]**
 
