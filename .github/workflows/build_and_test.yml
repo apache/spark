@@ -409,8 +409,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -620,13 +620,13 @@ jobs:
     - name: Package compile output
       run: |
         find . -type d -name target -not -path './build/*' -not -path './.git/*' -print0 \
-          | tar --null -czf compile-artifact.tar.gz -T -
-        ls -lh compile-artifact.tar.gz
+          | tar --null -cf - -T - | zstd -c -T0 > compile-artifact.tar.zst
+        ls -lh compile-artifact.tar.zst
     - name: Upload compile artifact
       uses: actions/upload-artifact@v6
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
-        path: compile-artifact.tar.gz
+        path: compile-artifact.tar.zst
         retention-days: 1
         if-no-files-found: error
 
@@ -764,8 +764,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -901,8 +901,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -1410,8 +1410,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
@@ -1542,8 +1542,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -1633,8 +1633,8 @@ jobs:
         if: steps.download-precompiled.outcome == 'success'
         continue-on-error: true
         run: |
-          tar -xzf compile-artifact.tar.gz
-          rm compile-artifact.tar.gz
+          zstd -dc compile-artifact.tar.zst | tar -xf -
+          rm compile-artifact.tar.zst
       - name: Install R
         run: |
           sudo apt update
