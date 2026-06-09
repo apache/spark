@@ -2304,40 +2304,6 @@ class AstBuilder extends DataTypeAstBuilder
     }
 
   /**
-   * Add an [[UnresolvedBinBy]] to a logical plan; the analyzer rewrites it to [[BinBy]] during
-   * analysis.
-   */
-  private def withBinBy(
-      ctx: BinByClauseContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val binWidth = expression(ctx.binWidth)
-    val originExpr = Option(ctx.origin).map(expression)
-    val rangeStart = UnresolvedAttribute(visitMultipartIdentifier(ctx.rangeStart))
-    val rangeEnd = UnresolvedAttribute(visitMultipartIdentifier(ctx.rangeEnd))
-    val distributeColumns = ctx.distributeCol.asScala
-      .map(c => UnresolvedAttribute(visitMultipartIdentifier(c))).toSeq
-    val outputAliases = BinByOutputAliases(
-      binStart = Option(ctx.binStartAlias).map(getIdentifierText),
-      binEnd = Option(ctx.binEndAlias).map(getIdentifierText),
-      binRatio = Option(ctx.binRatioAlias).map(getIdentifierText))
-
-    val binBy = UnresolvedBinBy(
-      binWidthExpr = binWidth,
-      rangeStartCol = rangeStart,
-      rangeEndCol = rangeEnd,
-      originExpr = originExpr,
-      distributeColumns = distributeColumns,
-      outputAliases = outputAliases,
-      child = query)
-
-    if (ctx.tblAlias != null) {
-      SubqueryAlias(getIdentifierText(ctx.tblAlias), binBy)
-    } else {
-      binBy
-    }
-  }
-
-  /**
    * Add a [[Generate]] (Lateral View) to a logical plan.
    */
   private def withGenerate(
@@ -2400,11 +2366,9 @@ class AstBuilder extends DataTypeAstBuilder
         withJoinRelation(extension.joinRelation(), left)
       } else if (extension.pivotClause() != null) {
         withPivot(extension.pivotClause(), left)
-      } else if (extension.unpivotClause() != null) {
-        withUnpivot(extension.unpivotClause(), left)
       } else {
-        assert(extension.binByClause() != null)
-        withBinBy(extension.binByClause(), left)
+        assert(extension.unpivotClause() != null)
+        withUnpivot(extension.unpivotClause(), left)
       }
     }
   }
@@ -7471,8 +7435,6 @@ class AstBuilder extends DataTypeAstBuilder
         throw QueryParsingErrors.unpivotWithPivotInFromClauseNotAllowedError(ctx)
       }
       withUnpivot(c, left)
-    }.getOrElse(Option(ctx.binByClause()).map { c =>
-      withBinBy(c, left)
     }.getOrElse(Option(ctx.sample).map { c =>
       withSample(c, left)
     }.getOrElse(Option(ctx.joinRelation()).map { c =>
@@ -7484,7 +7446,7 @@ class AstBuilder extends DataTypeAstBuilder
       withQueryResultClauses(c, PipeOperator(left), forPipeOperators = true)
     }.getOrElse(
       visitOperatorPipeAggregate(ctx, left)
-    )))))))))))))
+    ))))))))))))
   }
 
   private def visitOperatorPipeSet(
