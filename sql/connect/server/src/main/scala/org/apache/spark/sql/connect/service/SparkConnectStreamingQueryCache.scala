@@ -100,10 +100,9 @@ private[connect] class SparkConnectStreamingQueryCache(
     // strong reference to the now-closed session so that the driver can never exit.
     //
     // We publish the entry with queryCache.compute() *first* and only then read
-    // sessionHolder.isClosing. close() writes the volatile closedTimeMs *before* it iterates this
-    // cache in cleanupRunningQueries(). Correctness rests on ConcurrentHashMap's per-key
-    // linearizability of our compute() against the cleanup forEach -- not on the volatile read in
-    // isolation, which on its own would be StoreLoad/Dekker-vulnerable:
+    // sessionHolder.isClosing; close() writes the volatile closedTimeMs *before* it iterates this
+    // cache in cleanupRunningQueries(). Because both the cache publish and closedTimeMs are
+    // volatile, at least one side always observes the other:
     //   - if the cleanup forEach observes our entry, cleanupRunningQueries() stops the query;
     //   - otherwise the forEach missed it, which means our compute() linearized *after* close()'s
     //     read of that key's bin. Since closedTimeMs was written before that bin read (program
