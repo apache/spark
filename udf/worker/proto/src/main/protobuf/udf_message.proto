@@ -31,9 +31,7 @@ option java_multiple_files = true;
 // language) acts as the gRPC server.
 //
 // This file defines only the protocol's message types. The gRPC service
-// that carries them ([[UdfWorker]]) lives in udf_service.proto so its
-// stubs can be generated separately in the udf-worker-grpc module,
-// keeping gRPC off the classpath of the message types' consumers.
+// that carries them ([[UdfWorker]]) lives in udf_service.proto.
 // =====================================================================
 
 // =====================================================================

@@ -27,12 +27,8 @@ option java_multiple_files = true;
 // =====================================================================
 // gRPC service definition for the language-agnostic UDF protocol.
 //
-// The service is intentionally kept in its own file, separate from the
-// protocol's message definitions (udf_message.proto), so the gRPC
-// service stubs can be generated independently in the dedicated
-// udf-worker-grpc module while the message classes are generated once in
-// udf-worker-proto. This keeps the gRPC stack off the classpath of every
-// consumer of the message types (core, catalyst, sql/core).
+// The service is kept in its own file, separate from the protocol's
+// message definitions (udf_message.proto).
 // =====================================================================
 
 // The default UDF gRPC service. A worker that exposes this service
