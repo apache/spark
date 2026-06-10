@@ -1969,10 +1969,9 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
         return mapper, None, ser, ser
 
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
+        import pyarrow as pa
 
         def wrap_pyarrow_udtf(f, return_type):
-            import pyarrow as pa
-
             arrow_return_type = to_arrow_type(
                 return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
             )
@@ -2069,12 +2068,13 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
             set(eval_conf.table_arg_offsets) if eval_conf.table_arg_offsets else set()
         )
 
-        def mapper(_, it):
+        def func(split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+            """Apply Arrow UDTF"""
             try:
-                for batch in it:
-                    # For each column: flatten struct columns at table_arg_offsets into
-                    # RecordBatch, keep other columns as Array.
-                    a = [
+                for batch in data:
+                    # Pre-processing: for each column, flatten struct columns at
+                    # table_arg_offsets into RecordBatch, keep other columns as Array.
+                    columns = [
                         (
                             ArrowBatchTransformer.flatten_struct(batch, column_index=i)
                             if i in table_arg_offsets
@@ -2083,7 +2083,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                         for i in range(batch.num_columns)
                     ]
                     # For PyArrow UDTFs, pass RecordBatches directly (no row conversion needed)
-                    yield from eval(*[a[o] for o in args_kwargs_offsets])
+                    yield from eval(*[columns[o] for o in args_kwargs_offsets])
                 if terminate is not None:
                     yield from terminate()
             except SkipRestOfInputTableException:
@@ -2093,7 +2093,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if cleanup is not None:
                     cleanup()
 
-        return mapper, None, ser, ser
+        return func, None, ser, ser
 
     else:
 
