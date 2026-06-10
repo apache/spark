@@ -121,21 +121,21 @@ Project [named_struct(f, cast(null as timestamp_ntz(9))) AS named_struct(f, CAST
 -- !query
 SELECT hour(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [hour(cast(TimestampNanosVal(1577885075123456, 789) as timestamp_ntz), Some(America/Los_Angeles)) AS hour(TimestampNanosVal(1577885075123456, 789))#x]
+Project [hour(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz), Some(America/Los_Angeles)) AS hour(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT minute(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [minute(cast(TimestampNanosVal(1577885075123456, 789) as timestamp_ntz), Some(America/Los_Angeles)) AS minute(TimestampNanosVal(1577885075123456, 789))#x]
+Project [minute(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz), Some(America/Los_Angeles)) AS minute(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT second(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [second(cast(TimestampNanosVal(1577885075123456, 789) as timestamp_ntz), Some(America/Los_Angeles)) AS second(TimestampNanosVal(1577885075123456, 789))#x]
+Project [second(cast(2020-01-01 13:24:35.123456789 as timestamp_ntz), Some(America/Los_Angeles)) AS second(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
@@ -163,21 +163,21 @@ Project [hour(cast(cast(null as timestamp_ntz(9)) as timestamp_ntz), Some(Americ
 -- !query
 SELECT hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query analysis
-Project [hour(cast(TimestampNanosVal(-315570924876544, 789) as timestamp_ntz), Some(America/Los_Angeles)) AS hour(TimestampNanosVal(-315570924876544, 789))#x]
+Project [hour(cast(1960-01-01 13:24:35.123456789 as timestamp_ntz), Some(America/Los_Angeles)) AS hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query analysis
-Project [minute(cast(TimestampNanosVal(-315570924876544, 789) as timestamp_ntz), Some(America/Los_Angeles)) AS minute(TimestampNanosVal(-315570924876544, 789))#x]
+Project [minute(cast(1960-01-01 13:24:35.123456789 as timestamp_ntz), Some(America/Los_Angeles)) AS minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query analysis
-Project [second(cast(TimestampNanosVal(-315570924876544, 789) as timestamp_ntz), Some(America/Los_Angeles)) AS second(TimestampNanosVal(-315570924876544, 789))#x]
+Project [second(cast(1960-01-01 13:24:35.123456789 as timestamp_ntz), Some(America/Los_Angeles)) AS second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 

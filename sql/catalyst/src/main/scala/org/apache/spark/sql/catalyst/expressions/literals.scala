@@ -475,6 +475,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case TimestampNTZType =>
           TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(value.asInstanceOf[Long])
+        case t: TimestampNTZNanosType =>
+          TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
+            .formatWithoutTimeZoneNanos(value.asInstanceOf[TimestampNanosVal], t.precision)
+        case t: TimestampLTZNanosType =>
+          TimestampFormatter.getFractionFormatter(timeZoneId)
+            .formatNanos(value.asInstanceOf[TimestampNanosVal], t.precision)
         case DayTimeIntervalType(startField, endField) =>
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType(startField, endField) =>
@@ -518,6 +524,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(toString)
       case (l: Long, TimestampType | _: TimeType) => JString(toString)
+      case (_: TimestampNanosVal, _: TimestampNTZNanosType | _: TimestampLTZNanosType) =>
+        JString(toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
@@ -562,10 +570,27 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
         case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType | _: TimeType =>
           toExprCode(s"${value}L")
+        case (_: TimestampNTZNanosType | _: TimestampLTZNanosType)
+            if TypeOps(dataType).isDefined =>
+          ExprCode.forNonNullValue(
+            JavaCode.expression(TypeOps(dataType).get.getJavaLiteral(value), dataType))
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
           ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
       }
+    }
+  }
+
+  private def padToNanosPrecision(ts: String, precision: Int): String = {
+    val dotIdx = ts.indexOf('.')
+    if (dotIdx < 0) {
+      ts + "." + "0" * precision
+    } else {
+      val fracLen = ts.length - dotIdx - 1
+      // fracLen can never exceed precision: formatNanos/formatWithoutTimeZoneNanos truncate
+      // the value to `precision` digits before formatting, and the fractionFormatter only
+      // strips trailing zeros (never adds digits). The else branch is a defensive fallback.
+      if (fracLen < precision) ts + "0" * (precision - fracLen) else ts
     }
   }
 
@@ -607,6 +632,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       s"TIMESTAMP '$toString'"
     case (v: Long, TimestampNTZType) =>
       s"TIMESTAMP_NTZ '$toString'"
+    // toString strips trailing zeros (display-only); pad back to exactly `precision` digits
+    // here so the SQL literal round-trips correctly through the parser.
+    case (_: TimestampNanosVal, t: TimestampNTZNanosType) =>
+      s"TIMESTAMP_NTZ '${padToNanosPrecision(toString, t.precision)}'"
+    case (_: TimestampNanosVal, t: TimestampLTZNanosType) =>
+      s"TIMESTAMP_LTZ '${padToNanosPrecision(toString, t.precision)}'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${HexFormat.of().withUpperCase().formatHex(v)}'"
