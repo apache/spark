@@ -23,6 +23,7 @@ import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInteger}
 import java.time._
 import java.util
 import java.util.{List => JList, Locale, Map => JMap}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.immutable
 import scala.collection.mutable
@@ -151,9 +152,9 @@ object ArrowDeserializers {
           }
         }
       case (ScalaEnumEncoder(parent, _), v: FieldVector) =>
-        val mirror = scala.reflect.runtime.currentMirror
-        val module = mirror.classSymbol(parent).module.asModule
-        val enumeration = mirror.reflectModule(module).instance.asInstanceOf[Enumeration]
+        // Scala runtime reflection is not thread-safe (scala/bug#6240). Synchronize to
+        // prevent races that surface as "... is not a module" under concurrent access.
+        val enumeration = resolveEnum(parent)
         new LeafFieldDeserializer[Enumeration#Value](encoder, v, timeZoneId) {
           override def value(i: Int): Enumeration#Value = {
             enumeration.withName(reader.getString(i))
@@ -443,13 +444,72 @@ object ArrowDeserializers {
   private val methodLookup = MethodHandles.lookup()
 
   /**
+   * Cache for resolved companion objects. Scala runtime reflection is not thread-safe
+   * (scala/bug#6240, #10431): concurrent calls to `classSymbol(...).companion` can race,
+   * leaving the companion unresolved as `NoSymbol`, which causes `.asModule` to throw
+   * `ScalaReflectionException: <none> is not a module`. Caching avoids repeated reflection
+   * and the synchronization in `resolveCompanionFromMirror` prevents the race.
+   */
+  private val companionCache = new ConcurrentHashMap[Class[_], Any]()
+
+  /**
+   * Cache for resolved Scala Enumeration instances. See [[companionCache]] for the
+   * thread-safety rationale.
+   */
+  private val enumCache = new ConcurrentHashMap[Class[_], Enumeration]()
+
+  /**
    * Resolve the companion object for a scala class. In our particular case the class we pass in
    * is a Scala collection. We use the companion to create a builder for that collection.
+   *
+   * The resolved companion is cached per runtime class and the reflection itself is
+   * synchronized to prevent the thread-safety issues described on [[companionCache]].
    */
   private[arrow] def resolveCompanion[T](tag: ClassTag[_]): T = {
-    val mirror = scala.reflect.runtime.currentMirror
-    val module = mirror.classSymbol(tag.runtimeClass).companion.asModule
-    mirror.reflectModule(module).instance.asInstanceOf[T]
+    val cls = tag.runtimeClass
+    val cached = companionCache.get(cls)
+    if (cached != null) {
+      return cached.asInstanceOf[T]
+    }
+    val resolved = resolveCompanionFromMirror(scala.reflect.runtime.currentMirror, cls)
+    companionCache.putIfAbsent(cls, resolved)
+    resolved.asInstanceOf[T]
+  }
+
+  /**
+   * Synchronized reflection to resolve a companion object. Prevents the race condition
+   * where concurrent symbol completions corrupt Scala reflection internal state.
+   *
+   * The mirror is passed in rather than read from `currentMirror` so that the concurrency
+   * regression test can drive this exact (synchronized) method against a deliberately cold
+   * mirror, where the race would otherwise surface. Production always passes `currentMirror`.
+   */
+  private[arrow] def resolveCompanionFromMirror(
+      mirror: scala.reflect.runtime.universe.Mirror,
+      cls: Class[_]): Any = synchronized {
+    val module = mirror.classSymbol(cls).companion.asModule
+    mirror.reflectModule(module).instance
+  }
+
+  /**
+   * Resolve a Scala Enumeration parent class to its module instance.
+   * Cached and synchronized for the same thread-safety reasons as [[resolveCompanion]].
+   */
+  private def resolveEnum(parent: Class[_]): Enumeration = {
+    val cached = enumCache.get(parent)
+    if (cached != null) {
+      return cached
+    }
+    val resolved = resolveEnumFromMirror(scala.reflect.runtime.currentMirror, parent)
+    enumCache.putIfAbsent(parent, resolved)
+    resolved
+  }
+
+  private[arrow] def resolveEnumFromMirror(
+      mirror: scala.reflect.runtime.universe.Mirror,
+      parent: Class[_]): Enumeration = synchronized {
+    val module = mirror.classSymbol(parent).module.asModule
+    mirror.reflectModule(module).instance.asInstanceOf[Enumeration]
   }
 
   /**
