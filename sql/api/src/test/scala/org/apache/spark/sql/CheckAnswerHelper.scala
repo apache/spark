@@ -19,13 +19,9 @@ package org.apache.spark.sql
 
 import java.util.TimeZone
 
-import scala.jdk.CollectionConverters._
-import scala.language.implicitConversions
-
 import org.scalatest.Assertions
 
 import org.apache.spark.util.{SparkErrorUtils, SparkStringUtils}
-import org.apache.spark.util.ArrayImplicits._
 
 trait CheckAnswerHelper extends Assertions {
 
