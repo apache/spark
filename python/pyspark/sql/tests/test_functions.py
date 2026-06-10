@@ -1014,6 +1014,14 @@ class FunctionsTestsMixin:
         self.assertAlmostEqual(sum_result[0], 4.0, places=4)
         self.assertAlmostEqual(sum_result[1], 6.0, places=4)
 
+    def test_jaro_winkler_similarity_function(self):
+        df = self.spark.createDataFrame([("MARTHA", "MARHTA")], ["l", "r"])
+        result = df.select(F.jaro_winkler_similarity(df.l, df.r)).first()[0]
+        self.assertAlmostEqual(result, 0.9611111111111111, places=10)
+        # Null handling
+        null_result = df.select(F.jaro_winkler_similarity(df.l, F.lit(None))).first()[0]
+        self.assertIsNone(null_result)
+
     def test_between_function(self):
         df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
@@ -1648,7 +1656,7 @@ class FunctionsTestsMixin:
         non_file_df = self.spark.range(100).select(F.input_file_name())
 
         results = non_file_df.collect()
-        self.assertTrue(len(results) == 100)
+        self.assertEqual(len(results), 100)
 
         # [SPARK-24605]: if everything was properly reset after the last job, this should return
         # empty string rather than the file read in the last job.

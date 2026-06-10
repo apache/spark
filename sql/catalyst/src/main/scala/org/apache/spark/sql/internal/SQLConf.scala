@@ -996,12 +996,12 @@ object SQLConf {
   val SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED =
     buildConf("spark.sql.shuffle.spreadNullJoinKeys.enabled")
       .doc("When true, Spark may spread rows with NULL equi-join keys across shuffle partitions " +
-        "for shuffled LEFT, RIGHT, and FULL OUTER equi-joins on nullable keys to reduce " +
-        "shuffle skew. Null-aware join output partitioning does not satisfy a strict " +
-        "ClusteredDistribution, so downstream grouping, windowing, or equi-joins may require " +
-        "an extra shuffle. If one input is already hash partitioned, only the other input may " +
-        "be reshuffled into the null-aware layout, so the pre-shuffled input can keep its NULL " +
-        "skew.")
+        "for shuffled LEFT, RIGHT, and FULL OUTER equi-joins and LEFT ANTI equi-joins on " +
+        "nullable keys to reduce shuffle skew. Null-aware join output partitioning does not " +
+        "satisfy a strict ClusteredDistribution, so downstream grouping, windowing, or " +
+        "equi-joins may require an extra shuffle. If one input is already hash partitioned, " +
+        "only the other input may be reshuffled into the null-aware layout, so the pre-shuffled " +
+        "input can keep its NULL skew.")
       .version("4.1.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -2717,6 +2717,16 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("128MB") // parquet.block.size
 
+  val ARCHIVE_FORMAT_READER_ENABLED = buildConf("spark.sql.files.archive.reader.enabled")
+    .doc("When true, the CSV data source can read tar archives (.tar, .tar.gz, .tgz): each " +
+      "archive is read as a single split and its entries are streamed through the CSV parser " +
+      "(never unpacked to disk), as if the entries were separate CSV files. Only the CSV data " +
+      "source supports reading archives.")
+    .version("5.0.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .booleanConf
+    .createWithDefault(false)
+
   val FILES_OPEN_COST_IN_BYTES = buildConf("spark.sql.files.openCostInBytes")
     .internal()
     .doc("The estimated cost to open a file, measured by the number of bytes could be scanned in" +
@@ -3798,8 +3808,16 @@ object SQLConf {
 
   val USE_OBJECT_HASH_AGG = buildConf("spark.sql.execution.useObjectHashAggregateExec")
     .internal()
-    .doc("Decides if we use ObjectHashAggregateExec")
+    .doc("Decides if we use ObjectHashAggregateExec when possible.")
     .version("2.2.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val USE_HASH_AGG = buildConf("spark.sql.execution.useHashAggregateExec")
+    .internal()
+    .doc("Decides if we use HashAggregateExec when possible, the rule takes precedence " +
+      s"over ${USE_OBJECT_HASH_AGG.key}.")
+    .version("4.3.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -8188,6 +8206,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def useHashAggregation: Boolean = getConf(USE_HASH_AGG)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 

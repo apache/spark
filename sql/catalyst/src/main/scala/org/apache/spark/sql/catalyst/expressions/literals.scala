@@ -173,8 +173,31 @@ object Literal {
       case _: ObjectType => Literal(v, dataType)
       case _: CharType | _: VarcharType if SQLConf.get.preserveCharVarcharTypeInfo =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _ if requiresSchemaAwareNanosConversion(dataType, v) =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
     }
+  }
+
+  /**
+   * The schema-less [[CatalystTypeConverters.convertToCatalyst]] keeps bare external nanosecond
+   * timestamp values (`java.time.LocalDateTime` / `java.time.Instant`, and arrays/maps/structs of
+   * them) on the microsecond converters by design (SPARK-57033). When the declared type contains a
+   * nanosecond timestamp type anywhere, route the value through the schema-driven converter so
+   * external values are converted to the internal `TimestampNanosVal` representation. Values
+   * already in Catalyst internal form (`TimestampNanosVal`, `ArrayData`, `MapData`, `InternalRow`)
+   * and nulls keep using the lenient schema-less path, preserving the behavior of callers such as
+   * `Literal.default` that pass internal values.
+   */
+  private def requiresSchemaAwareNanosConversion(dataType: DataType, v: Any): Boolean = {
+    v != null &&
+      !v.isInstanceOf[TimestampNanosVal] &&
+      !v.isInstanceOf[ArrayData] &&
+      !v.isInstanceOf[MapData] &&
+      !v.isInstanceOf[InternalRow] &&
+      dataType.existsRecursively { t =>
+        t.isInstanceOf[TimestampNTZNanosType] || t.isInstanceOf[TimestampLTZNanosType]
+      }
   }
 
   def create[T : TypeTag](v: T): Literal = Try {
