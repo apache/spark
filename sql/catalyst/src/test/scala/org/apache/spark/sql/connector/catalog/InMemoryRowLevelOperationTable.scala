@@ -79,8 +79,8 @@ class InMemoryRowLevelOperationTable private (
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
 
-  // Set only on snapshot copies returned by InMemoryRowLevelOperationTableCatalog.loadTable,
-  // which routes truncateTable() to the catalog's live table (see the rationale there).
+  // Set only on snapshot copies returned by InMemoryRowLevelOperationTableCatalog.loadTable;
+  // when set, truncateTable() forwards to the catalog's live table (see the rationale there).
   // copy() deliberately drops this field: copies must stay independent tables (e.g. pinTable
   // version pinning), so the redirection is re-stamped per load instead of carried along.
   // Volatile: snapshots can cross threads (e.g. cloned streaming sessions sharing a catalog).
