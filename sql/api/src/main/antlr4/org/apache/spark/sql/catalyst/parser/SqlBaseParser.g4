@@ -1995,12 +1995,14 @@ ansiNonReserved
     | ANALYZE
     | ANTI
     | ANY_VALUE
+    | APPLY
     | APPROX
     | ARCHIVE
     | ARRAY
     | ASC
     | ASENSITIVE
     | AT
+    | AUTO
     | ATOMIC
     | BEGIN
     | BERNOULLI
@@ -2023,6 +2025,7 @@ ansiNonReserved
     | CASCADE
     | CATALOG
     | CATALOGS
+    | CDC
     | CHANGE
     | CHANGES
     | CHAR
@@ -2254,6 +2257,7 @@ ansiNonReserved
     | SECURITY
     | SEMI
     | SEPARATED
+    | SEQUENCE
     | SERDE
     | SERDEPROPERTIES
     | SET
