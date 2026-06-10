@@ -280,8 +280,9 @@ class SharedTablesInMemoryRowLevelOperationTableCatalog
     tables = SharedTablesInMemoryRowLevelOperationTableCatalog.sharedTables
   }
 
-  // Return the live table instance (not a snapshot copy) so that TRUNCATE and DROP
-  // mutations affect the shared catalog state immediately.
+  // Return the live table instance (not a snapshot copy) so that an in-place TRUNCATE --
+  // which resolves its target via the read-path loadTable -- mutates the shared catalog
+  // state instead of a discarded copy. (DROP bypasses loadTable, so it is unaffected.)
   override def loadTable(ident: Identifier): Table = liveTable(ident)
 }
 
