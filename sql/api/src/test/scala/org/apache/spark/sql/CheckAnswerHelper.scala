@@ -42,22 +42,6 @@ trait CheckAnswerHelper extends Assertions {
     }
   }
 
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
-    checkAnswer(df, Seq(expectedAnswer))
-  }
-
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
-    checkAnswer(df, expectedAnswer.collect().toImmutableArraySeq)
-  }
-
-  protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
-    checkAnswer(df, expectedAnswer.toImmutableArraySeq)
-  }
-
-  protected def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
-    checkAnswer(df, expectedAnswer.asScala.toSeq)
-  }
-
   protected def isDfSorted(df: DataFrame): Boolean
 
   /**
