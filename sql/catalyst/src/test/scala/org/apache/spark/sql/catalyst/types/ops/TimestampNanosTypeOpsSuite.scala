@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import java.time.{Instant, LocalDateTime}
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder, OptionEncoder}
@@ -204,19 +204,19 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("enabling the nanos types requires the Types Framework to be enabled") {
-    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
-      checkError(
-        exception = intercept[SparkIllegalArgumentException] {
-          SQLConf.get.setConfString(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key, "true")
-        },
-        condition = "INVALID_CONF_VALUE.REQUIREMENT",
-        parameters = Map(
-          "confName" -> SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key,
-          "confValue" -> "true",
-          "confRequirement" ->
-            (s"'${SQLConf.TYPES_FRAMEWORK_ENABLED.key}' must be true to enable the nanosecond " +
-              "timestamp types.")))
+  test("the nanos types flag only takes effect when the Types Framework is enabled") {
+    // Setting the flag must always succeed (a checkValue consulting SQLConf.get would recurse
+    // into the session conf's own construction); the framework requirement is enforced in the
+    // effective getter instead.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
+      assert(!SQLConf.get.timestampNanosTypesEnabled)
+    }
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true") {
+      assert(SQLConf.get.timestampNanosTypesEnabled)
     }
   }
 }
