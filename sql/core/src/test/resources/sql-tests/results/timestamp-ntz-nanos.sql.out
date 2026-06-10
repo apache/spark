@@ -261,3 +261,51 @@ SELECT (NULL::timestamp_ntz(9))::date
 struct<CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS DATE):date>
 -- !query output
 NULL
+
+
+-- !query
+SELECT array(TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789', NULL)::array<date>
+-- !query schema
+struct<array(TimestampNanosVal(1577881815123456, 789), NULL):array<date>>
+-- !query output
+[2020-01-01,null]
+
+
+-- !query
+SELECT map('k', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789')::map<string, date>
+-- !query schema
+struct<map(k, TimestampNanosVal(1577881815123456, 789)):map<string,date>>
+-- !query output
+{"k":2020-01-01}
+
+
+-- !query
+SELECT named_struct('f', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789')::struct<f: date>
+-- !query schema
+struct<named_struct(f, TimestampNanosVal(1577881815123456, 789)):struct<f:date>>
+-- !query output
+{"f":2020-01-01}
+
+
+-- !query
+SELECT array(DATE '2020-01-01', NULL)::array<timestamp_ntz(9)>::string
+-- !query schema
+struct<CAST(array(DATE '2020-01-01', NULL) AS STRING):string>
+-- !query output
+[2020-01-01 00:00:00, null]
+
+
+-- !query
+SELECT named_struct('f', DATE '2020-01-01')::struct<f: timestamp_ntz(9)>::string
+-- !query schema
+struct<CAST(named_struct(f, DATE '2020-01-01') AS STRING):string>
+-- !query output
+{2020-01-01 00:00:00}
+
+
+-- !query
+SELECT array(named_struct('f', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789'))::array<struct<f: date>>
+-- !query schema
+struct<array(named_struct(f, TimestampNanosVal(1577881815123456, 789))):array<struct<f:date>>>
+-- !query output
+[{"f":2020-01-01}]

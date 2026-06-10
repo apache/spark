@@ -66,7 +66,15 @@ class ResolveTimestampNanosCastHybridAnalyzerSuite extends QueryTest with Shared
       "SELECT TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001'::date",
       "SELECT DATE '2020-01-01'::timestamp_ntz(9)::date",
       "SELECT ((NULL::date)::timestamp_ntz(9))::string",
-      "SELECT (NULL::timestamp_ntz(9))::date"
+      "SELECT (NULL::timestamp_ntz(9))::date",
+      // DATE <-> nanos nested in complex types: the rewrite must reach the pair at any depth.
+      "SELECT array(TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789', NULL)::array<date>",
+      "SELECT map('k', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789')::map<string, date>",
+      "SELECT named_struct('f', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789')::struct<f: date>",
+      "SELECT (array(DATE '2020-01-01', NULL)::array<timestamp_ntz(9)>)::string",
+      "SELECT (named_struct('f', DATE '2020-01-01')::struct<f: timestamp_ntz(9)>)::string",
+      "SELECT array(named_struct('f', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789'))" +
+        "::array<struct<f: date>>"
     ).foreach(checkDualRunMatchesFixedPoint)
   }
 
@@ -78,7 +86,15 @@ class ResolveTimestampNanosCastHybridAnalyzerSuite extends QueryTest with Shared
       "SELECT TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001'::date",
       "SELECT DATE '2020-01-01'::timestamp_ltz(9)::date",
       "SELECT ((NULL::date)::timestamp_ltz(9))::string",
-      "SELECT (NULL::timestamp_ltz(9))::date"
+      "SELECT (NULL::timestamp_ltz(9))::date",
+      // DATE <-> nanos nested in complex types: the rewrite must reach the pair at any depth.
+      "SELECT array(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789', NULL)::array<date>",
+      "SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789')::map<string, date>",
+      "SELECT named_struct('f', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789')::struct<f: date>",
+      "SELECT (array(DATE '2020-01-01', NULL)::array<timestamp_ltz(9)>)::string",
+      "SELECT (named_struct('f', DATE '2020-01-01')::struct<f: timestamp_ltz(9)>)::string",
+      "SELECT array(named_struct('f', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'))" +
+        "::array<struct<f: date>>"
     ).foreach(checkDualRunMatchesFixedPoint)
   }
 }

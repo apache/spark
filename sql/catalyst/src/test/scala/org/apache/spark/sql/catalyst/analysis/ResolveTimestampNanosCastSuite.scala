@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, DateType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, DataType, DateType, IntegerType, MapType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
@@ -43,7 +43,31 @@ class ResolveTimestampNanosCastSuite extends AnalysisTest with ExpressionEvalHel
   private val ntzAttr = AttributeReference("ntz", ntzNanos)()
   private val ltzAttr = AttributeReference("ltz", ltzNanos)()
   private val dateAttr = AttributeReference("d", DateType)()
-  private val relation = LocalRelation(ntzAttr, ltzAttr, dateAttr)
+
+  // Complex-typed inputs that nest a nanos timestamp at various depths.
+  private val arrNtzAttr = AttributeReference("arr_ntz", ArrayType(ntzNanos, containsNull = true))()
+  private val arrDateAttr = AttributeReference("arr_d", ArrayType(DateType, containsNull = true))()
+  private val mapNtzAttr =
+    AttributeReference("map_ntz", MapType(StringType, ntzNanos, valueContainsNull = true))()
+  private val structNtzAttr =
+    AttributeReference("st_ntz", StructType(Seq(StructField("f", ntzNanos))))()
+  private val structMixedAttr = AttributeReference(
+    "st_mixed",
+    StructType(Seq(StructField("a", ntzNanos), StructField("b", IntegerType))))()
+  private val arrStructNtzAttr = AttributeReference(
+    "arr_st_ntz",
+    ArrayType(StructType(Seq(StructField("f", ntzNanos))), containsNull = true))()
+
+  private val relation = LocalRelation(
+    ntzAttr,
+    ltzAttr,
+    dateAttr,
+    arrNtzAttr,
+    arrDateAttr,
+    mapNtzAttr,
+    structNtzAttr,
+    structMixedAttr,
+    arrStructNtzAttr)
 
   // Rewrite only: keeps the original time zone id so the structure can be compared exactly.
   private object Rewrite extends RuleExecutor[LogicalPlan] {
@@ -102,6 +126,70 @@ class ResolveTimestampNanosCastSuite extends AnalysisTest with ExpressionEvalHel
 
   test("rewrite is idempotent") {
     val in = relation.select(Cast(ntzAttr, DateType).as("c"))
+    val once = Rewrite.execute(in)
+    comparePlans(Rewrite.execute(once), once)
+  }
+
+  test("rewrite nanos(p) <-> DATE nested in an array") {
+    // ARRAY<nanos(p)> -> ARRAY<DATE>
+    checkRewrite(
+      Cast(arrNtzAttr, ArrayType(DateType, containsNull = true)),
+      Cast(
+        Cast(arrNtzAttr, ArrayType(TimestampNTZType, containsNull = true)),
+        ArrayType(DateType, containsNull = true)))
+    // ARRAY<DATE> -> ARRAY<nanos(p)>
+    checkRewrite(
+      Cast(arrDateAttr, ArrayType(ntzNanos, containsNull = true)),
+      Cast(
+        Cast(arrDateAttr, ArrayType(TimestampNTZType, containsNull = true)),
+        ArrayType(ntzNanos, containsNull = true)))
+  }
+
+  test("rewrite nanos(p) -> DATE nested in a map value") {
+    checkRewrite(
+      Cast(mapNtzAttr, MapType(StringType, DateType, valueContainsNull = true)),
+      Cast(
+        Cast(mapNtzAttr, MapType(StringType, TimestampNTZType, valueContainsNull = true)),
+        MapType(StringType, DateType, valueContainsNull = true)))
+  }
+
+  test("rewrite nanos(p) -> DATE nested in a struct field") {
+    checkRewrite(
+      Cast(structNtzAttr, StructType(Seq(StructField("f", DateType)))),
+      Cast(
+        Cast(structNtzAttr, StructType(Seq(StructField("f", TimestampNTZType)))),
+        StructType(Seq(StructField("f", DateType)))))
+  }
+
+  test("rewrite bridges only the nanos field of a mixed struct") {
+    // The non-nanos field (b: INT) is left untouched in the intermediate type.
+    checkRewrite(
+      Cast(structMixedAttr,
+        StructType(Seq(StructField("a", DateType), StructField("b", IntegerType)))),
+      Cast(
+        Cast(structMixedAttr,
+          StructType(Seq(StructField("a", TimestampNTZType), StructField("b", IntegerType)))),
+        StructType(Seq(StructField("a", DateType), StructField("b", IntegerType)))))
+  }
+
+  test("rewrite reaches a nanos(p) -> DATE pair nested two levels deep") {
+    // ARRAY<STRUCT<f: nanos(p)>> -> ARRAY<STRUCT<f: DATE>>
+    val to = ArrayType(StructType(Seq(StructField("f", DateType))), containsNull = true)
+    val mid = ArrayType(StructType(Seq(StructField("f", TimestampNTZType))), containsNull = true)
+    checkRewrite(
+      Cast(arrStructNtzAttr, to),
+      Cast(Cast(arrStructNtzAttr, mid), to))
+  }
+
+  test("no rewrite when a complex cast has no DATE <-> nanos pair") {
+    // ARRAY<nanos(p)> -> ARRAY<nanos(p)> involves no DATE side: left as-is.
+    val same = Cast(arrNtzAttr, ArrayType(ntzNanos, containsNull = true))
+    checkRewrite(same, same)
+  }
+
+  test("complex rewrite is idempotent") {
+    val in = relation.select(
+      Cast(arrNtzAttr, ArrayType(DateType, containsNull = true)).as("c"))
     val once = Rewrite.execute(in)
     comparePlans(Rewrite.execute(once), once)
   }

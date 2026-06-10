@@ -67,3 +67,14 @@ SELECT DATE '2020-01-01'::timestamp_ltz(9)::date;
 -- NULLs in both directions.
 SELECT (NULL::date)::timestamp_ltz(9);
 SELECT (NULL::timestamp_ltz(9))::date;
+
+-- DATE <-> TIMESTAMP_LTZ(p) casts nested in complex types (SPARK-57323): the rewrite reaches the
+-- DATE <-> nanos pair at any depth. nanos -> DATE outputs display directly; DATE -> nanos outputs
+-- are rendered via ::string so they materialize independently of the nanos type's collection support.
+SELECT array(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789', NULL)::array<date>;
+SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789')::map<string, date>;
+SELECT named_struct('f', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789')::struct<f: date>;
+SELECT array(DATE '2020-01-01', NULL)::array<timestamp_ltz(9)>::string;
+SELECT named_struct('f', DATE '2020-01-01')::struct<f: timestamp_ltz(9)>::string;
+-- Two levels deep: ARRAY<STRUCT<f: nanos>> -> ARRAY<STRUCT<f: DATE>>.
+SELECT array(named_struct('f', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'))::array<struct<f: date>>;
