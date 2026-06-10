@@ -657,17 +657,11 @@ object SQLConf {
         "types. Enabling this flag does not guarantee full SQL support: casts, Parquet read, " +
         "typed literals, and other operations may still fail until their respective features " +
         "are implemented. The nanosecond timestamp types are implemented solely through the " +
-        "Types Framework, so this flag can only be set to true when " +
+        "Types Framework, so this flag only takes effect when " +
         s"${TYPES_FRAMEWORK_ENABLED.key} is also true.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .checkValue(
-        enabled => !enabled || SQLConf.get.typesFrameworkEnabled,
-        "REQUIREMENT",
-        _ => Map("confRequirement" ->
-          (s"'${TYPES_FRAMEWORK_ENABLED.key}' must be true to enable the nanosecond " +
-            "timestamp types.")))
       .createWithDefaultFunction(() => Utils.isTesting)
 
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
@@ -7648,7 +7642,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
 
-  def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
+  // The nanos types are implemented solely through the Types Framework, so the flag has no
+  // effect without it. The requirement is enforced here instead of in a checkValue of
+  // TIMESTAMP_NANOS_TYPES_ENABLED: a validator must not call SQLConf.get, because validators
+  // run inside mergeSparkConf while the session's SQLConf is still being constructed, and the
+  // SQLConf.get lookup re-enters that construction (infinite recursion).
+  def timestampNanosTypesEnabled: Boolean =
+    getConf(TIMESTAMP_NANOS_TYPES_ENABLED) && getConf(TYPES_FRAMEWORK_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
