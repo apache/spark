@@ -614,8 +614,8 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   // Splits SQL into individual statements by top-level semicolons. See
-  // [[StringUtils.splitSemiColonWithIndex]] for the implementation.
+  // [[StringUtils.splitSemiColon]] for the implementation.
   // Note: [SPARK-31595], [SPARK-33100], [SPARK-54876]
   private[hive] def splitSemiColon(line: String): JList[String] =
-    StringUtils.splitSemiColonWithIndex(line, enableSqlScripting = false).asJava
+    StringUtils.splitSemiColon(line, enableSqlScripting = false).asJava
 }
