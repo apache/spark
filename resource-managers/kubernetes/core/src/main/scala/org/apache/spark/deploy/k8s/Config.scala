@@ -446,16 +446,6 @@ private[spark] object Config extends Logging {
           "/names/#dns-subdomain-names and the value length <= 237")
       .createOptional
 
-  val KUBERNETES_CLEAN_FAILED_PODS_ON_START =
-    ConfigBuilder("spark.kubernetes.executor.cleanFailedPodsOnStart")
-      .doc("If set to true and spark.kubernetes.executor.podNamePrefix is configured, " +
-        "the driver will delete executor pods in Failed or Completed state matching the same " +
-        "podNamePrefix and the same spark-app-name at startup. This cleans up " +
-        "orphaned executor pods left by a previously force-killed driver.")
-      .version("4.1.0")
-      .booleanConf
-      .createWithDefault(false)
-
   val KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP =
     ConfigBuilder("spark.kubernetes.executor.disableConfigMap")
       .doc("If true, disable ConfigMap creation for executors.")

@@ -139,10 +139,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def start(): Unit = {
     super.start()
-    if (conf.get(KUBERNETES_CLEAN_FAILED_PODS_ON_START)) {
-      cleanTerminalExecutorPodsOnStart()
-    }
+
     // Must be called before setting the executors
+    cleanTerminalExecutorPodsOnStart()
     podAllocator.start(applicationId(), this)
     val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
     val initExecs = Map(defaultProfile -> initialExecutors)
