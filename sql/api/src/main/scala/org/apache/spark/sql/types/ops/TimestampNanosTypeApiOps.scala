@@ -39,8 +39,8 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * rendering is zone-independent (the value is the UTC-grid wall clock). LTZ rendering depends on
  * the session time zone, so the LTZ ops carries a ZoneId and builds its formatter once per
  * instance. The zone is threaded in via TypeApiOps.apply(dt, zoneId): CAST passes the cast's
- * resolved session zone, while zone-less callers (EXPLAIN / SQL-literal toSQLValue / Row JSON)
- * accept the default, the session-local time zone config.
+ * resolved session zone, while zone-less callers (Row JSON via formatExternal) accept the
+ * default, the session-local time zone config.
  *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
@@ -123,7 +123,7 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
  * @param zoneId
  *   The time zone LTZ values are rendered in (LTZ is zone-aware). `TypeApiOps.apply` threads in
  *   the session zone: the cast's resolved zone for CAST, or the session-local time zone config
- *   for zone-less render callers (EXPLAIN / SQL-literal / Row JSON).
+ *   for zone-less render callers (Row JSON via formatExternal).
  * @since 4.3.0
  */
 class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: ZoneId)

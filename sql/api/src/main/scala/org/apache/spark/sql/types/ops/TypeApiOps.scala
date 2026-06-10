@@ -177,10 +177,10 @@ object TypeApiOps {
    *   the DataType to get operations for
    * @param zoneId
    *   the session time zone for zone-aware rendering (TIMESTAMP_LTZ nanos). CAST passes the
-   *   cast's resolved zone; zone-less callers (EXPLAIN / SQL-literal / Row JSON) accept the
-   *   default, the session-local time zone config. By-name so it is forced only when LTZ is
-   *   constructed: zone-independent and unsupported types never evaluate it, which matters
-   *   because a CAST's zone is unresolved (`None.get`) until the time zone is assigned.
+   *   cast's resolved zone; zone-less callers (Row JSON via formatExternal) accept the default,
+   *   the session-local time zone config. By-name so it is forced only when LTZ is constructed:
+   *   zone-independent and unsupported types never evaluate it, which matters because a CAST's
+   *   zone is unresolved (`None.get`) until the time zone is assigned.
    * @return
    *   Some(TypeApiOps) if supported, None otherwise
    */
