@@ -31,8 +31,10 @@ import org.apache.spark.annotation.Experimental
  *
  * Contract:
  *  - [[releaseSession]] decrements the dispatcher-side reference count.
- *    Idempotent across a single session: the session itself only calls
- *    it once. Sessions sharing the same worker call it independently.
+ *    The caller ([[WorkerSession.close]]) invokes it exactly once per
+ *    session, so implementations need not be idempotent and MAY fail fast
+ *    on an unbalanced (negative) count. Sessions sharing the same worker
+ *    call it independently (each exactly once).
  *  - [[markInvalid]] is sticky: once set, the dispatcher MUST NOT return
  *    this worker to any reuse pool. Sessions set this when the worker
  *    is observed in an unsafe state (transport error, hung worker,
@@ -56,8 +58,9 @@ trait WorkerHandle {
   def markInvalid(): Unit
 
   /**
-   * Decrements the dispatcher-side session ref count. Each session calls
-   * this exactly once, from its [[WorkerSession.close]].
+   * Decrements the dispatcher-side session ref count. The caller
+   * ([[WorkerSession.close]]) invokes this exactly once per session, so
+   * implementations need not be idempotent.
    */
   def releaseSession(): Unit
 }

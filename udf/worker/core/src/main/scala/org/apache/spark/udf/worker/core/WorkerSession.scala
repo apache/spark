@@ -21,8 +21,8 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.udf.worker.{Cancel, CancelResponse, DataRequest, DataResponse,
-  ExecutionError, Finish, FinishResponse, Init, InitResponse}
+import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, Init,
+  InitResponse}
 
 /**
  * :: Experimental ::
@@ -243,7 +243,18 @@ abstract class WorkerSession(
   final def close(cancel: () => Cancel = () => Cancel.getDefaultInstance): Termination = {
     val firstClose = closeInvoked.compareAndSet(false, true)
     try {
-      doClose(cancel)
+      try {
+        doClose(cancel)
+      } catch {
+        case NonFatal(e) =>
+          // doClose is contracted not to throw -- it reports its outcome via the
+          // settled terminal. A NonFatal escape is a subclass bug; uphold the
+          // finalizer's must-not-throw contract by settling a failure terminal
+          // here rather than letting it propagate out of close(). (Fatal errors
+          // and interrupts still propagate, per the contract.)
+          completeTerminal(Termination.TransportFailed(e))
+          logger.warn("doClose threw unexpectedly; treating the worker as unsalvageable", e)
+      }
       // Enforce the doClose post-condition: it must leave the session terminal,
       // because isWorkerSalvageable (read below) classifies the worker off the
       // settled SessionState. A non-terminal state here is a subclass contract
@@ -253,7 +264,7 @@ abstract class WorkerSession(
       // and log loudly. Terminals are sticky, so this is a no-op on the normal
       // path where doClose already settled one.
       if (!currentState.isTerminal) {
-        completeTerminal(SessionState.TransportFailed(new IllegalStateException(
+        completeTerminal(Termination.TransportFailed(new IllegalStateException(
           s"doClose returned without settling a terminal (state: ${currentState})")))
         logger.warn(
           "doClose did not settle a terminal; treating the worker as unsalvageable")
@@ -328,25 +339,27 @@ abstract class WorkerSession(
    *
    * As the cleanup path it does not re-throw a failed terminal -- it reports a
    * best-effort [[Termination]] (the underlying failure surfaces through the
-   * result iterator).
+   * result iterator). Should it nonetheless throw an unexpected (non-fatal)
+   * error, [[close]] converts that into a [[Termination.TransportFailed]] rather
+   * than propagating, to honour its must-not-throw contract.
    */
   protected def doClose(cancel: () => Cancel): Termination
 
   /**
    * Whether the underlying worker is in a state safe to reuse after this
    * session ends. The default treats only a dead or unknown transport as
-   * unsafe: a [[SessionState.TransportFailed]] terminal (transport failure,
+   * unsafe: a [[Termination.TransportFailed]] outcome (transport failure,
    * timeout, or interrupt) -- or a session that never settled -- leaves the
    * worker in an unknown state and is not salvageable. Every other terminal is
-   * salvageable: a clean [[SessionState.Finished]], a cooperative
-   * [[SessionState.Cancelled]], and also an execution [[SessionState.Failed]],
+   * salvageable: a clean [[Termination.Finished]], a cooperative
+   * [[Termination.Cancelled]], and also an execution [[Termination.Failed]],
    * which is typically a user-code (UDF) error reported by a still-healthy
    * worker rather than a worker fault. A `false` result tells [[close]] to mark
    * `workerHandle` invalid so no reuse pool recycles the worker. Subclasses may
    * override for protocol-specific nuances.
    */
   protected def isWorkerSalvageable: Boolean = state.get() match {
-    case _: SessionState.TransportFailed => false
+    case SessionState.Terminal(_: Termination.TransportFailed) => false
     case t if t.isTerminal => true
     case _ => false
   }
@@ -368,16 +381,17 @@ abstract class WorkerSession(
     state.compareAndSet(expect, update)
 
   /**
-   * Settles the session on its terminal outcome. The first caller wins (an
-   * already-terminal state is left untouched); only the winner runs
-   * [[onTerminalSettled]] and this returns `true`. All later callers observe
-   * the existing terminal and return `false`.
+   * Settles the session on its terminal [[Termination]] outcome. The first
+   * caller wins (an already-terminal state is left untouched); only the winner
+   * runs [[onTerminalSettled]] and this returns `true`. All later callers
+   * observe the existing terminal and return `false`.
    */
-  protected final def completeTerminal(terminal: SessionState.Terminal): Boolean = {
+  protected final def completeTerminal(termination: Termination): Boolean = {
+    val terminal = SessionState.Terminal(termination)
     var cur = state.get()
     while (!cur.isTerminal) {
       if (state.compareAndSet(cur, terminal)) {
-        onTerminalSettled(terminal)
+        onTerminalSettled(termination)
         return true
       }
       cur = state.get()
@@ -387,28 +401,24 @@ abstract class WorkerSession(
 
   /**
    * Hook invoked exactly once, by the caller that settles the terminal in
-   * [[completeTerminal]]. Subclasses override it to wake whatever is blocked on
-   * the terminator (output queues, latches). The default does nothing.
+   * [[completeTerminal]], with the settled [[Termination]]. Subclasses override
+   * it to wake whatever is blocked on the terminator (output queues, latches).
+   * The default does nothing.
    */
-  protected def onTerminalSettled(terminal: SessionState.Terminal): Unit = ()
+  protected def onTerminalSettled(termination: Termination): Unit = ()
 
   /**
-   * Derives the [[Termination]] from the settled terminal, for [[doClose]] to
-   * return -- a 1:1 mapping of the four [[SessionState]] terminals. The clean
-   * terminators carry the worker's response proto (metrics + finish/cancel
-   * callback data/error); the failure terminals carry their cause
-   * ([[Termination.Failed]] the [[ExecutionError]], [[Termination.TransportFailed]]
-   * the [[Throwable]]) and have no proto terminator, so no metrics. The failure
-   * also surfaces through the result iterator when it is consumed, but is carried
-   * here too because an error raised during finish/close -- after the data has
-   * been drained -- reaches no one through the iterator. Throws only if called
-   * before a terminal is settled, which [[doClose]] must not do.
+   * The [[Termination]] the session settled on, for [[doClose]] to return. The
+   * clean terminators carry the worker's response proto (metrics + finish/cancel
+   * callback data/error); the failure terminations carry their cause and have no
+   * proto terminator, so no metrics. A failure also surfaces through the result
+   * iterator when it is consumed, but is carried here too because an error raised
+   * during finish/close -- after the data has been drained -- reaches no one
+   * through the iterator. Throws only if called before a terminal is settled,
+   * which [[doClose]] must not do.
    */
   protected final def settledTermination: Termination = state.get() match {
-    case SessionState.Finished(response) => Termination.Finished(response)
-    case SessionState.Cancelled(response) => Termination.Cancelled(response)
-    case SessionState.Failed(error) => Termination.Failed(error)
-    case SessionState.TransportFailed(cause) => Termination.TransportFailed(cause)
+    case SessionState.Terminal(termination) => termination
     case other =>
       throw new IllegalStateException(s"settledTermination called in non-terminal state: $other")
   }
@@ -420,9 +430,10 @@ object WorkerSession {
    * The single state machine for a [[WorkerSession]]: the call-ordering
    * contract, the protocol phase, and the terminal outcome. The normal
    * progression is `Created -> Initializing -> Initialized -> Streaming ->
-   * Finishing -> Finished`; `close`/cancel and errors fork to `Cancelling` and
-   * the failure terminals. See [[WorkerSession]] for the full diagram and which
-   * party drives each edge.
+   * Finishing -> Terminal`; `close`/cancel and errors fork to `Cancelling`
+   * before the `Terminal`. The single terminal state carries the public
+   * [[Termination]] outcome. See [[WorkerSession]] for the full diagram and
+   * which party drives each edge.
    *
    * Visible to the udf-worker modules (`private[worker]`) so concrete protocol
    * subclasses can drive and inspect the state; it is an implementation detail,
@@ -447,17 +458,14 @@ object WorkerSession {
     /** `Cancel` sent (engine cancel or post-error cleanup); awaiting terminator. */
     case object Cancelling extends SessionState
 
-    /** Terminal outcomes; the session is over and no further writes are valid. */
-    sealed trait Terminal extends SessionState {
+    /**
+     * The session is over; no further writes are valid. The single terminal
+     * state carries the public [[Termination]] outcome (`Finished` /
+     * `Cancelled` / `Failed` / `TransportFailed`), so those four outcome cases
+     * live once on [[Termination]] rather than being mirrored on the state.
+     */
+    final case class Terminal(termination: Termination) extends SessionState {
       override def isTerminal: Boolean = true
     }
-    /** Clean `FinishResponse` (carries metrics + finish-callback data/error). */
-    final case class Finished(response: FinishResponse) extends Terminal
-    /** `CancelResponse` (carries metrics + cancel-callback error). */
-    final case class Cancelled(response: CancelResponse) extends Terminal
-    /** Execution error with no proto terminator (e.g. ERROR before init). */
-    final case class Failed(error: ExecutionError) extends Terminal
-    /** Transport failure, timeout, or interrupt. */
-    final case class TransportFailed(cause: Throwable) extends Terminal
   }
 }

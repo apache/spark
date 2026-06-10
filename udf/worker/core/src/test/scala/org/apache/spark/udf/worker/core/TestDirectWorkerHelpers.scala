@@ -62,7 +62,7 @@ class NoOpWorkerSession(
     // Settle the clean terminal so close() does not fall through to its
     // contract-violation recovery path. A no-op session has no in-flight work,
     // so the cancel thunk is never needed.
-    completeTerminal(WorkerSession.SessionState.Finished(FinishResponse.getDefaultInstance))
+    completeTerminal(Termination.Finished(FinishResponse.getDefaultInstance))
     settledTermination
   }
 }

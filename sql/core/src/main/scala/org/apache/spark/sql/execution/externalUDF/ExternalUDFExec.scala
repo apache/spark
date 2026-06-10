@@ -64,8 +64,8 @@ trait ExternalUDFExec extends UnaryExecNode {
    * failure). [[WorkerSession#close]] is the single finalizer: it fetches the
    * `FinishResponse` if processing completed, or cancels anything still in
    * flight and waits for the `CancelResponse`. The provided function receives
-   * the session and must return the result iterator. The function CAN but MUST
-   * NOT close the session.
+   * the session and must return the result iterator. It may use the session
+   * but MUST NOT close it.
    */
   protected def withUDFWorkerSession(
       taskContext: TaskContext,

@@ -57,7 +57,7 @@ class WorkerSessionSuite extends AnyFunSuite {
         Iterator[DataResponse] = (_, _, _) => Iterator.empty[DataResponse],
       onCloseHook: (FakeWorkerSession, () => Cancel) => Termination =
         (self, _) => {
-          self.settle(SessionState.Finished(FinishResponse.getDefaultInstance))
+          self.settle(Termination.Finished(FinishResponse.getDefaultInstance))
           self.term
         })
     extends WorkerSession(handle, WorkerLogger.NoOp) {
@@ -69,14 +69,14 @@ class WorkerSessionSuite extends AnyFunSuite {
         input: Iterator[DataRequest], finish: () => Finish): Iterator[DataResponse] =
       onProcess(this, input, finish)
     override protected def doClose(cancel: () => Cancel): Termination = onCloseHook(this, cancel)
-    override protected def onTerminalSettled(terminal: SessionState.Terminal): Unit =
+    override protected def onTerminalSettled(termination: Termination): Unit =
       terminalSettledCount += 1
 
     // Re-expose the protected primitives so the test can drive the machine.
     def state: SessionState = currentState
     def cas(expect: SessionState, update: SessionState): Boolean =
       compareAndSetState(expect, update)
-    def settle(t: SessionState.Terminal): Boolean = completeTerminal(t)
+    def settle(t: Termination): Boolean = completeTerminal(t)
     def term: Termination = settledTermination
   }
 
@@ -113,12 +113,12 @@ class WorkerSessionSuite extends AnyFunSuite {
   test("a failed doInit settles a terminal and rejects a later process") {
     val err = ExecutionError.getDefaultInstance
     val s = new FakeWorkerSession(onInit = self => {
-      self.settle(SessionState.Failed(err))
+      self.settle(Termination.Failed(err))
       throw new RuntimeException("init boom")
     })
     val initEx = intercept[RuntimeException](s.init(Init.getDefaultInstance))
     assert(initEx.getMessage.contains("init boom"))
-    assert(s.state == SessionState.Failed(err))
+    assert(s.term == Termination.Failed(err))
     val ex = intercept[IllegalStateException](s.process(Iterator.empty))
     assert(ex.getMessage.contains("terminated"))
   }
@@ -126,7 +126,7 @@ class WorkerSessionSuite extends AnyFunSuite {
   test("close returns the Termination produced by doClose") {
     val resp = FinishResponse.getDefaultInstance
     val s = new FakeWorkerSession(onCloseHook = (self, _) => {
-      self.settle(SessionState.Finished(resp))
+      self.settle(Termination.Finished(resp))
       self.term
     })
     assert(s.close() == Termination.Finished(resp))
@@ -144,7 +144,7 @@ class WorkerSessionSuite extends AnyFunSuite {
   test("close marks a transport-failed worker invalid") {
     val h = new RecordingHandle
     val s = new FakeWorkerSession(handle = h, onCloseHook = (self, _) => {
-      self.settle(SessionState.TransportFailed(new RuntimeException("transport down")))
+      self.settle(Termination.TransportFailed(new RuntimeException("transport down")))
       self.term
     })
     s.close()
@@ -158,7 +158,7 @@ class WorkerSessionSuite extends AnyFunSuite {
     // A Failed terminal is typically a user-code (UDF) error, not a worker fault,
     // so the worker stays reusable: markInvalid must NOT be called.
     val s = new FakeWorkerSession(handle = h, onCloseHook = (self, _) => {
-      self.settle(SessionState.Failed(err))
+      self.settle(Termination.Failed(err))
       self.term
     })
     assert(s.close() == Termination.Failed(err))
@@ -175,9 +175,21 @@ class WorkerSessionSuite extends AnyFunSuite {
     val s = new FakeWorkerSession(handle = h,
       onCloseHook = (_, _) => Termination.Finished(FinishResponse.getDefaultInstance))
     val termination = s.close()
-    assert(s.state.isInstanceOf[SessionState.TransportFailed])
+    assert(s.term.isInstanceOf[Termination.TransportFailed])
     assert(termination.isInstanceOf[Termination.TransportFailed])
     assert(h.invalidated == 1)
+  }
+
+  test("close converts an unexpected internal doClose failure into TransportFailed") {
+    val h = new RecordingHandle
+    val boom = new RuntimeException("internal doClose failure")
+    // doClose throws an unexpected internal / transport-level error (e.g. a
+    // failed wire write). close() must not propagate it: it settles
+    // TransportFailed, returns it, and marks the worker unsalvageable.
+    val s = new FakeWorkerSession(handle = h, onCloseHook = (_, _) => throw boom)
+    assert(s.close() == Termination.TransportFailed(boom))
+    assert(h.invalidated == 1)
+    assert(h.released == 1)
   }
 
   test("close swallows a non-fatal worker-handle failure") {
@@ -191,7 +203,7 @@ class WorkerSessionSuite extends AnyFunSuite {
     // attempts both markInvalid() and releaseSession() -- here both throw.
     // close() must swallow them and still return the settled termination.
     val s = new FakeWorkerSession(handle = throwingHandle, onCloseHook = (self, _) => {
-      self.settle(SessionState.TransportFailed(cause))
+      self.settle(Termination.TransportFailed(cause))
       self.term
     })
     assert(s.close() == Termination.TransportFailed(cause))
@@ -210,7 +222,7 @@ class WorkerSessionSuite extends AnyFunSuite {
     }
     val cause = new RuntimeException("transport down")
     val s = new FakeWorkerSession(handle = handle, onCloseHook = (self, _) => {
-      self.settle(SessionState.TransportFailed(cause))
+      self.settle(Termination.TransportFailed(cause))
       self.term
     })
     assert(s.close() == Termination.TransportFailed(cause))
@@ -218,11 +230,11 @@ class WorkerSessionSuite extends AnyFunSuite {
   }
 
   test("completeTerminal is first-wins and runs onTerminalSettled once") {
-    val first = SessionState.Finished(FinishResponse.getDefaultInstance)
+    val first = Termination.Finished(FinishResponse.getDefaultInstance)
     val s = new FakeWorkerSession()
     assert(s.settle(first))
-    assert(!s.settle(SessionState.Cancelled(CancelResponse.getDefaultInstance)))
-    assert(s.state == first)
+    assert(!s.settle(Termination.Cancelled(CancelResponse.getDefaultInstance)))
+    assert(s.term == first)
     assert(s.terminalSettledCount == 1)
   }
 
@@ -231,7 +243,7 @@ class WorkerSessionSuite extends AnyFunSuite {
     s.init(Init.getDefaultInstance)
     assert(s.cas(SessionState.Initialized, SessionState.Streaming))
     assert(s.state == SessionState.Streaming)
-    assert(s.settle(SessionState.Failed(ExecutionError.getDefaultInstance)))
+    assert(s.settle(Termination.Failed(ExecutionError.getDefaultInstance)))
     assert(!s.cas(SessionState.Streaming, SessionState.Finishing))
   }
 
@@ -240,15 +252,15 @@ class WorkerSessionSuite extends AnyFunSuite {
     val can = CancelResponse.getDefaultInstance
     val err = ExecutionError.getDefaultInstance
     val cause = new RuntimeException("transport down")
-    def termFor(t: SessionState.Terminal): Termination = {
+    def termFor(t: Termination): Termination = {
       val s = new FakeWorkerSession()
       s.settle(t)
       s.term
     }
-    assert(termFor(SessionState.Finished(fin)) == Termination.Finished(fin))
-    assert(termFor(SessionState.Cancelled(can)) == Termination.Cancelled(can))
-    assert(termFor(SessionState.Failed(err)) == Termination.Failed(err))
-    assert(termFor(SessionState.TransportFailed(cause)) == Termination.TransportFailed(cause))
+    assert(termFor(Termination.Finished(fin)) == Termination.Finished(fin))
+    assert(termFor(Termination.Cancelled(can)) == Termination.Cancelled(can))
+    assert(termFor(Termination.Failed(err)) == Termination.Failed(err))
+    assert(termFor(Termination.TransportFailed(cause)) == Termination.TransportFailed(cause))
   }
 
   test("settledTermination throws before a terminal is settled") {
