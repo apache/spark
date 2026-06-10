@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, UnaryExpression, Unevaluable, VariableReference}
 import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, PLAN_EXPRESSION, TreePattern}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.GenerationExpression
@@ -57,6 +57,7 @@ case class GeneratedColumnExpression(
    * - The expression must be deterministic
    * - The expression data type can be safely up-cast to the destination column data type
    * - No subquery expressions
+   * - No references to session (temporary) variables
    * - No non-UTF8 binary collation
    */
   def validate(
@@ -75,6 +76,13 @@ case class GeneratedColumnExpression(
     // Don't allow subquery expressions
     if (child.containsPattern(PLAN_EXPRESSION)) {
       throw unsupportedExpressionError("subquery expressions are not allowed for generated columns")
+    }
+
+    // Don't allow references to session (temporary) variables. They are session-scoped mutable
+    // state, so persisting them into a generation expression would be ill-defined.
+    if (child.exists(_.isInstanceOf[VariableReference])) {
+      throw unsupportedExpressionError(
+        "generation expression cannot reference temporary variables")
     }
 
     // Use the resolver to respect case sensitivity settings
