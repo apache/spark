@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types.ops
 
-import java.time.{ZoneId, ZoneOffset}
+import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
@@ -59,16 +59,14 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
   // ==================== String Formatting ====================
 
   // Row JSON (Row.json / Row.prettyJson) holds the external Row value (java.time.Instant for LTZ,
-  // java.time.LocalDateTime for NTZ), but rendering nanosecond timestamps from this zone-less path
-  // is not supported yet (same reason as format above), so raise the user-facing
-  // UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING error here rather than silently truncating.
-  override def formatExternal(value: Any): Option[String] =
-    throw DataTypeErrors.cannotConvertNanosTimestampToStringError(dataType)
+  // java.time.LocalDateTime for NTZ); each subclass overrides the single-arg formatExternal to
+  // render it through the same formatter as its zone-aware cast-to-string, so Row JSON shows the
+  // nanosecond value rather than silently truncating to microseconds via the legacy path.
 
-  // The Hive result path (HiveResult.toHiveString) is zone-aware and renders nanosecond timestamps
-  // through its own default formatter, so return None here to fall through to it rather than raise
-  // the unsupported-rendering error that the zone-less single-arg formatExternal above throws. This
-  // is a temporary override until nanos external rendering is unified across the two paths.
+  // The Hive result path (HiveResult.toHiveString) renders nanosecond timestamps through its own
+  // zone-aware default formatter, so return None here to fall through to it rather than to the
+  // subclass single-arg rendering. This is a temporary split until nanos external rendering is
+  // unified across the zone-less (Row JSON) and zone-aware (Hive) paths.
   override def formatExternal(value: Any, nested: Boolean): Option[String] = None
 
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
@@ -106,6 +104,12 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
   override def format(v: Any): String =
     formatter.formatWithoutTimeZoneNanos(v.asInstanceOf[TimestampNanosVal], precision)
 
+  // Row JSON holds the external java.time.LocalDateTime (LocalDateTimeNanosEncoder, SPARK-57033)
+  // already at the column precision; render it zone-independently through the same UTC formatter
+  // as the internal-value format above.
+  override def formatExternal(value: Any): Option[String] =
+    Some(formatter.format(value.asInstanceOf[LocalDateTime]))
+
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampNTZNanosType (SPARK-57033):
   // maps to java.time.LocalDateTime with the column precision.
   override protected def nanosEncoder: AgnosticEncoder[_] = LocalDateTimeNanosEncoder(t.precision)
@@ -135,6 +139,12 @@ class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: ZoneId)
 
   override def format(v: Any): String =
     formatter.formatNanos(v.asInstanceOf[TimestampNanosVal], precision)
+
+  // Row JSON holds the external java.time.Instant (InstantNanosEncoder, SPARK-57033) already at the
+  // column precision; render it in the ops' session zone through the same formatter as the
+  // internal-value format above.
+  override def formatExternal(value: Any): Option[String] =
+    Some(formatter.format(value.asInstanceOf[Instant]))
 
   // Mirrors RowEncoder.encoderForDataTypeDefault for TimestampLTZNanosType (SPARK-57033):
   // maps to java.time.Instant with the column precision.
