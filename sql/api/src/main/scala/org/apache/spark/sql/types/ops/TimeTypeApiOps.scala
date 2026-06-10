@@ -24,7 +24,7 @@ import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
-import org.apache.spark.sql.catalyst.util.{FractionTimeFormatter, SparkDateTimeUtils, TimeFormatter}
+import org.apache.spark.sql.catalyst.util.{FractionTimeFormatter, TimeFormatter}
 import org.apache.spark.sql.types.{DataType, TimeType}
 
 /**
@@ -82,8 +82,7 @@ class TimeTypeApiOps(val t: TimeType) extends TypeApiOps {
     })
 
   override def formatExternal(value: Any): Option[String] = {
-    val nanos = SparkDateTimeUtils.localTimeToNanos(value.asInstanceOf[LocalTime])
-    Some(timeFormatter.format(nanos))
+    Some(timeFormatter.format(value.asInstanceOf[LocalTime]))
   }
 
   override def thriftTypeName: Option[String] = Some("STRING_TYPE")
