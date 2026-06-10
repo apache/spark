@@ -151,6 +151,28 @@ release = os.environ.get('RELEASE_VERSION', version)
 # directories to ignore when looking for source files.
 exclude_patterns = ['_build', '.DS_Store', '**.ipynb_checkpoints']
 
+# -- "Try PySpark in your browser" (experimental, documentation-only) ------
+#
+# Opt-in feature that turns code blocks marked with the "pyspark-live" class
+# into runnable cells backed by Pyodide and an in-browser, JVM-free Spark
+# engine (sail-wasm). It is enabled only when PYSPARK_DOCS_LIVE is set at
+# doc-build time, so the default build (for example the one published to
+# spark.apache.org) is completely unaffected. None of the supporting code ships
+# in the PySpark package; it all lives under python/docs/source/_static.
+pyspark_live_enabled = os.environ.get("PYSPARK_DOCS_LIVE", "").lower() in (
+    "1", "true", "yes", "on")
+
+if pyspark_live_enabled:
+    # Reveal ".. only:: pyspark_live" blocks (e.g. the toctree entry).
+    tags.add("pyspark_live")  # noqa: F821  (``tags`` is injected by Sphinx)
+else:
+    # Keep the experimental page out of the default build entirely. It is still
+    # referenced by a ".. only:: pyspark_live" toctree in getting_started; that
+    # reference to an excluded document would warn (and "-W" would fail the
+    # default build), so suppress only that specific warning.
+    exclude_patterns.append("getting_started/live_shell.rst")
+    suppress_warnings = ["toc.excluded"]
+
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
 #default_role = None
@@ -452,3 +474,34 @@ epub_exclude_files = ['search.html']
 
 # Skip sample endpoint link (not expected to resolve)
 linkcheck_ignore = [r'https://kinesis.us-east-1.amazonaws.com']
+
+
+def setup(app):
+    # Register the experimental "Try PySpark in your browser" assets. This is a
+    # no-op unless PYSPARK_DOCS_LIVE is set (see above), so the default build is
+    # untouched. The engine and runtime URLs can be overridden via environment
+    # variables (e.g. to point at a specific sail-wasm release), and are passed
+    # to the browser through a small inline config object.
+    if not pyspark_live_enabled:
+        return
+
+    import json
+
+    live_config = {
+        "pyodideIndexUrl": os.environ.get(
+            "PYSPARK_DOCS_LIVE_PYODIDE_URL",
+            "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/"),
+        "engineUrl": os.environ.get(
+            "PYSPARK_DOCS_LIVE_ENGINE_URL",
+            "https://github.com/HyukjinKwon/sail-wasm/releases/latest/"
+            "download/sail_wasm.js"),
+    }
+    # Optional explicit wasm binary URL (defaults to sail_wasm_bg.wasm next to
+    # engineUrl when unset).
+    engine_wasm_url = os.environ.get("PYSPARK_DOCS_LIVE_ENGINE_WASM_URL")
+    if engine_wasm_url:
+        live_config["engineWasmUrl"] = engine_wasm_url
+
+    app.add_css_file("pyspark-live/pyspark-live.css")
+    app.add_js_file(None, body="window.PYSPARK_LIVE_CONFIG = %s;" % json.dumps(live_config))
+    app.add_js_file("pyspark-live/pyspark-live.js", loading_method="defer")

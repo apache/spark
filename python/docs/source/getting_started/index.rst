@@ -41,3 +41,10 @@ The list below is the contents of this quickstart page:
    quickstart_connect
    quickstart_ps
    testing_pyspark
+
+.. only:: pyspark_live
+
+   .. toctree::
+      :maxdepth: 2
+
+      live_shell

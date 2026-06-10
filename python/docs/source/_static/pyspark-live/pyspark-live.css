@@ -1,0 +1,90 @@
+/*
+ *  Licensed to the Apache Software Foundation (ASF) under one or more
+ *  contributor license agreements.  See the NOTICE file distributed with
+ *  this work for additional information regarding copyright ownership.
+ *  The ASF licenses this file to You under the Apache License, Version 2.0
+ *  (the "License"); you may not use this file except in compliance with
+ *  the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ */
+
+/*
+ * Styling for the experimental "Try PySpark in your browser" feature.
+ * Loaded only when the documentation is built with PYSPARK_DOCS_LIVE set;
+ * see python/docs/source/conf.py.
+ */
+
+.pyspark-live-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.25rem 0 0 0;
+}
+
+.pyspark-live-run {
+    cursor: pointer;
+    border: none;
+    border-radius: 0.2rem;
+    padding: 0.2rem 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: #17A2B8;
+}
+
+.pyspark-live-run:hover {
+    background-color: #1B5162;
+}
+
+.pyspark-live-run:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.pyspark-live-status {
+    font-size: 0.8rem;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.pyspark-live-output {
+    display: none;
+    margin: 0.25rem 0 1rem 0;
+    padding: 0.6rem 0.8rem;
+    border-left: 3px solid #17A2B8;
+    background-color: #f6f8fa;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 0.82rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+}
+
+.pyspark-live-output.pyspark-live-error {
+    border-left-color: #d9534f;
+    background-color: #fdf2f2;
+    color: #a94442;
+}
+
+.pyspark-live-output.pyspark-live-visible {
+    display: block;
+}
+
+/* Dark theme support (pydata-sphinx-theme sets data-theme="dark"). */
+html[data-theme="dark"] .pyspark-live-output {
+    background-color: #1f2937;
+    color: #e5e7eb;
+}
+
+html[data-theme="dark"] .pyspark-live-output.pyspark-live-error {
+    background-color: #3b1f22;
+    color: #f5b7b1;
+}
