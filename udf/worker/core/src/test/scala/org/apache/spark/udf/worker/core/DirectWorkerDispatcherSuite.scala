@@ -27,8 +27,9 @@ import org.scalatest.BeforeAndAfterEach
 import org.scalatest.funsuite.AnyFunSuite
 
 import org.apache.spark.udf.worker.{
-  DirectWorker, LocalTcpConnection, ProcessCallable, UDFWorkerProperties,
-  UDFWorkerSpecification, UnixDomainSocket, WorkerConnectionSpec,
+  DirectWorker, LocalTcpConnection, ProcessCallable, UDFProtoCommunicationPattern,
+  UDFWorkerDataFormat, UDFWorkerProperties, UDFWorkerSpecification, UnixDomainSocket,
+  WorkerCapabilities, WorkerConnectionSpec,
   WorkerEnvironment}
 import org.apache.spark.udf.worker.core.direct.{DirectUnixSocketWorkerDispatcher,
   DirectWorkerException, DirectWorkerProcess,
@@ -71,8 +72,16 @@ class DirectWorkerDispatcherSuite
   private def directWorker(runner: ProcessCallable): DirectWorker =
     DirectWorker.newBuilder().setRunner(runner).setProperties(udsProperties).build()
 
+  private def defaultCapabilities: WorkerCapabilities =
+    WorkerCapabilities.newBuilder()
+      .addSupportedDataFormats(UDFWorkerDataFormat.ARROW)
+      .addSupportedCommunicationPatterns(
+        UDFProtoCommunicationPattern.BIDIRECTIONAL_STREAMING)
+      .build()
+
   private def specWithRunner(runner: ProcessCallable): UDFWorkerSpecification =
     UDFWorkerSpecification.newBuilder()
+      .setCapabilities(defaultCapabilities)
       .setDirect(directWorker(runner))
       .build()
 
@@ -81,6 +90,7 @@ class DirectWorkerDispatcherSuite
       env: WorkerEnvironment): UDFWorkerSpecification =
     UDFWorkerSpecification.newBuilder()
       .setEnvironment(env)
+      .setCapabilities(defaultCapabilities)
       .setDirect(directWorker(runner))
       .build()
 
@@ -125,6 +135,33 @@ class DirectWorkerDispatcherSuite
 
     session.close()
     assert(worker.activeSessions == 0, "should have 0 sessions after close")
+  }
+
+  test("rejects spec without worker capabilities") {
+    val badSpec = UDFWorkerSpecification.newBuilder()
+      .setDirect(directWorker(defaultRunner))
+      .build()
+
+    val ex = intercept[IllegalArgumentException] {
+      new TestDirectWorkerDispatcher(badSpec)
+    }
+    assert(ex.getMessage.contains("supported_data_formats must contain at least ARROW"))
+  }
+
+  test("rejects unspecified capability enum values") {
+    val badSpec = UDFWorkerSpecification.newBuilder()
+      .setCapabilities(WorkerCapabilities.newBuilder()
+        .addSupportedDataFormats(UDFWorkerDataFormat.UDF_WORKER_DATA_FORMAT_UNSPECIFIED)
+        .addSupportedCommunicationPatterns(
+          UDFProtoCommunicationPattern.UDF_PROTO_COMMUNICATION_PATTERN_UNSPECIFIED)
+        .build())
+      .setDirect(directWorker(defaultRunner))
+      .build()
+
+    val ex = intercept[IllegalArgumentException] {
+      new TestDirectWorkerDispatcher(badSpec)
+    }
+    assert(ex.getMessage.contains("must not contain UNSPECIFIED"))
   }
 
   test("concurrent createSession calls produce distinct workers") {
@@ -217,6 +254,7 @@ class DirectWorkerDispatcherSuite
       .setGracefulTerminationTimeoutMs(500)
       .build()
     val spec = UDFWorkerSpecification.newBuilder()
+      .setCapabilities(defaultCapabilities)
       .setDirect(DirectWorker.newBuilder()
         .setRunner(runner).setProperties(shortGracefulProps).build())
       .build()
@@ -406,6 +444,7 @@ class DirectWorkerDispatcherSuite
       .setGracefulTerminationTimeoutMs(60000)
       .build()
     val spec = UDFWorkerSpecification.newBuilder()
+      .setCapabilities(defaultCapabilities)
       .setDirect(DirectWorker.newBuilder()
         .setRunner(defaultRunner).setProperties(oversizedProps).build())
       .build()
@@ -425,6 +464,7 @@ class DirectWorkerDispatcherSuite
       .setInitializationTimeoutMs(60000)
       .build()
     val spec = UDFWorkerSpecification.newBuilder()
+      .setCapabilities(defaultCapabilities)
       .setDirect(DirectWorker.newBuilder()
         .setRunner(defaultRunner).setProperties(oversizedProps).build())
       .build()
@@ -516,6 +556,7 @@ class DirectWorkerDispatcherSuite
 
   test("DirectWorker without a connection is rejected") {
     val badSpec = UDFWorkerSpecification.newBuilder()
+      .setCapabilities(defaultCapabilities)
       .setDirect(DirectWorker.newBuilder().setRunner(defaultRunner).build())
       .build()
     val ex = intercept[IllegalArgumentException] {
@@ -531,6 +572,7 @@ class DirectWorkerDispatcherSuite
         .setTcp(LocalTcpConnection.getDefaultInstance).build())
       .build()
     val badSpec = UDFWorkerSpecification.newBuilder()
+      .setCapabilities(defaultCapabilities)
       .setDirect(DirectWorker.newBuilder()
         .setRunner(defaultRunner).setProperties(tcpProperties).build())
       .build()
@@ -608,6 +650,7 @@ class DirectWorkerDispatcherSuite
       .setInitializationTimeoutMs(500)
       .build()
     val spec = UDFWorkerSpecification.newBuilder()
+      .setCapabilities(defaultCapabilities)
       .setDirect(DirectWorker.newBuilder()
         .setRunner(hangingRunner).setProperties(shortInitProps).build())
       .build()
