@@ -75,7 +75,16 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       funcName match {
         case "TRUNC" =>
-          s"TRUNC(${inputs(0)}, 'IW')"
+          // Map Spark's trunc format strings to Oracle equivalents.
+          // inputs(1) arrives as e.g. "'MONTH'" (with quotes from LiteralValue.toString).
+          val oracleFormat = inputs(1) match {
+            case "'WEEK'" => "'IW'"
+            case "'MONTH'" | "'MM'" | "'MON'" => "'MM'"
+            case "'QUARTER'" => "'Q'"
+            case "'YEAR'" | "'YYYY'" | "'YY'" => "'YYYY'"
+            case other => other
+          }
+          s"TRUNC(${inputs(0)}, $oracleFormat)"
         case _ => super.visitSQLFunction(funcName, inputs)
       }
     }
