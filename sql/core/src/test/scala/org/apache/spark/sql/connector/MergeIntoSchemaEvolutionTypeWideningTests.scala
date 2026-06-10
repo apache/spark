@@ -27,43 +27,6 @@ trait MergeIntoSchemaEvolutionTypeWideningTests extends MergeIntoSchemaEvolution
 
   import testImplicits._
 
-  import org.apache.spark.sql.DataFrame
-
-  // scalastyle:off argcount
-  override protected def testEvolution(name: String)(
-      targetData: => DataFrame,
-      sourceData: => DataFrame,
-      cond: String = "t.pk = s.pk",
-      clauses: Seq[MergeClause] = Seq.empty,
-      expected: => DataFrame = null,
-      expectedWithoutEvolution: => DataFrame = null,
-      expectedSchema: StructType = null,
-      expectedSchemaWithoutEvolution: StructType = null,
-      expectErrorContains: String = null,
-      expectErrorWithoutEvolutionContains: String = null,
-      confs: Seq[(String, String)] = Seq.empty,
-      partitionCols: Seq[String] = Seq("dep"),
-      disableAutoSchemaEvolution: Boolean = false,
-      requiresNestedTypeCoercion: Boolean = false): Unit = {
-    super.testEvolution(name)(
-      targetData = targetData,
-      sourceData = sourceData,
-      cond = cond,
-      clauses = clauses,
-      expected = expected,
-      expectedWithoutEvolution = expectedWithoutEvolution,
-      expectedSchema = expectedSchema,
-      expectedSchemaWithoutEvolution = expectedSchemaWithoutEvolution,
-      expectErrorContains = expectErrorContains,
-      expectErrorWithoutEvolutionContains = expectErrorWithoutEvolutionContains,
-      confs = confs,
-      partitionCols = partitionCols,
-      disableAutoSchemaEvolution = disableAutoSchemaEvolution,
-      requiresNestedTypeCoercion = requiresNestedTypeCoercion
-    )
-  }
-  // scalastyle:on argcount
-
   // Type widening from SMALLINT to INT
   testEvolution("type widening from short to int")(
     targetData = {
