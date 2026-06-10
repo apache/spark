@@ -22,9 +22,9 @@ license: |
 ### Description
 
 The `MERGE INTO` statement merges a source table or query into a target table. Rows of the
-target table are matched against the source using a merge condition, and each row is then
-updated, deleted, or inserted according to the clauses that apply to it. All of these row-level
-changes are performed as a single atomic operation.
+target table are matched against the source using a merge condition. Target rows are then
+updated or deleted, and new rows are inserted from the source, according to the clauses that
+apply. All of these row-level changes are performed as a single atomic operation.
 
 `MERGE INTO` is supported on tables backed by
 [Data Source V2](sql-data-sources-v2.html#row-level-dml) connectors that support row-level operations.
@@ -72,6 +72,8 @@ not_matched_by_source_action
 
     Applies to rows that exist in both the source and the target (according to `merge_condition`).
     The optional `matched_condition` further restricts which matched rows the clause applies to.
+    The `matched_condition` and the `matched_action` values can reference columns of both the
+    target and the source tables.
     The `matched_action` can be one of:
     - `DELETE`: deletes the matched target row.
     - `UPDATE SET *`: updates the matched target row with all source columns, matched by name.
@@ -81,7 +83,9 @@ not_matched_by_source_action
 
     Applies to source rows that have no matching row in the target. `BY TARGET` is optional and is
     the default interpretation of `WHEN NOT MATCHED`. The optional `not_matched_condition` further
-    restricts which unmatched source rows the clause applies to. The `not_matched_action` can be one of:
+    restricts which unmatched source rows the clause applies to. The `not_matched_condition` and the
+    `not_matched_action` values can reference columns of the source table only.
+    The `not_matched_action` can be one of:
     - `INSERT *`: inserts a new target row using all source columns, matched by name.
     - `INSERT ( column [ , ... ] ) VALUES ( value [ , ... ] )`: inserts a new target row, assigning
       the given values to the listed columns.
@@ -90,6 +94,8 @@ not_matched_by_source_action
 
     Applies to target rows that have no matching row in the source. The optional
     `not_matched_by_source_condition` further restricts which such target rows the clause applies to.
+    The `not_matched_by_source_condition` and the `not_matched_by_source_action` values can reference
+    columns of the target table only.
     The `not_matched_by_source_action` can be one of:
     - `DELETE`: deletes the unmatched target row.
     - `UPDATE SET column = value [ , ... ]`: updates the listed target columns with the given values.
@@ -98,7 +104,8 @@ not_matched_by_source_action
 - A `MERGE INTO` statement must contain at least one `WHEN` clause.
 - Multiple clauses of the same type may be specified. For a given row, the clauses of the relevant
   type are evaluated in the order they are written, and the first clause whose condition is satisfied
-  is applied.
+  is applied. When multiple clauses of the same type are specified, only the last one may omit its
+  `AND` condition.
 - If a single target row matches more than one source row, the statement fails with a
   `MERGE_CARDINALITY_VIOLATION` error, since the row would otherwise be updated or deleted more than
   once. This check is skipped when there are no `WHEN MATCHED` clauses, or when the only `WHEN MATCHED`
