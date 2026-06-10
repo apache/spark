@@ -42,6 +42,11 @@ import org.apache.spark.sql.types.{DataType, DateType, TimestampLTZNanosType, Ti
  * unresolved until this rule rewrites it into the resolvable nested form. The new casts inherit the
  * original `timeZoneId` and `evalMode`; the only zone-sensitive part (the `micros <-> DATE` cast)
  * gets its session time zone from [[ResolveTimeZone]] within the same fixed-point batch.
+ *
+ * The per-cast rewrite is exposed via [[rewriteDateNanosCast]] so that the single-pass resolver
+ * (see `TimezoneAwareExpressionResolver`) can apply the same transformation and produce an
+ * identical plan; otherwise single-pass resolution would fail the cast's input type check while
+ * fixed-point succeeds.
  */
 object ResolveTimestampNanosCast extends Rule[LogicalPlan] {
 
@@ -52,15 +57,26 @@ object ResolveTimestampNanosCast extends Rule[LogicalPlan] {
     case _ => None
   }
 
+  /**
+   * If `cast` converts between [[DateType]] and a nanosecond-precision timestamp type, returns the
+   * equivalent two-step cast through the corresponding microsecond-precision timestamp type;
+   * returns `None` for any other cast. The nested casts inherit the original `timeZoneId` and
+   * `evalMode`.
+   */
+  def rewriteDateNanosCast(cast: Cast): Option[Cast] = cast match {
+    // nanos(p) -> DATE  ==>  nanos(p) -> micros -> DATE
+    case Cast(child, DateType, tz, mode)
+        if child.resolved && microTimestampType(child.dataType).isDefined =>
+      Some(Cast(Cast(child, microTimestampType(child.dataType).get, tz, mode), DateType, tz, mode))
+    // DATE -> nanos(p)  ==>  DATE -> micros -> nanos(p)
+    case Cast(child, dt, tz, mode)
+        if child.resolved && child.dataType == DateType && microTimestampType(dt).isDefined =>
+      Some(Cast(Cast(child, microTimestampType(dt).get, tz, mode), dt, tz, mode))
+    case _ => None
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan.resolveExpressionsWithPruning(_.containsPattern(CAST), ruleId) {
-      // nanos(p) -> DATE  ==>  nanos(p) -> micros -> DATE
-      case Cast(child, DateType, tz, mode)
-          if child.resolved && microTimestampType(child.dataType).isDefined =>
-        Cast(Cast(child, microTimestampType(child.dataType).get, tz, mode), DateType, tz, mode)
-      // DATE -> nanos(p)  ==>  DATE -> micros -> nanos(p)
-      case Cast(child, dt, tz, mode)
-          if child.resolved && child.dataType == DateType && microTimestampType(dt).isDefined =>
-        Cast(Cast(child, microTimestampType(dt).get, tz, mode), dt, tz, mode)
+      case cast: Cast => rewriteDateNanosCast(cast).getOrElse(cast)
     }
 }

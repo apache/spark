@@ -749,6 +749,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // SPARK-57323: DATE <-> nanos requires an explicit CAST in both directions (the explicit
       // cast is rewritten through the microsecond type by ResolveTimestampNanosCast), so STRICT
       // store assignment and ANSI store assignment both reject it.
+      // STRICT goes through Cast.canUpCast; assert it directly so a future blanket datetime arm in
+      // UpCastRule cannot silently turn this into a safe (implicit) store assignment.
+      assert(!Cast.canUpCast(DateType, TimestampNTZNanosType(p)))
+      assert(!Cast.canUpCast(TimestampNTZNanosType(p), DateType))
+      assert(!Cast.canUpCast(DateType, TimestampLTZNanosType(p)))
+      assert(!Cast.canUpCast(TimestampLTZNanosType(p), DateType))
       assert(!Cast.canANSIStoreAssign(DateType, TimestampNTZNanosType(p)))
       assert(!Cast.canANSIStoreAssign(TimestampNTZNanosType(p), DateType))
       assert(!Cast.canANSIStoreAssign(DateType, TimestampLTZNanosType(p)))

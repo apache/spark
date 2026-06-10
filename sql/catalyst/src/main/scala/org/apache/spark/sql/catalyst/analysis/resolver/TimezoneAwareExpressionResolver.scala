@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
+import org.apache.spark.sql.catalyst.analysis.ResolveTimestampNanosCast
 import org.apache.spark.sql.catalyst.expressions.{
   Cast,
   DefaultStringProducingExpression,
@@ -45,7 +46,9 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
   /**
    * Resolves a [[TimeZoneAwareExpression]] by resolving its children, applying a timezone
    * and calling [[coerceExpressionTypes]] on the result. If the expression is a [[Cast]], we apply
-   * [[collapseCast]] to the result.
+   * [[collapseCast]] to the result, and rewrite a `DATE <-> nanos` cast through the microsecond
+   * timestamp type (mirroring the fixed-point [[ResolveTimestampNanosCast]] rule) so single-pass
+   * resolution produces the same plan instead of failing the cast's input type check.
    *
    * @param unresolvedTimezoneExpression The [[TimeZoneAwareExpression]] to resolve.
    * @return A resolved [[Expression]] with the session's local timezone applied, and optionally
@@ -63,9 +66,16 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
       expressionTreeTraversal = traversals.current
     )
 
-    coercedTimezoneAwareExpression match {
+    val collapsedExpression = coercedTimezoneAwareExpression match {
       case cast: Cast if traversals.current.defaultCollation.isDefined =>
         tryCollapseCast(cast, traversals.current.defaultCollation.get)
+      case other =>
+        other
+    }
+
+    collapsedExpression match {
+      case cast: Cast =>
+        ResolveTimestampNanosCast.rewriteDateNanosCast(cast).getOrElse(cast)
       case other =>
         other
     }

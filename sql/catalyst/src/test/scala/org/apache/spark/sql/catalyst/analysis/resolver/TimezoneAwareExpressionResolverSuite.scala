@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, DateType, IntegerType, StringType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
 
 class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
 
@@ -92,5 +92,57 @@ class TimezoneAwareExpressionResolverSuite extends SparkFunSuite {
     assert(
       expressionWithTimezone.asInstanceOf[Cast].child.asInstanceOf[Cast].timeZoneId.get == "UTC"
     )
+  }
+
+  // SPARK-57323: DATE <-> nanos casts are not directly castable, so the single-pass resolver must
+  // apply the same rewrite as the fixed-point `ResolveTimestampNanosCast` rule (cast through the
+  // microsecond timestamp type); otherwise single-pass resolution would fail the cast's input type
+  // check while fixed-point succeeds.
+  private def resolveCast(resolvedChild: Expression, cast: Cast): Cast = {
+    val resolver = new HardCodedExpressionResolver(
+      catalogManager = mock[CatalogManager],
+      resolvedExpression = resolvedChild
+    )
+    val tzResolver = new TimezoneAwareExpressionResolver(resolver)
+    resolver.getExpressionTreeTraversals
+      .withNewTraversal(OneRowRelation()) {
+        tzResolver.resolve(cast)
+      }
+      .asInstanceOf[Cast]
+  }
+
+  private def assertRewrittenThroughMicros(
+      outer: Cast,
+      expectedOuterType: DataType,
+      expectedMicrosType: DataType,
+      expectedInnermost: Expression): Unit = {
+    assert(outer.dataType == expectedOuterType)
+    assert(outer.timeZoneId.nonEmpty)
+    val inner = outer.child.asInstanceOf[Cast]
+    assert(inner.dataType == expectedMicrosType)
+    assert(inner.timeZoneId.nonEmpty)
+    assert(inner.child == expectedInnermost)
+  }
+
+  test("SPARK-57323: single-pass rewrites DATE -> nanos cast through the micros timestamp type") {
+    val dateChild = AttributeReference(name = "d", dataType = DateType)()
+    Seq(
+      TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION) -> TimestampNTZType,
+      TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION) -> TimestampType
+    ).foreach { case (nanos, micros) =>
+      val resolved = resolveCast(dateChild, Cast(child = unresolvedChild, dataType = nanos))
+      assertRewrittenThroughMicros(resolved, nanos, micros, dateChild)
+    }
+  }
+
+  test("SPARK-57323: single-pass rewrites nanos -> DATE cast through the micros timestamp type") {
+    Seq(
+      TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION) -> TimestampNTZType,
+      TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION) -> TimestampType
+    ).foreach { case (nanos, micros) =>
+      val nanosChild = AttributeReference(name = "n", dataType = nanos)()
+      val resolved = resolveCast(nanosChild, Cast(child = unresolvedChild, dataType = DateType))
+      assertRewrittenThroughMicros(resolved, DateType, micros, nanosChild)
+    }
   }
 }
