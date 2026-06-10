@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.{expressions => exprs}
 import org.apache.spark.sql.catalyst.analysis.{GetColumnByOrdinal, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, AgnosticEncoders, AgnosticExpressionPathEncoder, Codec, JavaSerializationCodec, KryoSerializationCodec}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, GeographyEncoder, GeometryEncoder, InstantEncoder, InstantNanosEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalDateTimeNanosEncoder, LocalTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{ArrayEncoder, BoxedLeafEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, GeographyEncoder, GeometryEncoder, InstantEncoder, IterableEncoder, JavaBeanEncoder, JavaBigIntEncoder, JavaDecimalEncoder, JavaEnumEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, OptionEncoder, PrimitiveBooleanEncoder, PrimitiveByteEncoder, PrimitiveDoubleEncoder, PrimitiveFloatEncoder, PrimitiveIntEncoder, PrimitiveLongEncoder, PrimitiveShortEncoder, ProductEncoder, ScalaBigIntEncoder, ScalaDecimalEncoder, ScalaEnumEncoder, StringEncoder, TimestampEncoder, TransformingEncoder, UDTEncoder, VarcharEncoder, YearMonthIntervalEncoder}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils.{dataTypeForClass, externalDataTypeFor, isNativeEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, IsNull, Literal, MapKeys, MapValues, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, DecodeUsingSerializer, InitializeJavaBean, Invoke, NewInstance, StaticInvoke, UnresolvedCatalystToExternalMap, UnresolvedMapObjects, WrapOption}
@@ -176,24 +176,6 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
-  def createDeserializerForLocalDateTimeNanos(path: Expression): Expression = {
-    StaticInvoke(
-      DateTimeUtils.getClass,
-      ObjectType(classOf[java.time.LocalDateTime]),
-      "timestampNanosToLocalDateTime",
-      path :: Nil,
-      returnNullable = false)
-  }
-
-  def createDeserializerForInstantNanos(path: Expression): Expression = {
-    StaticInvoke(
-      DateTimeUtils.getClass,
-      ObjectType(classOf[java.time.Instant]),
-      "timestampNanosToInstant",
-      path :: Nil,
-      returnNullable = false)
-  }
-
   def createDeserializerForLocalTime(path: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
@@ -311,11 +293,19 @@ object DeserializerBuildHelper {
       enc: AgnosticEncoder[_],
       path: Expression,
       walkedTypePath: WalkedTypePath,
-      isTopLevel: Boolean = false): Expression =
+      isTopLevel: Boolean = false): Expression = enc match {
+    // OptionEncoder and TransformingEncoder proxy `dataType` to the wrapped encoder, so the
+    // framework dispatch below (which keys off `enc.dataType`) would otherwise fire on the wrapper
+    // and skip WrapOption / the transforming codec. Route these wrappers through the default path
+    // first, so the framework leaf dispatch only ever sees unwrapped leaf encoders.
+    case _: OptionEncoder[_] | _: TransformingEncoder[_, _] =>
+      createDeserializerDefault(enc, path, walkedTypePath, isTopLevel)
     // Framework dispatch runs before encoder-type checks in the default path. Safe because
     // framework types use dedicated leaf encoders, never migration shims or native primitives.
-    TypeOps(enc.dataType).flatMap(_.createDeserializer(path, walkedTypePath, isTopLevel))
-      .getOrElse(createDeserializerDefault(enc, path, walkedTypePath, isTopLevel))
+    case _ =>
+      TypeOps(enc.dataType).flatMap(_.createDeserializer(path, walkedTypePath, isTopLevel))
+        .getOrElse(createDeserializerDefault(enc, path, walkedTypePath, isTopLevel))
+  }
 
   private def createDeserializerDefault(
       enc: AgnosticEncoder[_],
@@ -374,10 +364,6 @@ object DeserializerBuildHelper {
       createDeserializerForInstant(path)
     case LocalDateTimeEncoder =>
       createDeserializerForLocalDateTime(path)
-    case _: LocalDateTimeNanosEncoder =>
-      createDeserializerForLocalDateTimeNanos(path)
-    case _: InstantNanosEncoder =>
-      createDeserializerForInstantNanos(path)
     case LocalTimeEncoder if !SQLConf.get.isTimeTypeEnabled =>
       throw org.apache.spark.sql.errors.QueryCompilationErrors.unsupportedTimeTypeError()
     case LocalTimeEncoder =>

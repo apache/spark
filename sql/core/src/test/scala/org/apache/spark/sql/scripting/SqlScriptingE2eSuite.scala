@@ -348,6 +348,54 @@ class SqlScriptingE2eSuite extends SharedSparkSession {
     }
   }
 
+  test("variable in REPLACE WHERE clause of INSERT INTO") {
+    withCatalog("cat") { _ =>
+      withTable("cat.ns1.t") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE x STRING DEFAULT 'hr';
+            |  CREATE TABLE cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  INSERT INTO cat.ns1.t VALUES (1, 100, 'hr'), (2, 200, 'software');
+            |  INSERT INTO cat.ns1.t
+            |    REPLACE WHERE dep = x
+            |    VALUES (1, 150, 'hr');
+            |  SELECT * FROM cat.ns1.t ORDER BY pk;
+            |END
+            |""".stripMargin
+
+        verifySqlScriptResult(
+          sqlScript,
+          Seq(Row(1, 150, "hr"), Row(2, 200, "software")))
+      }
+    }
+  }
+
+  test("REPLACE WHERE resolves table columns before SQL scripting variables") {
+    withCatalog("cat") { _ =>
+      withTable("cat.ns1.t") {
+        val sqlScript =
+          """
+            |BEGIN
+            |  DECLARE dep STRING DEFAULT 'software';
+            |  CREATE TABLE cat.ns1.t (pk INT NOT NULL, salary INT, dep STRING)
+            |    PARTITIONED BY (dep);
+            |  INSERT INTO cat.ns1.t VALUES (1, 100, 'hr'), (2, 200, 'software');
+            |  INSERT INTO cat.ns1.t
+            |    REPLACE WHERE dep = 'hr'
+            |    VALUES (1, 150, 'hr');
+            |  SELECT * FROM cat.ns1.t ORDER BY pk;
+            |END
+            |""".stripMargin
+
+        verifySqlScriptResult(
+          sqlScript,
+          Seq(Row(1, 150, "hr"), Row(2, 200, "software")))
+      }
+    }
+  }
+
   test("continue handler with transactional checks - handler DML runs in its own transaction") {
     withCatalog("cat") { catalog =>
       withTable("cat.ns1.t") {

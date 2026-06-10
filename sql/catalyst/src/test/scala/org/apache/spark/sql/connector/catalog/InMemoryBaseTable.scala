@@ -116,6 +116,21 @@ abstract class InMemoryBaseTable(
     }
   }
 
+  // Version-aware equality: two tables refer to the same metastore entity at the same state.
+  // Fall back to reference equality when `id()` is null (no metastore identity).
+  override def equals(obj: Any): Boolean = obj match {
+    case other: InMemoryBaseTable =>
+      if (this eq other) true
+      else if (id() == null || other.id() == null) false
+      else id() == other.id() && version() == other.version()
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    if (id() == null) System.identityHashCode(this)
+    else java.util.Objects.hash(id(), version())
+  }
+
   def increaseVersion(): Unit = {
     tableVersion += 1
   }
@@ -520,6 +535,7 @@ abstract class InMemoryBaseTable(
       if (evaluableFilters.nonEmpty) {
         scan.filter(evaluableFilters)
       }
+      scan.pushedFilters = _pushedFilters
       recordScanEvent(_pushedFilters)
       scan
     }
@@ -683,6 +699,12 @@ abstract class InMemoryBaseTable(
       tableSchema: StructType,
       options: CaseInsensitiveStringMap)
     extends BatchScanBaseClass(_data, readSchema, tableSchema) with SupportsRuntimeFiltering {
+
+    // Back-pointer to the table this scan was built against.
+    val table: InMemoryBaseTable = InMemoryBaseTable.this
+
+    // The filters pushed to this scan at build time.
+    var pushedFilters: Array[Filter] = Array.empty
 
     override def filterAttributes(): Array[NamedReference] = {
       val scanFields = readSchema.fields.map(_.name).toSet

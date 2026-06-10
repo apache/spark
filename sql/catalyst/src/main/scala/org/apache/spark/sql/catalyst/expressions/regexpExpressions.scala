@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.lang.{StringBuilder => JStringBuilder}
 import java.util.Locale
-import java.util.regex.{Matcher, MatchResult, Pattern, PatternSyntaxException}
+import java.util.regex.{Matcher, Pattern, PatternSyntaxException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -723,8 +723,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   // last replacement string, we don't want to convert a UTF8String => java.langString every time.
   @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
-  // result buffer write by Matcher
-  @transient private lazy val result: JStringBuilder = new JStringBuilder
   final override val nodePatterns: Seq[TreePattern] = Seq(REGEXP_REPLACE)
 
   override def nullSafeEval(s: Any, p: Any, r: Any, i: Any): Any = {
@@ -738,26 +736,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       lastReplacementInUTF8 = r.asInstanceOf[UTF8String].clone()
       lastReplacement = lastReplacementInUTF8.toString
     }
-    val source = s.toString()
-    val position = i.asInstanceOf[Int] - 1
-    if (position == 0 || position < source.length) {
-      val m = pattern.matcher(source)
-      m.region(position, source.length)
-      result.delete(0, result.length())
-      while (m.find) {
-        try {
-          m.appendReplacement(result, lastReplacement)
-        } catch {
-          case NonFatal(e) =>
-            throw QueryExecutionErrors.invalidRegexpReplaceError(s.toString,
-              p.toString, r.toString, i.asInstanceOf[Int], e)
-        }
-      }
-      m.appendTail(result)
-      UTF8String.fromString(result.toString)
-    } else {
-      s
-    }
+    RegExpUtils.replace(pattern, s.toString, lastReplacement, i.asInstanceOf[Int])
   }
 
   override def dataType: DataType = subject.dataType
@@ -768,14 +747,6 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def prettyName: String = "regexp_replace"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val termResult = ctx.freshName("termResult")
-
-    val classNameStringBuilder = classOf[JStringBuilder].getCanonicalName
-
-    val matcher = ctx.freshName("matcher")
-    val source = ctx.freshName("source")
-    val position = ctx.freshName("position")
-
     val termLastReplacement = ctx.addMutableState("String", "lastReplacement")
     val termLastReplacementInUTF8 = ctx.addMutableState("UTF8String", "lastReplacementInUTF8")
 
@@ -784,41 +755,22 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     } else {
       ""
     }
+    val regExpUtils = RegExpUtils.getClass.getName.stripSuffix("$")
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep, pos) => {
-    s"""
-      ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName, collationId)}
-      if (!$rep.equals($termLastReplacementInUTF8)) {
-        // replacement string changed
-        $termLastReplacementInUTF8 = $rep.clone();
-        $termLastReplacement = $termLastReplacementInUTF8.toString();
-      }
-      String $source = $subject.toString();
-      int $position = $pos - 1;
-      if ($position == 0 || $position < $source.length()) {
-        $classNameStringBuilder $termResult = new $classNameStringBuilder();
-        $matcher.region($position, $source.length());
-
-        while ($matcher.find()) {
-          try {
-            $matcher.appendReplacement($termResult, $termLastReplacement);
-          } catch (Throwable e) {
-            if (scala.util.control.NonFatal.apply(e)) {
-              throw QueryExecutionErrors.invalidRegexpReplaceError($source, $regexp.toString(),
-                $rep.toString(), $pos, e);
-            } else {
-              throw e;
-            }
-          }
+      val (patternCode, termPattern) =
+        RegExpUtils.initLastPatternCode(ctx, regexp, prettyName, collationId)
+      s"""
+        $patternCode
+        if (!$rep.equals($termLastReplacementInUTF8)) {
+          // replacement string changed
+          $termLastReplacementInUTF8 = $rep.clone();
+          $termLastReplacement = $termLastReplacementInUTF8.toString();
         }
-        $matcher.appendTail($termResult);
-        ${ev.value} = UTF8String.fromString($termResult.toString());
-        $termResult = null;
-      } else {
-        ${ev.value} = $subject;
-      }
-      $setEvNotNull
-    """
+        ${ev.value} = $regExpUtils.replace(
+          $termPattern, $subject.toString(), $termLastReplacement, $pos);
+        $setEvNotNull
+      """
     })
   }
 
@@ -843,6 +795,37 @@ object RegExpExtractBase {
       throw QueryExecutionErrors.invalidRegexGroupIndexError(
         prettyName, groupCount, groupIndex)
     }
+  }
+
+  // Extracts group `idx` of the first match, shared by RegExpExtract's eval and codegen so the
+  // generated Java is a single call rather than an inline match/group block.
+  def extract(matcher: Matcher, idx: Int, prettyName: String): UTF8String = {
+    if (matcher.find()) {
+      val mr = matcher.toMatchResult
+      checkGroupIndex(prettyName, mr.groupCount, idx)
+      val group = mr.group(idx)
+      // Pattern matched, but it's an optional group
+      if (group == null) UTF8String.EMPTY_UTF8 else UTF8String.fromString(group)
+    } else {
+      UTF8String.EMPTY_UTF8
+    }
+  }
+
+  // Extracts group `idx` of every match, shared by RegExpExtractAll's eval and codegen.
+  def extractAll(matcher: Matcher, idx: Int, prettyName: String): GenericArrayData = {
+    val matchResults = new ArrayBuffer[UTF8String]()
+    while (matcher.find()) {
+      val mr = matcher.toMatchResult
+      checkGroupIndex(prettyName, mr.groupCount, idx)
+      val group = mr.group(idx)
+      // Pattern matched, but it's an optional group
+      if (group == null) {
+        matchResults += UTF8String.EMPTY_UTF8
+      } else {
+        matchResults += UTF8String.fromString(group)
+      }
+    }
+    new GenericArrayData(matchResults.toArray.asInstanceOf[Array[Any]])
   }
 }
 
@@ -924,20 +907,7 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
-    val m = getLastMatcher(s, p)
-    if (m.find) {
-      val mr: MatchResult = m.toMatchResult
-      val index = r.asInstanceOf[Int]
-      RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
-      val group = mr.group(index)
-      if (group == null) { // Pattern matched, but it's an optional group
-        UTF8String.EMPTY_UTF8
-      } else {
-        UTF8String.fromString(group)
-      }
-    } else {
-      UTF8String.EMPTY_UTF8
-    }
+    RegExpExtractBase.extract(getLastMatcher(s, p), r.asInstanceOf[Int], prettyName)
   }
 
   override def dataType: DataType = subject.dataType
@@ -946,7 +916,6 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val matcher = ctx.freshName("matcher")
-    val matchResult = ctx.freshName("matchResult")
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
@@ -956,19 +925,8 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
       ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName, collationId)}
-      if ($matcher.find()) {
-        java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-        $classNameRegExpExtractBase.checkGroupIndex("$prettyName", $matchResult.groupCount(), $idx);
-        if ($matchResult.group($idx) == null) {
-          ${ev.value} = UTF8String.EMPTY_UTF8;
-        } else {
-          ${ev.value} = UTF8String.fromString($matchResult.group($idx));
-        }
-        $setEvNotNull
-      } else {
-        ${ev.value} = UTF8String.EMPTY_UTF8;
-        $setEvNotNull
-      }"""
+      ${ev.value} = $classNameRegExpExtractBase.extract($matcher, $idx, "$prettyName");
+      $setEvNotNull"""
     })
   }
 
@@ -1022,21 +980,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
-    val m = getLastMatcher(s, p)
-    val matchResults = new ArrayBuffer[UTF8String]()
-    while (m.find) {
-      val mr: MatchResult = m.toMatchResult
-      val index = r.asInstanceOf[Int]
-      RegExpExtractBase.checkGroupIndex(prettyName, mr.groupCount, index)
-      val group = mr.group(index)
-      if (group == null) { // Pattern matched, but it's an optional group
-        matchResults += UTF8String.EMPTY_UTF8
-      } else {
-        matchResults += UTF8String.fromString(group)
-      }
-    }
-
-    new GenericArrayData(matchResults.toArray.asInstanceOf[Array[Any]])
+    RegExpExtractBase.extractAll(getLastMatcher(s, p), r.asInstanceOf[Int], prettyName)
   }
 
   override def dataType: DataType = ArrayType(subject.dataType)
@@ -1044,10 +988,7 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
-    val arrayClass = classOf[GenericArrayData].getName
     val matcher = ctx.freshName("matcher")
-    val matchResult = ctx.freshName("matchResult")
-    val matchResults = ctx.freshName("matchResults")
     val setEvNotNull = if (nullable) {
       s"${ev.isNull} = false;"
     } else {
@@ -1057,21 +998,8 @@ case class RegExpExtractAll(subject: Expression, regexp: Expression, idx: Expres
       s"""
          | ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName,
         collationId)}
-         | java.util.ArrayList $matchResults = new java.util.ArrayList<UTF8String>();
-         | while ($matcher.find()) {
-         |   java.util.regex.MatchResult $matchResult = $matcher.toMatchResult();
-         |   $classNameRegExpExtractBase.checkGroupIndex(
-         |     "$prettyName",
-         |     $matchResult.groupCount(),
-         |     $idx);
-         |   if ($matchResult.group($idx) == null) {
-         |     $matchResults.add(UTF8String.EMPTY_UTF8);
-         |   } else {
-         |     $matchResults.add(UTF8String.fromString($matchResult.group($idx)));
-         |   }
-         | }
          | ${ev.value} =
-         |   new $arrayClass($matchResults.toArray(new UTF8String[$matchResults.size()]));
+         |   $classNameRegExpExtractBase.extractAll($matcher, $idx, "$prettyName");
          | $setEvNotNull
          """
     })
@@ -1242,6 +1170,33 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
 }
 
 object RegExpUtils {
+  // Emits the regex-pattern caching block (recompile only when the regexp value changes) and
+  // returns (code, patternTermName). The caller can build a Matcher from the returned term, or
+  // pass it to `replace`.
+  def initLastPatternCode(
+      ctx: CodegenContext,
+      regexp: String,
+      prettyName: String,
+      collationId: Int): (String, String) = {
+    val classNamePattern = classOf[Pattern].getCanonicalName
+    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
+    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
+    val collationRegexFlags = CollationSupport.collationAwareRegexFlags(collationId)
+    val utils = classOf[ExpressionImplUtils].getName
+
+    val code =
+      s"""
+         |if (!$regexp.equals($termLastRegex)) {
+         |  // regex value changed
+         |  UTF8String r = $regexp.clone();
+         |  $termPattern =
+         |    $utils.compileRegexPattern(r.toString(), $collationRegexFlags, "$prettyName");
+         |  $termLastRegex = r;
+         |}
+         |""".stripMargin
+    (code, termPattern)
+  }
+
   def initLastMatcherCode(
       ctx: CodegenContext,
       subject: String,
@@ -1249,20 +1204,9 @@ object RegExpUtils {
       matcher: String,
       prettyName: String,
       collationId: Int): String = {
-    val classNamePattern = classOf[Pattern].getCanonicalName
-    val termLastRegex = ctx.addMutableState("UTF8String", "lastRegex")
-    val termPattern = ctx.addMutableState(classNamePattern, "pattern")
-    val collationRegexFlags = CollationSupport.collationAwareRegexFlags(collationId)
-    val utils = classOf[ExpressionImplUtils].getName
-
+    val (patternCode, termPattern) = initLastPatternCode(ctx, regexp, prettyName, collationId)
     s"""
-       |if (!$regexp.equals($termLastRegex)) {
-       |  // regex value changed
-       |  UTF8String r = $regexp.clone();
-       |  $termPattern =
-       |    $utils.compileRegexPattern(r.toString(), $collationRegexFlags, "$prettyName");
-       |  $termLastRegex = r;
-       |}
+       |$patternCode
        |java.util.regex.Matcher $matcher = $termPattern.matcher($subject.toString());
        |""".stripMargin
   }
@@ -1273,5 +1217,41 @@ object RegExpUtils {
     val pattern = ExpressionImplUtils.compileRegexPattern(
       r.toString, CollationSupport.collationAwareRegexFlags(collationId), prettyName)
     (pattern, r)
+  }
+
+  /**
+   * Runs the regexp_replace loop shared by RegExpReplace's eval and codegen, so the generated
+   * Java is a single call rather than an inline matcher build + match/replace loop + error
+   * construction. The matcher is built here from `pattern`. `source` is returned (as a new
+   * UTF8String) when the start position is out of range; `pos` and `pattern.pattern()` (the
+   * original regex string) are only used to build the error message on a failed replacement.
+   */
+  def replace(
+      pattern: Pattern,
+      source: String,
+      replacement: String,
+      pos: Int): UTF8String = {
+    val position = pos - 1
+    if (position == 0 || position < source.length) {
+      val matcher = pattern.matcher(source)
+      matcher.region(position, source.length)
+      val result = new JStringBuilder
+      while (matcher.find()) {
+        try {
+          matcher.appendReplacement(result, replacement)
+        } catch {
+          case NonFatal(e) =>
+            // pattern.pattern() is the original regexp string: the pattern is compiled from the
+            // raw regexp without escaping (see ExpressionImplUtils.compileRegexPattern), so it
+            // round-trips exactly into the error message.
+            throw QueryExecutionErrors.invalidRegexpReplaceError(
+              source, pattern.pattern(), replacement, pos, e)
+        }
+      }
+      matcher.appendTail(result)
+      UTF8String.fromString(result.toString)
+    } else {
+      UTF8String.fromString(source)
+    }
   }
 }

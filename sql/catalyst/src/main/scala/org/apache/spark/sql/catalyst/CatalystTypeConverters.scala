@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.Utils
 
@@ -88,8 +88,6 @@ object CatalystTypeConverters {
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
       case TimestampNTZType => TimestampNTZConverter
-      case t: TimestampNTZNanosType => new TimestampNTZNanosConverter(t)
-      case t: TimestampLTZNanosType => new TimestampLTZNanosConverter(t)
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -515,50 +513,6 @@ object CatalystTypeConverters {
 
     override def toScalaImpl(row: InternalRow, column: Int): LocalDateTime =
       DateTimeUtils.microsToLocalDateTime(row.getLong(column))
-  }
-
-  private class TimestampNTZNanosConverter(dataType: TimestampNTZNanosType)
-    extends CatalystTypeConverter[Any, LocalDateTime, TimestampNanosVal] {
-    override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
-      case l: LocalDateTime => DateTimeUtils.localDateTimeToTimestampNanos(l, dataType.precision)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> dataType.sql))
-    }
-
-    override def toScala(catalystValue: TimestampNanosVal): LocalDateTime =
-      if (catalystValue == null) null
-      else DateTimeUtils.timestampNanosToLocalDateTime(catalystValue)
-
-    override def toScalaImpl(row: InternalRow, column: Int): LocalDateTime =
-      DateTimeUtils.timestampNanosToLocalDateTime(row.getTimestampNTZNanos(column))
-  }
-
-  // Always maps `TimestampLTZNanosType` to `java.time.Instant`. Unlike micro `TimestampType`,
-  // the mapping does not consult `spark.sql.datetime.java8API.enabled`: the nanos LTZ type is
-  // post-Java-8 and the legacy `java.sql.Timestamp` external type is intentionally out of scope
-  // here. See SPARK-57033.
-  private class TimestampLTZNanosConverter(dataType: TimestampLTZNanosType)
-    extends CatalystTypeConverter[Any, Instant, TimestampNanosVal] {
-    override def toCatalystImpl(scalaValue: Any): TimestampNanosVal = scalaValue match {
-      case i: Instant => DateTimeUtils.instantToTimestampNanos(i, dataType.precision)
-      case other => throw new SparkIllegalArgumentException(
-        errorClass = "INVALID_EXTERNAL_VALUE",
-        messageParameters = scala.collection.immutable.Map(
-          "other" -> other.toString,
-          "otherClass" -> other.getClass.getCanonicalName,
-          "dataType" -> dataType.sql))
-    }
-
-    override def toScala(catalystValue: TimestampNanosVal): Instant =
-      if (catalystValue == null) null
-      else DateTimeUtils.timestampNanosToInstant(catalystValue)
-
-    override def toScalaImpl(row: InternalRow, column: Int): Instant =
-      DateTimeUtils.timestampNanosToInstant(row.getTimestampLTZNanos(column))
   }
 
   private class DecimalConverter(dataType: DecimalType)

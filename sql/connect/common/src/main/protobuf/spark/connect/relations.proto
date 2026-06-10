@@ -83,6 +83,7 @@ message Relation {
     ChunkedCachedLocalRelation chunked_cached_local_relation = 45;
     RelationChanges relation_changes = 46;
     NearestByJoin nearest_by_join = 47;
+    Zip zip = 48;
 
     // NA functions
     NAFill fill_na = 90;
@@ -1306,4 +1307,16 @@ message NearestByJoin {
 
   // (Required) Ranking direction. Must be one of: "distance", "similarity".
   string direction = 7;
+}
+
+// Relation of type [[Zip]].
+//
+// Combines the columns of two DataFrames side-by-side. Both DataFrames must produce the same
+// canonicalized plan after stripping outer Project chains.
+message Zip {
+  // (Required) Left input relation.
+  Relation left = 1;
+
+  // (Required) Right input relation.
+  Relation right = 2;
 }

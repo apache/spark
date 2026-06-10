@@ -2704,6 +2704,13 @@ def levenshtein(
 levenshtein.__doc__ = pysparkfuncs.levenshtein.__doc__
 
 
+def jaro_winkler_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("jaro_winkler_similarity", left, right)
+
+
+jaro_winkler_similarity.__doc__ = pysparkfuncs.jaro_winkler_similarity.__doc__
+
+
 def locate(substr: str, str: "ColumnOrName", pos: int = 1) -> Column:
     return _invoke_function("locate", lit(substr), _to_col(str), lit(pos))
 
@@ -5568,6 +5575,64 @@ def call_function(funcName: str, *cols: "ColumnOrName") -> Column:
 
 
 call_function.__doc__ = pysparkfuncs.call_function.__doc__
+
+
+# ---------------------- Vector Functions ----------------------
+
+
+def vector_cosine_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_cosine_similarity", left, right)
+
+
+vector_cosine_similarity.__doc__ = pysparkfuncs.vector_cosine_similarity.__doc__
+
+
+def vector_inner_product(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_inner_product", left, right)
+
+
+vector_inner_product.__doc__ = pysparkfuncs.vector_inner_product.__doc__
+
+
+def vector_l2_distance(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_l2_distance", left, right)
+
+
+vector_l2_distance.__doc__ = pysparkfuncs.vector_l2_distance.__doc__
+
+
+def vector_norm(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    if degree is None:
+        return _invoke_function_over_columns("vector_norm", vector)
+    else:
+        return _invoke_function_over_columns("vector_norm", vector, degree)
+
+
+vector_norm.__doc__ = pysparkfuncs.vector_norm.__doc__
+
+
+def vector_normalize(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    if degree is None:
+        return _invoke_function_over_columns("vector_normalize", vector)
+    else:
+        return _invoke_function_over_columns("vector_normalize", vector, degree)
+
+
+vector_normalize.__doc__ = pysparkfuncs.vector_normalize.__doc__
+
+
+def vector_avg(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_avg", col)
+
+
+vector_avg.__doc__ = pysparkfuncs.vector_avg.__doc__
+
+
+def vector_sum(col: "ColumnOrName") -> Column:
+    return _invoke_function_over_columns("vector_sum", col)
+
+
+vector_sum.__doc__ = pysparkfuncs.vector_sum.__doc__
 
 
 def _test() -> None:

@@ -3923,6 +3923,29 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Session variable in INSERT REPLACE WHERE") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      spark.sql("DECLARE OR REPLACE VARIABLE replacement_id BIGINT DEFAULT 2")
+      try {
+        spark.sql(
+          s"""
+             |INSERT INTO $t
+             |  REPLACE WHERE id = replacement_id
+             |  VALUES (2, 'bb')
+             |""".stripMargin)
+
+        checkAnswer(
+          spark.table(t),
+          Seq(Row(1L, "a"), Row(2L, "bb"), Row(3L, "c")))
+      } finally {
+        spark.sql("DROP TEMPORARY VARIABLE IF EXISTS replacement_id")
+      }
+    }
+  }
+
   test("Selective Overwrite: REPLACE WHERE with BY NAME - column reordering") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")

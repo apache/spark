@@ -15,20 +15,12 @@
 # limitations under the License.
 #
 
-from pyspark.errors import PySparkNotImplementedError
+from pyspark.sql.tests.test_zip import DataFrameZipTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 
 
-class ZipParityTests(ReusedConnectTestCase):
-    """`DataFrame.zip` is classic-only for now; assert the Connect stub raises a clean
-    NOT_IMPLEMENTED instead of falling through to a generic error or appearing to work."""
-
-    def test_zip_raises_not_implemented(self):
-        df = self.spark.createDataFrame([(1, 2)], ["a", "b"])
-        with self.assertRaises(PySparkNotImplementedError) as ctx:
-            df.select("a").zip(df.select("b"))
-        self.assertEqual(ctx.exception.getCondition(), "NOT_IMPLEMENTED")
-        self.assertIn("zip", str(ctx.exception))
+class ZipParityTests(DataFrameZipTestsMixin, ReusedConnectTestCase):
+    pass
 
 
 if __name__ == "__main__":
