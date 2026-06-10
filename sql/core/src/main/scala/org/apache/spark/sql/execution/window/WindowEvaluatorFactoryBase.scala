@@ -283,16 +283,19 @@ trait WindowEvaluatorFactoryBase {
           case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
             if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
               val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
-              // Shrinking frames touch the LRU only for one partial block at
-              // the lower edge -- middle blocks of `[lower, n)` are answered
-              // directly from `blockAggregates`, not the LRU. The cursor
-              // advances monotonically with the output row, so blocks behind
-              // the cursor are never revisited. Hint = 2 (active block + 1
-              // slack for the brief overlap when the cursor crosses a
-              // boundary) suffices regardless of partition size; routing
-              // through `estimateMaxCachedBlocks` would produce 8 by default
-              // (no `IntegerLiteral` upper match) -- correct numerically but
-              // misleading about what the shrinking path actually needs.
+              // Shrinking-frame queries `[lower, n)` on `WindowSegmentTree` touch the LRU
+              // for exactly two blocks per query: (1) the lower-edge partial block, and
+              // (2) the partition's last block (the right-partial `mergeBlockRange(bhi, 0,
+              // ...)` calls `ensureBlockLevels(bhi)` on every multi-block query). Middle
+              // blocks of `[lower, n)` are answered directly from `blockAggregates` and
+              // never go through the LRU. The lower-edge block advances monotonically with
+              // the output row, so once the cursor crosses a boundary the previous block
+              // is never revisited; the last block stays hot because every query touches
+              // it. Hint = 2 keeps both resident; routing through `estimateMaxCachedBlocks`
+              // would produce 8 by default (no `IntegerLiteral` upper match) -- correct
+              // numerically but misleading about what the shrinking path actually needs.
+              // Note: tuning this down to 1 would thrash, evicting the last block on every
+              // query and forcing it to be rebuilt.
               val cacheHint = Some(2)
               target: InternalRow => {
                 val tc = TaskContext.get()

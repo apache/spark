@@ -221,13 +221,25 @@ private[window] final class SegmentTreeWindowFunctionFrame(
     }
   }
 
-  // `writeRow`/`writeRange` mirror the `(lowerBound, upperBound)` monotone
-  // cursor invariant of `SlidingWindowFunctionFrame.write`, but run
-  // admit-then-drop (no buffer to maintain) instead of drop-then-admit.
-  // Any future fix to Sliding's boundary semantics must be mirrored here;
-  // equivalence is guarded by `SegmentTreeWindowFunctionSuite` flag-on/off
-  // tests (`checkRangeEquivalence`, `feature flag off ...`, fallback tests)
-  // which compare against the Sliding baseline.
+  // `writeRow`/`writeRange` maintain the `(lowerBound, upperBound)` monotone
+  // cursor invariant for both sliding and shrinking frame shapes:
+  //
+  //   - Sliding (`ubound.isDefined`, mirrors `SlidingWindowFunctionFrame.write`):
+  //     run admit-then-drop (no buffer to maintain) instead of drop-then-admit.
+  //     The admit loop below (`if (!shrinking)`) extends `upperBound`; the drop
+  //     loop advances `lowerBound`. Any future fix to Sliding's boundary
+  //     semantics must be mirrored here; equivalence is guarded by
+  //     `SegmentTreeWindowFunctionSuite` flag-on/off tests
+  //     (`checkRangeEquivalence`, `feature flag off ...`, fallback tests)
+  //     against the Sliding baseline.
+  //
+  //   - Shrinking (`ubound.isEmpty`, upper is `tree.size`): drop-only. The admit
+  //     loop is skipped; only `lowerBound` advances each step. Equivalence is
+  //     guarded by `UnboundedFollowingSegmentTreeSuite` against the
+  //     `UnboundedFollowingWindowFunctionFrame` baseline.
+  //
+  // In both shapes, the segtree's `query(lowerBound, upperBound, ...)` is
+  // re-issued only when `boundsChanged` is true.
   private def writeRow(index: Int, current: InternalRow): Unit = {
     var boundsChanged = index == 0
 
