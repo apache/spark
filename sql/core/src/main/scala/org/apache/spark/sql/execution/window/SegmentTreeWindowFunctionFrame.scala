@@ -111,7 +111,7 @@ private[window] final class SegmentTreeWindowFunctionFrame(
   /**
    * Runtime dispatch flag: when `true`, `write()`, `currentLowerBound()`, and
    * `currentUpperBound()` delegate to the wrapped fallback frame produced by
-   * `fallbackFactory` (small-partition path). The fallback type is sliding-
+   * `fallbackFactory` (small-partition path). The fallback type is shape-
    * dependent: [[SlidingWindowFunctionFrame]] for moving frames and
    * [[UnboundedFollowingWindowFunctionFrame]] for shrinking frames. Set by
    * `prepare()` based on partition size vs.
