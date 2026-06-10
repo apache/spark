@@ -1042,6 +1042,7 @@ object Scd2BatchProcessor {
    * key within the microbatch.
    *
    * Temporary in that the column has no observable side effect or persistence across microbatches.
+   * Package level visiblity for unit-testing.
    */
   private[autocdc] val minSequenceColName: String = s"${AutoCdcReservedNames.prefix}min_sequence"
 
@@ -1052,7 +1053,7 @@ object Scd2BatchProcessor {
    *
    * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
-  private[autocdc] val nextRecordStartAtColName: String =
+  private val nextRecordStartAtColName: String =
     s"${AutoCdcReservedNames.prefix}next_record_start_at"
 
   /**
@@ -1061,7 +1062,7 @@ object Scd2BatchProcessor {
    *
    * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
-  private[autocdc] val decompositionExplodedColName: String =
+  private val decompositionExplodedColName: String =
     s"${AutoCdcReservedNames.prefix}decompose_output"
 
   /**
