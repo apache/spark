@@ -79,13 +79,8 @@ class InMemoryRowLevelOperationTable private (
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
 
-  // Set only on snapshot copies returned by InMemoryRowLevelOperationTableCatalog.loadTable.
-  // SPARK-56995 made that loadTable return a snapshot copy per call for cache-staleness tests,
-  // but TRUNCATE TABLE resolves its target through the same read path (no write privileges)
-  // and then calls truncateTable() on the resolved instance, so the mutation would land on a
-  // disposable copy. Routing it to the catalog's live table keeps it observable after the
-  // command. DML (DELETE/UPDATE/MERGE) resolves with write privileges and operates on the live
-  // instance directly, so TRUNCATE is the only operation that needs this redirection.
+  // Set only on snapshot copies returned by InMemoryRowLevelOperationTableCatalog.loadTable,
+  // which routes truncateTable() to the catalog's live table (see the rationale there).
   // Volatile: snapshots can cross threads (e.g. cloned streaming sessions sharing a catalog).
   @volatile private[catalog] var liveTableProvider: () => TruncatableTable = _
 

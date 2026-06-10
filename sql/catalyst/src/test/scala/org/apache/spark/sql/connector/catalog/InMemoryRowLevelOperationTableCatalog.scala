@@ -48,10 +48,13 @@ class InMemoryRowLevelOperationTableCatalog
     liveTable(ident) match {
       case rlot: InMemoryRowLevelOperationTable =>
         val snapshot = rlot.copy().asInstanceOf[InMemoryRowLevelOperationTable]
-        // TRUNCATE TABLE resolves its target through this read-path loadTable and mutates the
-        // resolved instance, which is a disposable snapshot. Resolve the live table at truncate
-        // time (not at load time) so the mutation lands on the catalog's current live instance
-        // even if alterTable replaced it after this load.
+        // TRUNCATE TABLE resolves its target through this read-path loadTable and then calls
+        // truncateTable() on the resolved instance, so without redirection the mutation would
+        // land on the disposable snapshot and the live table would silently keep its rows.
+        // Resolve the live table at truncate time (not at load time) so the mutation hits the
+        // current live instance even if alterTable replaced it after this load. DML
+        // (DELETE/UPDATE/MERGE) resolves with write privileges and operates on the live
+        // instance directly, so TRUNCATE is the only operation that needs this redirection.
         snapshot.liveTableProvider = () => liveTable(ident).asInstanceOf[TruncatableTable]
         snapshot
       case other => other

@@ -20,13 +20,10 @@ package org.apache.spark.sql.connector
 import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTable
 
 /**
- * Regression tests for TRUNCATE TABLE against `InMemoryRowLevelOperationTableCatalog`.
- *
- * SPARK-56995 made the catalog's read-path `loadTable` return a snapshot copy per call so that
- * version-aware `Table.equals` can detect stale cached relations. TRUNCATE TABLE resolves its
- * target through that read path and mutates the resolved instance, so without redirection the
- * mutation would land on a disposable snapshot and the live table would silently keep its rows
- * (originally observed as AutoCdcScd1FullRefreshSuite failures in the pipelines module).
+ * Regression tests for TRUNCATE TABLE against `InMemoryRowLevelOperationTableCatalog`, whose
+ * read-path `loadTable` returns snapshot copies (SPARK-56995). TRUNCATE must mutate the live
+ * table, not the resolved snapshot (originally observed as AutoCdcScd1FullRefreshSuite failures
+ * in the pipelines module); see the catalog's `loadTable` for the redirection rationale.
  */
 class RowLevelOperationTruncateTableSuite extends RowLevelOperationSuiteBase {
 
