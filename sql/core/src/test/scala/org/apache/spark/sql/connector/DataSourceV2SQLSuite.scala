@@ -2022,7 +2022,7 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("SPARK-57360: generation expression cannot reference temporary variables") {
     val tblName = "my_tab"
-    withTempVariable("my_var") {
+    withSessionVariable("my_var") {
       sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
       checkUnsupportedGenerationExpressionForCreate(
         tblName,
@@ -2034,7 +2034,7 @@ class DataSourceV2SQLSuiteV1Filter
 
   test("SPARK-57360: REPLACE TABLE - generation expression cannot reference temporary variables") {
     val tblName = "my_tab"
-    withTempVariable("my_var") {
+    withSessionVariable("my_var") {
       sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
       checkUnsupportedGenerationExpressionForReplace(
         tblName,
@@ -4565,14 +4565,6 @@ class DataSourceV2SQLSuiteV1Filter
       condition = "NOT_SUPPORTED_COMMAND_FOR_V2_TABLE",
       sqlState = "0A000",
       parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
-  }
-
-  private def withTempVariable(varNames: String*)(f: => Unit): Unit = {
-    try {
-      f
-    } finally {
-      varNames.foreach(v => sql(s"DROP TEMPORARY VARIABLE IF EXISTS $v"))
-    }
   }
 
   private def checkUnsupportedGenerationExpression(

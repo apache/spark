@@ -18,8 +18,8 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, UnaryExpression, Unevaluable, VariableReference}
-import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, PLAN_EXPRESSION, TreePattern}
+import org.apache.spark.sql.catalyst.expressions.{AnalysisAwareExpression, AttributeReference, Cast, Expression, UnaryExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ANALYSIS_AWARE_EXPRESSION, PLAN_EXPRESSION, TreePattern, VARIABLE_REFERENCE}
 import org.apache.spark.sql.catalyst.util.V2ExpressionBuilder
 import org.apache.spark.sql.connector.catalog.GenerationExpression
 import org.apache.spark.sql.internal.SQLConf
@@ -80,7 +80,7 @@ case class GeneratedColumnExpression(
 
     // Don't allow references to session (temporary) variables. They are session-scoped mutable
     // state, so persisting them into a generation expression would be ill-defined.
-    if (child.exists(_.isInstanceOf[VariableReference])) {
+    if (child.containsPattern(VARIABLE_REFERENCE)) {
       throw unsupportedExpressionError(
         "generation expression cannot reference temporary variables")
     }
