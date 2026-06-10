@@ -1971,98 +1971,79 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
         import pyarrow as pa
 
-        def wrap_pyarrow_udtf(f, return_type):
-            arrow_return_type = to_arrow_type(
-                return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
-            )
-            return_type_size = len(return_type)
-            target_schema = pa.schema(list(arrow_return_type))
+        arrow_return_type = to_arrow_type(
+            return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+        )
+        return_type_size = len(return_type)
+        target_schema = pa.schema(list(arrow_return_type))
 
-            def verify_result(result):
-                # Validate the output schema when the result has columns
-                if result.num_columns != return_type_size:
-                    raise PySparkRuntimeError(
-                        errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
-                        messageParameters={
-                            "expected": str(return_type_size),
-                            "actual": str(result.num_columns),
-                            "func": f.__name__,
-                        },
-                    )
+        def verify_result(result: pa.RecordBatch, method_name: str) -> pa.RecordBatch:
+            # Validate the output schema when the result has columns
+            if result.num_columns != return_type_size:
+                raise PySparkRuntimeError(
+                    errorClass="UDTF_RETURN_SCHEMA_MISMATCH",
+                    messageParameters={
+                        "expected": str(return_type_size),
+                        "actual": str(result.num_columns),
+                        "func": method_name,
+                    },
+                )
+            return result
 
-                # The result type is verified and coerced to the target schema
-                # in evaluate() below.
-                return result
+        def convert_to_arrow(res: Any, method_name: str) -> Iterator[pa.RecordBatch]:
+            # Check whether the result of a PyArrow UDTF is iterable before processing
+            if res is None:
+                res = iter([])
+            elif not isinstance(res, Iterable):
+                raise PySparkRuntimeError(
+                    errorClass="UDTF_RETURN_NOT_ITERABLE",
+                    messageParameters={
+                        "type": type(res).__name__,
+                        "func": method_name,
+                    },
+                )
 
-            # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
-            def func(*a: Any) -> Any:
-                try:
-                    return f(*a)
-                except SkipRestOfInputTableException:
-                    raise
-                except Exception as e:
-                    raise PySparkRuntimeError(
-                        errorClass="UDTF_EXEC_ERROR",
-                        messageParameters={"method_name": f.__name__, "error": str(e)},
-                    )
-
-            def check_return_value(res):
-                # Check whether the result of a PyArrow UDTF is iterable before processing
-                if res is not None:
-                    if not isinstance(res, Iterable):
-                        raise PySparkRuntimeError(
-                            errorClass="UDTF_RETURN_NOT_ITERABLE",
-                            messageParameters={
-                                "type": type(res).__name__,
-                                "func": f.__name__,
-                            },
-                        )
-                    return res
+            # Handle PyArrow Tables/RecordBatches directly
+            is_empty = True
+            for item in res:
+                is_empty = False
+                if isinstance(item, pa.Table):
+                    yield from item.to_batches()
+                elif isinstance(item, pa.RecordBatch):
+                    yield item
                 else:
-                    return iter([])
-
-            def convert_to_arrow(data: Iterable):
-                data_iter = check_return_value(data)
-
-                # Handle PyArrow Tables/RecordBatches directly
-                is_empty = True
-                for item in data_iter:
-                    is_empty = False
-                    if isinstance(item, pa.Table):
-                        yield from item.to_batches()
-                    elif isinstance(item, pa.RecordBatch):
-                        yield item
-                    else:
-                        # Arrow UDTF should only return Arrow types (RecordBatch/Table)
-                        raise PySparkRuntimeError(
-                            errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
-                            messageParameters={},
-                        )
-
-                if is_empty:
-                    yield pa.RecordBatch.from_pylist([], schema=pa.schema(list(arrow_return_type)))
-
-            def evaluate(*args: pa.RecordBatch):
-                # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
-                for batch in convert_to_arrow(func(*args)):
-                    coerced = ArrowBatchTransformer.enforce_schema(
-                        verify_result(batch), target_schema, safecheck=True
+                    # Arrow UDTF should only return Arrow types (RecordBatch/Table)
+                    raise PySparkRuntimeError(
+                        errorClass="UDTF_ARROW_TYPE_CONVERSION_ERROR",
+                        messageParameters={},
                     )
-                    yield ArrowBatchTransformer.wrap_struct(coerced)
 
-            return evaluate
+            if is_empty:
+                yield pa.RecordBatch.from_pylist([], schema=target_schema)
 
-        eval_func_kwargs_support, args_kwargs_offsets = wrap_kwargs_support(
+        def evaluate(method: Callable, *args: pa.RecordBatch) -> Iterator[pa.RecordBatch]:
+            # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
+            try:
+                res = method(*args)
+            except SkipRestOfInputTableException:
+                raise
+            except Exception as e:
+                raise PySparkRuntimeError(
+                    errorClass="UDTF_EXEC_ERROR",
+                    messageParameters={"method_name": method.__name__, "error": str(e)},
+                )
+
+            for batch in convert_to_arrow(res, method.__name__):
+                coerced = ArrowBatchTransformer.enforce_schema(
+                    verify_result(batch, method.__name__), target_schema, safecheck=True
+                )
+                yield ArrowBatchTransformer.wrap_struct(coerced)
+
+        eval_method, args_kwargs_offsets = wrap_kwargs_support(
             getattr(udtf, "eval"), udtf_info.args, udtf_info.kwargs
         )
-        eval = wrap_pyarrow_udtf(eval_func_kwargs_support, return_type)
-
-        if hasattr(udtf, "terminate"):
-            terminate = wrap_pyarrow_udtf(getattr(udtf, "terminate"), return_type)
-        else:
-            terminate = None
-
-        cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
+        terminate = getattr(udtf, "terminate", None)
+        cleanup = getattr(udtf, "cleanup", None)
 
         table_arg_offsets = (
             set(eval_conf.table_arg_offsets) if eval_conf.table_arg_offsets else set()
@@ -2083,12 +2064,12 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                         for i in range(batch.num_columns)
                     ]
                     # For PyArrow UDTFs, pass RecordBatches directly (no row conversion needed)
-                    yield from eval(*[columns[o] for o in args_kwargs_offsets])
+                    yield from evaluate(eval_method, *[columns[o] for o in args_kwargs_offsets])
                 if terminate is not None:
-                    yield from terminate()
+                    yield from evaluate(terminate)
             except SkipRestOfInputTableException:
                 if terminate is not None:
-                    yield from terminate()
+                    yield from evaluate(terminate)
             finally:
                 if cleanup is not None:
                     cleanup()
