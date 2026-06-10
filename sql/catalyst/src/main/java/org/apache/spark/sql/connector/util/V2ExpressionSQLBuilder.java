@@ -54,11 +54,16 @@ import org.apache.spark.sql.types.DataType;
 public class V2ExpressionSQLBuilder {
 
   /**
-   * Escape the special chars for like pattern.
+   * Escape the LIKE pattern special chars, using {@code \} as the escape character. The LIKE
+   * patterns produced by {@link #visitStartsWith}, {@link #visitEndsWith} and {@link #visitContains}
+   * declare {@code ESCAPE '\'}, so the wildcards {@code _} and {@code %} and the escape character
+   * {@code \} itself must each be prefixed with {@code \} to be matched literally.
    *
    * Note: This method adopts the escape representation within Spark and is not bound to any JDBC
-   * dialect. JDBC dialect should overwrite this API if the underlying database have more special
-   * chars other than _ and %.
+   * dialect. A JDBC dialect should overwrite this API if the underlying database has more LIKE
+   * special chars than {@code _}, {@code %} and {@code \}. Escaping that is instead needed because
+   * the database treats a character specially inside a SQL <em>string literal</em> belongs in
+   * {@link #escapeStringLiteralForLikePattern}.
    */
   protected String escapeSpecialCharsForLikePattern(String str) {
     StringBuilder builder = new StringBuilder();
@@ -73,6 +78,22 @@ public class V2ExpressionSQLBuilder {
     }
 
     return builder.toString();
+  }
+
+  /**
+   * Escape the characters that the target database treats specially inside a SQL string literal,
+   * applied to a LIKE pattern (and its ESCAPE character) when embedding it into a {@code '...'}
+   * literal for predicate pushdown.
+   *
+   * The default returns the input unchanged: a standard SQL string literal is taken verbatim (the
+   * single-quote doubling is already applied when the literal is rendered), so the {@code \} that
+   * {@link #escapeSpecialCharsForLikePattern} uses as the LIKE escape character reaches the LIKE
+   * engine intact. A dialect whose string-literal syntax gives {@code \} a special meaning (e.g.
+   * MySQL, which treats {@code \} as an escape character inside string literals) must override this
+   * to double the backslash, so the LIKE pattern survives string-literal parsing unchanged.
+   */
+  protected String escapeStringLiteralForLikePattern(String str) {
+    return str;
   }
 
   public String build(Expression expr) {
@@ -197,21 +218,32 @@ public class V2ExpressionSQLBuilder {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
+    return likeWithEscape(l, escapeSpecialCharsForLikePattern(value) + "%");
   }
 
   protected String visitEndsWith(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "' ESCAPE '\\'";
+    return likeWithEscape(l, "%" + escapeSpecialCharsForLikePattern(value));
   }
 
   protected String visitContains(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
+    return likeWithEscape(l, "%" + escapeSpecialCharsForLikePattern(value) + "%");
+  }
+
+  /**
+   * Build a {@code <left> LIKE '<pattern>' ESCAPE '\'} predicate. The pattern already has its LIKE
+   * special chars escaped (via {@link #escapeSpecialCharsForLikePattern}); both the pattern and the
+   * {@code \} escape character are then passed through {@link #escapeStringLiteralForLikePattern} so
+   * a dialect can add any string-literal escaping its SQL syntax requires.
+   */
+  private String likeWithEscape(String l, String pattern) {
+    return l + " LIKE '" + escapeStringLiteralForLikePattern(pattern)
+      + "' ESCAPE '" + escapeStringLiteralForLikePattern("\\") + "'";
   }
 
   protected String inputToSQL(Expression input) {
