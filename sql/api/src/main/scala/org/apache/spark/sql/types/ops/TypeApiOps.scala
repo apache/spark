@@ -130,8 +130,8 @@ trait TypeApiOps extends Serializable {
    * for TimeType).
    *
    * Consumer: Row JSON (Row.json / Row.prettyJson). Semantics:
-   *   - Some(s): s is used as the rendered JSON string (e.g. the nanosecond timestamp types render
-   *     the external Instant/LocalDateTime at the column precision).
+   *   - Some(s): s is used as the rendered JSON string (e.g. the nanosecond timestamp types
+   *     render the external Instant/LocalDateTime at the column precision).
    *   - None: Row JSON falls back to its legacy toJsonDefault rendering.
    *   - throw: an implementation may raise instead, to signal that rendering this type on this
    *     zone-less path is unsupported.
