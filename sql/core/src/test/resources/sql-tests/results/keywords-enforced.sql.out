@@ -16,6 +16,7 @@ AND	true
 ANTI	false
 ANY	true
 ANY_VALUE	false
+APPLY	false
 APPROX	false
 ARCHIVE	false
 ARRAY	false
@@ -25,6 +26,7 @@ ASENSITIVE	false
 AT	false
 ATOMIC	false
 AUTHORIZATION	true
+AUTO	false
 BEGIN	false
 BERNOULLI	false
 BETWEEN	false
@@ -49,6 +51,7 @@ CASE	true
 CAST	true
 CATALOG	false
 CATALOGS	false
+CDC	false
 CHANGE	false
 CHANGES	false
 CHAR	false
@@ -335,6 +338,7 @@ SECURITY	false
 SELECT	true
 SEMI	false
 SEPARATED	false
+SEQUENCE	false
 SERDE	false
 SERDEPROPERTIES	false
 SESSION_USER	true
