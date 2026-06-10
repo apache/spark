@@ -37,4 +37,6 @@ trait SessionQueryTest
   with SessionQueryTestBase
   with SparkSessionBinder {
   override def isDfSorted(df: DataFrame): Boolean = true // TODO
+
+  override def sessionType: String = "classic"
 }

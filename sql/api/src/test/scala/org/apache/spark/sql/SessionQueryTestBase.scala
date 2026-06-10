@@ -25,4 +25,21 @@ trait SessionQueryTestBase
   extends AnyFunSuite
     with SparkSessionProvider
     with CheckAnswerHelper
-    with QueryCleanupHelper
+    with QueryCleanupHelper {
+
+  /**
+   * Documents used session so that tests can handle and document session-specific behaviour
+   *
+   * {{{
+   *   test(...) {
+   *     val df = // query with connect-specific behaviour
+   *     if (sessionType = 'connect') {
+   *       checkError(...)
+   *     } else {
+   *       checkAnswer(df, ...)
+   *     }
+   *   }
+   * }}}
+   */
+  def sessionType: String
+}

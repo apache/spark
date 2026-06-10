@@ -23,4 +23,6 @@ import org.apache.spark.sql
  */
 trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
   override def isDfSorted(df: sql.DataFrame): Boolean = false // TODO
+
+  override def sessionType: String = "connect"
 }
