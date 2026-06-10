@@ -800,7 +800,8 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
    * First [[KeyedPartitioning]] reachable from this collection through direct members or nested
    * collections, if any. Since every collection validates the invariant on construction, this
    * single representative stands for all [[KeyedPartitioning]]s in the subtree: they all share
-   * its `partitionKeys` reference and expression arity.
+   * its `partitionKeys` reference and expression arity. The invariant check forces this lazy val
+   * during construction, so it is only recomputed after deserialization.
    */
   @transient private[physical] lazy val firstKeyedPartitioning: Option[KeyedPartitioning] =
     partitionings.view.map {
@@ -811,22 +812,20 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 
   /**
    * Nested collections already enforced the invariant on their own construction, so comparing one
-   * representative per direct member validates the whole subtree without walking it. Keeping this
-   * check O(partitionings.size) matters: join `outputPartitioning` builds these collections afresh
-   * on every call, and plans chaining many same-key joins nest them linearly deep.
+   * representative per direct member against [[firstKeyedPartitioning]] validates the whole
+   * subtree without walking it. Keeping this check O(partitionings.size) matters: join
+   * `outputPartitioning` builds these collections afresh on every call, and plans chaining many
+   * same-key joins nest them linearly deep.
    */
   private def checkKeyedPartitioningInvariant(): Unit = {
-    var first: KeyedPartitioning = null
-    partitionings.foreach { p =>
-      val representative = p match {
-        case k: KeyedPartitioning => k
-        case pc: PartitioningCollection => pc.firstKeyedPartitioning.orNull
-        case _ => null
-      }
-      if (representative != null) {
-        if (first == null) {
-          first = representative
-        } else {
+    firstKeyedPartitioning.foreach { first =>
+      partitionings.foreach { p =>
+        val representative = p match {
+          case k: KeyedPartitioning => k
+          case pc: PartitioningCollection => pc.firstKeyedPartitioning.orNull
+          case _ => null
+        }
+        if (representative != null && (representative ne first)) {
           require(representative.expressions.length == first.expressions.length,
             "All KeyedPartitionings in a PartitioningCollection must have matching expression " +
               "arity")
