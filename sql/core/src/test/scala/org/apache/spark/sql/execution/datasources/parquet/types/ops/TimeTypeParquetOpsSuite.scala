@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit
-import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, INT32, INT64}
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT32, INT64}
 import org.apache.parquet.schema.Type.Repetition.REQUIRED
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
@@ -110,12 +110,12 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
     assertRejects(timeMicros, field)
   }
 
-  test("rejects wrong primitive (BINARY) even with TIME(MICROS) annotation") {
-    val field = Types.primitive(BINARY, REQUIRED)
-      .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS))
-      .named("c")
-    assertRejects(timeMicros, field)
-  }
+  // Note: a "BINARY with TIME(MICROS) annotation" combination is impossible to
+  // construct - the parquet-mr Types builder itself rejects it with
+  // IllegalStateException("TIME(MICROS,false) can only annotate INT64"). So the
+  // wrong-primitive branch of requireCompatibleParquetType is unreachable for
+  // the TIME annotation; the raw-INT64 / TIMESTAMP / DECIMAL / group tests
+  // above already exercise the !isPrimitive and "non-TIME annotation" branches.
 
   // ---------- helper ----------
 
