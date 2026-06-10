@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, ZoneOffset}
 
-import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder, OptionEncoder}
@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampL
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
-import org.apache.spark.sql.types.ops.TypeApiOps
-import org.apache.spark.unsafe.types.TimestampNanosVal
+import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TypeApiOps}
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**
  * Tests for the Types Framework wiring of the nanosecond timestamp types (SPARK-57207).
@@ -162,15 +162,87 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("format and toSQLValue raise UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING") {
-    allCases.foreach { case (dt, _, value) =>
-      val ops = TypeApiOps(dt).get
-      Seq[() => Any](() => ops.format(value), () => ops.toSQLValue(value)).foreach { call =>
-        checkError(
-          exception = intercept[SparkUnsupportedOperationException](call()),
-          condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING",
-          parameters = Map("dataType" -> ("\"" + dt.sql + "\"")))
+  // SPARK-57285: a value with sub-precision (sub-nano) digits so flooring is exercised; built from
+  // a UTC wall clock so the rendered NTZ/LTZ strings are predictable.
+  private val nanosLdt = LocalDateTime.of(2020, 1, 1, 0, 0, 0, 123456789)
+
+  // Expected fractional second after flooring to the given nanos precision (trailing zeros are
+  // trimmed by the formatter, but 123456789 has none to trim at p in {7,8,9}).
+  private def expectedFraction(precision: Int): String = precision match {
+    case 7 => "1234567"
+    case 8 => "12345678"
+    case 9 => "123456789"
+  }
+
+  test("SPARK-57285: NTZ format renders zone-independently (no session zone needed)") {
+    precisions.foreach { p =>
+      val ops = TypeApiOps(TimestampNTZNanosType(p)).get
+      val v = DateTimeUtils.localDateTimeToTimestampNanos(nanosLdt, p)
+      val expected = s"2020-01-01 00:00:00.${expectedFraction(p)}"
+      // NTZ is zone-independent: it renders the same regardless of the session zone.
+      assert(ops.format(v) === expected, s"NTZ format for precision $p")
+      assert(ops.formatUTF8(v) === UTF8String.fromString(expected))
+      assert(ops.toSQLValue(v) === s"TIMESTAMP_NTZ '$expected'")
+    }
+  }
+
+  test("SPARK-57285: LTZ format renders in the zone carried by the ops instance") {
+    precisions.foreach { p =>
+      val t = TimestampLTZNanosType(p)
+      // Physical value is the epoch instant of the UTC wall clock above.
+      val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
+      val frac = expectedFraction(p)
+      // UTC zone: the rendered wall clock matches the UTC instant.
+      val utcOps = new TimestampLTZNanosTypeApiOps(t, ZoneOffset.UTC)
+      assert(utcOps.format(v) === s"2020-01-01 00:00:00.$frac")
+      assert(utcOps.formatUTF8(v) === UTF8String.fromString(s"2020-01-01 00:00:00.$frac"))
+      assert(utcOps.toSQLValue(v) === s"TIMESTAMP_LTZ '2020-01-01 00:00:00.$frac'")
+      // A +05:00 zone shifts the rendered wall clock; the fraction is unaffected.
+      val offsetOps = new TimestampLTZNanosTypeApiOps(t, ZoneOffset.ofHours(5))
+      assert(offsetOps.format(v) === s"2020-01-01 05:00:00.$frac")
+    }
+  }
+
+  test("SPARK-57285: LTZ zone-less lookup renders in the session-local time zone config") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      precisions.foreach { p =>
+        val dt = TimestampLTZNanosType(p)
+        // TypeApiOps.apply has no cast zone, so it defaults to the session-local time zone config.
+        val ops = TypeApiOps(dt).get
+        val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
+        val frac = expectedFraction(p)
+        assert(ops.format(v) === s"2020-01-01 00:00:00.$frac")
+        assert(ops.toSQLValue(v) === s"TIMESTAMP_LTZ '2020-01-01 00:00:00.$frac'")
       }
+    }
+  }
+
+  test("SPARK-57285: NTZ formatExternal renders LocalDateTime at the column precision") {
+    precisions.foreach { p =>
+      val ops = TypeApiOps(TimestampNTZNanosType(p)).get
+      // The encoder floors to column precision before handing the value to Row JSON;
+      // round-trip through TimestampNanosVal to reproduce that flooring, then format.
+      val v = DateTimeUtils.localDateTimeToTimestampNanos(nanosLdt, p)
+      val ldt = DateTimeUtils.timestampNanosToLocalDateTime(v)
+      val expected = s"2020-01-01 00:00:00.${expectedFraction(p)}"
+      assert(ops.formatExternal(ldt) === Some(expected), s"NTZ formatExternal for precision $p")
+    }
+  }
+
+  test("SPARK-57285: LTZ formatExternal renders Instant at the column precision in the ops zone") {
+    precisions.foreach { p =>
+      val t = TimestampLTZNanosType(p)
+      val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
+      val instant = DateTimeUtils.timestampNanosToInstant(v)
+      val frac = expectedFraction(p)
+      // UTC zone: rendered wall clock matches the UTC instant.
+      val utcOps = new TimestampLTZNanosTypeApiOps(t, ZoneOffset.UTC)
+      assert(utcOps.formatExternal(instant) === Some(s"2020-01-01 00:00:00.$frac"),
+        s"LTZ formatExternal for precision $p")
+      // A +05:00 zone shifts the rendered wall clock; the fraction is unaffected.
+      val offsetOps = new TimestampLTZNanosTypeApiOps(t, ZoneOffset.ofHours(5))
+      assert(offsetOps.formatExternal(instant) === Some(s"2020-01-01 05:00:00.$frac"),
+        s"LTZ formatExternal for precision $p with +05:00")
     }
   }
 

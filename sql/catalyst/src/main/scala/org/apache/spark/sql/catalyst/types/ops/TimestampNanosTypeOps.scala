@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
-import java.time.{Instant, LocalDateTime}
+import java.time.{Instant, LocalDateTime, ZoneOffset}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -130,8 +130,11 @@ case class TimestampNTZNanosTypeOps(override val t: TimestampNTZNanosType)
  *   The TimestampLTZNanosType with precision information
  * @since 4.3.0
  */
+// Server-side TypeOps is used only for physical type, literals, row accessors, and serde - never
+// for rendering (cast-to-string flows through TypeApiOps.apply). So the rendering zone is unused
+// here; pass UTC rather than reading the session config on every construction.
 case class TimestampLTZNanosTypeOps(override val t: TimestampLTZNanosType)
-  extends TimestampLTZNanosTypeApiOps(t) with TimestampNanosTypeOps {
+  extends TimestampLTZNanosTypeApiOps(t, ZoneOffset.UTC) with TimestampNanosTypeOps {
 
   override def getPhysicalType: PhysicalDataType = PhysicalTimestampLTZNanosType
 
