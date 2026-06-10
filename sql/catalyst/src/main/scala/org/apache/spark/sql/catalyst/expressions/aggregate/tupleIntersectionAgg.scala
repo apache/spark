@@ -25,8 +25,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{SummaryAggregateMode, TupleSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{SketchEnvelope, SketchProfile, SummaryAggregateMode, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
 
@@ -260,6 +261,10 @@ abstract class TupleIntersectionAggBase[S <: Summary]
    * @param input
    *   An input row containing a TupleSketch binary representation
    */
+  // Reference profile observed from the first enveloped input sketch in this task, used to detect
+  // when later inputs were built under an incompatible provenance profile.
+  @transient private var observedProfile: Option[SketchProfile] = None
+
   override def update(
       intersectionBuffer: TupleSketchState[S],
       input: InternalRow): TupleSketchState[S] = {
@@ -271,6 +276,14 @@ abstract class TupleIntersectionAggBase[S <: Summary]
       intersectionBuffer
     } else {
       val bytes = sketchBytes.asInstanceOf[Array[Byte]]
+      SketchEnvelope.profileOf(bytes).foreach { p =>
+        observedProfile match {
+          case Some(ref) =>
+            SketchEnvelope.assertCompatible(
+              p, ref, prettyName, SQLConf.get.sketchAllowVersionMismatch)
+          case None => observedProfile = Some(p)
+        }
+      }
       val inputSketch = heapifySketch(bytes)
 
       val intersection = intersectionBuffer match {
@@ -322,7 +335,7 @@ abstract class TupleIntersectionAggBase[S <: Summary]
    * @return
    *   A CompactSketch binary representation
    */
-  override def eval(sketchState: TupleSketchState[S]): Any = sketchState.eval()
+  override def eval(sketchState: TupleSketchState[S]): Any = maybeWrap(sketchState.eval())
 
   /**
    * Returns a CompactSketch binary representation from the Intersection aggregation buffer.
@@ -333,7 +346,19 @@ abstract class TupleIntersectionAggBase[S <: Summary]
    *   A CompactSketch binary representation
    */
   override def serialize(sketchState: TupleSketchState[S]): Array[Byte] =
-    sketchState.serialize()
+    maybeWrap(sketchState.serialize())
+
+  /** Wraps the payload with the observed input provenance when envelope writes are enabled. */
+  private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
+    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
+      observedProfile match {
+        case Some(p) => SketchEnvelope.wrap(payload, p)
+        case None => payload
+      }
+    } else {
+      payload
+    }
+  }
 
   /**
    * Heapify a CompactSketch from the sketch byte array.

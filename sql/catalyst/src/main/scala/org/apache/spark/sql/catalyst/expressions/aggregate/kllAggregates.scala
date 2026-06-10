@@ -25,7 +25,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription}
+import org.apache.spark.sql.catalyst.util.{SketchEnvelope, SketchKind}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, ByteType, DataType, DoubleType, FloatType, IntegerType, LongType, ShortType, TypeCollection}
 
 /**
@@ -104,6 +106,7 @@ case class KllSketchAggBigint(
   }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_bigint"
+  override protected def kllSketchKind: Byte = SketchKind.KLL_LONG
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -157,15 +160,15 @@ case class KllSketchAggBigint(
   }
 
   /** Returns a sketch derived from the input column or expression. */
-  override def eval(sketch: KllLongsSketch): Any = sketch.toByteArray
+  override def eval(sketch: KllLongsSketch): Any = maybeWrapKll(sketch.toByteArray)
 
   /** Converts the underlying sketch state into a byte array. */
-  override def serialize(sketch: KllLongsSketch): Array[Byte] = sketch.toByteArray
+  override def serialize(sketch: KllLongsSketch): Array[Byte] = maybeWrapKll(sketch.toByteArray)
 
-  /** Wraps the byte array into a sketch instance. */
+  /** Wraps the byte array into a sketch instance. Envelope (if present) is stripped first. */
   override def deserialize(buffer: Array[Byte]): KllLongsSketch = if (buffer.nonEmpty) {
     try {
-      KllLongsSketch.heapify(Memory.wrap(buffer))
+      KllLongsSketch.heapify(Memory.wrap(SketchEnvelope.payloadOf(buffer)))
     } catch {
       case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -246,6 +249,7 @@ case class KllSketchAggFloat(
   }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_float"
+  override protected def kllSketchKind: Byte = SketchKind.KLL_FLOAT
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -293,15 +297,15 @@ case class KllSketchAggFloat(
   }
 
   /** Returns a sketch derived from the input column or expression. */
-  override def eval(sketch: KllFloatsSketch): Any = sketch.toByteArray
+  override def eval(sketch: KllFloatsSketch): Any = maybeWrapKll(sketch.toByteArray)
 
   /** Converts the underlying sketch state into a byte array. */
-  override def serialize(sketch: KllFloatsSketch): Array[Byte] = sketch.toByteArray
+  override def serialize(sketch: KllFloatsSketch): Array[Byte] = maybeWrapKll(sketch.toByteArray)
 
-  /** Wraps the byte array into a sketch instance. */
+  /** Wraps the byte array into a sketch instance. Envelope (if present) is stripped first. */
   override def deserialize(buffer: Array[Byte]): KllFloatsSketch = if (buffer.nonEmpty) {
     try {
-      KllFloatsSketch.heapify(Memory.wrap(buffer))
+      KllFloatsSketch.heapify(Memory.wrap(SketchEnvelope.payloadOf(buffer)))
     } catch {
       case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -382,6 +386,7 @@ case class KllSketchAggDouble(
   }
   override def nullable: Boolean = false
   override def prettyName: String = "kll_sketch_agg_double"
+  override protected def kllSketchKind: Byte = SketchKind.KLL_DOUBLE
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
@@ -431,15 +436,15 @@ case class KllSketchAggDouble(
   }
 
   /** Returns a sketch derived from the input column or expression. */
-  override def eval(sketch: KllDoublesSketch): Any = sketch.toByteArray
+  override def eval(sketch: KllDoublesSketch): Any = maybeWrapKll(sketch.toByteArray)
 
   /** Converts the underlying sketch state into a byte array. */
-  override def serialize(sketch: KllDoublesSketch): Array[Byte] = sketch.toByteArray
+  override def serialize(sketch: KllDoublesSketch): Array[Byte] = maybeWrapKll(sketch.toByteArray)
 
-  /** Wraps the byte array into a sketch instance. */
+  /** Wraps the byte array into a sketch instance. Envelope (if present) is stripped first. */
   override def deserialize(buffer: Array[Byte]): KllDoublesSketch = if (buffer.nonEmpty) {
     try {
-      KllDoublesSketch.heapify(Memory.wrap(buffer))
+      KllDoublesSketch.heapify(Memory.wrap(SketchEnvelope.payloadOf(buffer)))
     } catch {
       case _: Exception =>
         throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -512,6 +517,7 @@ case class KllMergeAggBigint(
   }
 
   override def prettyName: String = "kll_merge_agg_bigint"
+  override protected def kllSketchKind: Byte = SketchKind.KLL_LONG
 
   // Factory method implementations
   protected def newHeapInstance(k: Int): KllLongsSketch = KllLongsSketch.newHeapInstance(k)
@@ -585,6 +591,7 @@ case class KllMergeAggFloat(
   }
 
   override def prettyName: String = "kll_merge_agg_float"
+  override protected def kllSketchKind: Byte = SketchKind.KLL_FLOAT
 
   // Factory method implementations
   protected def newHeapInstance(k: Int): KllFloatsSketch = KllFloatsSketch.newHeapInstance(k)
@@ -658,6 +665,7 @@ case class KllMergeAggDouble(
   }
 
   override def prettyName: String = "kll_merge_agg_double"
+  override protected def kllSketchKind: Byte = SketchKind.KLL_DOUBLE
 
   // Factory method implementations
   protected def newHeapInstance(k: Int): KllDoublesSketch = KllDoublesSketch.newHeapInstance(k)
@@ -733,7 +741,7 @@ abstract class KllMergeAggBase[T <: KllSketch]
       sketchOption
     } else {
       try {
-        val sketchBytes = v.asInstanceOf[Array[Byte]]
+        val sketchBytes = SketchEnvelope.payloadOf(v.asInstanceOf[Array[Byte]])
         val inputSketch = wrapSketch(sketchBytes)
         val sketch = sketchOption.getOrElse(newHeapInstance(inputSketch.getK()))
         sketch.merge(inputSketch)
@@ -765,24 +773,24 @@ abstract class KllMergeAggBase[T <: KllSketch]
   /** Returns a sketch derived from the input column or expression. */
   override def eval(sketchOption: Option[T]): Any = {
     sketchOption match {
-      case Some(sketch) => toByteArray(sketch)
-      case None => toByteArray(newHeapInstance(kValue))
+      case Some(sketch) => maybeWrapKll(toByteArray(sketch))
+      case None => maybeWrapKll(toByteArray(newHeapInstance(kValue)))
     }
   }
 
   /** Converts the underlying sketch state into a byte array. */
   override def serialize(sketchOption: Option[T]): Array[Byte] = {
     sketchOption match {
-      case Some(sketch) => toByteArray(sketch)
-      case None => toByteArray(newHeapInstance(kValue))
+      case Some(sketch) => maybeWrapKll(toByteArray(sketch))
+      case None => maybeWrapKll(toByteArray(newHeapInstance(kValue)))
     }
   }
 
-  /** Wraps the byte array into a sketch instance. */
+  /** Wraps the byte array into a sketch instance. Envelope (if present) is stripped first. */
   override def deserialize(buffer: Array[Byte]): Option[T] = {
     if (buffer.nonEmpty) {
       try {
-        Some(heapifySketch(buffer))
+        Some(heapifySketch(SketchEnvelope.payloadOf(buffer)))
       } catch {
         case _: Exception =>
           throw QueryExecutionErrors.kllInvalidInputSketchBuffer(prettyName)
@@ -799,6 +807,22 @@ abstract class KllMergeAggBase[T <: KllSketch]
 trait KllSketchAggBase {
   def kExpr: Option[Expression]
   def prettyName: String
+
+  /** The envelope sketch-kind tag for this KLL value type (long, float, or double). */
+  protected def kllSketchKind: Byte
+
+  /**
+   * Wraps a serialized KLL sketch in a provenance envelope when envelope writes are enabled. KLL
+   * sketches only ingest numeric values, so the recorded provenance is collation-independent and
+   * mainly tracks the DataSketches library version.
+   */
+  protected def maybeWrapKll(payload: Array[Byte]): Array[Byte] = {
+    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
+      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(kllSketchKind, LongType))
+    } else {
+      payload
+    }
+  }
 
   // Constants from the Apache DataSketches library.
   private val MIN_K = 8

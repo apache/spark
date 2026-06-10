@@ -227,9 +227,12 @@ object TupleSketchUtils {
    *   A deserialized sketch with summary type U
    */
   def heapifySketch[U <: Summary](
-      bytes: Array[Byte],
+      rawBytes: Array[Byte],
       deserializer: SummaryDeserializer[U],
       prettyName: String): Sketch[U] = {
+    // Strip the provenance envelope if present so the native DataSketches bytes can be heapified.
+    // Legacy (un-enveloped) buffers pass through unchanged.
+    val bytes = SketchEnvelope.payloadOf(rawBytes)
     val memory =
       try {
         Memory.wrap(bytes)

@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, TypeCheckResul
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionDescription, ImplicitCastInputTypes, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.trees.QuaternaryLike
-import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, SketchEnvelope, SketchKind, SketchSize, SummaryAggregateMode, ThetaSketchUtils, TupleSketchUtils, TupleSummaryMode}
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -110,6 +111,8 @@ case class TupleSketchAggDouble(
 
   // Override for TypedImperativeAggregate
   override def prettyName: String = "tuple_sketch_agg_double"
+
+  override protected def tupleSketchKind: Byte = SketchKind.TUPLE_DOUBLE
 
   /** Specifies accepted summary input types (double). */
   override protected def summaryInputType: AbstractDataType = DoubleType
@@ -219,6 +222,8 @@ case class TupleSketchAggInteger(
   // Override for TypedImperativeAggregate
   override def prettyName: String = "tuple_sketch_agg_integer"
 
+  override protected def tupleSketchKind: Byte = SketchKind.TUPLE_INTEGER
+
   /** Specifies accepted summary input types (integer). */
   override protected def summaryInputType: AbstractDataType =
     IntegerType
@@ -262,6 +267,9 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
   protected def createSummaryFactory(): SummaryFactory[S]
   protected def createSummarySetOperations(): SummarySetOperations[S]
   protected def heapifySketch(buffer: Array[Byte]): Sketch[S]
+
+  /** The envelope sketch-kind tag for this summary type (double vs integer). */
+  protected def tupleSketchKind: Byte
 
   // Abstract members that subclasses must implement
   protected def key: Expression
@@ -439,7 +447,7 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
    * @return
    *   A CompactSketch binary representation
    */
-  override def eval(sketchState: TupleSketchState[S]): Any = sketchState.eval()
+  override def eval(sketchState: TupleSketchState[S]): Any = maybeWrap(sketchState.eval())
 
   /**
    * Returns a CompactSketch binary derived from the input column or expression
@@ -450,10 +458,11 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
    *   A CompactSketch binary representation
    */
   override def serialize(sketchState: TupleSketchState[S]): Array[Byte] =
-    sketchState.serialize()
+    maybeWrap(sketchState.serialize())
 
   /**
-   * Heapify a CompactSketch from the sketch byte array.
+   * Heapify a CompactSketch from the sketch byte array. Envelope stripping happens inside
+   * `heapifySketch` (via `TupleSketchUtils`), so legacy and enveloped buffers both work.
    *
    * @param buffer
    *   A serialized sketch byte array
@@ -465,6 +474,15 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
       FinalizedTupleSketch(heapifySketch(buffer))
     } else {
       createAggregationBuffer()
+    }
+  }
+
+  /** Wraps the payload in a provenance envelope when envelope writes are enabled. */
+  private def maybeWrap(payload: Array[Byte]): Array[Byte] = {
+    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
+      SketchEnvelope.wrap(payload, SketchEnvelope.currentProfile(tupleSketchKind, key.dataType))
+    } else {
+      payload
     }
   }
 }

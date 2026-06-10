@@ -21,8 +21,44 @@ import org.apache.datasketches.theta.SetOperation
 
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.ThetaSketchUtils
+import org.apache.spark.sql.catalyst.util.{SketchEnvelope, SketchProfile, ThetaSketchUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, IntegerType, LongType}
+
+/**
+ * Shared helpers for applying the sketch provenance envelope policy in the scalar Theta set
+ * operations (theta_union / theta_difference / theta_intersection).
+ */
+private[expressions] object ThetaSetOpEnvelope {
+  /** Unwrap an input buffer, returning its optional profile and the native payload. */
+  def unwrap(value: Any): (Option[SketchProfile], Array[Byte]) =
+    SketchEnvelope.unwrap(value.asInstanceOf[Array[Byte]])
+
+  /** Validate two observed input profiles against each other per the compatibility policy. */
+  def check(
+      p1: Option[SketchProfile], p2: Option[SketchProfile], prettyName: String): Unit = {
+    (p1, p2) match {
+      case (Some(a), Some(b)) =>
+        SketchEnvelope.assertCompatible(b, a, prettyName, SQLConf.get.sketchAllowVersionMismatch)
+      case _ =>
+    }
+  }
+
+  /** Wrap an output payload, propagating the first available input profile. */
+  def wrap(
+      payload: Array[Byte],
+      p1: Option[SketchProfile],
+      p2: Option[SketchProfile]): Array[Byte] = {
+    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
+      p1.orElse(p2) match {
+        case Some(p) => SketchEnvelope.wrap(payload, p)
+        case None => payload
+      }
+    } else {
+      payload
+    }
+  }
+}
 
 @ExpressionDescription(
   usage = """
@@ -51,7 +87,7 @@ case class ThetaSketchEstimate(child: Expression)
   override def dataType: DataType = LongType
 
   override def nullSafeEval(input: Any): Any = {
-    val buffer = input.asInstanceOf[Array[Byte]]
+    val (_, buffer) = SketchEnvelope.unwrap(input.asInstanceOf[Array[Byte]])
 
     val sketch = ThetaSketchUtils.wrapCompactSketch(buffer, prettyName)
 
@@ -104,18 +140,20 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
     val logNominalEntries = value3.asInstanceOf[Int]
     ThetaSketchUtils.checkLgNomLongs(logNominalEntries, prettyName)
 
-    val sketch1Bytes = value1.asInstanceOf[Array[Byte]]
+    val (profile1, sketch1Bytes) = ThetaSetOpEnvelope.unwrap(value1)
     val sketch1 = ThetaSketchUtils.wrapCompactSketch(sketch1Bytes, prettyName)
 
-    val sketch2Bytes = value2.asInstanceOf[Array[Byte]]
+    val (profile2, sketch2Bytes) = ThetaSetOpEnvelope.unwrap(value2)
     val sketch2 = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
+
+    ThetaSetOpEnvelope.check(profile1, profile2, prettyName)
 
     val union = SetOperation.builder
       .setLogNominalEntries(logNominalEntries)
       .buildUnion
       .union(sketch1, sketch2)
 
-    union.toByteArrayCompressed
+    ThetaSetOpEnvelope.wrap(union.toByteArrayCompressed, profile1, profile2)
   }
 }
 
@@ -154,16 +192,18 @@ case class ThetaDifference(first: Expression, second: Expression)
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any): Any = {
-    val sketch1Bytes = value1.asInstanceOf[Array[Byte]]
+    val (profile1, sketch1Bytes) = ThetaSetOpEnvelope.unwrap(value1)
     val sketch1 = ThetaSketchUtils.wrapCompactSketch(sketch1Bytes, prettyName)
 
-    val sketch2Bytes = value2.asInstanceOf[Array[Byte]]
+    val (profile2, sketch2Bytes) = ThetaSetOpEnvelope.unwrap(value2)
     val sketch2 = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
+
+    ThetaSetOpEnvelope.check(profile1, profile2, prettyName)
 
     val difference = SetOperation.builder.buildANotB
       .aNotB(sketch1, sketch2)
 
-    difference.toByteArrayCompressed
+    ThetaSetOpEnvelope.wrap(difference.toByteArrayCompressed, profile1, profile2)
   }
 }
 
@@ -202,15 +242,17 @@ case class ThetaIntersection(first: Expression, second: Expression)
   override def dataType: DataType = BinaryType
 
   override def nullSafeEval(value1: Any, value2: Any): Any = {
-    val sketch1Bytes = value1.asInstanceOf[Array[Byte]]
+    val (profile1, sketch1Bytes) = ThetaSetOpEnvelope.unwrap(value1)
     val sketch1 = ThetaSketchUtils.wrapCompactSketch(sketch1Bytes, prettyName)
 
-    val sketch2Bytes = value2.asInstanceOf[Array[Byte]]
+    val (profile2, sketch2Bytes) = ThetaSetOpEnvelope.unwrap(value2)
     val sketch2 = ThetaSketchUtils.wrapCompactSketch(sketch2Bytes, prettyName)
+
+    ThetaSetOpEnvelope.check(profile1, profile2, prettyName)
 
     val intersection = SetOperation.builder.buildIntersection
       .intersect(sketch1, sketch2)
 
-    intersection.toByteArrayCompressed
+    ThetaSetOpEnvelope.wrap(intersection.toByteArrayCompressed, profile1, profile2)
   }
 }

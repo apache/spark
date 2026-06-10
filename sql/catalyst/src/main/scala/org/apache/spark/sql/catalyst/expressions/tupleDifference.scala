@@ -22,7 +22,8 @@ import org.apache.datasketches.tuple.adouble.DoubleSummary
 import org.apache.datasketches.tuple.aninteger.IntegerSummary
 
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.util.{ThetaSketchUtils, TupleSketchUtils}
+import org.apache.spark.sql.catalyst.util.{SketchEnvelope, ThetaSketchUtils, TupleSketchUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
 
 // scalastyle:off line.size.limit
@@ -191,10 +192,29 @@ abstract class TupleDifferenceBase[S <: Summary]
     val sketch1Bytes = sketch1Binary.asInstanceOf[Array[Byte]]
     val sketch2Bytes = sketch2Binary.asInstanceOf[Array[Byte]]
 
+    // Inspect provenance envelopes (if any) to reject combining incompatible sketches and to
+    // propagate provenance to the result. Reads themselves are envelope-tolerant downstream.
+    val profile1 = SketchEnvelope.profileOf(sketch1Bytes)
+    val profile2 = SketchEnvelope.profileOf(sketch2Bytes)
+    (profile1, profile2) match {
+      case (Some(a), Some(b)) =>
+        SketchEnvelope.assertCompatible(b, a, prettyName, SQLConf.get.sketchAllowVersionMismatch)
+      case _ =>
+    }
+
     val aNotB = new AnotB[S]()
 
     differenceSketches(sketch1Bytes, sketch2Bytes, aNotB)
 
-    aNotB.getResult(true).toByteArray
+    val result = aNotB.getResult(true).toByteArray
+    // Provenance follows the minuend (sketch A); difference removes A's keys present in B.
+    if (SQLConf.get.sketchEnvelopeWriteEnabled) {
+      profile1.orElse(profile2) match {
+        case Some(p) => SketchEnvelope.wrap(result, p)
+        case None => result
+      }
+    } else {
+      result
+    }
   }
 }
