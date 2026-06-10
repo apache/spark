@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
-import org.apache.parquet.io.api.RecordConsumer
+import java.time.ZoneId
+
+import org.apache.parquet.io.api.{Converter, RecordConsumer}
 import org.apache.parquet.schema.Type
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater}
+import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetToSparkSchemaConverter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType, TimeType}
 
@@ -75,7 +77,8 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * @param repetition REQUIRED, OPTIONAL, or REPEATED
    * @return the Parquet Type for this DataType
    */
-  def convertToParquetType(fieldName: String, repetition: Repetition): Type
+  def convertToParquetType(
+      fieldName: String, repetition: Repetition, inShredded: Boolean = false): Type
 
   // ==================== Value Write ====================
 
@@ -124,9 +127,8 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * @return a Converter that reads Parquet values into the parent container
    */
   def newConverter(
-      parquetType: org.apache.parquet.schema.Type,
-      updater: ParentContainerUpdater): org.apache.parquet.io.api.Converter
-    with HasParentContainerUpdater
+      parquetType: Type,
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater
 
   /**
    * Creates a Parquet Converter for reading values of this type (extended version).
@@ -147,14 +149,12 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * @return a Converter that reads Parquet values into the parent container
    */
   def newConverter(
-      parquetType: org.apache.parquet.schema.Type,
+      parquetType: Type,
       updater: ParentContainerUpdater,
-      schemaConverter: org.apache.spark.sql.execution.datasources.parquet
-        .ParquetToSparkSchemaConverter,
-      convertTz: Option[java.time.ZoneId],
+      schemaConverter: ParquetToSparkSchemaConverter,
+      convertTz: Option[ZoneId],
       datetimeRebaseSpec: RebaseSpec,
-      int96RebaseSpec: RebaseSpec): org.apache.parquet.io.api.Converter
-    with HasParentContainerUpdater =
+      int96RebaseSpec: RebaseSpec): Converter with HasParentContainerUpdater =
     newConverter(parquetType, updater)
 
   // ==================== Type Gates ====================

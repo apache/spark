@@ -51,7 +51,8 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
 
   // ==================== Schema Conversion ====================
 
-  override def convertToParquetType(fieldName: String, repetition: Repetition): Type =
+  override def convertToParquetType(
+      fieldName: String, repetition: Repetition, inShredded: Boolean): Type =
     Types.primitive(INT64, repetition)
       .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS))
       .named(fieldName)

@@ -645,7 +645,7 @@ class SparkToParquetSchemaConverter(
       repetition: Type.Repetition,
       inShredded: Boolean): Type = {
     // Types Framework: framework FIRST, original match as fallback.
-    ParquetTypeOps(field.dataType).map(_.convertToParquetType(field.name, repetition))
+    ParquetTypeOps(field.dataType).map(_.convertToParquetType(field.name, repetition, inShredded))
       .getOrElse(convertFieldDefault(field, repetition, inShredded))
   }
 
