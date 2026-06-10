@@ -2650,6 +2650,24 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("listHiddenFiles SQL conf: hidden files are streamed when the conf is set") {
+    withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> "true") {
+      withTempDirs { case (src, tmp) =>
+        val textStream = createFileStream("text", src.getCanonicalPath)
+        val filtered = textStream.filter($"value" contains "keep")
+
+        // With the session conf set, the '_'-prefixed file participates in streaming even
+        // though the listHiddenFiles option is not set.
+        testStream(filtered)(
+          AddTextFileData("drop1\nkeep2", src, tmp, tmpFilePrefix = "_hidden"),
+          CheckAnswer("keep2"),
+          AddTextFileData("keep3", src, tmp),
+          CheckAnswer("keep2", "keep3")
+        )
+      }
+    }
+  }
+
   test("listHiddenFiles option does not surface another query's _spark_metadata as data") {
     // Regression: listHiddenFiles must not change _spark_metadata handling -- a reader on a sink's
     // output dir still consults the metadata log rather than surfacing the log files as data.

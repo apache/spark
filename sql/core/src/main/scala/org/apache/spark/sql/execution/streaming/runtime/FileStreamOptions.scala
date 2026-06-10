@@ -102,13 +102,6 @@ class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging 
   val fileNameOnly: Boolean = withBooleanParameter("fileNameOnly", false)
 
   /**
-   * Whether to list and read files and directories whose names start with '_' or '.' (hidden
-   * files), which are skipped by default.
-   */
-  val listHiddenFiles: Boolean =
-    withBooleanParameter(FileIndexOptions.LIST_HIDDEN_FILES, false)
-
-  /**
    * The archive directory to move completed files. The option will be only effective when
    * "cleanSource" is set to "archive".
    *

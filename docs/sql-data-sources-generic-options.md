@@ -97,6 +97,16 @@ you can use:
 </div>
 </div>
 
+### List Hidden Files
+
+Spark allows you to use the configuration `spark.sql.files.listHiddenFiles` or the data source option `listHiddenFiles` to include hidden files while reading data
+from files. Its default value is `false`, which means files and directories whose names start with `_` or `.` are skipped during
+file listing. When set to true, such hidden files and directories participate in file listing, partition discovery, and reads.
+The data source option takes precedence over the configuration when both are set.
+
+Note that enabling this option also surfaces Spark-internal marker files, such as `_SUCCESS`, `._COPYING_`, and files under
+`_temporary` directories. The `pathGlobFilter` option can be used to narrow the results.
+
 ### Recursive File Lookup
 `recursiveFileLookup` is used to recursively load files and it disables partition inferring. Its default value is `false`.
 If data source explicitly specifies the `partitionSpec` when `recursiveFileLookup` is true, exception will be thrown.

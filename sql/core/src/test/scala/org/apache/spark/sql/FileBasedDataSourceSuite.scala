@@ -1496,6 +1496,22 @@ class FileBasedDataSourceSuite extends SharedSparkSession
       checkListHiddenFilesContract("parquet", basePath)
     }
   }
+
+  test("Option listHiddenFiles: reading an unmodified Spark-written parquet directory works") {
+    withTempDir { dir =>
+      // A normal Spark write leaves a zero-length _SUCCESS marker next to the part files. With
+      // listHiddenFiles enabled, the marker is surfaced by listing but must neither be picked as
+      // a schema inference footer candidate nor scanned as data.
+      val basePath = dir.getCanonicalPath
+      // withTempDir pre-creates the directory, so overwrite to avoid PATH_ALREADY_EXISTS.
+      Seq("a", "b").toDF("col").write.mode("overwrite").parquet(basePath)
+      assert(new File(dir, "_SUCCESS").exists())
+
+      checkAnswer(
+        spark.read.option("listHiddenFiles", "true").parquet(basePath),
+        Seq(Row("a"), Row("b")))
+    }
+  }
 }
 
 object TestingUDT {

@@ -752,6 +752,45 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
+  test("InMemoryFileIndex: listHiddenFiles with a hidden directory next to partition dirs") {
+    withTempDir { dir =>
+      // A hidden directory holding files next to 'part=1' becomes a leaf data dir when
+      // listHiddenFiles=true, so partition discovery sees conflicting base paths.
+      val partitionDir = new File(dir, "part=1")
+      assert(partitionDir.mkdir())
+      stringToFile(new File(partitionDir, "data.txt"), "data")
+      val strayDir = new File(dir, "_stray")
+      assert(strayDir.mkdir())
+      stringToFile(new File(strayDir, "extra.txt"), "extra")
+      val path = new Path(dir.getCanonicalPath)
+
+      // Default: the hidden directory is filtered out and only the partition data is listed.
+      val defaultIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
+      assert(defaultIndex.allFiles().map(_.getPath.getName).toSet === Set("data.txt"))
+      assert(defaultIndex.partitionSpec().partitionColumns.fieldNames.toSeq === Seq("part"))
+
+      // listHiddenFiles=true: '_stray' is treated as a leaf data dir and discovered as its own
+      // base path, so partition discovery fails with conflicting directory structures.
+      val hiddenIndex = new InMemoryFileIndex(
+        spark, Seq(path), Map("listHiddenFiles" -> "true"), None)
+      val ex = intercept[SparkRuntimeException] {
+        hiddenIndex.partitionSpec()
+      }
+      assert(ex.getMessage.contains("Conflicting directory structures detected"))
+
+      // listHiddenFiles=true + ignoreInvalidPartitionPaths=true: the invalid '_stray' base path
+      // is ignored, 'part' is still discovered, and both files surface.
+      val recoveredIndex = new InMemoryFileIndex(
+        spark,
+        Seq(path),
+        Map("listHiddenFiles" -> "true", "ignoreInvalidPartitionPaths" -> "true"),
+        None)
+      assert(recoveredIndex.partitionSpec().partitionColumns.fieldNames.toSeq === Seq("part"))
+      assert(recoveredIndex.allFiles().map(_.getPath.getName).toSet ===
+        Set("data.txt", "extra.txt"))
+    }
+  }
+
   test("InMemoryFileIndex: listHiddenFiles option overrides the listHiddenFiles SQL conf") {
     withTempDir { dir =>
       stringToFile(new File(dir, "data.txt"), "data")

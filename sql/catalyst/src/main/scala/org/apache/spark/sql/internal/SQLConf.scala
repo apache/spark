@@ -2790,7 +2790,10 @@ object SQLConf {
       "(hidden files), which are skipped by default. When true, such files participate in file " +
       "listing, partition discovery, and reads. This configuration is effective only when using " +
       "file-based sources such as Parquet, JSON and ORC. It can be overridden per read by the " +
-      "'listHiddenFiles' data source option.")
+      "'listHiddenFiles' data source option. Note that hidden directories also participate in " +
+      "partition discovery, so a hidden directory next to partition directories causes a " +
+      "conflicting directory structures error unless " +
+      "'spark.sql.files.ignoreInvalidPartitionPaths' is enabled.")
     .version("5.0.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
