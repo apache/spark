@@ -449,7 +449,7 @@ mllib = Module(
 
 pipelines = Module(
     name="pipelines",
-    dependencies=[],
+    dependencies=[sql],
     source_file_regexes=["sql/pipelines"],
     sbt_test_goals=[
         "pipelines/test",
