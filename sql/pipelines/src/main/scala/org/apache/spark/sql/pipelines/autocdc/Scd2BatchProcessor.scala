@@ -1070,7 +1070,7 @@ object Scd2BatchProcessor {
    *
    * Temporary in that the column has no observable side effect or persistence across microbatches.
    */
-  private[autocdc] val nextEffectiveRecordStartAtColName: String =
+  private val nextEffectiveRecordStartAtColName: String =
     s"${AutoCdcReservedNames.prefix}next_effective_record_start_at"
 
   /**
@@ -1080,9 +1080,9 @@ object Scd2BatchProcessor {
    * Temporary in that the columns have no observable side effect or persistence across
    * microbatches.
    */
-  private[autocdc] val finalStartAtColName: String =
+  private val finalStartAtColName: String =
     s"${AutoCdcReservedNames.prefix}final_start_at"
-  private[autocdc] val finalEndAtColName: String =
+  private val finalEndAtColName: String =
     s"${AutoCdcReservedNames.prefix}final_end_at"
 
   /**
