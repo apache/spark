@@ -1644,6 +1644,12 @@ def sum(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.min`
+    :meth:`pyspark.sql.functions.max`
+    :meth:`pyspark.sql.functions.avg`
+
     Examples
     --------
     Example 1: Calculating the sum of values in a column
@@ -1701,6 +1707,12 @@ def avg(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.min`
+    :meth:`pyspark.sql.functions.max`
+    :meth:`pyspark.sql.functions.sum`
 
     Examples
     --------
@@ -1800,6 +1812,12 @@ def median(col: "ColumnOrName") -> Column:
 
     :meth:`pyspark.sql.functions.percentile`
     :meth:`pyspark.sql.functions.approx_percentile`
+    :meth:`pyspark.sql.functions.percentile_approx`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.approx_percentile`
+    :meth:`pyspark.sql.functions.percentile`
     :meth:`pyspark.sql.functions.percentile_approx`
 
     Examples
@@ -2642,6 +2660,10 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     :class:`~pyspark.sql.Column`
         A column for the computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ceiling`
+
     Examples
     --------
     Example 1: Compute the ceiling of a column value
@@ -2695,6 +2717,10 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     -------
     :class:`~pyspark.sql.Column`
         A column for the computed results.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ceil`
 
     Examples
     --------
@@ -3408,6 +3434,10 @@ def signum(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sign`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -3445,6 +3475,10 @@ def sign(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.signum`
 
     Examples
     --------
@@ -3889,6 +3923,7 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.bit_get`
+    :meth:`pyspark.sql.functions.bit_count`
 
     Examples
     --------
@@ -4412,6 +4447,7 @@ def variance(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.stddev`
     :meth:`pyspark.sql.functions.skewness`
     :meth:`pyspark.sql.functions.kurtosis`
+    :meth:`pyspark.sql.functions.std`
 
     Examples
     --------
@@ -6984,6 +7020,10 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         distinct values of these two column values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.approx_count_distinct`
+
     Examples
     --------
     Example 1: Counting distinct values of a single column
@@ -8455,6 +8495,10 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     :class:`~pyspark.sql.Column`
         logariphm of given value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ln`
+
     Examples
     --------
     Example 1: Specify both base number and the input value
@@ -8521,6 +8565,10 @@ def ln(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         natural logarithm of given value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.log`
 
     Examples
     --------
@@ -10113,6 +10161,7 @@ def day(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.weekday`
 
     Examples
     --------
@@ -10199,6 +10248,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
 
     Examples
     --------
@@ -10614,6 +10664,9 @@ def weekday(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.dayofmonth`
 
     Examples
     --------
@@ -11075,6 +11128,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     :meth:`pyspark.sql.functions.datediff`
     :meth:`pyspark.sql.functions.date_diff`
     :meth:`pyspark.sql.functions.timestamp_add`
+    :meth:`pyspark.sql.functions.add_months`
 
     Examples
     --------
@@ -11134,6 +11188,7 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     :meth:`pyspark.sql.functions.datediff`
     :meth:`pyspark.sql.functions.date_diff`
     :meth:`pyspark.sql.functions.timestamp_add`
+    :meth:`pyspark.sql.functions.add_months`
 
     Examples
     --------
@@ -11303,6 +11358,7 @@ def date_diff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.date_sub`
     :meth:`pyspark.sql.functions.datediff`
     :meth:`pyspark.sql.functions.timestamp_diff`
+    :meth:`pyspark.sql.functions.time_diff`
 
     Examples
     --------
@@ -11516,6 +11572,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.try_to_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.try_to_date`
 
     Examples
     --------
@@ -11572,6 +11629,7 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.try_to_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.to_date`
 
     Examples
     --------
@@ -12019,6 +12077,8 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     :meth:`pyspark.sql.functions.to_timestamp`
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.try_to_date`
+    :meth:`pyspark.sql.functions.try_to_time`
 
     Examples
     --------
@@ -13096,6 +13156,7 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
     --------
     :meth:`pyspark.sql.functions.datediff`
     :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.time_diff`
 
     Examples
     --------
@@ -13615,6 +13676,7 @@ def to_timestamp_ltz(
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
 
     Examples
     --------
@@ -13685,6 +13747,7 @@ def to_timestamp_ntz(
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
 
     Examples
     --------
@@ -14357,6 +14420,7 @@ def upper(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.lower`
+    :meth:`pyspark.sql.functions.ucase`
 
     Examples
     --------
@@ -14397,6 +14461,7 @@ def lower(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.upper`
+    :meth:`pyspark.sql.functions.lcase`
 
     Examples
     --------
@@ -16826,6 +16891,11 @@ def uniform(
     :class:`~pyspark.sql.Column`
         The generated random number within the specified range.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.rand`
+    :meth:`pyspark.sql.functions.randn`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -16877,6 +16947,11 @@ def length(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         length of the value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.char_length`
+    :meth:`pyspark.sql.functions.character_length`
 
     Examples
     --------
@@ -17024,6 +17099,10 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert binary values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_to_binary`
+
     Examples
     --------
     Example 1: Convert string to a binary with encoding specified
@@ -17170,6 +17249,10 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert number values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_to_number`
+
     Examples
     --------
     >>> df = spark.createDataFrame([("$78.12",)], ["e"])
@@ -17289,6 +17372,7 @@ def substr(
     :meth:`pyspark.sql.functions.substring`
     :meth:`pyspark.sql.functions.substring_index`
     :meth:`pyspark.sql.Column.substr`
+    :meth:`pyspark.sql.functions.locate`
 
     Examples
     --------
@@ -17545,6 +17629,10 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
         string that can contain embedded format tags and used as result column's value
     cols : :class:`~pyspark.sql.Column` or str
         column names or :class:`~pyspark.sql.Column`\\s to be used in formatting
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.format_string`
 
     Examples
     --------
@@ -17957,6 +18045,11 @@ def char_length(str: "ColumnOrName") -> Column:
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.character_length`
+    :meth:`pyspark.sql.functions.length`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -17983,6 +18076,11 @@ def character_length(str: "ColumnOrName") -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.char_length`
+    :meth:`pyspark.sql.functions.length`
 
     Examples
     --------
@@ -18047,6 +18145,10 @@ def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) 
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert binary values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_binary`
+
     Examples
     --------
     Example 1: Convert string to a binary with encoding specified
@@ -18100,6 +18202,10 @@ def try_to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
         Input column or strings.
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert number values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_number`
 
     Examples
     --------
@@ -18335,6 +18441,12 @@ def lcase(str: "ColumnOrName") -> Column:
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.lower`
+    :meth:`pyspark.sql.functions.ucase`
+    :meth:`pyspark.sql.functions.upper`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -18359,6 +18471,12 @@ def ucase(str: "ColumnOrName") -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.upper`
+    :meth:`pyspark.sql.functions.lcase`
+    :meth:`pyspark.sql.functions.lower`
 
     Examples
     --------
@@ -19595,6 +19713,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.element_at`
+    :meth:`pyspark.sql.functions.try_element_at`
 
     Examples
     --------
@@ -30442,6 +30561,7 @@ def bitmap_construct_agg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.bitmap_bucket_number`
     :meth:`pyspark.sql.functions.bitmap_count`
     :meth:`pyspark.sql.functions.bitmap_or_agg`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
 
     Examples
     --------
