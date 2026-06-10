@@ -87,7 +87,6 @@ from pyspark.sql.pandas.serializers import (
     TransformWithStateInPySparkRowInitStateSerializer,
     ArrowStreamAggPandasUDFSerializer,
     ArrowStreamUDTFSerializer,
-    ArrowStreamArrowUDTFSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.types import (
@@ -1049,9 +1048,9 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
         else:
             ser = ArrowStreamUDTFSerializer()
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
-        # Read the table argument offsets
-        # Use PyArrow-native serializer for Arrow UDTFs with potential UDT support
-        ser = ArrowStreamArrowUDTFSerializer(table_arg_offsets=eval_conf.table_arg_offsets)
+        # Pure Arrow stream I/O; table-arg flattening and output coercion
+        # are handled in the mapper below.
+        ser = ArrowStreamSerializer(write_start_stream=True)
     else:
         # Each row is a group so do not batch but send one by one.
         ser = BatchedSerializer(CPickleSerializer(), 1)
@@ -1978,6 +1977,7 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
             )
             return_type_size = len(return_type)
+            target_schema = pa.schema(list(arrow_return_type))
 
             def verify_result(result):
                 # Validate the output schema when the result has columns
@@ -1991,8 +1991,8 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                         },
                     )
 
-                # We verify the type of the result and do type corerion
-                # in the serializer
+                # The result type is verified and coerced to the target schema
+                # in evaluate() below.
                 return result
 
             # Wrap the exception thrown from the UDTF in a PySparkRuntimeError.
@@ -2046,7 +2046,10 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
             def evaluate(*args: pa.RecordBatch):
                 # For Arrow UDTFs, unpack the RecordBatches and pass them to the function
                 for batch in convert_to_arrow(func(*args)):
-                    yield verify_result(batch), arrow_return_type
+                    coerced = ArrowBatchTransformer.enforce_schema(
+                        verify_result(batch), target_schema, safecheck=True
+                    )
+                    yield ArrowBatchTransformer.wrap_struct(coerced)
 
             return evaluate
 
@@ -2062,9 +2065,23 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
 
         cleanup = getattr(udtf, "cleanup") if hasattr(udtf, "cleanup") else None
 
+        table_arg_offsets = (
+            set(eval_conf.table_arg_offsets) if eval_conf.table_arg_offsets else set()
+        )
+
         def mapper(_, it):
             try:
-                for a in it:
+                for batch in it:
+                    # For each column: flatten struct columns at table_arg_offsets into
+                    # RecordBatch, keep other columns as Array.
+                    a = [
+                        (
+                            ArrowBatchTransformer.flatten_struct(batch, column_index=i)
+                            if i in table_arg_offsets
+                            else batch.column(i)
+                        )
+                        for i in range(batch.num_columns)
+                    ]
                     # For PyArrow UDTFs, pass RecordBatches directly (no row conversion needed)
                     yield from eval(*[a[o] for o in args_kwargs_offsets])
                 if terminate is not None:
