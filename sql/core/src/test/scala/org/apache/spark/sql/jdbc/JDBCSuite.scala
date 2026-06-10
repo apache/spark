@@ -1539,7 +1539,7 @@ class JDBCSuite extends SharedSparkSession {
     // LiteralValue for StringType must use UTF8String (Spark's internal string type)
     // to match what V2ExpressionBuilder produces in the real pushdown path.
     import org.apache.spark.unsafe.types.UTF8String
-    def truncExpr(fmt: String) = new GeneralScalarExpression("TRUNC",
+    def truncExpr(fmt: String): GeneralScalarExpression = new GeneralScalarExpression("TRUNC",
       Array[V2Expression](dateRef, LiteralValue(UTF8String.fromString(fmt), StringType)))
 
     val monthSql = oracleDialect.compileExpression(truncExpr("MONTH")).get
