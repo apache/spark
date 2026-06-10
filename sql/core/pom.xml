@@ -316,9 +316,20 @@
       <artifactId>spark-udf-worker-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <!--
+      gRPC is only needed by tests (PythonUDFWorkerSpecificationSuite reuses the
+      grpc module's TestDirectGrpcDispatcher). Test scope keeps gRPC off sql/core's
+      main classpath, preserving the gRPC confinement to the udf-worker-grpc module.
+    -->
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-udf-worker-core_${scala.binary.version}</artifactId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-udf-worker-grpc_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>

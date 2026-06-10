@@ -29,7 +29,8 @@ import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.udf.worker.{Cancel, UDFWorkerSpecification}
-import org.apache.spark.udf.worker.core.{TestDirectWorkerDispatcher, WorkerConnection}
+import org.apache.spark.udf.worker.core.WorkerConnection
+import org.apache.spark.udf.worker.grpc.testing.TestDirectGrpcDispatcher
 
 /**
  * A [[WorkerConnection]] that opens a real Unix-domain-socket channel to the
@@ -52,12 +53,12 @@ private object ConnectingSocketConnection {
 }
 
 /**
- * A [[TestDirectWorkerDispatcher]] whose connection actually connects to the
+ * A [[TestDirectGrpcDispatcher]] whose connection actually connects to the
  * worker socket (rather than just checking file existence), so the test
  * verifies the spawned Python worker is reachable.
  */
 private class ConnectingTestDispatcher(spec: UDFWorkerSpecification)
-    extends TestDirectWorkerDispatcher(spec) {
+    extends TestDirectGrpcDispatcher(spec) {
   override protected def newConnection(address: String): WorkerConnection =
     ConnectingSocketConnection.connect(address)
 }
@@ -74,7 +75,7 @@ private class ConnectingTestDispatcher(spec: UDFWorkerSpecification)
  * for SIGTERM, verifying that pythonExec, PYTHONPATH, env vars,
  * and command construction all work end-to-end.
  *
- * Reuses [[TestDirectWorkerDispatcher]]'s spawn / wait-for-ready machinery
+ * Reuses [[TestDirectGrpcDispatcher]]'s spawn / wait-for-ready machinery
  * (shared from `udf-worker-core` test sources) but overrides the connection
  * to open a real UDS channel -- the Python test worker only binds a raw
  * socket, it does not host a gRPC server, so a full gRPC session is not
