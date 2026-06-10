@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableLo
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.arrow.{ArrowFieldWriter, TimeWriter}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, TimeType}
 import org.apache.spark.sql.types.ops.TimeTypeApiOps
 
@@ -92,7 +94,19 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
 
   // ==================== Optional Operations ====================
 
+  // Building a TIME serializer/deserializer requires the TIME type to be enabled. The framework
+  // dispatch at the head of Serializer/DeserializerBuildHelper routes LocalTimeEncoder through
+  // these methods, so this is the single gate on the encoder path. Throw rather than return None
+  // so the dispatch surfaces UNSUPPORTED_TIME_TYPE instead of falling through to the default
+  // match, which no longer handles LocalTimeEncoder.
+  private def checkTimeTypeEnabled(): Unit = {
+    if (!SQLConf.get.isTimeTypeEnabled) {
+      throw QueryCompilationErrors.unsupportedTimeTypeError()
+    }
+  }
+
   override def createSerializer(input: Expression): Option[Expression] = {
+    checkTimeTypeEnabled()
     Some(StaticInvoke(
       DateTimeUtils.getClass,
       t,
@@ -102,6 +116,7 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
   }
 
   override def createDeserializer(path: Expression): Option[Expression] = {
+    checkTimeTypeEnabled()
     Some(StaticInvoke(
       DateTimeUtils.getClass,
       ObjectType(classOf[java.time.LocalTime]),

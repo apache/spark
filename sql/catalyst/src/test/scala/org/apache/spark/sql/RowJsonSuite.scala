@@ -132,46 +132,26 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
     new GenericRowWithSchema(Array(value), new StructType().add("a", TimeType(precision))).jsonValue
 
   test("SPARK-57338: TIME column renders the external LocalTime in JSON") {
-    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true") {
-      assert(timeRowJson(LocalTime.of(12, 13, 14), TimeType.MICROS_PRECISION) ===
-        JObject("a" -> JString("12:13:14")))
-      // The fraction is rendered up to microsecond resolution with trailing zeros trimmed.
-      assert(timeRowJson(LocalTime.of(1, 2, 3, 123456000), TimeType.MICROS_PRECISION) ===
-        JObject("a" -> JString("01:02:03.123456")))
-      assert(timeRowJson(LocalTime.of(10, 30, 0, 100000000), TimeType.MICROS_PRECISION) ===
-        JObject("a" -> JString("10:30:00.1")))
-      assert(timeRowJson(LocalTime.MIDNIGHT, TimeType.MICROS_PRECISION) ===
-        JObject("a" -> JString("00:00:00")))
-    }
+    assert(timeRowJson(LocalTime.of(12, 13, 14), TimeType.MICROS_PRECISION) ===
+      JObject("a" -> JString("12:13:14")))
+    // The fraction is rendered up to microsecond resolution with trailing zeros trimmed.
+    assert(timeRowJson(LocalTime.of(1, 2, 3, 123456000), TimeType.MICROS_PRECISION) ===
+      JObject("a" -> JString("01:02:03.123456")))
+    assert(timeRowJson(LocalTime.of(10, 30, 0, 100000000), TimeType.MICROS_PRECISION) ===
+      JObject("a" -> JString("10:30:00.1")))
+    assert(timeRowJson(LocalTime.MIDNIGHT, TimeType.MICROS_PRECISION) ===
+      JObject("a" -> JString("00:00:00")))
   }
 
   test("SPARK-57338: TIME column JSON rendering is independent of the column precision") {
-    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true") {
-      val time = LocalTime.of(1, 2, 3, 123456000)
-      (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
-        assert(timeRowJson(time, p) === JObject("a" -> JString("01:02:03.123456")))
-      }
+    val time = LocalTime.of(1, 2, 3, 123456000)
+    (TimeType.MIN_PRECISION to TimeType.MAX_PRECISION).foreach { p =>
+      assert(timeRowJson(time, p) === JObject("a" -> JString("01:02:03.123456")))
     }
   }
 
   test("SPARK-57338: null TIME column renders as JSON null") {
-    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true") {
-      assert(timeRowJson(null, TimeType.MICROS_PRECISION) === JObject("a" -> JNull))
-    }
-  }
-
-  // With the Types Framework off (the production default), TypeApiOps returns None and Row JSON
-  // falls back to the legacy toJsonDefault, which must still render the external LocalTime that a
-  // public Row holds for a TIME column - matching HiveResult's legacy fallback - rather than
-  // failing with FAILED_ROW_TO_JSON.
-  test("SPARK-57338: TIME column renders via the legacy path with the framework disabled") {
-    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
-      assert(timeRowJson(LocalTime.of(12, 13, 14), TimeType.MICROS_PRECISION) ===
-        JObject("a" -> JString("12:13:14")))
-      assert(timeRowJson(LocalTime.of(1, 2, 3, 123456000), TimeType.MICROS_PRECISION) ===
-        JObject("a" -> JString("01:02:03.123456")))
-      assert(timeRowJson(null, TimeType.MICROS_PRECISION) === JObject("a" -> JNull))
-    }
+    assert(timeRowJson(null, TimeType.MICROS_PRECISION) === JObject("a" -> JNull))
   }
 
   // With nanosecond cast-to-string now supported through the framework (SPARK-57285), Row JSON
@@ -181,7 +161,6 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
     def nanosRowJson(value: Any, dt: DataType): JValue =
       new GenericRowWithSchema(Array(value), new StructType().add("a", dt)).jsonValue
     withSQLConf(
-        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true",
         SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val ldt = LocalDateTime.of(2020, 1, 1, 12, 0, 0, 123456789)

@@ -1111,7 +1111,6 @@ spark.sql.timestampType
 spark.sql.transposeMaxValues
 spark.sql.truncateTable.ignorePermissionAcl.enabled
 spark.sql.tvf.allowMultipleTableArguments.enabled
-spark.sql.types.framework.enabled
 spark.sql.ui.explainMode
 spark.sql.ui.retainedExecutions
 spark.sql.unionOutputPartitioning

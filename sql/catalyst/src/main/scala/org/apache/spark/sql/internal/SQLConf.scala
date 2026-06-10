@@ -634,17 +634,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val TYPES_FRAMEWORK_ENABLED =
-    buildConf("spark.sql.types.framework.enabled")
-      .internal()
-      .doc("When true, use the Types Framework for supported types (currently TimeType and the " +
-        "nanosecond timestamp types TimestampNTZNanosType and TimestampLTZNanosType). " +
-        "The framework centralizes type-specific operations in Ops classes instead of " +
-        "scattered pattern matching. When false, use legacy scattered implementation.")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefaultFunction(() => Utils.isTesting)
-
   val TIMESTAMP_NANOS_TYPES_ENABLED =
     buildConf("spark.sql.timestampNanosTypes.enabled")
       .internal()
@@ -656,9 +645,7 @@ object SQLConf {
         "Unparameterized TIMESTAMP, TIMESTAMP_NTZ, and TIMESTAMP_LTZ remain microsecond " +
         "types. Enabling this flag does not guarantee full SQL support: casts, Parquet read, " +
         "typed literals, and other operations may still fail until their respective features " +
-        "are implemented. The nanosecond timestamp types are implemented solely through the " +
-        "Types Framework, so this flag only takes effect when " +
-        s"${TYPES_FRAMEWORK_ENABLED.key} is also true.")
+        "are implemented.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -7651,15 +7638,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
-  def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
-
-  // The nanos types are implemented solely through the Types Framework, so the flag has no
-  // effect without it. The requirement is enforced here instead of in a checkValue of
-  // TIMESTAMP_NANOS_TYPES_ENABLED: a validator must not call SQLConf.get, because validators
-  // run inside mergeSparkConf while the session's SQLConf is still being constructed, and the
-  // SQLConf.get lookup re-enters that construction (infinite recursion).
-  def timestampNanosTypesEnabled: Boolean =
-    getConf(TIMESTAMP_NANOS_TYPES_ENABLED) && getConf(TYPES_FRAMEWORK_ENABLED)
+  def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
