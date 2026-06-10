@@ -245,3 +245,11 @@ SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 struct<minute(TimestampNanosVal(1577885075123456, 789)):int>
 -- !query output
 24
+
+
+-- !query
+SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query schema
+struct<second(TimestampNanosVal(1577885075123456, 789)):int>
+-- !query output
+35

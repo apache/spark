@@ -214,3 +214,10 @@ SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 -- !query analysis
 Project [minute(cast(TimestampNanosVal(1577885075123456, 789) as timestamp), Some(America/Los_Angeles)) AS minute(TimestampNanosVal(1577885075123456, 789))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query analysis
+Project [second(cast(TimestampNanosVal(1577885075123456, 789) as timestamp), Some(America/Los_Angeles)) AS second(TimestampNanosVal(1577885075123456, 789))#x]
++- OneRowRelation
