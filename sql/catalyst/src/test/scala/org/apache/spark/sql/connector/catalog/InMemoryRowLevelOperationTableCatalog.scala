@@ -53,8 +53,9 @@ class InMemoryRowLevelOperationTableCatalog
         // land on the disposable snapshot and the live table would silently keep its rows.
         // Resolve the live table at truncate time (not at load time) so the mutation hits the
         // current live instance even if alterTable replaced it after this load. DML
-        // (DELETE/UPDATE/MERGE) resolves with write privileges and operates on the live
-        // instance directly, so TRUNCATE is the only operation that needs this redirection.
+        // (DELETE/UPDATE/MERGE) resolves through the loadTable(ident, writePrivileges) overload
+        // (see InMemoryTableCatalog), which returns the live instance directly, so TRUNCATE is
+        // the only operation that needs this redirection.
         snapshot.liveTableProvider = () => liveTable(ident).asInstanceOf[TruncatableTable]
         snapshot
       case other => other
