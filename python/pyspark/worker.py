@@ -937,7 +937,8 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
 
     # If chained_func is from pyspark.sql.worker, it is to read/write data source.
     # In this case, we check the data_source_profiler config.
-    if getattr(chained_func, "__module__", "").startswith("pyspark.sql.worker."):
+    module = getattr(chained_func, "__module__", "")
+    if isinstance(module, str) and module.startswith("pyspark.sql.worker."):
         profiler = runner_conf.data_source_profiler
     else:
         profiler = runner_conf.udf_profiler
