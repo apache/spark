@@ -182,12 +182,16 @@ class GrpcWorkerSession(
 
     override def onError(t: Throwable): Unit = {
       // Transport-level failure: the stream is dead. No further writes are
-      // possible (reaching a terminal state closes the write side). Unblock any
-      // thread waiting on InitResponse so init() surfaces the transport cause
-      // instead of timing out after initResponseTimeoutMs with a misleading
-      // "timed out" message.
-      initLatch.countDown()
+      // possible (reaching a terminal state closes the write side). Settle the
+      // terminal BEFORE counting down initLatch: init() blocks on that latch,
+      // and only await/countDown establish a happens-before edge, so a thread
+      // woken by the countDown must already be able to observe the terminal.
+      // That lets init() surface the transport cause instead of timing out
+      // after initResponseTimeoutMs with a misleading "timed out" message --
+      // or, if it saw a transient non-terminal state, the defensive "init latch
+      // fired without an InitResponse or terminal" error.
       completeTerminal(Termination.TransportFailed(t))
+      initLatch.countDown()
     }
 
     override def onCompleted(): Unit = {
@@ -243,10 +247,6 @@ class GrpcWorkerSession(
     case UdfControlResponse.ControlCase.ERROR =>
       val err = ctrl.getError.getError
       executionError.compareAndSet(None, Some(err))
-      // ERROR before InitResponse means init will never succeed; surface it
-      // to doInit immediately instead of waiting for the eventual CancelResponse.
-      // countDown is idempotent so this is safe in the normal data-phase path too.
-      initLatch.countDown()
       // ERROR before InitResponse is special: under directExecutor or with
       // a fast worker, sendCancelInternal may run while requestObserver is
       // still null (we're inside stream.onNext(initRequest) and have not
@@ -259,6 +259,12 @@ class GrpcWorkerSession(
       if (!initResolved) {
         completeTerminal(Termination.Failed(err))
       }
+      // Surface the error to doInit. Count down AFTER settling the terminal
+      // above: init() blocks on this latch and only await/countDown establish
+      // happens-before, so a woken doInit must be able to observe the terminal
+      // rather than a transient non-terminal state. Idempotent, so the normal
+      // data-phase path (latch already fired during init) is unaffected.
+      initLatch.countDown()
       sendCancelInternal(() => cancelWithReason("aborting after ErrorResponse"))
 
     case UdfControlResponse.ControlCase.FINISH =>
@@ -329,7 +335,10 @@ class GrpcWorkerSession(
         // best-effort half-close; the terminal already reflects the failure.
         requestObserver = stream
         completeTerminal(Termination.TransportFailed(e))
-        throw e
+        // Surface as GrpcWorkerSessionException so the engine integration layer
+        // (which catches that type and wraps it) sees a uniform init-failure
+        // exception rather than the raw transport error.
+        throw new GrpcWorkerSessionException("UDF worker stream failed during init", e)
     }
 
     val responded = try {
@@ -347,13 +356,16 @@ class GrpcWorkerSession(
 
     if (!responded) {
       sendCancelInternal(() => cancelWithReason("InitResponse timed out"))
+      val timeout = new TimeoutException(
+        s"timed out waiting for InitResponse after ${initResponseTimeoutMs}ms")
       // Settle the terminal so a subsequent close() does not stall for a
       // second `terminalTimeoutMs` waiting for a worker that already missed
       // its init deadline.
-      completeTerminal(Termination.TransportFailed(new TimeoutException(
-        s"timed out waiting for InitResponse after ${initResponseTimeoutMs}ms")))
-      throw new IllegalStateException(
-        s"timed out waiting for InitResponse after ${initResponseTimeoutMs}ms")
+      completeTerminal(Termination.TransportFailed(timeout))
+      // Surface as GrpcWorkerSessionException (carrying the timeout cause) so
+      // the engine integration layer that catches that type can wrap it.
+      throw new GrpcWorkerSessionException(
+        s"timed out waiting for InitResponse after ${initResponseTimeoutMs}ms", timeout)
     }
 
     initResponse.get() match {

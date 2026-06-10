@@ -28,7 +28,7 @@ import org.apache.spark.udf.worker.grpc.DirectGrpcDispatcher
  * protocol.
  *
  * Reusable across modules: callers in `sql/core` (or anywhere with a
- * test-jar dependency on `udf-worker-core`) can drop this in for tests
+ * test-jar dependency on `udf-worker-grpc`) can drop this in for tests
  * that only need to verify a worker spec produces a spawnable worker.
  */
 class TestDirectGrpcDispatcher(spec: UDFWorkerSpecification)

@@ -76,7 +76,7 @@ private class ConnectingTestDispatcher(spec: UDFWorkerSpecification)
  * and command construction all work end-to-end.
  *
  * Reuses [[TestDirectGrpcDispatcher]]'s spawn / wait-for-ready machinery
- * (shared from `udf-worker-core` test sources) but overrides the connection
+ * (shared from `udf-worker-grpc` test sources) but overrides the connection
  * to open a real UDS channel -- the Python test worker only binds a raw
  * socket, it does not host a gRPC server, so a full gRPC session is not
  * exercised here.
