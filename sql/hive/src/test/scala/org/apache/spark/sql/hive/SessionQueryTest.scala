@@ -14,25 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.connect
 
-import org.apache.spark.sql
+package org.apache.spark.sql.hive
 
-/**
- * Overrides test utils to implement 'connect variants' of suites declared in sql/core:
- * {{{
- *   // in sql/core
- *   FooSuite extends SessionQueryTest { test("") { ... } }
- *
- *   // in sql/connect
- *   FooConnectSuite extends connect.SessionQueryTest
- * }}}
- *
- * This trait overrides [[spark]] to use a [[SparkSession connect.SparkSession]], which executes
- * via the gRPC API using an in-process connect server.
- */
-trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
-  final override def isDfSorted(df: sql.DataFrame): Boolean = false // TODO
+import org.apache.spark.sql.classic
 
-  override def sessionType: String = "connect"
+trait SessionQueryTest extends classic.SessionQueryTest with test.TestHiveSingleton {
+  override def sessionType: String = "hive"
 }

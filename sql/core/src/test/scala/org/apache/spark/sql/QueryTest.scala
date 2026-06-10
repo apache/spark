@@ -30,12 +30,11 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.scalactic.source.Position
-import org.scalatest.{Assertions, BeforeAndAfterAll, Suite, Tag}
+import org.scalatest.{BeforeAndAfterAll, Suite, Tag}
 import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.plans._
@@ -62,9 +61,6 @@ trait QueryTestBase
   with CheckAnswerHelper
   with QueryCleanupHelper
   with PlanTestBase { self: Suite =>
-
-  override protected def isDfSorted(df: DataFrame): Boolean =
-    df.logicalPlan.collectFirst { case s: logical.Sort => s }.nonEmpty
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords.
@@ -182,11 +178,11 @@ trait QueryTestBase
     QueryTest.checkAnswer(analyzedDF, expectedAnswer)
   }
 
-  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
     checkAnswer(df, Seq(expectedAnswer))
   }
 
-  override protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: DataFrame): Unit = {
     checkAnswer(df, expectedAnswer.collect().toImmutableArraySeq)
   }
 
@@ -196,7 +192,7 @@ trait QueryTestBase
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Array]] of [[Row]]s.
    */
-  override protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
+  protected def checkAnswer(df: => DataFrame, expectedAnswer: Array[Row]): Unit = {
     checkAnswer(df, expectedAnswer.toImmutableArraySeq)
   }
 
@@ -802,7 +798,11 @@ object QueryTest extends CheckAnswerHelper {
    * @param expectedAnswer the expected result in a Seq of Rows.
    * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean = true): Unit = {
+  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    checkAnswer(df, expectedAnswer, checkToRDD = true)
+  }
+
+  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean): Unit = {
     if (checkToRDD) {
       SQLExecution.withSQLConfPropagated(df.sparkSession) {
         df.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
@@ -810,6 +810,13 @@ object QueryTest extends CheckAnswerHelper {
     }
 
     super.checkAnswer(df, expectedAnswer)
+  }
+
+  def checkAnswer(df: DataFrame, expectedAnswer: java.util.List[Row]): Unit = {
+    getErrorMessageInCheckAnswer(df, expectedAnswer.asScala.toSeq) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
+    }
   }
 
   override protected def isDfSorted(df: DataFrame): Boolean =

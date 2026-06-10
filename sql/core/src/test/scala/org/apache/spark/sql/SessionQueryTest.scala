@@ -20,23 +20,24 @@ package org.apache.spark.sql
 import org.apache.spark.SparkFunSuite
 
 /**
- * Provides classic/connect-agnostic test utils
- *
+ * Provides connect-compatible test utils to write suites that have 'connect variants':
  * {{{
  *   // in sql/core
- *   FooSuite extends SessionQueryTest {
- *     test("") { ... }
- *   }
+ *   FooSuite extends SessionQueryTest { test("") { ... } }
  *
  *   // in sql/connect
  *   FooConnectSuite extends connect.SessionQueryTest
  * }}}
+ *
+ * While this trait internally uses a [[classic.SparkSession]] when executing tests,
+ * it exposed as a [[SparkSession sql.SparkSession]] to allow for overriding on the connect side.
+ *
+ * For classic-specific tests, use [[classic.SessionQueryTest]].
  */
 trait SessionQueryTest
   extends SparkFunSuite
   with SessionQueryTestBase
   with SparkSessionBinder {
-  override def isDfSorted(df: DataFrame): Boolean = true // TODO
 
   override def sessionType: String = "classic"
 }

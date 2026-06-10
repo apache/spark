@@ -37,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.{BufferedRows, CatalogV2Util, Iden
  * [[DSv2TempViewWithStoredPlanTests]], [[DSv2RepeatedTableAccessTests]],
  * [[DSv2IncrementallyConstructedQueryTests]], or [[DSv2CacheTableReadTests]].
  */
-trait DSv2ExternalMutationTestBase extends SessionQueryTestBase with QueryTest {
+trait DSv2ExternalMutationTestBase extends QueryTest with SessionQueryTestBase {
 
   /** Fully qualified table name under the non-caching test catalog. */
   protected val testTable: String = "testcat.ns1.ns2.tbl"

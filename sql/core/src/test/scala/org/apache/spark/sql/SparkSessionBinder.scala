@@ -66,7 +66,7 @@ trait SparkSessionBinderBase
   with BeforeAndAfterAll
   with Eventually { self: Suite =>
 
-  protected def sparkConf = {
+  protected def sparkConf: SparkConf = {
     val conf = new SparkConf()
       .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
       .set(UNSAFE_EXCEPTION_ON_MEMORY_LEAK, true)
@@ -100,7 +100,7 @@ trait SparkSessionBinderBase
   protected override def spark: SparkSession = _spark
 
   /**
-   * The [[TestSQLContext]] to use for all tests in this suite.
+   * The [[test.TestSQLContext]] to use for all tests in this suite.
    */
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 

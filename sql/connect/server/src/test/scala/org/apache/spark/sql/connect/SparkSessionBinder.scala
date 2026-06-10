@@ -41,7 +41,7 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
   /** The underlying classic session used by the in-process server. */
   protected def classicSpark: classic.SparkSession = super.spark.asInstanceOf[classic.SparkSession]
 
-  override def beforeAll(): Unit = {
+  override protected def beforeAll(): Unit = {
     super.beforeAll()
     val prevPort = SparkEnv.get.conf.get(Connect.CONNECT_GRPC_BINDING_PORT)
     try {

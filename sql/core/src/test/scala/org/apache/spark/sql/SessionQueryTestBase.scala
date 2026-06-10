@@ -21,6 +21,12 @@ package org.apache.spark.sql
 import org.scalatest.funsuite.AnyFunSuite
 // scalastyle:on
 
+/**
+ * TODO should be moved to sql/api
+ *
+ * base for fully sql/core independent tests, i.e. this trait could be moved to sql/api and then
+ * used in sql/connect/client.
+ */
 trait SessionQueryTestBase
   extends AnyFunSuite
     with SparkSessionProvider

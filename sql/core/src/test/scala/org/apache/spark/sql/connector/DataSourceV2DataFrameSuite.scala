@@ -24,7 +24,7 @@ import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SessionQueryTest, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
@@ -47,6 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
+  with SessionQueryTest
   with DSv2TempViewWithStoredPlanTests
   with DSv2RepeatedTableAccessTests
   with DSv2IncrementallyConstructedQueryTests
@@ -97,7 +98,6 @@ class DataSourceV2DataFrameSuite
 
   // DSv2ExternalMutationTestBase implementations for classic mode
   override protected def testPrefix: String = ""
-  override protected def isConnect: Boolean = false
 
   override protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
