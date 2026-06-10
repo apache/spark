@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.jdk.CollectionConverters._
 
-import io.fabric8.kubernetes.api.model.{ConfigMap, Pod, PodBuilder, PodList}
+import io.fabric8.kubernetes.api.model.{ConfigMap, HasMetadata, Pod, PodBuilder, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
 import io.fabric8.kubernetes.client.dsl.PodResource
 import io.fabric8.kubernetes.client.dsl.base.PatchContext
@@ -35,6 +35,7 @@ import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.resource.{ResourceProfile, ResourceProfileManager}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, LiveListenerBus, TaskSchedulerImpl}
@@ -104,6 +105,9 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   @Mock
   private var pollEvents: ExecutorPodsPollingSnapshotSource = _
+
+  @Mock
+  private var resourceListOperation: RESOURCE_LIST = _
 
   @Mock
   private var context: RpcCallContext = _
@@ -349,5 +353,45 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     val id2 = backendWithoutAppId.applicationId()
     assert(id1 === id2, "applicationId() must return the same value on repeated calls")
     assert(id1.startsWith("spark-"), "generated app ID should have the spark- prefix")
+  }
+
+  test("SPARK-37856: cleanTerminalExecutorPodsOnStart deletes Failed and Completed executor pods") {
+    val appName = "test-spark-app"
+    val appNameLabel = KubernetesConf.getAppNameLabel(appName)
+    when(sc.appName).thenReturn(appName)
+
+    val failedPod = new PodBuilder()
+      .withNewMetadata().withName("exec-failed").endMetadata()
+      .withNewStatus().withPhase("Failed").endStatus()
+      .build()
+    val completedPod = new PodBuilder()
+      .withNewMetadata().withName("exec-completed").endMetadata()
+      .withNewStatus().withPhase("Completed").endStatus()
+      .build()
+    val runningPod = new PodBuilder()
+      .withNewMetadata().withName("exec-running").endMetadata()
+      .withNewStatus().withPhase("Running").endStatus()
+      .build()
+
+    val podList = mock(classOf[PodList])
+    when(podsWithNamespace.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE))
+      .thenReturn(labeledPods)
+    when(labeledPods.withLabel(SPARK_APP_NAME_LABEL, appNameLabel))
+      .thenReturn(labeledPods)
+    when(labeledPods.list()).thenReturn(podList)
+    when(podList.getItems)
+      .thenReturn(java.util.Arrays.asList(failedPod, completedPod, runningPod))
+    var capturedPods: Seq[Pod] = Seq.empty
+    when(kubernetesClient.resourceList(any[java.util.Collection[HasMetadata]]()))
+      .thenAnswer { invocation =>
+        capturedPods = invocation.getArgument[java.util.Collection[Pod]](0).asScala.toSeq
+        resourceListOperation
+      }
+    when(resourceListOperation.inNamespace("default")).thenReturn(resourceListOperation)
+
+    schedulerBackendUnderTest.start()
+
+    assert(capturedPods.map(_.getMetadata.getName).toSet === Set("exec-failed", "exec-completed"))
+    verify(resourceListOperation).delete()
   }
 }
