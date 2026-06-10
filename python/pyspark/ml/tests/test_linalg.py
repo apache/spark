@@ -193,13 +193,13 @@ class VectorTests(MLlibTestCase):
 
     def test_repr_dense_matrix(self):
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10])
-        self.assertTrue(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
+        self.assertEqual(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
 
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10], True)
-        self.assertTrue(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
+        self.assertEqual(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
 
         mat = DenseMatrix(6, 3, zeros(18))
-        self.assertTrue(
+        self.assertEqual(
             repr(mat),
             "DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., \
                 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)",
@@ -209,7 +209,7 @@ class VectorTests(MLlibTestCase):
         sm1t = SparseMatrix(
             3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], isTransposed=True
         )
-        self.assertTrue(
+        self.assertEqual(
             repr(sm1t),
             "SparseMatrix(3, 4, [0, 2, 3, 5], [0, 1, 2, 0, 2], [3.0, 2.0, 4.0, 9.0, 8.0], True)",
         )
@@ -217,7 +217,7 @@ class VectorTests(MLlibTestCase):
         indices = tile(arange(6), 3)
         values = ones(18)
         sm = SparseMatrix(6, 3, [0, 6, 12, 18], indices, values)
-        self.assertTrue(
+        self.assertEqual(
             repr(sm),
             "SparseMatrix(6, 3, [0, 6, 12, 18], \
                 [0, 1, 2, 3, 4, 5, 0, 1, ..., 4, 5, 0, 1, 2, 3, 4, 5], \
@@ -225,7 +225,7 @@ class VectorTests(MLlibTestCase):
                 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)",
         )
 
-        self.assertTrue(
+        self.assertEqual(
             str(sm),
             "6 X 3 CSCMatrix\n\
             (0,0) 1.0\n(1,0) 1.0\n(2,0) 1.0\n(3,0) 1.0\n(4,0) 1.0\n(5,0) 1.0\n\
@@ -234,7 +234,7 @@ class VectorTests(MLlibTestCase):
         )
 
         sm = SparseMatrix(1, 18, zeros(19), [], [])
-        self.assertTrue(
+        self.assertEqual(
             repr(sm),
             "SparseMatrix(1, 18, \
                 [0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)",
@@ -248,7 +248,7 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(sm1.colPtrs.tolist(), [0, 2, 2, 4, 4])
         self.assertEqual(sm1.rowIndices.tolist(), [1, 2, 1, 2])
         self.assertEqual(sm1.values.tolist(), [1.0, 2.0, 4.0, 5.0])
-        self.assertTrue(
+        self.assertEqual(
             repr(sm1),
             "SparseMatrix(3, 4, [0, 2, 2, 4, 4], [1, 2, 1, 2], [1.0, 2.0, 4.0, 5.0], False)",
         )
@@ -307,12 +307,12 @@ class VectorTests(MLlibTestCase):
     def test_norms(self):
         a = DenseVector([0, 2, 3, -1])
         self.assertAlmostEqual(a.norm(2), 3.742, 3)
-        self.assertTrue(a.norm(1), 6)
-        self.assertTrue(a.norm(inf), 3)
+        self.assertEqual(a.norm(1), 6)
+        self.assertEqual(a.norm(inf), 3)
         a = SparseVector(4, [0, 2], [3, -4])
         self.assertAlmostEqual(a.norm(2), 5)
-        self.assertTrue(a.norm(1), 7)
-        self.assertTrue(a.norm(inf), 4)
+        self.assertEqual(a.norm(1), 7)
+        self.assertEqual(a.norm(inf), 4)
 
         tmp = SparseVector(4, [0, 2], [3, 0])
         self.assertEqual(tmp.numNonzeros(), 1)
@@ -385,14 +385,14 @@ class MatrixUDTTests(MLlibTestCase):
         rdd = self.sc.parallelize([("dense", self.dm1), ("sparse", self.sm1)])
         df = rdd.toDF()
         schema = df.schema
-        self.assertTrue(schema.fields[1].dataType, self.udt)
+        self.assertEqual(schema.fields[1].dataType, self.udt)
         matrices = df.rdd.map(lambda x: x._2).collect()
         self.assertEqual(len(matrices), 2)
         for m in matrices:
             if isinstance(m, DenseMatrix):
-                self.assertTrue(m, self.dm1)
+                self.assertEqual(m, self.dm1)
             elif isinstance(m, SparseMatrix):
-                self.assertTrue(m, self.sm1)
+                self.assertEqual(m, self.sm1)
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))
 
