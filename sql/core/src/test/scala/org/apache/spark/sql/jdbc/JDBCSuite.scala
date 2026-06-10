@@ -910,6 +910,38 @@ class JDBCSuite extends SharedSparkSession {
     assert(dialect.compileExpression(eqFalse).get === "\"a\" = (1 = 0)")
   }
 
+  test("SPARK-57332: escape backslash in LIKE pattern for STARTS_WITH/ENDS_WITH/CONTAINS") {
+    // Default dialect: standard SQL string literals take backslash verbatim, so the LIKE escape
+    // character `\` appears once in the ESCAPE clause and a literal backslash in the value is
+    // doubled once (by escapeSpecialCharsForLikePattern) to be matched literally.
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    def defaultSQL(f: Filter): String = defaultDialect.compileExpression(f.toV2).getOrElse("")
+    // "c" LIKE 'ab\\%' ESCAPE '\'
+    assert(defaultSQL(StringStartsWith("c", "ab\\")) === """"c" LIKE 'ab\\%' ESCAPE '\'""")
+    // "c" LIKE '%\\ab' ESCAPE '\'
+    assert(defaultSQL(StringEndsWith("c", "\\ab")) === """"c" LIKE '%\\ab' ESCAPE '\'""")
+    // "c" LIKE '%a\\b%' ESCAPE '\'
+    assert(defaultSQL(StringContains("c", "a\\b")) === """"c" LIKE '%a\\b%' ESCAPE '\'""")
+
+    // MySQL treats backslash as an escape character inside string literals, so every backslash is
+    // doubled again: the ESCAPE clause uses `\\` and a literal backslash in the value becomes four
+    // backslashes (escapeSpecialCharsForLikePattern doubles it, then escapeStringLiteralForLikePattern
+    // doubles each of those). The wildcard escaping for `%`/`_` is unchanged from the default.
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    def mySQLSQL(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
+    // `c` LIKE 'ab\\\\%' ESCAPE '\\'
+    assert(mySQLSQL(StringStartsWith("c", "ab\\")) === """`c` LIKE 'ab\\\\%' ESCAPE '\\'""")
+    // `c` LIKE '%\\\\ab' ESCAPE '\\'
+    assert(mySQLSQL(StringEndsWith("c", "\\ab")) === """`c` LIKE '%\\\\ab' ESCAPE '\\'""")
+    // `c` LIKE '%a\\\\b%' ESCAPE '\\'
+    assert(mySQLSQL(StringContains("c", "a\\b")) === """`c` LIKE '%a\\\\b%' ESCAPE '\\'""")
+    // Wildcards stay escaped: the `\` that escapeSpecialCharsForLikePattern puts before `%`/`_` is
+    // itself doubled for MySQL's string-literal layer, so it parses back to `\%`/`\_` (literal
+    // wildcards) before the LIKE engine, matching the default dialect's semantics.
+    // `c` LIKE 'a\\%b\\_%' ESCAPE '\\'
+    assert(mySQLSQL(StringStartsWith("c", "a%b_")) === """`c` LIKE 'a\\%b\\_%' ESCAPE '\\'""")
+  }
+
   test("Dialect unregister") {
     JdbcDialects.unregisterDialect(H2Dialect())
     try {
