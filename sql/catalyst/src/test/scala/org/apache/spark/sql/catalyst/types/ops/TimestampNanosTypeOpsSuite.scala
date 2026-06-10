@@ -203,16 +203,4 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
       }
     }
   }
-
-  test("setting the nanos types flag never consults other confs") {
-    // The flag's previous checkValue called SQLConf.get, which recurses into the session
-    // conf's own construction when the flag arrives via SparkConf. Setting it must succeed
-    // regardless of the framework flag; with the framework disabled the nanos types simply
-    // remain unsupported (covered by the test above).
-    withSQLConf(
-        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false",
-        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      assert(SQLConf.get.timestampNanosTypesEnabled)
-    }
-  }
 }

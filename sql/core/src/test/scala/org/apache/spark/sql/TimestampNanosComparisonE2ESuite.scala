@@ -32,11 +32,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  */
 class TimestampNanosComparisonE2ESuite extends QueryTest with SharedSparkSession {
 
-  // NOTE: spark.sql.timestampNanosTypes.enabled and spark.sql.types.framework.enabled both
-  // default to true under Utils.isTesting, so no conf overrides are needed here. Setting
-  // TIMESTAMP_NANOS_TYPES_ENABLED through sparkConf instead crashes session construction with
-  // infinite recursion: its checkValue calls SQLConf.get, which re-enters the session's
-  // under-construction sqlConf lazy val while mergeSparkConf is applying this very conf.
+  // NOTE: spark.sql.timestampNanosTypes.enabled defaults to true under Utils.isTesting, so no
+  // conf override is needed here.
 
   private def ntz(frac: String): String = s"TIMESTAMP_NTZ'2026-01-01 00:00:00.$frac'"
   private def ltz(frac: String): String = s"TIMESTAMP'2026-01-01 00:00:00.$frac'"
