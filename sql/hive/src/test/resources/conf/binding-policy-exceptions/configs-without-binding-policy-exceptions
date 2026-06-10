@@ -1097,6 +1097,7 @@ spark.sql.subexpressionElimination.cache.maxEntries
 spark.sql.subexpressionElimination.enabled
 spark.sql.subexpressionElimination.skipForShortcutExpr
 spark.sql.subquery.maxThreadThreshold
+spark.sql.test.tempEntryToVerifyBindingPolicyCiCheck
 spark.sql.thriftServer.incrementalCollect
 spark.sql.thriftServer.interruptOnCancel
 spark.sql.thriftServer.queryTimeout
