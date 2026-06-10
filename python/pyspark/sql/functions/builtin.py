@@ -4451,7 +4451,7 @@ def var_samp(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.variance`
     :meth:`pyspark.sql.functions.var_pop`
-    :meth:`pyspark.sql.functions.std_samp`
+    :meth:`pyspark.sql.functions.stddev_samp`
 
     Examples
     --------
@@ -4491,7 +4491,7 @@ def var_pop(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.variance`
     :meth:`pyspark.sql.functions.var_samp`
-    :meth:`pyspark.sql.functions.std_pop`
+    :meth:`pyspark.sql.functions.stddev_pop`
 
     Examples
     --------
