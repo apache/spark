@@ -66,16 +66,12 @@ class TimezoneAwareExpressionResolver(expressionResolver: ExpressionResolver)
       expressionTreeTraversal = traversals.current
     )
 
-    val collapsedExpression = coercedTimezoneAwareExpression match {
-      case cast: Cast if traversals.current.defaultCollation.isDefined =>
-        tryCollapseCast(cast, traversals.current.defaultCollation.get)
-      case other =>
-        other
-    }
-
-    collapsedExpression match {
+    coercedTimezoneAwareExpression match {
       case cast: Cast =>
-        ResolveTimestampNanosCast.rewriteDateNanosCast(cast).getOrElse(cast)
+        val collapsedCast = traversals.current.defaultCollation
+          .map(tryCollapseCast(cast, _))
+          .getOrElse(cast)
+        ResolveTimestampNanosCast.rewriteDateNanosCast(collapsedCast).getOrElse(collapsedCast)
       case other =>
         other
     }
