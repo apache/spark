@@ -65,13 +65,15 @@ object ResolveTimestampNanosCast extends Rule[LogicalPlan] {
    */
   def rewriteDateNanosCast(cast: Cast): Option[Cast] = cast match {
     // nanos(p) -> DATE  ==>  nanos(p) -> micros -> DATE
-    case Cast(child, DateType, tz, mode)
-        if child.resolved && microTimestampType(child.dataType).isDefined =>
-      Some(Cast(Cast(child, microTimestampType(child.dataType).get, tz, mode), DateType, tz, mode))
+    case Cast(child, DateType, tz, mode) if child.resolved =>
+      microTimestampType(child.dataType).map { micros =>
+        Cast(Cast(child, micros, tz, mode), DateType, tz, mode)
+      }
     // DATE -> nanos(p)  ==>  DATE -> micros -> nanos(p)
-    case Cast(child, dt, tz, mode)
-        if child.resolved && child.dataType == DateType && microTimestampType(dt).isDefined =>
-      Some(Cast(Cast(child, microTimestampType(dt).get, tz, mode), dt, tz, mode))
+    case Cast(child, dt, tz, mode) if child.resolved && child.dataType == DateType =>
+      microTimestampType(dt).map { micros =>
+        Cast(Cast(child, micros, tz, mode), dt, tz, mode)
+      }
     case _ => None
   }
 

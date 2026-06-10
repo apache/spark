@@ -759,6 +759,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(!Cast.canANSIStoreAssign(TimestampNTZNanosType(p), DateType))
       assert(!Cast.canANSIStoreAssign(DateType, TimestampLTZNanosType(p)))
       assert(!Cast.canANSIStoreAssign(TimestampLTZNanosType(p), DateType))
+      // Cast.canCast also rejects DATE <-> nanos directly: the cast is supported only via the
+      // ResolveTimestampNanosCast analyzer rule (which rewrites through the microsecond type).
+      assert(!Cast.canCast(DateType, TimestampNTZNanosType(p)))
+      assert(!Cast.canCast(TimestampNTZNanosType(p), DateType))
+      assert(!Cast.canCast(DateType, TimestampLTZNanosType(p)))
+      assert(!Cast.canCast(TimestampLTZNanosType(p), DateType))
     }
   }
 
