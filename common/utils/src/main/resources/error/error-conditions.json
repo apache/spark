@@ -5542,6 +5542,12 @@
     },
     "sqlState" : "0A000"
   },
+  "MISSING_CLAUSES_FOR_OPERATION" : {
+    "message" : [
+      "Missing required clause(s) <clauses> for operation <operation>."
+    ],
+    "sqlState" : "42601"
+  },
   "MISSING_DATABASE_FOR_V1_SESSION_CATALOG" : {
     "message" : [
       "Database name is not specified in the v1 session catalog. Please ensure to provide a valid database name when interacting with the v1 catalog."

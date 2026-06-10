@@ -825,6 +825,49 @@ case class CreateStreamingTable(
 }
 
 /**
+ * Command parsed from `CREATE [OR REFRESH] STREAMING TABLE <name> FLOW AUTO CDC ...` SQL syntax.
+ * This command serves as a parse-time placeholder for a pipeline CDC definition and cannot be
+ * executed directly. It is interpreted by the pipeline submodule during a pipeline execution.
+ *
+ * The target of the CDC operation is the streaming table itself (given by [[name]]).
+ *
+ * @param name           The streaming table name, which also serves as the CDC target.
+ * @param columns        User-specified columns for the streaming table.
+ * @param partitioning   Column-based partitioning for the streaming table.
+ * @param tableSpec      Additional table specs.
+ * @param ifNotExists    Whether the table should only be created if it doesn't already exist.
+ * @param orRefresh      Whether the statement is `CREATE OR REFRESH` (vs plain `CREATE`).
+ * @param sourceTable    The source relation providing the change events.
+ * @param keys           Column(s) that uniquely identify a row in the target table.
+ * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
+ * @param sequenceByExpr Expression that orders CDC events to resolve out-of-order arrivals.
+ * @param specifiedCols  An explicit list of source columns to include. Mutually exclusive with
+ *                       [[exceptCols]].
+ * @param exceptCols     Source columns to exclude. Mutually exclusive with [[specifiedCols]].
+ */
+case class CreateStreamingTableAutoCdc(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    ifNotExists: Boolean,
+    orRefresh: Boolean,
+    sourceTable: LogicalPlan,
+    keys: Seq[UnresolvedAttribute],
+    deleteCondition: Option[Expression],
+    sequenceByExpr: Expression,
+    specifiedCols: Seq[UnresolvedAttribute],
+    exceptCols: Seq[UnresolvedAttribute]
+) extends BinaryCommand with CreatePipelineDataset {
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = sourceTable
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): LogicalPlan =
+    copy(name = newLeft, sourceTable = newRight)
+}
+
+/**
  * Replace a table with a v2 catalog.
  *
  * If the table does not exist, and orCreate is true, then it will be created.

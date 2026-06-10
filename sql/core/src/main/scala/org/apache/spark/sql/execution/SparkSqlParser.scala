@@ -1571,6 +1571,100 @@ class SparkSqlAstBuilder extends AstBuilder {
     )
   }
 
+  override def visitCreateFlowAutoCdc(
+      ctx: CreateFlowAutoCdcContext): LogicalPlan = withOrigin(ctx) {
+    val flowHeaderCtx = ctx.createPipelineFlowHeader()
+    val ident = withIdentClause(flowHeaderCtx.flowName, UnresolvedIdentifier(_))
+    val commentOpt = Option(flowHeaderCtx.commentSpec()).map(visitCommentSpec)
+    val applyChanges = buildAutoCdcIntoCommand(ctx.autoCdcCommand())
+    CreateFlowCommand(
+      name = ident,
+      flowOperation = applyChanges,
+      comment = commentOpt
+    )
+  }
+
+  override def visitCreateStreamingTableAutoCdc(
+      ctx: CreateStreamingTableAutoCdcContext): LogicalPlan = withOrigin(ctx) {
+    val headerCtx = ctx.createPipelineDatasetHeader()
+
+    if (headerCtx.materializedView() != null) {
+      throw operationNotAllowed(
+        "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW.", ctx)
+    }
+
+    val orRefresh = headerCtx.REFRESH() != null
+    val ifNotExists = headerCtx.EXISTS() != null
+    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
+    val (colDefs, colConstraints) = Option(ctx.tableElementList()).map(visitTableElementList)
+      .getOrElse((Nil, Nil))
+
+    if (colConstraints.nonEmpty) {
+      throw operationNotAllowed(
+        "Pipeline datasets do not currently support column constraints.", ctx)
+    }
+
+    val (partTransforms, partCols, bucketSpec,
+    properties, options, location, comment, collation, serdeInfoOpt,
+    clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
+
+    val partitioning =
+      partitionExpressions(partTransforms, partCols, ctx) ++
+        clusterBySpec.map(_.asTransform)
+
+    if (bucketSpec.isDefined) {
+      throw operationNotAllowed(
+        "Bucketing is not supported for CREATE STREAMING TABLE statements.", ctx)
+    }
+    if (options.options.nonEmpty) {
+      throw operationNotAllowed(
+        "Options are not supported for CREATE STREAMING TABLE statements.", ctx)
+    }
+    serdeInfoOpt.foreach { _ =>
+      throw operationNotAllowed(
+        "Hive SerDe format options are not supported for CREATE STREAMING TABLE statements.", ctx)
+    }
+    if (location.nonEmpty) {
+      throw operationNotAllowed(
+        "Specifying location is not supported for CREATE STREAMING TABLE statements.", ctx)
+    }
+
+    val spec = TableSpec(
+      properties = properties,
+      provider = provider,
+      options = Map.empty,
+      location = location,
+      comment = comment,
+      collation = collation,
+      serde = None,
+      external = false,
+      constraints = Seq.empty
+    )
+
+    val tableIdent = withIdentClause(
+      headerCtx.identifierReference,
+      UnresolvedIdentifier(_)
+    )
+
+    val (src, keys, delete, seq, specCols, exceptCols) =
+      parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
+
+    CreateStreamingTableAutoCdc(
+      name = tableIdent,
+      columns = colDefs,
+      partitioning = partitioning,
+      tableSpec = spec,
+      ifNotExists = ifNotExists,
+      orRefresh = orRefresh,
+      sourceTable = src,
+      keys = keys,
+      deleteCondition = delete,
+      sequenceByExpr = seq,
+      specifiedCols = specCols,
+      exceptCols = exceptCols
+    )
+  }
+
   override def visitCreatePipelineDataset(
       ctx: CreatePipelineDatasetContext): LogicalPlan = withOrigin(ctx) {
     val createPipelineDatasetHeaderCtx = ctx.createPipelineDatasetHeader()

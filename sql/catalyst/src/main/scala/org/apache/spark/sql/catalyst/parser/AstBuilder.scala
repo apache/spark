@@ -1362,6 +1362,50 @@ class AstBuilder extends DataTypeAstBuilder
       withSchemaEvolution)
   }
 
+  protected def buildAutoCdcIntoCommand(ctx: AutoCdcCommandContext): AutoCdcIntoCommand =
+    withOrigin(ctx) {
+      val target = visitMultipartIdentifier(ctx.target).asTableIdentifier
+      val (src, keys, delete, seq, specCols, exceptCols) =
+        parseAutoCdcParams(ctx.autoCdcParameters())
+      AutoCdcIntoCommand(target, src, keys, delete, seq, specCols, exceptCols)
+    }
+
+  protected def parseAutoCdcParams(params: AutoCdcParametersContext): (
+      LogicalPlan,
+      Seq[UnresolvedAttribute],
+      Option[Expression],
+      Expression,
+      Seq[UnresolvedAttribute],
+      Seq[UnresolvedAttribute]) =
+    withOrigin(params) {
+      checkDuplicateClauses(params.autoCdcDeleteClause(), "APPLY AS DELETE", params)
+      checkDuplicateClauses(params.autoCdcSequenceByClause(), "SEQUENCE BY", params)
+      checkDuplicateClauses(params.autoCdcColumnsClause(), "COLUMNS", params)
+
+      if (params.autoCdcSequenceByClause().isEmpty) {
+        throw QueryParsingErrors.missingClausesForOperation(
+          params, "SEQUENCE BY", "AUTO CDC INTO")
+      }
+
+      val sourceTable = plan(params.source.relationPrimary)
+      val keys = visitMultipartIdentifierList(params.keys)
+      val deleteCondition = params.autoCdcDeleteClause().asScala.headOption
+        .map(c => expression(c.deleteCondition))
+      val sequencing = expression(params.autoCdcSequenceByClause(0).sequence)
+
+      val columnsClause = params.autoCdcColumnsClause().asScala.headOption
+      val specifiedCols = columnsClause match {
+        case Some(c) if c.columns != null => visitMultipartIdentifierList(c.columns)
+        case _ => Seq.empty
+      }
+      val exceptCols = columnsClause match {
+        case Some(c) if c.exceptCols != null => visitMultipartIdentifierList(c.exceptCols)
+        case _ => Seq.empty
+      }
+
+      (sourceTable, keys, deleteCondition, sequencing, specifiedCols, exceptCols)
+    }
+
   /**
    * Returns the parameters for [[UnresolvedExecuteImmediate]] logical plan.
    * Expected format:

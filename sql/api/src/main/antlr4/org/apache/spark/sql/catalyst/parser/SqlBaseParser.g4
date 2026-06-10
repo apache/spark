@@ -417,7 +417,11 @@ statement
     | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
         createTableClauses
         (AS query)?                                                    #createPipelineDataset
+    | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
+        createTableClauses
+        FLOW autoCdcBody                                               #createStreamingTableAutoCdc
     | createPipelineFlowHeader insertInto query                        #createPipelineInsertIntoFlow
+    | createPipelineFlowHeader autoCdcCommand                          #createFlowAutoCdc
     ;
 
 materializedView
@@ -429,7 +433,7 @@ streamingTable
     ;
 
 createPipelineDatasetHeader
-    : CREATE
+    : CREATE (OR REFRESH)?
       (materializedView | streamingTable)
       (IF errorCapturingNot EXISTS)?
       identifierReference
@@ -748,6 +752,38 @@ dmlStatementNoWith
         matchedClause*
         notMatchedClause*
         notMatchedBySourceClause*                                                  #mergeIntoTable
+    ;
+
+autoCdcCommand
+    : AUTO CDC INTO target=multipartIdentifier
+        autoCdcParameters
+    ;
+
+autoCdcBody
+    : AUTO CDC autoCdcParameters
+    ;
+
+autoCdcParameters
+    : FROM source=relation
+        KEYS LEFT_PAREN keys=multipartIdentifierList RIGHT_PAREN
+        (autoCdcDeleteClause
+        | autoCdcSequenceByClause
+        | autoCdcColumnsClause
+        )*
+    ;
+
+autoCdcDeleteClause
+    : APPLY AS DELETE WHEN deleteCondition=booleanExpression
+    ;
+
+autoCdcSequenceByClause
+    : SEQUENCE BY sequence=expression
+    ;
+
+autoCdcColumnsClause
+    : COLUMNS (
+        columns=multipartIdentifierList |
+        ASTERISK EXCEPT LEFT_PAREN exceptCols=multipartIdentifierList RIGHT_PAREN)
     ;
 
 identifierReference
@@ -2346,8 +2382,10 @@ nonReserved
     | AND
     | ANY
     | ANY_VALUE
+    | APPLY
     | APPROX
     | ARCHIVE
+    | AUTO
     | ARRAY
     | AS
     | ASC
@@ -2380,6 +2418,7 @@ nonReserved
     | CAST
     | CATALOG
     | CATALOGS
+    | CDC
     | CHANGE
     | CHANGES
     | CHAR
@@ -2653,6 +2692,7 @@ nonReserved
     | SECOND
     | SECONDS
     | SECURITY
+    | SEQUENCE
     | SELECT
     | SEPARATED
     | SERDE
