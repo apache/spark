@@ -46,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.Metadata
+import org.apache.spark.sql.types.{Metadata, MetadataBuilder}
 
 /**
  * The [[NameScope]] is used to control the resolution of names (table, column, alias identifiers).
@@ -152,6 +152,10 @@ import org.apache.spark.sql.types.Metadata
  * @param baseAggregate [[Aggregate]] node that is either a resolved [[Aggregate]] corresponding to
  *  this node or base [[Aggregate]] constructed when resolving lateral column references in
  *  [[Aggregate]].
+ * @param unaggregatedAccessOnlyIds ExprIds of Expand-output grouping attributes. When
+ *   `canReferenceAggregatedAccessOnlyAttributes` is true (inside aggregate expressions),
+ *   these IDs are excluded from candidates so the pre-Expand original is resolved instead.
+ *   Outside aggregate expressions these attributes remain accessible normally.
  */
 class NameScope(
     val output: Seq[Attribute] = Seq.empty,
@@ -160,6 +164,7 @@ class NameScope(
     val availableAliases: HashMap[ExprId, Alias] = new HashMap[ExprId, Alias],
     val aggregateListAliases: Seq[Alias] = Seq.empty,
     val baseAggregate: Option[Aggregate] = None,
+    val unaggregatedAccessOnlyIds: HashSet[ExprId] = new HashSet[ExprId],
     planLogger: PlanLogger = new PlanLogger
 ) extends SQLConfHelper {
 
@@ -251,15 +256,17 @@ class NameScope(
 
   /**
    * Returns new [[NameScope]] which preserves all the immutable [[NameScope]] properties but
-   * overwrites `output`, `hiddenOutput`, `availableAliases`, `aggregateListAliases` and
-   * `baseAggregate` if provided. Mutable state like `lcaRegistry` is not preserved.
+   * overwrites `output`, `hiddenOutput`, `availableAliases`, `aggregateListAliases`,
+   * `baseAggregate` and `unaggregatedAccessOnlyIds` if provided. Mutable state like `lcaRegistry`
+   * is not preserved.
    */
   def overwrite(
       output: Option[Seq[Attribute]] = None,
       hiddenOutput: Option[Seq[Attribute]] = None,
       availableAliases: Option[HashMap[ExprId, Alias]] = None,
       aggregateListAliases: Seq[Alias] = Seq.empty,
-      baseAggregate: Option[Aggregate] = None): NameScope = {
+      baseAggregate: Option[Aggregate] = None,
+      unaggregatedAccessOnlyIds: Option[HashSet[ExprId]] = None): NameScope = {
     new NameScope(
       output = output.getOrElse(this.output),
       hiddenOutput = hiddenOutput.getOrElse(this.hiddenOutput),
@@ -267,6 +274,8 @@ class NameScope(
       availableAliases = availableAliases.getOrElse(this.availableAliases),
       aggregateListAliases = aggregateListAliases,
       baseAggregate = baseAggregate,
+      unaggregatedAccessOnlyIds =
+        unaggregatedAccessOnlyIds.getOrElse(this.unaggregatedAccessOnlyIds),
       planLogger = planLogger
     )
   }
@@ -652,8 +661,11 @@ class NameScope(
    *   that name.
    * 2. If nested fields were inferred during the name matching process, we are dealing with
    *   struct/map/array field/element extraction. Further narrow down those attributes that are
-   *   suitable for field extraction using [[ExtractValue.isExtractable]]. We can safely do this
-   *   right away, because nested fields cannot be applied to non-recursive data types.
+   *   suitable for field extraction using [[ExtractValue.isExtractable]]. For grouping analytics,
+   *   Expand-output grouping attributes in [[unaggregatedAccessOnlyIds]] are also excluded inside
+   *   aggregate expressions so the pre-Expand originals resolve instead. We can safely do both
+   *   right away, because nested fields cannot be applied to non-recursive data types and
+   *   unaggregated-access-only attributes never appear in metadata output.
    * 3. Triage the candidates into several groups: main output, metadata output and hidden output.
    *   Main output is the topmost output of a relevant operator (actual SELECT list). Metadata
    *   output is a special qualified-access only output which originates from [[NaturalJoin]] or
@@ -690,7 +702,8 @@ class NameScope(
       shouldPreferHiddenOutput: Boolean,
       canReferenceAggregatedAccessOnlyAttributes: Boolean,
       extractValueExtractionKey: Option[Expression]): Option[ResolvedMultipartName] = {
-    val (candidates, nestedFields) = getCandidatesForResolution(multipartName)
+    val (candidates, nestedFields) =
+      getCandidatesForResolution(multipartName, canReferenceAggregatedAccessOnlyAttributes)
 
     val mainOutputCandidates = getMainOutputCandidates(candidates)
     val metadataOutputCandidates = getMetadataOutputCandidates(candidates)
@@ -752,11 +765,12 @@ class NameScope(
   }
 
   private def getCandidatesForResolution(
-      multipartName: Seq[String]): (Seq[Attribute], Seq[String]) = {
+      multipartName: Seq[String],
+      canReferenceAggregatedAccessOnlyAttributes: Boolean): (Seq[Attribute], Seq[String]) = {
     val (candidates, nestedFields) =
       attributesForResolution.getCandidatesForResolution(multipartName, nameComparator)
 
-    val filteredCandidates = if (nestedFields.nonEmpty) {
+    val extractableCandidates = if (nestedFields.nonEmpty) {
       candidates.filter { attribute =>
         ExtractValue.isExtractable(
           attribute = attribute,
@@ -766,6 +780,14 @@ class NameScope(
       }
     } else {
       candidates
+    }
+
+    val filteredCandidates = if (canReferenceAggregatedAccessOnlyAttributes) {
+      extractableCandidates.filter { attribute =>
+        !unaggregatedAccessOnlyIds.contains(attribute.exprId)
+      }
+    } else {
+      extractableCandidates
     }
 
     (filteredCandidates, nestedFields)
@@ -1039,7 +1061,7 @@ class NameScopeStack(
   }
 
   /**
-   * Overwrites `output`, `groupingAttributeIds`, `aggregateListAliases` and `baseAggregate` of the
+   * Overwrites `output`, `groupingModifier`, `aggregateListAliases` and `baseAggregate` of the
    * current [[NameScope]] entry and:
    *  1. Extends hidden output with the provided output. For attributes that appear in both hidden
    *  output and the provided output, the output version takes precedence. This ensures that the
@@ -1066,10 +1088,14 @@ class NameScopeStack(
    *
    *  2. updates properties of attributes in hidden output. This includes nullabilities and access
    *  modes. See [[updateHiddenOutputProperties]] for more details.
+   *
+   * @param output The new output attributes for the current scope.
+   * @param groupingModifier Controls how hidden output attributes are tagged for access control
+   *   above an [[Aggregate]]. See [[GroupingModifier]] for details.
    */
   def overwriteOutputAndExtendHiddenOutput(
       output: Seq[Attribute],
-      groupingAttributeIds: Option[HashSet[ExprId]] = None,
+      groupingModifier: GroupingModifier = GroupingModifier.NoGrouping,
       aggregateListAliases: Seq[Alias] = Seq.empty,
       baseAggregate: Option[Aggregate] = None): Unit = {
     val prevScope = stack.pop
@@ -1089,18 +1115,28 @@ class NameScopeStack(
     val hiddenOutputWithUpdatedProperties: Seq[Attribute] = updateHiddenOutputProperties(
       output = output,
       hiddenOutput = refreshedHiddenOutput,
-      groupingAttributeIds = groupingAttributeIds
+      groupingModifier = groupingModifier
     )
 
     val resultHiddenOutput = hiddenOutputWithUpdatedProperties ++ output.filter { attribute =>
         prevScope.getHiddenAttributeById(attribute.exprId).isEmpty
       }
 
+    val newUnaggregatedAccessOnlyIds = groupingModifier match {
+      case GroupingModifier.GroupingAnalytics(attributeIds) =>
+        val result = new HashSet[ExprId](attributeIds.size)
+        result.addAll(attributeIds)
+        Some(result)
+      case _ =>
+        None
+    }
+
     val newScope = prevScope.overwrite(
       output = Some(output),
       hiddenOutput = Some(resultHiddenOutput),
       aggregateListAliases = aggregateListAliases,
-      baseAggregate = baseAggregate
+      baseAggregate = baseAggregate,
+      unaggregatedAccessOnlyIds = newUnaggregatedAccessOnlyIds
     )
 
     stack.push(newScope)
@@ -1470,7 +1506,7 @@ class NameScopeStack(
   private def updateHiddenOutputProperties(
       output: Seq[Attribute],
       hiddenOutput: Seq[Attribute],
-      groupingAttributeIds: Option[HashSet[ExprId]] = None): Seq[Attribute] = {
+      groupingModifier: GroupingModifier = GroupingModifier.NoGrouping): Seq[Attribute] = {
     val outputLookup = new HashMap[ExprId, Attribute](output.size)
     output.foreach(attribute => outputLookup.put(attribute.exprId, attribute))
 
@@ -1481,16 +1517,39 @@ class NameScopeStack(
         attribute
       }
 
-      groupingAttributeIds match {
-        case Some(groupingAttributeIds) =>
-          if (groupingAttributeIds.contains(attribute.exprId)) {
+      groupingModifier match {
+        case GroupingModifier.GroupBy(attributeIds) =>
+          if (attributeIds.contains(attribute.exprId)) {
             attributeWithUpdatedNullability.markAsAllowAnyAccess()
           } else {
             attributeWithUpdatedNullability.markAsAggregatedAccessOnly()
           }
-        case None =>
+        case GroupingModifier.GroupingAnalytics(attributeIds) =>
+          if (attributeIds.contains(attribute.exprId)) {
+            attributeWithUpdatedNullability.markAsAllowAnyAccess()
+          } else {
+            stripIsDuplicateMetadata(attributeWithUpdatedNullability.markAsAggregatedAccessOnly())
+          }
+        case GroupingModifier.NoGrouping =>
           attributeWithUpdatedNullability
       }
+    }
+  }
+
+  /**
+   * Strips `__is_duplicate` metadata so the attribute survives `AttributeSeq` candidate pruning
+   * when it is the sole pre-Expand representative for a grouping column.
+   */
+  private def stripIsDuplicateMetadata(attribute: Attribute): Attribute = {
+    if (attribute.metadata.contains("__is_duplicate")) {
+      attribute.withMetadata(
+        new MetadataBuilder()
+          .withMetadata(attribute.metadata)
+          .remove("__is_duplicate")
+          .build()
+      )
+    } else {
+      attribute
     }
   }
 }

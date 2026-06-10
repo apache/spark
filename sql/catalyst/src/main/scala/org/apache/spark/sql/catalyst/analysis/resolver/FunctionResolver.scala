@@ -29,7 +29,10 @@ import org.apache.spark.sql.catalyst.expressions.{
   BinaryArithmetic,
   Collate,
   Expression,
+  ExpressionInfo,
   ExpressionWithRandomSeed,
+  Grouping,
+  GroupingID,
   InheritAnalysisRules,
   ResolvedCollation,
   TryEval,
@@ -123,7 +126,7 @@ class FunctionResolver(
     )
     val expressionResolutionContext = expressionResolutionContextStack.peek()
 
-    if (expressionInfo.exists(_.getGroup == "agg_funcs")) {
+    if (isAggregateFunction(expressionInfo)) {
       expressionResolutionContext.resolvingTreeUnderAggregateExpression = true
     }
 
@@ -224,4 +227,18 @@ class FunctionResolver(
         "exprWithSeed" -> toSQLExpr(expressionWithRandomSeed)
       )
     )
+
+  /**
+   * Returns true if the function is a true aggregate function whose children should be resolved
+   * with aggregate-expression context. Grouping and GroupingID are classified under "agg_funcs"
+   * for documentation purposes but are not real aggregates - they are Unevaluable placeholders
+   * rewritten into spark_grouping_id bit-extraction expressions.
+   */
+  private def isAggregateFunction(expressionInfo: Option[ExpressionInfo]): Boolean = {
+    expressionInfo.exists { info =>
+      info.getGroup == "agg_funcs" &&
+        info.getClassName != classOf[Grouping].getName &&
+        info.getClassName != classOf[GroupingID].getName
+    }
+  }
 }
