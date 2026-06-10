@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.command.v2
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedIdentifier, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{
+  AnalysisTest, UnresolvedAttribute,
+  UnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{
   AutoCdcIntoCommand,
@@ -84,7 +86,8 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |SEQUENCE BY ts""".stripMargin)
 
     val cmd = plan.asInstanceOf[CreateFlowCommand]
-    assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("mycat", "myschema", "myflow"))
+    assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts ==
+      Seq("mycat", "myschema", "myflow"))
   }
 
   test("CREATE FLOW AS AUTO CDC INTO - two-part target table name") {
