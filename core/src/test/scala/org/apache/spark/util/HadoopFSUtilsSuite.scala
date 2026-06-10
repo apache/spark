@@ -31,8 +31,13 @@ class HadoopFSUtilsSuite extends SparkFunSuite {
   // Accept everything; hidden-file filtering is exercised via the listHiddenFiles flag.
   private val acceptAllFilter: PathFilter = AcceptAllPathFilter
 
-  // Builds a tree with one regular file, hidden entries ('_'-, '.'-, '._COPYING_'-named) and a
-  // hidden subdir with its own file. Returns (rootPath, regularFileName).
+  /**
+   * Builds a tree with one regular file, hidden entries ('_'-, '.'-, '._COPYING_'-named) and a
+   * hidden subdir with its own file.
+   *
+   * @return a tuple of (root path to pass to the listing APIs, name of the only non-hidden file
+   *         in the tree).
+   */
   private def createHiddenFileTree(root: File): (Path, String) = {
     def writeFile(parent: File, name: String): Unit = {
       val file = new File(parent, name)
@@ -63,6 +68,9 @@ class HadoopFSUtilsSuite extends SparkFunSuite {
     assert(HadoopFSUtils.shouldFilterOutPathName("_ab_metadata"))
     assert(HadoopFSUtils.shouldFilterOutPathName("_cd_common_metadata"))
     assert(HadoopFSUtils.shouldFilterOutPathName("a._COPYING_"))
+    // listHiddenFiles short-circuits the predicates: nothing is considered hidden.
+    assert(!HadoopFSUtils.shouldFilterOutPathName(".ab", listHiddenFiles = true))
+    assert(!HadoopFSUtils.shouldFilterOutPath("/.ab", listHiddenFiles = true))
   }
 
   test("SPARK-45452: HadoopFSUtils - path filtering") {

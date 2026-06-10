@@ -190,6 +190,6 @@ private class PathFilterWrapper(
     val listHiddenFiles: Boolean) extends PathFilter with Serializable {
   override def accept(path: Path): Boolean = {
     (filter == null || filter.accept(path)) &&
-      (listHiddenFiles || !HadoopFSUtils.shouldFilterOutPathName(path.getName))
+      !HadoopFSUtils.shouldFilterOutPathName(path.getName, listHiddenFiles)
   }
 }

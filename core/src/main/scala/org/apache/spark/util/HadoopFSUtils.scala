@@ -101,7 +101,7 @@ private[spark] object HadoopFSUtils extends Logging {
         def next(): LocatedFileStatus = remoteIter.next
         def hasNext: Boolean = remoteIter.hasNext
       }.filterNot(status =>
-          !listHiddenFiles && shouldFilterOutPath(status.getPath.toString.substring(prefixLength)))
+        shouldFilterOutPath(status.getPath.toString.substring(prefixLength), listHiddenFiles))
         .filter(f => filter.accept(f.getPath))
         .toArray
       Seq((path, statues.toImmutableArraySeq))
@@ -263,7 +263,7 @@ private[spark] object HadoopFSUtils extends Logging {
 
     val filteredStatuses =
       statuses.filterNot(status =>
-        !listHiddenFiles && shouldFilterOutPathName(status.getPath.getName))
+        shouldFilterOutPathName(status.getPath.getName, listHiddenFiles))
 
     val allLeafStatuses = {
       val (dirs, topLevelFiles) = filteredStatuses.partition(_.isDirectory)
@@ -356,8 +356,12 @@ private[spark] object HadoopFSUtils extends Logging {
   }
   // scalastyle:on argcount
 
-  /** Checks if we should filter out this path name. */
-  def shouldFilterOutPathName(pathName: String): Boolean = {
+  /**
+   * Checks if we should filter out this path name. When `listHiddenFiles` is true, nothing is
+   * considered hidden and this always returns false.
+   */
+  def shouldFilterOutPathName(pathName: String, listHiddenFiles: Boolean = false): Boolean = {
+    if (listHiddenFiles) return false
     // We filter follow paths:
     // 1. everything that starts with _ and ., except _common_metadata and _metadata
     // because Parquet needs to find those metadata files from leaf files returned by this method.
@@ -373,9 +377,13 @@ private[spark] object HadoopFSUtils extends Logging {
   private val underscore: Regex = "/_[^=/]*/".r
   private val underscoreEnd: Regex = "/_[^=/]*$".r
 
-  /** Checks if we should filter out this path. */
+  /**
+   * Checks if we should filter out this path. When `listHiddenFiles` is true, nothing is
+   * considered hidden and this always returns false.
+   */
   @scala.annotation.tailrec
-  def shouldFilterOutPath(path: String): Boolean = {
+  def shouldFilterOutPath(path: String, listHiddenFiles: Boolean = false): Boolean = {
+    if (listHiddenFiles) return false
     if (path.contains("/.") || path.endsWith("._COPYING_")) return true
     underscoreEnd.findFirstIn(path) match {
       case Some(dir) if dir.equals("/_metadata") || dir.equals("/_common_metadata") => false
@@ -383,9 +391,9 @@ private[spark] object HadoopFSUtils extends Logging {
       case None =>
         underscore.findFirstIn(path) match {
           case Some(dir) if dir.equals("/_metadata/") =>
-            shouldFilterOutPath(path.replaceFirst("/_metadata", ""))
+            shouldFilterOutPath(path.replaceFirst("/_metadata", ""), listHiddenFiles)
           case Some(dir) if dir.equals("/_common_metadata/") =>
-            shouldFilterOutPath(path.replaceFirst("/_common_metadata", ""))
+            shouldFilterOutPath(path.replaceFirst("/_common_metadata", ""), listHiddenFiles)
           case Some(_) => true
           case None => false
         }
