@@ -30,7 +30,8 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * [[OrderingSuite]] covers `GenerateOrdering` / `PhysicalDataType.ordering` directly; this suite
  * covers the predicate expressions built on top of that ordering: the six [[BinaryComparison]]
  * operators, [[In]] / [[InSet]], and [[Least]] / [[Greatest]] -- in interpreted, codegen and
- * unsafe-projection modes (via `checkEvaluation`).
+ * unsafe-projection modes (via `checkEvaluation`). Each test iterates both flavors at all
+ * precisions; the physical values are precision-blind, so the coverage is identical.
  */
 class TimestampNanosComparisonSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -46,8 +47,8 @@ class TimestampNanosComparisonSuite extends SparkFunSuite with ExpressionEvalHel
 
   private def lit(v: TimestampNanosVal, dt: DataType): Literal = Literal.create(v, dt)
 
-  for (dt <- nanosTypes) {
-    test(s"$dt: equality operators") {
+  test("equality operators") {
+    for (dt <- nanosTypes) {
       // Distinct instances with equal fields, to prove value (not reference) equality.
       val smallCopy = nanosVal(1000L, 100)
       checkEvaluation(EqualTo(lit(small, dt), lit(smallCopy, dt)), true)
@@ -56,8 +57,10 @@ class TimestampNanosComparisonSuite extends SparkFunSuite with ExpressionEvalHel
       checkEvaluation(EqualTo(lit(small, dt), lit(mid, dt)), false)
       checkEvaluation(EqualNullSafe(lit(small, dt), lit(mid, dt)), false)
     }
+  }
 
-    test(s"$dt: null semantics") {
+  test("null semantics") {
+    for (dt <- nanosTypes) {
       val nullLit = Literal.create(null, dt)
       checkEvaluation(EqualTo(nullLit, lit(small, dt)), null)
       checkEvaluation(LessThan(nullLit, lit(small, dt)), null)
@@ -65,8 +68,10 @@ class TimestampNanosComparisonSuite extends SparkFunSuite with ExpressionEvalHel
       checkEvaluation(EqualNullSafe(lit(small, dt), nullLit), false)
       checkEvaluation(EqualNullSafe(nullLit, Literal.create(null, dt)), true)
     }
+  }
 
-    test(s"$dt: ordering operators") {
+  test("ordering operators") {
+    for (dt <- nanosTypes) {
       // Sub-microsecond tie-breaker: same epochMicros, nanosWithinMicro decides.
       checkEvaluation(LessThan(lit(small, dt), lit(mid, dt)), true)
       checkEvaluation(LessThanOrEqual(lit(small, dt), lit(mid, dt)), true)
@@ -81,8 +86,10 @@ class TimestampNanosComparisonSuite extends SparkFunSuite with ExpressionEvalHel
       checkEvaluation(LessThanOrEqual(lit(small, dt), lit(small, dt)), true)
       checkEvaluation(GreaterThanOrEqual(lit(small, dt), lit(small, dt)), true)
     }
+  }
 
-    test(s"$dt: extreme values") {
+  test("extreme values") {
+    for (dt <- nanosTypes) {
       val min = nanosVal(Long.MinValue, 0)
       val max = nanosVal(Long.MaxValue, 999)
       val preEpoch = nanosVal(-1L, 999)
@@ -92,8 +99,10 @@ class TimestampNanosComparisonSuite extends SparkFunSuite with ExpressionEvalHel
       checkEvaluation(LessThan(lit(preEpoch, dt), lit(epoch, dt)), true)
       checkEvaluation(GreaterThan(lit(epoch, dt), lit(preEpoch, dt)), true)
     }
+  }
 
-    test(s"$dt: In and InSet") {
+  test("In and InSet") {
+    for (dt <- nanosTypes) {
       checkEvaluation(In(lit(small, dt), Seq(lit(mid, dt), lit(big, dt))), false)
       checkEvaluation(
         In(lit(small, dt), Seq(lit(mid, dt), lit(nanosVal(1000L, 100), dt))), true)
@@ -101,8 +110,10 @@ class TimestampNanosComparisonSuite extends SparkFunSuite with ExpressionEvalHel
       checkEvaluation(InSet(lit(small, dt), Set[Any](small, big)), true)
       checkEvaluation(InSet(lit(mid, dt), Set[Any](small, big)), false)
     }
+  }
 
-    test(s"$dt: Least and Greatest") {
+  test("Least and Greatest") {
+    for (dt <- nanosTypes) {
       checkEvaluation(Least(Seq(lit(mid, dt), lit(big, dt), lit(small, dt))), small)
       checkEvaluation(Greatest(Seq(lit(mid, dt), lit(big, dt), lit(small, dt))), big)
       checkEvaluation(
