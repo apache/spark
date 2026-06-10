@@ -484,6 +484,11 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      // The TIMESTAMP(NANOS) parquet type postdates Spark's switch to the proleptic Gregorian
+      // calendar, so no legacy hybrid-calendar writer could have produced it. Nanos values are
+      // always proleptic Gregorian and are exempt from datetime rebasing
+      // (`spark.sql.parquet.datetimeRebaseModeInRead` only covers DATE, TIMESTAMP_MILLIS and
+      // TIMESTAMP_MICROS).
       case _: TimestampLTZNanosType
         if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
           parquetType.getLogicalTypeAnnotation
@@ -493,8 +498,7 @@ private[parquet] class ParquetRowConverter(
             val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
             val nanosWithinMicro =
               Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toShort
-            this.updater.set(
-              TimestampNanosVal.fromParts(timestampRebaseFunc(epochMicros), nanosWithinMicro))
+            this.updater.set(TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro))
           }
         }
 

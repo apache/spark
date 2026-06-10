@@ -162,30 +162,61 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
   }
 
   test("SPARK-57102: reading a foreign TIMESTAMP(NANOS) file fails when the feature is disabled") {
-    withTempPath { dir =>
-      val file = new File(dir, "foreign.parquet")
-      writeForeignNanosParquet(file, isAdjustedToUTC = false, Seq(Some(123L)))
-      withSQLConf(
-        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false",
-        SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "false") {
-        val e = intercept[AnalysisException] {
-          spark.read.parquet(file.getCanonicalPath).schema
+    Seq(true, false).foreach { isAdjustedToUTC =>
+      withTempPath { dir =>
+        val file = new File(dir, "foreign.parquet")
+        writeForeignNanosParquet(file, isAdjustedToUTC, Seq(Some(123L)))
+        withSQLConf(
+          SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false",
+          SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "false") {
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.read.parquet(file.getCanonicalPath).schema
+            },
+            condition = "PARQUET_TYPE_ILLEGAL",
+            parameters = Map("parquetType" -> s"INT64 (TIMESTAMP(NANOS,$isAdjustedToUTC))"))
         }
-        assert(e.getMessage.contains("NANOS") || e.getMessage.contains("Parquet"))
       }
     }
   }
 
   test("SPARK-57102: writing a timestamp outside the INT64 epoch-nanos range fails loudly") {
     withNanosEnabled {
-      withTempPath { dir =>
-        val df = spark.sql("SELECT TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999' AS ntz")
-        val e = intercept[SparkException] {
-          df.write.parquet(dir.getCanonicalPath)
+      Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
+        withTempPath { dir =>
+          val df = spark.sql(s"SELECT $typeName '9999-12-31 23:59:59.999999999' AS ts")
+          val e = intercept[SparkException] {
+            df.write.parquet(dir.getCanonicalPath)
+          }
+          assert(
+            hasCause(e, classOf[ArithmeticException]),
+            s"Expected an arithmetic overflow for $typeName, but got: ${e.getMessage}")
         }
-        assert(
-          hasCause(e, classOf[ArithmeticException]),
-          s"Expected an arithmetic overflow, but got: ${e.getMessage}")
+      }
+    }
+  }
+
+  test("SPARK-57102: datetime rebase configs do not affect TIMESTAMP(NANOS) reads") {
+    withNanosEnabled {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        withTempPath { dir =>
+          val file = new File(dir, "ltz.parquet")
+          // 1800-01-01 00:00:00 UTC predates the last Julian-to-Gregorian switch instant of the
+          // rebase logic, so applying a timestamp rebase (or the EXCEPTION-mode guard) on this
+          // value would change the result or fail the read.
+          writeForeignNanosParquet(
+            file, isAdjustedToUTC = true, Seq(Some(-5364662400000000000L)))
+          Seq("EXCEPTION", "CORRECTED", "LEGACY").foreach { mode =>
+            withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> mode) {
+              checkAnswer(
+                spark.read.parquet(file.getCanonicalPath),
+                spark.sql(
+                  "SELECT TIMESTAMP_LTZ '1800-01-01 00:00:00.000000000'").collect().toSeq)
+            }
+          }
+        }
       }
     }
   }

@@ -189,14 +189,14 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     }
   }
 
-  // `inShredded` indicates whether the current traversal is nested within a shredded Variant
-  // schema. This affects how timestamp values are written.
   private def timestampNanosToEpochNanos(value: TimestampNanosVal): Long = {
     Math.addExact(
       Math.multiplyExact(value.epochMicros, DateTimeConstants.NANOS_PER_MICROS),
       value.nanosWithinMicro.toLong)
   }
 
+  // `inShredded` indicates whether the current traversal is nested within a shredded Variant
+  // schema. This affects how timestamp values are written.
   private def makeWriter(dataType: DataType, inShredded: Boolean): ValueWriter = {
     dataType match {
       case NullType => // No values of NullType should ever be written, as all values are null.
@@ -275,6 +275,8 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
         // MICROS time unit.
         (row: SpecializedGetters, ordinal: Int) => recordConsumer.addLong(row.getLong(ordinal))
 
+      // TIMESTAMP(NANOS) values are always proleptic Gregorian and are exempt from datetime
+      // rebasing; see the TIMESTAMP(NANOS) converters in `ParquetRowConverter` for details.
       case _: TimestampLTZNanosType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addLong(timestampNanosToEpochNanos(row.getTimestampLTZNanos(ordinal)))
