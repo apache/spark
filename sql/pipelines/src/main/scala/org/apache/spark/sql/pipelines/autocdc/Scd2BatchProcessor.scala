@@ -910,8 +910,8 @@ case class Scd2BatchProcessor(
    * Convert surviving decomposition tails into tombstones.
    *
    * A decomposition tail that survives deletion cleanup is an unmatched delete boundary; setting
-   * [[recordStartAtFieldName]], [[startAtColName]], and [[endAtColName]] to the tail's end
-   * sequence lets downstream aux handling preserve it as a tombstone.
+   * [[recordStartAtFieldName]], and [[startAtColName]] to the tail's end sequence lets downstream
+   * aux handling preserve it as a tombstone.
    *
    * For example, if an existing closed upsert `[startAt=10, endAt=20)` is bisected by an event at
    * `15`, decomposition first produces an open head `[10, null)` plus a tail `[null, 20)`;
@@ -1190,9 +1190,9 @@ object Scd2BatchProcessor {
    * Temporary in that the columns have no observable side effect or persistence across
    * microbatches.
    */
-  private[autocdc] val previousEndAtColName: String =
+  private val previousEndAtColName: String =
     s"${AutoCdcReservedNames.prefix}previous_end_at"
-  private[autocdc] val isRedundantDeleteEncodingColName: String =
+  private val isRedundantDeleteEncodingColName: String =
     s"${AutoCdcReservedNames.prefix}is_redundant_delete_encoding"
 
   /**

@@ -1924,7 +1924,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // values. The first row begins a fresh run with startAt=5. The second row, sharing the
     // tracked value, is a continuation of that run and inherits the run head's startAt.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 5L, null, Row(5L)),
       Row(1, "alice", 10L, null, Row(10L))
     )
 
@@ -1949,7 +1949,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // its existing startAt encodes the true global run start and must be preserved -
     // and propagated to the in-window continuation.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 2L,  null, Row(5L)),
+      Row(1, "alice", 2L, null, Row(5L)),
       Row(1, "alice", 10L, null, Row(10L))
     )
 
@@ -1973,8 +1973,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // first run at the second event's effective recordStartAt and starts a new run whose
     // startAt is the new event's recordStartAt.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  null, Row(5L)),
-      Row(1, "bob",   10L, null, Row(10L))
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "bob", 10L, null, Row(10L))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -1982,8 +1982,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  10L,  Row(5L)),
-        Row(1, "bob",   10L, null, Row(10L))
+        Row(1, "alice", 5L, 10L, Row(5L)),
+        Row(1, "bob", 10L, null, Row(10L))
       )
     )
   }
@@ -1996,7 +1996,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Three consecutive open upserts all agreeing on the tracked column form one no-op
     // run. Every row in the run must end up with the run head's startAt.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 5L, null, Row(5L)),
       Row(1, "alice", 10L, null, Row(10L)),
       Row(1, "alice", 15L, null, Row(15L))
     )
@@ -2024,7 +2024,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // column as tracked. The two rows agree on `name` but disagree on `status`, which
     // should therefore start a new run.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "active", 5L, null, Row(5L)),
       Row(1, "alice", "inactive", 10L, null, Row(10L))
     )
 
@@ -2033,7 +2033,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", "active",   5L,  10L,  Row(5L)),
+        Row(1, "alice", "active", 5L, 10L, Row(5L)),
         Row(1, "alice", "inactive", 10L, null, Row(10L))
       )
     )
@@ -2055,7 +2055,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // `status` is excluded from tracking, so the two rows are tracked-equal on the
     // remaining columns (`name`). They should collapse into a single no-op run.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "active", 5L, null, Row(5L)),
       Row(1, "alice", "inactive", 10L, null, Row(10L))
     )
 
@@ -2064,7 +2064,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", "active",   5L, null, Row(5L)),
+        Row(1, "alice", "active", 5L, null, Row(5L)),
         Row(1, "alice", "inactive", 5L, null, Row(10L))
       )
     )
@@ -2089,8 +2089,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // nothing to compare, every consecutive upsert pair collapses into a single run -
     // even when the user-visible data differs on every column.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", "active",   5L,  null, Row(5L)),
-      Row(1, "bob",   "inactive", 10L, null, Row(10L))
+      Row(1, "alice", "active", 5L, null, Row(5L)),
+      Row(1, "bob", "inactive", 10L, null, Row(10L))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2098,8 +2098,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", "active",   5L, null, Row(5L)),
-        Row(1, "bob",   "inactive", 5L, null, Row(10L))
+        Row(1, "alice", "active", 5L, null, Row(5L)),
+        Row(1, "bob", "inactive", 5L, null, Row(10L))
       )
     )
   }
@@ -2113,8 +2113,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // pass through identically. The bracketing upserts close (10) and reopen (15) around
     // the tombstone.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  null, Row(5L)),
-      Row(1, "alice", 10L, 10L,  Row(10L)),
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "alice", 10L, 10L, Row(10L)),
       Row(1, "alice", 15L, null, Row(15L))
     )
 
@@ -2123,8 +2123,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  10L,  Row(5L)),
-        Row(1, "alice", 10L, 10L,  Row(10L)),
+        Row(1, "alice", 5L, 10L, Row(5L)),
+        Row(1, "alice", 10L, 10L, Row(10L)),
         Row(1, "alice", 15L, null, Row(15L))
       )
     )
@@ -2139,8 +2139,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // null) is excluded from upsert reconciliation. The tail's startAt must stay null
     // and its endAt must pass through unchanged.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,   null, Row(5L)),
-      Row(1, "alice", null, 30L,  Row(null))
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "alice", null, 30L, Row(null))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2148,7 +2148,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,   30L, Row(5L)),
+        Row(1, "alice", 5L, 30L, Row(5L)),
         Row(1, "alice", null, 30L, Row(null))
       )
     )
@@ -2163,8 +2163,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // The closed upsert already ended at 15 - strictly before the next event - so its
     // endAt is left intact.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  15L,  Row(5L)),
-      Row(1, "bob",   20L, null, Row(20L))
+      Row(1, "alice", 5L, 15L, Row(5L)),
+      Row(1, "bob", 20L, null, Row(20L))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2172,8 +2172,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  15L,  Row(5L)),
-        Row(1, "bob",   20L, null, Row(20L))
+        Row(1, "alice", 5L, 15L, Row(5L)),
+        Row(1, "bob", 20L, null, Row(20L))
       )
     )
   }
@@ -2186,8 +2186,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // at recordStartAt=20. The first run head must be closed at 20 because the run ends
     // there.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  null, Row(5L)),
-      Row(1, "bob",   20L, null, Row(20L))
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "bob", 20L, null, Row(20L))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2195,8 +2195,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  20L,  Row(5L)),
-        Row(1, "bob",   20L, null, Row(20L))
+        Row(1, "alice", 5L, 20L, Row(5L)),
+        Row(1, "bob", 20L, null, Row(20L))
       )
     )
   }
@@ -2211,7 +2211,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // the now-redundant tombstone for the next transform to drop based on the
     // shape locked in here.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  20L, Row(5L)),
+      Row(1, "alice", 5L, 20L, Row(5L)),
       Row(1, "alice", 20L, 20L, Row(20L))
     )
 
@@ -2220,7 +2220,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  20L, Row(5L)),
+        Row(1, "alice", 5L, 20L, Row(5L)),
         Row(1, "alice", 20L, 20L, Row(20L))
       )
     )
@@ -2234,8 +2234,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Downstream transforms identify decomposition tails by recordStartAt = null, so
     // reconciliation must not synthesize a value into the tail's _cdc_metadata.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,   null, Row(5L)),
-      Row(1, "alice", null, 30L,  Row(null))
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "alice", null, 30L, Row(null))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2275,9 +2275,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Mix of canonical post-decomposition row shapes so we exercise multiple reconciliation
     // branches under the schema-preservation contract.
     val df = microbatchOf(schema)(
-      Row(1, "alice", 5L,   null, Row(5L)),
-      Row(1, "alice", null, 30L,  Row(null)),
-      Row(1, "alice", 30L,  30L,  Row(30L))
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(1, "alice", null, 30L, Row(null)),
+      Row(1, "alice", 30L, 30L, Row(30L))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2300,8 +2300,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // or successor. Reconciliation must handle the missing neighbors cleanly and pass the
     // single rows through.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  null, Row(5L)),
-      Row(2, "bob",   10L, 20L,  Row(10L))
+      Row(1, "alice", 5L, null, Row(5L)),
+      Row(2, "bob", 10L, 20L, Row(10L))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2309,8 +2309,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  null, Row(5L)),
-        Row(2, "bob",   10L, 20L,  Row(10L))
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(2, "bob", 10L, 20L, Row(10L))
       )
     )
   }
@@ -2330,7 +2330,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Only `name` is tracked. Two rows agreeing on name but differing on status are
     // tracked-equal and should collapse into one run.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", "active",   5L,  null, Row(5L)),
+      Row(1, "alice", "active", 5L, null, Row(5L)),
       Row(1, "alice", "inactive", 10L, null, Row(10L))
     )
 
@@ -2339,7 +2339,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", "active",   5L, null, Row(5L)),
+        Row(1, "alice", "active", 5L, null, Row(5L)),
         Row(1, "alice", "inactive", 5L, null, Row(10L))
       )
     )
@@ -2369,7 +2369,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val userSchema = new StructType().add("id", IntegerType).add("name", StringType)
 
     val df = targetTableOf(userSchema)(
-      Row(1, null, 5L,  null, Row(5L)),
+      Row(1, null, 5L, null, Row(5L)),
       Row(1, null, 10L, null, Row(10L))
     )
 
@@ -2390,9 +2390,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
 
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 5L, null, Row(5L)),
       Row(1, "alice", 10L, null, Row(10L)),
-      Row(1, "alice", 15L, 15L,  Row(15L))
+      Row(1, "alice", 15L, 15L, Row(15L))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2400,9 +2400,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  null, Row(5L)),
-        Row(1, "alice", 5L,  15L,  Row(10L)),
-        Row(1, "alice", 15L, 15L,  Row(15L))
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, 15L, Row(10L)),
+        Row(1, "alice", 15L, 15L, Row(15L))
       )
     )
   }
@@ -2414,10 +2414,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Two keys, each with a fresh-key run head + tracked-equal continuation. The two
     // partitions must reconcile independently.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  null, Row(5L)),
+      Row(1, "alice", 5L, null, Row(5L)),
       Row(1, "alice", 10L, null, Row(10L)),
-      Row(2, "bob",   20L, null, Row(20L)),
-      Row(2, "bob",   25L, null, Row(25L))
+      Row(2, "bob", 20L, null, Row(20L)),
+      Row(2, "bob", 25L, null, Row(25L))
     )
 
     val result = processor.reconcileStartAndEndAt(df)
@@ -2425,10 +2425,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  null, Row(5L)),
-        Row(1, "alice", 5L,  null, Row(10L)),
-        Row(2, "bob",   20L, null, Row(20L)),
-        Row(2, "bob",   20L, null, Row(25L))
+        Row(1, "alice", 5L, null, Row(5L)),
+        Row(1, "alice", 5L, null, Row(10L)),
+        Row(2, "bob", 20L, null, Row(20L)),
+        Row(2, "bob", 20L, null, Row(25L))
       )
     )
   }
@@ -2466,8 +2466,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // at 15, the event closes at the tail's boundary 20, leaving the [null, 20) tail redundant
     // because the [15, 20) upsert already encodes the boundary.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 10L,  15L, Row(10L)),
-      Row(1, "bob",   15L,  20L, Row(15L)),
+      Row(1, "alice", 10L, 15L, Row(10L)),
+      Row(1, "bob", 15L, 20L, Row(15L)),
       Row(1, "alice", null, 20L, Row(null))
     )
 
@@ -2477,7 +2477,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       df = result,
       expectedAnswer = Seq(
         Row(1, "alice", 10L, 15L, Row(10L)),
-        Row(1, "bob",   15L, 20L, Row(15L))
+        Row(1, "bob", 15L, 20L, Row(15L))
       )
     )
   }
@@ -2490,7 +2490,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // The closed upsert ends at 15 but the tombstone is at 20, so the delete boundary is not
     // encoded by the preceding row and the tombstone must survive.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  15L, Row(5L)),
+      Row(1, "alice", 5L, 15L, Row(5L)),
       Row(1, "alice", 20L, 20L, Row(20L))
     )
 
@@ -2499,7 +2499,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  15L, Row(5L)),
+        Row(1, "alice", 5L, 15L, Row(5L)),
         Row(1, "alice", 20L, 20L, Row(20L))
       )
     )
@@ -2513,7 +2513,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // The preceding closed upsert ends at 12, strictly before the tail's boundary 20, so the
     // tail is an unmatched delete boundary that must survive for promotion to a tombstone.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,   12L, Row(5L)),
+      Row(1, "alice", 5L, 12L, Row(5L)),
       Row(1, "alice", null, 20L, Row(null))
     )
 
@@ -2522,7 +2522,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,   12L, Row(5L)),
+        Row(1, "alice", 5L, 12L, Row(5L)),
         Row(1, "alice", null, 20L, Row(null))
       )
     )
@@ -2536,8 +2536,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // With no predecessor, previousEndAt is null and `null <=> endAt` is false, so a leading
     // tombstone (key 1) and a leading decomposition tail (key 2) both survive.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 15L,  15L, Row(15L)),
-      Row(2, "bob",   null, 20L, Row(null))
+      Row(1, "alice", 15L, 15L, Row(15L)),
+      Row(2, "bob", null, 20L, Row(null))
     )
 
     val result = processor.dropLeftoverDeletesPostReconciliation(df)
@@ -2545,8 +2545,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 15L,  15L, Row(15L)),
-        Row(2, "bob",   null, 20L, Row(null))
+        Row(1, "alice", 15L, 15L, Row(15L)),
+        Row(2, "bob", null, 20L, Row(null))
       )
     )
   }
@@ -2560,8 +2560,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // row is delete-encoded, so the `isDeleteEncodedRow` guard must keep both. The overlapping
     // intervals are synthetic here purely to isolate the guard.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,  20L, Row(5L)),
-      Row(1, "bob",   10L, 20L, Row(10L))
+      Row(1, "alice", 5L, 20L, Row(5L)),
+      Row(1, "bob", 10L, 20L, Row(10L))
     )
 
     val result = processor.dropLeftoverDeletesPostReconciliation(df)
@@ -2569,8 +2569,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  20L, Row(5L)),
-        Row(1, "bob",   10L, 20L, Row(10L))
+        Row(1, "alice", 5L, 20L, Row(5L)),
+        Row(1, "bob", 10L, 20L, Row(10L))
       )
     )
   }
@@ -2585,7 +2585,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     val df = targetTableOf(userSchema)(
       Row(1, "alice", 10L, 15L, Row(10L)),
       Row(1, "alice", 15L, 15L, Row(15L)),
-      Row(2, "bob",   15L, 15L, Row(15L))
+      Row(2, "bob", 15L, 15L, Row(15L))
     )
 
     val result = processor.dropLeftoverDeletesPostReconciliation(df)
@@ -2594,7 +2594,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       df = result,
       expectedAnswer = Seq(
         Row(1, "alice", 10L, 15L, Row(10L)),
-        Row(2, "bob",   15L, 15L, Row(15L))
+        Row(2, "bob", 15L, 15L, Row(15L))
       )
     )
   }
@@ -2608,9 +2608,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // redundant tail at 20. Both delete-encoded rows are encoded by their immediate predecessors
     // and drop together in one window pass.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,   10L, Row(5L)),
-      Row(1, "alice", 10L,  10L, Row(10L)),
-      Row(1, "bob",   15L,  20L, Row(15L)),
+      Row(1, "alice", 5L, 10L, Row(5L)),
+      Row(1, "alice", 10L, 10L, Row(10L)),
+      Row(1, "bob", 15L, 20L, Row(15L)),
       Row(1, "alice", null, 20L, Row(null))
     )
 
@@ -2619,8 +2619,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  10L, Row(5L)),
-        Row(1, "bob",   15L, 20L, Row(15L))
+        Row(1, "alice", 5L, 10L, Row(5L)),
+        Row(1, "bob", 15L, 20L, Row(15L))
       )
     )
   }
@@ -2634,7 +2634,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // The [null, 20) tail becomes a tombstone [20, 20] with recordStartAt = 20; the closed
     // upsert is untouched.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 10L,  20L, Row(10L)),
+      Row(1, "alice", 10L, 20L, Row(10L)),
       Row(1, "alice", null, 20L, Row(null))
     )
 
@@ -2656,9 +2656,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // No decomposition tails present: a tombstone, an open upsert, and a closed upsert must all
     // pass through identically.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 15L, 15L,  Row(15L)),
-      Row(2, "bob",   5L,  null, Row(5L)),
-      Row(3, "carol", 5L,  15L,  Row(5L))
+      Row(1, "alice", 15L, 15L, Row(15L)),
+      Row(2, "bob", 5L, null, Row(5L)),
+      Row(3, "carol", 5L, 15L, Row(5L))
     )
 
     val result = processor.promoteDecompositionTailsToTombstones(df)
@@ -2666,9 +2666,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 15L, 15L,  Row(15L)),
-        Row(2, "bob",   5L,  null, Row(5L)),
-        Row(3, "carol", 5L,  15L,  Row(5L))
+        Row(1, "alice", 15L, 15L, Row(15L)),
+        Row(2, "bob", 5L, null, Row(5L)),
+        Row(3, "carol", 5L, 15L, Row(5L))
       )
     )
   }
@@ -2720,7 +2720,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // A tail (rewritten) plus a non-tail (passed through) so both projection paths are exercised.
     val df = microbatchOf(schema)(
       Row(1, "alice", null, 20L, Row(null)),
-      Row(1, "alice", 5L,   20L, Row(5L))
+      Row(1, "alice", 5L, 20L, Row(5L))
     )
 
     val result = processor.promoteDecompositionTailsToTombstones(df)
@@ -2740,10 +2740,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // Each key carries a closed upsert plus a decomposition tail; only the tails are rewritten.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 5L,   20L, Row(5L)),
+      Row(1, "alice", 5L, 20L, Row(5L)),
       Row(1, "alice", null, 20L, Row(null)),
-      Row(2, "bob",   8L,   30L, Row(8L)),
-      Row(2, "bob",   null, 30L, Row(null))
+      Row(2, "bob", 8L, 30L, Row(8L)),
+      Row(2, "bob", null, 30L, Row(null))
     )
 
     val result = processor.promoteDecompositionTailsToTombstones(df)
@@ -2751,10 +2751,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 5L,  20L, Row(5L)),
+        Row(1, "alice", 5L, 20L, Row(5L)),
         Row(1, "alice", 20L, 20L, Row(20L)),
-        Row(2, "bob",   8L,  30L, Row(8L)),
-        Row(2, "bob",   30L, 30L, Row(30L))
+        Row(2, "bob", 8L, 30L, Row(8L)),
+        Row(2, "bob", 30L, 30L, Row(30L))
       )
     )
   }
