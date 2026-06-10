@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableVa
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, TimeType}
+import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
  * Server-side (catalyst) type operations for the Types Framework.
@@ -81,6 +81,18 @@ trait TypeOps extends Serializable {
    *   Java class (e.g., classOf[Long] for TimeType)
    */
   def getJavaClass: Class[_]
+
+  /**
+   * Returns the boxed Java class used in code generation where a nullable, reference-typed value
+   * is required (e.g., array/map elements, external-value validation). Defaults to
+   * [[getJavaClass]], which is correct for object-backed types; primitive-backed types must
+   * override it to return the corresponding boxed class (e.g., classOf[java.lang.Long] for a
+   * Long-backed type).
+   *
+   * @return
+   *   boxed Java class
+   */
+  def getBoxedJavaClass: Class[_] = getJavaClass
 
   /**
    * Returns a MutableValue instance for use in SpecificInternalRow.
@@ -231,6 +243,8 @@ object TypeOps {
     if (!SQLConf.get.typesFrameworkEnabled) return None
     dt match {
       case tt: TimeType => Some(TimeTypeOps(tt))
+      case t: TimestampNTZNanosType => Some(TimestampNTZNanosTypeOps(t))
+      case t: TimestampLTZNanosType => Some(TimestampLTZNanosTypeOps(t))
       // Add new types here - single registration point
       case _ => None
     }

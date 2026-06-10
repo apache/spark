@@ -378,17 +378,17 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-coursier-
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-${{ matrix.java }}-${{ matrix.hadoop }}-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
       run: |
         if [ -f ./dev/free_disk_space ]; then
@@ -425,8 +425,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -612,16 +612,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Cache Coursier local repository
       uses: actions/cache@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -636,13 +636,13 @@ jobs:
     - name: Package compile output
       run: |
         find . -type d -name target -not -path './build/*' -not -path './.git/*' -print0 \
-          | tar --null -czf compile-artifact.tar.gz -T -
-        ls -lh compile-artifact.tar.gz
+          | tar --null -cf - -T - | zstd -c -T0 > compile-artifact.tar.zst
+        ls -lh compile-artifact.tar.zst
     - name: Upload compile artifact
       uses: actions/upload-artifact@v7
       with:
         name: spark-compile-${{ inputs.branch }}-${{ github.run_id }}
-        path: compile-artifact.tar.gz
+        path: compile-artifact.tar.zst
         retention-days: 1
         if-no-files-found: error
 
@@ -741,16 +741,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
       shell: 'script -q -e -c "bash {0}"'
       run: ./dev/free_disk_space_container
@@ -783,8 +783,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     # Run the tests.
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
@@ -927,16 +927,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -956,8 +956,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -1078,23 +1078,23 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
         path: ~/.m2/repository
-        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          docs-maven-
+          docs-maven-${{ runner.os }}-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -1277,23 +1277,23 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Cache Maven local repository
       uses: actions/cache@v5
       with:
         path: ~/.m2/repository
-        key: docs-maven-${{ hashFiles('**/pom.xml') }}
+        key: docs-maven-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          docs-maven-
+          docs-maven-${{ runner.os }}-
     - name: Free up disk space
       run: ./dev/free_disk_space_container
     - name: Install Java ${{ inputs.java }}
@@ -1472,16 +1472,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1499,14 +1499,14 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Cache TPC-DS generated data
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
       with:
         path: ./tpcds-sf-1
-        key: tpcds-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
+        key: tpcds-${{ runner.os }}-${{ hashFiles('.github/workflows/build_and_test.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Checkout tpcds-kit repository
       if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
       uses: actions/checkout@v6
@@ -1604,16 +1604,16 @@ jobs:
           build/apache-maven-*
           build/*.jar
           ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+        key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
         restore-keys: |
-          build-
+          build-${{ runner.os }}-
     - name: Restore Coursier local repository
       uses: actions/cache/restore@v5
       with:
         path: ~/.cache/coursier
-        key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+        key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
-          ${{ runner.os }}-coursier-
+          coursier-${{ runner.os }}-
     - name: Install Java ${{ inputs.java }}
       uses: actions/setup-java@v5
       with:
@@ -1631,8 +1631,8 @@ jobs:
       if: steps.download-precompiled.outcome == 'success'
       continue-on-error: true
       run: |
-        tar -xzf compile-artifact.tar.gz
-        rm compile-artifact.tar.gz
+        zstd -dc compile-artifact.tar.zst | tar -xf -
+        rm compile-artifact.tar.zst
     - name: Run tests
       env: ${{ fromJSON(inputs.envs) }}
       run: |
@@ -1690,16 +1690,16 @@ jobs:
             build/apache-maven-*
             build/*.jar
             ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
+          key: build-${{ runner.os }}-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
           restore-keys: |
-            build-
+            build-${{ runner.os }}-
       - name: Restore Coursier local repository
         uses: actions/cache/restore@v5
         with:
           path: ~/.cache/coursier
-          key: ${{ runner.os }}-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
+          key: coursier-${{ runner.os }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
           restore-keys: |
-            ${{ runner.os }}-coursier-
+            coursier-${{ runner.os }}-
       - name: Free up disk space
         run: |
           if [ -f ./dev/free_disk_space ]; then
@@ -1722,8 +1722,8 @@ jobs:
         if: steps.download-precompiled.outcome == 'success'
         continue-on-error: true
         run: |
-          tar -xzf compile-artifact.tar.gz
-          rm compile-artifact.tar.gz
+          zstd -dc compile-artifact.tar.zst | tar -xf -
+          rm compile-artifact.tar.zst
       - name: Install R
         run: |
           sudo apt update

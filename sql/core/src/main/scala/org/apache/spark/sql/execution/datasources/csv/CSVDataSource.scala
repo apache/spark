@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{FileNotFoundException, InputStream, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
 
 import scala.util.control.NonFatal
@@ -71,7 +71,14 @@ abstract class CSVDataSource extends Serializable {
     parsedOptions.singleVariantColumn match {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
-        if (inputPaths.nonEmpty) {
+        if (parsedOptions.archiveFormatEnabled &&
+            inputPaths.exists(f => ArchiveReader.isArchivePath(f.getPath))) {
+          // Schema inference is not yet supported for tar archives. Returning None makes Spark
+          // raise its standard "Unable to infer schema ... It must be specified manually" error
+          // (UNABLE_TO_INFER_SCHEMA), so reading an archive requires an explicit `.schema(...)`.
+          // Inferring a schema by streaming archive entries is planned as a follow-up.
+          None
+        } else if (inputPaths.nonEmpty) {
           Some(infer(sparkSession, inputPaths, parsedOptions))
         } else {
           None
@@ -83,6 +90,46 @@ abstract class CSVDataSource extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType
+
+  /**
+   * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the CSV parser without
+   * unpacking it to disk. The whole archive is a single split (see `CSVFileFormat.isSplitable`); a
+   * fresh header checker and parser are built per entry so each entry is parsed exactly like a
+   * standalone CSV file -- its header, if any, validated and dropped independently. The
+   * mode-specific implementation turns one entry into rows via `parseStream` / `parseIterator`.
+   *
+   * @param getParser builds a fresh [[UnivocityParser]].
+   * @param getHeaderChecker builds a fresh [[CSVHeaderChecker]] for `(isStartOfFile, source)`.
+   */
+  def readArchive(
+      conf: Configuration,
+      file: PartitionedFile,
+      getParser: () => UnivocityParser,
+      getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
+      requiredSchema: StructType): Iterator[InternalRow]
+
+  /**
+   * Shared driver used by the [[readArchive]] implementations: streams each non-skipped entry's
+   * `(parser, headerChecker, stream)` -- a fresh parser/header checker per entry -- through
+   * `parseEntry`. The header checker `source` (`CSV archive entry: <archive>!/<entryName>`) names
+   * the entry in error messages.
+   */
+  protected def streamArchiveEntries(
+      conf: Configuration,
+      file: PartitionedFile,
+      getParser: () => UnivocityParser,
+      getHeaderChecker: (Boolean, String) => CSVHeaderChecker)(
+      parseEntry: (UnivocityParser, CSVHeaderChecker, InputStream) => Iterator[InternalRow])
+    : Iterator[InternalRow] = {
+    ArchiveReader(file.toPath).readEntries(conf) { (entryName, in) =>
+      val headerChecker =
+        getHeaderChecker(true, s"CSV archive entry: ${file.urlEncodedPath}!/$entryName")
+      val parser = getParser()
+      headerChecker.setHeaderForSingleVariantColumn =
+        CSVDataSource.setHeaderForSingleVariantColumn(conf, file, parser)
+      parseEntry(parser, headerChecker, in)
+    }
+  }
 }
 
 object CSVDataSource extends Logging {
@@ -142,6 +189,36 @@ object TextInputCSVDataSource extends CSVDataSource {
     headerChecker.setHeaderForSingleVariantColumn =
       CSVDataSource.setHeaderForSingleVariantColumn(conf, file, parser)
     UnivocityParser.parseIterator(lines, parser, headerChecker, requiredSchema)
+  }
+
+  override def readArchive(
+      conf: Configuration,
+      file: PartitionedFile,
+      getParser: () => UnivocityParser,
+      getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
+      requiredSchema: StructType): Iterator[InternalRow] =
+    // Stream each tar entry through the line-based parser, treating the entry exactly like a
+    // standalone CSV file (a fresh parser/header checker is built per entry).
+    streamArchiveEntries(conf, file, getParser, getHeaderChecker) { (parser, headerChecker, in) =>
+      UnivocityParser.parseIterator(
+        entryLines(in, parser.options), parser, headerChecker, requiredSchema)
+    }
+
+  /**
+   * Decodes one archive entry's bytes into the same CSV line strings the non-archive [[readFile]]
+   * path feeds to the parser: [[ArchiveReader.lineIterator]] splits the entry into lines (honoring
+   * a custom line separator) and each line is decoded with the configured charset. Like `readFile`,
+   * the decoded lines are fed to `UnivocityParser.parseIterator` without a re-appended terminator.
+   *
+   * @param in bytes of one already-decompressed archive entry; not closed here (the archive owns
+   *           the underlying stream).
+   * @param options CSV options supplying the read line separator and charset.
+   * @return an iterator over the entry's lines.
+   */
+  private def entryLines(in: InputStream, options: CSVOptions): Iterator[String] = {
+    ArchiveReader.lineIterator(in, options.lineSeparatorInRead).map { line =>
+      new String(line.getBytes, 0, line.getLength, options.charset)
+    }
   }
 
   override def infer(
@@ -226,6 +303,18 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
       headerChecker,
       requiredSchema)
   }
+
+  override def readArchive(
+      conf: Configuration,
+      file: PartitionedFile,
+      getParser: () => UnivocityParser,
+      getHeaderChecker: (Boolean, String) => CSVHeaderChecker,
+      requiredSchema: StructType): Iterator[InternalRow] =
+    // Stream each tar entry whole through the multi-line parser (a fresh parser/header checker is
+    // built per entry).
+    streamArchiveEntries(conf, file, getParser, getHeaderChecker) { (parser, headerChecker, in) =>
+      UnivocityParser.parseStream(in, parser, headerChecker, requiredSchema)
+    }
 
   override def infer(
       sparkSession: SparkSession,

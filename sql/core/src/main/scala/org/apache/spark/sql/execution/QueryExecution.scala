@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, LazyExpression, NamePar
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CompoundBody, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer, Union, UnresolvedWith, WithCTE}
-import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.transactions.TransactionUtils
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -291,15 +291,13 @@ class QueryExecution(
       assertAnalyzed()
       assertSupported()
 
-      // During a transaction, skip cache substitution. This is to avoid replacing relations
-      // loaded by the transactional catalog with potentially stale relations cached before
-      // the transaction was active.
-      if (transactionOpt.isDefined) {
-        normalized
-      } else {
-        // Clone the plan to avoid sharing the plan instance between different stages like
-        // analyzing, optimizing and planning.
-        sparkSession.sharedState.cacheManager.useCachedData(normalized.clone())
+      // Clone the plan to avoid sharing the plan instance between different stages like
+      // analyzing, optimizing and planning.
+      val planToRewrite = normalized.clone()
+      val cacheManager = sparkSession.sharedState.cacheManager
+      transactionOpt match {
+        case Some(txn) => cacheManager.useCachedData(planToRewrite, txn)
+        case None => cacheManager.useCachedData(planToRewrite)
       }
     }
   }
@@ -359,7 +357,9 @@ class QueryExecution(
     val plan = executePhase(QueryPlanningTracker.PLANNING) {
       // clone the plan to avoid sharing the plan instance between different stages like analyzing,
       // optimizing and planning.
-      QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+      QueryPlanningTracker.withTracker(tracker) {
+        QueryExecution.prepareForExecution(preparations, sparkPlan.clone())
+      }
     }
     // Note: For eagerly executed command it might have already been called in
     // `eagerlyExecutedCommand` and is a noop here.
@@ -790,14 +790,21 @@ object QueryExecution {
   private[execution] def prepareForExecution(
       preparations: Seq[Rule[SparkPlan]],
       plan: SparkPlan): SparkPlan = {
-    val planChangeLogger = new PlanChangeLogger[SparkPlan]()
-    val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
-      val result = rule.apply(sp)
-      planChangeLogger.logRule(rule.ruleName, sp, result)
-      result
-    }
-    planChangeLogger.logBatch("Preparations", plan, preparedPlan)
-    preparedPlan
+    new PhysicalRuleExecutor("Preparations", preparations).execute(plan)
+  }
+
+  /**
+   * A [[RuleExecutor]] that applies a fixed list of physical-plan rules once each (a single
+   * `FixedPoint(1)` batch). Routing physical preparation and AQE rules through a `RuleExecutor`
+   * reuses its built-in per-rule timing, which records into the active [[QueryPlanningTracker]]
+   * exactly like the analyzer and optimizer, instead of re-implementing the timing loop. A
+   * `FixedPoint(1)` strategy (rather than `Once`) is used so each rule runs exactly once without
+   * triggering the idempotence re-check, as preparation rules are not necessarily idempotent.
+   */
+  private[execution] class PhysicalRuleExecutor(
+      batchName: String,
+      rules: Seq[Rule[SparkPlan]]) extends RuleExecutor[SparkPlan] {
+    override protected def batches: Seq[Batch] = Seq(Batch(batchName, FixedPoint(1), rules: _*))
   }
 
   /**

@@ -448,6 +448,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         s"failed to match ${toSQLId(funcName)} at `addNewFunction`.")
   }
 
+  def lambdaVariableAlreadyDefinedError(id: Long): Throwable = {
+    new IllegalArgumentException(s"Lambda variable $id cannot be redefined")
+  }
+
+  def lambdaVariableNotDefinedError(id: Long): Throwable = {
+    new IllegalArgumentException(
+      s"Lambda variable $id is not defined in the current codegen scope")
+  }
+
   def cannotGenerateCodeForIncomparableTypeError(
       codeType: String, dataType: DataType): Throwable = {
     SparkException.internalError(
@@ -1725,6 +1734,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "version" -> version,
         "key" -> key))
+  }
+
+  def unsupportedHiveMetastoreVersionForJavaError(
+      version: String,
+      requiredJavaVersion: Int,
+      currentJavaVersion: Int): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA",
+      messageParameters = Map(
+        "version" -> version,
+        "requiredJavaVersion" -> requiredJavaVersion.toString,
+        "currentJavaVersion" -> currentJavaVersion.toString))
   }
 
   def loadHiveClientCausesNoClassDefFoundError(

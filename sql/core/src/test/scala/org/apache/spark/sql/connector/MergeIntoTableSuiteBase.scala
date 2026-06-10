@@ -1198,10 +1198,18 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
 
         assert(txn.currentState == Committed)
         assert(txn.isClosed)
-        // both target and source must have been read through the transaction catalog
-        assert(txnTables.size == 2)
+        // The source TxnTable is still created during analysis (the txn catalog routes the
+        // load), but cache substitution reuses the cached scan instead of issuing a fresh
+        // BatchScanExec for the source, so only the target appears in the executed plan.
+        assert(txn.catalog.txnTables.size == 2)
+        assert(txnTables.size == 1)
+        assert(txnTables.contains(tableNameAsString))
         assert(table.version() == "2")
-        assert(txnTables(sourceNameAsString).scanEvents.nonEmpty)
+        // The connector accepted the cached source scan via registerScans, which also
+        // records the scan as a read event against the source's TxnTable.
+        assert(txn.registeredScans.nonEmpty)
+        val sourceTxnTable = txn.catalog.txnTables.values.find(_.name == sourceNameAsString).get
+        assert(sourceTxnTable.scanEvents.nonEmpty)
         assert(txnTables(tableNameAsString).scanEvents.nonEmpty)
 
         checkAnswer(
