@@ -122,9 +122,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // (recordStartAt = null, endAt = 10) takes its endAt as its effective ordering sequence,
     // so the expected per-key window order is 5, tail(10), 15.
     val df = targetTableOf(userSchema)(
-      Row(1, "v15",  15L,  null, Row(15L)),
-      Row(1, "tail", null, 10L,  Row(null)),
-      Row(1, "v5",   5L,   null, Row(5L))
+      Row(1, "v15", 15L, null, Row(15L)),
+      Row(1, "tail", null, 10L, Row(null)),
+      Row(1, "v5", 5L, null, Row(5L))
     )
 
     val withRn = df.withColumn(
@@ -134,9 +134,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = withRn,
       expectedAnswer = Seq(
-        Row(1, "v5",   5L,   null, Row(5L),    1),
-        Row(1, "tail", null, 10L,  Row(null),  2),
-        Row(1, "v15",  15L,  null, Row(15L),   3)
+        Row(1, "v5", 5L, null, Row(5L), 1),
+        Row(1, "tail", null, 10L, Row(null), 2),
+        Row(1, "v15", 15L, null, Row(15L), 3)
       )
     )
   }
@@ -152,12 +152,12 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     //   key=2: upsert-representing-first (open variant)   - open upsert vs tombstone.
     //   key=3: upsert-representing-first (closed variant) - closed run head vs tombstone.
     val df = targetTableOf(userSchema)(
-      Row(1, "tomb",   10L,  10L,  Row(10L)),
-      Row(1, "tail",   null, 10L,  Row(null)),
-      Row(2, "tomb",   10L,  10L,  Row(10L)),
-      Row(2, "open",   10L,  null, Row(10L)),
-      Row(3, "tomb",   10L,  10L,  Row(10L)),
-      Row(3, "closed", 10L,  20L,  Row(10L))
+      Row(1, "tomb", 10L, 10L, Row(10L)),
+      Row(1, "tail", null, 10L, Row(null)),
+      Row(2, "tomb", 10L, 10L, Row(10L)),
+      Row(2, "open", 10L, null, Row(10L)),
+      Row(3, "tomb", 10L, 10L, Row(10L)),
+      Row(3, "closed", 10L, 20L, Row(10L))
     )
 
     val withRn = df.withColumn(
@@ -167,12 +167,12 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = withRn,
       expectedAnswer = Seq(
-        Row(1, "tail",   null, 10L,  Row(null), 1),
-        Row(1, "tomb",   10L,  10L,  Row(10L),  2),
-        Row(2, "open",   10L,  null, Row(10L),  1),
-        Row(2, "tomb",   10L,  10L,  Row(10L),  2),
-        Row(3, "closed", 10L,  20L,  Row(10L),  1),
-        Row(3, "tomb",   10L,  10L,  Row(10L),  2)
+        Row(1, "tail", null, 10L, Row(null), 1),
+        Row(1, "tomb", 10L, 10L, Row(10L), 2),
+        Row(2, "open", 10L, null, Row(10L), 1),
+        Row(2, "tomb", 10L, 10L, Row(10L), 2),
+        Row(3, "closed", 10L, 20L, Row(10L), 1),
+        Row(3, "tomb", 10L, 10L, Row(10L), 2)
       )
     )
   }
@@ -186,9 +186,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // of rows for key 1, and vice versa.
     val df = targetTableOf(userSchema)(
       Row(1, "k1-15", 15L, null, Row(15L)),
-      Row(2, "k2-7",  7L,  null, Row(7L)),
-      Row(1, "k1-5",  5L,  null, Row(5L)),
-      Row(2, "k2-3",  3L,  null, Row(3L)),
+      Row(2, "k2-7", 7L, null, Row(7L)),
+      Row(1, "k1-5", 5L, null, Row(5L)),
+      Row(2, "k2-3", 3L, null, Row(3L)),
       Row(1, "k1-10", 10L, null, Row(10L)),
       Row(2, "k2-20", 20L, null, Row(20L))
     )
@@ -200,11 +200,11 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = withRn,
       expectedAnswer = Seq(
-        Row(1, "k1-5",  5L,  null, Row(5L),  1),
+        Row(1, "k1-5", 5L, null, Row(5L), 1),
         Row(1, "k1-10", 10L, null, Row(10L), 2),
         Row(1, "k1-15", 15L, null, Row(15L), 3),
-        Row(2, "k2-3",  3L,  null, Row(3L),  1),
-        Row(2, "k2-7",  7L,  null, Row(7L),  2),
+        Row(2, "k2-3", 3L, null, Row(3L), 1),
+        Row(2, "k2-7", 7L, null, Row(7L), 2),
         Row(2, "k2-20", 20L, null, Row(20L), 3)
       )
     )
@@ -1334,9 +1334,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     //   - "tomb":  startAt == endAt, so it is excluded by the strict `<` closed check
     //   - "last":  closed, but is the last row in its window partition (no successor)
     val df = targetTableOf(userSchema)(
-      Row(1, "open", 100, 5L,  null, Row(5L)),
-      Row(1, "tomb", 200, 10L, 10L,  Row(10L)),
-      Row(1, "last", 300, 15L, 25L,  Row(15L))
+      Row(1, "open", 100, 5L, null, Row(5L)),
+      Row(1, "tomb", 200, 10L, 10L, Row(10L)),
+      Row(1, "last", 300, 15L, 25L, Row(15L))
     )
 
     val result = processor.decomposeOutOfOrderRows(df)
@@ -1344,9 +1344,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "open", 100, 5L,  null, Row(5L)),
-        Row(1, "tomb", 200, 10L, 10L,  Row(10L)),
-        Row(1, "last", 300, 15L, 25L,  Row(15L))
+        Row(1, "open", 100, 5L, null, Row(5L)),
+        Row(1, "tomb", 200, 10L, 10L, Row(10L)),
+        Row(1, "last", 300, 15L, 25L, Row(15L))
       )
     )
   }
@@ -1363,8 +1363,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // than 10. Here the successor lands at exactly 10, which means it doesn't actually
     // bisect the closed row and therefore shouldn't decompose it.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 42, 5L,  10L,  Row(5L)),
-      Row(1, "bob",   99, 10L, null, Row(10L))
+      Row(1, "alice", 42, 5L, 10L, Row(5L)),
+      Row(1, "bob", 99, 10L, null, Row(10L))
     )
 
     val result = processor.decomposeOutOfOrderRows(df)
@@ -1372,8 +1372,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 42, 5L,  10L,  Row(5L)),
-        Row(1, "bob",   99, 10L, null, Row(10L))
+        Row(1, "alice", 42, 5L, 10L, Row(5L)),
+        Row(1, "bob", 99, 10L, null, Row(10L))
       )
     )
   }
@@ -1393,8 +1393,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Both head and tail must carry the parent's data columns (value="alice", amount=42)
     // identically.
     val df = targetTableOf(userSchema)(
-      Row(1, "alice", 42, 5L,  30L,  Row(5L)),
-      Row(1, "bob",   99, 15L, null, Row(15L))
+      Row(1, "alice", 42, 5L, 30L, Row(5L)),
+      Row(1, "bob", 99, 15L, null, Row(15L))
     )
 
     val result = processor.decomposeOutOfOrderRows(df)
@@ -1402,9 +1402,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 42, 5L,   null, Row(5L)),    // head
-        Row(1, "alice", 42, null, 30L,  Row(null)),  // tail
-        Row(1, "bob",   99, 15L,  null, Row(15L))    // bisecting successor
+        Row(1, "alice", 42, 5L, null, Row(5L)), // head
+        Row(1, "alice", 42, null, 30L, Row(null)), // tail
+        Row(1, "bob", 99, 15L, null, Row(15L))    // bisecting successor
       )
     )
   }
@@ -1421,15 +1421,15 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // own row kind (the bisection check looks only at recordStartAt < parent.endAt).
     val df = targetTableOf(userSchema)(
       // Key 1: bisected by an open upsert.
-      Row(1, "alice", 1, 5L,  50L,  Row(5L)),
-      Row(1, "bob",   2, 10L, null, Row(10L)),
+      Row(1, "alice", 1, 5L, 50L, Row(5L)),
+      Row(1, "bob", 2, 10L, null, Row(10L)),
 
       // Key 2: bisected by a tombstone.
-      Row(2, "carol", 3, 5L,  50L, Row(5L)),
-      Row(2, "dave",  4, 20L, 20L, Row(20L)),
+      Row(2, "carol", 3, 5L, 50L, Row(5L)),
+      Row(2, "dave", 4, 20L, 20L, Row(20L)),
 
       // Key 3: bisected by another closed non-tombstone.
-      Row(3, "eve",   5, 5L,  50L, Row(5L)),
+      Row(3, "eve", 5, 5L, 50L, Row(5L)),
       Row(3, "frank", 6, 30L, 40L, Row(30L))
     )
 
@@ -1439,17 +1439,17 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       df = result,
       expectedAnswer = Seq(
         // Key 1.
-        Row(1, "alice", 1, 5L,   null, Row(5L)),
-        Row(1, "alice", 1, null, 50L,  Row(null)),
-        Row(1, "bob",   2, 10L,  null, Row(10L)),
+        Row(1, "alice", 1, 5L, null, Row(5L)),
+        Row(1, "alice", 1, null, 50L, Row(null)),
+        Row(1, "bob", 2, 10L, null, Row(10L)),
         // Key 2.
-        Row(2, "carol", 3, 5L,   null, Row(5L)),
-        Row(2, "carol", 3, null, 50L,  Row(null)),
-        Row(2, "dave",  4, 20L,  20L,  Row(20L)),
+        Row(2, "carol", 3, 5L, null, Row(5L)),
+        Row(2, "carol", 3, null, 50L, Row(null)),
+        Row(2, "dave", 4, 20L, 20L, Row(20L)),
         // Key 3.
-        Row(3, "eve",   5, 5L,   null, Row(5L)),
-        Row(3, "eve",   5, null, 50L,  Row(null)),
-        Row(3, "frank", 6, 30L,  40L,  Row(30L))
+        Row(3, "eve", 5, 5L, null, Row(5L)),
+        Row(3, "eve", 5, null, 50L, Row(null)),
+        Row(3, "frank", 6, 30L, 40L, Row(30L))
       )
     )
   }
@@ -1465,8 +1465,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // non-chronological order. The window orders rows by effective recordStartAt, so the
     // result must still recognize that [5, 30] is bisected by the row at recordStartAt = 15.
     val df = targetTableOf(userSchema)(
-      Row(1, "bob",   99, 15L, null, Row(15L)),  // appears first in input
-      Row(1, "alice", 42, 5L,  30L,  Row(5L))    // appears last in input but lower in window
+      Row(1, "bob", 99, 15L, null, Row(15L)), // appears first in input
+      Row(1, "alice", 42, 5L, 30L, Row(5L))    // appears last in input but lower in window
     )
 
     val result = processor.decomposeOutOfOrderRows(df)
@@ -1474,9 +1474,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "alice", 42, 5L,   null, Row(5L)),
-        Row(1, "alice", 42, null, 30L,  Row(null)),
-        Row(1, "bob",   99, 15L,  null, Row(15L))
+        Row(1, "alice", 42, 5L, null, Row(5L)),
+        Row(1, "alice", 42, null, 30L, Row(null)),
+        Row(1, "bob", 99, 15L, null, Row(15L))
       )
     )
   }
@@ -1493,8 +1493,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // bisecting successor must NOT bleed into key 2's partition.
     val df = targetTableOf(userSchema)(
       // Key 1: closed [5, 30] bisected by recordStartAt = 15.
-      Row(1, "alice", 42, 5L,  30L,  Row(5L)),
-      Row(1, "bob",   99, 15L, null, Row(15L)),
+      Row(1, "alice", 42, 5L, 30L, Row(5L)),
+      Row(1, "bob", 99, 15L, null, Row(15L)),
 
       // Key 2: a single closed [5, 30] with no successor in its own partition.
       Row(2, "carol", 7, 5L, 30L, Row(5L))
@@ -1506,9 +1506,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       df = result,
       expectedAnswer = Seq(
         // Key 1 decomposes.
-        Row(1, "alice", 42, 5L,   null, Row(5L)),
-        Row(1, "alice", 42, null, 30L,  Row(null)),
-        Row(1, "bob",   99, 15L,  null, Row(15L)),
+        Row(1, "alice", 42, 5L, null, Row(5L)),
+        Row(1, "alice", 42, null, 30L, Row(null)),
+        Row(1, "bob", 99, 15L, null, Row(15L)),
         // Key 2 passes through.
         Row(2, "carol", 7, 5L, 30L, Row(5L))
       )
@@ -1528,9 +1528,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     //   [10, 25] bisected by [15, 20]   -> decomposes
     //   [15, 20] is the last row        -> passes through
     val df = targetTableOf(userSchema)(
-      Row(1, "outer",  1, 5L,  30L, Row(5L)),
+      Row(1, "outer", 1, 5L, 30L, Row(5L)),
       Row(1, "middle", 2, 10L, 25L, Row(10L)),
-      Row(1, "inner",  3, 15L, 20L, Row(15L))
+      Row(1, "inner", 3, 15L, 20L, Row(15L))
     )
 
     val result = processor.decomposeOutOfOrderRows(df)
@@ -1539,13 +1539,13 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       df = result,
       expectedAnswer = Seq(
         // outer decomposes.
-        Row(1, "outer",  1, 5L,   null, Row(5L)),
-        Row(1, "outer",  1, null, 30L,  Row(null)),
+        Row(1, "outer", 1, 5L, null, Row(5L)),
+        Row(1, "outer", 1, null, 30L, Row(null)),
         // middle decomposes.
-        Row(1, "middle", 2, 10L,  null, Row(10L)),
-        Row(1, "middle", 2, null, 25L,  Row(null)),
+        Row(1, "middle", 2, 10L, null, Row(10L)),
+        Row(1, "middle", 2, null, 25L, Row(null)),
         // inner passes through.
-        Row(1, "inner",  3, 15L,  20L,  Row(15L))
+        Row(1, "inner", 3, 15L, 20L, Row(15L))
       )
     )
   }
@@ -1571,14 +1571,14 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     def commentMetadata(comment: String): Metadata =
       new MetadataBuilder().putString("comment", comment).build()
-    
+
     val cdcMetadataInnerSchema = new StructType().add(
       Scd2BatchProcessor.recordStartAtFieldName,
       LongType,
       nullable = true,
       metadata = commentMetadata("inner __RECORD_START_AT")
     )
-    
+
     val schema = new StructType()
       .add("id", IntegerType, nullable = false, metadata = commentMetadata("user key"))
       .add("value", StringType, nullable = true, metadata = commentMetadata("user data"))
@@ -1594,8 +1594,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     // Closed [5, 30] bisected by recordStartAt = 15.
     val df = microbatchOf(schema)(
-      Row(1, "alice", 5L,  30L,  Row(5L)),
-      Row(1, "bob",   15L, null, Row(15L))
+      Row(1, "alice", 5L, 30L, Row(5L)),
+      Row(1, "bob", 15L, null, Row(15L))
     )
 
     val result = processor.decomposeOutOfOrderRows(df)
@@ -1623,19 +1623,19 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     //   closed upsert:       startAt < endAt, recordStartAt non-null
     //   decomposition tail:  startAt and recordStartAt null, endAt non-null
     val df = targetTableOf(userSchema)(
-      Row(1, "tomb",   10L,  10L,  Row(10L)),
-      Row(2, "open",   20L,  null, Row(20L)),
-      Row(3, "closed", 30L,  40L,  Row(30L)),
-      Row(4, "tail",   null, 50L,  Row(null))
+      Row(1, "tomb", 10L, 10L, Row(10L)),
+      Row(2, "open", 20L, null, Row(20L)),
+      Row(3, "closed", 30L, 40L, Row(30L)),
+      Row(4, "tail", null, 50L, Row(null))
     )
 
     checkAnswer(
       df = processor.assertWellFormedRowsPostDecomposition(df, batchId = 0),
       expectedAnswer = Seq(
-        Row(1, "tomb",   10L,  10L,  Row(10L)),
-        Row(2, "open",   20L,  null, Row(20L)),
-        Row(3, "closed", 30L,  40L,  Row(30L)),
-        Row(4, "tail",   null, 50L,  Row(null))
+        Row(1, "tomb", 10L, 10L, Row(10L)),
+        Row(2, "open", 20L, null, Row(20L)),
+        Row(3, "closed", 30L, 40L, Row(30L)),
+        Row(4, "tail", null, 50L, Row(null))
       )
     )
   }
@@ -1685,9 +1685,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // Distinct effective recordStartAts within the dataframe, so no redundancies - identity
     // transformation expected.
     val df = targetTableOf(userSchema)(
-      Row(1, "v5",  5L,  null, Row(5L)),
+      Row(1, "v5", 5L, null, Row(5L)),
       Row(1, "v10", 10L, null, Row(10L)),
-      Row(1, "v15", 15L, 20L,  Row(15L))
+      Row(1, "v15", 15L, 20L, Row(15L))
     )
 
     val result = processor.dropRedundantRowsPostDecomposition(df)
@@ -1695,9 +1695,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "v5",  5L,  null, Row(5L)),
+        Row(1, "v5", 5L, null, Row(5L)),
         Row(1, "v10", 10L, null, Row(10L)),
-        Row(1, "v15", 15L, 20L,  Row(15L))
+        Row(1, "v15", 15L, 20L, Row(15L))
       )
     )
   }
@@ -1711,7 +1711,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // survives because the window's tiebreaker among truly-identical rows is intentionally
     // undefined.
     val df = targetTableOf(userSchema)(
-      Row(1, "first",  10L, null, Row(10L)),
+      Row(1, "first", 10L, null, Row(10L)),
       Row(1, "second", 10L, null, Row(10L))
     )
 
@@ -1732,7 +1732,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // and is dropped. The tombstone (last in partition) survives.
     val df = targetTableOf(userSchema)(
       Row(1, "open", 10L, null, Row(10L)),
-      Row(1, "tomb", 10L, 10L,  Row(10L))
+      Row(1, "tomb", 10L, 10L, Row(10L))
     )
 
     val result = processor.dropRedundantRowsPostDecomposition(df)
@@ -1755,8 +1755,8 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // tail encodes is already represented by the coincident event, so the leading tail is
     // dropped. The event survives.
     val df = targetTableOf(userSchema)(
-      Row(1, "tail",  null, 30L,  Row(null)),
-      Row(1, "event", 30L,  null, Row(30L))
+      Row(1, "tail", null, 30L, Row(null)),
+      Row(1, "event", 30L, null, Row(30L))
     )
 
     val result = processor.dropRedundantRowsPostDecomposition(df)
@@ -1779,10 +1779,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // successor on effective recordStartAt, so the redundancy filter doesn't fire. Every
     // row survives.
     val df = targetTableOf(userSchema)(
-      Row(1, "open",  10L,  null, Row(10L)),
-      Row(1, "next1", 15L,  null, Row(15L)),
-      Row(1, "tail",  null, 30L,  Row(null)),
-      Row(1, "next2", 35L,  null, Row(35L))
+      Row(1, "open", 10L, null, Row(10L)),
+      Row(1, "next1", 15L, null, Row(15L)),
+      Row(1, "tail", null, 30L, Row(null)),
+      Row(1, "next2", 35L, null, Row(35L))
     )
 
     val result = processor.dropRedundantRowsPostDecomposition(df)
@@ -1790,10 +1790,10 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df = result,
       expectedAnswer = Seq(
-        Row(1, "open",  10L,  null, Row(10L)),
-        Row(1, "next1", 15L,  null, Row(15L)),
-        Row(1, "tail",  null, 30L,  Row(null)),
-        Row(1, "next2", 35L,  null, Row(35L))
+        Row(1, "open", 10L, null, Row(10L)),
+        Row(1, "next1", 15L, null, Row(15L)),
+        Row(1, "tail", null, 30L, Row(null)),
+        Row(1, "next2", 35L, null, Row(35L))
       )
     )
   }
@@ -1831,9 +1831,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // duplicate plus the distinct event. We don't assert which user-data variant of the
     // duplicate survives.
     val df = targetTableOf(userSchema)(
-      Row(1, "dup1",     5L,  null, Row(5L)),
-      Row(1, "dup2",     5L,  null, Row(5L)),
-      Row(1, "dup3",     5L,  null, Row(5L)),
+      Row(1, "dup1", 5L, null, Row(5L)),
+      Row(1, "dup2", 5L, null, Row(5L)),
+      Row(1, "dup3", 5L, null, Row(5L)),
       Row(1, "different", 10L, null, Row(10L))
     )
 
@@ -1861,14 +1861,14 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     //          covered).
     //   key=4: two tombstones.
     val df = targetTableOf(userSchema)(
-      Row(1, "openA",   10L, null, Row(10L)),
-      Row(1, "openB",   10L, null, Row(10L)),
-      Row(2, "open",    10L, null, Row(10L)),
-      Row(2, "closed",  10L, 20L,  Row(10L)),
-      Row(3, "closedA", 10L, 20L,  Row(10L)),
-      Row(3, "closedB", 10L, 20L,  Row(10L)),
-      Row(4, "tombA",   10L, 10L,  Row(10L)),
-      Row(4, "tombB",   10L, 10L,  Row(10L))
+      Row(1, "openA", 10L, null, Row(10L)),
+      Row(1, "openB", 10L, null, Row(10L)),
+      Row(2, "open", 10L, null, Row(10L)),
+      Row(2, "closed", 10L, 20L, Row(10L)),
+      Row(3, "closedA", 10L, 20L, Row(10L)),
+      Row(3, "closedB", 10L, 20L, Row(10L)),
+      Row(4, "tombA", 10L, 10L, Row(10L)),
+      Row(4, "tombB", 10L, 10L, Row(10L))
     )
 
     val expectedSurvivorsPerKey: Map[Int, Set[String]] = Map(
@@ -1880,7 +1880,7 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
 
     val survivors = processor.dropRedundantRowsPostDecomposition(df).collect()
     assert(survivors.length == 4)
-    
+
     expectedSurvivorsPerKey.foreach { case (k, validValues) =>
       val perKey = survivors.filter(_.getInt(0) == k)
       assert(perKey.length == 1)
@@ -1898,9 +1898,9 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     // redundancy filter then drops every row whose successor shares its effective sequence,
     // leaving only the trailing tombstone.
     val df = targetTableOf(userSchema)(
-      Row(1, "tail", null, 10L,  Row(null)),
-      Row(1, "open", 10L,  null, Row(10L)),
-      Row(1, "tomb", 10L,  10L,  Row(10L))
+      Row(1, "tail", null, 10L, Row(null)),
+      Row(1, "open", 10L, null, Row(10L)),
+      Row(1, "tomb", 10L, 10L, Row(10L))
     )
 
     val result = processor.dropRedundantRowsPostDecomposition(df)
