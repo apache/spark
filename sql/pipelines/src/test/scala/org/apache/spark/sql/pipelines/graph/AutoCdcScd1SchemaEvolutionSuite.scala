@@ -579,7 +579,7 @@ class AutoCdcScd1SchemaEvolutionSuite
           ExpectedContext(
             fragment = s"`$catalog`.`$namespace`.`target`.`Value`",
             start = 0,
-            stop = 27
+            stop = s"`$catalog`.`$namespace`.`target`.`Value`".length - 1
           )
         )
       )

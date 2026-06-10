@@ -251,4 +251,9 @@ object SharedTablesInMemoryRowLevelOperationTableCatalog {
     new ConcurrentHashMap[Identifier, Table]()
 
   def reset(): Unit = sharedTables.clear()
+
+  /** Remove only entries whose namespace contains the given name. */
+  def clearNamespace(ns: String): Unit = {
+    sharedTables.keySet().removeIf(id => java.util.Arrays.asList(id.namespace(): _*).contains(ns))
+  }
 }

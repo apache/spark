@@ -46,8 +46,14 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
   /** v2 catalog name registered for AutoCDC E2E tests. Tests qualify tables as `cat.ns1.t`. */
   protected val catalog: String = "cat"
 
-  /** Namespace under [[catalog]] used by AutoCDC E2E tests. */
-  protected val namespace: String = "ns1"
+  /**
+   * Namespace under [[catalog]] used by AutoCDC E2E tests. Each concrete suite gets a unique
+   * namespace derived from its class name so that suites running in parallel in the same JVM
+   * do not collide on the shared static table map used by
+   * [[SharedTablesInMemoryRowLevelOperationTableCatalog]].
+   */
+  protected val namespace: String =
+    "ns_" + getClass.getSimpleName.toLowerCase(java.util.Locale.ROOT)
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -64,7 +70,9 @@ trait AutoCdcGraphExecutionTestMixin extends BeforeAndAfterEach {
   }
 
   override protected def afterEach(): Unit = {
-    SharedTablesInMemoryRowLevelOperationTableCatalog.reset()
+    // Remove only this suite's tables from the shared static map. A global reset() would
+    // destroy tables belonging to other suites that run in parallel in the same JVM.
+    SharedTablesInMemoryRowLevelOperationTableCatalog.clearNamespace(namespace)
     spark.sessionState.catalogManager.reset()
     spark.sessionState.conf.unsetConf(s"spark.sql.catalog.$catalog")
     spark.sessionState.conf.unsetConf(SQLConf.PIPELINES_MAX_FLOW_RETRY_ATTEMPTS.key)
