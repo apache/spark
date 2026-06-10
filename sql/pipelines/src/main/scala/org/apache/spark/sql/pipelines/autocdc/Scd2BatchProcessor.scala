@@ -854,6 +854,103 @@ case class Scd2BatchProcessor(
   }
 
   /**
+   * Drop delete-encoded rows (tombstones and decomposition tails) that became redundant after
+   * reconciliation.
+   *
+   * A tombstone or decomposition tail is redundant when the immediately preceding row's reconciled
+   * [[endAtColName]] equals its own sequence: the preceding upsert already encodes the delete
+   * boundary, so the standalone delete-encoded row should no longer be routed to aux.
+   *
+   * For example, an open upsert `[startAt=10, endAt=null)` followed by a tombstone at `15`
+   * reconciles into a closed upsert `[10, 15)`, making the tombstone redundant. Likewise, an
+   * existing closed `[10, 20)` bisected by an event at `15` reconciles the event into `[15, 20)`,
+   * making the `[null, 20)` decomposition tail redundant.
+   */
+  private[autocdc] def dropLeftoverDeletesPostReconciliation(
+      reconciledDf: DataFrame): DataFrame = {
+    val recordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAt = F.col(Scd2BatchProcessor.startAtColName)
+    val endAt = F.col(Scd2BatchProcessor.endAtColName)
+
+    // Both tombstones and decomposition tails encode a delete boundary in their `endAt`. Either
+    // becomes redundant when the immediately preceding upsert was reconciled to close exactly on
+    // that boundary, since the resulting closed upsert already carries it.
+    val isTombstone = RowClassifier.isTombstone(
+      recordStartAt = recordStartAt,
+      startAt = startAt,
+      endAt = endAt
+    )
+    val isDecompositionTail = RowClassifier.isDecompositionTail(
+      recordStartAt = recordStartAt,
+      startAt = startAt,
+      endAt = endAt
+    )
+    val isDeleteEncodedRow = isTombstone || isDecompositionTail
+
+    val withWindowCols = reconciledDf
+      .withColumn(
+        Scd2BatchProcessor.previousEndAtColName,
+        F.lag(endAt, 1).over(orderChronologicallyPerKeyWindow)
+      )
+      .withColumn(
+        Scd2BatchProcessor.isRedundantDeleteEncodingColName,
+        isDeleteEncodedRow && (F.col(Scd2BatchProcessor.previousEndAtColName) <=> endAt)
+      )
+
+    withWindowCols
+      .filter(!F.col(Scd2BatchProcessor.isRedundantDeleteEncodingColName))
+      .drop(
+        Scd2BatchProcessor.previousEndAtColName,
+        Scd2BatchProcessor.isRedundantDeleteEncodingColName
+      )
+  }
+
+  /**
+   * Convert surviving decomposition tails into tombstones.
+   *
+   * A decomposition tail that survives deletion cleanup is an unmatched delete boundary; setting
+   * [[recordStartAtFieldName]], [[startAtColName]], and [[endAtColName]] to the tail's end
+   * sequence lets downstream aux handling preserve it as a tombstone.
+   *
+   * For example, if an existing closed upsert `[startAt=10, endAt=20)` is bisected by an event at
+   * `15`, decomposition first produces an open head `[10, null)` plus a tail `[null, 20)`;
+   * reconciliation may close the head as `[10, 15)`, leaving the tail's boundary at `20` to be
+   * promoted into a tombstone.
+   */
+  private[autocdc] def promoteDecompositionTailsToTombstones(
+      reconciledDf: DataFrame): DataFrame = {
+    val recordStartAt =
+      Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAt = F.col(Scd2BatchProcessor.startAtColName)
+    val endAt = F.col(Scd2BatchProcessor.endAtColName)
+    val isDecompositionTail = RowClassifier.isDecompositionTail(
+      recordStartAt = recordStartAt,
+      startAt = startAt,
+      endAt = endAt
+    )
+
+    val outputColumns = reconciledDf.columns.map {
+      case c if c == AutoCdcReservedNames.cdcMetadataColName =>
+        val metadata = reconciledDf.schema(c).metadata
+        F.when(
+          isDecompositionTail,
+          Scd2BatchProcessor.constructCdcMetadataCol(
+            recordStartAt = endAt,
+            sequencingType = resolvedSequencingType
+          )
+        ).otherwise(F.col(c)).as(c, metadata)
+      case c if c == Scd2BatchProcessor.startAtColName =>
+        val metadata = reconciledDf.schema(c).metadata
+        F.when(isDecompositionTail, endAt).otherwise(startAt).as(c, metadata)
+      case c =>
+        F.col(c)
+    }
+
+    reconciledDf.select(outputColumns.toImmutableArraySeq: _*)
+  }
+
+  /**
    * Return the schema field names of columns selected for history-tracking on `df`:
    * the eligible user-data columns (those not in [[ChangeArgs.keys]] or the framework
    * reserved set) filtered through [[ChangeArgs.trackHistorySelection]].
@@ -1084,6 +1181,19 @@ object Scd2BatchProcessor {
     s"${AutoCdcReservedNames.prefix}final_start_at"
   private[autocdc] val finalEndAtColName: String =
     s"${AutoCdcReservedNames.prefix}final_end_at"
+
+  /**
+   * Names of temporary columns used by [[dropLeftoverDeletesPostReconciliation]] to identify
+   * delete-encoded rows (tombstones and decomposition tails) already encoded by the immediately
+   * preceding upsert row's [[endAtColName]].
+   *
+   * Temporary in that the columns have no observable side effect or persistence across
+   * microbatches.
+   */
+  private[autocdc] val previousEndAtColName: String =
+    s"${AutoCdcReservedNames.prefix}previous_end_at"
+  private[autocdc] val isRedundantDeleteEncodingColName: String =
+    s"${AutoCdcReservedNames.prefix}is_redundant_delete_encoding"
 
   /**
    * Name of the temporary column used to identify the sequence associated with the anchor

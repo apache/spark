@@ -2432,4 +2432,330 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  // =============== dropLeftoverDeletesPostReconciliation tests ===============
+
+  test("dropLeftoverDeletesPostReconciliation drops a tombstone whose sequence the preceding " +
+    "upsert was reconciled to close on") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A closed upsert [10, 15) immediately followed by a tombstone at 15. The upsert's reconciled
+    // endAt already encodes the delete boundary, so the standalone tombstone is redundant.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 10L, 15L, Row(10L)),
+      Row(1, "alice", 15L, 15L, Row(15L))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 10L, 15L, Row(10L))
+      )
+    )
+  }
+
+  test("dropLeftoverDeletesPostReconciliation drops a decomposition tail whose boundary the " +
+    "preceding upsert was reconciled to close on") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Reconciled state of an existing closed [10, 20) bisected by an event at 15: the head closes
+    // at 15, the event closes at the tail's boundary 20, leaving the [null, 20) tail redundant
+    // because the [15, 20) upsert already encodes the boundary.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 10L,  15L, Row(10L)),
+      Row(1, "bob",   15L,  20L, Row(15L)),
+      Row(1, "alice", null, 20L, Row(null))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 10L, 15L, Row(10L)),
+        Row(1, "bob",   15L, 20L, Row(15L))
+      )
+    )
+  }
+
+  test("dropLeftoverDeletesPostReconciliation keeps a tombstone whose sequence differs from " +
+    "the preceding upsert's reconciled endAt") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // The closed upsert ends at 15 but the tombstone is at 20, so the delete boundary is not
+    // encoded by the preceding row and the tombstone must survive.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  15L, Row(5L)),
+      Row(1, "alice", 20L, 20L, Row(20L))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  15L, Row(5L)),
+        Row(1, "alice", 20L, 20L, Row(20L))
+      )
+    )
+  }
+
+  test("dropLeftoverDeletesPostReconciliation keeps a decomposition tail whose boundary the " +
+    "preceding row does not close on") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // The preceding closed upsert ends at 12, strictly before the tail's boundary 20, so the
+    // tail is an unmatched delete boundary that must survive for promotion to a tombstone.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,   12L, Row(5L)),
+      Row(1, "alice", null, 20L, Row(null))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,   12L, Row(5L)),
+        Row(1, "alice", null, 20L, Row(null))
+      )
+    )
+  }
+
+  test("dropLeftoverDeletesPostReconciliation keeps a delete-encoded row that has no window " +
+    "predecessor") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // With no predecessor, previousEndAt is null and `null <=> endAt` is false, so a leading
+    // tombstone (key 1) and a leading decomposition tail (key 2) both survive.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 15L,  15L, Row(15L)),
+      Row(2, "bob",   null, 20L, Row(null))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 15L,  15L, Row(15L)),
+        Row(2, "bob",   null, 20L, Row(null))
+      )
+    )
+  }
+
+  test("dropLeftoverDeletesPostReconciliation never drops an upsert even when its endAt " +
+    "equals the preceding row's endAt") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Two closed upserts whose endAts coincide at 20. The `<=>` predicate matches, but neither
+    // row is delete-encoded, so the `isDeleteEncodedRow` guard must keep both. The overlapping
+    // intervals are synthetic here purely to isolate the guard.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,  20L, Row(5L)),
+      Row(1, "bob",   10L, 20L, Row(10L))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  20L, Row(5L)),
+        Row(1, "bob",   10L, 20L, Row(10L))
+      )
+    )
+  }
+
+  test("dropLeftoverDeletesPostReconciliation evaluates redundancy independently per key") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // key 1: a closed upsert [10, 15) followed by a redundant tombstone at 15 (dropped).
+    // key 2: a tombstone at 15 that is the first row in its window (kept) - the key-1 upsert
+    // must not be treated as its predecessor.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 10L, 15L, Row(10L)),
+      Row(1, "alice", 15L, 15L, Row(15L)),
+      Row(2, "bob",   15L, 15L, Row(15L))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 10L, 15L, Row(10L)),
+        Row(2, "bob",   15L, 15L, Row(15L))
+      )
+    )
+  }
+
+  test("dropLeftoverDeletesPostReconciliation drops a redundant tombstone and a redundant " +
+    "decomposition tail in a single pass") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // [5, 10) closed upsert then a redundant tombstone at 10, then [15, 20) closed upsert then a
+    // redundant tail at 20. Both delete-encoded rows are encoded by their immediate predecessors
+    // and drop together in one window pass.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,   10L, Row(5L)),
+      Row(1, "alice", 10L,  10L, Row(10L)),
+      Row(1, "bob",   15L,  20L, Row(15L)),
+      Row(1, "alice", null, 20L, Row(null))
+    )
+
+    val result = processor.dropLeftoverDeletesPostReconciliation(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  10L, Row(5L)),
+        Row(1, "bob",   15L, 20L, Row(15L))
+      )
+    )
+  }
+
+  // =============== promoteDecompositionTailsToTombstones tests ===============
+
+  test("promoteDecompositionTailsToTombstones rewrites a decomposition tail into a tombstone") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // The [null, 20) tail becomes a tombstone [20, 20] with recordStartAt = 20; the closed
+    // upsert is untouched.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 10L,  20L, Row(10L)),
+      Row(1, "alice", null, 20L, Row(null))
+    )
+
+    val result = processor.promoteDecompositionTailsToTombstones(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 10L, 20L, Row(10L)),
+        Row(1, "alice", 20L, 20L, Row(20L))
+      )
+    )
+  }
+
+  test("promoteDecompositionTailsToTombstones leaves tombstones and upserts unchanged") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // No decomposition tails present: a tombstone, an open upsert, and a closed upsert must all
+    // pass through identically.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 15L, 15L,  Row(15L)),
+      Row(2, "bob",   5L,  null, Row(5L)),
+      Row(3, "carol", 5L,  15L,  Row(5L))
+    )
+
+    val result = processor.promoteDecompositionTailsToTombstones(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 15L, 15L,  Row(15L)),
+        Row(2, "bob",   5L,  null, Row(5L)),
+        Row(3, "carol", 5L,  15L,  Row(5L))
+      )
+    )
+  }
+
+  test("promoteDecompositionTailsToTombstones preserves the tail's inherited user columns") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("name", StringType)
+      .add("status", StringType)
+
+    // Only the framework columns (startAt and the cdc-metadata recordStartAt) are rewritten to
+    // the tail's boundary; the inherited user columns must survive verbatim.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active", null, 20L, Row(null))
+    )
+
+    val result = processor.promoteDecompositionTailsToTombstones(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active", 20L, 20L, Row(20L))
+      )
+    )
+  }
+
+  test("promoteDecompositionTailsToTombstones preserves the input schema, column metadata, " +
+    "and row count") {
+    val processor = processorWithKeys(Seq("id"))
+
+    def commentMetadata(comment: String): Metadata =
+      new MetadataBuilder().putString("comment", comment).build()
+
+    val schema = new StructType()
+      .add("id", IntegerType, nullable = false, metadata = commentMetadata("user key"))
+      .add("value", StringType, nullable = true, metadata = commentMetadata("user data"))
+      .add(
+        Scd2BatchProcessor.startAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __START_AT"))
+      .add(
+        Scd2BatchProcessor.endAtColName, LongType, nullable = true,
+        metadata = commentMetadata("framework __END_AT"))
+      .add(
+        AutoCdcReservedNames.cdcMetadataColName,
+        Scd2BatchProcessor.cdcMetadataColSchema(LongType), nullable = false,
+        metadata = commentMetadata("framework _cdc_metadata"))
+
+    // A tail (rewritten) plus a non-tail (passed through) so both projection paths are exercised.
+    val df = microbatchOf(schema)(
+      Row(1, "alice", null, 20L, Row(null)),
+      Row(1, "alice", 5L,   20L, Row(5L))
+    )
+
+    val result = processor.promoteDecompositionTailsToTombstones(df)
+
+    schema.fields.zip(result.schema.fields).foreach { case (in, out) =>
+      assert(in.name == out.name)
+      assert(in.dataType == out.dataType)
+      assert(in.nullable == out.nullable)
+      assert(in.metadata == out.metadata)
+    }
+    assert(result.count() == df.count())
+  }
+
+  test("promoteDecompositionTailsToTombstones promotes tails independently across keys") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Each key carries a closed upsert plus a decomposition tail; only the tails are rewritten.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", 5L,   20L, Row(5L)),
+      Row(1, "alice", null, 20L, Row(null)),
+      Row(2, "bob",   8L,   30L, Row(8L)),
+      Row(2, "bob",   null, 30L, Row(null))
+    )
+
+    val result = processor.promoteDecompositionTailsToTombstones(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", 5L,  20L, Row(5L)),
+        Row(1, "alice", 20L, 20L, Row(20L)),
+        Row(2, "bob",   8L,  30L, Row(8L)),
+        Row(2, "bob",   30L, 30L, Row(30L))
+      )
+    )
+  }
 }
