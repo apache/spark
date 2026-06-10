@@ -603,7 +603,6 @@ spark.sql.execution.replaceHashWithSortAgg
 spark.sql.execution.reuseSubquery
 spark.sql.execution.sortBeforeRepartition
 spark.sql.execution.topKSortFallbackThreshold
-spark.sql.execution.useHashAggregateExec
 spark.sql.execution.useObjectHashAggregateExec
 spark.sql.execution.usePartitionEvaluator
 spark.sql.extendedExplainProviders

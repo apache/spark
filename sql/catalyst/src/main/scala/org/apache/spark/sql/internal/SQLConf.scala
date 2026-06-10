@@ -3812,6 +3812,7 @@ object SQLConf {
     .doc("Decides if we use HashAggregateExec when possible, the rule takes precedence " +
       s"over ${USE_OBJECT_HASH_AGG.key}.")
     .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
 
