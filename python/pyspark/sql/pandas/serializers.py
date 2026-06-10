@@ -535,8 +535,7 @@ class ArrowStreamPandasUDTFSerializer(ArrowStreamPandasUDFSerializer):
         return "ArrowStreamPandasUDTFSerializer"
 
 
-# Serializer for SQL_GROUPED_AGG_PANDAS_UDF, SQL_WINDOW_AGG_PANDAS_UDF,
-# and SQL_GROUPED_AGG_PANDAS_ITER_UDF
+# Serializer for SQL_GROUPED_AGG_PANDAS_ITER_UDF
 class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
     def __init__(
         self,

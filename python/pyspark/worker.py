@@ -736,87 +736,6 @@ def wrap_grouped_agg_pandas_iter_udf(f, args_offsets, kwargs_offsets, return_typ
     )
 
 
-def wrap_window_agg_pandas_udf(
-    f, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
-):
-    window_bound_types_str = runner_conf.get("window_bound_types")
-    window_bound_type = [t.strip().lower() for t in window_bound_types_str.split(",")][udf_index]
-    if window_bound_type == "bounded":
-        return wrap_bounded_window_agg_pandas_udf(
-            f, args_offsets, kwargs_offsets, return_type, runner_conf
-        )
-    elif window_bound_type == "unbounded":
-        return wrap_unbounded_window_agg_pandas_udf(
-            f, args_offsets, kwargs_offsets, return_type, runner_conf
-        )
-    else:
-        raise PySparkRuntimeError(
-            errorClass="INVALID_WINDOW_BOUND_TYPE",
-            messageParameters={
-                "window_bound_type": window_bound_type,
-            },
-        )
-
-
-def wrap_unbounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
-    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets, kwargs_offsets)
-
-    # This is similar to grouped_agg_pandas_udf, the only difference
-    # is that window_agg_pandas_udf needs to repeat the return value
-    # to match window length, where grouped_agg_pandas_udf just returns
-    # the scalar value.
-    def wrapped(*series):
-        import pandas as pd
-
-        result = func(*series)
-        return pd.Series([result]).repeat(len(series[0]))
-
-    return (
-        args_kwargs_offsets,
-        lambda *a: (wrapped(*a), return_type),
-    )
-
-
-def wrap_bounded_window_agg_pandas_udf(f, args_offsets, kwargs_offsets, return_type, runner_conf):
-    # args_offsets should have at least 2 for begin_index, end_index.
-    assert len(args_offsets) >= 2, len(args_offsets)
-    func, args_kwargs_offsets = wrap_kwargs_support(f, args_offsets[2:], kwargs_offsets)
-
-    def wrapped(begin_index, end_index, *series):
-        import pandas as pd
-
-        result = []
-
-        # Index operation is faster on np.ndarray,
-        # So we turn the index series into np array
-        # here for performance
-        begin_array = begin_index.values
-        end_array = end_index.values
-
-        for i in range(len(begin_array)):
-            # Note: Create a slice from a series for each window is
-            #       actually pretty expensive. However, there
-            #       is no easy way to reduce cost here.
-            # Note: s.iloc[i : j] is about 30% faster than s[i: j], with
-            #       the caveat that the created slices shares the same
-            #       memory with s. Therefore, user are not allowed to
-            #       change the value of input series inside the window
-            #       function. It is rare that user needs to modify the
-            #       input series in the window function, and therefore,
-            #       it is be a reasonable restriction.
-            # Note: Calling reset_index on the slices will increase the cost
-            #       of creating slices by about 100%. Therefore, for performance
-            #       reasons we don't do it here.
-            series_slices = [s.iloc[begin_array[i] : end_array[i]] for s in series]
-            result.append(func(*series_slices))
-        return pd.Series(result)
-
-    return (
-        args_offsets[:2] + args_kwargs_offsets,
-        lambda *a: (wrapped(*a), return_type),
-    )
-
-
 def wrap_kwargs_support(f, args_offsets, kwargs_offsets):
     if len(kwargs_offsets):
         keys = list(kwargs_offsets.keys())
@@ -1019,11 +938,10 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
         return wrap_grouped_agg_pandas_iter_udf(
             func, args_offsets, kwargs_offsets, return_type, runner_conf
         )
-    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        return wrap_window_agg_pandas_udf(
-            func, args_offsets, kwargs_offsets, return_type, runner_conf, udf_index
-        )
-    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
+    elif eval_type in (
+        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
+        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+    ):
         return func, args_offsets, kwargs_offsets, return_type
     elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
         return wrap_udf(func, args_offsets, kwargs_offsets, return_type)
@@ -2218,12 +2136,12 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
         ):
             ser = ArrowStreamGroupSerializer(write_start_stream=True)
-        elif eval_type == PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF:
-            ser = ArrowStreamGroupSerializer(write_start_stream=True)
         elif eval_type in (
-            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
             PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
         ):
+            ser = ArrowStreamGroupSerializer(write_start_stream=True)
+        elif eval_type == PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF:
             ser = ArrowStreamAggPandasUDFSerializer(
                 timezone=runner_conf.timezone,
                 safecheck=runner_conf.safecheck,
@@ -2652,6 +2570,94 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
                 batch = pa.RecordBatch.from_arrays(result_arrays, col_names)
                 yield ArrowBatchTransformer.enforce_schema(batch, return_schema)
+
+        # profiling is not supported for UDF
+        return grouped_func, None, ser, ser
+
+    if eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
+        import pyarrow as pa
+        import pandas as pd
+
+        window_bound_types_str = runner_conf.get("window_bound_types")
+        window_bound_types = [t.strip().lower() for t in window_bound_types_str.split(",")]
+
+        col_names = ["_%d" % i for i in range(len(udfs))]
+        output_schema = StructType(
+            [StructField(name, rt) for name, (_, _, _, rt) in zip(col_names, udfs)]
+        )
+
+        def grouped_func(
+            split_index: int, data: Iterator["GroupedBatch"]
+        ) -> Iterator[pa.RecordBatch]:
+            for group in data:
+                batch_list = list(group)
+                if not batch_list:
+                    continue
+                table = pa.Table.from_batches(batch_list).combine_chunks()
+                all_series = ArrowBatchTransformer.to_pandas(
+                    table,
+                    timezone=runner_conf.timezone,
+                    prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                )
+                num_rows = table.num_rows
+
+                result_series = []
+                for udf_index, (udf_func, args_offsets, kwargs_offsets, _) in enumerate(udfs):
+                    bound_type = window_bound_types[udf_index]
+                    if bound_type == "unbounded":
+                        result = udf_func(
+                            *[all_series[o] for o in args_offsets],
+                            **{k: all_series[v] for k, v in kwargs_offsets.items()},
+                        )
+                        # Repeat the scalar result to match the window (group) length.
+                        result_series.append(pd.Series([result]).repeat(num_rows))
+                    elif bound_type == "bounded":
+                        # args_offsets[0] and args_offsets[1] are begin_index and end_index.
+                        assert len(args_offsets) >= 2, len(args_offsets)
+                        # Index operation is faster on np.ndarray, so we turn the
+                        # index series into np arrays here for performance.
+                        begin_array = all_series[args_offsets[0]].values
+                        end_array = all_series[args_offsets[1]].values
+                        series = [all_series[o] for o in args_offsets[2:]]
+                        kw_series = {k: all_series[v] for k, v in kwargs_offsets.items()}
+                        results = []
+                        for i in range(num_rows):
+                            # Note: Creating a slice from a series for each window is
+                            #       actually pretty expensive. However, there
+                            #       is no easy way to reduce cost here.
+                            # Note: s.iloc[i : j] is about 30% faster than s[i: j], with
+                            #       the caveat that the created slices shares the same
+                            #       memory with s. Therefore, user are not allowed to
+                            #       change the value of input series inside the window
+                            #       function. It is rare that user needs to modify the
+                            #       input series in the window function, and therefore,
+                            #       it is a reasonable restriction.
+                            # Note: Calling reset_index on the slices will increase the
+                            #       cost of creating slices by about 100%. Therefore, for
+                            #       performance reasons we don't do it here.
+                            slices = [s.iloc[begin_array[i] : end_array[i]] for s in series]
+                            kw_slices = {
+                                k: s.iloc[begin_array[i] : end_array[i]]
+                                for k, s in kw_series.items()
+                            }
+                            results.append(udf_func(*slices, **kw_slices))
+                        result_series.append(pd.Series(results))
+                    else:
+                        raise PySparkRuntimeError(
+                            errorClass="INVALID_WINDOW_BOUND_TYPE",
+                            messageParameters={"window_bound_type": bound_type},
+                        )
+
+                yield PandasToArrowConversion.convert(
+                    result_series,
+                    output_schema,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    arrow_cast=True,
+                    prefers_large_types=runner_conf.use_large_var_types,
+                    assign_cols_by_name=runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                )
 
         # profiling is not supported for UDF
         return grouped_func, None, ser, ser
@@ -3567,36 +3573,6 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                     tuple(batch_series[o] for o in arg_offsets) for batch_series in batch_iter
                 )
             return f(series_iter)
-
-    elif eval_type == PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF:
-        import pandas as pd
-
-        # For SQL_WINDOW_AGG_PANDAS_UDF,
-        # convert iterator of batch tuples to concatenated pandas Series
-        def mapper(batch_iter):
-            # batch_iter is Iterator[Tuple[pd.Series, ...]] where each tuple represents one batch
-            # Collect all batches and concatenate into single Series per column
-            batches = list(batch_iter)
-            if not batches:
-                # Empty batches - determine num_columns from all UDFs' arg_offsets
-                all_offsets = [o for arg_offsets, _ in udfs for o in arg_offsets]
-                num_columns = max(all_offsets) + 1 if all_offsets else 0
-                concatenated = [pd.Series(dtype=object) for _ in range(num_columns)]
-            else:
-                # Use actual number of columns from the first batch
-                num_columns = len(batches[0])
-                concatenated = [
-                    pd.concat([batch[i] for batch in batches], ignore_index=True)
-                    for i in range(num_columns)
-                ]
-
-            result = tuple(f(*[concatenated[o] for o in arg_offsets]) for arg_offsets, f in udfs)
-            # In the special case of a single UDF this will return a single result rather
-            # than a tuple of results; this is the format that the JVM side expects.
-            if len(result) == 1:
-                return result[0]
-            else:
-                return result
 
     else:
 
