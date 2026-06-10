@@ -367,7 +367,7 @@
   },
   "BIN_BY_DISTRIBUTE_TYPE_MISMATCH" : {
     "message" : [
-      "The DISTRIBUTE UNIFORM columns in BIN BY must be numeric or DAY-TIME INTERVAL. Column <columnName> has type <columnType>."
+      "The DISTRIBUTE UNIFORM columns in BIN BY must be FLOAT or DOUBLE. Column <columnName> has type <columnType>."
     ],
     "sqlState" : "42804"
   },

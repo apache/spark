@@ -27,7 +27,7 @@ class BinBySuite extends QueryTest with SharedSparkSession {
       spark.sql(
         """SELECT TIMESTAMP '2024-01-01 00:00:00' AS ts_start,
           |       TIMESTAMP '2024-01-01 01:00:00' AS ts_end,
-          |       1L AS value""".stripMargin).createOrReplaceTempView("metrics")
+          |       CAST(1 AS DOUBLE) AS value""".stripMargin).createOrReplaceTempView("metrics")
       val df = spark.sql(
         """SELECT * FROM metrics BIN BY (
           |  RANGE ts_start TO ts_end
