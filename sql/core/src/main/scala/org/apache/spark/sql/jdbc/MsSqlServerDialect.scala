@@ -101,10 +101,7 @@ private case class MsSqlServerDialect() extends JdbcDialect with NoLegacyJDBCErr
       }
 
     private def isBinaryComparison(e: Expression): Boolean = e match {
-      case p: Predicate => p.name() match {
-        case "=" | "<>" | "<=>" | "<" | "<=" | ">" | ">=" => true
-        case _ => false
-      }
+      case p: Predicate => isBinaryComparisonOperator(p.name())
       case _ => false
     }
 
