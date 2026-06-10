@@ -1593,7 +1593,6 @@ class SparkSqlAstBuilder extends AstBuilder {
         "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW.", ctx)
     }
 
-    val orRefresh = headerCtx.REFRESH() != null
     val ifNotExists = headerCtx.EXISTS() != null
     val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
     val (colDefs, colConstraints) = Option(ctx.tableElementList()).map(visitTableElementList)
@@ -1655,7 +1654,6 @@ class SparkSqlAstBuilder extends AstBuilder {
       partitioning = partitioning,
       tableSpec = spec,
       ifNotExists = ifNotExists,
-      orRefresh = orRefresh,
       sourceTable = src,
       keys = keys,
       deleteCondition = delete,

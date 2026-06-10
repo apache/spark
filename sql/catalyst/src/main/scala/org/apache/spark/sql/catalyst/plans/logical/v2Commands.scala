@@ -825,7 +825,7 @@ case class CreateStreamingTable(
 }
 
 /**
- * Command parsed from `CREATE [OR REFRESH] STREAMING TABLE <name> FLOW AUTO CDC ...` SQL syntax.
+ * Command parsed from `CREATE STREAMING TABLE <name> FLOW AUTO CDC ...` SQL syntax.
  * This command serves as a parse-time placeholder for a pipeline CDC definition and cannot be
  * executed directly. It is interpreted by the pipeline submodule during a pipeline execution.
  *
@@ -836,7 +836,6 @@ case class CreateStreamingTable(
  * @param partitioning   Column-based partitioning for the streaming table.
  * @param tableSpec      Additional table specs.
  * @param ifNotExists    Whether the table should only be created if it doesn't already exist.
- * @param orRefresh      Whether the statement is `CREATE OR REFRESH` (vs plain `CREATE`).
  * @param sourceTable    The source relation providing the change events.
  * @param keys           Column(s) that uniquely identify a row in the target table.
  * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
@@ -851,7 +850,6 @@ case class CreateStreamingTableAutoCdc(
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
     ifNotExists: Boolean,
-    orRefresh: Boolean,
     sourceTable: LogicalPlan,
     keys: Seq[UnresolvedAttribute],
     deleteCondition: Option[Expression],

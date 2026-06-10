@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.SparkSqlParser
  *
  * Covers two supported forms:
  *   1. CREATE FLOW <name> [COMMENT ...] AS AUTO CDC INTO <target> ...
- *   2. CREATE [OR REFRESH] STREAMING TABLE <name> FLOW AUTO CDC ...
+ *   2. CREATE STREAMING TABLE <name> FLOW AUTO CDC ...
  *
  * Snapshot CDC, SCD Type 2, IGNORE NULL UPDATES, and APPLY AS TRUNCATE WHEN are not
  * supported and should fail to parse. The standalone AUTO CDC INTO form (without CREATE FLOW
@@ -158,7 +158,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   }
 
   // ---------------------------------------------------------------------------
-  // CREATE [OR REFRESH] STREAMING TABLE ... FLOW AUTO CDC
+  // CREATE STREAMING TABLE ... FLOW AUTO CDC
   // ---------------------------------------------------------------------------
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - minimal form") {
@@ -171,7 +171,6 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
 
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
     assert(cmd.name.asInstanceOf[UnresolvedIdentifier].nameParts == Seq("target"))
-    assert(!cmd.orRefresh)
     assert(!cmd.ifNotExists)
     assert(cmd.sourceTable.isInstanceOf[UnresolvedRelation])
     assert(cmd.keys.map(_.name) == Seq("key1", "key2"))
@@ -179,18 +178,6 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
     assert(cmd.sequenceByExpr == UnresolvedAttribute("timestamp"))
     assert(cmd.specifiedCols.isEmpty)
     assert(cmd.exceptCols.isEmpty)
-  }
-
-  test("CREATE OR REFRESH STREAMING TABLE FLOW AUTO CDC") {
-    val plan = parser.parsePlan(
-      """CREATE OR REFRESH STREAMING TABLE target
-        |FLOW AUTO CDC
-        |FROM source
-        |KEYS (id)
-        |SEQUENCE BY ts""".stripMargin)
-
-    val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
-    assert(cmd.orRefresh)
   }
 
   test("CREATE STREAMING TABLE IF NOT EXISTS FLOW AUTO CDC") {
@@ -203,7 +190,6 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
 
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
     assert(cmd.ifNotExists)
-    assert(!cmd.orRefresh)
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - multipart table name") {
@@ -262,7 +248,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - all clauses combined") {
     val plan = parser.parsePlan(
-      """CREATE OR REFRESH STREAMING TABLE target
+      """CREATE STREAMING TABLE target
         |FLOW AUTO CDC
         |FROM source
         |KEYS (key1, key2)
@@ -271,7 +257,6 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
         |COLUMNS * EXCEPT (key4)""".stripMargin)
 
     val cmd = plan.asInstanceOf[CreateStreamingTableAutoCdc]
-    assert(cmd.orRefresh)
     assert(cmd.keys.map(_.name) == Seq("key1", "key2"))
     assert(cmd.deleteCondition.isDefined)
     assert(cmd.sequenceByExpr == UnresolvedAttribute("timestamp"))
