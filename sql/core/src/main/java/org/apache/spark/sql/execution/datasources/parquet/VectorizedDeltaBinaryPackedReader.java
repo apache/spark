@@ -437,11 +437,11 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
   }
 
   // Reusable buffer for unsigned long -> BigInteger encoding (9 bytes: sign + 8 value bytes).
-  private final ByteBuffer unsignedLongBuf = ByteBuffer.allocate(9);
+  private final byte[] unsignedLongScratch = new byte[9];
 
   private void putUnsignedLongAsBigInteger(WritableColumnVector c, int rowId, long v) {
-    int start = encodeUnsignedLongBigEndian(v, unsignedLongBuf);
-    c.putByteArray(rowId, unsignedLongBuf.array(), start, 9 - start);
+    int start = encodeUnsignedLongBigEndian(v, unsignedLongScratch);
+    c.putByteArray(rowId, unsignedLongScratch, start, 9 - start);
   }
 
 }

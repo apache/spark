@@ -40,7 +40,6 @@ import org.apache.spark.sql.types.*;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.math.RoundingMode;
-import java.nio.ByteBuffer;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Arrays;
@@ -712,7 +711,7 @@ public class ParquetVectorUpdaterFactory {
   }
 
   private static class UnsignedLongUpdater implements ParquetVectorUpdater {
-    private final ByteBuffer unsignedLongBuf = ByteBuffer.allocate(9);
+    private final byte[] unsignedLongScratch = new byte[9];
 
     @Override
     public void readValues(
@@ -734,8 +733,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(
-          valuesReader.readLong(), unsignedLongBuf);
-      values.putByteArray(offset, unsignedLongBuf.array(), start, 9 - start);
+          valuesReader.readLong(), unsignedLongScratch);
+      values.putByteArray(offset, unsignedLongScratch, start, 9 - start);
     }
 
     @Override
@@ -745,8 +744,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       long signed = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(signed, unsignedLongBuf);
-      values.putByteArray(offset, unsignedLongBuf.array(), start, 9 - start);
+      int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(signed, unsignedLongScratch);
+      values.putByteArray(offset, unsignedLongScratch, start, 9 - start);
     }
   }
 
