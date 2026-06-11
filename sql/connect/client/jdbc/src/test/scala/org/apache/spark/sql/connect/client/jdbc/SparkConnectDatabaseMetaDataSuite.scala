@@ -573,7 +573,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
        COLUMN_NAME: String,
        DATA_TYPE: Int,
        TYPE_NAME: String,
-       COLUMN_SIZE: Int,
+       COLUMN_SIZE: Integer,
        BUFFER_LENGTH: Int,
        DECIMAL_DIGITS: Int,
        NUM_PREC_RADIX: Int,
@@ -615,7 +615,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             COLUMN_NAME = rs.getString("COLUMN_NAME"),
             DATA_TYPE = rs.getInt("DATA_TYPE"),
             TYPE_NAME = rs.getString("TYPE_NAME"),
-            COLUMN_SIZE = rs.getInt("COLUMN_SIZE"),
+            COLUMN_SIZE = rs.getObject("COLUMN_SIZE").asInstanceOf[Integer],
             BUFFER_LENGTH = rs.getInt("BUFFER_LENGTH"),
             DECIMAL_DIGITS = rs.getInt("DECIMAL_DIGITS"),
             NUM_PREC_RADIX = rs.getInt("NUM_PREC_RADIX"),
@@ -667,7 +667,10 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
           |  col_timestamp TIMESTAMP,
           |  col_timestamp_ntz TIMESTAMP_NTZ,
           |  col_binary BINARY,
-          |  col_time TIME)""".stripMargin)
+          |  col_time TIME,
+          |  col_array ARRAY<INT>,
+          |  col_map MAP<STRING, INT>,
+          |  col_struct STRUCT<a: INT, b: STRING>)""".stripMargin)
 
       spark.sql(
         """CREATE VIEW IF NOT EXISTS spark_catalog.db1.t1_v AS
@@ -720,10 +723,23 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
                 ("spark_catalog", "db1", "t2", 13, "col_timestamp_ntz"),
                 ("spark_catalog", "db1", "t2", 14, "col_binary"),
                 ("spark_catalog", "db1", "t2", 15, "col_time"),
+                ("spark_catalog", "db1", "t2", 16, "col_array"),
+                ("spark_catalog", "db1", "t2", 17, "col_map"),
+                ("spark_catalog", "db1", "t2", 18, "col_struct"),
                 ("spark_catalog", "db_", "t_", 1, "id"),
                 ("spark_catalog", "db_", "t_", 2, "i_"),
                 ("spark_catalog", "db_2", "t_2", 1, "id"),
                 ("testcat", "t_db1", "t_t1", 1, "id"))
+            }
+
+            // COLUMN_SIZE is not applicable for complex types
+            val complexColumns = Set("col_array", "col_map", "col_struct")
+            getColumnResults.foreach { r =>
+              if (complexColumns.contains(r.COLUMN_NAME)) {
+                assert(r.COLUMN_SIZE === null)
+              } else {
+                assert(r.COLUMN_SIZE !== null)
+              }
             }
 
             // TODO verify the remaining attributes

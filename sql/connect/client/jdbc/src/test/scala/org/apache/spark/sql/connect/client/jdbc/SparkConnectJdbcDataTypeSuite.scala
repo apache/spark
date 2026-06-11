@@ -21,6 +21,7 @@ import java.sql.{ResultSet, SQLException, Types}
 
 import scala.util.Using
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 
@@ -787,6 +788,77 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
           assert(!rs.next())
         }
       }
+    }
+  }
+
+  test("get array type") {
+    withExecuteQuery("SELECT array(1, 2, 3)") { rs =>
+      assert(rs.next())
+      val value = rs.getObject(1)
+      assert(value === Seq(1, 2, 3))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "array(1, 2, 3)")
+      assert(metaData.getColumnLabel(1) === "array(1, 2, 3)")
+      assert(metaData.getColumnType(1) === Types.ARRAY)
+      assert(metaData.getColumnTypeName(1) === "ARRAY<INT>")
+      assert(metaData.getColumnClassName(1) === "scala.collection.Seq")
+      assert(Class.forName(metaData.getColumnClassName(1)).isInstance(value))
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 0)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
+    }
+  }
+
+  test("get map type") {
+    withExecuteQuery("SELECT map('a', 1)") { rs =>
+      assert(rs.next())
+      val value = rs.getObject(1)
+      assert(value === Map("a" -> 1))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "map(a, 1)")
+      assert(metaData.getColumnLabel(1) === "map(a, 1)")
+      assert(metaData.getColumnType(1) === Types.JAVA_OBJECT)
+      assert(metaData.getColumnTypeName(1) === "MAP<STRING, INT>")
+      assert(metaData.getColumnClassName(1) === "scala.collection.Map")
+      assert(Class.forName(metaData.getColumnClassName(1)).isInstance(value))
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 0)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
+    }
+  }
+
+  test("get struct type") {
+    withExecuteQuery("SELECT named_struct('a', 1, 'b', 'x')") { rs =>
+      assert(rs.next())
+      val value = rs.getObject(1)
+      assert(value.isInstanceOf[Row])
+      val row = value.asInstanceOf[Row]
+      assert(row.getInt(0) === 1)
+      assert(row.getString(1) === "x")
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnName(1) === "named_struct(a, 1, b, x)")
+      assert(metaData.getColumnLabel(1) === "named_struct(a, 1, b, x)")
+      assert(metaData.getColumnType(1) === Types.STRUCT)
+      assert(metaData.getColumnTypeName(1) === "STRUCT<a: INT NOT NULL, b: STRING NOT NULL>")
+      assert(metaData.getColumnClassName(1) === "org.apache.spark.sql.Row")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 0)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
     }
   }
 }

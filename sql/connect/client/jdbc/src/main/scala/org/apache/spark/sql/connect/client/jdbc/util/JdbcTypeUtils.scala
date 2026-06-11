@@ -21,6 +21,7 @@ import java.lang.{Boolean => JBoolean, Byte => JByte, Double => JDouble, Float =
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Array => _, _}
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 private[jdbc] object JdbcTypeUtils {
@@ -41,6 +42,9 @@ private[jdbc] object JdbcTypeUtils {
     case TimestampNTZType => Types.TIMESTAMP
     case BinaryType => Types.VARBINARY
     case _: TimeType => Types.TIME
+    case _: ArrayType => Types.ARRAY
+    case _: MapType => Types.JAVA_OBJECT
+    case _: StructType => Types.STRUCT
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -61,6 +65,9 @@ private[jdbc] object JdbcTypeUtils {
     case TimestampNTZType => classOf[Timestamp].getName
     case BinaryType => classOf[Array[Byte]].getName
     case _: TimeType => classOf[Time].getName
+    case _: ArrayType => classOf[scala.collection.Seq[_]].getName
+    case _: MapType => classOf[scala.collection.Map[_, _]].getName
+    case _: StructType => classOf[Row].getName
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -69,7 +76,7 @@ private[jdbc] object JdbcTypeUtils {
     case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType |
          _: DecimalType => true
     case NullType | BooleanType | StringType | DateType | BinaryType | _: TimeType |
-         TimestampType | TimestampNTZType => false
+         TimestampType | TimestampNTZType | _: ArrayType | _: MapType | _: StructType => false
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -94,6 +101,9 @@ private[jdbc] object JdbcTypeUtils {
     // Users can call getObject(index, classOf[LocalTime]) to access full microsecond
     // precision when the source type is TIME(4) or higher.
     case TimeType(precision) => precision
+    // ResultSetMetaData.getPrecision: "0 is returned for data types where the
+    // column size is not applicable."
+    case _: ArrayType | _: MapType | _: StructType => 0
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -104,7 +114,7 @@ private[jdbc] object JdbcTypeUtils {
     case TimestampType => 6
     case TimestampNTZType => 6
     case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType | StringType |
-         DateType | BinaryType | _: TimeType => 0
+         DateType | BinaryType | _: TimeType | _: ArrayType | _: MapType | _: StructType => 0
     case DecimalType.Fixed(_, s) => s
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
@@ -131,8 +141,16 @@ private[jdbc] object JdbcTypeUtils {
     case DecimalType.Fixed(p, s) if s == 0 => p + 1
     // precision + negative sign + decimal point, like DECIMAL(5,2) = -123.45
     case DecimalType.Fixed(p, _) => p + 2
+    case _: ArrayType | _: MapType | _: StructType => Int.MaxValue
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
+  }
+
+  // For DatabaseMetaData.getColumns COLUMN_SIZE: "Null is returned for data types
+  // where the column size is not applicable."
+  def getColumnSize(field: StructField): Integer = field.dataType match {
+    case _: ArrayType | _: MapType | _: StructType => null
+    case _ => getDisplaySize(field)
   }
 
   def getDecimalDigits(field: StructField): Integer = field.dataType match {

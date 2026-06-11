@@ -534,7 +534,7 @@ class SparkConnectDatabaseMetaData(conn: SparkConnectConnection) extends Databas
             field.name, // COLUMN_NAME
             JdbcTypeUtils.getColumnType(field), // DATA_TYPE
             field.dataType.sql, // TYPE_NAME
-            JdbcTypeUtils.getDisplaySize(field), // COLUMN_SIZE
+            JdbcTypeUtils.getColumnSize(field), // COLUMN_SIZE
             JdbcTypeUtils.getDecimalDigits(field), // DECIMAL_DIGITS
             JdbcTypeUtils.getNumPrecRadix(field), // NUM_PREC_RADIX
             if (field.nullable) columnNullable else columnNoNulls, // NULLABLE
