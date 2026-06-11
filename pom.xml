@@ -113,6 +113,7 @@
     <module>connector/protobuf</module>
     <module>udf/worker/proto</module>
     <module>udf/worker/core</module>
+    <module>udf/worker/grpc</module>
     <!-- See additional modules enabled by profiles below -->
   </modules>
 
@@ -183,7 +184,7 @@
     <scalafmt.validateOnly>true</scalafmt.validateOnly>
     <scalafmt.changedOnly>true</scalafmt.changedOnly>
     <!-- Should be consistent with SparkBuild.scala and docs -->
-    <fasterxml.jackson.version>2.21.3</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.21.4</fasterxml.jackson.version>
     <ws.xmlschema.version>2.3.1</ws.xmlschema.version>
     <snappy.version>1.1.10.8</snappy.version>
     <netlib.ludovic.dev.version>3.2.0</netlib.ludovic.dev.version>
@@ -220,8 +221,8 @@
             SPARK-53327 workaround should be reverted.
      -->
     <datasketches.version>6.2.0</datasketches.version>
-    <netty.version>4.2.13.Final</netty.version>
-    <netty-tcnative.version>2.0.77.Final</netty-tcnative.version>
+    <netty.version>4.2.15.Final</netty.version>
+    <netty-tcnative.version>2.0.78.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>

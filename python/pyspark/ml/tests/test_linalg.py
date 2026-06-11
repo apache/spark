@@ -146,10 +146,10 @@ class VectorTests(MLlibTestCase):
         # tests for fix of [SPARK-5089]
         v = array([1, 2, 3, 4], dtype="float64")
         dv = DenseVector(v)
-        self.assertTrue(dv.array.dtype == "float64")
+        self.assertEqual(dv.array.dtype, "float64")
         v = array([1, 2, 3, 4], dtype="float32")
         dv = DenseVector(v)
-        self.assertTrue(dv.array.dtype == "float64")
+        self.assertEqual(dv.array.dtype, "float64")
 
     def test_sparse_vector_indexing(self):
         sv = SparseVector(5, {1: 1, 3: 2})

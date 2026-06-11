@@ -43,7 +43,7 @@ class DataSourceV2RelationSuite extends SparkFunSuite {
       rowCount = Some(10),
       colStats = Map(
         "id" -> idColStat,
-        // "extra" is not in schema — should be silently skipped
+        // "extra" is not in schema, should be silently skipped
         "extra" -> CatalogColumnStat(distinctCount = Some(5))))
 
     val v2Stats = DataSourceV2Relation.v1StatsToV2Stats(catalogStats, schema)

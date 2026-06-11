@@ -110,7 +110,7 @@ class UnifiedExternalUDFPlanner(
       children = Seq.empty,
       udfDeterministic = pythonUdf.udfDeterministic,
       udfNullable = true)
-    MapPartitionsExternalUDF(workerSpec, udf, isBarrier, child)
+    MapPartitionsExternalUDF(workerSpec, udf, isBarrier, profile, child)
   }
 
   override def planPythonMapInArrow(

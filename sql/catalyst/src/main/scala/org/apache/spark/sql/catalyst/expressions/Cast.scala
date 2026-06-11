@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{dayTimeIntervalToByte, 
 import org.apache.spark.sql.errors.{QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.unsafe.types.UTF8String.{IntWrapper, LongWrapper}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -112,6 +112,14 @@ object Cast extends QueryErrorsBase {
     case (_: StringType, TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
+
+    case (_: StringType, _: TimestampNTZNanosType) => true
+    case (_: StringType, _: TimestampLTZNanosType) => true
+
+    case (TimestampNTZType, _: TimestampNTZNanosType) => true
+    case (_: TimestampNTZNanosType, TimestampNTZType) => true
+    case (TimestampType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, TimestampType) => true
 
     case (_: StringType, _: CalendarIntervalType) => true
     case (_: StringType, _: AnsiIntervalType) => true
@@ -248,6 +256,14 @@ object Cast extends QueryErrorsBase {
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
+    case (_: StringType, _: TimestampNTZNanosType) => true
+    case (_: StringType, _: TimestampLTZNanosType) => true
+
+    case (TimestampNTZType, _: TimestampNTZNanosType) => true
+    case (_: TimestampNTZNanosType, TimestampNTZType) => true
+    case (TimestampType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, TimestampType) => true
+
     case (_: StringType, DateType) => true
     case (_: StringType, _: TimeType) => true
     case (TimestampType, DateType) => true
@@ -335,6 +351,10 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, DateType) => true
     case (TimestampType, TimestampNTZType) => true
     case (TimestampNTZType, TimestampType) => true
+    // NTZ string is zone-independent (mirroring micro TIMESTAMP_NTZ, which is not listed); only
+    // the LTZ string parse/render depends on the session time zone.
+    case (_: StringType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, _: StringType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
     case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
       needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)
@@ -390,6 +410,11 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, _: StringType) => true
     case (_: CalendarIntervalType, _: StringType) => true
+    // SPARK-57293: narrowing a nanosecond-precision timestamp to its microsecond counterpart
+    // drops the sub-microsecond digits, so it is not allowed as a (silent) store assignment.
+    // This conversion stays explicit-only.
+    case (_: TimestampNTZNanosType, TimestampNTZType) => false
+    case (_: TimestampLTZNanosType, TimestampType) => false
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -752,6 +777,8 @@ case class Cast(
       buildCast[Int](_, d => daysToMicros(d, zoneId))
     case TimestampNTZType =>
       buildCast[Long](_, ts => convertTz(ts, zoneId, ZoneOffset.UTC))
+    case _: TimestampLTZNanosType =>
+      buildCast[TimestampNanosVal](_, v => v.epochMicros)
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -784,6 +811,36 @@ case class Cast(
       buildCast[Int](_, d => daysToMicros(d, ZoneOffset.UTC))
     case TimestampType =>
       buildCast[Long](_, ts => convertTz(ts, ZoneOffset.UTC, zoneId))
+    case _: TimestampNTZNanosType =>
+      buildCast[TimestampNanosVal](_, v => v.epochMicros)
+  }
+
+  private[this] def castToTimestampLTZNanos(
+      from: DataType,
+      precision: Int): Any => Any = from match {
+    case _: StringType =>
+      buildCast[UTF8String](_, utfs =>
+        if (ansiEnabled) {
+          DateTimeUtils.stringToTimestampLTZNanosAnsi(utfs, precision, zoneId, getContextOrNull())
+        } else {
+          DateTimeUtils.stringToTimestampLTZNanos(utfs, precision, zoneId).orNull
+        })
+    case TimestampType =>
+      buildCast[Long](_, m => TimestampNanosVal.fromParts(m, 0.toShort))
+  }
+
+  private[this] def castToTimestampNTZNanos(
+      from: DataType,
+      precision: Int): Any => Any = from match {
+    case _: StringType =>
+      buildCast[UTF8String](_, utfs =>
+        if (ansiEnabled) {
+          DateTimeUtils.stringToTimestampNTZNanosAnsi(utfs, precision, getContextOrNull())
+        } else {
+          DateTimeUtils.stringToTimestampNTZNanos(utfs, precision, allowTimeZone = true).orNull
+        })
+    case TimestampNTZType =>
+      buildCast[Long](_, m => TimestampNanosVal.fromParts(m, 0.toShort))
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
@@ -1299,6 +1356,8 @@ case class Cast(
         case decimal: DecimalType => castToDecimal(from, decimal)
         case TimestampType => castToTimestamp(from)
         case TimestampNTZType => castToTimestampNTZ(from)
+        case t: TimestampNTZNanosType => castToTimestampNTZNanos(from, t.precision)
+        case t: TimestampLTZNanosType => castToTimestampLTZNanos(from, t.precision)
         case CalendarIntervalType => castToInterval(from)
         case it: DayTimeIntervalType => castToDayTimeInterval(from, it)
         case it: YearMonthIntervalType => castToYearMonthInterval(from, it)
@@ -1409,6 +1468,8 @@ case class Cast(
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
     case TimestampNTZType => castToTimestampNTZCode(from, ctx)
+    case t: TimestampNTZNanosType => castToTimestampNTZNanosCode(from, t.precision, ctx)
+    case t: TimestampLTZNanosType => castToTimestampLTZNanosCode(from, t.precision, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
     case it: DayTimeIntervalType => castToDayTimeIntervalCode(from, it)
     case it: YearMonthIntervalType => castToYearMonthIntervalCode(from, it)
@@ -1707,6 +1768,8 @@ case class Cast(
         zoneIdClass)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, $zid, java.time.ZoneOffset.UTC);"
+    case _: TimestampLTZNanosType =>
+      (c, evPrim, evNull) => code"$evPrim = $c.epochMicros;"
     case DecimalType() =>
       (c, evPrim, evNull) => code"$evPrim = ${decimalToTimestampCode(c)};"
     case DoubleType =>
@@ -1770,6 +1833,70 @@ case class Cast(
         zoneIdClass)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, java.time.ZoneOffset.UTC, $zid);"
+    case _: TimestampNTZNanosType =>
+      (c, evPrim, evNull) => code"$evPrim = $c.epochMicros;"
+  }
+
+  private[this] def castToTimestampLTZNanosCode(
+      from: DataType,
+      precision: Int,
+      ctx: CodegenContext): CastFunction = from match {
+    case _: StringType =>
+      val zoneIdClass = classOf[ZoneId]
+      val zid = JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
+      val tsOpt = ctx.freshVariable("tsOpt", classOf[Option[TimestampNanosVal]])
+      (c, evPrim, evNull) =>
+        if (ansiEnabled) {
+          val errorContext = getContextOrNullCode(ctx)
+          code"""
+            $evPrim = $dateTimeUtilsCls.stringToTimestampLTZNanosAnsi(
+              $c, $precision, $zid, $errorContext);
+           """
+        } else {
+          code"""
+            scala.Option<TimestampNanosVal> $tsOpt =
+              $dateTimeUtilsCls.stringToTimestampLTZNanos($c, $precision, $zid);
+            if ($tsOpt.isDefined()) {
+              $evPrim = (TimestampNanosVal) $tsOpt.get();
+            } else {
+              $evNull = true;
+            }
+           """
+        }
+    case TimestampType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
+  }
+
+  private[this] def castToTimestampNTZNanosCode(
+      from: DataType,
+      precision: Int,
+      ctx: CodegenContext): CastFunction = from match {
+    case _: StringType =>
+      val tsOpt = ctx.freshVariable("tsOpt", classOf[Option[TimestampNanosVal]])
+      (c, evPrim, evNull) =>
+        if (ansiEnabled) {
+          val errorContext = getContextOrNullCode(ctx)
+          code"""
+            $evPrim = $dateTimeUtilsCls.stringToTimestampNTZNanosAnsi(
+              $c, $precision, $errorContext);
+           """
+        } else {
+          code"""
+            scala.Option<TimestampNanosVal> $tsOpt =
+              $dateTimeUtilsCls.stringToTimestampNTZNanos($c, $precision, true);
+            if ($tsOpt.isDefined()) {
+              $evPrim = (TimestampNanosVal) $tsOpt.get();
+            } else {
+              $evNull = true;
+            }
+           """
+        }
+    case TimestampNTZType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
   }
 
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {

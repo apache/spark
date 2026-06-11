@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.externalUDF
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   Attribute,
@@ -36,9 +37,9 @@ import org.apache.spark.udf.worker.UDFWorkerSpecification
  * external worker process.
  *
  * @param workerSpec       Specification describing the UDF worker.
- * @param functionExpr     The UDF to invoke.
+ * @param function         The UDF to invoke.
  * @param isBarrier        Whether the UDF should be invoked using barrier execution.
- * @param resultAttributes Output attributes produced by the UDF.
+ * @param profile          Optional resource profile for the UDF execution.
  * @param child            Child plan providing input partitions.
  */
 @Experimental
@@ -46,6 +47,7 @@ case class MapPartitionsExternalUDFExec(
     workerSpec: UDFWorkerSpecification,
     function: ExternalUserDefinedFunction,
     isBarrier: Boolean,
+    profile: Option[ResourceProfile],
     child: SparkPlan)
   extends ExternalUDFExec {
 

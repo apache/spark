@@ -214,16 +214,24 @@ abstract class Optimizer(catalogManager: CatalogManager)
       OptimizeSubqueries,
       OptimizeOneRowRelationSubquery),
     Batch("Replace Operators", fixedPoint,
+      // SPARK-51262: ReplaceDeduplicateWithAggregate must run before RewriteExceptAll because
+      // it replaces Deduplicate with Aggregate(First(...)), creating new attribute exprIds.
+      // If RewriteExceptAll runs first, its Generate node captures stale exprIds that no
+      // longer exist after the Deduplicate-to-Aggregate rewrite.
+      ReplaceDeduplicateWithAggregate,
       RewriteExceptAll,
       RewriteIntersectAll,
       ReplaceIntersectWithSemiJoin,
       ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
-      ReplaceDistinctWithAggregate,
-      ReplaceDeduplicateWithAggregate),
+      ReplaceDistinctWithAggregate),
     Batch("Aggregate", fixedPoint,
       RemoveLiteralFromGroupExpressions,
       RemoveRepetitionFromGroupExpressions),
+    // Injected rules run once here, before the operator-optimization fixed point, so they
+    // can observe the plan before FoldablePropagation/ConstantFolding rewrite it.
+    Batch("Pre Operator Optimization", Once,
+      preOperatorOptimizationRules: _*),
     operatorOptimizationBatch,
     Batch("Clean Up Temporary CTE Info", Once, CleanUpTempCTEInfo),
     // This batch rewrites plans after the operator optimization and
@@ -502,6 +510,14 @@ abstract class Optimizer(catalogManager: CatalogManager)
    * Override to provide additional rules for the operator optimization batch.
    */
   def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Override to provide additional rules that run in a single pass before the main
+   * operator optimization fixed-point batch. Use this for rules that need to observe the plan
+   * as it enters the operator-optimization fixed point (e.g., before FoldablePropagation or
+   * ConstantFolding rewrite predicates).
+   */
+  def preOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = Nil
 
   /**
    * Override to provide additional rules for early projection and filter pushdown to scans.

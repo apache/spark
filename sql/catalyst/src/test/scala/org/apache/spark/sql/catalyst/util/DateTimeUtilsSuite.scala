@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
@@ -410,6 +410,35 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       stringToTimestampWithoutTimeZone(
         UTF8String.fromString("2021-11-22 10:54:27 +08:00"), false) ==
       None)
+  }
+
+  test("SPARK-57250: fractionalSecondsDigits counts digits after the first dot") {
+    // No fractional part.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00") === 0)
+    assert(fractionalSecondsDigits("2020-01-01") === 0)
+    assert(fractionalSecondsDigits("") === 0)
+
+    // A trailing dot with no digits.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.") === 0)
+
+    // Boundary digit counts used by the literal precision routing.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.1") === 1)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.123456") === 6)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.1234567") === 7)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.123456789") === 9)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.1234567890") === 10)
+
+    // Counting stops at the first non-digit, e.g. a trailing time zone or whitespace.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.123456789+08:00") === 9)
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.123 ") === 3)
+    assert(fractionalSecondsDigits("12:30:45.5Z") === 1)
+
+    // Only the first dot introduces the fraction; later dots are not counted.
+    assert(fractionalSecondsDigits("2020-01-01 00:00:00.12.34") === 2)
+
+    // The helper does not validate the rest of the string; it just counts the fractional run.
+    assert(fractionalSecondsDigits("abcd.1234") === 4)
+    assert(fractionalSecondsDigits(".789") === 3)
   }
 
   test("SPARK-15379: special invalid date string") {
@@ -1953,6 +1982,24 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     for (p <- 7 to 9) {
       assert(instantToTimestampNanos(negativeEpochInstant, precision = p).epochMicros ===
         negativeExpectedMicros)
+    }
+  }
+
+  test("SPARK-57162: nanos converters raise an internal error for precision outside [7, 9]") {
+    // `precision` is always sourced from a validated TimestampNTZNanosType/TimestampLTZNanosType
+    // (constructible only with p in [7, 9]), so an out-of-range value is an internal caller bug,
+    // not user input. Both the NTZ (LocalDateTime) and LTZ (Instant) converters must reject it.
+    val ldt = LocalDateTime.parse("2019-02-26T16:56:00.123456789")
+    val instant = Instant.parse("2019-02-26T16:56:00.123456789Z")
+    Seq(6, 10).foreach { p =>
+      checkError(
+        exception = intercept[SparkException](localDateTimeToTimestampNanos(ldt, p)),
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> s"Fractional second precision $p is out of range [7, 9]."))
+      checkError(
+        exception = intercept[SparkException](instantToTimestampNanos(instant, p)),
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> s"Fractional second precision $p is out of range [7, 9]."))
     }
   }
 

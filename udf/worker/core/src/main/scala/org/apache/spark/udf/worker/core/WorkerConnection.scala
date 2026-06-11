@@ -33,7 +33,7 @@ import org.apache.spark.annotation.Experimental
  * multiplexed streams over this channel.
  *
  * Implementations expose only lifecycle. Data transmission happens at
- * the [[WorkerSession]] level -- this class is solely about whether the
+ * the [[WorkerSession]] level -- this trait is solely about whether the
  * channel is open.
  *
  * '''Relationship to other classes (direct creation mode):'''
@@ -43,7 +43,7 @@ import org.apache.spark.annotation.Experimental
  * }}}
  */
 @Experimental
-abstract class WorkerConnection extends AutoCloseable {
+trait WorkerConnection extends AutoCloseable {
   /** Returns true if the underlying transport channel is still usable. */
   def isActive: Boolean
 }

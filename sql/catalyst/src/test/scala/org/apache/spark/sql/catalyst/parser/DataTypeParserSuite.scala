@@ -68,6 +68,11 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
   checkDataType("TIMESTAMP WITHOUT TIME ZONE", TimestampNTZType)
   checkDataType("timestamp_ntz", TimestampNTZType)
   checkDataType("timestamp_ltz", TimestampType)
+  // Precision 6 (microseconds) maps to the GA types and needs no preview flag.
+  checkDataType("TIMESTAMP_NTZ(6)", TimestampNTZType)
+  checkDataType("TIMESTAMP_LTZ(6)", TimestampType)
+  checkDataType("TIMESTAMP(6) WITHOUT TIME ZONE", TimestampNTZType)
+  checkDataType("TIMESTAMP(6) WITH LOCAL TIME ZONE", TimestampType)
   checkDataType("string", StringType)
   checkDataType("ChaR(5)", CharType(5))
   checkDataType("ChaRacter(5)", CharType(5))
@@ -161,35 +166,35 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       assert(parse("timestamp") === TimestampNTZType)
       assert(parse("timestamp with local time zone") === TimestampType)
       assert(parse("timestamp without time zone") === TimestampNTZType)
+      // Bare TIMESTAMP(6) resolves to the session default GA type, no preview flag needed.
+      assert(parse("timestamp(6)") === TimestampNTZType)
       withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
         assert(parse("timestamp(9)") === TimestampNTZNanosType(9))
         // Bare TIMESTAMP(p) routes through SqlApiConf.get.timestampType, so an
         // out-of-range precision must surface as the NTZ error here.
-        Seq("6", "10").foreach { p =>
-          checkError(
-            exception = intercept[SparkException] {
-              CatalystSqlParser.parseDataType(s"timestamp($p)")
-            },
-            condition = "INVALID_TIMESTAMP_PRECISION",
-            parameters = Map("precision" -> p, "type" -> "TIMESTAMP_NTZ"))
-        }
+        checkError(
+          exception = intercept[SparkException] {
+            CatalystSqlParser.parseDataType("timestamp(10)")
+          },
+          condition = "INVALID_TIMESTAMP_PRECISION",
+          parameters = Map("precision" -> "10", "type" -> "TIMESTAMP_NTZ"))
       }
     }
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
       assert(parse("timestamp") === TimestampType)
       assert(parse("timestamp with local time zone") === TimestampType)
       assert(parse("timestamp without time zone") === TimestampNTZType)
+      // Bare TIMESTAMP(6) resolves to the session default GA type, no preview flag needed.
+      assert(parse("timestamp(6)") === TimestampType)
       withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
         assert(parse("timestamp(9)") === TimestampLTZNanosType(9))
         // Bare TIMESTAMP(p) under LTZ default must surface as the LTZ error.
-        Seq("6", "10").foreach { p =>
-          checkError(
-            exception = intercept[SparkException] {
-              CatalystSqlParser.parseDataType(s"timestamp($p)")
-            },
-            condition = "INVALID_TIMESTAMP_PRECISION",
-            parameters = Map("precision" -> p, "type" -> "TIMESTAMP_LTZ"))
-        }
+        checkError(
+          exception = intercept[SparkException] {
+            CatalystSqlParser.parseDataType("timestamp(10)")
+          },
+          condition = "INVALID_TIMESTAMP_PRECISION",
+          parameters = Map("precision" -> "10", "type" -> "TIMESTAMP_LTZ"))
       }
     }
   }
@@ -235,6 +240,23 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
       assert(parse("TIMESTAMP_LTZ") === TimestampType)
       assert(parse("TIMESTAMP WITHOUT TIME ZONE") === TimestampNTZType)
       assert(parse("TIMESTAMP WITH LOCAL TIME ZONE") === TimestampType)
+      // Precision 6 maps to the GA types and stays accepted with the gate off.
+      assert(parse("TIMESTAMP_NTZ(6)") === TimestampNTZType)
+      assert(parse("TIMESTAMP_LTZ(6)") === TimestampType)
+      assert(parse("TIMESTAMP(6) WITHOUT TIME ZONE") === TimestampNTZType)
+      assert(parse("TIMESTAMP(6) WITH LOCAL TIME ZONE") === TimestampType)
+      // Out-of-range precisions surface as INVALID_TIMESTAMP_PRECISION regardless of the flag.
+      Seq("TIMESTAMP_NTZ" -> "TIMESTAMP_NTZ", "TIMESTAMP_LTZ" -> "TIMESTAMP_LTZ").foreach {
+        case (spelling, errorType) =>
+          Seq(0, 1, 5, 10, 99).foreach { p =>
+            checkError(
+              exception = intercept[SparkException] {
+                CatalystSqlParser.parseDataType(s"$spelling($p)")
+              },
+              condition = "INVALID_TIMESTAMP_PRECISION",
+              parameters = Map("precision" -> p.toString, "type" -> errorType))
+          }
+      }
     }
   }
 
@@ -315,7 +337,9 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       Seq("TIMESTAMP_NTZ" -> "TIMESTAMP_NTZ", "TIMESTAMP_LTZ" -> "TIMESTAMP_LTZ").foreach {
         case (spelling, errorType) =>
-          Seq(0, 1, 6, 10, 99).foreach { p =>
+          // Precision 6 is valid (maps to the GA type); only [0, 5] and [10, ...] are invalid.
+          // Precision 5 is included to pin the lower boundary of the p=6 carve-out.
+          Seq(0, 1, 5, 10, 99).foreach { p =>
             checkError(
               exception = intercept[SparkException] {
                 CatalystSqlParser.parseDataType(s"$spelling($p)")
@@ -332,12 +356,6 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
         condition = "INVALID_TIMESTAMP_PRECISION",
         parameters = Map("precision" -> "99999999999", "type" -> "TIMESTAMP_NTZ"))
       // TIMESTAMP(p) with zone aliases route to the corresponding nanos type's error.
-      checkError(
-        exception = intercept[SparkException] {
-          CatalystSqlParser.parseDataType("TIMESTAMP(6) WITHOUT TIME ZONE")
-        },
-        condition = "INVALID_TIMESTAMP_PRECISION",
-        parameters = Map("precision" -> "6", "type" -> "TIMESTAMP_NTZ"))
       checkError(
         exception = intercept[SparkException] {
           CatalystSqlParser.parseDataType("TIMESTAMP(10) WITH LOCAL TIME ZONE")

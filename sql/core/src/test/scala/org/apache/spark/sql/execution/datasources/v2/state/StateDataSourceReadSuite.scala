@@ -23,7 +23,7 @@ import java.util.UUID
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.Assertions
 
-import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.{AnalysisException, DataFrame, Encoders, Row}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow}
@@ -589,8 +589,6 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
   override protected def newStateStoreProvider(): RocksDBStateStoreProvider =
     new RocksDBStateStoreProvider
 
-  import testImplicits._
-
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION, 2)
@@ -600,34 +598,57 @@ class RocksDBWithCheckpointV2StateDataSourceReaderSuite extends StateDataSourceR
       "true")
   }
 
-  // TODO: Remove this test once we allow migrations from checkpoint v1 to v2
-  test("reading checkpoint v2 store with version 1 should fail") {
-    withTempDir { tmpDir =>
-      val inputData = MemoryStream[(Int, Long)]
-      val query = getStreamStreamJoinQuery(inputData)
-      testStream(query)(
-        StartStream(checkpointLocation = tmpDir.getCanonicalPath),
-        AddData(inputData, (1, 1L), (2, 2L), (3, 3L), (4, 4L), (5, 5L)),
-        ProcessAllAvailable(),
-        Execute { _ => Thread.sleep(2000) },
-        StopStream
-      )
+  // Expected state after runLargeDataStreamingAggregationQuery, read from batch 2 / operator 0.
+  private val expectedLargeAggregationState: Seq[Row] = Seq(
+    Row(0, 5, 60, 30, 0), Row(1, 5, 65, 31, 1), Row(2, 5, 70, 32, 2),
+    Row(3, 4, 72, 33, 3), Row(4, 4, 76, 34, 4), Row(5, 4, 80, 35, 5),
+    Row(6, 4, 84, 36, 6), Row(7, 4, 88, 37, 7), Row(8, 4, 92, 38, 8),
+    Row(9, 4, 96, 39, 9))
+
+  private def readLargeAggregationState(checkpointDir: String): DataFrame =
+    spark.read.format("statestore")
+      .option(StateSourceOptions.PATH, checkpointDir)
+      .option(StateSourceOptions.BATCH_ID, 2)
+      .option(StateSourceOptions.OPERATOR_ID, 0)
+      .load()
+      .selectExpr("key.groupKey AS key_groupKey", "value.count AS value_cnt",
+        "value.sum AS value_sum", "value.max AS value_max", "value.min AS value_min")
+
+  // SPARK-56970: The commit log wire format version is now discovered from the file header
+  // rather than required to match STATE_STORE_CHECKPOINT_FORMAT_VERSION. As a result a V1 commit
+  // log can be read under a V2-configured session (and vice versa). Note this only applies to the
+  // commit log layer; reading a V2 state store still requires version 2 to be configured because
+  // the state store files are named with checkpoint unique ids.
+  test("SPARK-56970: reading a v1 checkpoint with commit log version 2 configured succeeds") {
+    withTempDir { tempDir =>
+      // Override the suite default to write a V1 checkpoint (no checkpoint unique ids).
+      withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
+        runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
+      }
+
+      // The suite default reads with version 2 configured; the V1 commit log must still be read.
+      checkAnswer(
+        readLargeAggregationState(tempDir.getAbsolutePath), expectedLargeAggregationState)
+    }
+  }
+
+  test("SPARK-56970: reading a v2 checkpoint with commit log version 1 configured fails on the " +
+    "state store, not the commit log") {
+    withTempDir { tempDir =>
+      // The suite configures commit log format version 2, so this writes a V2 checkpoint whose
+      // state store files are named with checkpoint unique ids.
+      runLargeDataStreamingAggregationQuery(tempDir.getAbsolutePath)
 
       withSQLConf(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "1") {
-        // Verify reading state throws error when reading checkpoint v2 with version 1
-        val exc = intercept[IllegalStateException] {
-          val stateDf = spark.read.format("statestore")
-            .option(StateSourceOptions.BATCH_ID, 0)
-            .option(StateSourceOptions.OPERATOR_ID, 0)
-            .load(tmpDir.getCanonicalPath)
-          stateDf.collect()
+        // The commit log now deserializes across versions, so this no longer fails with
+        // INVALID_LOG_VERSION at the commit-log layer. Reading the V2 state store itself still
+        // requires version 2 to be configured: with version 1 the reader looks for non-unique
+        // state file names and cannot locate the unique-id-named files.
+        val ex = intercept[SparkException] {
+          readLargeAggregationState(tempDir.getAbsolutePath).collect()
         }
-
-        checkError(exc.getCause.asInstanceOf[SparkThrowable],
-          "INVALID_LOG_VERSION.EXACT_MATCH_VERSION", "KD002",
-          Map(
-            "version" -> "2",
-            "matchVersion" -> "1"))
+        assert(ex.getMessage.contains("CANNOT_LOAD_STATE_STORE") ||
+          Option(ex.getCause).map(_.getMessage).exists(_.contains("CANNOT_LOAD_STATE_STORE")))
       }
     }
   }

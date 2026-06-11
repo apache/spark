@@ -73,6 +73,12 @@ object DataTypeTestUtils {
     TimeType(TimeType.MIN_PRECISION),
     TimeType(TimeType.MAX_PRECISION))
 
+  val timestampNanosTypes: Seq[DatetimeType] = Seq(
+    TimestampLTZNanosType(TimestampLTZNanosType.MIN_PRECISION),
+    TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION),
+    TimestampNTZNanosType(TimestampNTZNanosType.MIN_PRECISION),
+    TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
+
   val unsafeRowMutableFieldTypes: Seq[DataType] = Seq(
     NullType,
     BooleanType,
@@ -101,7 +107,8 @@ object DataTypeTestUtils {
     TimestampNTZType,
     DateType,
     StringType,
-    BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes ++ timeTypes
+    BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes ++ timeTypes ++
+    timestampNanosTypes
 
   /**
    * All the types that we can use in a property check
@@ -117,7 +124,8 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     TimestampType,
-    TimestampNTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes ++ timeTypes
+    TimestampNTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes ++ timeTypes ++
+    timestampNanosTypes
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

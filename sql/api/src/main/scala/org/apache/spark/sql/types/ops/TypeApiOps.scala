@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.types.ops
 
+import java.time.ZoneId
+
 import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
 import org.apache.spark.sql.internal.SqlApiConf
-import org.apache.spark.sql.types.{DataType, TimeType}
+import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -118,15 +121,35 @@ trait TypeApiOps extends Serializable {
   /** Creates a converter function for Python/Py4J interop. */
   def makeFromJava: Option[Any => Any] = None
 
-  // ==================== Hive Formatting (optional) ====================
+  // ==================== External-Value Formatting (optional) ====================
 
   /**
-   * Formats an external-type value for Hive output. Most types override this simple version.
-   * Types that need different formatting when nested should override the 2-param overload.
+   * Renders an external (public-facing) value as a display string, or returns None to let the
+   * caller fall back to its own legacy rendering. Unlike [[format]], which takes the internal
+   * representation, this takes the external value a public Row holds (e.g. java.time.LocalTime
+   * for TimeType).
+   *
+   * Consumer: Row JSON (Row.json / Row.prettyJson). Semantics:
+   *   - Some(s): s is used as the rendered JSON string (e.g. the nanosecond timestamp types
+   *     render the external Instant/LocalDateTime at the column precision).
+   *   - None: Row JSON falls back to its legacy toJsonDefault rendering.
+   *   - throw: an implementation may raise instead, to signal that rendering this type on this
+   *     zone-less path is unsupported.
+   *
+   * Returning None silently routes the type into the legacy path, so a type that must be rendered
+   * by the framework should override this (every currently registered type does).
    */
   def formatExternal(value: Any): Option[String] = None
 
-  /** Formats with nesting context. Default delegates to the simple version. */
+  /**
+   * Renders an external value for Hive-style output (HiveResult.toHiveString). `nested` indicates
+   * whether the value appears inside an array/map/struct, which may format/quote it differently.
+   * Semantics mirror the single-arg overload: Some(s) is used directly, None falls back to
+   * HiveResult's zone-aware legacy rendering. The default delegates to the single-arg overload;
+   * override it separately when the two consumers need different behavior (e.g. the nanosecond
+   * timestamp types render the external value on the zone-less Row JSON path but return None here
+   * so the zone-aware Hive path renders them through its own formatter).
+   */
   def formatExternal(value: Any, nested: Boolean): Option[String] = formatExternal(value)
 
   // ==================== Thrift Mapping (optional) ====================
@@ -152,13 +175,24 @@ object TypeApiOps {
    *
    * @param dt
    *   the DataType to get operations for
+   * @param zoneId
+   *   the session time zone for zone-aware rendering (TIMESTAMP_LTZ nanos). CAST passes the
+   *   cast's resolved zone; zone-less callers (Row JSON via formatExternal) accept the default,
+   *   the session-local time zone config. By-name so it is forced only when LTZ is constructed:
+   *   zone-independent and unsupported types never evaluate it, which matters because a CAST's
+   *   zone is unresolved (`None.get`) until the time zone is assigned.
    * @return
    *   Some(TypeApiOps) if supported, None otherwise
    */
-  def apply(dt: DataType): Option[TypeApiOps] = {
+  def apply(
+      dt: DataType,
+      zoneId: => ZoneId = SparkDateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone))
+      : Option[TypeApiOps] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     dt match {
       case tt: TimeType => Some(new TimeTypeApiOps(tt))
+      case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeApiOps(t))
+      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t, zoneId))
       // Add new types here - single registration point
       case _ => None
     }
