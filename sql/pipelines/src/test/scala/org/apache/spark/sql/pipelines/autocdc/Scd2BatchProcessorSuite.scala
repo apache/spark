@@ -2345,6 +2345,40 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
     )
   }
 
+  test("reconcileStartAndEndAt: a tracked-history column whose name contains a dot is quoted " +
+    "and matched as a single column, not as a nested field path") {
+    // The backticks make `UnqualifiedColumnName` store the literal field name "user.name".
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("`user.name`")))
+      )
+    )
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("user.name", StringType)
+      .add("status", StringType)
+
+    // Only the dotted column is tracked. Two rows agreeing on "user.name" but differing on
+    // status are tracked-equal and must collapse into a single run. Without quoting,
+    // `F.col("user.name")` would be parsed as a nested-field access (struct `user`, field
+    // `name`) and fail to resolve.
+    val df = targetTableOf(userSchema)(
+      Row(1, "alice", "active", 5L, null, Row(5L)),
+      Row(1, "alice", "inactive", 10L, null, Row(10L))
+    )
+
+    val result = processor.reconcileStartAndEndAt(df)
+
+    checkAnswer(
+      df = result,
+      expectedAnswer = Seq(
+        Row(1, "alice", "active", 5L, null, Row(5L)),
+        Row(1, "alice", "inactive", 5L, null, Row(10L))
+      )
+    )
+  }
+
   test("reconcileStartAndEndAt: trackHistorySelection referring to an unknown column raises " +
     "AUTOCDC_COLUMNS_NOT_FOUND_IN_SCHEMA") {
     val processor = processorWithKeys(
