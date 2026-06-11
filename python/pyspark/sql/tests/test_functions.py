@@ -301,8 +301,8 @@ class FunctionsTestsMixin:
         ct = sorted(ct, key=lambda x: x[0])
         for i, row in enumerate(ct):
             self.assertEqual(row[0], str(i))
-            self.assertTrue(row[1], 1)
-            self.assertTrue(row[2], 1)
+            self.assertEqual(row[1], 1)
+            self.assertEqual(row[2], 1)
 
     def test_math_functions(self):
         df = self.spark.createDataFrame([Row(a=i, b=2 * i) for i in range(10)])
