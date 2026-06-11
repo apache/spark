@@ -42,6 +42,11 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
 
   private def getAncestorWithSamePartitionSizes(rdd: RDD[_]): RDD[_] = {
     rdd match {
+      // A ZippedWithIndexRDD ancestor that has already computed its startIndices covers the same
+      // partition sizes, so stop here and let the caller reuse those indices directly. startIndices
+      // is @transient and may be null on a deserialized ancestor; guard against that so such an
+      // ancestor falls through to running a counting job instead.
+      case z: ZippedWithIndexRDD[_] if z.startIndices != null => z
       case c: RDD[_] if c.isCheckpointed || c.getStorageLevel != StorageLevel.NONE => c
       case m: MapPartitionsRDD[_, _] if m.preservesPartitionSizes =>
         getAncestorWithSamePartitionSizes(m.prev)
@@ -60,11 +65,19 @@ class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev)
       Array(0L)
     } else {
       val ancestor = getAncestorWithSamePartitionSizes(prev)
-      ancestor.context.runJob(
-        ancestor,
-        Utils.getIteratorSize _,
-        0 until n - 1 // do not need to count the last partition
-      ).scanLeft(0L)(_ + _)
+      ancestor match {
+        // getAncestorWithSamePartitionSizes only stops at a ZippedWithIndexRDD whose startIndices
+        // are already populated and which covers the same partition sizes as ours, so its start
+        // indices are identical; reuse them directly and skip the counting job. The null check is
+        // redundant with that guard but kept for safety.
+        case z: ZippedWithIndexRDD[_] if z.startIndices != null => z.startIndices
+        case _ =>
+          ancestor.context.runJob(
+            ancestor,
+            Utils.getIteratorSize _,
+            0 until n - 1 // do not need to count the last partition
+          ).scanLeft(0L)(_ + _)
+      }
     }
   }
 
