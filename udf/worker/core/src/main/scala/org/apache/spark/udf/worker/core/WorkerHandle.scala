@@ -63,4 +63,13 @@ trait WorkerHandle {
    * implementations need not be idempotent.
    */
   def releaseSession(): Unit
+
+  /**
+   * The transport [[WorkerConnection]] used to talk to this worker. The
+   * dispatcher attaches it to the handle so the session-construction seam
+   * (the dispatcher's `newSession`) takes a single object rather than a
+   * separate handle + connection. Its lifecycle is owned by the dispatcher,
+   * not the session: it is torn down when the worker is, not on session close.
+   */
+  def connection: WorkerConnection
 }

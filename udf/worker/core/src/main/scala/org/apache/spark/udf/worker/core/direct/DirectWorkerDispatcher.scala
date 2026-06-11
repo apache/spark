@@ -210,11 +210,10 @@ abstract class DirectWorkerDispatcher(
    * Constructs the per-invocation [[WorkerSession]] for a worker.
    * Subclasses build the concrete session implementation (e.g.
    * `GrpcWorkerSession` for gRPC over UDS) using `workerHandle` for
-   * dispatcher-side cleanup and `connection` for the wire transport.
+   * dispatcher-side cleanup and `workerHandle.connection` for the wire
+   * transport.
    */
-  protected def newSession(
-      workerHandle: WorkerHandle,
-      connection: WorkerConnection): WorkerSession
+  protected def newSession(workerHandle: WorkerHandle): WorkerSession
 
   /**
    * Test-only hook: invoked once per [[createSession]] after the worker
@@ -255,7 +254,7 @@ abstract class DirectWorkerDispatcher(
     }
     try {
       afterWorkerRegistered(worker)
-      newSession(worker, worker.connection)
+      newSession(worker)
     } catch {
       case e: InterruptedException =>
         Thread.currentThread().interrupt()

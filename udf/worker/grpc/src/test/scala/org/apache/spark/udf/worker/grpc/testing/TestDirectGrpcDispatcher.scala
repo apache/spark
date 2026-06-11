@@ -37,8 +37,6 @@ class TestDirectGrpcDispatcher(spec: UDFWorkerSpecification)
   override protected def newConnection(address: String): WorkerConnection =
     new SocketFileConnection(address)
 
-  override protected def newSession(
-      workerHandle: WorkerHandle,
-      connection: WorkerConnection): WorkerSession =
+  override protected def newSession(workerHandle: WorkerHandle): WorkerSession =
     new NoOpWorkerSession(workerHandle, logger)
 }

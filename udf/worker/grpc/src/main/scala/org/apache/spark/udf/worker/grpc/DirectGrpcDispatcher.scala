@@ -170,16 +170,15 @@ class DirectGrpcDispatcher(
   override protected def newConnection(address: String): WorkerConnection =
     new GrpcWorkerChannel(address, logger)
 
-  override protected def newSession(
-      workerHandle: WorkerHandle,
-      connection: WorkerConnection): WorkerSession = connection match {
-    case g: GrpcWorkerChannel =>
-      new GrpcWorkerSession(workerHandle, g.channel, logger)
-    case other =>
-      throw new IllegalStateException(
-        s"DirectGrpcDispatcher.newConnection should have produced a " +
-          s"GrpcWorkerChannel but got ${other.getClass.getName}")
-  }
+  override protected def newSession(workerHandle: WorkerHandle): WorkerSession =
+    workerHandle.connection match {
+      case g: GrpcWorkerChannel =>
+        new GrpcWorkerSession(workerHandle, g.channel, logger)
+      case other =>
+        throw new IllegalStateException(
+          s"DirectGrpcDispatcher.newConnection should have produced a " +
+            s"GrpcWorkerChannel but got ${other.getClass.getName}")
+    }
 
   private def throwWorkerExitedBeforeSocket(
       process: Process,

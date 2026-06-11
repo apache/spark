@@ -510,9 +510,7 @@ class DirectWorkerDispatcherSuite
     var capturedWorker: DirectWorkerProcess = null
     val failingDispatcher =
       new TestDirectGrpcDispatcher(specWithRunner(defaultRunner)) {
-        override protected def newSession(
-            workerHandle: WorkerHandle,
-            connection: WorkerConnection): WorkerSession =
+        override protected def newSession(workerHandle: WorkerHandle): WorkerSession =
           throw new RuntimeException("session creation failed")
         override protected def afterWorkerRegistered(w: DirectWorkerProcess): Unit = {
           capturedWorker = w
