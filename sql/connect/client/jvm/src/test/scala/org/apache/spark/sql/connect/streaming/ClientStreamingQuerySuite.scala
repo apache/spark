@@ -35,7 +35,7 @@ import org.apache.spark.sql.connect.test.{IntegrationTestUtils, QueryTest, Remot
 import org.apache.spark.sql.functions.{col, lit, udf, window}
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamingQueryListener, Trigger}
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryIdleEvent, QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.util.SparkFileUtils
 
 class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with Logging {
@@ -181,11 +181,30 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
+  private val disallowUserSpecifiedSchemaInTableConfKey =
+    "spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled"
+
+  /**
+   * Starts `df` into a memory sink and verifies the streamed rows match the data written to
+   * the source table via `spark.range(3)`.
+   */
+  private def checkStreamingTableAnswer(df: DataFrame, sinkName: String): Unit = {
+    assert(df.isStreaming)
+    val q = df.writeStream.format("memory").queryName(sinkName).start()
+    try {
+      q.processAllAvailable()
+      eventually(timeout(30.seconds)) {
+        checkAnswer(spark.table(sinkName), Seq(Row(0L), Row(1L), Row(2L)))
+      }
+    } finally {
+      q.stop()
+    }
+  }
+
   test("Streaming table API rejects user-specified schema") {
-    val confKey = "spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled"
     val tableName = "table_with_user_specified_schema"
     withTable(tableName) {
-      spark.sql(s"CREATE TABLE $tableName (id LONG) USING parquet").collect()
+      spark.range(3).write.format("parquet").saveAsTable(tableName)
 
       val e = intercept[AnalysisException] {
         spark.readStream
@@ -195,15 +214,27 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       checkError(
         exception = e,
         condition = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
-        parameters = Map("config" -> confKey))
+        parameters = Map("config" -> disallowUserSpecifiedSchemaInTableConfKey))
 
-      // Flipping the conf off restores the previous behavior: the user-specified schema is
-      // silently ignored and the catalog table's schema is used.
-      withSQLConf(confKey -> "false") {
+      // After removing the user-specified schema, the query runs using the table's schema.
+      val df = spark.readStream.table(tableName)
+      assert(df.schema === new StructType().add("id", LongType, nullable = false))
+      checkStreamingTableAnswer(df, "user_schema_rejected_sink")
+    }
+  }
+
+  test("Streaming table API silently ignores user-specified schema when flag is flipped off") {
+    val tableName = "table_with_user_specified_schema_flag_off"
+    withTable(tableName) {
+      spark.range(3).write.format("parquet").saveAsTable(tableName)
+
+      withSQLConf(disallowUserSpecifiedSchemaInTableConfKey -> "false") {
         val df = spark.readStream
           .schema(new StructType().add("a", IntegerType))
           .table(tableName)
-        assert(df.schema.fieldNames === Array("id"))
+        // The user-specified `a: Int` is dropped; the catalog table's `id: Long` is used.
+        assert(df.schema === new StructType().add("id", LongType, nullable = false))
+        checkStreamingTableAnswer(df, "user_schema_ignored_sink")
       }
     }
   }
