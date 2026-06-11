@@ -29,9 +29,9 @@ import org.apache.spark.sql.internal.SQLConf
  * Enforces that every Spark config declares a `ConfigBindingPolicy`. The exceptions file
  * `conf/binding-policy-exceptions/configs-without-binding-policy-exceptions` is a frozen list
  * of configs that predate the binding policy and must only ever shrink: new configs must
- * declare a policy via `.withBindingPolicy()` when building the config entry, using
- * `NOT_APPLICABLE` if the config does not affect the behavior of SQL views/UDFs/procedures.
- * The `binding-policy` CI job rejects any PR that adds entries to the exceptions file.
+ * declare a policy via `.withBindingPolicy()` when building the config entry (see the
+ * [[ConfigBindingPolicy]] scaladoc for how to choose a policy). The `binding-policy` CI job
+ * rejects any PR that adds entries to the exceptions file.
  */
 class SparkConfigBindingPolicySuite extends SparkFunSuite {
 
@@ -66,10 +66,10 @@ class SparkConfigBindingPolicySuite extends SparkFunSuite {
       fail(
         s"The following configs do not have bindingPolicy field set. You need to define it " +
         "by using .withBindingPolicy(ConfigBindingPolicy.SESSION/PERSISTED/NOT_APPLICABLE) " +
-        "when you build the config entry. Use NOT_APPLICABLE if the config does not affect " +
-        "the behavior of SQL views/UDFs/procedures. DO NOT add new entries to the " +
-        "exceptions file: it is a frozen list of configs that predate the binding policy " +
-        "and must only ever shrink (the binding-policy CI job rejects any addition).\n" +
+        "when you build the config entry. See the ConfigBindingPolicy scaladoc for how to " +
+        "choose a policy. DO NOT add new entries to the exceptions file: it is a frozen " +
+        "list of configs that predate the binding policy and must only ever shrink (the " +
+        "binding-policy CI job rejects any addition).\n" +
         missingBindingPolicyConfigs.mkString("\n")
       )
     }
