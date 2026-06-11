@@ -83,7 +83,6 @@ from pyspark.sql.pandas.serializers import (
     TransformWithStateInPandasInitStateSerializer,
     TransformWithStateInPySparkRowSerializer,
     TransformWithStateInPySparkRowInitStateSerializer,
-    ArrowStreamUDTFSerializer,
 )
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.types import (
@@ -868,7 +867,9 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
             )
         else:
-            ser = ArrowStreamUDTFSerializer()
+            # Pure Arrow stream I/O; output struct wrapping is handled in the
+            # mapper below.
+            ser = ArrowStreamSerializer(write_start_stream=True)
     elif eval_type == PythonEvalType.SQL_ARROW_UDTF:
         # Pure Arrow stream I/O; table-arg flattening and output coercion
         # are handled in the mapper below.
@@ -1736,12 +1737,12 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                 if len(args) == 0:
                     for _ in range(num_rows):
                         for batch in convert_to_arrow(func()):
-                            yield batch, arrow_return_type
+                            yield ArrowBatchTransformer.wrap_struct(batch)
 
                 else:
                     for row in zip(*args):
                         for batch in convert_to_arrow(func(*row)):
-                            yield batch, arrow_return_type
+                            yield ArrowBatchTransformer.wrap_struct(batch)
 
             return evaluate
 
@@ -1776,8 +1777,8 @@ def read_udtf(pickleSer, udtf_info, eval_type, runner_conf, eval_conf):
                         )
                         for column, conv in zip(a.columns, converters)
                     ]
-                    # The eval function yields an iterator. Each element produced by this
-                    # iterator is a tuple in the form of (pyarrow.RecordBatch, arrow_return_type).
+                    # The eval function yields an iterator of struct-wrapped
+                    # pyarrow.RecordBatches ready to be written to the stream.
                     yield from eval(*[pylist[o] for o in args_kwargs_offsets], num_rows=a.num_rows)
                 if terminate is not None:
                     yield from terminate()
