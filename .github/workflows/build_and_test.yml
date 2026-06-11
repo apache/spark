@@ -43,9 +43,7 @@ on:
         description: Additional environment variables to set when running the tests. Should be in JSON format.
         required: false
         type: string
-        # TEMP(coercion-pandas3): run PySpark CI under Pandas 3 to validate the new
-        # pandas-3 golden files in this PR. Revert to "python-312" before merge.
-        default: '{"PYSPARK_IMAGE_TO_TEST": "python-312-pandas-3", "PYTHON_TO_TEST": "python3.12"}'
+        default: '{"PYSPARK_IMAGE_TO_TEST": "python-312", "PYTHON_TO_TEST": "python3.12"}'
       jobs:
         description: >-
           Jobs to run, and should be in JSON format. The values should be matched with the job's key defined
