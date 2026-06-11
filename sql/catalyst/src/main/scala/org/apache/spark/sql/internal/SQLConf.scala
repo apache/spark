@@ -3249,7 +3249,7 @@ object SQLConf {
       .doc("When true, streaming sinks can be named using the name() API on DataStreamWriter. " +
         "This enables sink evolution capability where sinks can be changed while maintaining " +
         "a historical record of all sinks used in the checkpoint.")
-      .version("4.1.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
