@@ -29,6 +29,24 @@ package org.apache.spark.internal.config
  * is PERSISTED, session-level config changes will not apply to views/UDFs/procedures but only
  * to outer queries. In order for session-level changes to propagate correctly, this value must
  * be explicitly set to SESSION.
+ *
+ * How to choose a policy for a new config:
+ *
+ *  - NOT_APPLICABLE: the config is never consulted when resolving the body of a view/UDF/
+ *    procedure, e.g. physical planning, scheduling, runtime, or transport toggles. This is
+ *    the right choice for most configs. At runtime it behaves the same as SESSION.
+ *
+ *  - SESSION: the config is consulted during view/UDF/procedure resolution and the caller's
+ *    session value should apply. This is the default choice for configs that affect query
+ *    behavior: it keeps behavior uniform across the entire query, and lets behavior changes
+ *    such as bug-fix flags reach existing views/UDFs/procedures.
+ *
+ *  - PERSISTED: the view/UDF/procedure should use the create-time value of the config, e.g.
+ *    ANSI mode or the session timezone. These are configs that change query behavior, where a
+ *    persisted object should keep computing the same result as it did at creation, no matter
+ *    who calls it later. Note that changing query behavior alone does not justify PERSISTED:
+ *    a bug-fix flag also changes query behavior, but views should not freeze the buggy
+ *    behavior, so it should use SESSION.
  */
 object ConfigBindingPolicy extends Enumeration {
   type ConfigBindingPolicy = Value
