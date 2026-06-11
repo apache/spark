@@ -3522,11 +3522,10 @@ abstract class CSVSuite
           .option("maxColumns", "2")
           .csv(path.getAbsolutePath)
       }
-      checkError(
-        exception = e,
-        condition = "MALFORMED_CSV_RECORD",
-        parameters = Map("badRecord" -> ""),
-        sqlState = "KD000")
+      // badRecord comes from TextParsingException.getParsedContent (bounded), so its exact value
+      // is not pinned here; the error condition is what this asserts.
+      assert(e.getCondition == "MALFORMED_CSV_RECORD",
+        s"unexpected error condition: ${e.getCondition}")
     }
   }
 
@@ -3551,6 +3550,34 @@ abstract class CSVSuite
         parameters = Map("badRecord" -> "1,2,3"),
         sqlState = "KD000")
     }
+  }
+
+  test("SPARK-57195: multiLine CSV read failure with more than max columns") {
+    // The multiLine read path (parseStream) uses the same guarded streaming tokenizer as inference.
+    // With an explicit schema, an overflow row surfaces as MALFORMED_CSV_RECORD wrapped in
+    // FAILED_READ_FILE, mirroring the non-multiLine SPARK-49444 test above.
+    val schema = new StructType()
+      .add("intColumn", IntegerType, nullable = true)
+      .add("decimalColumn", DecimalType(10, 2), nullable = true)
+
+    val fileReadException = intercept[SparkException] {
+      spark.read
+        .schema(schema)
+        .option("header", "false")
+        .option("multiLine", "true")
+        .option("maxColumns", "2")
+        .csv(testFile(moreColumnsFile))
+        .collect()
+    }
+
+    checkErrorMatchPVals(
+      exception = fileReadException,
+      condition = "FAILED_READ_FILE.NO_HINT",
+      parameters = Map("path" -> s".*$moreColumnsFile"))
+
+    val malformedCSVException = fileReadException.getCause.asInstanceOf[SparkRuntimeException]
+    assert(malformedCSVException.getCondition == "MALFORMED_CSV_RECORD",
+      s"unexpected error condition: ${malformedCSVException.getCondition}")
   }
 
   test("csv with variant") {

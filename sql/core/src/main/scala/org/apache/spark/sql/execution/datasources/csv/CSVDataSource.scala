@@ -172,11 +172,9 @@ object TextInputCSVDataSource extends CSVDataSource {
           val linesWithoutHeader =
             CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)
-          // Route data rows through UnivocityParser.parseLine so a row with more columns than
-          // maxColumns surfaces as MALFORMED_CSV_RECORD instead of a raw
-          // ArrayIndexOutOfBoundsException (SPARK-57195). The first-line parse above is left as the
-          // raw parser so an oversized single value still yields Univocity's TextParsingException
-          // with a bounded message (SPARK-28431).
+          // Route data rows through UnivocityParser.parseLine so a too-many-columns row surfaces as
+          // MALFORMED_CSV_RECORD, not a raw ArrayIndexOutOfBoundsException (SPARK-57195). The
+          // first-line parse above stays raw to keep SPARK-28431's bounded TextParsingException.
           linesWithoutHeader.map(UnivocityParser.parseLine(parser, _))
         }
         SQLExecution.withSQLConfPropagated(csv.sparkSession) {
