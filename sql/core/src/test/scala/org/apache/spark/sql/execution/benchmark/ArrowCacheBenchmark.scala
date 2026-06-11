@@ -135,7 +135,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       // benchmark.addCase("Arrow cache - write + read (lz4)") { _ =>
       //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
       //   try {
-      //     spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+      //     spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "lz4")
       //     val df = spark.range(numRows).selectExpr(
       //       "id as int_col",
       //       "id * 2L as long_col",
@@ -153,8 +153,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("Arrow cache - write + read (zstd level -1)") { _ =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "-1")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "-1")
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
             "id * 2L as long_col",
@@ -172,8 +172,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("Arrow cache - write + read (zstd level 1)") { _ =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "1")
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
             "id * 2L as long_col",
@@ -191,7 +191,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("Arrow cache - write + read (zstd level 3)") { _ =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
             "id * 2L as long_col",
@@ -272,7 +272,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       // benchmark.addCase("Arrow cache - filter (lz4)") { _ =>
       //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
       //   try {
-      //     spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+      //     spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "lz4")
       //     val df = spark.range(numRows).selectExpr(
       //       "id as int_col",
       //       "cast(id as double) as double_col"
@@ -290,8 +290,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("Arrow cache - filter (zstd level -1)") { _ =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "-1")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "-1")
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
             "cast(id as double) as double_col"
@@ -309,8 +309,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("Arrow cache - filter (zstd level 1)") { _ =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "1")
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
             "cast(id as double) as double_col"
@@ -328,7 +328,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addCase("Arrow cache - filter (zstd level 3)") { _ =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
             "cast(id as double) as double_col"
@@ -409,7 +409,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         // benchmark.addCase("Arrow cache - columnar input (lz4)") { _ =>
         //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         //   try {
-        //     spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+        //     spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "lz4")
         //     val parquet = spark.read.parquet(path)
         //     parquet.cache()
         //     parquet.write.format("noop").mode("overwrite").save() // Force read all data
@@ -422,8 +422,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         benchmark.addCase("Arrow cache - columnar input (zstd level -1)") { _ =>
           val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
           try {
-            spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-            spark.conf.set("spark.sql.execution.arrow.compression.level", "-1")
+            spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+            spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "-1")
             val parquet = spark.read.parquet(path)
             parquet.cache()
             parquet.write.format("noop").mode("overwrite").save() // Force read all data
@@ -436,8 +436,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         benchmark.addCase("Arrow cache - columnar input (zstd level 1)") { _ =>
           val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
           try {
-            spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-            spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+            spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+            spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "1")
             val parquet = spark.read.parquet(path)
             parquet.cache()
             parquet.write.format("noop").mode("overwrite").save() // Force read all data
@@ -450,7 +450,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
         benchmark.addCase("Arrow cache - columnar input (zstd level 3)") { _ =>
           val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
           try {
-            spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+            spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
             val parquet = spark.read.parquet(path)
             parquet.cache()
             parquet.write.format("noop").mode("overwrite").save() // Force read all data
@@ -556,7 +556,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       // benchmark.addTimerCase("Arrow cache - cache a cached DF (lz4)") { timer =>
       //   val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
       //   try {
-      //     spark.conf.set("spark.sql.execution.arrow.compression.codec", "lz4")
+      //     spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "lz4")
       //     // Create and cache initial data (NOT timed)
       //     val df = spark.range(numRows).selectExpr(
       //       "id as int_col",
@@ -583,8 +583,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addTimerCase("Arrow cache - cache a cached DF (zstd level -1)") { timer =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "-1")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "-1")
           // Create and cache initial data (NOT timed)
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
@@ -611,8 +611,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addTimerCase("Arrow cache - cache a cached DF (zstd level 1)") { timer =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "1")
           // Create and cache initial data (NOT timed)
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
@@ -639,7 +639,7 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
       benchmark.addTimerCase("Arrow cache - cache a cached DF (zstd level 3)") { timer =>
         val spark = createFreshSession(classOf[ArrowCachedBatchSerializer].getName)
         try {
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
           // Create and cache initial data (NOT timed)
           val df = spark.range(numRows).selectExpr(
             "id as int_col",
@@ -735,8 +735,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
           "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
         try {
           spark.conf.set(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key, "true")
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "-1")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "-1")
           val df = spark.range(numRows).selectExpr(
             (0 until 20).map(i => s"id + $i as col$i"): _*
           )
@@ -755,8 +755,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
           "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
         try {
           spark.conf.set(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key, "true")
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "1")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "1")
           val df = spark.range(numRows).selectExpr(
             (0 until 20).map(i => s"id + $i as col$i"): _*
           )
@@ -775,8 +775,8 @@ object ArrowCacheBenchmark extends SqlBasedBenchmark {
           "org.apache.spark.sql.execution.columnar.ArrowCachedBatchSerializer")
         try {
           spark.conf.set(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key, "true")
-          spark.conf.set("spark.sql.execution.arrow.compression.codec", "zstd")
-          spark.conf.set("spark.sql.execution.arrow.compression.level", "3")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_COMPRESSION_CODEC.key, "zstd")
+          spark.conf.set(SQLConf.ARROW_EXECUTION_ZSTD_COMPRESSION_LEVEL.key, "3")
           val df = spark.range(numRows).selectExpr(
             (0 until 20).map(i => s"id + $i as col$i"): _*
           )

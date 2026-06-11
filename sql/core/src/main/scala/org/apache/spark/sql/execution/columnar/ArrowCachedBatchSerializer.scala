@@ -221,14 +221,12 @@ private object ArrowCachedBatchSerializer {
       compressionLevel: Int): CompressionCodec = {
     codecName.toLowerCase match {
       case "none" => NoCompressionCodec.INSTANCE
-      case "zstd" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new ZstdCompressionCodec(compressionLevel).getCodecType()
-        factory.createCodec(codecType)
-      case "lz4" =>
-        val factory = CompressionCodec.Factory.INSTANCE
-        val codecType = new Lz4CompressionCodec().getCodecType()
-        factory.createCodec(codecType)
+      // The codec instance must be constructed directly so that compressionLevel is honored:
+      // CompressionCodec.Factory.createCodec(codecType) ignores the level and builds a codec at
+      // the default level. The level only matters on the write side; the read side looks up the
+      // codec by the type recorded in the IPC message.
+      case "zstd" => new ZstdCompressionCodec(compressionLevel)
+      case "lz4" => new Lz4CompressionCodec()
       case other =>
         throw SparkException.internalError(
           s"Unsupported Arrow compression codec: $other. Supported values: none, zstd, lz4")

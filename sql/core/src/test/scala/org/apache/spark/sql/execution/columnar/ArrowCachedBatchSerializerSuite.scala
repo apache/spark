@@ -24,7 +24,7 @@ import org.apache.arrow.vector.{
   BigIntVector, BitVector, DateDayVector, DecimalVector,
   Float4Vector, Float8Vector, IntVector, LargeVarCharVector, SmallIntVector,
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
-  VarBinaryVector, VarCharVector, VectorSchemaRoot}
+  VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
@@ -1634,6 +1634,47 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
         case e: Exception => root.close(); throw e
       }
     }
+  }
+
+  test("zstd compression level is honored by createCompressionCodec") {
+    // Regression test: createCompressionCodec used to rebuild the codec through the
+    // single-argument factory overload, which silently dropped the level, so every configured
+    // level compressed at the zstd default. Compress the same batch at an ultra-fast negative
+    // level and at a high level and assert the high level yields a strictly smaller payload.
+    def compressedSize(level: Int): Int = {
+      val schema = Seq(AttributeReference("str_col", StringType)())
+      val sparkSchema = StructType(schema.map(a => StructField(a.name, a.dataType)))
+      val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", false, false)
+      val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
+      try {
+        root.allocateNew()
+        val strVector = root.getVector("str_col").asInstanceOf[VarCharVector]
+        // Compressible but non-trivial corpus: shared structure with per-row variation, so
+        // different zstd levels produce measurably different output sizes.
+        (0 until 2000).foreach { i =>
+          val value =
+            s"user-$i@example.com,record-${i % 97},payload-${i * 2654435761L}".getBytes("UTF-8")
+          strVector.setSafe(i, value, 0, value.length)
+        }
+        root.setRowCount(2000)
+        val codec = ArrowCachedBatchSerializer.createCompressionCodec("zstd", level)
+        val recordBatch = new VectorUnloader(root, true, codec, true).getRecordBatch()
+        try {
+          ArrowCachedBatchSerializer.serializeBatch(recordBatch).length
+        } finally {
+          recordBatch.close()
+        }
+      } finally {
+        root.close()
+      }
+    }
+
+    val fastSize = compressedSize(-5)
+    val highSize = compressedSize(19)
+    assert(highSize < fastSize,
+      s"zstd level 19 should compress smaller than level -5, " +
+        s"got level 19 -> $highSize bytes vs level -5 -> $fastSize bytes; " +
+        "equal sizes mean the configured level is being ignored")
   }
 
   test("collectStatistics returns null bounds when all Float/Double values are NaN") {
