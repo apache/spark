@@ -79,15 +79,16 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         return "golden_python_udf_input_type_coercion"
 
     @property
-    def suffix(self):
+    def pandas_dir(self):
         # Only the legacy pandas conversion path routes inputs through pandas,
         # whose defaults changed in pandas 3 (e.g. None becomes nan in str
         # columns). Use a dedicated golden file per major pandas version for
-        # that path instead of patching one golden in memory.
+        # that path, kept in a versioned subdirectory, instead of patching
+        # one golden in memory.
         if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
-            return "_pandas3"
+            return "pd3"
         else:
-            return "_pandas2"
+            return "pd2"
 
     @property
     def test_cases(self):
@@ -264,7 +265,7 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         self._run_udf_input_type_coercion(
             use_arrow=True,
             legacy_pandas=True,
-            golden_file=f"{self.prefix}_with_arrow_and_pandas{self.suffix}",
+            golden_file=f"{self.pandas_dir}/{self.prefix}_with_arrow_and_pandas",
             test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
         )
 

@@ -79,15 +79,16 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         return "golden_pandas_udf_input_type_coercion"
 
     @property
-    def suffix(self):
+    def pandas_dir(self):
         # Pandas >= 3.0 reports the dedicated 'str' dtype for string columns,
         # whereas earlier versions report 'object', which changes the recorded
-        # Python types. Use a dedicated golden file per major pandas version
-        # instead of patching one golden in memory.
+        # Python types. Use a dedicated golden file per major pandas version,
+        # kept in a versioned subdirectory, instead of patching one golden
+        # in memory.
         if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
-            return "_pandas3"
+            return "pd3"
         else:
-            return "_pandas2"
+            return "pd2"
 
     @property
     def test_cases(self):
@@ -246,7 +247,7 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
 
     def test_pandas_input_type_coercion_vanilla(self):
         self._run_pandas_udf_input_type_coercion(
-            golden_file=f"{self.prefix}_base{self.suffix}",
+            golden_file=f"{self.pandas_dir}/{self.prefix}_base",
             test_name="Pandas UDF",
         )
 
