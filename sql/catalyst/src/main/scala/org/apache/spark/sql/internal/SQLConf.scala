@@ -3250,6 +3250,7 @@ object SQLConf {
         "This enables sink evolution capability where sinks can be changed while maintaining " +
         "a historical record of all sinks used in the checkpoint.")
       .version("4.1.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -7436,6 +7437,7 @@ object SQLConf {
         "top-level columns are filled with their default value (or null). This is " +
         "experimental and the semantics may change.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
