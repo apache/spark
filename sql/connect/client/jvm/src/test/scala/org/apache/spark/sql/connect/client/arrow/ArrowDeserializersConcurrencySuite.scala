@@ -22,27 +22,31 @@ import java.util.concurrent.{ConcurrentLinkedQueue, CyclicBarrier}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.runtime.{universe => ru}
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 
 /**
- * Concurrency guard for [[ArrowDeserializers.resolveCompanionFromMirror]], the synchronized
- * reflection behind [[ArrowDeserializers.resolveCompanion]].
+ * Concurrency guard for the synchronized reflection in [[ArrowDeserializers]]:
+ * [[ArrowDeserializers.resolveCompanionFromMirror]] (behind
+ * [[ArrowDeserializers.resolveCompanion]], collection companions) and
+ * [[ArrowDeserializers.resolveEnumFromMirror]] (behind `resolveEnum`, Scala `Enumeration` modules).
  *
  * Scala runtime reflection is not thread-safe (scala/bug#6240). Resolving a collection companion
- * via `mirror.classSymbol(cls).companion.asModule` can, under concurrent access, observe
- * `.companion` as `NoSymbol`, so `.asModule` throws `ScalaReflectionException: <none> is not a
- * module` -- the production symptom this fix addresses. `resolveCompanionFromMirror` guards
- * against it by serializing the reflection through a single monitor.
+ * via `mirror.classSymbol(cls).companion.asModule` (or an Enumeration via `...module.asModule`)
+ * can, under concurrent access, observe the symbol as `NoSymbol`, so `.asModule` throws
+ * `ScalaReflectionException: <none> is not a module` -- the production symptom this fix addresses.
+ * Both `*FromMirror` methods guard against it by serializing the reflection through a single
+ * monitor.
  *
  * The race only manifests while a mirror's symbol table is still cold. The `currentMirror` used
  * in production warms up after the first resolution, so the race window is effectively one-shot
- * per JVM and unreachable through the normal path. This suite re-opens it deterministically:
+ * per symbol and unreachable through the normal path. This suite re-opens it deterministically:
  * each repetition builds a runtime mirror over a FRESH classloader (parent = the platform loader,
- * so `scala.*` collection classes are reloaded fresh rather than delegating to the warm
- * application loader), giving a brand new, COLD mirror, and drives the real synchronized
- * `resolveCompanionFromMirror` against it from many threads at once.
+ * so `scala.*` classes are reloaded fresh rather than delegating to the warm application loader),
+ * giving a brand new, COLD mirror, and drives the real synchronized reflection against it from
+ * many threads at once.
  *
  * With the synchronization in place this is reliably green. If it is ever removed, concurrent
  * cold-mirror resolution races and the suite goes flaky/red -- the regression signal we keep
@@ -95,6 +99,13 @@ class ArrowDeserializersConcurrencySuite extends ConnectFunSuite with Logging {
     "scala.collection.mutable.PriorityQueue",
     "scala.collection.mutable.UnrolledBuffer")
 
+  // Scala Enumeration module classes, resolved by `resolveEnum` in production. The fixtures
+  // defined at the bottom of this file give the enum path its own breadth of concurrent symbol
+  // completion. The "$" suffix names the module class (e.g. `object Foo` -> `Foo$`), which is the
+  // form production passes as `parent`. Keep the count in sync with the definitions below.
+  private val enumClassNames: Seq[String] =
+    (0 until 8).map(i => s"org.apache.spark.sql.connect.client.arrow.ConcurrencyTestEnum$i$$")
+
   /** Every jar/dir on the running classpath, so a cold loader can resolve any class fresh. */
   private val classpathUrls: Array[URL] = {
     val fromProp = Option(System.getProperty("java.class.path")).toSeq
@@ -114,24 +125,34 @@ class ArrowDeserializersConcurrencySuite extends ConnectFunSuite with Logging {
   private def newColdLoader(): URLClassLoader =
     new URLClassLoader(classpathUrls, ClassLoader.getPlatformClassLoader)
 
-  /** Class names that `resolveCompanion` handles cleanly single-threaded (on a cold mirror). */
-  private def resolvableClassNames(): Seq[String] = {
+  /** The subset of `names` that `resolve` handles cleanly single-threaded on a cold mirror. */
+  private def resolvableNames(
+      names: Seq[String],
+      resolve: (ru.Mirror, Class[_]) => Any): Seq[String] = {
     val loader = newColdLoader()
     val mirror = ru.runtimeMirror(loader)
-    collectionClassNames.filter { name =>
+    names.filter { name =>
       try {
-        ArrowDeserializers.resolveCompanionFromMirror(mirror, loader.loadClass(name))
+        resolve(mirror, loader.loadClass(name))
         true
       } catch {
-        case _: Throwable => false
+        // Only "not resolvable as a module/companion" is expected here; let anything else
+        // (including fatal errors) propagate rather than silently shrink the coverage.
+        case NonFatal(_) => false
       }
     }
   }
 
-  test("SPARK-57371: resolveCompanion is thread-safe under concurrent cold-mirror access") {
-    val names = resolvableClassNames()
-    assert(names.nonEmpty, "expected at least one resolvable collection companion")
-    logInfo(s"Exercising resolveCompanion for ${names.size} collection companions")
+  /**
+   * Drive `resolve` against a fresh cold mirror from `threadsPerRep` threads, `reps` times, and
+   * fail if any thread errors or fails to terminate (a hang must not pass silently).
+   */
+  private def hammer(
+      label: String,
+      names: Seq[String],
+      resolve: (ru.Mirror, Class[_]) => Any): Unit = {
+    assert(names.nonEmpty, s"expected at least one resolvable $label type")
+    logInfo(s"Exercising $label for ${names.size} types")
 
     val reps = 50
     val threadsPerRep = 16
@@ -150,7 +171,7 @@ class ArrowDeserializersConcurrencySuite extends ConnectFunSuite with Logging {
             barrier.await() // release all threads simultaneously onto the cold mirror
             var i = 0
             while (i < classes.length) {
-              try ArrowDeserializers.resolveCompanionFromMirror(mirror, classes(i))
+              try resolve(mirror, classes(i))
               catch { case e: Throwable => errors.add(e) }
               i += 1
             }
@@ -160,7 +181,12 @@ class ArrowDeserializersConcurrencySuite extends ConnectFunSuite with Logging {
         })
       }
       threads.foreach(_.start())
-      threads.foreach(_.join(60000))
+      threads.foreach { t =>
+        t.join(60000)
+        // A still-alive thread means a hang (e.g. a deadlock from a botched lock change); fail
+        // loudly instead of letting an empty `errors` queue read as success.
+        assert(!t.isAlive, s"$label thread did not finish within 60s (possible deadlock)")
+      }
     }
 
     if (!errors.isEmpty) {
@@ -171,8 +197,30 @@ class ArrowDeserializersConcurrencySuite extends ConnectFunSuite with Logging {
         .sorted
         .mkString("\n")
       fail(
-        s"resolveCompanion raced under concurrent access: ${errors.size} error(s).\n$summary",
+        s"$label raced under concurrent access: ${errors.size} error(s).\n$summary",
         errors.peek())
     }
   }
+
+  test("SPARK-57371: resolveCompanion is thread-safe under concurrent cold-mirror access") {
+    val resolve = (m: ru.Mirror, c: Class[_]) => ArrowDeserializers.resolveCompanionFromMirror(m, c)
+    hammer("resolveCompanion", resolvableNames(collectionClassNames, resolve), resolve)
+  }
+
+  test("SPARK-57371: resolveEnum is thread-safe under concurrent cold-mirror access") {
+    val resolve = (m: ru.Mirror, c: Class[_]) => ArrowDeserializers.resolveEnumFromMirror(m, c)
+    hammer("resolveEnum", resolvableNames(enumClassNames, resolve), resolve)
+  }
 }
+
+// Enumeration fixtures for the enum concurrency test. Declared top-level so each module class is
+// named `org.apache.spark.sql.connect.client.arrow.ConcurrencyTestEnum<i>$` and can be loaded by
+// name through a cold classloader. Keep the count in sync with `enumClassNames` above.
+private[arrow] object ConcurrencyTestEnum0 extends Enumeration { val A, B, C = Value }
+private[arrow] object ConcurrencyTestEnum1 extends Enumeration { val A, B, C = Value }
+private[arrow] object ConcurrencyTestEnum2 extends Enumeration { val A, B, C = Value }
+private[arrow] object ConcurrencyTestEnum3 extends Enumeration { val A, B, C = Value }
+private[arrow] object ConcurrencyTestEnum4 extends Enumeration { val A, B, C = Value }
+private[arrow] object ConcurrencyTestEnum5 extends Enumeration { val A, B, C = Value }
+private[arrow] object ConcurrencyTestEnum6 extends Enumeration { val A, B, C = Value }
+private[arrow] object ConcurrencyTestEnum7 extends Enumeration { val A, B, C = Value }

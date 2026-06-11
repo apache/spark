@@ -446,7 +446,7 @@ object ArrowDeserializers {
    * Resolve the companion object for a scala class. In our particular case the class we pass in
    * is a Scala collection. We use the companion to create a builder for that collection.
    *
-   * Scala runtime reflection is not thread-safe (scala/bug#6240, #10431): concurrent calls to
+   * Scala runtime reflection is not thread-safe (scala/bug#6240): concurrent calls to
    * `classSymbol(...).companion` can race, leaving the companion as `NoSymbol` so that
    * `.asModule` throws `ScalaReflectionException: <none> is not a module`. We serialize the
    * reflection through this object's monitor (see [[resolveCompanionFromMirror]]) to prevent it.
@@ -469,13 +469,25 @@ object ArrowDeserializers {
   }
 
   /**
-   * Resolve a Scala Enumeration parent class to its module instance. Synchronized on the same
-   * monitor as [[resolveCompanionFromMirror]] for the same thread-safety reasons.
+   * Resolve a Scala Enumeration parent class to its module instance. Reads `currentMirror` and
+   * delegates to [[resolveEnumFromMirror]], mirroring the [[resolveCompanion]] /
+   * [[resolveCompanionFromMirror]] split.
    */
-  private def resolveEnum(parent: Class[_]): Enumeration = synchronized {
-    val mirror = scala.reflect.runtime.currentMirror
+  private def resolveEnum(parent: Class[_]): Enumeration =
+    resolveEnumFromMirror(scala.reflect.runtime.currentMirror, parent).asInstanceOf[Enumeration]
+
+  /**
+   * Synchronized reflection to resolve a Scala Enumeration's module instance. As with
+   * [[resolveCompanionFromMirror]], the mirror is passed in rather than read from `currentMirror`
+   * so the concurrency regression test can drive this exact (synchronized) method against a
+   * deliberately cold mirror. Synchronized on the same monitor as [[resolveCompanionFromMirror]]
+   * for the same thread-safety reasons. Production always passes `currentMirror`.
+   */
+  private[arrow] def resolveEnumFromMirror(
+      mirror: scala.reflect.runtime.universe.Mirror,
+      parent: Class[_]): Any = synchronized {
     val module = mirror.classSymbol(parent).module.asModule
-    mirror.reflectModule(module).instance.asInstanceOf[Enumeration]
+    mirror.reflectModule(module).instance
   }
 
   /**
