@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.columnar.CachedBatch
-import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{InSubqueryExec, LeafExecNode, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -53,7 +53,9 @@ trait InMemoryTableScanLike extends LeafExecNode {
 case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
-    @transient relation: InMemoryRelation)
+    @transient relation: InMemoryRelation,
+    limit: Option[Int] = None,
+    runtimeFilters: Seq[Expression] = Nil)
   extends InMemoryTableScanLike {
 
   override lazy val metrics = Map(
@@ -80,9 +82,13 @@ case class InMemoryTableScanExec(
   override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override def doCanonicalize(): SparkPlan =
-    copy(attributes = attributes.map(QueryPlan.normalizeExpressions(_, relation.output)),
+    copy(
+      attributes = attributes.map(QueryPlan.normalizeExpressions(_, relation.output)),
       predicates = predicates.map(QueryPlan.normalizeExpressions(_, relation.output)),
-      relation = relation.canonicalized.asInstanceOf[InMemoryRelation])
+      relation = relation.canonicalized.asInstanceOf[InMemoryRelation],
+      limit = limit,
+      runtimeFilters = runtimeFilters.map(QueryPlan.normalizeExpressions(_, relation.output))
+    )
 
   override def vectorTypes: Option[Seq[String]] =
     relation.cacheBuilder.serializer.vectorTypes(attributes, conf)
@@ -137,11 +143,29 @@ case class InMemoryTableScanExec(
 
   private val inMemoryPartitionPruningEnabled = conf.inMemoryPartitionPruning
 
+  // After DPP subqueries are evaluated, DynamicPruningExpression wraps an InSubqueryExec whose
+  // result is populated. Convert it to In(child, literals) so buildFilter can skip batches via
+  // per-batch min/max column statistics. Without the conversion, buildFilter cannot translate
+  // InSubqueryExec and DPP provides no batch-level pruning.
+  private def allPredicates: Seq[Expression] = predicates ++ runtimeFilters.map {
+    case DynamicPruningExpression(in: InSubqueryExec) =>
+      in.values() match {
+        case Some(values) if values.nonEmpty =>
+          In(in.child, values.map(v => Literal.create(v, in.child.dataType)).toSeq)
+        // Empty broadcast side: IN () is always false - signal to buildFilter that every
+        // batch can be skipped rather than treating it as an unconstrained TrueLiteral.
+        case _ => Literal.FalseLiteral
+      }
+    case DynamicPruningExpression(e) => e
+    case e => e
+  }
+
   private def filteredCachedBatches(): RDD[CachedBatch] = {
     val buffers = relation.cacheBuilder.cachedColumnBuffers
 
     if (inMemoryPartitionPruningEnabled) {
-      val filterFunc = relation.cacheBuilder.serializer.buildFilter(predicates, relation.output)
+      val filterFunc =
+        relation.cacheBuilder.serializer.buildFilter(allPredicates, relation.output)
       buffers.mapPartitionsWithIndexInternal(filterFunc)
     } else {
       buffers
@@ -161,8 +185,7 @@ case class InMemoryTableScanExec(
     val relOutput = relation.output
     val serializer = relation.cacheBuilder.serializer
 
-    // update SQL metrics
-    val withMetrics =
+    val withAccumulators =
       filteredCachedBatches().mapPartitionsInternal { iter =>
         if (enableAccumulatorsForTest && iter.hasNext) {
           readPartitions.add(1)
@@ -171,22 +194,50 @@ case class InMemoryTableScanExec(
           if (enableAccumulatorsForTest) {
             readBatches.add(1)
           }
-          numOutputRows += batch.numRows
           batch
         }
       }
-    serializer.convertCachedBatchToInternalRow(withMetrics, relOutput, attributes, conf)
+    val rows =
+      serializer.convertCachedBatchToInternalRow(withAccumulators, relOutput, attributes, conf)
+    // Apply the per-partition limit before counting output rows so numOutputRows reflects
+    // what actually leaves the scan, not what was deserialized before LocalLimit truncates.
+    val result = limit.fold(rows)(n => rows.mapPartitions(_.take(n)))
+    result.mapPartitions(_.map { row => numOutputRows += 1; row })
+  }
+
+  // Limits a ColumnarBatch iterator to at most maxRows rows, truncating the last batch if needed.
+  // Iterator.take(n) on RDD[ColumnarBatch] would take n batches (not n rows); this corrects that.
+  private def limitBatchesToRows(
+      iter: Iterator[ColumnarBatch], maxRows: Int): Iterator[ColumnarBatch] = {
+    var remaining = maxRows
+    new Iterator[ColumnarBatch] {
+      override def hasNext: Boolean = remaining > 0 && iter.hasNext
+      override def next(): ColumnarBatch = {
+        val batch = iter.next()
+        val n = batch.numRows()
+        if (n <= remaining) {
+          remaining -= n
+          batch
+        } else {
+          batch.setNumRows(remaining)
+          remaining = 0
+          batch
+        }
+      }
+    }
   }
 
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     // Resulting RDD is cached and reused by SparkPlan.executeColumnarRDD
     val numOutputRows = longMetric("numOutputRows")
-    val buffers = filteredCachedBatches()
-    relation.cacheBuilder.serializer.convertCachedBatchToColumnarBatch(
-      buffers,
+    val batches = relation.cacheBuilder.serializer.convertCachedBatchToColumnarBatch(
+      filteredCachedBatches(),
       relation.output,
       attributes,
-      conf).map { cb =>
+      conf)
+    // Apply row-accurate per-partition limit before counting output rows.
+    val result = limit.fold(batches)(n => batches.mapPartitions(limitBatchesToRows(_, n)))
+    result.map { cb =>
       numOutputRows += cb.numRows()
       cb
     }

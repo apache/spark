@@ -262,6 +262,11 @@ abstract class SimpleMetricsCachedBatchSerializer extends CachedBatchSerializer 
     // Returned filter predicate should return false iff it is impossible for the input expression
     // to evaluate to `true` based on statistics collected about this partition batch.
     @transient lazy val buildFilter: PartialFunction[Expression, Expression] = {
+      // A constant-false predicate can never select any row, so every batch can be skipped.
+      // Such predicates reach this point e.g. from a dynamic partition pruning filter whose
+      // build side turned out to be empty (see InMemoryTableScanExec.allPredicates).
+      case Literal.FalseLiteral => Literal.FalseLiteral
+
       case And(lhs: Expression, rhs: Expression)
         if buildFilter.isDefinedAt(lhs) || buildFilter.isDefinedAt(rhs) =>
         (buildFilter.lift(lhs) ++ buildFilter.lift(rhs)).reduce(_ && _)

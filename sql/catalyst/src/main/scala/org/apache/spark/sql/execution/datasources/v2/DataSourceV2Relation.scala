@@ -40,6 +40,15 @@ import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
 
 /**
+ * A marker for [[Table]] implementations whose statistics are accurate even before projections
+ * and filters are pushed down, e.g. the wrapper over cached DataFrames, whose statistics come
+ * from the materialized cache rather than from estimating a scan. For such tables it is safe
+ * to compute statistics before [[V2ScanRelationPushDown]] runs, so
+ * [[DataSourceV2RelationBase.computeStats]] skips its testing-mode assertion.
+ */
+private[sql] trait SupportsPrePushdownStats
+
+/**
  * A logical plan representing a data source v2 table.
  *
  * @param table  The table that this relation represents.
@@ -84,10 +93,12 @@ abstract class DataSourceV2RelationBase(
   }
 
   override def computeStats(): Statistics = {
-    if (Utils.isTesting) {
+    if (Utils.isTesting && !table.isInstanceOf[SupportsPrePushdownStats]) {
       // when testing, throw an exception if this computeStats method is called because stats should
       // not be accessed before pushing the projection and filters to create a scan. otherwise, the
       // stats are not accurate because they are based on a full table scan of all columns.
+      // Tables marked with SupportsPrePushdownStats report accurate stats regardless of
+      // pushdown and take the branch below instead.
       throw SparkException.internalError(
         s"BUG: computeStats called before pushdown on DSv2 relation: $name")
     } else {

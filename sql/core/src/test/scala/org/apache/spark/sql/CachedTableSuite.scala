@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.AsOfVersion
 import org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Join, JoinStrategyHint, SHUFFLE_HASH}
+import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, ColumnStat, Join, JoinStrategyHint, SHUFFLE_HASH}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.CatalogPlugin
@@ -85,7 +85,7 @@ class CachedTableSuite extends SharedSparkSession
   def rddIdOf(tableName: String): Int = {
     val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
-      case InMemoryTableScanExec(_, _, relation) =>
+      case InMemoryTableScanExec(_, _, relation, _, _) =>
         relation.cacheBuilder.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
@@ -107,7 +107,7 @@ class CachedTableSuite extends SharedSparkSession
 
   private def getNumInMemoryRelations(ds: Dataset[_]): Int = {
     val plan = ds.queryExecution.withCachedData
-    var sum = plan.collect { case _: InMemoryRelation => 1 }.sum
+    var sum = plan.collect { case CachedRelation(_) => 1 }.sum
     plan.transformAllExpressions {
       case e: SubqueryExpression =>
         sum += getNumInMemoryRelations(e.plan)
@@ -124,7 +124,7 @@ class CachedTableSuite extends SharedSparkSession
 
   private def getNumInMemoryTablesRecursively(plan: SparkPlan): Int = {
     collect(plan) {
-      case inMemoryTable @ InMemoryTableScanExec(_, _, relation) =>
+      case inMemoryTable @ InMemoryTableScanExec(_, _, relation, _, _) =>
         getNumInMemoryTablesRecursively(relation.cachedPlan) +
           getNumInMemoryTablesInSubquery(inMemoryTable) + 1
       case p =>
@@ -222,20 +222,20 @@ class CachedTableSuite extends SharedSparkSession
 
     assertCached(spark.table("testData"))
     assert(spark.table("testData").queryExecution.withCachedData match {
-      case _: InMemoryRelation => true
+      case CachedRelation(_) => true
       case _ => false
     })
 
     uncacheTable("testData")
     assert(!spark.catalog.isCached("testData"))
     assert(spark.table("testData").queryExecution.withCachedData match {
-      case _: InMemoryRelation => false
+      case CachedRelation(_) => false
       case _ => true
     })
   }
 
   test("SPARK-1669: cacheTable should be idempotent") {
-    assert(!spark.table("testData").logicalPlan.isInstanceOf[InMemoryRelation])
+    assert(!CachedRelation.unapply(spark.table("testData").logicalPlan).isDefined)
 
     spark.catalog.cacheTable("testData")
     assertCached(spark.table("testData"))
@@ -247,7 +247,7 @@ class CachedTableSuite extends SharedSparkSession
     spark.catalog.cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
       spark.table("testData").queryExecution.withCachedData.collect {
-        case r: InMemoryRelation if r.cachedPlan.isInstanceOf[InMemoryTableScanExec] => r
+        case CachedRelation(r) if r.cachedPlan.isInstanceOf[InMemoryTableScanExec] => r
       }.size
     }
 
@@ -410,9 +410,70 @@ class CachedTableSuite extends SharedSparkSession
   test("InMemoryRelation statistics") {
     sql("CACHE TABLE testData")
     spark.table("testData").queryExecution.withCachedData.collect {
-      case cached: InMemoryRelation =>
+      case CachedRelation(cached) =>
         val actualSizeInBytes = (1 to 100).map(i => 4 + i.toString.length + 4).sum
         assert(cached.stats.sizeInBytes === actualSizeInBytes)
+    }
+  }
+
+  test("SPARK-56479: cached relation reports stats before pushdown") {
+    sql("CACHE TABLE testData")
+    // Optimizer rules that run before V2ScanRelationPushDown (e.g. the broadcast-size check
+    // in PushDownLeftSemiAntiJoin) read stats from the cache's DSv2 relation. Unlike generic
+    // DSv2 relations, whose pre-pushdown stats are inaccurate full-scan estimates (and
+    // therefore fail in testing mode), the cache wrapper reports the InMemoryRelation stats.
+    val prePushdown = spark.table("testData").queryExecution.withCachedData
+    assert(CachedRelation.unapply(prePushdown).isDefined)
+    assert(prePushdown.stats.sizeInBytes > 0)
+
+    // End-to-end query shape that reads stats before pushdown: a left semi join over an
+    // aggregate triggers PushDownLeftSemiAntiJoin's canPlanAsBroadcastHashJoin check.
+    checkAnswer(
+      sql("""SELECT xx.key, xx.cnt
+            |FROM (SELECT key, count(*) AS cnt FROM testData GROUP BY key) xx
+            |LEFT SEMI JOIN testData yy ON xx.key = yy.key
+            |WHERE xx.key < 3""".stripMargin),
+      Row(1, 1) :: Row(2, 1) :: Nil)
+  }
+
+  test("SPARK-56479: cached plan with duplicate column names stays on InMemoryRelation") {
+    val df = spark.range(5).select($"id".as("c"), ($"id" * 2).as("c"))
+    df.cache()
+    try {
+      checkAnswer(df, (0 until 5).map(i => Row(i.toLong, i.toLong * 2)))
+      // The DSv2 machinery identifies columns by name, so an output with duplicate names
+      // cannot round-trip through the InMemoryCacheTable wrapper; the substituted plan
+      // must be the raw InMemoryRelation.
+      val cached = df.queryExecution.withCachedData
+      assert(cached.exists(_.isInstanceOf[InMemoryRelation]))
+      assert(!cached.exists {
+        case DataSourceV2Relation(_: InMemoryCacheTable, _, _, _, _, _) => true
+        case _ => false
+      })
+    } finally {
+      df.unpersist()
+    }
+  }
+
+  test("SPARK-56479: withOutput remaps duplicate-named column stats positionally") {
+    val df = spark.range(10).select($"id".as("c"), ($"id" * 2).as("c"))
+    df.cache()
+    try {
+      df.count()
+      val mem = df.queryExecution.withCachedData.collect { case CachedRelation(m) => m }.head
+      val Seq(a1, a2) = mem.output
+      val stat1 = ColumnStat(distinctCount = Some(BigInt(1)))
+      val stat2 = ColumnStat(distinctCount = Some(BigInt(2)))
+      mem.updateStats(10, Map(a1 -> stat1, a2 -> stat2))
+      val newOutput = mem.output.map(_.newInstance())
+      val remapped = mem.withOutput(newOutput)
+      val remappedStats = remapped.statsOfPlanToCache.attributeStats
+      // Both same-named columns keep their own stats: a name-based remap would collapse
+      // them onto a single attribute and drop one of the stats.
+      assert(remappedStats.get(newOutput.head).contains(stat1))
+      assert(remappedStats.get(newOutput(1)).contains(stat2))
+    } finally {
+      df.unpersist()
     }
   }
 
@@ -474,12 +535,12 @@ class CachedTableSuite extends SharedSparkSession
       val toBeCleanedAccIds = new HashSet[Long]
 
       val accId1 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case CachedRelation(i) => i.cacheBuilder.sizeInBytesStats.id
       }.head
       toBeCleanedAccIds += accId1
 
       val accId2 = spark.table("t1").queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i.cacheBuilder.sizeInBytesStats.id
+        case CachedRelation(i) => i.cacheBuilder.sizeInBytesStats.id
       }.head
       toBeCleanedAccIds += accId2
 
@@ -1600,7 +1661,7 @@ class CachedTableSuite extends SharedSparkSession
       sql(s"CACHE TABLE $tableName AS SELECT TIMESTAMP_NTZ'2021-01-01 00:00:00'")
       checkAnswer(spark.table(tableName), Row(LocalDateTime.parse("2021-01-01T00:00:00")))
       spark.table(tableName).queryExecution.withCachedData.collect {
-        case cached: InMemoryRelation =>
+        case CachedRelation(cached) =>
           assert(cached.stats.sizeInBytes === 8)
       }
       sql(s"UNCACHE TABLE $tableName")
@@ -1811,7 +1872,7 @@ class CachedTableSuite extends SharedSparkSession
       sql(s"CACHE TABLE $tableName AS SELECT TIME'22:00:00'")
       checkAnswer(spark.table(tableName), Row(LocalTime.parse("22:00:00")))
       spark.table(tableName).queryExecution.withCachedData.collect {
-        case cached: InMemoryRelation =>
+        case CachedRelation(cached) =>
           assert(cached.stats.sizeInBytes === 8)
       }
       sql(s"UNCACHE TABLE $tableName")

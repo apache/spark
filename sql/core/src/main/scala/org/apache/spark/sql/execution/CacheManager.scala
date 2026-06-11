@@ -26,7 +26,7 @@ import org.apache.spark.internal.LogKeys._
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
@@ -37,11 +37,12 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelp
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.{InMemoryCacheTable, InMemoryRelation}
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -333,8 +334,20 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cachedData: CachedData,
       column: Seq[Attribute]): Unit = {
     val relation = cachedData.cachedRepresentation
+    val planToAnalyze: LogicalPlan = if (SQLConf.get.inMemoryCacheEnableDSv2 &&
+        InMemoryCacheTable.supportsOutput(relation.output)) {
+      DataSourceV2Relation(
+        table = new InMemoryCacheTable(relation),
+        output = relation.output.map { case ar: AttributeReference => ar },
+        catalog = None,
+        identifier = None,
+        options = CaseInsensitiveStringMap.empty()
+      )
+    } else {
+      relation
+    }
     val (rowCount, newColStats) =
-      CommandUtils.computeColumnStats(sparkSession, relation, column)
+      CommandUtils.computeColumnStats(sparkSession, planToAnalyze, column)
     relation.updateStats(rowCount, newColStats)
   }
 
@@ -521,6 +534,7 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private[sql] def useCachedData(
       plan: LogicalPlan,
       canUse: CachedData => Boolean = _ => true): LogicalPlan = {
+    val dsv2Enabled = SQLConf.get.inMemoryCacheEnableDSv2
     val newPlan = plan transformDown {
       case command: Command => command
 
@@ -529,9 +543,27 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
           // After cache lookup, we should still keep the hints from the input plan.
           val hints = EliminateResolvedHint.extractHintsFromPlan(currentFragment)._2
           val cachedPlan = cached.cachedRepresentation.withOutput(currentFragment.output)
+          // When DSv2 is enabled (default), wrap in DataSourceV2Relation so that
+          // V2ScanRelationPushDown can apply DPP and per-partition LIMIT pushdown.
+          // When disabled, return InMemoryRelation directly; InMemoryScans handles it via
+          // pruneFilterProject (column pruning, filter pushdown, sort-order propagation).
+          // Outputs with duplicate column names cannot be identified by name in the DSv2
+          // machinery and also stay on the InMemoryRelation path.
+          val substitutedPlan: LogicalPlan = if (dsv2Enabled &&
+              InMemoryCacheTable.supportsOutput(cachedPlan.output)) {
+            DataSourceV2Relation(
+              table = new InMemoryCacheTable(cachedPlan),
+              output = cachedPlan.output.map { case ar: AttributeReference => ar },
+              catalog = None,
+              identifier = None,
+              options = CaseInsensitiveStringMap.empty()
+            )
+          } else {
+            cachedPlan
+          }
           // The returned hint list is in top-down order, we should create the hint nodes from
           // right to left.
-          hints.foldRight[LogicalPlan](cachedPlan) { case (hint, p) =>
+          hints.foldRight[LogicalPlan](substitutedPlan) { case (hint, p) =>
             ResolvedHint(p, hint)
           }
         }.getOrElse(currentFragment)

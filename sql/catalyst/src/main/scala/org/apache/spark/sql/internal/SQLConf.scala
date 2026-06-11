@@ -873,6 +873,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val IN_MEMORY_CACHE_ENABLE_DSV2 =
+    buildConf("spark.sql.inMemoryColumnarStorage.enableDatasourceV2")
+      .doc("When true (default), cached DataFrames are represented as DataSourceV2Relation " +
+        "nodes, enabling Dynamic Partition Pruning and per-partition LIMIT pushdown on cached " +
+        "data. Set to false to revert to the pre-DSv2 InMemoryRelation path, which still " +
+        "supports column pruning, filter pushdown, and sort-order propagation via the " +
+        "InMemoryScans planner strategy.")
+      .version("4.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val COLUMN_VECTOR_OFFHEAP_ENABLED =
     buildConf("spark.sql.columnVector.offheap.enabled")
       .internal()
@@ -8139,6 +8151,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def parquetRecordFilterEnabled: Boolean = getConf(PARQUET_RECORD_FILTER_ENABLED)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
+
+  def inMemoryCacheEnableDSv2: Boolean = getConf(IN_MEMORY_CACHE_ENABLE_DSV2)
 
   def inMemoryTableScanStatisticsEnabled: Boolean = getConf(IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED)
 
