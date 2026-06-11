@@ -665,77 +665,61 @@ def print_jira_issue_summary(issue):
     )
 
 
-def jira_components_from_title_tags(tags, primary_only=False):
+def jira_components_from_title_tags(tags):
     """Canonical SPARK JIRA component names implied by PR-title component tags.
 
-    Each tag is resolved through the component registry; tags that are not JIRA
+    Each tag is resolved through the component registry; a tag that maps to a
+    JIRA component contributes that component's canonical name, whether primary
+    or not (e.g. [SQL] -> "SQL", [TEST] -> "Tests"). Tags that are not JIRA
     components (status markers like [FOLLOWUP]/[MINOR], version tags like [4.X],
-    or unknown tags) contribute nothing. Aliases normalize to the canonical JIRA
-    name. With ``primary_only`` set, non-primary components (e.g. [TEST],
-    [SHUFFLE]) are dropped too, leaving only primary tags. The result preserves
-    input order and is de-duplicated.
+    or unknown tags) contribute nothing. Aliases normalize to the canonical
+    name. The result preserves input order and is de-duplicated.
 
     >>> jira_components_from_title_tags(["SQL", "CORE"])
     ['SQL', 'Spark Core']
     >>> jira_components_from_title_tags(["PYSPARK", "DOCS"])
     ['PySpark', 'Documentation']
+    >>> jira_components_from_title_tags(["SQL", "TEST"])
+    ['SQL', 'Tests']
     >>> jira_components_from_title_tags(["SQL", "FOLLOWUP", "4.X", "BOGUS"])
     ['SQL']
     >>> jira_components_from_title_tags(["SQL", "SQL"])
     ['SQL']
-    >>> jira_components_from_title_tags(["SQL", "TEST"], primary_only=True)
-    ['SQL']
-    >>> jira_components_from_title_tags(["TEST", "SHUFFLE"], primary_only=True)
-    []
     """
     names = []
     for tag in tags:
         c = Component.find(tag)
-        if c is not None and c.jira_name and (c.primary or not primary_only):
+        if c is not None and c.jira_name:
             names.append(c.jira_name)
     return list(dict.fromkeys(names))
 
 
 def reconcile_jira_components(issue, title_components):
-    """Prompt to sync primary JIRA components when they differ from the PR title.
+    """Prompt to sync JIRA components when they differ from the PR title.
 
     ``title_components`` is the list of normalized PR-title component tags (e.g.
-    ["SQL", "TEST"]). Only primary components are reconciled: the PR title's
-    primary tags, mapped to canonical JIRA names, are compared as a set against
-    the issue's current primary components. Non-primary tags (e.g. [TEST]) and
-    non-primary JIRA components (e.g. "Optimizer") are ignored by the comparison
-    and preserved by both updates. When the primary sets differ, offer to
-    overwrite JIRA's primary components with the PR title's, append the PR title's
-    primary components, or keep JIRA unchanged (the default). Titles with no
-    primary component (e.g. [MINOR]) are skipped.
+    ["SQL", "TEST"]). Every tag that maps to a JIRA component -- primary or not,
+    e.g. [SQL] -> "SQL" and [TEST] -> "Tests" -- is reconciled; tags with no JIRA
+    component ([MINOR], [FOLLOWUP], version tags, unknown tags) are dropped. The
+    mapped names are compared, as a set, against the issue's current components.
+    On a mismatch, offer to overwrite JIRA with the PR title's components, append
+    them to the existing ones, or keep JIRA unchanged (the default).
     """
-    pr_primary = jira_components_from_title_tags(title_components, primary_only=True)
-    if not pr_primary:
+    title_jira_components = jira_components_from_title_tags(title_components)
+    if not title_jira_components:
         return
-
     current = [c.name for c in issue.fields.components]
-    current_primary = []
-    current_nonprimary = []
-    for n in current:
-        comp = Component.find_by_jira_name(n)
-        if comp is not None and comp.primary:
-            current_primary.append(n)
-        else:
-            current_nonprimary.append(n)
-
-    if set(current_primary) == set(pr_primary):
+    if set(current) == set(title_jira_components):
         return
 
     print()
     print("=" * 80)
-    print("PR title primary components differ from JIRA %s:" % issue.key)
-    print("  PR title: %s" % ", ".join(pr_primary))
-    print("  JIRA:     %s" % (", ".join(current_primary) if current_primary else "(none)"))
-    if current_nonprimary:
-        print("  (non-primary JIRA components, preserved: %s)" % ", ".join(current_nonprimary))
+    print("PR title components differ from JIRA %s:" % issue.key)
+    print("  PR title: %s" % ", ".join(title_jira_components))
+    print("  JIRA:     %s" % (", ".join(current) if current else "(none)"))
     print("=" * 80)
     choice = get_input(
-        "[o]verwrite JIRA primaries with PR title / [a]ppend PR title / [k]eep JIRA as is "
+        "[o]verwrite JIRA with PR title / [a]ppend PR title to JIRA / [k]eep JIRA as is "
         "(default: keep): ",
         {"o": ["o", "overwrite"], "a": ["a", "append"], "k": ["k", "keep", ""]},
     )
@@ -743,10 +727,9 @@ def reconcile_jira_components(issue, title_components):
         print("Keeping JIRA %s components unchanged." % issue.key)
         return
     if choice == "o":
-        # Replace the primary components; keep any non-primary ones already on the issue.
-        new_names = list(dict.fromkeys(pr_primary + current_nonprimary))
-    else:  # "a": append the PR title's primary components, keeping everything else.
-        new_names = list(dict.fromkeys(current + pr_primary))
+        new_names = list(title_jira_components)
+    else:  # "a": append the PR title's components, keeping the existing ones first.
+        new_names = list(dict.fromkeys(current + title_jira_components))
 
     try:
         issue.update(fields={"components": [{"name": n} for n in new_names]})
@@ -972,28 +955,6 @@ class Component:
         token = token.strip().upper()
         for c in COMPONENTS:
             if c.matches(token):
-                return c
-        return None
-
-    @classmethod
-    def find_by_jira_name(cls, name):
-        """Return the Component whose canonical JIRA name is ``name``, or None.
-
-        >>> Component.find_by_jira_name("Spark Core").tag
-        'CORE'
-        >>> Component.find_by_jira_name("SQL").primary
-        True
-        >>> Component.find_by_jira_name("Tests").primary
-        False
-        >>> Component.find_by_jira_name("Not A Component") is None
-        True
-        >>> Component.find_by_jira_name("") is None
-        True
-        """
-        if not name:
-            return None
-        for c in COMPONENTS:
-            if c.jira_name == name:
                 return c
         return None
 
