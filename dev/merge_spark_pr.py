@@ -764,9 +764,11 @@ def choose_jira_assignee(issue):
         try:
             reporter = issue.fields.reporter
             commentators = list(map(lambda x: x.author, issue.fields.comment.comments))
-            candidates = set(commentators)
-            candidates.add(reporter)
-            candidates = list(candidates)
+            # Put the reporter first so that [0] is a sensible default assignee.
+            candidates = []
+            if reporter is not None:
+                candidates.append(reporter)
+            candidates += [c for c in set(commentators) if c != reporter]
             print("JIRA is unassigned, choose assignee")
             for idx, author in enumerate(candidates):
                 if author.key == "apachespark":
@@ -775,35 +777,39 @@ def choose_jira_assignee(issue):
                 if author in commentators:
                     annotations.append("Commentator")
                 print("[%d] %s (%s)" % (idx, author.displayName, ",".join(annotations)))
-            raw_assignee = bold_input(
-                "Enter number of user, or userid, to assign to (blank to leave unassigned): "
-            )
-            if raw_assignee == "":
-                return None
+            base_prompt = "Enter number of user, or userid, to assign to"
+            if reporter is not None:
+                prompt = "%s [%s]: " % (base_prompt, reporter.displayName)
             else:
-                try:
-                    id = int(raw_assignee)
-                    assignee = candidates[id]
-                except BaseException:
-                    # assume it's a user id, and try to assign (might fail, we just prompt again)
-                    assignee = asf_jira.user(raw_assignee)
-                try:
+                prompt = "%s (blank to leave unassigned): " % base_prompt
+            raw_assignee = bold_input(prompt)
+            if raw_assignee == "":
+                if reporter is None:
+                    return None
+                raw_assignee = "0"
+            try:
+                id = int(raw_assignee)
+                assignee = candidates[id]
+            except BaseException:
+                # assume it's a user id, and try to assign (might fail, we just prompt again)
+                assignee = asf_jira.user(raw_assignee)
+            try:
+                assign_issue(issue.key, assignee.name)
+            except Exception as e:
+                if (
+                    e.__class__.__name__ == "JIRAError"
+                    and ("'%s' cannot be assigned" % assignee.name)
+                    in getattr(e, "response").text
+                ):
+                    continue_maybe(
+                        "User '%s' cannot be assigned, add to contributors role and try again?"
+                        % assignee.name
+                    )
+                    grant_contributor_role(assignee.name)
                     assign_issue(issue.key, assignee.name)
-                except Exception as e:
-                    if (
-                        e.__class__.__name__ == "JIRAError"
-                        and ("'%s' cannot be assigned" % assignee.name)
-                        in getattr(e, "response").text
-                    ):
-                        continue_maybe(
-                            "User '%s' cannot be assigned, add to contributors role and try again?"
-                            % assignee.name
-                        )
-                        grant_contributor_role(assignee.name)
-                        assign_issue(issue.key, assignee.name)
-                    else:
-                        raise e
-                return assignee
+                else:
+                    raise e
+            return assignee
         except KeyboardInterrupt:
             raise
         except BaseException:
