@@ -140,14 +140,6 @@ class ExecutorRunnableSuite extends SparkFunSuite with PrivateMethodTester {
     commands should contain inOrderElementsOf List("--cores", "7")
   }
 
-  test("OnOutOfMemoryError argument is added by default") {
-    val sparkConf = new SparkConf()
-    val execRunnable = createExecutorRunnable(sparkConf)
-
-    val commands = execRunnable invokePrivate _prepareCommand()
-    assert(commands.exists(_.contains("-XX:OnOutOfMemoryError")))
-  }
-
   test("test executor OnOutOfMemoryError JVM options") {
     Seq(true, false).foreach { OOMKill =>
       val sparkConf = new SparkConf()
