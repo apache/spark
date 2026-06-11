@@ -116,3 +116,108 @@ SELECT named_struct('f', CAST(NULL AS timestamp_ltz(9)))
 -- !query analysis
 Project [named_struct(f, cast(null as timestamp_ltz(9))) AS named_struct(f, CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [hour(cast(TimestampNanosVal(1577913875123456, 789) as timestamp), Some(America/Los_Angeles)) AS hour(TimestampNanosVal(1577913875123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [minute(cast(TimestampNanosVal(1577913875123456, 789) as timestamp), Some(America/Los_Angeles)) AS minute(TimestampNanosVal(1577913875123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [second(cast(TimestampNanosVal(1577913875123456, 789) as timestamp), Some(America/Los_Angeles)) AS second(TimestampNanosVal(1577913875123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hour('2020-01-01 13:24:35.999999999' :: timestamp_ltz(7))
+-- !query analysis
+Project [hour(cast(cast(2020-01-01 13:24:35.999999999 as timestamp_ltz(7)) as timestamp), Some(America/Los_Angeles)) AS hour(CAST(2020-01-01 13:24:35.999999999 AS TIMESTAMP_LTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT second('2020-01-01 13:24:35.999999999' :: timestamp_ltz(8))
+-- !query analysis
+Project [second(cast(cast(2020-01-01 13:24:35.999999999 as timestamp_ltz(8)) as timestamp), Some(America/Los_Angeles)) AS second(CAST(2020-01-01 13:24:35.999999999 AS TIMESTAMP_LTZ(8)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hour(NULL :: timestamp_ltz(9))
+-- !query analysis
+Project [hour(cast(cast(null as timestamp_ltz(9)) as timestamp), Some(America/Los_Angeles)) AS hour(CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hour(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789')
+-- !query analysis
+Project [hour(cast(TimestampNanosVal(-315542124876544, 789) as timestamp), Some(America/Los_Angeles)) AS hour(TimestampNanosVal(-315542124876544, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT minute(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789')
+-- !query analysis
+Project [minute(cast(TimestampNanosVal(-315542124876544, 789) as timestamp), Some(America/Los_Angeles)) AS minute(TimestampNanosVal(-315542124876544, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT second(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789')
+-- !query analysis
+Project [second(cast(TimestampNanosVal(-315542124876544, 789) as timestamp), Some(America/Los_Angeles)) AS second(TimestampNanosVal(-315542124876544, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata')
+-- !query analysis
+Project [hour(cast(TimestampNanosVal(1577865275123456, 789) as timestamp), Some(America/Los_Angeles)) AS hour(TimestampNanosVal(1577865275123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata')
+-- !query analysis
+Project [minute(cast(TimestampNanosVal(1577865275123456, 789) as timestamp), Some(America/Los_Angeles)) AS minute(TimestampNanosVal(1577865275123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata')
+-- !query analysis
+Project [second(cast(TimestampNanosVal(1577865275123456, 789) as timestamp), Some(America/Los_Angeles)) AS second(TimestampNanosVal(1577865275123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query analysis
+Project [hour(cast(TimestampNanosVal(1577885075123456, 789) as timestamp), Some(America/Los_Angeles)) AS hour(TimestampNanosVal(1577885075123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query analysis
+Project [minute(cast(TimestampNanosVal(1577885075123456, 789) as timestamp), Some(America/Los_Angeles)) AS minute(TimestampNanosVal(1577885075123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query analysis
+Project [second(cast(TimestampNanosVal(1577885075123456, 789) as timestamp), Some(America/Los_Angeles)) AS second(TimestampNanosVal(1577885075123456, 789))#x]
++- OneRowRelation

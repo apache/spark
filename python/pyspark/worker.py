@@ -937,7 +937,8 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
 
     # If chained_func is from pyspark.sql.worker, it is to read/write data source.
     # In this case, we check the data_source_profiler config.
-    if getattr(chained_func, "__module__", "").startswith("pyspark.sql.worker."):
+    module = getattr(chained_func, "__module__", "")
+    if isinstance(module, str) and module.startswith("pyspark.sql.worker."):
         profiler = runner_conf.data_source_profiler
     else:
         profiler = runner_conf.udf_profiler
@@ -972,7 +973,7 @@ def read_single_udf(pickleSer, udf_info, eval_type, runner_conf, udf_index):
     elif eval_type == PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF:
         return func, args_offsets, kwargs_offsets, return_type
     elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        return args_offsets, wrap_pandas_batch_iter_udf(func, return_type, runner_conf)
+        return func, None, None, return_type
     elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
         return func, None, None, None
     elif eval_type in (
@@ -2284,6 +2285,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
             )
         elif eval_type in (
             PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_UDF,
             PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
             PythonEvalType.SQL_ARROW_BATCHED_UDF,
@@ -2293,10 +2295,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         else:
             # Scalar Pandas UDF handles struct type arguments as pandas DataFrames instead of
             # pandas Series. See SPARK-27240.
-            df_for_struct = (
-                eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
-                or eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
-            )
+            df_for_struct = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
 
             ser = ArrowStreamPandasUDFSerializer(
                 timezone=runner_conf.timezone,
@@ -2984,6 +2983,75 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return cogrouped_func, None, ser, ser
 
+    if eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
+        import pyarrow as pa
+        import pandas as pd
+
+        assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
+        map_udf, _, _, return_type = udfs[0]
+        output_schema = StructType([StructField("_0", return_type)])
+        iter_type_label = (
+            "pandas.DataFrame" if isinstance(return_type, StructType) else "pandas.Series"
+        )
+        elem_type = pd.DataFrame if isinstance(return_type, StructType) else pd.Series
+
+        def func(
+            split_index: int,
+            data: Iterator[pa.RecordBatch],
+        ) -> Iterator[pa.RecordBatch]:
+            """Apply mapInPandas UDF."""
+
+            def dataframe_iter():
+                # Input batches have a single struct column (see
+                # MapInBatchEvaluatorFactory); convert lazily so peakmem stays
+                # bounded by one batch.
+                for batch in data:
+                    yield ArrowBatchTransformer.to_pandas(
+                        batch,
+                        timezone=runner_conf.timezone,
+                        prefer_int_ext_dtype=runner_conf.prefer_int_ext_dtype,
+                        df_for_struct=True,
+                    )[0]
+
+            # mapInPandas accepts any iterable (e.g. a list), not just an
+            # iterator, so the standard verify_return_type (which requires an
+            # Iterator) is intentionally not reused here.
+            result = map_udf(dataframe_iter())
+            if not isinstance(result, Iterator) and not hasattr(result, "__iter__"):
+                raise PySparkTypeError(
+                    errorClass="UDF_RETURN_TYPE",
+                    messageParameters={
+                        "expected": "iterator of {}".format(iter_type_label),
+                        "actual": type(result).__name__,
+                    },
+                )
+
+            for df in result:
+                if not isinstance(df, elem_type):
+                    raise PySparkTypeError(
+                        errorClass="UDF_RETURN_TYPE",
+                        messageParameters={
+                            "expected": "iterator of {}".format(iter_type_label),
+                            "actual": "iterator of {}".format(type(df).__name__),
+                        },
+                    )
+                verify_pandas_result(
+                    df, return_type, assign_cols_by_name=True, truncate_return_schema=True
+                )
+                yield PandasToArrowConversion.convert(
+                    [df],
+                    output_schema,
+                    timezone=runner_conf.timezone,
+                    safecheck=runner_conf.safecheck,
+                    arrow_cast=True,
+                    prefers_large_types=runner_conf.use_large_var_types,
+                    assign_cols_by_name=runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                )
+
+        # profiling is not supported for UDF
+        return func, None, ser, ser
+
     if (
         eval_type == PythonEvalType.SQL_ARROW_BATCHED_UDF
         and not runner_conf.use_legacy_pandas_udf_conversion
@@ -3243,15 +3311,8 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
         # profiling is not supported for UDF
         return func, None, ser, ser
 
-    is_scalar_iter = eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
-    is_map_pandas_iter = eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
-
-    if is_scalar_iter or is_map_pandas_iter:
-        # TODO: Better error message for num_udfs != 1
-        if is_scalar_iter:
-            assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
-        if is_map_pandas_iter:
-            assert num_udfs == 1, "One MAP_PANDAS_ITER UDF expected here."
+    if eval_type == PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF:
+        assert num_udfs == 1, "One SCALAR_ITER UDF expected here."
 
         arg_offsets, udf = udfs[0]
 
@@ -3279,31 +3340,30 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 # by consuming the input iterator in user side. Therefore,
                 # it's very unlikely the output length is higher than
                 # input length.
-                if is_scalar_iter and num_output_rows > num_input_rows:
+                if num_output_rows > num_input_rows:
                     raise PySparkRuntimeError(
                         errorClass="OUTPUT_EXCEEDS_INPUT_ROWS", messageParameters={}
                     )
                 yield (result_batch, result_type)
 
-            if is_scalar_iter:
-                try:
-                    next(iterator)
-                except StopIteration:
-                    pass
-                else:
-                    raise PySparkRuntimeError(
-                        errorClass="INPUT_NOT_FULLY_CONSUMED",
-                        messageParameters={},
-                    )
+            try:
+                next(iterator)
+            except StopIteration:
+                pass
+            else:
+                raise PySparkRuntimeError(
+                    errorClass="INPUT_NOT_FULLY_CONSUMED",
+                    messageParameters={},
+                )
 
-                if num_output_rows != num_input_rows:
-                    raise PySparkRuntimeError(
-                        errorClass="RESULT_ROWS_MISMATCH",
-                        messageParameters={
-                            "output_length": str(num_output_rows),
-                            "input_length": str(num_input_rows),
-                        },
-                    )
+            if num_output_rows != num_input_rows:
+                raise PySparkRuntimeError(
+                    errorClass="RESULT_ROWS_MISMATCH",
+                    messageParameters={
+                        "output_length": str(num_output_rows),
+                        "input_length": str(num_input_rows),
+                    },
+                )
 
         # profiling is not supported for UDF
         return func, None, ser, ser

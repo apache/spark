@@ -283,7 +283,7 @@ class CatalogTestsMixin:
             functionsWithPattern = dict(
                 (f.name, f) for f in spark.catalog.listFunctions(pattern="*not_existing_func*")
             )
-            self.assertTrue(len(functionsWithPattern) == 0)
+            self.assertEqual(len(functionsWithPattern), 0)
 
             with self.function("func1", "some_db.func2"):
                 try:
@@ -335,10 +335,10 @@ class CatalogTestsMixin:
         with self.function("func1"):
             spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
             func1 = spark.catalog.getFunction("spark_catalog.default.func1")
-            self.assertTrue(func1.name == "func1")
-            self.assertTrue(func1.namespace == ["default"])
-            self.assertTrue(func1.catalog == "spark_catalog")
-            self.assertTrue(func1.className == "org.apache.spark.data.bricks")
+            self.assertEqual(func1.name, "func1")
+            self.assertEqual(func1.namespace, ["default"])
+            self.assertEqual(func1.catalog, "spark_catalog")
+            self.assertEqual(func1.className, "org.apache.spark.data.bricks")
             self.assertFalse(func1.isTemporary)
 
     def test_list_columns(self):

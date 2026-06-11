@@ -657,17 +657,11 @@ object SQLConf {
         "types. Enabling this flag does not guarantee full SQL support: casts, Parquet read, " +
         "typed literals, and other operations may still fail until their respective features " +
         "are implemented. The nanosecond timestamp types are implemented solely through the " +
-        "Types Framework, so this flag can only be set to true when " +
+        "Types Framework, so this flag only takes effect when " +
         s"${TYPES_FRAMEWORK_ENABLED.key} is also true.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .checkValue(
-        enabled => !enabled || SQLConf.get.typesFrameworkEnabled,
-        "REQUIREMENT",
-        _ => Map("confRequirement" ->
-          (s"'${TYPES_FRAMEWORK_ENABLED.key}' must be true to enable the nanosecond " +
-            "timestamp types.")))
       .createWithDefaultFunction(() => Utils.isTesting)
 
   val EXTENDED_EXPLAIN_PROVIDERS = buildConf("spark.sql.extendedExplainProviders")
@@ -895,6 +889,17 @@ object SQLConf {
     .version("2.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val SORT_MERGE_AS_OF_JOIN_ENABLED =
+    buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
+      .doc("When true, use a dedicated sort-merge physical operator for AS-OF joins " +
+        "instead of rewriting to a correlated subquery. The sort-merge operator evaluates " +
+        "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
+        "in a single pass.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION =
     buildConf("spark.sql.requireAllClusterKeysForCoPartition")
@@ -3808,8 +3813,16 @@ object SQLConf {
 
   val USE_OBJECT_HASH_AGG = buildConf("spark.sql.execution.useObjectHashAggregateExec")
     .internal()
-    .doc("Decides if we use ObjectHashAggregateExec")
+    .doc("Decides if we use ObjectHashAggregateExec when possible.")
     .version("2.2.0")
+    .booleanConf
+    .createWithDefault(true)
+
+  val USE_HASH_AGG = buildConf("spark.sql.execution.useHashAggregateExec")
+    .internal()
+    .doc("Decides if we use HashAggregateExec when possible, the rule takes precedence " +
+      s"over ${USE_OBJECT_HASH_AGG.key}.")
+    .version("4.3.0")
     .booleanConf
     .createWithDefault(true)
 
@@ -7640,7 +7653,13 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
 
-  def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
+  // The nanos types are implemented solely through the Types Framework, so the flag has no
+  // effect without it. The requirement is enforced here instead of in a checkValue of
+  // TIMESTAMP_NANOS_TYPES_ENABLED: a validator must not call SQLConf.get, because validators
+  // run inside mergeSparkConf while the session's SQLConf is still being constructed, and the
+  // SQLConf.get lookup re-enters that construction (infinite recursion).
+  def timestampNanosTypesEnabled: Boolean =
+    getConf(TIMESTAMP_NANOS_TYPES_ENABLED) && getConf(TYPES_FRAMEWORK_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
@@ -8098,6 +8117,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
+  def sortMergeAsOfJoinEnabled: Boolean = getConf(SORT_MERGE_AS_OF_JOIN_ENABLED)
+
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
@@ -8198,6 +8219,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def enableVectorizedHashMap: Boolean = getConf(ENABLE_VECTORIZED_HASH_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def useHashAggregation: Boolean = getConf(USE_HASH_AGG)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 

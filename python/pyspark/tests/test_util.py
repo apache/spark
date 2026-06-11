@@ -137,7 +137,7 @@ class UtilTests(PySparkTestCase):
         self.assertEqual(str(v1), "1.2.3")
         self.assertEqual(repr(v1), "LooseVersion ('1.2.3')")
         v2 = "1.2.3"
-        self.assertTrue(v1 == v2)
+        self.assertEqual(v1, v2)
         v3 = 1.1
         with self.assertRaises(TypeError):
             v1 > v3
