@@ -86,9 +86,9 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         # that path, kept in a versioned subdirectory, instead of patching
         # one golden in memory.
         if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
-            return "pd3"
+            return "pandas_3"
         else:
-            return "pd2"
+            return "pandas_2"
 
     @property
     def test_cases(self):
