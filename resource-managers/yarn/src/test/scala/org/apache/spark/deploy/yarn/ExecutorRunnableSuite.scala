@@ -141,13 +141,13 @@ class ExecutorRunnableSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   test("test executor OnOutOfMemoryError JVM options") {
-    Seq(true, false).foreach { OOMKill =>
+    Seq(true, false).foreach { oomKill =>
       val sparkConf = new SparkConf()
-        .set(YARN_EXECUTOR_OOM_KILL_ENABLED, OOMKill)
+        .set(YARN_EXECUTOR_OOM_KILL_ENABLED, oomKill)
       val execRunnable = createExecutorRunnable(sparkConf)
 
       val commands = execRunnable invokePrivate _prepareCommand()
-      if (OOMKill) {
+      if (oomKill) {
         assert(commands.exists(_.contains("-XX:OnOutOfMemoryError")))
       } else {
         assert(!commands.exists(_.contains("-XX:OnOutOfMemoryError")))

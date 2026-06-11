@@ -349,8 +349,8 @@ package object config extends Logging {
       .createOptional
 
   private[spark] val YARN_EXECUTOR_OOM_KILL_ENABLED =
-    ConfigBuilder("spark.yarn.executor.OOMKill.enabled")
-      .doc("Whether to add `-XX:OnOutOfMemoryError='kill %p'`(or its counterpart on Windows) " +
+    ConfigBuilder("spark.yarn.executor.oomKill.enabled")
+      .doc("Whether to add `-XX:OnOutOfMemoryError='kill %p'` (or its counterpart on Windows) " +
         "to executor JVM options.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
