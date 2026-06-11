@@ -673,21 +673,9 @@ case class Scd2BatchProcessor(
     // Decomposition tails carry no recordStartAt of their own, so they take the closing
     // sequence (`endAt`) as their effective ordering position - the same convention used by
     // [[orderChronologicallyPerKeyWindow]] and [[dropRedundantRowsPostDecomposition]].
-    val effectiveRecordStartAt = F.coalesce(recordStartAtField, endAtCol)
-
-    val previousRecordStartAt =
-      F.lag(recordStartAtField, 1).over(orderChronologicallyPerKeyWindow)
-    val previousStartAt = F.lag(startAtCol, 1).over(orderChronologicallyPerKeyWindow)
-    val previousEndAt = F.lag(endAtCol, 1).over(orderChronologicallyPerKeyWindow)
-    val previousEffectiveRecordStartAt =
-      F.lag(effectiveRecordStartAt, 1).over(orderChronologicallyPerKeyWindow)
-
-    val nextRecordStartAt =
-      F.lead(recordStartAtField, 1).over(orderChronologicallyPerKeyWindow)
-    val nextStartAt = F.lead(startAtCol, 1).over(orderChronologicallyPerKeyWindow)
-    val nextEndAt = F.lead(endAtCol, 1).over(orderChronologicallyPerKeyWindow)
-    val nextEffectiveRecordStartAt =
-      F.lead(effectiveRecordStartAt, 1).over(orderChronologicallyPerKeyWindow)
+    val current = Scd2IntervalColumns(recordStartAtField, startAtCol, endAtCol)
+    val previous = current.lagBy(1, orderChronologicallyPerKeyWindow)
+    val next = current.leadBy(1, orderChronologicallyPerKeyWindow)
 
     // A row is the last in its per-key window when `LEAD(1)` has no successor; a constant
     // literal is sufficient since we only care whether one exists.
@@ -703,65 +691,30 @@ case class Scd2BatchProcessor(
     // the user tracks nothing.
     val areTrackedColumnsEqualInPreviousRow = trackedHistoryColumns
       .map { c =>
-        F.col(c) <=> F.lag(F.col(c), 1).over(orderChronologicallyPerKeyWindow)
+        val col = F.col(QuotingUtils.quoteIdentifier(c))
+        col <=> F.lag(col, 1).over(orderChronologicallyPerKeyWindow)
       }
       .reduceOption(_ && _)
       .getOrElse(F.lit(true))
 
     val areTrackedColumnsEqualInNextRow = trackedHistoryColumns
       .map { c =>
-        F.col(c) <=> F.lead(F.col(c), 1).over(orderChronologicallyPerKeyWindow)
+        val col = F.col(QuotingUtils.quoteIdentifier(c))
+        col <=> F.lead(col, 1).over(orderChronologicallyPerKeyWindow)
       }
       .reduceOption(_ && _)
       .getOrElse(F.lit(true))
 
     // Reconciliation of start/end at is dependent on the class of row being reconciled. Build
     // row classification predicates.
-    val isDecompositionTail = RowClassifier.isDecompositionTail(
-      recordStartAt = recordStartAtField,
-      startAt = startAtCol,
-      endAt = endAtCol
-    )
-    val isUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(
-      recordStartAt = recordStartAtField,
-      startAt = startAtCol,
-      endAt = endAtCol
-    )
-    val previousIsUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(
-      recordStartAt = previousRecordStartAt,
-      startAt = previousStartAt,
-      endAt = previousEndAt
-    )
-    val nextIsUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(
-      recordStartAt = nextRecordStartAt,
-      startAt = nextStartAt,
-      endAt = nextEndAt
-    )
+    val isDecompositionTail = RowClassifier.isDecompositionTail(current)
+    val isUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(current)
 
-    def rowClosesStrictlyBeforeNextRow(
-        rowEndAt: Column,
-        nextEffective: Column): Column = {
-      rowEndAt.isNotNull && rowEndAt < nextEffective
-    }
-
-    def rowIsNoOpUpsertWithNext(
-        rowIsUpsertRepresenting: Column,
-        rowEndAt: Column,
-        nextRowIsUpsertRepresenting: Column,
-        nextEffective: Column,
-        areTrackedColumnsEqualInNextRow: Column): Column = {
-      rowIsUpsertRepresenting &&
-        nextRowIsUpsertRepresenting &&
-        !rowClosesStrictlyBeforeNextRow(rowEndAt, nextEffective) &&
-        areTrackedColumnsEqualInNextRow
-    }
-
+    // From the previous row's perspective, the current row is its successor.
     val previousIsNoOpUpsertWithCurrent =
-      rowIsNoOpUpsertWithNext(
-        rowIsUpsertRepresenting = previousIsUpsertRepresentingRow,
-        rowEndAt = previousEndAt,
-        nextRowIsUpsertRepresenting = isUpsertRepresentingRow,
-        nextEffective = effectiveRecordStartAt,
+      RowClassifier.isNoOpUpsertContinuation(
+        row = previous,
+        next = current,
         areTrackedColumnsEqualInNextRow = areTrackedColumnsEqualInPreviousRow
       )
 
@@ -771,7 +724,7 @@ case class Scd2BatchProcessor(
     // predecessor is not a no-op continuation that absorbs it.
     val isWindowLocalUpsertRunHead =
       isUpsertRepresentingRow && !previousIsNoOpUpsertWithCurrent
-    val isFirstRowInKeyWindow = previousEffectiveRecordStartAt.isNull
+    val isFirstRowInKeyWindow = previous.effectiveRecordStartAt.isNull
     val runHeadStartAt =
       F.when(
         isWindowLocalUpsertRunHead,
@@ -796,11 +749,9 @@ case class Scd2BatchProcessor(
       )
 
     val currentIsNoOpUpsertWithNext =
-      rowIsNoOpUpsertWithNext(
-        rowIsUpsertRepresenting = isUpsertRepresentingRow,
-        rowEndAt = endAtCol,
-        nextRowIsUpsertRepresenting = nextIsUpsertRepresentingRow,
-        nextEffective = nextEffectiveRecordStartAt,
+      RowClassifier.isNoOpUpsertContinuation(
+        row = current,
+        next = next,
         areTrackedColumnsEqualInNextRow = areTrackedColumnsEqualInNextRow
       )
 
@@ -818,8 +769,10 @@ case class Scd2BatchProcessor(
         // The row already closes strictly before the next event (e.g., a tombstone or a
         // closed upsert that ended before the next event arrived), so there is nothing to
         // re-close.
-        .when(rowClosesStrictlyBeforeNextRow(endAtCol, nextEffectiveRecordStartAt), endAtCol)
-        .otherwise(nextEffectiveRecordStartAt)
+        .when(
+          RowClassifier.rowClosesStrictlyBeforeNextRow(endAtCol, next.effectiveRecordStartAt),
+          endAtCol)
+        .otherwise(next.effectiveRecordStartAt)
 
     // Stage the recomputed start/end values into temporary columns first, then project them
     // back over the originals via `select`. Both staged values reference the original
@@ -841,7 +794,7 @@ case class Scd2BatchProcessor(
         F.col(Scd2BatchProcessor.finalEndAtColName)
           .as(Scd2BatchProcessor.endAtColName, endAtMetadata)
       case col =>
-        F.col(col)
+        F.col(QuotingUtils.quoteIdentifier(col))
     }
     staged.select(outputColumns.toImmutableArraySeq: _*)
   }
@@ -1142,6 +1095,20 @@ private[autocdc] case class Scd2IntervalColumns(
    * [[Scd2BatchProcessor.orderChronologicallyPerKeyWindow]].
    */
   def effectiveRecordStartAt: Column = F.coalesce(recordStartAt, endAt)
+
+  /** The same interval columns read from the row `offset` positions earlier in `window`. */
+  def lagBy(offset: Int, window: WindowSpec): Scd2IntervalColumns =
+    Scd2IntervalColumns(
+      F.lag(recordStartAt, offset).over(window),
+      F.lag(startAt, offset).over(window),
+      F.lag(endAt, offset).over(window))
+
+  /** The same interval columns read from the row `offset` positions later in `window`. */
+  def leadBy(offset: Int, window: WindowSpec): Scd2IntervalColumns =
+    Scd2IntervalColumns(
+      F.lead(recordStartAt, offset).over(window),
+      F.lead(startAt, offset).over(window),
+      F.lead(endAt, offset).over(window))
 }
 
 object RowClassifier {
@@ -1203,4 +1170,35 @@ object RowClassifier {
       row.endAt.isNotNull &&
       row.startAt === row.recordStartAt &&
       row.endAt === row.recordStartAt
+
+  /**
+   * Whether a row closes (`endAt`) strictly before the next chronologically-ordered row for the
+   * same key begins (`nextEffectiveRecordStartAt`), leaving a gap in the visible timeline.
+   */
+  private[autocdc] def rowClosesStrictlyBeforeNextRow(
+      endAt: Column,
+      nextEffectiveRecordStartAt: Column
+  ): Column =
+    endAt.isNotNull && endAt < nextEffectiveRecordStartAt
+
+  /**
+   * Whether `row` carries no new information beyond its immediate successor `next` and so
+   * collapses into that successor's run instead of standing as its own visible interval. It is
+   * the caller's responsibility to pass `row` and `next` as successive rows in chronological
+   * order, and `areTrackedColumnsEqualInNextRow` as true iff the two rows hold equal values for
+   * every tracked-history column.
+   *
+   * Returns true iff `row` and `next` are both upsert-representing, `row`'s interval reaches
+   * `next` without leaving a gap, and the two are tracked-history equal. It is false whenever
+   * there is no successor (the last row in a key window) or either row is not upsert-representing.
+   */
+  private[autocdc] def isNoOpUpsertContinuation(
+      row: Scd2IntervalColumns,
+      next: Scd2IntervalColumns,
+      areTrackedColumnsEqualInNextRow: Column
+  ): Column =
+    isUpsertRepresentingRow(row) &&
+      isUpsertRepresentingRow(next) &&
+      !rowClosesStrictlyBeforeNextRow(row.endAt, next.effectiveRecordStartAt) &&
+      areTrackedColumnsEqualInNextRow
 }
