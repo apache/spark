@@ -3523,9 +3523,13 @@ abstract class CSVSuite
           .csv(path.getAbsolutePath)
       }
       // badRecord comes from TextParsingException.getParsedContent (bounded), so its exact value
-      // is not pinned here; the error condition is what this asserts.
-      assert(e.getCondition == "MALFORMED_CSV_RECORD",
-        s"unexpected error condition: ${e.getCondition}")
+      // is not pinned; ".*" keeps the error class, sqlState, and parameter validation.
+      checkError(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        sqlState = Some("KD000"),
+        parameters = Map("badRecord" -> ".*"),
+        matchPVals = true)
     }
   }
 
@@ -3576,8 +3580,12 @@ abstract class CSVSuite
       parameters = Map("path" -> s".*$moreColumnsFile"))
 
     val malformedCSVException = fileReadException.getCause.asInstanceOf[SparkRuntimeException]
-    assert(malformedCSVException.getCondition == "MALFORMED_CSV_RECORD",
-      s"unexpected error condition: ${malformedCSVException.getCondition}")
+    checkError(
+      exception = malformedCSVException,
+      condition = "MALFORMED_CSV_RECORD",
+      sqlState = Some("KD000"),
+      parameters = Map("badRecord" -> ".*"),
+      matchPVals = true)
   }
 
   test("csv with variant") {
