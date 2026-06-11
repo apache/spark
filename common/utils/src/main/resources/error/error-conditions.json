@@ -391,7 +391,7 @@
   },
   "BIN_BY_INVALID_RANGE" : {
     "message" : [
-      "The input row to BIN BY has range_start (<rangeStart>) greater than range_end (<rangeEnd>). BIN BY requires range_start <= range_end."
+      "The BIN BY range is invalid: the range start (<rangeStart>) must be less than or equal to the range end (<rangeEnd>)."
     ],
     "sqlState" : "22023"
   },
