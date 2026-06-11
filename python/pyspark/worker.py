@@ -3256,8 +3256,7 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
 
         # Pre-compute target schema for output coercion
         return_schema = StructType([StructField("_0", return_type)])
-        # mypy can't validate a dynamic class as a type parameter, so use Any here.
-        expected_iter_type: Any = (
+        expected_iter_type = (
             Iterator[pd.DataFrame] if isinstance(return_type, StructType) else Iterator[pd.Series]
         )
 
