@@ -83,6 +83,17 @@ class UDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         return "golden_python_udf_return_type_coercion"
 
     @property
+    def suffix(self):
+        # Only the legacy pandas conversion path routes results through pandas,
+        # whose defaults changed in pandas 3. Use a dedicated golden file per
+        # major pandas version for that path instead of patching one golden
+        # in memory.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            return "_pandas3"
+        else:
+            return "_pandas2"
+
+    @property
     def test_data(self):
         return [
             None,
@@ -154,7 +165,7 @@ class UDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         self._run_udf_return_type_coercion(
             use_arrow=True,
             legacy_pandas=True,
-            golden_file=f"{self.prefix}_with_arrow_and_pandas",
+            golden_file=f"{self.prefix}_with_arrow_and_pandas{self.suffix}",
             test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
         )
 

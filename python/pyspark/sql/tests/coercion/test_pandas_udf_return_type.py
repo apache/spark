@@ -84,8 +84,11 @@ class PandasUDFReturnTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         # of [ns], Categorical categories use str instead of object, and the same
         # casts return microseconds instead of nanoseconds), which produces
         # different coercion results. Use a dedicated golden file per major
-        # pandas version instead of patching the pandas-2 golden in memory.
-        return "_pandas3" if LooseVersion(pd.__version__) >= LooseVersion("3.0.0") else ""
+        # pandas version instead of patching one golden in memory.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            return "_pandas3"
+        else:
+            return "_pandas2"
 
     @property
     def test_data(self):

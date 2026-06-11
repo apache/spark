@@ -79,6 +79,17 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         return "golden_python_udf_input_type_coercion"
 
     @property
+    def suffix(self):
+        # Only the legacy pandas conversion path routes inputs through pandas,
+        # whose defaults changed in pandas 3 (e.g. None becomes nan in str
+        # columns). Use a dedicated golden file per major pandas version for
+        # that path instead of patching one golden in memory.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            return "_pandas3"
+        else:
+            return "_pandas2"
+
+    @property
     def test_cases(self):
         def df(args):
             def create_df(data_type):
@@ -253,7 +264,7 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         self._run_udf_input_type_coercion(
             use_arrow=True,
             legacy_pandas=True,
-            golden_file=f"{self.prefix}_with_arrow_and_pandas",
+            golden_file=f"{self.prefix}_with_arrow_and_pandas{self.suffix}",
             test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
         )
 
@@ -319,6 +330,9 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             except Exception as e:
                 print("Exception", e)
                 result.append(f"✗ {str(e)}")
+                # Pad to the full column count so the row roundtrips through
+                # the golden CSV (short rows come back with a trailing "").
+                result.append("")
 
             # Clean up exception message to remove newlines and extra whitespace
             result = [self.clean_result(r) for r in result]

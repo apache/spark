@@ -83,8 +83,11 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         # Pandas >= 3.0 reports the dedicated 'str' dtype for string columns,
         # whereas earlier versions report 'object', which changes the recorded
         # Python types. Use a dedicated golden file per major pandas version
-        # instead of patching the pandas-2 golden in memory.
-        return "_pandas3" if LooseVersion(pd.__version__) >= LooseVersion("3.0.0") else ""
+        # instead of patching one golden in memory.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            return "_pandas3"
+        else:
+            return "_pandas2"
 
     @property
     def test_cases(self):
@@ -296,6 +299,9 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             except Exception as e:
                 print("error_msg", e)
                 result.append(f"✗ {str(e)}")
+                # Pad to the full column count so the row roundtrips through
+                # the golden CSV (short rows come back with a trailing "").
+                result.append("")
 
             # Clean up exception message to remove newlines and extra whitespace
             result = [self.clean_result(r) for r in result]
