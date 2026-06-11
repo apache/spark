@@ -21,7 +21,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.internal.config.{ConfigBindingPolicy, ConfigBuilder}
 import org.apache.spark.network.util.ByteUnit
 
 package object config extends Logging {
@@ -347,6 +347,15 @@ package object config extends Logging {
       .version("1.4.0")
       .stringConf
       .createOptional
+
+  private[spark] val YARN_EXECUTOR_OOM_KILL_ENABLED =
+    ConfigBuilder("spark.yarn.executor.OOMKill.enabled")
+      .doc("Whether to add `-XX:OnOutOfMemoryError='kill %p'`(or its counterpart on Windows) " +
+        "to executor JVM options.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   /* Unmanaged AM configuration. */
 
