@@ -157,10 +157,8 @@ class DataFrameReader(OptionUtils):
     def changes(self, tableName: str) -> "DataFrame":
         if self._schema:
             raise AnalysisException(
-                "The schema specified via DataFrameReader/DataStreamReader.schema(...) cannot "
-                "be applied: the operation `changes` does not support a user-specified schema. "
-                "Remove the schema(...) call.",
-                errorClass="USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.WITH_OPERATION",
+                "User specified schema not supported with `changes`.",
+                errorClass="_LEGACY_ERROR_TEMP_1189",
                 messageParameters={"operation": "changes"},
             )
         return self._df(RelationChanges(tableName, self._options))

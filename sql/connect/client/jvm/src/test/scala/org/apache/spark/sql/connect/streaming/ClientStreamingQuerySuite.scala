@@ -181,60 +181,27 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
-  private val disallowUserSpecifiedSchemaInTableConfKey =
-    "spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled"
-
-  /**
-   * Starts `df` into a memory sink and verifies the streamed rows match the data written to
-   * the source table via `spark.range(3)`.
-   */
-  private def checkStreamingTableAnswer(df: DataFrame, sinkName: String): Unit = {
-    assert(df.isStreaming)
-    val q = df.writeStream.format("memory").queryName(sinkName).start()
-    try {
-      q.processAllAvailable()
-      eventually(timeout(30.seconds)) {
-        checkAnswer(spark.table(sinkName), Seq(Row(0L), Row(1L), Row(2L)))
-      }
-    } finally {
-      q.stop()
-    }
-  }
-
-  test("Streaming table API rejects user-specified schema") {
+  test("Streaming table API ignores user-specified schema") {
     val tableName = "table_with_user_specified_schema"
+    val sinkName = "user_schema_ignored_sink"
     withTable(tableName) {
       spark.range(3).write.format("parquet").saveAsTable(tableName)
 
-      val e = intercept[AnalysisException] {
-        spark.readStream
-          .schema(new StructType().add("a", IntegerType))
-          .table(tableName)
-      }
-      checkError(
-        exception = e,
-        condition = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
-        parameters = Map("config" -> disallowUserSpecifiedSchemaInTableConfKey))
-
-      // After removing the user-specified schema, the query runs using the table's schema.
-      val df = spark.readStream.table(tableName)
+      // The user-specified `a: Int` is ignored (with a client-side warning); the catalog
+      // table's `id: Long` is used and the query runs end-to-end.
+      val df = spark.readStream
+        .schema(new StructType().add("a", IntegerType))
+        .table(tableName)
       assert(df.schema === new StructType().add("id", LongType, nullable = false))
-      checkStreamingTableAnswer(df, "user_schema_rejected_sink")
-    }
-  }
 
-  test("Streaming table API silently ignores user-specified schema when flag is flipped off") {
-    val tableName = "table_with_user_specified_schema_flag_off"
-    withTable(tableName) {
-      spark.range(3).write.format("parquet").saveAsTable(tableName)
-
-      withSQLConf(disallowUserSpecifiedSchemaInTableConfKey -> "false") {
-        val df = spark.readStream
-          .schema(new StructType().add("a", IntegerType))
-          .table(tableName)
-        // The user-specified `a: Int` is dropped; the catalog table's `id: Long` is used.
-        assert(df.schema === new StructType().add("id", LongType, nullable = false))
-        checkStreamingTableAnswer(df, "user_schema_ignored_sink")
+      val q = df.writeStream.format("memory").queryName(sinkName).start()
+      try {
+        q.processAllAvailable()
+        eventually(timeout(30.seconds)) {
+          checkAnswer(spark.table(sinkName), Seq(Row(0L), Row(1L), Row(2L)))
+        }
+      } finally {
+        q.stop()
       }
     }
   }

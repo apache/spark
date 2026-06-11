@@ -18,6 +18,7 @@ import json
 import re
 import sys
 import pickle
+import warnings
 from typing import cast, overload, Callable, Dict, List, Optional, TYPE_CHECKING, Union
 
 from pyspark.serializers import CloudPickleSerializer
@@ -452,24 +453,11 @@ class DataStreamReader(OptionUtils):
     xml.__doc__ = PySparkDataStreamReader.xml.__doc__
 
     def table(self, tableName: str) -> "DataFrame":
-        # The schema set via DataStreamReader.schema(...) is never sent to the server for
-        # named table reads: catalog tables declare their own schema. Reject it instead of
-        # silently dropping it, unless the user explicitly restores the old behavior via
-        # the conf.
         if self._schema:
-            conf_key = "spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled"
-            disallow = self._client.conf.get(conf_key, "true")
-            if disallow is not None and disallow.lower() == "true":
-                raise AnalysisException(
-                    "The schema specified via DataFrameReader/DataStreamReader.schema(...) "
-                    "cannot be applied: catalog tables declare their own schema, so the schema "
-                    "passed to DataStreamReader.schema(...) is ignored by "
-                    f"DataStreamReader.table(). Remove the schema(...) call, or set '{conf_key}' "
-                    "to false to restore the previous behavior of silently ignoring the "
-                    "user-specified schema.",
-                    errorClass="USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
-                    messageParameters={"config": conf_key},
-                )
+            warnings.warn(
+                "DataStreamReader.table() does not support a user-specified schema; the schema "
+                "set via DataStreamReader.schema(...) is ignored. Remove the schema(...) call."
+            )
         return self._df(Read(tableName, self._options, is_streaming=True))
 
     table.__doc__ = PySparkDataStreamReader.table.__doc__
@@ -477,10 +465,8 @@ class DataStreamReader(OptionUtils):
     def changes(self, tableName: str) -> "DataFrame":
         if self._schema:
             raise AnalysisException(
-                "The schema specified via DataFrameReader/DataStreamReader.schema(...) cannot "
-                "be applied: the operation `changes` does not support a user-specified schema. "
-                "Remove the schema(...) call.",
-                errorClass="USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.WITH_OPERATION",
+                "User specified schema not supported with `changes`.",
+                errorClass="_LEGACY_ERROR_TEMP_1189",
                 messageParameters={"operation": "changes"},
             )
         return self._df(RelationChanges(tableName, self._options, is_streaming=True))

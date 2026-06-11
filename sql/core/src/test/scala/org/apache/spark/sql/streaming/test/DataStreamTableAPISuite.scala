@@ -84,47 +84,20 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     checkErrorTableNotFound(e, "`non_exist_table`")
   }
 
-  test("read: user-specified schema is not allowed with table API") {
+  test("read: user-specified schema is ignored by the table API") {
     val tblName = "my_table"
     withTable(tblName) {
       spark.range(3).write.format("parquet").saveAsTable(tblName)
-      val e = intercept[AnalysisException] {
-        spark.readStream
-          .schema(new StructType().add("a", IntegerType))
-          .table(tblName)
-      }
-      checkError(
-        exception = e,
-        condition = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
-        parameters = Map(
-          "config" -> SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key))
-
-      // After removing the user-specified schema, the query runs using the table's schema.
-      val df = spark.readStream.table(tblName)
+      // The user-specified `a: Int` is ignored (with a warning); the catalog table's
+      // `id: Long` is used.
+      val df = spark.readStream
+        .schema(new StructType().add("a", IntegerType))
+        .table(tblName)
       assert(df.schema === new StructType().add("id", LongType, nullable = false))
       testStream(df)(
         ProcessAllAvailable(),
         CheckAnswer(Row(0), Row(1), Row(2))
       )
-    }
-  }
-
-  test("read: user-specified schema is silently ignored when flag is flipped off") {
-    val tblName = "my_table"
-    withTable(tblName) {
-      spark.range(3).write.format("parquet").saveAsTable(tblName)
-      withSQLConf(
-          SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key -> "false") {
-        val df = spark.readStream
-          .schema(new StructType().add("a", IntegerType))
-          .table(tblName)
-        // The user-specified `a: Int` is dropped; the catalog table's `id: Long` is used.
-        assert(df.schema === new StructType().add("id", LongType, nullable = false))
-        testStream(df)(
-          ProcessAllAvailable(),
-          CheckAnswer(Row(0), Row(1), Row(2))
-        )
-      }
     }
   }
 

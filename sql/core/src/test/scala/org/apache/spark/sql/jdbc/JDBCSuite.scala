@@ -1543,19 +1543,13 @@ class JDBCSuite extends SharedSparkSession {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
-    }
-    checkError(
-      exception = e1,
-      condition = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.WITH_OPERATION",
-      parameters = Map("operation" -> "jdbc"))
+    }.getMessage
+    assert(e1.contains("User specified schema not supported with `jdbc`"))
 
     val e2 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
-    }
-    checkError(
-      exception = e2,
-      condition = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.WITH_OPERATION",
-      parameters = Map("operation" -> "jdbc"))
+    }.getMessage
+    assert(e2.contains("User specified schema not supported with `jdbc`"))
   }
 
   test("jdbc API support custom schema") {

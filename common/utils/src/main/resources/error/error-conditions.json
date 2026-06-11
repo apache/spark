@@ -8900,29 +8900,6 @@
     ],
     "sqlState" : "42000"
   },
-  "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED" : {
-    "message" : [
-      "The schema specified via DataFrameReader/DataStreamReader.schema(...) cannot be applied:"
-    ],
-    "subClass" : {
-      "BY_DATA_SOURCE" : {
-        "message" : [
-          "the <provider> source does not support a user-specified schema. Remove the schema(...) call and let the source provide its own schema."
-        ]
-      },
-      "IN_STREAMING_TABLE" : {
-        "message" : [
-          "catalog tables declare their own schema, so the schema passed to DataStreamReader.schema(...) is ignored by DataStreamReader.table(). Remove the schema(...) call, or set '<config>' to false to restore the previous behavior of silently ignoring the user-specified schema."
-        ]
-      },
-      "WITH_OPERATION" : {
-        "message" : [
-          "the operation `<operation>` does not support a user-specified schema. Remove the schema(...) call."
-        ]
-      }
-    },
-    "sqlState" : "0A000"
-  },
   "V2_EXPRESSION_SQL_BUILDER_UDAF_NOT_SUPPORTED" : {
     "message" : [
       "<class> does not support user defined aggregate function: <funcName>."
@@ -9658,6 +9635,11 @@
   "_LEGACY_ERROR_TEMP_1188" : {
     "message" : [
       "There is a 'path' option set and <method>() is called with a path parameter. Either remove the path option, or call <method>() without the parameter. To ignore this check, set '<config>' to 'true'."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_1189" : {
+    "message" : [
+      "User specified schema not supported with `<operation>`."
     ]
   },
   "_LEGACY_ERROR_TEMP_1190" : {
@@ -10722,6 +10704,11 @@
   "_LEGACY_ERROR_TEMP_2241" : {
     "message" : [
       "Nonatomic partition table <tableName> can not add multiple partitions."
+    ]
+  },
+  "_LEGACY_ERROR_TEMP_2242" : {
+    "message" : [
+      "<provider> source does not support user-specified schema."
     ]
   },
   "_LEGACY_ERROR_TEMP_2243" : {

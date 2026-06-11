@@ -149,12 +149,6 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       errorClass = "CANNOT_MODIFY_CONFIG",
       messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
-
-  def userSpecifiedSchemaUnsupportedInStreamingTableError(config: String): AnalysisException = {
-    new AnalysisException(
-      errorClass = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
-      messageParameters = Map("config" -> config))
-  }
 }
 
 private[sql] object CompilationErrors extends CompilationErrors
