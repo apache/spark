@@ -196,13 +196,13 @@ class VectorTests(MLlibTestCase):
         self.assertEqual(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
 
         mat = DenseMatrix(3, 2, [0, 1, 4, 6, 8, 10], True)
-        self.assertEqual(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], False)")
+        self.assertEqual(repr(mat), "DenseMatrix(3, 2, [0.0, 1.0, 4.0, 6.0, 8.0, 10.0], True)")
 
         mat = DenseMatrix(6, 3, zeros(18))
         self.assertEqual(
             repr(mat),
-            "DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., \
-                0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)",
+            "DenseMatrix(6, 3, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ..., "
+            "0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], False)",
         )
 
     def test_repr_sparse_matrix(self):
@@ -219,25 +219,25 @@ class VectorTests(MLlibTestCase):
         sm = SparseMatrix(6, 3, [0, 6, 12, 18], indices, values)
         self.assertEqual(
             repr(sm),
-            "SparseMatrix(6, 3, [0, 6, 12, 18], \
-                [0, 1, 2, 3, 4, 5, 0, 1, ..., 4, 5, 0, 1, 2, 3, 4, 5], \
-                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ..., \
-                1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)",
+            "SparseMatrix(6, 3, [0, 6, 12, 18], "
+            "[0, 1, 2, 3, 4, 5, 0, 1, ..., 4, 5, 0, 1, 2, 3, 4, 5], "
+            "[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, ..., "
+            "1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], False)",
         )
 
         self.assertEqual(
             str(sm),
-            "6 X 3 CSCMatrix\n\
-            (0,0) 1.0\n(1,0) 1.0\n(2,0) 1.0\n(3,0) 1.0\n(4,0) 1.0\n(5,0) 1.0\n\
-            (0,1) 1.0\n(1,1) 1.0\n(2,1) 1.0\n(3,1) 1.0\n(4,1) 1.0\n(5,1) 1.0\n\
-            (0,2) 1.0\n(1,2) 1.0\n(2,2) 1.0\n(3,2) 1.0\n..\n..",
+            "6 X 3 CSCMatrix\n"
+            "(0,0) 1.0\n(1,0) 1.0\n(2,0) 1.0\n(3,0) 1.0\n(4,0) 1.0\n(5,0) 1.0\n"
+            "(0,1) 1.0\n(1,1) 1.0\n(2,1) 1.0\n(3,1) 1.0\n(4,1) 1.0\n(5,1) 1.0\n"
+            "(0,2) 1.0\n(1,2) 1.0\n(2,2) 1.0\n(3,2) 1.0\n..\n..",
         )
 
         sm = SparseMatrix(1, 18, zeros(19), [], [])
         self.assertEqual(
             repr(sm),
-            "SparseMatrix(1, 18, \
-                [0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)",
+            "SparseMatrix(1, 18, "
+            "[0, 0, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0, 0, 0], [], [], False)",
         )
 
     def test_sparse_matrix(self):
