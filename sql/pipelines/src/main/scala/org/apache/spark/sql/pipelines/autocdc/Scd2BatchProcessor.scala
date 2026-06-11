@@ -61,24 +61,16 @@ case class Scd2BatchProcessor(
     )
     val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
     val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
+    val row = Scd2IntervalColumns(recordStartAtCol, startAtCol, endAtCol)
 
     // All rows except decomposition tails have a non-null recordStartAt. Tails use their
     // logical endAt to order against other rows. That endAt comes from a real CDC event
     // from some processed microbatch, so it is comparable to other rows' recordStartAt.
-    val sequencingIfDecompositionTail = endAtCol
-    val effectiveRecordStartAt = F.coalesce(recordStartAtCol, sequencingIfDecompositionTail).asc
+    val effectiveRecordStartAt = row.effectiveRecordStartAt.asc
 
-    val orderDecompositionTailsFirst = RowClassifier.isDecompositionTail(
-      recordStartAt = recordStartAtCol,
-      startAt = startAtCol,
-      endAt = endAtCol
-    ).desc
+    val orderDecompositionTailsFirst = RowClassifier.isDecompositionTail(row).desc
 
-    val orderUpsertRepresentingRowsFirst = RowClassifier.isUpsertRepresentingRow(
-      recordStartAt = recordStartAtCol,
-      startAt = startAtCol,
-      endAt = endAtCol
-    ).desc
+    val orderUpsertRepresentingRowsFirst = RowClassifier.isUpsertRepresentingRow(row).desc
 
     Window
       .partitionBy(keysQuoted.map(F.col): _*)
@@ -465,9 +457,7 @@ case class Scd2BatchProcessor(
     )
 
     val isClosedUpsertRow = RowClassifier.isClosedUpsert(
-      recordStartAt = recordStartAtField,
-      startAt = startAtCol,
-      endAt = endAtCol
+      Scd2IntervalColumns(recordStartAtField, startAtCol, endAtCol)
     )
     val nextRowBisectsCurrentRow =
       nextRecordStartAt.isNotNull && nextRecordStartAt < endAtCol
@@ -563,10 +553,11 @@ case class Scd2BatchProcessor(
     val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
     val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
 
+    val row = Scd2IntervalColumns(recordStartAtField, startAtCol, endAtCol)
     val isWellFormedRow =
-      RowClassifier.isDecompositionTail(recordStartAtField, startAtCol, endAtCol) ||
-        RowClassifier.isTombstone(recordStartAtField, startAtCol, endAtCol) ||
-        RowClassifier.isUpsertRepresentingRow(recordStartAtField, startAtCol, endAtCol)
+      RowClassifier.isDecompositionTail(row) ||
+        RowClassifier.isTombstone(row) ||
+        RowClassifier.isUpsertRepresentingRow(row)
 
     def stringOrNullLit(c: Column): Column = F.coalesce(c.cast(StringType), F.lit("null"))
     val malformedRowDiagnostic = F.concat(
@@ -626,8 +617,10 @@ case class Scd2BatchProcessor(
       decomposedRowsPerKey: DataFrame): DataFrame = {
     val recordStartAtField =
       Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
+    val startAtCol = F.col(Scd2BatchProcessor.startAtColName)
     val endAtCol = F.col(Scd2BatchProcessor.endAtColName)
-    val effectiveRecordStartAt = F.coalesce(recordStartAtField, endAtCol)
+    val effectiveRecordStartAt =
+      Scd2IntervalColumns(recordStartAtField, startAtCol, endAtCol).effectiveRecordStartAt
 
     val withNextEffectiveRecordStartAt = decomposedRowsPerKey.withColumn(
       Scd2BatchProcessor.nextEffectiveRecordStartAtColName,
@@ -1133,34 +1126,44 @@ object Scd2BatchProcessor {
   }
 }
 
+/**
+ * The three columns that locate a row on the SCD2 timeline: its source record-start sequence
+ * (`recordStartAt`, null only for decomposition tails) and the bounds of its visible interval
+ * [`startAt`, `endAt`). [[RowClassifier]] classifies a row purely from this triple.
+ */
+private[autocdc] case class Scd2IntervalColumns(
+    recordStartAt: Column,
+    startAt: Column,
+    endAt: Column) {
+
+  /**
+   * The row's effective ordering position. Decomposition tails carry no `recordStartAt` and
+   * fall back to their closing sequence (`endAt`), the same convention used by
+   * [[Scd2BatchProcessor.orderChronologicallyPerKeyWindow]].
+   */
+  def effectiveRecordStartAt: Column = F.coalesce(recordStartAt, endAt)
+}
+
 object RowClassifier {
 
   /**
    * Synthetic right boundary created by splitting a closed row, temporarily present during
    * microbatch reconciliation but never materializes in the target or aux tables.
    */
-  private[autocdc] def isDecompositionTail(
-      recordStartAt: Column,
-      startAt: Column,
-      endAt: Column
-  ): Column =
-    recordStartAt.isNull && startAt.isNull && endAt.isNotNull
+  private[autocdc] def isDecompositionTail(row: Scd2IntervalColumns): Column =
+    row.recordStartAt.isNull && row.startAt.isNull && row.endAt.isNotNull
 
   /**
    * Upsert row that is currently open in the visible timeline. Hidden no-op upserts are
    * also open until reconciliation decides whether they should stay hidden.
    */
-  private[autocdc] def isOpenUpsert(
-      recordStartAt: Column,
-      startAt: Column,
-      endAt: Column
-  ): Column =
-    recordStartAt.isNotNull &&
-      startAt.isNotNull &&
-      endAt.isNull &&
+  private[autocdc] def isOpenUpsert(row: Scd2IntervalColumns): Column =
+    row.recordStartAt.isNotNull &&
+      row.startAt.isNotNull &&
+      row.endAt.isNull &&
       // startAt < recordStartAt implies this row belongs to but is not the head of some
       // upsert-run, else this is the head of a run.
-      startAt <= recordStartAt
+      row.startAt <= row.recordStartAt
 
   /**
    * Upsert row whose visible interval has already been closed by a strictly later event;
@@ -1168,30 +1171,21 @@ object RowClassifier {
    *
    * Notably, a zero-width [startAt, endAt) interval is not considered a valid closed upsert.
    */
-  private[autocdc] def isClosedUpsert(
-      recordStartAt: Column,
-      startAt: Column,
-      endAt: Column
-  ): Column =
-    recordStartAt.isNotNull &&
-      startAt.isNotNull &&
-      endAt.isNotNull &&
-      recordStartAt < endAt &&
-      startAt < endAt &&
+  private[autocdc] def isClosedUpsert(row: Scd2IntervalColumns): Column =
+    row.recordStartAt.isNotNull &&
+      row.startAt.isNotNull &&
+      row.endAt.isNotNull &&
+      row.recordStartAt < row.endAt &&
+      row.startAt < row.endAt &&
       // startAt <= recordStartAt covers both the run-head case (startAt == recordStartAt)
       // and the no-op-continuation case (startAt < recordStartAt).
-      startAt <= recordStartAt
+      row.startAt <= row.recordStartAt
 
   /**
    * Any row that semantically encodes an upsert event.
    */
-  private[autocdc] def isUpsertRepresentingRow(
-      recordStartAt: Column,
-      startAt: Column,
-      endAt: Column
-  ): Column =
-    isOpenUpsert(recordStartAt, startAt, endAt) ||
-      isClosedUpsert(recordStartAt, startAt, endAt)
+  private[autocdc] def isUpsertRepresentingRow(row: Scd2IntervalColumns): Column =
+    isOpenUpsert(row) || isClosedUpsert(row)
 
   /**
    * Tombstone (delete-boundary) row, encoded as an instantaneous interval at
@@ -1203,14 +1197,10 @@ object RowClassifier {
    * null altogether. Reconciliation does not consume these values for any semantic
    * decision.
    */
-  private[autocdc] def isTombstone(
-      recordStartAt: Column,
-      startAt: Column,
-      endAt: Column
-  ): Column =
-    recordStartAt.isNotNull &&
-      startAt.isNotNull &&
-      endAt.isNotNull &&
-      startAt === recordStartAt &&
-      endAt === recordStartAt
+  private[autocdc] def isTombstone(row: Scd2IntervalColumns): Column =
+    row.recordStartAt.isNotNull &&
+      row.startAt.isNotNull &&
+      row.endAt.isNotNull &&
+      row.startAt === row.recordStartAt &&
+      row.endAt === row.recordStartAt
 }
