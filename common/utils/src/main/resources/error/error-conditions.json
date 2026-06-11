@@ -7211,6 +7211,18 @@
     },
     "sqlState" : "0A000"
   },
+  "STREAMING_SHUFFLE_INCORRECT_SEQUENCE_NUMBER" : {
+    "message" : [
+      "Streaming shuffle <messageType> between writer <writerId> and reader <readerId> expected to have sequence number <expSeqNum>, but the actual sequence number is <actSeqNum>. Please verify that the messages are sent in order."
+    ],
+    "sqlState" : "XXKST"
+  },
+  "STREAMING_SHUFFLE_UNEXPECTED_MESSAGE_TYPE" : {
+    "message" : [
+      "Unexpected message type <messageType> encountered during streaming shuffle."
+    ],
+    "sqlState" : "XXKST"
+  },
   "STREAMING_STATEFUL_OPERATOR_MISSING_STATE_DIRECTORY" : {
     "message" : [
       "Cannot restart streaming query with stateful operators because the state directory is empty or missing.",
@@ -8301,6 +8313,11 @@
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
+      "SHOW_TABLE_EXTENDED_JSON_WITH_PARTITION" : {
+        "message" : [
+          "SHOW TABLE EXTENDED with PARTITION does not support AS JSON output."
+        ]
+      },
       "SQL_CURSOR" : {
         "message" : [
           "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
@@ -8369,11 +8386,6 @@
       "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
         "message" : [
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
-        ]
-      },
-      "TIMESTAMP_NANOS_TO_STRING" : {
-        "message" : [
-          "Converting values of the nanosecond timestamp type <dataType> to a string."
         ]
       },
       "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {

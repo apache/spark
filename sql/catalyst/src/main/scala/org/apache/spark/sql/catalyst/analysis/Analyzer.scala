@@ -2549,6 +2549,15 @@ class Analyzer(
         case a: FunctionTableSubqueryArgumentExpression if !a.plan.resolved =>
           resolveSubQuery(a, outer)(
             (plan, outerAttrs) => a.copy(plan = plan, outerAttrs = outerAttrs))
+        // The subquery's plan is already resolved. Replace any V2TableReferences without
+        // re-running any analyzer rules.
+        case se: SubqueryExpression
+            if se.plan.resolved &&
+               se.plan.collectFirstWithSubqueries { case _: V2TableReference => () }.isDefined =>
+          val newPlan = se.plan.transformWithSubqueries {
+            case r: V2TableReference => relationResolution.resolveReference(r)
+          }
+          se.withNewPlan(newPlan)
       }
     }
 
@@ -2860,6 +2869,12 @@ class Analyzer(
           assert(projectList.isEmpty)
           j.copy(left = newLeft, right = newRight)
         }
+
+      // Defer to a later iteration: once ResolveSQLTableFunctions expands the
+      // table function, the SQLFunctionExpression sits inside the expanded
+      // plan's input-cast Project and is rewritten by a subsequent iteration
+      // of this rule.
+      case f: SQLTableFunction if hasSQLFunctionExpression(f.expressions) => f
 
       case o: LogicalPlan if o.resolved && hasSQLFunctionExpression(o.expressions) =>
         o.transformExpressionsWithPruning(_.containsPattern(SQL_FUNCTION_EXPRESSION)) {

@@ -136,6 +136,21 @@ select cast(named_struct('f', cast('2020-01-01 00:00:00.123456789' as timestamp_
 select cast(cast(null as timestamp_ntz(9)) as string);
 select concat('ts=', cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as string));
 
+-- SPARK-57293: cast between nanosecond-precision timestamps and their microsecond counterparts.
+-- Both directions stay within one zone family (pure representation conversions, no timezone
+-- involvement). Widening (micros -> nanos(p)) is wrapped in cast(... as string) because a bare
+-- nanos result column is not yet serializable by JDBC/thrift; narrowing/round-trip yield micros.
+-- TIMESTAMP_NTZ <-> TIMESTAMP_NTZ(p): widening sets the sub-microsecond part to 0.
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9)) as string);
+-- Narrowing TIMESTAMP_NTZ(p) -> TIMESTAMP_NTZ drops the sub-microsecond digits (floor).
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as timestamp_ntz);
+-- Round-trip micros -> nanos(p) -> micros returns the original microseconds.
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9)) as timestamp_ntz);
+-- TIMESTAMP_LTZ <-> TIMESTAMP_LTZ(p): same conversions on the epoch-micros instant.
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9)) as string);
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9)) as timestamp);
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9)) as timestamp);
+
 select cast(cast('inf' as double) as timestamp);
 select cast(cast('inf' as float) as timestamp);
 

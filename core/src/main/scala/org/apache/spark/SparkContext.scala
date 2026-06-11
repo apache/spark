@@ -455,7 +455,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
     if (SparkMasterRegex.isK8s(master) &&
-        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", false)) {
+        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", true)) {
       logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
         "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
       _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_BIND_ADDRESS))

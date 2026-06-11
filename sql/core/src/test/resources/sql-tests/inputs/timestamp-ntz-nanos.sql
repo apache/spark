@@ -30,3 +30,19 @@ SELECT CAST(NULL AS timestamp_ntz(9));
 SELECT array(CAST(NULL AS timestamp_ntz(9)));
 SELECT map('k', CAST(NULL AS timestamp_ntz(9)));
 SELECT named_struct('f', CAST(NULL AS timestamp_ntz(9)));
+
+-- HOUR/MINUTE/SECOND over nanosecond-precision values (SPARK-57315). NTZ extracts the
+-- wall-clock components, so the result is zone-independent and the sub-microsecond digits
+-- never affect the integer field.
+SELECT hour(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT minute(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT second(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT hour('2020-01-01 13:24:35.999999999' :: timestamp_ntz(7));
+SELECT second('2020-01-01 13:24:35.999999999' :: timestamp_ntz(8));
+SELECT hour(NULL :: timestamp_ntz(9));
+
+-- Pre-epoch nanosecond values exercise the negative-epoch path; HOUR/MINUTE/SECOND
+-- still read the wall-clock fields and remain zone-independent.
+SELECT hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
+SELECT minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
+SELECT second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');

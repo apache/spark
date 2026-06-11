@@ -5221,6 +5221,15 @@ object functions {
   def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
 
   /**
+   * Computes the Jaro-Winkler similarity between the two given string columns. The result is a
+   * double between 0.0 (no similarity) and 1.0 (identical).
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def jaro_winkler_similarity(l: Column, r: Column): Column =
+    Column.fn("jaro_winkler_similarity", l, r)
+
+  /**
    * Locate the position of the first occurrence of substr.
    *
    * @note
@@ -7717,7 +7726,9 @@ object functions {
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
   /**
-   * Extracts the hours as an integer from a given date/time/timestamp/string.
+   * Extracts the hours as an integer from a given date/time/timestamp/string. The input may also
+   * be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -7790,7 +7801,9 @@ object functions {
   def last_day(e: Column): Column = Column.fn("last_day", e)
 
   /**
-   * Extracts the minutes as an integer from a given date/time/timestamp/string.
+   * Extracts the minutes as an integer from a given date/time/timestamp/string. The input may
+   * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -7896,7 +7909,9 @@ object functions {
     Column.fn("next_day", date, dayOfWeek)
 
   /**
-   * Extracts the seconds as an integer from a given date/time/timestamp/string.
+   * Extracts the seconds as an integer from a given date/time/timestamp/string. The input may
+   * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs

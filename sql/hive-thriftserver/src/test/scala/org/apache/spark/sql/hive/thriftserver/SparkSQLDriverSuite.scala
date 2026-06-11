@@ -25,7 +25,7 @@ import org.apache.spark.util.Utils.REDACTION_REPLACEMENT_TEXT
 
 class SparkSQLDriverSuite extends SharedSparkSession {
 
-  test("SPARK-57262: job description should be redacted by spark.sql.redaction.string.regex") {
+  test("job description should be redacted by spark.sql.redaction.string.regex") {
     withSQLConf(SQLConf.SQL_STRING_REDACTION_PATTERN.key -> "password=([^\\s]+)") {
       var jobDescription: String = null
       spark.sparkContext.addSparkListener(new SparkListener {
