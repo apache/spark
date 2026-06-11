@@ -2758,4 +2758,248 @@ class Scd2BatchProcessorSuite extends QueryTest with SharedSparkSession {
       )
     )
   }
+
+  // =============== identifyAndTagAuxRows tests ===============
+
+  /** Select `id`, `value`, and the appended routing flag for compact assertions. */
+  private def withRouteFlag(df: DataFrame): DataFrame =
+    df.select(
+      F.col("id"),
+      F.col("value"),
+      F.col(Scd2BatchProcessor.startAtColName),
+      F.col(Scd2BatchProcessor.endAtColName),
+      F.col(AutoCdcReservedNames.cdcMetadataColName),
+      F.col(Scd2BatchProcessor.shouldRouteToAuxTableColName)
+    )
+
+  test("identifyAndTagAuxRows routes a tombstone to the auxiliary table") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A tombstone (startAt == endAt == recordStartAt) is delete-encoded and must live in the
+    // aux table, never the target table.
+    val df = targetTableOf(userSchema)(
+      Row(1, "t", 5L, 5L, Row(5L))
+    )
+
+    checkAnswer(
+      df = withRouteFlag(processor.identifyAndTagAuxRows(df)),
+      expectedAnswer = Seq(
+        Row(1, "t", 5L, 5L, Row(5L), true)
+      )
+    )
+  }
+
+  test("identifyAndTagAuxRows does not route a decomposition tail to the auxiliary table") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A decomposition tail (recordStartAt == null) is neither a tombstone nor an
+    // upsert-representing row, so it is tagged false. (Tails are promoted/dropped upstream of
+    // the merges; this pins that the router itself never claims them for the aux table.)
+    val df = targetTableOf(userSchema)(
+      Row(1, "tail", null, 10L, Row(null))
+    )
+
+    checkAnswer(
+      df = withRouteFlag(processor.identifyAndTagAuxRows(df)),
+      expectedAnswer = Seq(
+        Row(1, "tail", null, 10L, Row(null), false)
+      )
+    )
+  }
+
+  test("identifyAndTagAuxRows keeps a lone open upsert visible (no successor to coalesce with)") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A single open upsert with no following row in its key window cannot be a hidden no-op
+    // continuation - it is the visible tail of its (size-1) run.
+    val df = targetTableOf(userSchema)(
+      Row(1, "v", 5L, null, Row(5L))
+    )
+
+    checkAnswer(
+      df = withRouteFlag(processor.identifyAndTagAuxRows(df)),
+      expectedAnswer = Seq(
+        Row(1, "v", 5L, null, Row(5L), false)
+      )
+    )
+  }
+
+  test("identifyAndTagAuxRows routes every no-op run member except the visible tail to the aux") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A reconciled no-op run: three upserts agreeing on the tracked `value`, all sharing the
+    // run head's startAt=5 and open endAt. The first two coalesce into hidden aux rows; only
+    // the last (the run tail) stays visible in the target table.
+    val df = targetTableOf(userSchema)(
+      Row(1, "a", 5L, null, Row(5L)),
+      Row(1, "a", 5L, null, Row(10L)),
+      Row(1, "a", 5L, null, Row(15L))
+    )
+
+    checkAnswer(
+      df = withRouteFlag(processor.identifyAndTagAuxRows(df)),
+      expectedAnswer = Seq(
+        Row(1, "a", 5L, null, Row(5L), true),
+        Row(1, "a", 5L, null, Row(10L), true),
+        Row(1, "a", 5L, null, Row(15L), false)
+      )
+    )
+  }
+
+  test("identifyAndTagAuxRows keeps a row visible when the next row changes a tracked column") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // A real state change between the two rows (value a -> b) breaks the run, so the earlier
+    // closed upsert is a visible run tail rather than a hidden no-op continuation.
+    val df = targetTableOf(userSchema)(
+      Row(1, "a", 5L, 10L, Row(5L)),
+      Row(1, "b", 10L, null, Row(10L))
+    )
+
+    checkAnswer(
+      df = withRouteFlag(processor.identifyAndTagAuxRows(df)),
+      expectedAnswer = Seq(
+        Row(1, "a", 5L, 10L, Row(5L), false),
+        Row(1, "b", 10L, null, Row(10L), false)
+      )
+    )
+  }
+
+  test("identifyAndTagAuxRows keeps a row visible when it closes strictly before the next row") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // The first row closes at 8 but the next row only begins at 10, leaving a visible gap. Even
+    // though both rows agree on the tracked `value`, the earlier row cannot be hidden - dropping
+    // it would erase the gap from the visible timeline.
+    val df = targetTableOf(userSchema)(
+      Row(1, "a", 5L, 8L, Row(5L)),
+      Row(1, "a", 10L, null, Row(10L))
+    )
+
+    checkAnswer(
+      df = withRouteFlag(processor.identifyAndTagAuxRows(df)),
+      expectedAnswer = Seq(
+        Row(1, "a", 5L, 8L, Row(5L), false),
+        Row(1, "a", 10L, null, Row(10L), false)
+      )
+    )
+  }
+
+  test("identifyAndTagAuxRows coalesces consecutive upserts when the tracked set is empty") {
+    val processor = processorWithKeys(
+      keys = Seq("id"),
+      trackHistorySelection = Some(
+        ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("value")))
+      )
+    )
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // With `value` excluded the effective tracked set is empty, so consecutive gapless upserts
+    // are always tracked-equal: the earlier one is hidden even though the user data differs.
+    val df = targetTableOf(userSchema)(
+      Row(1, "a", 5L, null, Row(5L)),
+      Row(1, "b", 5L, null, Row(10L))
+    )
+
+    checkAnswer(
+      df = withRouteFlag(processor.identifyAndTagAuxRows(df)),
+      expectedAnswer = Seq(
+        Row(1, "a", 5L, null, Row(5L), true),
+        Row(1, "b", 5L, null, Row(10L), false)
+      )
+    )
+  }
+
+  // =============== antiJoinRowsByRecordStartAtPerKey tests ===============
+
+  test("antiJoinRowsByRecordStartAtPerKey returns only left rows with no (key, recordStartAt) " +
+    "match on the right") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    val left = targetTableOf(userSchema)(
+      Row(1, "L5", 5L, null, Row(5L)),
+      Row(1, "L9", 9L, null, Row(9L))
+    )
+    // Right matches the left row at recordStartAt=5 only; the left row at 9 has no counterpart.
+    val right = targetTableOf(userSchema)(
+      Row(1, "R5", 5L, null, Row(5L))
+    )
+
+    checkAnswer(
+      df = processor.antiJoinRowsByRecordStartAtPerKey(left, right),
+      expectedAnswer = Seq(
+        Row(1, "L9", 9L, null, Row(9L))
+      )
+    )
+  }
+
+  test("antiJoinRowsByRecordStartAtPerKey matches per key: same recordStartAt under a different " +
+    "key is not a match") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    val left = targetTableOf(userSchema)(
+      Row(1, "a", 5L, null, Row(5L)),
+      Row(2, "b", 5L, null, Row(5L))
+    )
+    // Only key 1 at recordStartAt=5 matches; key 2 at the same recordStartAt must survive.
+    val right = targetTableOf(userSchema)(
+      Row(1, "r", 5L, null, Row(5L))
+    )
+
+    checkAnswer(
+      df = processor.antiJoinRowsByRecordStartAtPerKey(left, right),
+      expectedAnswer = Seq(
+        Row(2, "b", 5L, null, Row(5L))
+      )
+    )
+  }
+
+  test("antiJoinRowsByRecordStartAtPerKey matches null recordStartAt null-safely") {
+    val processor = processorWithKeys(Seq("id"))
+    val userSchema = new StructType().add("id", IntegerType).add("value", StringType)
+
+    // Both sides carry a null recordStartAt for the same key. A null-safe equality treats the
+    // two as matching, so the left row is anti-joined away (an ordinary `=` would keep it).
+    val left = targetTableOf(userSchema)(
+      Row(1, "tailL", null, 10L, Row(null))
+    )
+    val right = targetTableOf(userSchema)(
+      Row(1, "tailR", null, 20L, Row(null))
+    )
+
+    assert(processor.antiJoinRowsByRecordStartAtPerKey(left, right).collect().isEmpty)
+  }
+
+  test("antiJoinRowsByRecordStartAtPerKey matches on the full composite key") {
+    val processor = processorWithKeys(Seq("id", "grp"))
+    val userSchema = new StructType()
+      .add("id", IntegerType)
+      .add("grp", StringType)
+      .add("value", StringType)
+
+    // Rows share id and recordStartAt but differ on the second key column `grp`. Only the exact
+    // composite-key match (1, "g") is removed; (1, "h") survives.
+    val left = targetTableOf(userSchema)(
+      Row(1, "g", "a", 5L, null, Row(5L)),
+      Row(1, "h", "b", 5L, null, Row(5L))
+    )
+    val right = targetTableOf(userSchema)(
+      Row(1, "g", "r", 5L, null, Row(5L))
+    )
+
+    checkAnswer(
+      df = processor.antiJoinRowsByRecordStartAtPerKey(left, right),
+      expectedAnswer = Seq(
+        Row(1, "h", "b", 5L, null, Row(5L))
+      )
+    )
+  }
 }
