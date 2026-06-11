@@ -55,9 +55,10 @@ public class V2ExpressionSQLBuilder {
 
   /**
    * Escape the LIKE pattern special chars, using {@code \} as the escape character. The LIKE
-   * patterns produced by {@link #visitStartsWith}, {@link #visitEndsWith} and {@link #visitContains}
-   * declare {@code ESCAPE '\'}, so the wildcards {@code _} and {@code %} and the escape character
-   * {@code \} itself must each be prefixed with {@code \} to be matched literally.
+   * patterns produced by {@link #visitStartsWith}, {@link #visitEndsWith} and
+   * {@link #visitContains} declare {@code ESCAPE '\'}, so the wildcards {@code _} and {@code %}
+   * and the escape character {@code \} itself must each be prefixed with {@code \} to be matched
+   * literally.
    *
    * Note: This method adopts the escape representation within Spark and is not bound to any JDBC
    * dialect. A JDBC dialect should overwrite this API if the underlying database has more LIKE
@@ -237,9 +238,10 @@ public class V2ExpressionSQLBuilder {
 
   /**
    * Build a {@code <left> LIKE '<pattern>' ESCAPE '\'} predicate. The pattern already has its LIKE
-   * special chars escaped (via {@link #escapeSpecialCharsForLikePattern}); both the pattern and the
-   * {@code \} escape character are then passed through {@link #escapeStringLiteralForLikePattern} so
-   * a dialect can add any string-literal escaping its SQL syntax requires.
+   * special chars escaped (via {@link #escapeSpecialCharsForLikePattern}); both the pattern and
+   * the {@code \} escape character are then passed through
+   * {@link #escapeStringLiteralForLikePattern} so a dialect can add any string-literal escaping
+   * its SQL syntax requires.
    */
   private String likeWithEscape(String l, String pattern) {
     return l + " LIKE '" + escapeStringLiteralForLikePattern(pattern)
