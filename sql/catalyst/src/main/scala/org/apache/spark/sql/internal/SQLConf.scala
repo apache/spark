@@ -2646,10 +2646,7 @@ object SQLConf {
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("janino", "jdk"))
-    // TEMP: default flipped to "jdk" so this branch's GHA workflows exercise the JDK
-    // backend across the full Spark test surface. Revert to "janino" before the PR
-    // merges to upstream master.
-    .createWithDefault("jdk")
+    .createWithDefault("janino")
 
   val WHOLESTAGE_HUGE_METHOD_LIMIT = buildConf("spark.sql.codegen.hugeMethodLimit")
     .internal()
