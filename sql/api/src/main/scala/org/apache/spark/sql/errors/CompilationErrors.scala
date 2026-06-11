@@ -149,6 +149,12 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       errorClass = "CANNOT_MODIFY_CONFIG",
       messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
+
+  def streamingUserSpecifiedSchemaNotAllowedInTableError(config: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+      messageParameters = Map("config" -> config))
+  }
 }
 
 private[sql] object CompilationErrors extends CompilationErrors

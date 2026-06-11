@@ -37,7 +37,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.sources.FakeScanBuilder
-import org.apache.spark.sql.types.{DataType, IntegerType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
@@ -82,6 +82,50 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       spark.readStream.table("non_exist_table")
     }
     checkErrorTableNotFound(e, "`non_exist_table`")
+  }
+
+  test("read: user-specified schema is not allowed with table API") {
+    val tblName = "my_table"
+    withTable(tblName) {
+      spark.range(3).write.format("parquet").saveAsTable(tblName)
+      val e = intercept[AnalysisException] {
+        spark.readStream
+          .schema(new StructType().add("a", IntegerType))
+          .table(tblName)
+      }
+      checkError(
+        exception = e,
+        condition = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+        parameters = Map(
+          "config" -> SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key))
+
+      // After removing the user-specified schema, the query runs using the table's schema.
+      val df = spark.readStream.table(tblName)
+      assert(df.schema === new StructType().add("id", LongType, nullable = false))
+      testStream(df)(
+        ProcessAllAvailable(),
+        CheckAnswer(Row(0), Row(1), Row(2))
+      )
+    }
+  }
+
+  test("read: user-specified schema is silently ignored when flag is flipped off") {
+    val tblName = "my_table"
+    withTable(tblName) {
+      spark.range(3).write.format("parquet").saveAsTable(tblName)
+      withSQLConf(
+          SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key -> "false") {
+        val df = spark.readStream
+          .schema(new StructType().add("a", IntegerType))
+          .table(tblName)
+        // The user-specified `a: Int` is dropped; the catalog table's `id: Long` is used.
+        assert(df.schema === new StructType().add("id", LongType, nullable = false))
+        testStream(df)(
+          ProcessAllAvailable(),
+          CheckAnswer(Row(0), Row(1), Row(2))
+        )
+      }
+    }
   }
 
   test("read: stream table API with temp view") {

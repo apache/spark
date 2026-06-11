@@ -22,7 +22,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.annotation.{Evolving, Experimental}
 import org.apache.spark.connect.proto.Read.DataSource
 import org.apache.spark.sql.connect.ConnectConversions._
-import org.apache.spark.sql.errors.DataTypeErrors
+import org.apache.spark.sql.errors.{CompilationErrors, DataTypeErrors}
 import org.apache.spark.sql.streaming
 import org.apache.spark.sql.types.StructType
 
@@ -102,6 +102,13 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
+    // The schema set via DataStreamReader.schema(...) is never sent to the server for named
+    // table reads: catalog tables declare their own schema. Reject it instead of silently
+    // dropping it, unless the user explicitly restores the old behavior via the conf.
+    if (sourceBuilder.hasSchema && disallowUserSpecifiedSchemaInTable) {
+      throw CompilationErrors.streamingUserSpecifiedSchemaNotAllowedInTableError(
+        DataStreamReader.DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_KEY)
+    }
     sparkSession.newDataFrame { builder =>
       builder.getReadBuilder
         .setIsStreaming(true)
@@ -109,6 +116,12 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
         .setUnparsedIdentifier(tableName)
         .putAllOptions(sourceBuilder.getOptionsMap)
     }
+  }
+
+  private def disallowUserSpecifiedSchemaInTable: Boolean = {
+    sparkSession.conf
+      .get(DataStreamReader.DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_KEY, "true")
+      .toBoolean
   }
 
   /** @inheritdoc */
@@ -163,4 +176,11 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
   /** @inheritdoc */
   override def textFile(path: String): Dataset[String] = super.textFile(path)
 
+}
+
+private object DataStreamReader {
+  // Mirrors SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED, which is not
+  // accessible from the Connect client.
+  private val DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_KEY =
+    "spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled"
 }

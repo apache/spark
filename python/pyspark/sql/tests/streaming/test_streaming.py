@@ -24,7 +24,7 @@ from pyspark.sql import Row
 from pyspark.sql.functions import lit
 from pyspark.sql.types import StructType, StructField, IntegerType, StringType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 
 
 class StreamingTestsMixin:
@@ -440,6 +440,25 @@ class StreamingTestsMixin:
             self.assertEqual(
                 set([Row(value="aaa"), Row(value="bbb"), Row(value="ccc")]), set(result)
             )
+
+    def test_streaming_read_from_table_with_user_specified_schema(self):
+        with self.table("input_table"):
+            self.spark.sql("CREATE TABLE input_table (value string) USING parquet")
+            with self.assertRaises(AnalysisException) as ctx:
+                self.spark.readStream.schema("value string").table("input_table")
+            self.assertEqual(
+                ctx.exception.getCondition(),
+                "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+            )
+
+            # Flipping the conf off restores the previous behavior: the user-specified
+            # schema is silently ignored and the catalog table's schema is used.
+            with self.sql_conf(
+                {"spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled": False}
+            ):
+                df = self.spark.readStream.schema("id long").table("input_table")
+                self.assertTrue(df.isStreaming)
+                self.assertEqual(df.schema, StructType([StructField("value", StringType(), True)]))
 
     def test_streaming_write_to_table(self):
         with self.table("output_table"), tempfile.TemporaryDirectory(prefix="to_table") as tmpdir:

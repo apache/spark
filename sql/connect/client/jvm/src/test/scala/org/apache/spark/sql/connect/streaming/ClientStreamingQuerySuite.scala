@@ -181,6 +181,33 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     }
   }
 
+  test("Streaming table API rejects user-specified schema") {
+    val confKey = "spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled"
+    val tableName = "table_with_user_specified_schema"
+    withTable(tableName) {
+      spark.sql(s"CREATE TABLE $tableName (id LONG) USING parquet").collect()
+
+      val e = intercept[AnalysisException] {
+        spark.readStream
+          .schema(new StructType().add("a", IntegerType))
+          .table(tableName)
+      }
+      checkError(
+        exception = e,
+        condition = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+        parameters = Map("config" -> confKey))
+
+      // Flipping the conf off restores the previous behavior: the user-specified schema is
+      // silently ignored and the catalog table's schema is used.
+      withSQLConf(confKey -> "false") {
+        val df = spark.readStream
+          .schema(new StructType().add("a", IntegerType))
+          .table(tableName)
+        assert(df.schema.fieldNames === Array("id"))
+      }
+    }
+  }
+
   test("stream read options with csv source and Trigger.AvailableNow") {
     withTempPath { ckpt =>
       val q = spark.readStream

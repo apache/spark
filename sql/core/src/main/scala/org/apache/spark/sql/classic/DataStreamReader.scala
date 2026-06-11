@@ -27,6 +27,7 @@ import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.json.JsonUtils.checkJsonSchema
 import org.apache.spark.sql.execution.datasources.xml.XmlUtils.checkXmlSchema
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -102,6 +103,11 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     require(tableName != null, "The table name can't be null")
+    if (userSpecifiedSchema.nonEmpty &&
+        sparkSession.sessionState.conf.streamingDisallowUserSpecifiedSchemaInTableEnabled) {
+      throw QueryCompilationErrors.streamingUserSpecifiedSchemaNotAllowedInTableError(
+        SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key)
+    }
     val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
     val unresolved = UnresolvedRelation(
       identifier,

@@ -452,6 +452,23 @@ class DataStreamReader(OptionUtils):
     xml.__doc__ = PySparkDataStreamReader.xml.__doc__
 
     def table(self, tableName: str) -> "DataFrame":
+        # The schema set via DataStreamReader.schema(...) is never sent to the server for
+        # named table reads: catalog tables declare their own schema. Reject it instead of
+        # silently dropping it, unless the user explicitly restores the old behavior via
+        # the conf.
+        if self._schema:
+            conf_key = "spark.sql.streaming.disallowUserSpecifiedSchemaInTable.enabled"
+            disallow = self._client.conf.get(conf_key, "true")
+            if disallow is not None and disallow.lower() == "true":
+                raise AnalysisException(
+                    "User specified schema is not allowed with DataStreamReader.table(). "
+                    "Catalog tables declare their own schema, so the schema passed to "
+                    "DataStreamReader.schema(...) is ignored. Remove the .schema(...) call, "
+                    f"or set '{conf_key}' to false to restore the previous behavior of "
+                    "silently ignoring the user-specified schema.",
+                    errorClass="STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+                    messageParameters={"config": conf_key},
+                )
         return self._df(Read(tableName, self._options, is_streaming=True))
 
     table.__doc__ = PySparkDataStreamReader.table.__doc__
