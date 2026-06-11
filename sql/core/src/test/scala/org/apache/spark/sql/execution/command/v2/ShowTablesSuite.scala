@@ -26,6 +26,7 @@ import org.apache.spark.util.Utils
  */
 class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase {
   override def defaultNamespace: Seq[String] = Nil
+  override def expectsSessionTempViews: Boolean = false
 
   // The test fails for V1 catalog with the error:
   // org.apache.spark.sql.AnalysisException:
