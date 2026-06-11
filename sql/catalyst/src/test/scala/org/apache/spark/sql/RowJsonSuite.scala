@@ -21,7 +21,7 @@ import java.time.{LocalDate, LocalDateTime, LocalTime, ZoneOffset}
 
 import org.json4s.JsonAST.{JArray, JBool, JDecimal, JDouble, JLong, JNull, JObject, JString, JValue}
 
-import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.encoders.{ExamplePoint, ExamplePointUDT}
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.catalyst.plans.SQLHelper
@@ -174,24 +174,23 @@ class RowJsonSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  // Routing the external value through formatExternal must not silently change the nanosecond
-  // timestamp behavior: those ops raise the clean unsupported-rendering error directly from
-  // formatExternal instead of mis-rendering the external value as a microsecond timestamp.
-  test("SPARK-57338: nanosecond timestamp column raises the unsupported-rendering error in JSON") {
+  // With nanosecond cast-to-string now supported through the framework (SPARK-57285), Row JSON
+  // routes the external Row value (LocalDateTime for NTZ, Instant for LTZ) through formatExternal
+  // and renders it at the column precision, rather than raising an unsupported-rendering error.
+  test("SPARK-57338: nanosecond timestamp column renders the external value in JSON") {
+    def nanosRowJson(value: Any, dt: DataType): JValue =
+      new GenericRowWithSchema(Array(value), new StructType().add("a", dt)).jsonValue
     withSQLConf(
         SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true",
-        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
       val ldt = LocalDateTime.of(2020, 1, 1, 12, 0, 0, 123456789)
-      Seq[(Any, DataType)](
-        ldt -> TimestampNTZNanosType(9),
-        ldt.toInstant(ZoneOffset.UTC) -> TimestampLTZNanosType(9)).foreach { case (value, dt) =>
-        checkError(
-          exception = intercept[SparkUnsupportedOperationException] {
-            new GenericRowWithSchema(Array(value), new StructType().add("a", dt)).jsonValue
-          },
-          condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING",
-          parameters = Map("dataType" -> toSQLType(dt)))
-      }
+      // NTZ renders zone-independently (the value is the UTC-grid wall clock).
+      assert(nanosRowJson(ldt, TimestampNTZNanosType(9)) ===
+        JObject("a" -> JString("2020-01-01 12:00:00.123456789")))
+      // LTZ renders in the session zone; with UTC it matches the NTZ wall clock.
+      assert(nanosRowJson(ldt.toInstant(ZoneOffset.UTC), TimestampLTZNanosType(9)) ===
+        JObject("a" -> JString("2020-01-01 12:00:00.123456789")))
     }
   }
 

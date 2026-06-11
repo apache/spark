@@ -49,6 +49,7 @@ Data Manipulation Statements are used to add, change, or delete data. Spark SQL 
 
  * [INSERT TABLE](sql-ref-syntax-dml-insert-table.html)
  * [INSERT OVERWRITE DIRECTORY](sql-ref-syntax-dml-insert-overwrite-directory.html)
+ * [MERGE INTO](sql-ref-syntax-dml-merge-into.html)
  * [LOAD](sql-ref-syntax-dml-load.html)
 
 ### Data Retrieval Statements

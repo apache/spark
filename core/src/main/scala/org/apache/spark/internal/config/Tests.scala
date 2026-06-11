@@ -43,6 +43,7 @@ private[spark] object Tests {
     ConfigBuilder("spark.testing.injectShuffleFetchFailures")
       .doc("Injecting fetch failures for shuffle stages by providing an invalid BlockManager " +
         "location for the first stage attempt. Testing only flag!")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 

@@ -2393,6 +2393,7 @@ package object config {
       .doc("When true, scheduler log messages for streaming tasks include " +
         "the structured streaming query ID and batch ID.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
@@ -2401,6 +2402,7 @@ package object config {
       .doc("Maximum number of characters of the streaming query ID to include " +
         "in scheduler log messages. Set to -1 to include the full query ID.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .intConf
       .createWithDefault(5)
 
@@ -2971,6 +2973,7 @@ package object config {
         "Application Master JVM options in client mode. In cluster mode, use " +
         "`spark.driver.limitActiveProcessorCount.enabled` instead.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -2979,6 +2982,7 @@ package object config {
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.driver.cores> to the driver JVM " +
         "options. Currently, this only takes effect in YARN cluster mode.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
@@ -2987,6 +2991,7 @@ package object config {
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.executor.cores> to executor JVM " +
         "options. Currently, this only takes effect in YARN mode.")
       .version("4.2.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 }

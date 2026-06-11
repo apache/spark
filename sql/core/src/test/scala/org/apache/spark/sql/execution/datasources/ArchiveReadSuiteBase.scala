@@ -90,9 +90,9 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   /** Entry file name for the i-th data file in an archive. */
   protected def entryName(i: Int): String = s"part-$i.$fileExtension"
 
-  /** Provides an archive-extensioned path inside a fresh temp dir to `f`. */
-  protected def withArchiveFile(
-      extension: String = archiveExtensions.head)(f: File => Unit): Unit = {
+  /** Provides an archive-extensioned path inside a fresh temp dir to `f` and returns its result. */
+  protected def withArchiveFile[T](
+      extension: String = archiveExtensions.head)(f: File => T): T = {
     val dir = Utils.createTempDir(namePrefix = "archive-test")
     try f(new File(dir, s"archive.$extension")) finally Utils.deleteRecursively(dir)
   }

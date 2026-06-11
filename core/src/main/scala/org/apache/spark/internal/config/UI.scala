@@ -149,6 +149,7 @@ private[spark] object UI {
       "backward compatibility with standalone deployments. Set to true to enforce " +
       "SNI host checking for stricter security.")
     .version("4.2.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
 
