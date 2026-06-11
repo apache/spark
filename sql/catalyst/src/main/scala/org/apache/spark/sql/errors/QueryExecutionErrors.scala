@@ -2114,7 +2114,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def userSpecifiedSchemaUnsupportedByDataSourceError(
       provider: TableProvider): SparkUnsupportedOperationException = {
     new SparkUnsupportedOperationException(
-      errorClass = "_LEGACY_ERROR_TEMP_2242",
+      errorClass = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.BY_DATA_SOURCE",
       messageParameters = Map(
         "provider" -> provider.getClass.getSimpleName))
   }

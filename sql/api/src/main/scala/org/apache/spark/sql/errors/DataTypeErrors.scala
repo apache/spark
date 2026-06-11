@@ -266,7 +266,7 @@ private[sql] object DataTypeErrors extends DataTypeErrorsBase {
 
   def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1189",
+      errorClass = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.WITH_OPERATION",
       messageParameters = Map("operation" -> operation))
   }
 

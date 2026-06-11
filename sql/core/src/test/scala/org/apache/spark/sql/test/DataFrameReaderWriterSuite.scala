@@ -1068,8 +1068,11 @@ class DataFrameReaderWriterSuite extends SharedSparkSession with BeforeAndAfter 
       val schema = StructType(StructField("a", StringType) :: Nil)
       val e = intercept[AnalysisException] {
         spark.read.schema(schema).table("t")
-      }.getMessage
-      assert(e.contains("User specified schema not supported with `table`"))
+      }
+      checkError(
+        exception = e,
+        condition = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.WITH_OPERATION",
+        parameters = Map("operation" -> "table"))
     }
   }
 

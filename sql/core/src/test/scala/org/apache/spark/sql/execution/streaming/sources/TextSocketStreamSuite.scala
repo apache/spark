@@ -197,7 +197,7 @@ class TextSocketStreamSuite extends StreamTest {
       exception = intercept[SparkUnsupportedOperationException] {
         spark.readStream.schema(userSpecifiedSchema).format("socket").options(params).load()
       },
-      condition = "_LEGACY_ERROR_TEMP_2242",
+      condition = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.BY_DATA_SOURCE",
       parameters = Map("provider" -> "TextSocketSourceProvider"))
   }
 
