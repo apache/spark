@@ -1982,6 +1982,32 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
+  test("duplicated column names roundtrip through the cache") {
+    // Arrow schemas are allowed to contain duplicate field names, and nothing in the cache path
+    // is keyed by name: vectors are read positionally (getFieldVectors / getVector(index)) and
+    // column pruning maps selected attributes to cache columns by exprId. The name-collision
+    // handling needed for the Python<->JVM Arrow exchange does not apply here because cached
+    // batches never cross into Python. This test pins that property for both read paths and for
+    // pruning a single one of the duplicated columns.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val df = spark.range(3).selectExpr("id as a", "(id * 10) as a", "string(id) as a")
+        df.cache()
+        try {
+          checkAnswer(df, Seq(Row(0L, 0L, "0"), Row(1L, 10L, "1"), Row(2L, 20L, "2")))
+          // Selecting a duplicated name directly is ambiguous, so rename above the cached
+          // relation and project one column. The scan still prunes against the duplicate-name
+          // cache schema, resolving the column by exprId.
+          val pruned = df.toDF("x", "y", "z").select("y")
+          checkAnswer(pruned, Seq(Row(0L), Row(10L), Row(20L)))
+        } finally {
+          df.unpersist()
+          InMemoryRelation.clearSerializer()
+        }
+      }
+    }
+  }
+
   test("top-level geometry and geography roundtrip through the cache") {
     Seq(false, true).foreach { vectorized =>
       withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
