@@ -461,12 +461,13 @@ class DataStreamReader(OptionUtils):
             disallow = self._client.conf.get(conf_key, "true")
             if disallow is not None and disallow.lower() == "true":
                 raise AnalysisException(
-                    "User specified schema is not allowed with DataStreamReader.table(). "
-                    "Catalog tables declare their own schema, so the schema passed to "
-                    "DataStreamReader.schema(...) is ignored. Remove the .schema(...) call, "
-                    f"or set '{conf_key}' to false to restore the previous behavior of "
-                    "silently ignoring the user-specified schema.",
-                    errorClass="STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+                    "The schema specified via DataFrameReader/DataStreamReader.schema(...) "
+                    "cannot be applied: catalog tables declare their own schema, so the schema "
+                    "passed to DataStreamReader.schema(...) is ignored by "
+                    f"DataStreamReader.table(). Remove the schema(...) call, or set '{conf_key}' "
+                    "to false to restore the previous behavior of silently ignoring the "
+                    "user-specified schema.",
+                    errorClass="USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
                     messageParameters={"config": conf_key},
                 )
         return self._df(Read(tableName, self._options, is_streaming=True))

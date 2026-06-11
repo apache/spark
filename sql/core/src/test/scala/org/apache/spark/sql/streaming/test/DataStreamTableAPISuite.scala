@@ -95,7 +95,7 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       }
       checkError(
         exception = e,
-        condition = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+        condition = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
         parameters = Map(
           "config" -> SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key))
 

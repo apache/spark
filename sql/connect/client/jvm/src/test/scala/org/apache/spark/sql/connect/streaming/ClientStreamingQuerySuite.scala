@@ -213,7 +213,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       }
       checkError(
         exception = e,
-        condition = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+        condition = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
         parameters = Map("config" -> disallowUserSpecifiedSchemaInTableConfKey))
 
       // After removing the user-specified schema, the query runs using the table's schema.

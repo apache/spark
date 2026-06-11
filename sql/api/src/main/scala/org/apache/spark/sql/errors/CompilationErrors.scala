@@ -150,9 +150,9 @@ private[sql] trait CompilationErrors extends DataTypeErrorsBase {
       messageParameters = Map("key" -> toSQLConf(key), "docroot" -> docroot))
   }
 
-  def streamingUserSpecifiedSchemaNotAllowedInTableError(config: String): AnalysisException = {
+  def userSpecifiedSchemaUnsupportedInStreamingTableError(config: String): AnalysisException = {
     new AnalysisException(
-      errorClass = "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+      errorClass = "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
       messageParameters = Map("config" -> config))
   }
 }

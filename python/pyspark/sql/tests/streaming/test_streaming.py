@@ -448,7 +448,7 @@ class StreamingTestsMixin:
                 self.spark.readStream.schema("value string").table("input_table")
             self.assertEqual(
                 ctx.exception.getCondition(),
-                "STREAMING_USER_SPECIFIED_SCHEMA_NOT_ALLOWED_IN_TABLE",
+                "USER_SPECIFIED_SCHEMA_NOT_SUPPORTED.IN_STREAMING_TABLE",
             )
 
             # Flipping the conf off restores the previous behavior: the user-specified

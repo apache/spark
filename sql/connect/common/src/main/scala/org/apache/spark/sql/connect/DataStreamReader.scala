@@ -106,7 +106,7 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
     // table reads: catalog tables declare their own schema. Reject it instead of silently
     // dropping it, unless the user explicitly restores the old behavior via the conf.
     if (sourceBuilder.hasSchema && disallowUserSpecifiedSchemaInTable) {
-      throw CompilationErrors.streamingUserSpecifiedSchemaNotAllowedInTableError(
+      throw CompilationErrors.userSpecifiedSchemaUnsupportedInStreamingTableError(
         DataStreamReader.DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_KEY)
     }
     sparkSession.newDataFrame { builder =>

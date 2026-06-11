@@ -105,7 +105,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession)
     require(tableName != null, "The table name can't be null")
     if (userSpecifiedSchema.nonEmpty &&
         sparkSession.sessionState.conf.streamingDisallowUserSpecifiedSchemaInTableEnabled) {
-      throw QueryCompilationErrors.streamingUserSpecifiedSchemaNotAllowedInTableError(
+      throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedInStreamingTableError(
         SQLConf.STREAMING_DISALLOW_USER_SPECIFIED_SCHEMA_IN_TABLE_ENABLED.key)
     }
     val identifier = sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
