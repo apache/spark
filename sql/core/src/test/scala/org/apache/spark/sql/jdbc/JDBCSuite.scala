@@ -925,8 +925,9 @@ class JDBCSuite extends SharedSparkSession {
 
     // MySQL treats backslash as an escape character inside string literals, so every backslash is
     // doubled again: the ESCAPE clause uses `\\` and a literal backslash in the value becomes four
-    // backslashes (escapeSpecialCharsForLikePattern doubles it, then escapeStringLiteralForLikePattern
-    // doubles each of those). The wildcard escaping for `%`/`_` is unchanged from the default.
+    // backslashes (escapeSpecialCharsForLikePattern doubles it, then
+    // escapeStringLiteralForLikePattern doubles each of those). The wildcard escaping for
+    // `%`/`_` is unchanged from the default.
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     def mySQLSQL(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
     // `c` LIKE 'ab\\\\%' ESCAPE '\\'
