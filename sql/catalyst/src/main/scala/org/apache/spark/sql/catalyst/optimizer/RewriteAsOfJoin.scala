@@ -48,43 +48,53 @@ import org.apache.spark.sql.catalyst.rules._
  * }}}
  */
 object RewriteAsOfJoin extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
-    case j @ AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _) =>
-      val conditionWithOuterReference =
-        condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
-          case a: AttributeReference if left.outputSet.contains(a) =>
-            OuterReference(a)
-      }
-      val filtered = Filter(conditionWithOuterReference, right)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    // When the sort-merge AS-OF join operator is enabled, skip this rewrite
+    // so that the AsOfJoin logical node reaches the planner intact and
+    // AsOfJoinSelection can produce a dedicated physical operator.
+    // This conf-based gating (rather than excludedRules) is used because
+    // the planner strategy and this optimizer rule must be kept in sync:
+    // if the rewrite runs, the planner never sees AsOfJoin.
+    if (conf.sortMergeAsOfJoinEnabled) return plan
 
-      val orderExpressionWithOuterReference = orderExpression.transformUp {
-          case a: AttributeReference if left.outputSet.contains(a) =>
-            OuterReference(a)
+    plan.transformUpWithNewOutput {
+      case j @ AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _) =>
+        val conditionWithOuterReference =
+          condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
+            case a: AttributeReference if left.outputSet.contains(a) =>
+              OuterReference(a)
         }
-      val rightStruct = CreateStruct(right.output)
-      val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
-        .toAggregateExpression()
-      val aggExpr = Alias(nearestRight, "__nearest_right__")()
-      val aggregate = Aggregate(Seq.empty, Seq(aggExpr), filtered)
+        val filtered = Filter(conditionWithOuterReference, right)
 
-      val projectWithScalarSubquery = Project(
-        left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
-        left)
+        val orderExpressionWithOuterReference = orderExpression.transformUp {
+            case a: AttributeReference if left.outputSet.contains(a) =>
+              OuterReference(a)
+          }
+        val rightStruct = CreateStruct(right.output)
+        val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
+          .toAggregateExpression()
+        val aggExpr = Alias(nearestRight, "__nearest_right__")()
+        val aggregate = Aggregate(Seq.empty, Seq(aggExpr), filtered)
 
-      val filterRight = joinType match {
-        case LeftOuter => projectWithScalarSubquery
-        case _ =>
-          Filter(IsNotNull(projectWithScalarSubquery.output.last), projectWithScalarSubquery)
-      }
+        val projectWithScalarSubquery = Project(
+          left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
+          left)
 
-      val project = Project(
-        left.output ++ right.output.zipWithIndex.map {
-          case (out, idx) =>
-            Alias(GetStructField(filterRight.output.last, idx), out.name)()
-        },
-        filterRight)
-      val attrMapping = j.output.zip(project.output)
+        val filterRight = joinType match {
+          case LeftOuter => projectWithScalarSubquery
+          case _ =>
+            Filter(IsNotNull(projectWithScalarSubquery.output.last), projectWithScalarSubquery)
+        }
 
-      project -> attrMapping
+        val project = Project(
+          left.output ++ right.output.zipWithIndex.map {
+            case (out, idx) =>
+              Alias(GetStructField(filterRight.output.last, idx), out.name)()
+          },
+          filterRight)
+        val attrMapping = j.output.zip(project.output)
+
+        project -> attrMapping
+    }
   }
 }

@@ -187,7 +187,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterDatabasePropertiesCommand(db, properties)
 
     case SetNamespaceLocation(ResolvedV1Database(db), location) if conf.useV1Command =>
-      if (SparkStringUtils.isEmpty(location)) {
+      if (SparkStringUtils.isBlank(location)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location)
       }
       AlterDatabaseSetLocationCommand(db, location)
@@ -359,7 +359,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       val comment = c.properties.get(SupportsNamespaces.PROP_COMMENT)
       val location = c.properties.get(SupportsNamespaces.PROP_LOCATION)
       val newProperties = c.properties -- CatalogV2Util.NAMESPACE_RESERVED_PROPERTIES
-      if (location.isDefined && location.get.isEmpty) {
+      if (location.exists(SparkStringUtils.isBlank)) {
         throw QueryExecutionErrors.invalidEmptyLocationError(location.get)
       }
       CreateDatabaseCommand(name, c.ifNotExists, location, comment, newProperties)
