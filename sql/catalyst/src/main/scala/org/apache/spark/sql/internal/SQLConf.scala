@@ -1007,7 +1007,7 @@ object SQLConf {
         "equi-joins may require an extra shuffle. If one input is already hash partitioned, " +
         "only the other input may be reshuffled into the null-aware layout, so the pre-shuffled " +
         "input can keep its NULL skew.")
-      .version("4.1.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
