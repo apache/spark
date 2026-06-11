@@ -932,13 +932,8 @@ case class Scd2BatchProcessor(
       Scd2BatchProcessor.recordStartAtOf(F.col(AutoCdcReservedNames.cdcMetadataColName))
     val startAt = F.col(Scd2BatchProcessor.startAtColName)
     val endAt = F.col(Scd2BatchProcessor.endAtColName)
-    val effectiveRecordStartAt = F.coalesce(recordStartAt, endAt)
-
-    val nextRecordStartAt = F.lead(recordStartAt, 1).over(orderChronologicallyPerKeyWindow)
-    val nextStartAt = F.lead(startAt, 1).over(orderChronologicallyPerKeyWindow)
-    val nextEndAt = F.lead(endAt, 1).over(orderChronologicallyPerKeyWindow)
-    val nextEffectiveRecordStartAt =
-      F.lead(effectiveRecordStartAt, 1).over(orderChronologicallyPerKeyWindow)
+    val current = Scd2IntervalColumns(recordStartAt, startAt, endAt)
+    val next = current.leadBy(1, orderChronologicallyPerKeyWindow)
 
     val trackedHistoryColumns = computeTrackedHistoryColumns(reconciledDf)
     val areTrackedColumnsEqualInNextRow = trackedHistoryColumns
@@ -949,31 +944,12 @@ case class Scd2BatchProcessor(
       .reduceOption(_ && _)
       .getOrElse(F.lit(true))
 
-    val isUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(
-      recordStartAt = recordStartAt,
-      startAt = startAt,
-      endAt = endAt
+    val isTombstone = RowClassifier.isTombstone(current)
+    val isHiddenNoOpUpsert = RowClassifier.isNoOpUpsertContinuation(
+      row = current,
+      next = next,
+      areTrackedColumnsEqualInNextRow = areTrackedColumnsEqualInNextRow
     )
-    val nextIsUpsertRepresentingRow = RowClassifier.isUpsertRepresentingRow(
-      recordStartAt = nextRecordStartAt,
-      startAt = nextStartAt,
-      endAt = nextEndAt
-    )
-    val isTombstone = RowClassifier.isTombstone(
-      recordStartAt = recordStartAt,
-      startAt = startAt,
-      endAt = endAt
-    )
-
-    // A row that closes strictly before the next row starts leaves a gap in the visible
-    // timeline, so it cannot be a hidden no-op continuation of a run - it must stay visible.
-    val rowClosesStrictlyBeforeNextRow =
-      endAt.isNotNull && endAt < nextEffectiveRecordStartAt
-    val isHiddenNoOpUpsert =
-      isUpsertRepresentingRow &&
-        nextIsUpsertRepresentingRow &&
-        !rowClosesStrictlyBeforeNextRow &&
-        areTrackedColumnsEqualInNextRow
 
     reconciledDf.withColumn(
       Scd2BatchProcessor.shouldRouteToAuxTableColName,
@@ -1144,11 +1120,7 @@ case class Scd2BatchProcessor(
         // tails). Only op upsert-representing rows should land in the target, and no-op
         // upsert-representing rows would have been marked as routed to aux table; hence all
         // remaining upserts should land in the target table.
-        RowClassifier.isUpsertRepresentingRow(
-          recordStartAt = recordStartAt,
-          startAt = startAt,
-          endAt = endAt
-        )
+        RowClassifier.isUpsertRepresentingRow(Scd2IntervalColumns(recordStartAt, startAt, endAt))
 
     // Compute the set of affected rows that should be upserted back into the target table, as well
     // as rows that have been dropped or demoted out of the target table.
