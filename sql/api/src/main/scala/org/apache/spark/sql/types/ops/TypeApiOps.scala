@@ -17,9 +17,12 @@
 
 package org.apache.spark.sql.types.ops
 
+import java.time.ZoneId
+
 import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
+import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -127,11 +130,11 @@ trait TypeApiOps extends Serializable {
    * for TimeType).
    *
    * Consumer: Row JSON (Row.json / Row.prettyJson). Semantics:
-   *   - Some(s): s is used as the rendered JSON string.
+   *   - Some(s): s is used as the rendered JSON string (e.g. the nanosecond timestamp types
+   *     render the external Instant/LocalDateTime at the column precision).
    *   - None: Row JSON falls back to its legacy toJsonDefault rendering.
    *   - throw: an implementation may raise instead, to signal that rendering this type on this
-   *     zone-less path is unsupported (e.g. the nanosecond timestamp types raise
-   *     UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_TO_STRING).
+   *     zone-less path is unsupported.
    *
    * Returning None silently routes the type into the legacy path, so a type that must be rendered
    * by the framework should override this (every currently registered type does).
@@ -144,8 +147,8 @@ trait TypeApiOps extends Serializable {
    * Semantics mirror the single-arg overload: Some(s) is used directly, None falls back to
    * HiveResult's zone-aware legacy rendering. The default delegates to the single-arg overload;
    * override it separately when the two consumers need different behavior (e.g. the nanosecond
-   * timestamp types throw on the zone-less Row JSON path but return None here so the zone-aware
-   * Hive path renders them).
+   * timestamp types render the external value on the zone-less Row JSON path but return None here
+   * so the zone-aware Hive path renders them through its own formatter).
    */
   def formatExternal(value: Any, nested: Boolean): Option[String] = formatExternal(value)
 
@@ -172,15 +175,24 @@ object TypeApiOps {
    *
    * @param dt
    *   the DataType to get operations for
+   * @param zoneId
+   *   the session time zone for zone-aware rendering (TIMESTAMP_LTZ nanos). CAST passes the
+   *   cast's resolved zone; zone-less callers (Row JSON via formatExternal) accept the default,
+   *   the session-local time zone config. By-name so it is forced only when LTZ is constructed:
+   *   zone-independent and unsupported types never evaluate it, which matters because a CAST's
+   *   zone is unresolved (`None.get`) until the time zone is assigned.
    * @return
    *   Some(TypeApiOps) if supported, None otherwise
    */
-  def apply(dt: DataType): Option[TypeApiOps] = {
+  def apply(
+      dt: DataType,
+      zoneId: => ZoneId = SparkDateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone))
+      : Option[TypeApiOps] = {
     if (!SqlApiConf.get.typesFrameworkEnabled) return None
     dt match {
       case tt: TimeType => Some(new TimeTypeApiOps(tt))
       case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeApiOps(t))
-      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t))
+      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t, zoneId))
       // Add new types here - single registration point
       case _ => None
     }

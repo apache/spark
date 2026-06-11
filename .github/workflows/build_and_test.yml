@@ -1038,6 +1038,55 @@ jobs:
       if: inputs.branch != 'branch-3.5'
       run: ./dev/check-protos.py
 
+  # The config binding policy exceptions file lists pre-existing configs that were created before
+  # the binding policy was introduced. It must never grow: new configs must declare a binding
+  # policy via .withBindingPolicy() instead of being added to the exceptions file. This job fails
+  # if a PR adds entries to the file. It only runs on forks because PR builds run there, and the
+  # diff against apache/spark master is exactly the PR's change.
+  binding-policy:
+    needs: [precondition]
+    if: >-
+      (!cancelled()) &&
+      github.repository != 'apache/spark' &&
+      fromJson(needs.precondition.outputs.required).lint == 'true'
+    name: Config binding policy exceptions check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - name: Checkout Spark repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+        repository: apache/spark
+        ref: ${{ needs.precondition.outputs.head_sha }}
+    - name: Sync the current branch with the latest in Apache Spark
+      run: |
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
+        git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
+        git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit" --allow-empty
+    - name: Check no new entries in the binding policy exceptions file
+      run: |
+        EXCEPTIONS_FILE="sql/hive/src/test/resources/conf/binding-policy-exceptions/configs-without-binding-policy-exceptions"
+        if [ ! -f "$EXCEPTIONS_FILE" ]; then
+          echo "$EXCEPTIONS_FILE does not exist on this branch, skipping."
+          exit 0
+        fi
+        ADDED_ENTRIES=$(git diff "$APACHE_SPARK_REF" HEAD -- "$EXCEPTIONS_FILE" | grep '^+' | grep -v '^+++' || true)
+        if [ -n "$ADDED_ENTRIES" ]; then
+          echo "ERROR: This PR adds the following entries to $EXCEPTIONS_FILE:"
+          echo "$ADDED_ENTRIES"
+          echo ""
+          echo "This file is a frozen list of configs that predate the binding policy, and new"
+          echo "entries must not be added to it. Instead, declare a binding policy when building"
+          echo "the config entry, e.g."
+          echo "  .withBindingPolicy(ConfigBindingPolicy.SESSION/PERSISTED/NOT_APPLICABLE)"
+          echo "See the scaladoc of org.apache.spark.internal.config.ConfigBindingPolicy for the"
+          echo "semantics of each policy and how to choose one."
+          exit 1
+        fi
+        echo "No new entries added to the binding policy exceptions file."
+
   # Static analysis
   lint:
     needs: [precondition, infra-image]
