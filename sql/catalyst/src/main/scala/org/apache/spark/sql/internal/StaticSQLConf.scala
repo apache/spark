@@ -20,6 +20,7 @@ package org.apache.spark.sql.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.util.Utils
 
@@ -128,6 +129,7 @@ object StaticSQLConf {
       .doc("Whether to enable Jetty's SNI host check on the ThriftHttpCLIService HTTPS " +
         "connector. Set to false to restore the behavior prior to SPARK-45522 (Jetty 10+).")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
