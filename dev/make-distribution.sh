@@ -32,6 +32,15 @@ set -x
 SPARK_HOME="$(cd "`dirname "$0"`/.."; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
+# The Apache LICENSE and NOTICE are copied into the Python and R package
+# directories below so they are bundled into the source distributions. Remove
+# them on exit so a failed build does not leave stray files behind.
+function cleanup_dist_license_files {
+  rm -f "$SPARK_HOME/python/LICENSE" "$SPARK_HOME/python/NOTICE" \
+        "$SPARK_HOME/R/pkg/LICENSE" "$SPARK_HOME/R/pkg/NOTICE"
+}
+trap cleanup_dist_license_files EXIT
+
 MAKE_TGZ=false
 MAKE_PIP=false
 MAKE_R=false
@@ -259,9 +268,14 @@ if [ "$MAKE_PIP" == "true" ]; then
   pushd "$SPARK_HOME/python" > /dev/null
   # Delete the egg info file if it exists, this can cache older setup files.
   rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
+  # Ship the Apache LICENSE and NOTICE inside the PySpark source distributions
+  # (see MANIFEST.in). These are removed again after the sdists are built.
+  cp "$SPARK_HOME/LICENSE" LICENSE
+  cp "$SPARK_HOME/NOTICE" NOTICE
   python3 packaging/classic/setup.py sdist
   python3 packaging/connect/setup.py sdist
   python3 packaging/client/setup.py sdist
+  rm -f LICENSE NOTICE
   popd > /dev/null
 else
   echo "Skipping building python distribution package"
@@ -272,9 +286,14 @@ if [ "$MAKE_R" == "true" ]; then
   echo "Building R source package"
   R_PACKAGE_VERSION=`grep Version "$SPARK_HOME/R/pkg/DESCRIPTION" | awk '{print $NF}'`
   pushd "$SPARK_HOME/R" > /dev/null
+  # Ship the Apache LICENSE and NOTICE inside the SparkR source package. These
+  # are removed again after the package is built.
+  cp "$SPARK_HOME/LICENSE" pkg/LICENSE
+  cp "$SPARK_HOME/NOTICE" pkg/NOTICE
   # Build source package and run full checks
   # Do not source the check-cran.sh - it should be run from where it is for it to set SPARK_HOME
   NO_TESTS=1 "$SPARK_HOME/R/check-cran.sh"
+  rm -f pkg/LICENSE pkg/NOTICE
 
   # Move R source package to match the Spark release version if the versions are not the same.
   # NOTE(shivaram): `mv` throws an error on Linux if source and destination are same file
