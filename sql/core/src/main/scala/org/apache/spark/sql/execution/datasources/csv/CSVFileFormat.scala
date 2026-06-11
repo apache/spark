@@ -57,7 +57,10 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = getCsvOptions(sparkSession, options)
-    CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
+    // The v1 file format routes archives to `readArchive` (see `buildReader`), so archive schema
+    // inference is supported here.
+    CSVDataSource(parsedOptions)
+      .inferSchema(sparkSession, files, parsedOptions, supportsArchiveScan = true)
   }
 
   override def prepareWrite(
