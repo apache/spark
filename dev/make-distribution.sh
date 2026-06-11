@@ -301,8 +301,9 @@ if [ "$MAKE_PIP" == "true" ]; then
   # at the package root. The missing files were only caught by a Spark 4.2.0 RC1
   # vote -1 (SPARK-57393); fail the release build here instead of at vote time.
   for f in dist/pyspark*.tar.gz; do
+    listing=$(tar tzf "$f")
     for required in LICENSE NOTICE; do
-      tar tzf "$f" | grep -qE "/$required\$" || \
+      grep -qE "^[^/]+/$required\$" <<< "$listing" || \
         { echo "ERROR: $f is missing $required at the package root"; exit 1; }
     done
   done
@@ -338,8 +339,9 @@ if [ "$MAKE_R" == "true" ]; then
 
   # Guard against regressions: the SparkR source package must contain LICENSE and
   # NOTICE at the package root (SPARK-57393).
+  listing=$(tar tzf "SparkR_$R_PACKAGE_VERSION.tar.gz")
   for required in LICENSE NOTICE; do
-    tar tzf "SparkR_$R_PACKAGE_VERSION.tar.gz" | grep -qE "/$required\$" || \
+    grep -qE "^[^/]+/$required\$" <<< "$listing" || \
       { echo "ERROR: SparkR source package is missing $required"; exit 1; }
   done
 

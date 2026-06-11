@@ -108,6 +108,10 @@ DATA_PATH = os.path.join(SPARK_HOME, "data")
 # license texts (licenses-binary), which enumerate those jars' licenses, mirroring
 # the binary distribution. The connect/client packages bundle no jars.
 LICENSES_PATH = os.path.join(SPARK_HOME, "licenses-binary")
+if not os.path.isdir(LICENSES_PATH):
+    # In a binary release dist (the RELEASE mode below), the binary license texts
+    # were already copied to licenses/ (see dev/make-distribution.sh).
+    LICENSES_PATH = os.path.join(SPARK_HOME, "licenses")
 
 SCRIPTS_TARGET = os.path.join(TEMP_PATH, "bin")
 USER_SCRIPTS_TARGET = os.path.join(TEMP_PATH, "sbin")
