@@ -159,6 +159,43 @@ class Scd2BatchProcessorMergeSuite
     )
   }
 
+  test("mergeRowsIntoAuxiliaryTable is replay-stable: re-running the same batchId is a no-op") {
+    createAuxTable(
+      // Survives reconciliation -> re-upserted in place.
+      Row(1, "old", 5L, null, Row(5L), null),
+      // Affected but does not survive -> logically deleted by this batch.
+      Row(2, "gone", 7L, 7L, Row(7L), null)
+    )
+
+    val tagged = taggedOf(Row(1, "new", 5L, null, Row(5L), true))
+    val affected = canonicalOf(
+      Row(1, "old", 5L, null, Row(5L)),
+      Row(2, "gone", 7L, 7L, Row(7L))
+    )
+
+    // First application of the batch.
+    processor.mergeRowsIntoAuxiliaryTable(
+      tagged, affected, defaultAuxTableIdentifier, batchId = 7L)
+    val afterFirstRun = auxTable.collect().sortBy(_.getInt(0)).toSeq
+
+    // Replaying the exact same batch (same batchId, re-derived inputs) must leave the aux table
+    // byte-identical: the surviving row stays updated in place, and the non-surviving row stays
+    // logically deleted by this same batch rather than physically garbage-collected (7 ==
+    // batchId, so the GC clause does not fire).
+    processor.mergeRowsIntoAuxiliaryTable(
+      tagged, affected, defaultAuxTableIdentifier, batchId = 7L)
+    val afterSecondRun = auxTable.collect().sortBy(_.getInt(0)).toSeq
+
+    assert(afterFirstRun == afterSecondRun)
+    checkAnswer(
+      auxTable,
+      Seq(
+        Row(1, "new", 5L, null, Row(5L), null),
+        Row(2, "gone", 7L, 7L, Row(7L), 7L)
+      )
+    )
+  }
+
   // ===========================================================================================
   // mergeRowsIntoTargetTable tests
   // ===========================================================================================
