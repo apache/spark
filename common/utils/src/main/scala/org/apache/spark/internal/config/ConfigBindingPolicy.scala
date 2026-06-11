@@ -32,10 +32,13 @@ package org.apache.spark.internal.config
  *
  * How to choose a policy for a new config:
  *
- *  1. Is the config consulted when resolving the body of a view/UDF/procedure? If not (e.g.
- *     physical planning, scheduling, runtime, or transport toggles), use NOT_APPLICABLE. This
- *     covers most configs.
- *  2. If it is consulted, should the persisted object use the create-time value of the config,
+ *  1. Can the config change the result of resolving the body of a view/UDF/procedure, i.e. the
+ *     resolved plan? If not, use NOT_APPLICABLE. This covers most configs. Note that the test
+ *     is whether the config changes the resolution result, not whether it is read during
+ *     resolution: view analysis can itself trigger query execution (e.g. a schema inference
+ *     job), so even physical planning or runtime configs may be read while resolving a view,
+ *     but they do not change what the body resolves to.
+ *  2. If it can, should the persisted object use the create-time value of the config,
  *     so that it keeps computing the same result as it did at creation no matter who calls it
  *     later (e.g. ANSI mode, session timezone)? If so, use PERSISTED. Note that changing query
  *     behavior alone does not justify PERSISTED: a bug-fix flag also changes query behavior,
