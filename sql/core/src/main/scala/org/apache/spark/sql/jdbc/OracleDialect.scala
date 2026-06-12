@@ -76,13 +76,19 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       funcName match {
         case "TRUNC" =>
           // Map Spark's trunc format strings to Oracle equivalents.
-          // inputs(1) arrives as e.g. "'MONTH'" (with quotes from LiteralValue.toString).
-          val oracleFormat = inputs(1) match {
+          // inputs(1) arrives quoted, e.g. "'MONTH'" (see JDBCSQLBuilder.visitLiteral).
+          // Case-insensitive: Spark's parseTruncLevel uppercases before matching.
+          val fmt = inputs(1).toUpperCase(Locale.ROOT)
+          val oracleFormat = fmt match {
             case "'WEEK'" => "'IW'"
             case "'MONTH'" | "'MM'" | "'MON'" => "'MM'"
             case "'QUARTER'" => "'Q'"
             case "'YEAR'" | "'YYYY'" | "'YY'" => "'YYYY'"
-            case other => other
+            case _ =>
+              // Unmapped formats: don't push down. compileExpression catches the
+              // exception and returns None, so Spark evaluates trunc locally.
+              throw new IllegalArgumentException(
+                s"Unsupported Oracle TRUNC format: ${inputs(1)}")
           }
           s"TRUNC(${inputs(0)}, $oracleFormat)"
         case _ => super.visitSQLFunction(funcName, inputs)

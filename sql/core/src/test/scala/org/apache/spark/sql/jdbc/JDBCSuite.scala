@@ -1559,6 +1559,15 @@ class JDBCSuite extends SharedSparkSession {
     val quarterSql = oracleDialect.compileExpression(truncExpr("QUARTER")).get
     assert(quarterSql.contains("'Q'"),
       s"trunc(d, 'QUARTER') should produce Oracle 'Q', got: $quarterSql")
+
+    // Case-insensitive: lowercase formats must also map correctly
+    val weekLowerSql = oracleDialect.compileExpression(truncExpr("week")).get
+    assert(weekLowerSql.contains("'IW'"),
+      s"trunc(d, 'week') (lowercase) should produce Oracle 'IW', got: $weekLowerSql")
+
+    // Unmapped formats should NOT be pushed down (compileExpression returns None)
+    assert(oracleDialect.compileExpression(truncExpr("DAY")).isEmpty,
+      "Unmapped format 'DAY' should not be pushed down (compileExpression should return None)")
   }
 
   private def assertEmptyQuery(sqlString: String): Unit = {
