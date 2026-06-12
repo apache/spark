@@ -29,7 +29,7 @@ import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentExcep
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
  * Helper functions for converting between internal and external date and time representations.
@@ -146,6 +146,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
    */
   def getSecondsWithFraction(micros: Long, zoneId: ZoneId): Decimal = {
     Decimal(getMicroseconds(micros, zoneId), 8, 6)
+  }
+
+  /**
+   * Returns the seconds part and its fractional part with nanoseconds, of a nanosecond-precision
+   * timestamp. The integral seconds and the six microsecond fraction digits come from the
+   * wall-clock fields of `epochMicros` in the given zone; `nanosWithinMicro` contributes the
+   * three sub-microsecond digits. The scale is fixed at the maximum nanosecond precision (9):
+   * digits below the value's type precision are always zero because values are floored to the
+   * type precision at the type boundary.
+   */
+  def getSecondsWithFractionNanos(ts: TimestampNanosVal, zoneId: ZoneId): Decimal = {
+    val nanosOfMinute =
+      getMicroseconds(ts.epochMicros, zoneId) * NANOS_PER_MICROS + ts.nanosWithinMicro
+    Decimal(nanosOfMinute, 11, 9)
   }
 
 
