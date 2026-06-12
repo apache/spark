@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.TimeType
  * ParquetRowConverter guard, which accepts that encoding. This is a known,
  * intentional divergence between the framework and legacy paths for this
  * single case; reconciling it (either by relaxing the framework guard or
- * tightening the legacy one) is a separate follow-up.
+ * tightening the legacy one) is tracked by SPARK-57416.
  */
 class TimeTypeParquetOpsSuite extends SparkFunSuite {
 
@@ -54,7 +54,7 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
     TimeTypeParquetOps.requireCompatibleParquetType(timeMicros, field)
   }
 
-  // ---------- the four reject paths called out in code review ----------
+  // ---------- the four primary reject paths ----------
 
   test("rejects raw INT64 with no logical type annotation") {
     val field = Types.primitive(INT64, REQUIRED).named("c")
@@ -80,8 +80,8 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
     // The intended framework behavior is to reject this encoding: the canonical
     // TimeType representation is local-time (isAdjustedToUTC=false). The legacy
     // ParquetRowConverter guard accepts the encoding, so this is a known,
-    // intentional framework-vs-legacy divergence; reconciliation is a separate
-    // follow-up.
+    // intentional framework-vs-legacy divergence; reconciliation is tracked by
+    // SPARK-57416.
     val field = Types.primitive(INT64, REQUIRED)
       .as(LogicalTypeAnnotation.timeType(true, TimeUnit.MICROS))
       .named("c")
