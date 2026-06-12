@@ -146,6 +146,31 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
     readBulkIntegers(total, c, rowId);
   }
 
+  @Override
+  public void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
+    // Delta decoder already works on long[]; skip the int narrowing and write longs directly.
+    readBulkLongs(total, c, rowId);
+  }
+
+  @Override
+  public void readIntegersAsDoubles(int total, WritableColumnVector c, int rowId) {
+    checkReadBounds(total);
+    int remaining = total;
+    if (valuesRead == 0) {
+      c.putDouble(rowId, (double) firstValue);
+      lastValueRead = firstValue;
+      rowId++;
+      remaining--;
+    }
+    readBulkLoop(remaining, c, rowId,
+        (col, r, buf, s, n) -> {
+          for (int i = s; i < s + n; i++) {
+            col.putDouble(r + i - s, (double) buf[i]);
+          }
+        });
+    valuesRead += total;
+  }
+
   // Based on VectorizedPlainValuesReader.readIntegersWithRebase
   @Override
   public final void readIntegersWithRebase(
