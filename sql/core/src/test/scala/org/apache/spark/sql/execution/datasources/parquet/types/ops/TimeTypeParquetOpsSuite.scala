@@ -29,16 +29,16 @@ import org.apache.spark.sql.types.TimeType
  * Unit tests for [[TimeTypeParquetOps.requireCompatibleParquetType]].
  *
  * TimeType is stored in Parquet as INT64 TIME(MICROS, isAdjustedToUTC=false).
- * Any other encoding is rejected so that reading fails loudly rather than
- * silently mis-decoding (e.g. interpreting NANOS as MICROS, which would be off
- * by 1000x).
+ * The read-path guard accepts only that canonical encoding and rejects every
+ * other primitive/annotation combination so that reading fails loudly rather
+ * than silently mis-decoding (e.g. interpreting NANOS as MICROS, which would
+ * be off by 1000x).
  *
- * These tests document the exact reject set and pin the intended behavior of
- * the read-path guard. They also serve as a regression hook for the
- * isAdjustedToUTC=true ON/OFF behavior difference flagged on
- * https://github.com/apache/spark/pull/55326 - whichever resolution lands
- * (mirror the original guard, or tighten both paths), the corresponding test
- * below must be updated, which makes the intent explicit in the diff.
+ * Note: rejecting isAdjustedToUTC=true is stricter than the legacy
+ * ParquetRowConverter guard, which accepts that encoding. This is a known,
+ * intentional divergence between the framework and legacy paths for this
+ * single case; reconciling it (either by relaxing the framework guard or
+ * tightening the legacy one) is a separate follow-up.
  */
 class TimeTypeParquetOpsSuite extends SparkFunSuite {
 
@@ -76,13 +76,12 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
     assertRejects(timeMicros, field)
   }
 
-  test("rejects INT64 TIME(MICROS, isAdjustedToUTC=true) - ON/OFF divergence pin") {
-    // Regression hook for the discussion on apache/spark#55326. The legacy
-    // ParquetRowConverter guard did NOT check isAdjustedToUTC, so framework-OFF
-    // reads accept this encoding while framework-ON rejects it. If/when that
-    // divergence is resolved (either by dropping the isAdjustedToUTC check here
-    // or by tightening the legacy path to match), update THIS test accordingly
-    // so the intent of the change is explicit.
+  test("rejects INT64 TIME(MICROS, isAdjustedToUTC=true)") {
+    // The intended framework behavior is to reject this encoding: the canonical
+    // TimeType representation is local-time (isAdjustedToUTC=false). The legacy
+    // ParquetRowConverter guard accepts the encoding, so this is a known,
+    // intentional framework-vs-legacy divergence; reconciliation is a separate
+    // follow-up.
     val field = Types.primitive(INT64, REQUIRED)
       .as(LogicalTypeAnnotation.timeType(true, TimeUnit.MICROS))
       .named("c")

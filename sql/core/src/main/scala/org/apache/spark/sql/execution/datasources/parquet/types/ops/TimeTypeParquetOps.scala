@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
-import org.apache.parquet.io.api.RecordConsumer
+import org.apache.parquet.io.api.{Converter, RecordConsumer}
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
@@ -71,9 +71,8 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
   // ==================== Row-Based Read ====================
 
   override def newConverter(
-      parquetType: org.apache.parquet.schema.Type,
-      updater: ParentContainerUpdater
-  ): org.apache.parquet.io.api.Converter with HasParentContainerUpdater = {
+      parquetType: Type,
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
     // Framework-first dispatch in ParquetRowConverter routes here whenever the
     // requested Spark type is TimeType, regardless of the actual Parquet encoding.
     // Without this guard, files whose column is raw INT64, INT64 TIME(NANOS),

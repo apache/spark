@@ -75,6 +75,7 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    *
    * @param fieldName the column/field name in the Parquet schema
    * @param repetition REQUIRED, OPTIONAL, or REPEATED
+   * @param inShredded whether the field is nested within a shredded Variant schema
    * @return the Parquet Type for this DataType
    */
   def convertToParquetType(
