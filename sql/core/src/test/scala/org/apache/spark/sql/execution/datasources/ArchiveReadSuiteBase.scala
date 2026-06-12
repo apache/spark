@@ -139,7 +139,8 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
 
   /**
    * Schema [[format]] infers from `paths` under [[readOptions]] ++ [[inferenceOptions]] (plus
-   * `extraOptions`). Loading several paths reads them as one fileset, exactly as a directory read.
+   * `extraOptions`). Loading several paths reads them as one fileset, exactly as a directory
+   * read does.
    */
   protected def inferredSchema(
       paths: Seq[String],

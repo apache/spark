@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
  * schema-inference and complex-type tests (see `supportsSchemaInference`/`supportsComplexTypes`),
  * and adds the JSON-specific tests with no format-agnostic analogue: NullType canonicalization,
  * field-union/null-in-loose merging, and multi-line documents. Reusable across archive formats: a
- * `JSON<Archive>Read` suite mixes this in alongside the archive-format trait.
+ * `JSON<Container>ArchiveReadSuite` mixes this in alongside the archive-format trait.
  */
 trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
 
