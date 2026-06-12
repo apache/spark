@@ -68,7 +68,8 @@ trait TimeZoneAwareExpression extends Expression {
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 
   def zoneIdForType(dataType: DataType): ZoneId = dataType match {
-    case _: TimestampNTZType => java.time.ZoneOffset.UTC
+    // The TIMESTAMP_NTZ family carries wall-clock fields, so it is evaluated in UTC.
+    case _: TimestampNTZType | _: TimestampNTZNanosType => java.time.ZoneOffset.UTC
     case _ => zoneId
   }
 }
@@ -505,12 +506,9 @@ case class SecondWithFractionNanos(child: Expression, timeZoneId: Option[String]
   override def withTimeZone(timeZoneId: String): SecondWithFractionNanos =
     copy(timeZoneId = Option(timeZoneId))
 
-  // TIMESTAMP_NTZ(p) extracts the wall-clock fields, so it is evaluated in UTC like
-  // TimestampNTZType in zoneIdForType; TIMESTAMP_LTZ(p) uses the session time zone.
-  @transient private lazy val zoneIdInEval: ZoneId = child.dataType match {
-    case _: TimestampNTZNanosType => ZoneOffset.UTC
-    case _ => zoneId
-  }
+  // TIMESTAMP_NTZ(p) extracts the wall-clock fields, so it is evaluated in UTC;
+  // TIMESTAMP_LTZ(p) uses the session time zone.
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(child.dataType)
 
   override protected def nullSafeEval(timestamp: Any): Any = {
     DateTimeUtils.getSecondsWithFractionNanos(
@@ -3485,7 +3483,7 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
               - "DOY" - the day of the year (1 - 365/366)
               - "HOUR", ("H", "HOURS", "HR", "HRS") - The hour field (0 - 23)
               - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - the minutes field (0 - 59)
-              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts
+              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts. Returns a DECIMAL(8, 6) value, or a DECIMAL(11, 9) value for the nanosecond-precision timestamps TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p) with p in [7, 9]
           - Supported string values of `field` for interval(which consists of `months`, `days`, `microseconds`) are(case insensitive):
               - "YEAR", ("Y", "YEARS", "YR", "YRS") - the total `months` / 12
               - "MONTH", ("MON", "MONS", "MONTHS") - the total `months` % 12

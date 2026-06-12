@@ -162,7 +162,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
     Decimal(nanosOfMinute, 11, 9)
   }
 
-
   /**
    * Returns the second value with fraction from a given TIME (TimeType) value.
    * @param nanos
