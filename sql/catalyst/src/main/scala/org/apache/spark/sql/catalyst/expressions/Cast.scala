@@ -429,8 +429,12 @@ object Cast extends QueryErrorsBase {
     // This conversion stays explicit-only.
     case (_: TimestampNTZNanosType, TimestampNTZType) => false
     case (_: TimestampLTZNanosType, TimestampType) => false
-    // SPARK-57323: DATE <-> nanosecond-precision timestamp drops time-of-day and sub-microsecond
-    // digits (or fabricates them), so it requires an explicit CAST and is not a store assignment.
+    // SPARK-57323: DATE <-> nanosecond-precision timestamp requires an explicit CAST in both
+    // directions. nanos -> DATE silently drops time-of-day and sub-microsecond digits (the same
+    // rule as the narrowing above). DATE -> nanos is lossless (midnight, zero sub-micro part),
+    // but conversions involving the nanos types stay explicit-only while the types are
+    // unreleased: allowing the store assignment later is a compatible change, revoking it is not.
+    // Note this is stricter than micro DATE <-> TIMESTAMP[_NTZ], which the catch-all below allows.
     case (DateType, _: TimestampLTZNanosType) => false
     case (DateType, _: TimestampNTZNanosType) => false
     case (_: TimestampLTZNanosType, DateType) => false
