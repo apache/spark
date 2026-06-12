@@ -405,13 +405,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    */
   private def generationExpressionNeedsCollation(columnDef: ColumnDefinition): Boolean = {
     columnDef.generationExpression.exists { genExpr =>
-      // Only inspect AttributeReferences: `resolveExpressionsUp` evaluates this guard on
-      // unresolved expressions too, and calling `dataType` on an unresolved node (e.g.
-      // UnresolvedAttribute / UnresolvedFunction from a typo'd column) throws UnresolvedException
-      // (surfaced as INTERNAL_ERROR) before CheckAnalysis can report the real unresolved-column
-      // error. Matching only AttributeReference skips unresolved nodes, and also avoids the guard
-      // staying true forever when the only default-string node is a non-attribute (where the
-      // re-pointing transform is an identity anyway).
+      // Only inspect AttributeReferences, avoiding calling dataType on unresolved nodes.
       genExpr.child.exists {
         case a: AttributeReference => hasDefaultStringCharOrVarcharType(a.dataType)
         case _ => false
