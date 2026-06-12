@@ -202,8 +202,8 @@ private[spark] class DAGScheduler(
 
   // Build the bogus BlockManagerId used by INJECT_SHUFFLE_FETCH_FAILURES to mark a corrupted
   // MapStatus: keeps the original host/port/topology so the consumer's locality preference
-  // resolves to a real host, only the executorId is INVALID_EXECUTOR_ID so any fetch from this
-  // location FetchFailed.
+  // resolves to a real host; only the executorId is INVALID_EXECUTOR_ID, so any fetch from
+  // this location fails with FetchFailed.
   private def injectShuffleFetchFailuresInvalidBlockManagerId(
       currentLocation: BlockManagerId): BlockManagerId = {
     BlockManagerId(

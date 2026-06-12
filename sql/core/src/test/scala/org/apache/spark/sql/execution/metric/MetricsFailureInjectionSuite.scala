@@ -495,8 +495,9 @@ class MetricsFailureInjectionSuite
     // and shuffle.partitions=20 (much greater than the test's local[2] cores). The DAGScheduler
     // event loop is single-threaded for completion events, so deferring the producer's
     // mapper-0 corruption until after one consumer success guarantees AT LEAST ONE consumer
-    // task fully completed before the FetchFailed cascade kicks in. With mode 3's rollback,
-    // those completed-then-cleared partitions all re-run during the rollback retry, giving a
+    // task fully completed before the FetchFailed cascade kicks in. With the force-checksum-
+    // mismatch injection's rollback, those completed-then-cleared partitions all re-run during
+    // the rollback retry, giving a
     // strict lower bound on the raw stage-2 accumulator that's not reachable in
     // recompute-only mode.
     val stage1Metric = SQLMetrics.createMetric(spark.sparkContext, "stage 1 counter")
@@ -536,17 +537,19 @@ class MetricsFailureInjectionSuite
           assert(result.toMap === (0 until 5).map(v => (v, 300 / 5)).toMap)
 
           // With delay=1 and 20 shuffle partitions on local[2], at least one stage-2 reducer
-          // task is guaranteed to fully process its rows before the corruption fires. Mode 3's
-          // rollback then re-runs all 20 stage-2 partitions, replaying those previously-
-          // completed ones. The recompute-only baseline is 300 (full coverage across attempts)
-          // + size(mapper 0) for the FetchFailed-driven retry; mode 3 adds at least one
-          // already-completed partition's worth on top of that. Partition sizes vary with the
-          // hash of `id`, so we just assert "strictly above the recompute-only baseline" rather
-          // than a tight numeric bound.
+          // task is guaranteed to fully process its rows before the corruption fires. The
+          // force-checksum-mismatch injection's rollback then re-runs all 20 stage-2
+          // partitions, replaying those previously-completed ones. The recompute-only baseline
+          // is 300 (full coverage across attempts) + size(mapper 0) for the FetchFailed-driven
+          // retry; the force-checksum-mismatch injection adds at least one already-completed
+          // partition's worth on top of that. Partition sizes vary with the hash of `id`, so
+          // we just assert "strictly above the recompute-only baseline" rather than a tight
+          // numeric bound.
           assert(stage1Metric.value > 300, s"stage1Metric=${stage1Metric.value}")
           assert(stage2Metric.value > 315,
-            s"stage2Metric should be above the mode-2 baseline (~315) because the rollback " +
-              s"re-played a partition that completed in attempt 0, got ${stage2Metric.value}")
+            s"stage2Metric should be above the recompute-only baseline (~315) because the " +
+              s"rollback re-played a partition that completed in attempt 0, got " +
+              s"${stage2Metric.value}")
           assert(stage3Metric.value === 5)
 
           assert(stage1SLAMetric.lastAttemptValueForHighestRDDId() === Some(300))
@@ -564,11 +567,11 @@ class MetricsFailureInjectionSuite
   test("Force checksum mismatch aborts a downstream ResultStage") {
     // 2-stage query whose downstream is a ResultStage. With RESULT_STAGE_DELAY=1 the result
     // stage gets at least one finished task before the FetchFailed cascade, so by the time
-    // mode 3's forced checksum mismatch on stage 1 mapper 0 fires `rollbackSucceedingStages`,
-    // the result stage's findMissingPartitions is strictly less than numTasks - which OSS
-    // Spark cannot roll back, so the job aborts. With the default RESULT_STAGE_DELAY=0 the
-    // result stage is corrupted before any task dispatches and the rollback path does not
-    // abort.
+    // the forced checksum mismatch on stage 1 mapper 0 fires `rollbackSucceedingStages`,
+    // the result stage's findMissingPartitions().length is strictly less than numTasks, and
+    // OSS Spark cannot roll back a partially-finished result stage, so the job aborts. With
+    // the default RESULT_STAGE_DELAY=0 the result stage is corrupted before any task
+    // dispatches and the rollback path does not abort.
     withTable("test_table") {
       setUpTestTable("test_table")
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "20") {
