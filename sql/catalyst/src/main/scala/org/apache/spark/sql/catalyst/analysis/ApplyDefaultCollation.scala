@@ -245,6 +245,19 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
   private def transform(plan: LogicalPlan, collation: String): LogicalPlan = {
     plan resolveOperators {
+      // The ResolvedIdentifier child of CreateTable/ReplaceTable exposes the resolved table
+      // columns as output attributes. Re-point any default string/char/varchar typed ones to the
+      // default collation so the resolved schema stays consistent with the column definitions.
+      // Matched before the generic case below so it is not routed through transformPlan, which
+      // does not rewrite bare output attributes.
+      case ri: ResolvedIdentifier
+          if ri.output.exists(a => hasDefaultStringCharOrVarcharType(a.dataType)) =>
+        ri.copy(output = ri.output.map {
+          case a if hasDefaultStringCharOrVarcharType(a.dataType) =>
+            a.withDataType(replaceDefaultStringCharAndVarcharTypes(a.dataType, collation))
+          case a => a
+        })
+
       case p if isCreateOrAlterPlan(p) || AnalysisContext.get.collation.isDefined =>
         transformPlan(p, collation)
 
@@ -390,8 +403,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
 
   /**
    * Returns true if the column's generation expression references a default string/char/varchar
-   * type, so the column is transformed even when its own type is not a default string type
-   * (e.g. `c INT GENERATED ALWAYS AS (LENGTH(s))`).
+   * type.
    */
   private def generationExpressionNeedsCollation(columnDef: ColumnDefinition): Boolean = {
     columnDef.generationExpression.exists { genExpr =>
