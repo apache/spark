@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Cast, DefaultStringProducingExpression, Expression, Literal, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumns, AlterColumnSpec, AlterViewAs, ColumnDefinition, CreateTable, CreateTableAsSelect, CreateTempView, CreateUserDefinedFunction, CreateView, LogicalPlan, QualifiedColType, ReplaceColumns, ReplaceTable, ReplaceTableAsSelect, TableSpec, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -348,9 +348,26 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    * collated types.
    */
   private def transformExpression: PartialFunction[Expression, String => Expression] = {
-    case columnDef: ColumnDefinition if hasDefaultStringCharOrVarcharType(columnDef.dataType) =>
-      collation => columnDef.copy(dataType =
-        replaceDefaultStringCharAndVarcharTypes(columnDef.dataType, collation))
+    case columnDef: ColumnDefinition
+        if hasDefaultStringCharOrVarcharType(columnDef.dataType) ||
+          generationExpressionNeedsCollation(columnDef) =>
+      collation =>
+        // Re-point any default string/char/varchar typed references inside the generation
+        // expression to the default collation, matching the collation applied to the columns
+        // they reference. Other nodes (e.g. literals and casts) are handled by the dedicated
+        // cases below as part of the bottom-up traversal.
+        val newGenExpr = columnDef.generationExpression.map { genExpr =>
+          val newChild = genExpr.child.transform {
+            case a: AttributeReference if hasDefaultStringCharOrVarcharType(a.dataType) =>
+              a.copy(dataType =
+                replaceDefaultStringCharAndVarcharTypes(a.dataType, collation))(
+                a.exprId, a.qualifier)
+          }
+          if (newChild eq genExpr.child) genExpr else genExpr.copy(child = newChild)
+        }
+        columnDef.copy(
+          dataType = replaceDefaultStringCharAndVarcharTypes(columnDef.dataType, collation),
+          generationExpression = newGenExpr)
 
     case cast: Cast if hasDefaultStringCharOrVarcharType(cast.dataType) &&
       cast.containsTag(Cast.USER_SPECIFIED_CAST) =>
@@ -369,6 +386,17 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
             .applyOrElse(expression, identity[Expression])
         }
         subquery.withNewPlan(newPlan)
+  }
+
+  /**
+   * Returns true if the column's generation expression references a default string/char/varchar
+   * type, so the column is transformed even when its own type is not a default string type
+   * (e.g. `c INT GENERATED ALWAYS AS (LENGTH(s))`).
+   */
+  private def generationExpressionNeedsCollation(columnDef: ColumnDefinition): Boolean = {
+    columnDef.generationExpression.exists { genExpr =>
+      genExpr.child.exists(e => hasDefaultStringCharOrVarcharType(e.dataType))
+    }
   }
 
   /**

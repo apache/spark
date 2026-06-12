@@ -981,6 +981,125 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
           "generation expression cannot contain non utf8 binary collated string type"))
   }
 
+  test("Generated column expressions using table default collation - errors out") {
+    // The referenced columns are declared as plain STRING (default UTF8_BINARY), but the
+    // table-level DEFAULT COLLATION makes them effectively non-UTF8 binary collated. The
+    // generation expression must be rejected the same way an explicit per-column COLLATE would be.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING,
+             |  c2 STRING GENERATED ALWAYS AS (SUBSTRING(c1, 0, 1))
+             |)
+             |USING $v2Source
+             |DEFAULT COLLATION UNICODE
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "SUBSTRING(c1, 0, 1)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING,
+             |  c2 STRING GENERATED ALWAYS AS (LOWER(c1))
+             |)
+             |USING $v2Source
+             |DEFAULT COLLATION UTF8_LCASE
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "LOWER(c1)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  struct1 STRUCT<a: STRING>,
+             |  c2 STRING GENERATED ALWAYS AS (UCASE(struct1.a))
+             |)
+             |USING $v2Source
+             |DEFAULT COLLATION UNICODE
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "UCASE(struct1.a)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+  }
+
+  test("Generated column with non-string output referencing collated column - errors out") {
+    // The non-UTF8 collation check is structural: a generation expression that references a
+    // collated string column is rejected even when the generated column's own type is not a
+    // string (here INT). This must hold both for an explicit per-column collation and for a
+    // table-level DEFAULT COLLATION.
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING COLLATE UNICODE,
+             |  c2 INT GENERATED ALWAYS AS (LENGTH(c1))
+             |)
+             |USING $v2Source
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "LENGTH(c1)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(
+          s"""
+             |CREATE TABLE testcat.test_table(
+             |  c1 STRING,
+             |  c2 INT GENERATED ALWAYS AS (LENGTH(c1))
+             |)
+             |USING $v2Source
+             |DEFAULT COLLATION UNICODE
+             |""".stripMargin)
+      },
+      condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+      parameters = Map(
+        "fieldName" -> "c2",
+        "expressionStr" -> "LENGTH(c1)",
+        "reason" ->
+          "generation expression cannot contain non utf8 binary collated string type"))
+  }
+
+  test("Generated column with UTF8_BINARY default collation is allowed") {
+    withTable("testcat.test_table") {
+      sql(
+        s"""
+           |CREATE TABLE testcat.test_table(
+           |  c1 STRING,
+           |  c2 STRING GENERATED ALWAYS AS (SUBSTRING(c1, 0, 1))
+           |)
+           |USING $v2Source
+           |DEFAULT COLLATION UTF8_BINARY
+           |""".stripMargin)
+    }
+  }
+
   test("Cast expression for collations") {
     checkAnswer(
       sql(s"SELECT collation(cast('a' as string collate utf8_lcase))"),
