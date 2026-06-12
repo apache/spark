@@ -928,7 +928,7 @@ class ColumnTestsMixin:
         rows = df1.intersect(df2).select(df1.c).collect()
         self.assertEqual([r.c for r in rows], [2])
 
-    def test_resolve_through_zip(self):
+    def test_resolve_after_zip(self):
         # zip merges two column-projected DataFrames side by side. Classic
         # resolves the tagged left/right reference by attribute id, which
         # ResolveZip preserves in the merged Project, so it succeeds. Connect
@@ -947,8 +947,8 @@ class ColumnTestsMixin:
             [(2, 20), (3, 40), (4, 60)],
         )
 
-    def test_resolve_through_zip_reordered(self):
-        # The originating DataFrame controls which side each column reads, in
+    def test_resolve_after_zip_reordered(self):
+        # The originating DataFrame controls which side each column reads from, in
         # any order. Classic resolves by attribute id; Connect raises.
         df = self.spark.createDataFrame([(1, 10), (2, 20)], ["a", "b"])
         left = df.select(df.a.alias("x"))
@@ -959,7 +959,7 @@ class ColumnTestsMixin:
             [(10, 1), (20, 2)],
         )
 
-    def test_resolve_through_zip_duplicate_names(self):
+    def test_resolve_after_zip_duplicate_names(self):
         # Both sides expose a column named "v" from different sources, so the
         # merged schema has two "v"s. A bare "v" is ambiguous, but the tagged
         # left/right reference disambiguates by attribute id on Classic.
@@ -972,7 +972,7 @@ class ColumnTestsMixin:
         self.assertEqual(sorted(r.v for r in zipped.select(left.v).collect()), [1, 3])
         self.assertEqual(sorted(r.v for r in zipped.select(right.v).collect()), [2, 4])
 
-    def test_resolve_through_zip_shared_producer(self):
+    def test_resolve_after_zip_shared_producer(self):
         # Both sides project the same producer under the same name "v";
         # ResolveZip dedups the producer but keeps one output column per side,
         # each still selectable by its originating DataFrame on Classic.
@@ -984,7 +984,7 @@ class ColumnTestsMixin:
         self.assertEqual(sorted(r.v for r in zipped.select(left.v).collect()), [1, 3])
         self.assertEqual(sorted(r.v for r in zipped.select(right.v).collect()), [1, 3])
 
-    def test_resolve_through_zip_in_expression(self):
+    def test_resolve_after_zip_in_expression(self):
         # A tagged reference from each side can be combined in one expression.
         df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
         left = df.select(df.a.alias("x"))
@@ -995,7 +995,7 @@ class ColumnTestsMixin:
             [11, 22, 33],
         )
 
-    def test_resolve_through_zip_in_filter(self):
+    def test_resolve_after_zip_in_filter(self):
         # A tagged reference resolves in a filter over the zip result too.
         df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
         left = df.select(df.a.alias("x"))
@@ -1007,7 +1007,7 @@ class ColumnTestsMixin:
             [(2, 20), (3, 30)],
         )
 
-    def test_resolve_through_zip_chained(self):
+    def test_resolve_after_zip_chained(self):
         # Each side is its own chain of projections off the shared base; the
         # tagged reference still resolves on Classic.
         df = self.spark.createDataFrame([(1, 2, 3), (4, 5, 6)], ["a", "b", "c"])
@@ -1020,6 +1020,37 @@ class ColumnTestsMixin:
             sorted((r.x, r.y) for r in zipped.select(left.x, right.y).collect()),
             [(2, 6), (5, 12)],
         )
+
+    def test_resolve_after_zip_base_side(self):
+        # A base-side reference: df.zip(right).select(df.a). Classic resolves
+        # by attribute id like the projected-side cases. On Connect the result
+        # depends on the base plan's root node: createDataFrame analyzes to a
+        # Project over a LocalRelation, and that Project - the node carrying
+        # the DataFrame's plan-id tag - is dissolved into the merged chain by
+        # ResolveZip, so the tagged reference raises (overridden in the parity
+        # suite). See test_resolve_after_zip_bare_base_side for a base whose
+        # tagged root survives the merge.
+        df = self.spark.createDataFrame([(1, 10), (2, 20), (3, 30)], ["a", "b"])
+        right = df.select((df.b * 2).alias("y"))
+        zipped = df.zip(right)
+        self.assertEqual(zipped.columns, ["a", "b", "y"])
+        self.assertEqual(sorted(r.a for r in zipped.select(df.a).collect()), [1, 2, 3])
+        self.assertEqual(
+            sorted((r.b, r.a) for r in zipped.select(df.b, df.a).collect()),
+            [(10, 1), (20, 2), (30, 3)],
+        )
+
+    def test_resolve_after_zip_bare_base_side(self):
+        # When the base DataFrame's plan root is the base relation itself
+        # (range analyzes to a bare Range node), ResolveZip reuses that node
+        # unchanged as the merged plan's base, so its plan-id tag survives and
+        # the tagged reference resolves on Connect in all modes as well - the
+        # one zip shape with no Classic/Connect divergence for df.col.
+        df = self.spark.range(3)
+        right = df.select((df.id * 2).alias("y"))
+        zipped = df.zip(right)
+        self.assertEqual(zipped.columns, ["id", "y"])
+        self.assertEqual(sorted(r.id for r in zipped.select(df.id).collect()), [0, 1, 2])
 
     def test_resolve_self_join_alias(self):
         # Both self-join sides originate from the same plan-id-tagged
