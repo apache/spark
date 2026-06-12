@@ -40,7 +40,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object UnboundedFollowingWindowBenchmark extends SqlBasedBenchmark {
 
-  // Section A: calibrated so naive baseline lands ~3s/iter at MAIN_N.
+  // Section A: calibrated so naive baseline lands ~3s/iter at A_N.
   private val A_N: Long = 10L * 1024L              // ~2.4s naive @ N=10K (smoke: 2391ms)
 
   // Section B: N-sweep
