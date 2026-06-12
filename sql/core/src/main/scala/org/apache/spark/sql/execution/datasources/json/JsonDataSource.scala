@@ -179,12 +179,12 @@ abstract class JsonDataSource extends Serializable with Logging {
     // Honor `samplingRatio` like the loose-file infer paths, so an archive samples its records like
     // a directory read rather than always reading every one.
     val sampled = JsonUtils.sample(records, parsedOptions)
-    // Parse each record exactly as its mode's scan does, so even an unusual `encoding` lands the
-    // same way. multiLine mirrors MultiLineJsonDataSource (`CreateJacksonParser.inputStream`): with
-    // `encoding` it decodes through an InputStreamReader of that charset -- accepting any JVM
-    // charset, like the scan, not just the `CharsetProvider` allow-list that `bytes(enc, ...)`
-    // enforces -- and with none it auto-detects. Line-delimited mirrors TextInputJsonDataSource
-    // (`CreateJacksonParser.text`): the byte-array/stream-decoder path, which already matches.
+    // Parse each record exactly as its mode's scan does. multiLine mirrors MultiLineJsonDataSource
+    // (`CreateJacksonParser.inputStream`): an InputStreamReader of the `encoding` (or auto-detect
+    // when unset), matching the scan's decoder -- including its lenient handling of bytes that are
+    // malformed in that charset, where the strict stream decoder would instead fail inference.
+    // Line-delimited mirrors TextInputJsonDataSource (`CreateJacksonParser.text`): the
+    // byte-array / stream-decoder path, which already matches.
     val recordParser: (JsonFactory, Array[Byte]) => JsonParser = if (multiLine) {
       encoding match {
         case Some(enc) =>
