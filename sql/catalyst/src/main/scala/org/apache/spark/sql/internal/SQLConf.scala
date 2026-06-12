@@ -410,7 +410,8 @@ object SQLConf {
       )
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(
+        sys.env.get("SPARK_SINGLE_PASS_ANALYZER_ENABLED_TENTATIVELY").contains("true"))
 
   val ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER =
     buildConf("spark.sql.analyzer.singlePassResolver.dualRunWithLegacy")
@@ -422,7 +423,7 @@ object SQLConf {
       )
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(Utils.isTesting)
 
   val ANALYZER_DUAL_RUN_RETURN_SINGLE_PASS_RESULT =
     buildConf("spark.sql.analyzer.singlePassResolver.returnSinglePassResultInDualRun")
@@ -434,7 +435,7 @@ object SQLConf {
       )
       .version("4.0.0")
       .booleanConf
-      .createWithDefault(Utils.isTesting)
+      .createWithDefault(false)
 
   val ANALYZER_DUAL_RUN_SAMPLE_RATE =
     buildConf("spark.sql.analyzer.singlePassResolver.dualRunSampleRate")
@@ -447,7 +448,7 @@ object SQLConf {
       )
       .version("4.1.0")
       .doubleConf
-      .createWithDefault(if (Utils.isTesting) 1.0 else 0.001)
+      .createWithDefault(if (Utils.isTesting) 1.0 else 0.1)
 
   val ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE =
     buildConf("spark.sql.analyzer.singlePassResolver.exposeResolverGuardFailure")
