@@ -266,7 +266,8 @@ object ParquetVectorUpdaterBenchmark extends BenchmarkBase {
       longVec, intBytes)
     addReadValuesCase(benchmark, "LongAsNanosUpdater (TimeType)",
       TimeType(),
-      descriptor(PrimitiveTypeName.INT64, LogicalTypeAnnotation.timeType(false, LogicalTypeAnnotation.TimeUnit.MICROS)),
+      descriptor(PrimitiveTypeName.INT64,
+        LogicalTypeAnnotation.timeType(false, LogicalTypeAnnotation.TimeUnit.MICROS)),
       longVec, longBytes)
     // 32-bit-decimal target with INT64 source routes via canReadAsLongDecimal +
     // is32BitDecimalType, both TRUE here, hence DowncastLongUpdater.
