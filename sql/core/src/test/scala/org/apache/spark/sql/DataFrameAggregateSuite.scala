@@ -659,6 +659,51 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.selectExpr("sort_array(collect_set(b) RESPECT NULLS)"), Seq(Row(Seq(null, 2))))
   }
 
+  test("SPARK-57298: collect_set normalizes NaN and -0.0 for floating-point types") {
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Double.NaN)))
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (float('NaN')), (float('NaN')) AS t(v)"),
+      Row(Seq(Float.NaN)))
+
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (-0.0D), (0.0D) AS t(v)"),
+      Row(Seq(0.0d)))
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (float(-0.0)), (float(0.0)) AS t(v)"),
+      Row(Seq(0.0f)))
+
+    val df = Seq(Double.NaN, Double.NaN, 0.0d, -0.0d, 1.0d).toDF("v").repartition(3)
+    checkAnswer(df.selectExpr("sort_array(collect_set(v))"), Row(Seq(0.0d, 1.0d, Double.NaN)))
+  }
+
+  test("SPARK-57298: collect_set normalizes NaN and -0.0 nested in complex types") {
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM VALUES (-0.0D), (0.0D) AS t(v)"),
+      Row(Seq(Row(0.0d))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM VALUES (array(-0.0D)), (array(0.0D)) AS t(a)"),
+      Row(Seq(Seq(0.0d))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM VALUES (array(float(-0.0))), (array(float(0.0))) AS t(a)"),
+      Row(Seq(Seq(0.0f))))
+
+    // Nested NaN already deduplicates today, included as a guardrail against regressions.
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM " +
+        "VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Row(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(double('NaN'))), (array(double('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(float('NaN'))), (array(float('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Float.NaN))))
+  }
+
   test("collect functions structs") {
     val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
       .toDF("a", "x", "y")
@@ -3315,14 +3360,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df: => DataFrame,
       expected: Int): Unit = {
     val configurations = Seq(
-      Seq.empty[(String, String)], // hash aggregate is used by default
+      Seq(SQLConf.USE_HASH_AGG.key -> "true"),
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 10"),
       Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
       Seq(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
-      Seq("spark.sql.test.forceApplySortAggregate" -> "true")
+      Seq(SQLConf.USE_HASH_AGG.key -> "false"),
+      Seq(
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false")
     )
 
     // Make tests faster

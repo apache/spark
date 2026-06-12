@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal.connector
 
 import java.util.Objects
 
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, IdentityColumnSpec}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, GenerationExpression, IdentityColumnSpec}
 import org.apache.spark.sql.types.DataType
 
 // The standard concrete implementation of data source V2 column.
@@ -29,7 +29,7 @@ case class ColumnImpl(
     nullable: Boolean,
     comment: String,
     defaultValue: ColumnDefaultValue,
-    generationExpression: String,
+    override val columnGenerationExpression: GenerationExpression,
     identityColumnSpec: IdentityColumnSpec,
     metadataInJSON: String,
     override val id: String = null) extends Column {
@@ -47,7 +47,7 @@ case class ColumnImpl(
         nullable == that.nullable &&
         comment == that.comment &&
         defaultValue == that.defaultValue &&
-        generationExpression == that.generationExpression &&
+        columnGenerationExpression == that.columnGenerationExpression &&
         identityColumnSpec == that.identityColumnSpec &&
         metadataInJSON == that.metadataInJSON
     case _ => false
@@ -60,7 +60,7 @@ case class ColumnImpl(
       Boolean.box(nullable),
       comment,
       defaultValue,
-      generationExpression,
+      columnGenerationExpression,
       identityColumnSpec,
       metadataInJSON)
   }

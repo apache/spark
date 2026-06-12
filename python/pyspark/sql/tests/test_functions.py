@@ -973,6 +973,55 @@ class FunctionsTestsMixin:
         actual_with_threshold = df.select(F.levenshtein(df.l, df.r, 2).alias("b"))
         assertDataFrameEqual([Row(b=-1)], actual_with_threshold)
 
+    def test_vector_functions(self):
+        from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+
+        schema = StructType(
+            [
+                StructField("a", ArrayType(FloatType())),
+                StructField("b", ArrayType(FloatType())),
+            ]
+        )
+        df = self.spark.createDataFrame([([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])], schema)
+
+        # Similarity/distance functions
+        self.assertAlmostEqual(
+            df.select(F.vector_cosine_similarity("a", "b")).first()[0], 0.9746318, places=4
+        )
+        self.assertAlmostEqual(
+            df.select(F.vector_inner_product("a", "b")).first()[0], 32.0, places=1
+        )
+        self.assertAlmostEqual(
+            df.select(F.vector_l2_distance("a", "b")).first()[0], 5.196152, places=4
+        )
+
+        # Norm/normalize functions
+        schema2 = StructType([StructField("v", ArrayType(FloatType()))])
+        df2 = self.spark.createDataFrame([([3.0, 4.0],)], schema2)
+        self.assertAlmostEqual(
+            df2.select(F.vector_norm("v", F.lit(2.0).cast("float"))).first()[0], 5.0, places=1
+        )
+        result = df2.select(F.vector_normalize("v", F.lit(2.0).cast("float"))).first()[0]
+        self.assertAlmostEqual(result[0], 0.6, places=4)
+        self.assertAlmostEqual(result[1], 0.8, places=4)
+
+        # Aggregate functions
+        df3 = self.spark.createDataFrame([([1.0, 2.0],), ([3.0, 4.0],)], schema2)
+        avg_result = df3.select(F.vector_avg("v")).first()[0]
+        self.assertAlmostEqual(avg_result[0], 2.0, places=4)
+        self.assertAlmostEqual(avg_result[1], 3.0, places=4)
+        sum_result = df3.select(F.vector_sum("v")).first()[0]
+        self.assertAlmostEqual(sum_result[0], 4.0, places=4)
+        self.assertAlmostEqual(sum_result[1], 6.0, places=4)
+
+    def test_jaro_winkler_similarity_function(self):
+        df = self.spark.createDataFrame([("MARTHA", "MARHTA")], ["l", "r"])
+        result = df.select(F.jaro_winkler_similarity(df.l, df.r)).first()[0]
+        self.assertAlmostEqual(result, 0.9611111111111111, places=10)
+        # Null handling
+        null_result = df.select(F.jaro_winkler_similarity(df.l, F.lit(None))).first()[0]
+        self.assertIsNone(null_result)
+
     def test_between_function(self):
         df = self.spark.createDataFrame(
             [Row(a=1, b=2, c=3), Row(a=2, b=1, c=3), Row(a=4, b=1, c=4)]
@@ -1607,7 +1656,7 @@ class FunctionsTestsMixin:
         non_file_df = self.spark.range(100).select(F.input_file_name())
 
         results = non_file_df.collect()
-        self.assertTrue(len(results) == 100)
+        self.assertEqual(len(results), 100)
 
         # [SPARK-24605]: if everything was properly reset after the last job, this should return
         # empty string rather than the file read in the last job.
@@ -3278,11 +3327,15 @@ class FunctionsTestsMixin:
         df = self.spark.createDataFrame(
             [("100-200", r"(\d+)", "--")], ["str", "pattern", "replacement"]
         )
+
         self.assertTrue(
             all(
                 df.select(
                     F.regexp_replace("str", r"(\d+)", "--") == "-----",
                     F.regexp_replace("str", F.col("pattern"), F.col("replacement")) == "-----",
+                    F.regexp_replace("str", r"(\d+)", "--", 5) == "100---",
+                    F.regexp_replace("str", F.col("pattern"), F.col("replacement"), F.lit(5))
+                    == "100---",
                 ).first()
             )
         )

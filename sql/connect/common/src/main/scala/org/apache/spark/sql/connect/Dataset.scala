@@ -348,7 +348,12 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def zip(other: sql.Dataset[_]): DataFrame = {
-    throw new UnsupportedOperationException("zip is not supported in Spark Connect")
+    checkSameSparkSession(other)
+    sparkSession.newDataFrame { builder =>
+      builder.getZipBuilder
+        .setLeft(plan.getRoot)
+        .setRight(other.asInstanceOf[Dataset[_]].plan.getRoot)
+    }
   }
 
   /** @inheritdoc */

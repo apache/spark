@@ -4811,6 +4811,53 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     testArrayOfPrimitiveTypeNotContainsNull()
   }
 
+  test("aggregate function - null array does not evaluate zero expression through CSE") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.range(1).selectExpr(
+          """
+            |aggregate(
+            |  CAST(NULL AS ARRAY<INT>),
+            |  (CAST(id AS INT) / 0) + (CAST(id AS INT) / 0),
+            |  (acc, x) -> acc + x)
+            |""".stripMargin),
+        Row(null))
+    }
+  }
+
+  test("aggregate function - generated code clears accumulator null state within row") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+      checkAnswer(
+        spark.range(1).selectExpr(
+          """
+            |aggregate(
+            |  array(CAST(id AS INT) + 1, CAST(id AS INT) + 2),
+            |  CAST(NULL AS INT),
+            |  (acc, x) -> coalesce(acc, 0) + x,
+            |  acc -> coalesce(acc, -1))
+            |""".stripMargin),
+        Row(3))
+    }
+  }
+
+  test("aggregate function - generated code clears accumulator null state across rows") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+      checkAnswer(
+        spark.range(0, 2, 1, 1).selectExpr(
+          """
+            |aggregate(
+            |  CASE WHEN id = 0 THEN array(CAST(NULL AS INT)) ELSE array() END,
+            |  0,
+            |  (acc, x) -> acc + x,
+            |  acc -> coalesce(acc, -1))
+            |""".stripMargin),
+        Seq(Row(-1), Row(0)))
+    }
+  }
+
   test("aggregate function - array for primitive type containing null") {
     val df = Seq[Seq[Integer]](
       Seq(1, 9, 8, 7),

@@ -906,7 +906,7 @@ class ArrowTestsMixin:
         expected = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_createDataFrame_arrow_with_array_type_nulls(self):
         t = pa.table({"a": [[1, 2], None, [3, 4]], "b": [["x", "y"], ["y", "z"], None]})
@@ -918,7 +918,7 @@ class ArrowTestsMixin:
         ]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_toPandas_with_array_type(self):
         for arrow_enabled in [True, False]:
@@ -935,7 +935,7 @@ class ArrowTestsMixin:
         result = [tuple(list(e) for e in rec) for rec in pdf.to_records(index=False)]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_toArrow_with_array_type_nulls(self):
         expected = [([1, 2], ["x", "y"]), (None, ["y", "z"]), ([3, 4], None)]
@@ -950,7 +950,7 @@ class ArrowTestsMixin:
         ]
         for r in range(len(expected)):
             for e in range(len(expected[r])):
-                self.assertTrue(expected[r][e] == result[r][e])
+                self.assertEqual(expected[r][e], result[r][e])
 
     def test_createDataFrame_pandas_with_map_type(self):
         with self.quiet():

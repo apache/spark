@@ -378,6 +378,11 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a = $"a".string.at(0)
     checkEvaluation(Ascii(Literal("efg")), 101, create_row("abdef"))
     checkEvaluation(Ascii(a), 97, create_row("abdef"))
+    // U+1F600 is a supplementary-plane code point; ascii must return the full code point
+    // (128512 via codePointAt), not the leading UTF-16 surrogate (55357 via charAt).
+    // scalastyle:off
+    checkEvaluation(Ascii(Literal("😀")), 128512, create_row("😀"))
+    // scalastyle:on
     checkEvaluation(Ascii(a), 0, create_row(""))
     checkEvaluation(Ascii(a), null, create_row(null))
     checkEvaluation(Ascii(Literal.create(null, StringType)), null, create_row("abdef"))
@@ -655,6 +660,44 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments:
     GenerateUnsafeProjection.generate(Levenshtein(Literal("\"quotea"), Literal("\"quoteb")) :: Nil)
+  }
+
+  test("Jaro-Winkler similarity") {
+    // Identical strings
+    checkEvaluation(JaroWinkler(Literal("ABC"), Literal("ABC")), 1.0)
+    // Completely different
+    checkEvaluation(JaroWinkler(Literal("ABC"), Literal("XYZ")), 0.0)
+    // Empty strings
+    checkEvaluation(JaroWinkler(Literal(""), Literal("")), 1.0)
+    checkEvaluation(JaroWinkler(Literal("ABC"), Literal("")), 0.0)
+    checkEvaluation(JaroWinkler(Literal(""), Literal("ABC")), 0.0)
+    // Classic example: MARTHA vs MARHTA (well-known reference value)
+    checkEvaluation(JaroWinkler(Literal("MARTHA"), Literal("MARHTA")), 0.9611111111111111)
+    // Another well-known example
+    checkEvaluation(JaroWinkler(Literal("DWAYNE"), Literal("DUANE")), 0.8400000000000001)
+    // Symmetry: jaro_winkler(a, b) == jaro_winkler(b, a)
+    checkEvaluation(JaroWinkler(Literal("MARHTA"), Literal("MARTHA")), 0.9611111111111111)
+    checkEvaluation(JaroWinkler(Literal("sitting"), Literal("kitten")),
+      JaroWinkler(Literal("kitten"), Literal("sitting")).eval(null))
+    // Strings with very different lengths
+    assert(JaroWinkler(Literal("a"), Literal("abcdefgh")).eval(null)
+      .asInstanceOf[Double] > 0.0)
+    checkEvaluation(JaroWinkler(Literal("abc"), Literal("abcdefgh")),
+      JaroWinkler(Literal("abcdefgh"), Literal("abc")).eval(null))
+    // Single character strings
+    checkEvaluation(JaroWinkler(Literal("a"), Literal("a")), 1.0)
+    checkEvaluation(JaroWinkler(Literal("a"), Literal("b")), 0.0)
+    // Multi-byte (Japanese) strings
+    // scalastyle:off nonascii
+    checkEvaluation(JaroWinkler(Literal("東京都"), Literal("東京都")), 1.0)
+    checkEvaluation(JaroWinkler(Literal("東京都"), Literal("東京府")),
+      JaroWinkler(Literal("東京府"), Literal("東京都")).eval(null))
+    assert(JaroWinkler(Literal("東京都"), Literal("東京府")).eval(null)
+      .asInstanceOf[Double] > 0.8)
+    // scalastyle:on nonascii
+    // Null handling
+    checkEvaluation(JaroWinkler(Literal.create(null, StringType), Literal("ABC")), null)
+    checkEvaluation(JaroWinkler(Literal("ABC"), Literal.create(null, StringType)), null)
   }
 
   test("soundex unit test") {

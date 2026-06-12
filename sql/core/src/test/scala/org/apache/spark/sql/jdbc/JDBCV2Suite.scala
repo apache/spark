@@ -214,6 +214,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%_def@gmail.com')")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_%def@gmail.com')")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_''%def@gmail.com')")
+      batchStmt.addBatch(
+        "INSERT INTO \"test\".\"address\" VALUES ('abc\\def@gmail.com')")
 
       batchStmt.addBatch("CREATE TABLE \"test\".\"employee_bonus\" " +
         "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)")
@@ -1425,6 +1427,25 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkPushedInfo(df15,
       raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_''\%d%' ESCAPE '\']")
     checkAnswer(df15, Seq(Row("abc_'%def@gmail.com")))
+
+    // Backslash in the value must be escaped since '\' is the LIKE escape character
+    val df16 = spark.table("h2.test.address").filter($"email".startsWith("abc\\"))
+    checkFiltersRemoved(df16)
+    checkPushedInfo(df16,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\\%' ESCAPE '\']")
+    checkAnswer(df16, Seq(Row("abc\\def@gmail.com")))
+
+    val df17 = spark.table("h2.test.address").filter($"email".endsWith("\\def@gmail.com"))
+    checkFiltersRemoved(df17)
+    checkPushedInfo(df17,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\\def@gmail.com' ESCAPE '\']")
+    checkAnswer(df17, Seq(Row("abc\\def@gmail.com")))
+
+    val df18 = spark.table("h2.test.address").filter($"email".contains("c\\d"))
+    checkFiltersRemoved(df18)
+    checkPushedInfo(df18,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\\d%' ESCAPE '\']")
+    checkAnswer(df18, Seq(Row("abc\\def@gmail.com")))
   }
 
   test("scan with filter push-down with ansi mode") {

@@ -280,9 +280,9 @@ trait SparkConnectServerTest extends SharedSparkSession {
   protected def withCustomBlockingStub(
       retryPolicies: Seq[RetryPolicy] = RetryPolicy.defaultPolicies())(
       f: CustomSparkConnectBlockingStub => Unit): Unit = {
-    val conf = SparkConnectClient.Configuration(port = serverPort)
+    val conf = SparkConnectClient.Configuration(port = serverPort, retryPolicies = retryPolicies)
     val channel = conf.createChannel()
-    val stubState = new SparkConnectStubState(channel, retryPolicies)
+    val stubState = new SparkConnectStubState(channel, conf)
     val bstub = new CustomSparkConnectBlockingStub(channel, stubState)
     try f(bstub)
     finally {

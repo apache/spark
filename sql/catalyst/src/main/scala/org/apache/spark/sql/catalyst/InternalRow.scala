@@ -202,10 +202,6 @@ object InternalRow {
     case DoubleType => (input, v) => input.setDouble(ordinal, v.asInstanceOf[Double])
     case CalendarIntervalType =>
       (input, v) => input.setInterval(ordinal, v.asInstanceOf[CalendarInterval])
-    case _: TimestampNTZNanosType =>
-      (input, v) => input.setTimestampNTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
-    case _: TimestampLTZNanosType =>
-      (input, v) => input.setTimestampLTZNanos(ordinal, v.asInstanceOf[TimestampNanosVal])
     case DecimalType.Fixed(precision, _) =>
       (input, v) => input.setDecimal(ordinal, v.asInstanceOf[Decimal], precision)
     case udt: UserDefinedType[_] => getWriter(ordinal, udt.sqlType)
