@@ -39,6 +39,38 @@ import org.apache.spark.sql.internal.SQLConf
 object ResolveHints {
 
   /**
+   * Checks if the given multi-part identifiers are matched with each other.
+   *
+   * The [[ResolveJoinStrategyHints]] rule is applied before the resolution batch in the analyzer
+   * and we cannot semantically compare them at this stage. Therefore, we follow a simple rule;
+   * they match if an identifier in a hint is a tail of an identifier in a relation. This process
+   * is independent of a session catalog (`currentDb` in [[SessionCatalog]]) and it just compares
+   * them literally.
+   *
+   * For example,
+   *  - in a query `SELECT /*+ BROADCAST(t) */ * FROM db1.t JOIN t`,
+   *    the broadcast hint will match both tables, `db1.t` and `t`,
+   *    even when the current db is `db2`.
+   *  - in a query `SELECT /*+ BROADCAST(default.t) */ * FROM default.t JOIN t`,
+   *    the broadcast hint will match the left-side table only, `default.t`.
+   *
+   * The `resolver` is passed in explicitly so that this logic can be shared by both the
+   * fixed-point analyzer and the single-pass resolver, neither of which has to depend on the
+   * other's rule state.
+   */
+  def matchedIdentifier(
+      identInHint: Seq[String],
+      identInQuery: Seq[String],
+      resolver: Resolver): Boolean = {
+    if (identInHint.length <= identInQuery.length) {
+      identInHint.zip(identInQuery.takeRight(identInHint.length))
+        .forall { case (i1, i2) => resolver(i1, i2) }
+    } else {
+      false
+    }
+  }
+
+  /**
    * The list of allowed join strategy hints is defined in [[JoinStrategyHint.strategies]], and a
    * sequence of relation aliases can be specified with a join strategy hint, e.g., "MERGE(a, c)",
    * "BROADCAST(a)". A join strategy hint plan node will be inserted on top of any relation (that
@@ -65,27 +97,8 @@ object ResolveHints {
             _.toUpperCase(Locale.ROOT)).contains(hintName.toUpperCase(Locale.ROOT))))
     }
 
-    // This method checks if given multi-part identifiers are matched with each other.
-    // The [[ResolveJoinStrategyHints]] rule is applied before the resolution batch
-    // in the analyzer and we cannot semantically compare them at this stage.
-    // Therefore, we follow a simple rule; they match if an identifier in a hint
-    // is a tail of an identifier in a relation. This process is independent of a session
-    // catalog (`currentDb` in [[SessionCatalog]]) and it just compares them literally.
-    //
-    // For example,
-    //  * in a query `SELECT /*+ BROADCAST(t) */ * FROM db1.t JOIN t`,
-    //    the broadcast hint will match both tables, `db1.t` and `t`,
-    //    even when the current db is `db2`.
-    //  * in a query `SELECT /*+ BROADCAST(default.t) */ * FROM default.t JOIN t`,
-    //    the broadcast hint will match the left-side table only, `default.t`.
-    private def matchedIdentifier(identInHint: Seq[String], identInQuery: Seq[String]): Boolean = {
-      if (identInHint.length <= identInQuery.length) {
-        identInHint.zip(identInQuery.takeRight(identInHint.length))
-          .forall { case (i1, i2) => resolver(i1, i2) }
-      } else {
-        false
-      }
-    }
+    private def matchedIdentifier(identInHint: Seq[String], identInQuery: Seq[String]): Boolean =
+      ResolveHints.matchedIdentifier(identInHint, identInQuery, resolver)
 
     private def extractIdentifier(r: SubqueryAlias): Seq[String] = {
       r.identifier.qualifier :+ r.identifier.name
