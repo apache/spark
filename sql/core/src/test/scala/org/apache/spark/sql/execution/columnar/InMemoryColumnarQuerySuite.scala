@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.columnar.CachedBatch
-import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, InputAdapter, LocalTableScanExec, SubqueryExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.{FilterExec, InputAdapter, InSubqueryExec, LocalTableScanExec, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.CachedRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
