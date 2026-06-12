@@ -34,6 +34,7 @@ from typing import (
 
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
+from pyspark.errors import PySparkNotImplementedError, PySparkValueError
 from pyspark.sql.session import _monkey_patch_RDD, SparkSession
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.readwriter import DataFrameReader
@@ -142,9 +143,12 @@ class SQLContext:
         return self._jsqlContext
 
     @classmethod
-    def getOrCreate(cls: Type["SQLContext"], sc: "SparkContext") -> "SQLContext":
+    def getOrCreate(cls: Type["SQLContext"], sc: Optional["SparkContext"] = None) -> "SQLContext":
         """
         Get the existing SQLContext or create a new one with given SparkContext.
+
+        When running in Spark Connect mode, ``sc`` is not required and the active
+        :class:`SparkSession` is used automatically.
 
         .. versionadded:: 1.6.0
 
@@ -153,12 +157,45 @@ class SQLContext:
 
         Parameters
         ----------
-        sc : :class:`SparkContext`
+        sc : :class:`SparkContext`, optional
+            Required in classic mode; ignored in Spark Connect mode.
         """
+        from pyspark.sql.utils import is_remote
+
         warnings.warn(
             "Deprecated in 3.0.0. Use SparkSession.builder.getOrCreate() instead.",
             FutureWarning,
         )
+        if is_remote():
+            from pyspark.sql.connect import context as _connect_context
+            from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
+            session = SparkSession._getActiveSessionOrCreate()
+            # Route to the Connect counterpart so subclasses (e.g. HiveContext) are handled
+            # correctly: the Connect HiveContext._from_session raises PySparkNotImplementedError.
+            connect_cls = getattr(_connect_context, cls.__name__, None)
+            if connect_cls is None:
+                # A user-defined SQLContext subclass has no Connect counterpart. Fail loudly
+                # instead of silently returning a base Connect SQLContext that would be
+                # missing the subclass's attributes.
+                raise PySparkNotImplementedError(
+                    errorClass="NOT_IMPLEMENTED",
+                    messageParameters={"feature": f"{cls.__name__}.getOrCreate in Spark Connect"},
+                )
+            return cast(
+                "SQLContext",
+                connect_cls._get_or_create_from_session(cast(ConnectSparkSession, session)),
+            )
+        if sc is None:
+            # Not an ``assert`` because asserts are stripped under ``python -O``, which
+            # would skip the guard and fail later with a cryptic AttributeError on sc._jvm.
+            raise PySparkValueError(
+                errorClass="ARGUMENT_REQUIRED",
+                messageParameters={
+                    "arg_name": "sc",
+                    "condition": "running in classic (non-Connect) mode",
+                },
+            )
         return cls._get_or_create(sc)
 
     @classmethod
