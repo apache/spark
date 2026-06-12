@@ -483,11 +483,11 @@ class _ArrowBatchedBenchMixin:
         "mixed_types": ("mixed", 50_000, 10, 5_000),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        type_key, num_rows, num_cols, batch_size = _ArrowBatchedBenchMixin._scenario_configs[name]
+        type_key, num_rows, num_cols, batch_size = cls._scenario_configs[name]
         pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
         return MockDataFactory.make_batches(
             num_rows=num_rows,
@@ -586,10 +586,10 @@ class _ArrowUDTFBenchMixin:
         "pure_strings": ("pure_strings", 50_000, 10, 5_000),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         np.random.seed(42)
-        type_key, num_rows, num_cols, batch_size = _ArrowUDTFBenchMixin._scenario_configs[name]
+        type_key, num_rows, num_cols, batch_size = cls._scenario_configs[name]
         pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
         struct_type = MockDataFactory.make_struct_type(num_fields=num_cols, base_types=pool)
         batches, schema = MockDataFactory.make_batches(
@@ -680,10 +680,10 @@ class _ArrowTableUDFBenchMixin:
         "pure_strings": ("pure_strings", 5_000, 10, 2_500),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         np.random.seed(42)
-        type_key, num_rows, num_cols, batch_size = _ArrowTableUDFBenchMixin._scenario_configs[name]
+        type_key, num_rows, num_cols, batch_size = cls._scenario_configs[name]
         pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
         return MockDataFactory.make_batches(
             num_rows=num_rows,
@@ -1071,13 +1071,11 @@ class _GroupedMapArrowBenchMixin:
         "multi_key": (200, 5_000, 3, 5),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        num_groups, rows_per_group, num_key_cols, num_value_cols = (
-            _GroupedMapArrowBenchMixin._scenario_configs[name]
-        )
+        num_groups, rows_per_group, num_key_cols, num_value_cols = cls._scenario_configs[name]
         n_fields = num_key_cols + num_value_cols
         struct_type = MockDataFactory.make_struct_type(
             num_fields=n_fields,
@@ -1094,6 +1092,7 @@ class _GroupedMapArrowBenchMixin:
         return_type = StructType(inner_fields[num_key_cols:])
         return (groups, return_type)
 
+    _eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
     _udfs = {
         "identity_udf": _grouped_map_arrow_identity,
         "sort_udf": _grouped_map_arrow_sort,
@@ -1110,7 +1109,7 @@ class _GroupedMapArrowBenchMixin:
         num_key_cols = n_total - n_values
         arg_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, n_values)
         MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            self._eval_type,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
             lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
@@ -1148,6 +1147,7 @@ class _GroupedMapArrowIterBenchMixin(_GroupedMapArrowBenchMixin):
         for batch in batches:
             yield batch.filter(pc.is_valid(batch.column(0)))
 
+    _eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
     _udfs = {
         "identity_udf": _grouped_map_arrow_iter_identity,
         "sort_udf": _grouped_map_arrow_iter_sort,
@@ -1155,20 +1155,6 @@ class _GroupedMapArrowIterBenchMixin(_GroupedMapArrowBenchMixin):
     }
     params = [list(_GroupedMapArrowBenchMixin._scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, schema = self._build_scenario(scenario)
-        udf_func = self._udfs[udf_name]
-        n_total = groups[0][0][0].column(0).type.num_fields
-        n_values = len(schema.fields)
-        num_key_cols = n_total - n_values
-        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, n_values)
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
-            lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
-            buf,
-        )
 
 
 class GroupedMapArrowIterUDFTimeBench(_GroupedMapArrowIterBenchMixin, _TimeBenchBase):
@@ -1198,11 +1184,11 @@ class _GroupedMapPandasBenchMixin:
         "mixed_types": ("mixed", None, None, None),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        cfg = _GroupedMapPandasBenchMixin._scenario_configs[name]
+        cfg = cls._scenario_configs[name]
         if cfg[0] == "mixed":
             batches, schema = MockDataFactory.make_batches(
                 num_rows=3,
@@ -1220,6 +1206,7 @@ class _GroupedMapPandasBenchMixin:
         )
         return (groups, schema)
 
+    _eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
     # Each UDF entry: (func, ret_type, n_args).
     # ret_type=None means "use the input schema" (excluding key columns for n_args=2).
     # n_args=1 -> func(pdf), n_args=2 -> func(key, pdf).
@@ -1241,7 +1228,7 @@ class _GroupedMapPandasBenchMixin:
         n_cols = len(schema.fields)
         arg_offsets = MockUDFFactory.make_grouped_arg_offsets(n_args - 1, n_cols - (n_args - 1))
         MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            self._eval_type,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
             lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
@@ -1274,6 +1261,7 @@ class _GroupedMapPandasIterBenchMixin(_GroupedMapPandasBenchMixin):
     def _grouped_map_pandas_iter_key_identity(key, pdfs):
         yield from pdfs
 
+    _eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
     _udfs = {
         "identity_udf": (_grouped_map_pandas_iter_identity, None, 1),
         "sort_udf": (_grouped_map_pandas_iter_sort, None, 1),
@@ -1281,20 +1269,6 @@ class _GroupedMapPandasIterBenchMixin(_GroupedMapPandasBenchMixin):
     }
     params = [list(_GroupedMapPandasBenchMixin._scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, schema = self._build_scenario(scenario)
-        udf_func, ret_type, n_args = self._udfs[udf_name]
-        if ret_type is None:
-            ret_type = StructType(schema.fields[n_args - 1 :]) if n_args > 1 else schema
-        n_cols = len(schema.fields)
-        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(n_args - 1, n_cols - (n_args - 1))
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
-            buf,
-        )
 
 
 class GroupedMapPandasIterUDFTimeBench(_GroupedMapPandasIterBenchMixin, _TimeBenchBase):
@@ -1345,11 +1319,11 @@ class _MapArrowIterBenchMixin:
         "mixed_types": ("mixed", 1_000_000, 10, 5_000),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        type_key, num_rows, num_cols, batch_size = _MapArrowIterBenchMixin._scenario_configs[name]
+        type_key, num_rows, num_cols, batch_size = cls._scenario_configs[name]
         pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
         struct_type = MockDataFactory.make_struct_type(
             num_fields=num_cols,
@@ -1432,11 +1406,11 @@ class _MapPandasIterBenchMixin:
         "mixed_types": ("mixed", 200_000, 10, 5_000),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        type_key, num_rows, num_cols, batch_size = _MapPandasIterBenchMixin._scenario_configs[name]
+        type_key, num_rows, num_cols, batch_size = cls._scenario_configs[name]
         pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
         struct_type = MockDataFactory.make_struct_type(
             num_fields=num_cols,
