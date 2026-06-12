@@ -880,7 +880,7 @@ object SQLConf {
         "data. Set to false to revert to the pre-DSv2 InMemoryRelation path, which still " +
         "supports column pruning, filter pushdown, and sort-order propagation via the " +
         "InMemoryScans planner strategy.")
-      .version("4.0.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
