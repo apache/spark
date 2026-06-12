@@ -65,6 +65,9 @@ jobs:
     # If this job fails or is cancelled, the matrix entries fall back to
     # running the SBT build locally as before.
     continue-on-error: true
+    outputs:
+      # Pinned so the build job checks out the same snapshot, even if the branch advances mid-run.
+      head_sha: ${{ steps.resolve-sha.outputs.head_sha }}
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
@@ -77,6 +80,9 @@ jobs:
           fetch-depth: 0
           repository: apache/spark
           ref: ${{ inputs.branch }}
+      - name: Resolve apache/spark HEAD SHA
+        id: resolve-sha
+        run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |
@@ -185,7 +191,8 @@ jobs:
         with:
           fetch-depth: 0
           repository: apache/spark
-          ref: ${{ inputs.branch }}
+          # Fall back to the branch when the precompile job failed before resolving the SHA.
+          ref: ${{ needs.precompile.outputs.head_sha || inputs.branch }}
       - name: Sync the current branch with the latest in Apache Spark
         if: github.repository != 'apache/spark'
         run: |
