@@ -514,7 +514,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     run_cmd(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
 
     continue_maybe(
-        "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
+        "Merge complete (local ref %s). Push to %s/%s?"
+        % (target_branch_name, PUSH_REMOTE_NAME, target_ref)
     )
 
     try:
@@ -546,7 +547,8 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         continue_maybe(msg, True)
 
     continue_maybe(
-        "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
+        "Pick complete (local ref %s). Push to %s/%s?"
+        % (pick_branch_name, PUSH_REMOTE_NAME, pick_ref)
     )
 
     try:
@@ -1445,7 +1447,7 @@ def main():
         merge_hash = merge_commits[-1]["commit_id"]
         message = get_json("%s/commits/%s" % (GITHUB_API_BASE, merge_hash))["commit"]["message"]
 
-        print("Pull request %s has already been merged, assuming you want to backport" % pr_num)
+        print("Pull request %s has already been merged" % pr_num)
         commit_is_downloaded = (
             run_cmd(["git", "rev-parse", "--quiet", "--verify", "%s^{commit}" % merge_hash]).strip()
             != ""
@@ -1454,6 +1456,7 @@ def main():
             fail("Couldn't find any merge commit for #%s, you may need to update HEAD." % pr_num)
 
         print("Found commit %s:\n%s" % (merge_hash, message))
+        continue_maybe("Proceed with backporting pull request #%s?" % pr_num)
         default = branch_names[0]
         cherry_pick(pr_num, merge_hash, default, branch_names, target_ref, already_picked=())
         sys.exit(0)
