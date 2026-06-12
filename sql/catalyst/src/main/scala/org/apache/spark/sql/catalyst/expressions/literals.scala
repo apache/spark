@@ -570,10 +570,6 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           ExprCode.forNonNullValue(JavaCode.expression(s"($javaType)$value", dataType))
         case TimestampType | TimestampNTZType | LongType | _: DayTimeIntervalType | _: TimeType =>
           toExprCode(s"${value}L")
-        case (_: TimestampNTZNanosType | _: TimestampLTZNanosType)
-            if TypeOps(dataType).isDefined =>
-          ExprCode.forNonNullValue(
-            JavaCode.expression(TypeOps(dataType).get.getJavaLiteral(value), dataType))
         case _ =>
           val constRef = ctx.addReferenceObj("literal", value, javaType)
           ExprCode.forNonNullValue(JavaCode.global(constRef, dataType))
@@ -589,7 +585,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       val fracLen = ts.length - dotIdx - 1
       // fracLen can never exceed precision: formatNanos/formatWithoutTimeZoneNanos truncate
       // the value to `precision` digits before formatting, and the fractionFormatter only
-      // strips trailing zeros (never adds digits). The else branch is a defensive fallback.
+      // strips trailing zeros (never adds digits); the else branch handles fracLen == precision.
       if (fracLen < precision) ts + "0" * (precision - fracLen) else ts
     }
   }
