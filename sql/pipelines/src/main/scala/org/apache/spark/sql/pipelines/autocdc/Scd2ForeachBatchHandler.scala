@@ -31,6 +31,8 @@ case class Scd2ForeachBatchHandler(
 
   /**
    * Process a single CDC microbatch and merge it into the auxiliary and target tables.
+   *
+   * Idempotent under same-`batchId` replay.
    */
   def execute(batchDf: DataFrame, batchId: Long): Unit = {
     ScdBatchValidator(
@@ -59,6 +61,8 @@ case class Scd2ForeachBatchHandler(
       perKeyMinimumSequenceInMicrobatchDf = perKeyMinimumSequenceInMicrobatchDf
     )
 
+    // All three share the canonical schema; findAffectedRowsFromAuxiliaryTable drops the aux-only
+    // deletedByBatchId column.
     val microbatchAndAffectedRows = preprocessedBatchDf
       .unionByName(affectedRowsFromAuxiliaryTable)
       .unionByName(affectedRowsFromTargetTable)
@@ -66,15 +70,13 @@ case class Scd2ForeachBatchHandler(
     val decomposedDf = microbatchAndAffectedRows
       .transform(batchProcessor.decomposeOutOfOrderRows)
       .transform(batchProcessor.dropRedundantRowsPostDecomposition)
-    
-    batchProcessor.assertWellFormedRowsPostDecomposition(decomposedDf, batchId)
+      .transform(d => batchProcessor.assertWellFormedRowsPostDecomposition(d, batchId))
 
-    val reconciledDf = decomposedDf
+    val reconciledAndRoutedDf = decomposedDf
       .transform(batchProcessor.reconcileStartAndEndAt)
       .transform(batchProcessor.dropLeftoverDeletesPostReconciliation)
       .transform(batchProcessor.promoteDecompositionTailsToTombstones)
-
-    val reconciledAndRoutedDf = batchProcessor.identifyAndTagAuxRows(reconciledDf)
+      .transform(batchProcessor.identifyAndTagAuxRows)
 
     batchProcessor.mergeRowsIntoAuxiliaryTable(
       reconciledDfWithAuxRowsTagged = reconciledAndRoutedDf,
