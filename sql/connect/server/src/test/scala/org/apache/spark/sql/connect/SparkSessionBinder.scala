@@ -76,10 +76,7 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
   }
 
   override def afterAll(): Unit = {
-    try {
-      SparkConnectService.stop()
-    } finally {
-      super.afterAll()
-    }
+    super.afterAll()
+    SparkConnectService.stop()
   }
 }
