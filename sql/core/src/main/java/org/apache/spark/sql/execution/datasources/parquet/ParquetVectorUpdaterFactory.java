@@ -429,7 +429,11 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      valuesReader.readIntegersAsTimestampMicros(total, values, offset);
+      valuesReader.readIntegersAsLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        values.putLong(offset + i,
+            DateTimeUtils.daysToMicros((int) values.getLong(offset + i), ZoneOffset.UTC));
+      }
     }
 
     @Override
