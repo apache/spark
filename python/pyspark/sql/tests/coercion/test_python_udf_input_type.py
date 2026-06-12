@@ -265,7 +265,7 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         self._run_udf_input_type_coercion(
             use_arrow=True,
             legacy_pandas=True,
-            golden_file=f"{self.pandas_dir}/{self.prefix}_with_arrow_and_pandas",
+            golden_file=os.path.join(self.pandas_dir, f"{self.prefix}_with_arrow_and_pandas"),
             test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
         )
 

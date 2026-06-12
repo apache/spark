@@ -247,7 +247,7 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
 
     def test_pandas_input_type_coercion_vanilla(self):
         self._run_pandas_udf_input_type_coercion(
-            golden_file=f"{self.pandas_dir}/{self.prefix}_base",
+            golden_file=os.path.join(self.pandas_dir, f"{self.prefix}_base"),
             test_name="Pandas UDF",
         )
 
