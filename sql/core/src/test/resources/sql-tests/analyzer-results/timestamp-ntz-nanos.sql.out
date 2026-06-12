@@ -249,3 +249,81 @@ SELECT extract(SECOND FROM TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query analysis
 Project [extract(SECOND, 1960-01-01 13:24:35.123456789) AS extract(SECOND FROM TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT DATE '2020-01-01'::timestamp_ntz(9)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT DATE '2020-01-01'::timestamp_ntz(7)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789'::date
+-- !query analysis
+Project [cast(TimestampNanosVal(1577881815123456, 789) as date) AS CAST(TimestampNanosVal(1577881815123456, 789) AS DATE)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001'::date
+-- !query analysis
+Project [cast(TimestampNanosVal(-315619200000000, 1) as date) AS CAST(TimestampNanosVal(-315619200000000, 1) AS DATE)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT DATE '2020-01-01'::timestamp_ntz(9)::date
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT (NULL :: date) :: timestamp_ntz(9)
+-- !query analysis
+Project [cast(cast(null as date) as timestamp_ntz(9)) AS CAST(CAST(NULL AS DATE) AS TIMESTAMP_NTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT (NULL :: timestamp_ntz(9)) :: date
+-- !query analysis
+Project [cast(cast(null as timestamp_ntz(9)) as date) AS CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS DATE)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT array(TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789') :: array<date>
+-- !query analysis
+Project [cast(array(TimestampNanosVal(1577881815123456, 789)) as array<date>) AS array(TimestampNanosVal(1577881815123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT array(DATE '2020-01-01') :: array<timestamp_ntz(9)>
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT map('k', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789') :: map<string, date>
+-- !query analysis
+Project [cast(map(k, TimestampNanosVal(1577881815123456, 789)) as map<string,date>) AS map(k, TimestampNanosVal(1577881815123456, 789))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ntz(9), string>
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]

@@ -349,3 +349,99 @@ SELECT extract(SECOND FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kol
 struct<extract(SECOND FROM TIMESTAMP_LTZ '2019-12-31 23:54:35.123456789'):decimal(11,9)>
 -- !query output
 35.123456789
+
+
+-- !query
+SELECT DATE '2020-01-01'::timestamp_ltz(9)
+-- !query schema
+struct<CAST(DATE '2020-01-01' AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+2020-01-01 00:00:00
+
+
+-- !query
+SELECT DATE '2020-01-01'::timestamp_ltz(7)
+-- !query schema
+struct<CAST(DATE '2020-01-01' AS TIMESTAMP_LTZ(7)):timestamp_ltz(7)>
+-- !query output
+2020-01-01 00:00:00
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'::date
+-- !query schema
+struct<CAST(TimestampNanosVal(1577910615123456, 789) AS DATE):date>
+-- !query output
+2020-01-01
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001'::date
+-- !query schema
+struct<CAST(TimestampNanosVal(-315590400000000, 1) AS DATE):date>
+-- !query output
+1960-01-01
+
+
+-- !query
+SELECT DATE '2020-01-01'::timestamp_ltz(9)::date
+-- !query schema
+struct<CAST(CAST(DATE '2020-01-01' AS TIMESTAMP_LTZ(9)) AS DATE):date>
+-- !query output
+2020-01-01
+
+
+-- !query
+SELECT (NULL :: date) :: timestamp_ltz(9)
+-- !query schema
+struct<CAST(CAST(NULL AS DATE) AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT (NULL :: timestamp_ltz(9)) :: date
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_LTZ(9)) AS DATE):date>
+-- !query output
+NULL
+
+
+-- !query
+SELECT array(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: array<date>
+-- !query schema
+struct<array(TimestampNanosVal(1577910615123456, 789)):array<date>>
+-- !query output
+[2020-01-01]
+
+
+-- !query
+SELECT array(DATE '2020-01-01') :: array<timestamp_ltz(9)>
+-- !query schema
+struct<array(DATE '2020-01-01'):array<timestamp_ltz(9)>>
+-- !query output
+[2020-01-01 00:00:00]
+
+
+-- !query
+SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: map<string, date>
+-- !query schema
+struct<map(k, TimestampNanosVal(1577910615123456, 789)):map<string,date>>
+-- !query output
+{"k":2020-01-01}
+
+
+-- !query
+SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ltz(9), string>
+-- !query schema
+struct<map(DATE '2020-01-01', v):map<timestamp_ltz(9),string>>
+-- !query output
+{2020-01-01 00:00:00:"v"}
+
+
+-- !query
+SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ltz(9)>
+-- !query schema
+struct<named_struct(f, DATE '2020-01-01'):struct<f:timestamp_ltz(9)>>
+-- !query output
+{"f":2020-01-01 00:00:00}
