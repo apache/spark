@@ -167,6 +167,27 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 
+  test("JSON: archive inference honors the encoding option like a directory") {
+    // A non-UTF-8 (UTF-16) archive: inference must decode each entry with `encoding`, exactly as
+    // the scan and a directory read do. Reading the bytes as UTF-8 would mis-parse them, diverging
+    // from a directory read of the same files. multiLine makes the whole document one record, so
+    // line-separator handling does not enter the test.
+    val opts = Map("encoding" -> "UTF-16", "multiLine" -> "true")
+    val bytes = "{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}".getBytes(StandardCharsets.UTF_16)
+    withTempDir { dir =>
+      writeArchive(new File(dir, s"data.${archiveExtensions.head}"), Seq(entryName(0) -> bytes))
+      val schema = inferredSchema(Seq(dir.getCanonicalPath), opts)
+      withTempDir { looseDir =>
+        Files.write(new File(looseDir, entryName(0)).toPath, bytes)
+        val dirSchema = inferredSchema(Seq(looseDir.getCanonicalPath), opts)
+        assert(schema == dirSchema,
+          s"encoding inference diverged from a directory read; archive=$schema dir=$dirSchema")
+      }
+      assert(schema.fieldNames.toSet == Set("id", "name"),
+        s"expected id/name decoded from UTF-16, got $schema")
+    }
+  }
+
   // ----- JSON-specific read tests --------------------------------------------
 
   test("JSON: entries with differing fields union like a directory") {

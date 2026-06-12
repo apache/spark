@@ -142,6 +142,7 @@ abstract class JsonDataSource extends Serializable with Logging {
     val streams = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
     val multiLine = parsedOptions.multiLine
     val lineSeparator = parsedOptions.lineSeparatorInRead
+    val encoding = parsedOptions.encoding
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
     // Each input is streamed lazily; records are copied into fresh `UTF8String`s (the line reader
@@ -150,12 +151,20 @@ abstract class JsonDataSource extends Serializable with Logging {
     // one inference pass.
     val records: RDD[UTF8String] = streams.flatMap { stream =>
       val path = new Path(stream.getPath())
+      // Decode each record with the configured `encoding` (re-encoding to UTF-8) so archive
+      // inference matches the scan and a directory read. With no `encoding`, the raw bytes are
+      // kept and parsed as UTF-8 by `CreateJacksonParser.utf8String`.
+      def toRecord(bytes: Array[Byte], length: Int): UTF8String = encoding match {
+        case Some(enc) => UTF8String.fromString(new String(bytes, 0, length, enc))
+        case None => UTF8String.fromBytes(bytes, 0, length)
+      }
       def recordsOf(in: InputStream): Iterator[UTF8String] =
         if (multiLine) {
-          Iterator.single(UTF8String.fromBytes(in.readAllBytes()))
+          val bytes = in.readAllBytes()
+          Iterator.single(toRecord(bytes, bytes.length))
         } else {
           ArchiveReader.lineIterator(in, lineSeparator).map { line =>
-            UTF8String.fromBytes(line.getBytes, 0, line.getLength)
+            toRecord(line.getBytes, line.getLength)
           }
         }
       try {
@@ -177,10 +186,13 @@ abstract class JsonDataSource extends Serializable with Logging {
             e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
       }
     }
+    // Honor `samplingRatio` like the loose-file infer paths, so an archive samples its records like
+    // a directory read rather than always reading every one.
+    val sampled = JsonUtils.sample(records, parsedOptions)
     SQLExecution.withSQLConfPropagated(sparkSession) {
       new JsonInferSchema(parsedOptions)
         .infer[UTF8String](
-          records, CreateJacksonParser.utf8String(_: JsonFactory, _: UTF8String),
+          sampled, CreateJacksonParser.utf8String(_: JsonFactory, _: UTF8String),
           isReadFile = multiLine)
     }
   }
