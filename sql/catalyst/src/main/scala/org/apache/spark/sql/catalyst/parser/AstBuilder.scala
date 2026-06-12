@@ -1378,33 +1378,16 @@ class AstBuilder extends DataTypeAstBuilder
       Seq[UnresolvedAttribute],
       Seq[UnresolvedAttribute]) =
     withOrigin(params) {
-      checkDuplicateClauses(params.autoCdcDeleteClause(), "APPLY AS DELETE", params)
-      checkDuplicateClauses(params.autoCdcSequenceByClause(), "SEQUENCE BY", params)
-      val allColumnsClauses = params.autoCdcColumnsClause().asScala
-      if (allColumnsClauses.exists(_.columns != null) &&
-          allColumnsClauses.exists(_.exceptCols != null)) {
-        throw new ParseException(
-          errorClass = "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST",
-          ctx = params)
-      }
-      checkDuplicateClauses(params.autoCdcColumnsClause(), "COLUMNS", params)
-
-      if (params.autoCdcSequenceByClause().isEmpty) {
-        throw new ParseException(
-          errorClass = "AUTOCDC_MISSING_SEQUENCE_BY",
-          ctx = params)
-      }
-
       val sourceTable = plan(params.source) match {
         case r: UnresolvedRelation => r.copy(isStreaming = true)
         case other => other
       }
       val keys = visitMultipartIdentifierList(params.keys)
-      val deleteCondition = params.autoCdcDeleteClause().asScala.headOption
+      val deleteCondition = Option(params.autoCdcDeleteClause())
         .map(c => expression(c.deleteCondition))
-      val sequencing = expression(params.autoCdcSequenceByClause(0).sequence)
+      val sequencing = expression(params.autoCdcSequenceByClause().sequence)
 
-      val columnsClause = params.autoCdcColumnsClause().asScala.headOption
+      val columnsClause = Option(params.autoCdcColumnsClause())
       val specifiedCols = columnsClause match {
         case Some(c) if c.columns != null => visitMultipartIdentifierList(c.columns)
         case _ => Seq.empty

@@ -276,7 +276,7 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
           |FROM source
           |KEYS (id)""".stripMargin)
     }
-    assert(e.getCondition == "AUTOCDC_MISSING_SEQUENCE_BY")
+    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - SEQUENCE BY is required") {
@@ -287,62 +287,35 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
           |FROM source
           |KEYS (id)""".stripMargin)
     }
-    assert(e.getCondition == "AUTOCDC_MISSING_SEQUENCE_BY")
+    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
   }
 
   // ---------------------------------------------------------------------------
-  // Error cases: duplicate clauses
+  // Error cases: wrong clause order
   // ---------------------------------------------------------------------------
 
-  test("duplicate SEQUENCE BY clause") {
+  test("SEQUENCE BY before APPLY AS DELETE is not allowed") {
     val e = intercept[ParseException] {
       parser.parsePlan(
         """CREATE FLOW f AS AUTO CDC INTO target
           |FROM source
           |KEYS (id)
-          |SEQUENCE BY ts1
-          |SEQUENCE BY ts2""".stripMargin)
+          |SEQUENCE BY ts
+          |APPLY AS DELETE WHEN a = 1""".stripMargin)
     }
-    assert(e.getCondition == "DUPLICATE_CLAUSES")
+    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
   }
 
-  test("duplicate APPLY AS DELETE clause") {
+  test("COLUMNS before SEQUENCE BY is not allowed") {
     val e = intercept[ParseException] {
       parser.parsePlan(
         """CREATE FLOW f AS AUTO CDC INTO target
           |FROM source
           |KEYS (id)
-          |APPLY AS DELETE WHEN a = 1
-          |APPLY AS DELETE WHEN b = 2
+          |COLUMNS a, b
           |SEQUENCE BY ts""".stripMargin)
     }
-    assert(e.getCondition == "DUPLICATE_CLAUSES")
-  }
-
-  test("duplicate COLUMNS clause") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts
-          |COLUMNS a, b
-          |COLUMNS c, d""".stripMargin)
-    }
-    assert(e.getCondition == "DUPLICATE_CLAUSES")
-  }
-
-  test("both COLUMNS include list and COLUMNS * EXCEPT is an error") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts
-          |COLUMNS a, b
-          |COLUMNS * EXCEPT (c)""".stripMargin)
-    }
-    assert(e.getCondition == "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST")
+    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
   }
 
   // ---------------------------------------------------------------------------

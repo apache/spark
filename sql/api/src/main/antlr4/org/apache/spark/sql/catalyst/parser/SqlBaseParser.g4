@@ -766,10 +766,9 @@ autoCdcBody
 autoCdcParameters
     : FROM source=relationPrimary
         KEYS LEFT_PAREN keys=multipartIdentifierList RIGHT_PAREN
-        (autoCdcDeleteClause
-        | autoCdcSequenceByClause
-        | autoCdcColumnsClause
-        )*
+        autoCdcDeleteClause?
+        autoCdcSequenceByClause
+        autoCdcColumnsClause?
     ;
 
 autoCdcDeleteClause
