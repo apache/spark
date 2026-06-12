@@ -35,7 +35,7 @@ import org.codehaus.janino.util.ClassFile
 import org.codehaus.janino.util.ClassFile.CodeAttribute
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, TaskContext, TaskKilledException}
-import org.apache.spark.executor.InputMetrics
+import org.apache.spark.executor.{ExecutorClassLoader, InputMetrics}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
@@ -219,8 +219,6 @@ object CodeCompiler extends Logging {
       UnnameablePackageObjectClass.findFirstIn(code.body).isDefined
   }
 
-  private val ExecutorClassLoaderName = "org.apache.spark.executor.ExecutorClassLoader"
-
   /**
    * True when codegen is running in a REPL / interactive context, detected via the three
    * mechanisms Spark uses to ship such classes:
@@ -236,9 +234,8 @@ object CodeCompiler extends Logging {
    *     class loader chain (created on executors when a session has such a class URI).
    *
    * The default (non-REPL) job state has no `replClassDirUri`, so ordinary codegen is not
-   * affected. The class loader is compared by class name rather than `isInstanceOf` so
-   * catalyst need not depend on the `repl` module. Any reflection / lookup failure
-   * conservatively reports `false`, which preserves the configured backend.
+   * affected. Any lookup failure conservatively reports `false`, which preserves the
+   * configured backend.
    */
   private def isReplContext: Boolean = {
     def hasArtifactReplUri =
@@ -252,7 +249,7 @@ object CodeCompiler extends Logging {
         var loader = Utils.getContextOrSparkClassLoader
         var found = false
         while (loader != null && !found) {
-          if (loader.getClass.getName == ExecutorClassLoaderName) found = true
+          if (loader.isInstanceOf[ExecutorClassLoader]) found = true
           loader = loader.getParent
         }
         found
@@ -296,8 +293,8 @@ object CodeCompiler extends Logging {
    * Compute bytecode statistics for a set of compiled classes. Both backends
    * produce the same map shape (className -> classfile bytes), so the analysis is
    * shared. This is the only piece of code that depends on Janino's
-   * `commons-compiler` ClassFile parser; it can be swapped for ASM later without
-   * touching either backend.
+   * `ClassFile` parser (from the `janino` artifact); it can be swapped for ASM
+   * later without touching either backend.
    */
   private[codegen] def computeByteCodeStats(
       classBytecodes: Iterable[(String, Array[Byte])]): ByteCodeStats = {
@@ -433,7 +430,7 @@ object JaninoCodeCompiler extends CodeCompiler with Logging {
  * executor (see `compileExecutor`). This is required for correctness on Spark
  * task threads (jar reads through interruptible NIO channels vs. task
  * interruption), and it also confines the shared, not-thread-safe
- * [[StandardJavaFileManager]] (used for platform classes and output) to one
+ * [[StandardJavaFileManager]] (used for platform-class lookups) to one
  * thread, so no extra locking is needed. Caller threads only build the source and
  * capture the context classloader, then await the result.
  *
@@ -1029,8 +1026,9 @@ object JdkCodeCompiler extends CodeCompiler with Logging {
    * classpath, mirroring how Janino resolves referenced classes. This lets the JDK
    * compiler see exactly what Janino would - including classes that exist only on a
    * runtime loader (REPL-generated, Spark Connect session artifacts) and never on
-   * `java.class.path`. The platform classes (`java.*`, `jdk.*`) and compiled output
-   * still go through the wrapped [[StandardJavaFileManager]].
+   * `java.class.path`. Platform-class lookups (`java.*`, `jdk.*`) still go through
+   * the wrapped [[StandardJavaFileManager]]; compiled output is captured in
+   * [[InMemoryClassFile]] objects and never reaches it.
    */
   private class ClassLoaderFileManager(
       delegate: StandardJavaFileManager,

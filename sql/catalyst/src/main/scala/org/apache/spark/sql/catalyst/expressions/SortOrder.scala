@@ -194,7 +194,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val childCode = child.child.genCode(ctx)
     val input = childCode.value
-    // Use javaSourceName to emit the canonical binary form (e.g.
+    // Use javaSourceName to emit the binary name form (e.g.
     // `PrefixComparators$DoublePrefixComparator`); Janino loads that name directly,
     // and the JDK backend's rewriteInnerClassRefs converts it to the dotted source
     // form javac requires.

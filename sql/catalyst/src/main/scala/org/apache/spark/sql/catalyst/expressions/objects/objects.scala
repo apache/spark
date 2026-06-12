@@ -605,8 +605,9 @@ case class NewInstance(
   // JVM-form binary name (with `$` for inner classes); used where literal `$`
   // is intentional (e.g., Scala companion access `Foo$.MODULE$`).
   private val className = cls.getName
-  // Dotted Java-source FQN; required by the JDK compiler in `new X(...)`
-  // expressions and casts. Equal to `className` for top-level classes.
+  // The same binary name as `className`, routed through `javaSourceName` to mark
+  // it as a type reference the JDK backend rewrites to a javac-legal form at
+  // compile time (see JdkCodeCompiler.rewriteInnerClassRefs).
   private val javaSourceClassName = CodeGenerator.javaSourceName(cls)
 
   override def nullable: Boolean = needNullCheck
