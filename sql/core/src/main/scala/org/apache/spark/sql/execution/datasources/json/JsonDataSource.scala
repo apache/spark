@@ -146,11 +146,9 @@ abstract class JsonDataSource extends Serializable with Logging {
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
     // Each input is streamed lazily, carrying each record as its raw bytes in a fresh array (the
-    // line reader reuses one buffer, so a line is copied off it). The bytes are parsed downstream
-    // exactly as the scan parses a file: a byte-array parser auto-detects the charset when no
-    // `encoding` is set (so UTF-16/UTF-32 is read correctly, not just UTF-8), and a stream decoder
-    // applies the explicit `encoding` when one is given. An archive is read entry by entry; a loose
-    // file is read directly -- both yield the same record units, so all inputs feed one pass.
+    // line reader reuses one buffer, so a line is copied off it). The bytes are parsed below the
+    // way the matching scan parses them (see `recordParser`). An archive is read entry by entry; a
+    // loose file is read directly -- both yield the same record units, so all inputs feed one pass.
     val records: RDD[Array[Byte]] = streams.flatMap { stream =>
       val path = new Path(stream.getPath())
       def recordsOf(in: InputStream): Iterator[Array[Byte]] =
@@ -181,9 +179,26 @@ abstract class JsonDataSource extends Serializable with Logging {
     // Honor `samplingRatio` like the loose-file infer paths, so an archive samples its records like
     // a directory read rather than always reading every one.
     val sampled = JsonUtils.sample(records, parsedOptions)
-    val recordParser = encoding
-      .map(enc => CreateJacksonParser.bytes(enc, _: JsonFactory, _: Array[Byte]))
-      .getOrElse(CreateJacksonParser.bytes(_: JsonFactory, _: Array[Byte]))
+    // Parse each record exactly as its mode's scan does, so even an unusual `encoding` lands the
+    // same way. multiLine mirrors MultiLineJsonDataSource (`CreateJacksonParser.inputStream`): with
+    // `encoding` it decodes through an InputStreamReader of that charset -- accepting any JVM
+    // charset, like the scan, not just the `CharsetProvider` allow-list that `bytes(enc, ...)`
+    // enforces -- and with none it auto-detects. Line-delimited mirrors TextInputJsonDataSource
+    // (`CreateJacksonParser.text`): the byte-array/stream-decoder path, which already matches.
+    val recordParser: (JsonFactory, Array[Byte]) => JsonParser = if (multiLine) {
+      encoding match {
+        case Some(enc) =>
+          (factory, bytes) =>
+            CreateJacksonParser.inputStream(enc, factory, new ByteArrayInputStream(bytes))
+        case None =>
+          (factory, bytes) =>
+            CreateJacksonParser.inputStream(factory, new ByteArrayInputStream(bytes))
+      }
+    } else {
+      encoding
+        .map(enc => CreateJacksonParser.bytes(enc, _: JsonFactory, _: Array[Byte]))
+        .getOrElse(CreateJacksonParser.bytes(_: JsonFactory, _: Array[Byte]))
+    }
     SQLExecution.withSQLConfPropagated(sparkSession) {
       new JsonInferSchema(parsedOptions)
         .infer[Array[Byte]](sampled, recordParser, isReadFile = multiLine)

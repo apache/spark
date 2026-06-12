@@ -209,6 +209,27 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 
+  test("JSON: multiLine archive inference honors windows-1252 like a directory") {
+    // windows-1252 is allowed for multiLine reads but is outside CharsetProvider's allow-list, so
+    // decoding it through a stream decoder would fail with INVALID_PARAMETER_VALUE.CHARSET. The
+    // multiLine scan and a directory read decode it via a plain InputStreamReader, so archive
+    // inference must too -- accepting the same files rather than erroring.
+    val opts = Map("encoding" -> "windows-1252", "multiLine" -> "true")
+    val bytes = "{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}".getBytes("windows-1252")
+    withTempDir { dir =>
+      writeArchive(new File(dir, s"data.${archiveExtensions.head}"), Seq(entryName(0) -> bytes))
+      val schema = inferredSchema(Seq(dir.getCanonicalPath), opts)
+      withTempDir { looseDir =>
+        Files.write(new File(looseDir, entryName(0)).toPath, bytes)
+        val dirSchema = inferredSchema(Seq(looseDir.getCanonicalPath), opts)
+        assert(schema == dirSchema,
+          s"windows-1252 archive inference diverged; archive=$schema dir=$dirSchema")
+      }
+      assert(schema.fieldNames.toSet == Set("id", "name"),
+        s"expected id/name decoded from windows-1252, got $schema")
+    }
+  }
+
   // ----- JSON-specific read tests --------------------------------------------
 
   test("JSON: entries with differing fields union like a directory") {
