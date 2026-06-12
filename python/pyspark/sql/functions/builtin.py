@@ -21514,6 +21514,68 @@ def is_valid_variant(v: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    """
+    Removes fields or array elements from a variant at the given JSONPath locations.
+    Multiple paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are
+    skipped.
+
+    .. versionadded:: 5.0.0
+
+    Parameters
+    ----------
+    v : :class:`~pyspark.sql.Column` or str
+        a variant column or column name
+    paths : :class:`~pyspark.sql.Column` or str
+        one or more JSONPath deletion targets. A `str` is a literal path; a
+        :class:`~pyspark.sql.Column` supplies the path at runtime. A valid path
+        should start with `$` and is followed by one or more segments like
+        `[123]`, `.name`, `['name']`, or `["name"]`. The root path `$` is not
+        allowed.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        a variant column with the specified paths removed
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import lit, parse_json, to_json, variant_delete
+    >>> df = spark.createDataFrame([{
+    ...     'json': '''{ "a" : 1, "b" : 2, "c" : 3, "items" : [1, 2, 3] }''',
+    ...     'path': '$.a'
+    ... }])
+    >>> v = parse_json(df.json)
+    >>> df.select(to_json(variant_delete(v, lit(None), "$.a", "$.c")).alias("r")).collect()
+    [Row(r='{"b":2,"items":[1,2,3]}')]
+    >>> df.select(to_json(variant_delete(v, "$.missing")).alias("r")).collect()
+    [Row(r='{"a":1,"b":2,"c":3,"items":[1,2,3]}')]
+    >>> df.select(to_json(variant_delete(v, df.path)).alias("r")).collect()
+    [Row(r='{"b":2,"c":3,"items":[1,2,3]}')]
+    >>> df.select(to_json(variant_delete(v, "$.items[0]", "$.items[0]")).alias("r")).collect()
+    [Row(r='{"a":1,"b":2,"c":3,"items":[3]}')]
+    >>> df.select(variant_delete(lit(None), "$.a").alias("r")).collect()
+    [Row(r=None)]
+    """
+    from pyspark.sql.classic.column import _to_java_column, _to_seq
+
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    sc = _get_active_spark_context()
+
+    path_cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function(
+        "variant_delete",
+        _to_java_column(v),
+        _to_java_column(path_cols[0]),
+        _to_seq(sc, path_cols[1:], _to_java_column),
+    )
+
+
+@_try_remote_functions
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     """
     Extracts a sub-variant from `v` according to `path`, and then cast the sub-variant to
