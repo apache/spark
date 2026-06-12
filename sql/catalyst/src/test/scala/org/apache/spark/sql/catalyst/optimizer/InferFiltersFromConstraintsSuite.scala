@@ -35,6 +35,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         PushPredicateThroughNonJoin,
         InferFiltersFromConstraints,
         CombineFilters,
+        ConstantFolding,
         SimplifyBinaryComparison,
         BooleanSimplification,
         PruneFilters) :: Nil
@@ -399,4 +400,52 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     comparePlans(optimizedQuery, correctAnswer)
     comparePlans(InferFiltersFromConstraints(optimizedQuery), correctAnswer)
   }
+
+  test("correlated range predicate in left-outer join ON clause is pushed to right side " +
+    "when left attr is bound to a literal") {
+    testRangePredicatePushDown(LeftOuter)
+  }
+
+  test("correlated range predicate in inner join ON clause is pushed to right side " +
+    "when left attr is bound to a literal") {
+    testRangePredicatePushDown(Inner)
+  }
+
+  private def testRangePredicatePushDown(joinType: JoinType): Unit = {
+    // Simulates: SELECT * FROM a JOIN b ON a.key = b.key AND b.v >= a.k AND b.v <= a.k + 10
+    // WHERE a.k = 5
+    // The constant binding a.k = 5 should be substituted into the range predicates, producing
+    // b.v >= 5 and b.v <= 15 that get pushed into the right scan.
+    val left = LocalRelation($"k".int, $"key".int).subquery("a")
+    val right = LocalRelation($"v".int, $"key".int).subquery("b")
+
+    val joinCond = ("a.key".attr === "b.key".attr) &&
+      ("b.v".attr >= "a.k".attr) &&
+      ("b.v".attr <= ("a.k".attr + 10))
+
+    val originalQuery = left
+      .where("a.k".attr === 5)
+      .join(right, joinType, Some(joinCond))
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // The optimized right side must carry the inferred range filters.
+    optimized.foreach {
+      case Join(_, rightChild, `joinType`, _, _) =>
+        val rightFilters = rightChild.collect { case Filter(cond, _) => cond }
+        val allConds = rightFilters.flatMap(splitConjunctivePredicates)
+        // b.v >= 5 and b.v <= 15 (or their canonicalized equivalents) must appear
+        assert(allConds.exists {
+          case GreaterThanOrEqual(_: Attribute, Literal(v, IntegerType)) => v == 5
+          case _ => false
+        }, s"Expected b.v >= 5 in right filter; found: $allConds")
+        assert(allConds.exists {
+          case LessThanOrEqual(_: Attribute, Literal(v, IntegerType)) => v == 15
+          case _ => false
+        }, s"Expected b.v <= 15 in right filter; found: $allConds")
+      case _ =>
+    }
+  }
+
 }

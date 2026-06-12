@@ -427,4 +427,76 @@ class ConstraintPropagationSuite extends PlanTest {
       assert(aliasedRelation.analyze.constraints.isEmpty)
     }
   }
+
+  test("infer range constraints by substituting attr=literal bindings") {
+    // When a.pt = '20260610' (modeled as a.k = 5) and b.v >= a.k are both present,
+    // inferAdditionalConstraints should emit b.v >= 5.
+    val tr = LocalRelation($"k".int, $"v".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+
+    val constraints = ExpressionSet(Seq(
+      EqualTo(a, Literal(5)),
+      GreaterThanOrEqual(b, a),
+      LessThanOrEqual(b, Add(a, Literal(10)))))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferAdditionalConstraints(constraints)
+
+    // b >= 5 must be inferred
+    assert(inferred.exists {
+      case GreaterThanOrEqual(attr: Attribute, Literal(v, IntegerType)) =>
+        attr.semanticEquals(b) && v == 5
+      case _ => false
+    }, s"Expected b >= 5 in inferred constraints; got: $inferred")
+
+    // b <= 15 must be inferred (a + 10 with a=5, i.e. Add(Literal(5), Literal(10)))
+    assert(inferred.exists {
+      case LessThanOrEqual(attr: Attribute, rhs) if attr.semanticEquals(b) =>
+        // rhs is either Literal(15) or Add(Literal(5), Literal(10)) - both are foldable
+        rhs.foldable && rhs.eval(null) == 15
+      case _ => false
+    }, s"Expected b <= 15 in inferred constraints; got: $inferred")
+  }
+
+  test("infer range constraints: literal on left side of EqualTo") {
+    val tr = LocalRelation($"k".int, $"v".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+
+    // Literal appears on the left: 5 = a.k
+    val constraints = ExpressionSet(Seq(
+      EqualTo(Literal(5), a),
+      GreaterThanOrEqual(b, a)))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferAdditionalConstraints(constraints)
+
+    assert(inferred.exists {
+      case GreaterThanOrEqual(attr: Attribute, Literal(v, IntegerType)) =>
+        attr.semanticEquals(b) && v == 5
+      case _ => false
+    }, s"Expected b >= 5 in inferred constraints; got: $inferred")
+  }
+
+  test("non-deterministic predicate is not inferred after attr=literal substitution") {
+    val tr = LocalRelation($"k".int, $"v".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+
+    // b >= a.k + Rand(); after substituting a.k=5 the result is non-deterministic
+    val randExpr = Add(a, Cast(Rand(0L), IntegerType))
+    val constraints = ExpressionSet(Seq(
+      EqualTo(a, Literal(5)),
+      GreaterThanOrEqual(b, randExpr)))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferAdditionalConstraints(constraints)
+
+    // Must not emit b >= (5 + Rand())
+    assert(!inferred.exists {
+      case GreaterThanOrEqual(attr: Attribute, _) => attr.semanticEquals(b)
+      case _ => false
+    }, s"Should not infer non-deterministic constraint; got: $inferred")
+  }
 }
