@@ -2020,6 +2020,30 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-57360: generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
+  }
+
+  test("SPARK-57360: REPLACE TABLE - generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
+  }
+
   test("SPARK-44313: generation expression validation passes when there is a char/varchar column") {
     val tblName = "my_tab"
     // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
