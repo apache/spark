@@ -200,12 +200,18 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
 
   /**
-   * Search for a selective filtering operation or a precomputed input carrying source statistics.
+   * Search for a selective filtering operation, a LocalRelation, or a checkpoint-derived
+   * LogicalRDD.
    *
-   * A LocalRelation, or a LogicalRDD created by checkpoint() or localCheckpoint(), can be reused
-   * as a broadcast build side for DPP without evaluating an upstream computation again.
+   * LocalRelation rows are already locally available. A checkpoint-derived LogicalRDD establishes
+   * an explicit checkpoint boundary and can be used as a broadcast build side for DPP without
+   * evaluating the computation upstream of that boundary again.
+   *
+   * InMemoryRelation is intentionally excluded because cache() and persist() are lazy: its
+   * presence does not guarantee the cached data has been materialized, and missing or evicted
+   * blocks may require evaluating the upstream computation again.
    */
-  private def hasSelectivePredicateOrMaterializedInput(plan: LogicalPlan): Boolean = {
+  private def hasSelectivePredicateOrLocalOrCheckpointedInput(plan: LogicalPlan): Boolean = {
     plan.exists {
       case f: Filter => isLikelySelective(f.condition)
       case _: LocalRelation => true
@@ -218,10 +224,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * To be able to prune partitions on a join key, the filtering side needs to
    * meet the following requirements:
    *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate or a materialized input with known statistics
+   *   (2) it needs to contain a selective predicate, a LocalRelation, or a checkpoint-derived
+   *       LogicalRDD
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicateOrMaterializedInput(plan)
+    !plan.isStreaming && hasSelectivePredicateOrLocalOrCheckpointedInput(plan)
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
