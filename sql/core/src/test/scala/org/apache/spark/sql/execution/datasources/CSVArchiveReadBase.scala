@@ -44,12 +44,14 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
-  // CSV infers its schema from row content, so it opts into the shared inference tests; inference
-  // is triggered by the `inferSchema` option. CSV cannot represent nested types, so it leaves
-  // `supportsComplexTypes` at its false default.
-  override protected def supportsSchemaInference: Boolean = true
-
+  // CSV infers its schema from row content (supportsSchemaInference defaults true); inference is
+  // triggered by the `inferSchema` option. CSV is positional/header-keyed and cannot represent
+  // nested types, so it opts out of the schema-merge and complex-type tests.
   override protected def inferenceOptions: Map[String, String] = Map("inferSchema" -> "true")
+
+  override protected def supportsComplexTypes: Boolean = false
+
+  override protected def supportsSchemaMerge: Boolean = false
 
   override protected def encodeFile(
       df: DataFrame,
@@ -75,30 +77,6 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
   /** CSV bytes for `rows`, prefixed with a `cols` header line when [[header]] is set. */
   private def csvEntry(cols: String, rows: String*): Array[Byte] =
     csvBytes((if (header) cols +: rows else rows).mkString("", "\n", "\n"))
-
-  // The format-agnostic inference tests -- archive-vs-directory parity, all-archive-formats parity,
-  // corrupt-archive skip, and cross-entry type widening -- run from ArchiveReadSuiteBase (CSV opts
-  // in via supportsSchemaInference). The tests below cover CSV-specific inference behavior.
-
-  test("CSV: inference merges archive entries with loose files in the same directory") {
-    withTempDir { dir =>
-      val inArchive = sampleDf((1, "Alice"), (2, "Bob"))
-      val loose = sampleDf((3, "Carol"))
-      writeArchive(new File(dir, s"data.${archiveExtensions.head}"),
-        Seq(entryName(0) -> encodeFile(inArchive)))
-      Files.write(new File(dir, s"loose.$fileExtension").toPath, encodeFile(loose))
-      val schema = spark.read.options(readOptions).option("inferSchema", "true")
-        .format(format).load(dir.getCanonicalPath).schema
-      withTempDir { looseDir =>
-        Files.write(new File(looseDir, entryName(0)).toPath, encodeFile(inArchive))
-        Files.write(new File(looseDir, s"loose.$fileExtension").toPath, encodeFile(loose))
-        val expected = spark.read.options(readOptions).option("inferSchema", "true")
-          .format(format).load(looseDir.getCanonicalPath).schema
-        assert(schema == expected,
-          s"mixed archive+loose inference diverged from directory; got $schema, want $expected")
-      }
-    }
-  }
 
   test("CSV: a column empty in the archive but typed in a loose file is not collapsed to string") {
     // One inference pass over all inputs keeps the empty column NullType until the end, so it

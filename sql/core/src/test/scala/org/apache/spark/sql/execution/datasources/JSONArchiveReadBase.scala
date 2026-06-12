@@ -44,12 +44,10 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
-  // JSON infers its schema from record content and represents nested structs, so it opts into the
-  // shared inference and complex-type tests. Inference needs no trigger option, so the inherited
-  // `inferenceOptions` keeps its empty default.
-  override protected def supportsSchemaInference: Boolean = true
-
-  override protected def supportsComplexTypes: Boolean = true
+  // JSON infers its schema from record content, represents nested structs, and unions fields by
+  // name, so it keeps all three capability defaults on (supportsSchemaInference,
+  // supportsComplexTypes, supportsSchemaMerge). Inference needs no trigger option, so the inherited
+  // `inferenceOptions` stays empty.
 
   override protected def encodeFile(
       df: DataFrame,
@@ -73,31 +71,11 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   protected def jsonBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)
 
   // ----- JSON-specific schema inference --------------------------------------
-  // The format-agnostic parity/widening/corrupt-skip and complex-type tests run from
-  // ArchiveReadSuiteBase (gated by the `supports*` hooks above); the tests below assert
-  // JSON-specific inference behavior -- NullType canonicalization and field-union merging -- that
-  // has no format-agnostic analogue. They use the shared `inferredSchema` helper from the base.
-
-  test("JSON: inference merges archive entries with loose files in the same directory") {
-    withTempDir { dir =>
-      val inArchive = jsonBytes("{\"id\":1,\"name\":\"Alice\"}\n{\"id\":2,\"name\":\"Bob\"}\n")
-      // The loose file drops `name` (which the archive entry has) and adds `age` (which it lacks);
-      // JSON's single inference pass unions both by field name, exactly as a directory read does.
-      val loose = jsonBytes("{\"id\":3,\"age\":30}\n")
-      writeArchive(new File(dir, s"data.${archiveExtensions.head}"), Seq(entryName(0) -> inArchive))
-      Files.write(new File(dir, s"loose.$fileExtension").toPath, loose)
-      val schema = inferredSchema(Seq(dir.getCanonicalPath))
-      assert(schema.fieldNames.toSet == Set("id", "name", "age"),
-        s"expected the union of the entry and loose fields, got $schema")
-      withTempDir { looseDir =>
-        Files.write(new File(looseDir, entryName(0)).toPath, inArchive)
-        Files.write(new File(looseDir, s"loose.$fileExtension").toPath, loose)
-        val expected = inferredSchema(Seq(looseDir.getCanonicalPath))
-        assert(schema == expected,
-          s"mixed archive+loose inference diverged from directory; got $schema, want $expected")
-      }
-    }
-  }
+  // The format-agnostic parity/widening/corrupt-skip, schema-merge (differing-field union), and
+  // complex-type tests run from ArchiveReadSuiteBase (gated by the `supports*` hooks above); the
+  // tests below assert JSON-specific inference behavior -- NullType canonicalization, null-in-loose
+  // widening, multi-line merging, and charset handling -- that has no format-agnostic analogue.
+  // They use the shared `inferredSchema` helper from the base.
 
   test("JSON: a column null across all archive entries infers as string") {
     // Field `v` is null in every record across both entries, so each per-record type is NullType.
@@ -210,14 +188,6 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
   }
 
   // ----- JSON-specific read tests --------------------------------------------
-
-  test("JSON: entries with differing fields union like a directory") {
-    assertArchiveMatchesDir(
-      Seq(
-        "a.json" -> jsonBytes("{\"id\":1,\"name\":\"Alice\"}\n{\"id\":2,\"name\":\"Bob\"}\n"),
-        // No "name" field: the schema's "name" column must read back as null for this entry.
-        "b.json" -> jsonBytes("{\"id\":3}\n")))
-  }
 
   test("JSON: multi-line documents match a directory read") {
     assertArchiveMatchesDir(
