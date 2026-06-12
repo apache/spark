@@ -20,9 +20,10 @@ package org.apache.spark.sql.connect
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{classic, connect, SparkSession}
 import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2IncrementallyConstructedQueryTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests}
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 
 /**
  * Connect-mode counterpart of [[org.apache.spark.sql.connector.DataSourceV2DataFrameSuite]].
@@ -54,10 +55,21 @@ class DataSourceV2DataFrameConnectSuite
 
   override protected def testPrefix: String = "[connect] "
 
+  protected def getServerSession(clientSession: SparkSession): classic.SparkSession = {
+    val connectSession = clientSession.asInstanceOf[connect.SparkSession]
+    val userId = connectSession.client.userId
+    val sessionId = connectSession.sessionId
+    val key = SessionKey(userId, sessionId)
+    SparkConnectService.sessionManager
+      .getIsolatedSessionIfPresent(key)
+      .get
+      .session
+  }
+
   override protected def getTableCatalog[C <: TableCatalog: ClassTag](
       session: SparkSession,
       catalogName: String): C = {
-    val catalog = classicSpark.sessionState.catalogManager.catalog(catalogName)
+    val catalog = getServerSession(session).sessionState.catalogManager.catalog(catalogName)
     val ct = implicitly[ClassTag[C]]
     require(
       ct.runtimeClass.isInstance(catalog),
