@@ -23,8 +23,6 @@ on:
   push:
     branches:
       - master
-      # TEMP: validate this workflow on the fork, remove before merge
-      - pages-reuse-doc-image-dev1
 
 concurrency:
   group: 'docs preview'
@@ -46,7 +44,7 @@ jobs:
       RELEASE_VERSION: 'In-Progress'
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
-    # TEMP: job-level repository guard removed to run on the fork, restore before merge
+    if: github.repository == 'apache/spark'
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v6
@@ -80,15 +78,11 @@ jobs:
           cd docs
           SKIP_RDOC=1 bundle exec jekyll build
       - name: Setup Pages
-        # TEMP: skip Pages API calls on the fork (Pages not enabled there), remove the if before merge
-        if: github.repository == 'apache/spark'
         uses: actions/configure-pages@v6
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
           path: 'docs/_site'
       - name: Deploy to GitHub Pages
-        # TEMP: skip deployment on the fork, remove the if before merge
-        if: github.repository == 'apache/spark'
         id: deployment
         uses: actions/deploy-pages@v5
