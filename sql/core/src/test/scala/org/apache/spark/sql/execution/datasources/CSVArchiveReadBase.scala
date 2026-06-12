@@ -44,6 +44,13 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
+  // CSV infers its schema from row content, so it opts into the shared inference tests; inference
+  // is triggered by the `inferSchema` option. CSV cannot represent nested types, so it leaves
+  // `supportsComplexTypes` at its false default.
+  override protected def supportsSchemaInference: Boolean = true
+
+  override protected def inferenceOptions: Map[String, String] = Map("inferSchema" -> "true")
+
   override protected def encodeFile(
       df: DataFrame,
       writeOptions: Map[String, String]): Array[Byte] = {
@@ -65,72 +72,13 @@ trait CSVArchiveReadBase extends ArchiveReadSuiteBase {
   /** Raw CSV bytes, for tests that need precise control over the row layout. */
   protected def csvBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)
 
-  test("CSV: archive infers the same schema as a directory of the same files") {
-    val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
-      .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
-    withArchiveFile() { archive =>
-      writeArchive(archive, entries)
-      val archiveSchema = spark.read.options(readOptions).option("inferSchema", "true")
-        .format(format).load(archive.getCanonicalPath).schema
-      withTempDir { dir =>
-        entries.foreach { case (n, b) => Files.write(new File(dir, n).toPath, b) }
-        val dirSchema = spark.read.options(readOptions).option("inferSchema", "true")
-          .format(format).load(dir.getCanonicalPath).schema
-        assert(archiveSchema == dirSchema,
-          s"inference parity broken; archive=$archiveSchema dir=$dirSchema")
-      }
-    }
-  }
-
-  test("CSV: all archive formats infer the same schema") {
-    val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
-      .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
-    val schemas = archiveExtensions.map { ext =>
-      withArchiveFile(ext) { archive =>
-        writeArchive(archive, entries)
-        spark.read.options(readOptions).option("inferSchema", "true")
-          .format(format).load(archive.getCanonicalPath).schema
-      }
-    }
-    assert(schemas.distinct.size == 1,
-      s"archive formats inferred different schemas: ${archiveExtensions.zip(schemas)}")
-  }
-
   /** CSV bytes for `rows`, prefixed with a `cols` header line when [[header]] is set. */
   private def csvEntry(cols: String, rows: String*): Array[Byte] =
     csvBytes((if (header) cols +: rows else rows).mkString("", "\n", "\n"))
 
-  test("CSV: inference skips a corrupt archive among good ones (ignoreCorruptFiles)") {
-    withTempDir { dir =>
-      val good = sampleDf((1, "Alice"), (2, "Bob"))
-      writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
-        Seq(entryName(0) -> encodeFile(good)))
-      writeCorruptArchive(new File(dir, s"bad.$corruptArchiveExtension"))
-      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
-        val schema = spark.read.options(readOptions).option("inferSchema", "true")
-          .format(format).load(dir.getCanonicalPath).schema
-        withTempDir { onlyGood =>
-          Files.write(new File(onlyGood, entryName(0)).toPath, encodeFile(good))
-          val expected = spark.read.options(readOptions).option("inferSchema", "true")
-            .format(format).load(onlyGood.getCanonicalPath).schema
-          assert(schema == expected,
-            s"corrupt archive not skipped during inference; got $schema, want $expected")
-        }
-      }
-    }
-  }
-
-  test("CSV: inference widens a column's type across archive entries") {
-    withArchiveFile() { archive =>
-      writeArchive(archive, Seq(
-        entryName(0) -> csvEntry("c", "1", "2"),
-        entryName(1) -> csvEntry("c", "x")))
-      val schema = spark.read.options(readOptions).option("inferSchema", "true")
-        .format(format).load(archive.getCanonicalPath).schema
-      assert(schema.length == 1 && schema.head.dataType == StringType,
-        s"expected the column widened to string across entries, got $schema")
-    }
-  }
+  // The format-agnostic inference tests -- archive-vs-directory parity, all-archive-formats parity,
+  // corrupt-archive skip, and cross-entry type widening -- run from ArchiveReadSuiteBase (CSV opts
+  // in via supportsSchemaInference). The tests below cover CSV-specific inference behavior.
 
   test("CSV: inference merges archive entries with loose files in the same directory") {
     withTempDir { dir =>

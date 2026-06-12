@@ -40,6 +40,10 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       path: Path): Boolean = {
     val parsedOptions = getJsonOptions(sparkSession, options)
+    if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+      // A tar archive is read as one sequential stream (entry by entry), so it is never split.
+      return false
+    }
     JsonDataSource(parsedOptions).isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
@@ -48,7 +52,8 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = getJsonOptions(sparkSession, options)
-    JsonDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
+    JsonDataSource(parsedOptions)
+      .inferSchema(sparkSession, files, parsedOptions, supportsArchiveScan = true)
   }
 
   override def prepareWrite(
@@ -102,11 +107,16 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
         parsedOptions,
         allowArrayAsStructs = true,
         filters)
-      JsonDataSource(parsedOptions).readFile(
-        broadcastedHadoopConf.value.value,
-        file,
-        parser,
-        requiredSchema)
+      if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+        JsonDataSource(parsedOptions).readArchive(
+          broadcastedHadoopConf.value.value, file, parser, requiredSchema)
+      } else {
+        JsonDataSource(parsedOptions).readFile(
+          broadcastedHadoopConf.value.value,
+          file,
+          parser,
+          requiredSchema)
+      }
     }
   }
 
