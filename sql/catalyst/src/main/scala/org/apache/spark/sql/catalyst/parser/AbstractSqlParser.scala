@@ -72,6 +72,16 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
     }
   }
 
+  /** Creates a TemporalIdentifier for a given SQL string */
+  override def parseTemporalTableIdentifier(sqlText: String): TemporalIdentifier = {
+    parse(sqlText) { parser =>
+      val ctx = parser.singleTemporalTableIdentifier()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitSingleTemporalTableIdentifier(ctx)
+      }
+    }
+  }
+
   /** Creates LogicalPlan for a given SQL string of query. */
   override def parseQuery(sqlText: String): LogicalPlan =
     parse(sqlText) { parser =>

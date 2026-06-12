@@ -26,7 +26,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
@@ -157,6 +157,28 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     val res = transform(proto.Relation.newBuilder.setRead(readWithTable).build())
     assert(res !== null)
     assert(res.nodeName == "UnresolvedRelation")
+  }
+
+  test("Read with at syntax time travel") {
+    val read = proto.Read
+      .newBuilder()
+      .setNamedTable(proto.Read.NamedTable.newBuilder.setUnparsedIdentifier("name@v1").build())
+      .build()
+    val res = transform(proto.Relation.newBuilder.setRead(read).build())
+    res match {
+      case RelationTimeTravel(relation: UnresolvedRelation, timestamp, version) =>
+        assert(relation.multipartIdentifier === Seq("name"))
+        assert(timestamp.isEmpty)
+        assert(version === Some("1"))
+      case other => fail(s"Expected RelationTimeTravel but got: $other")
+    }
+
+    // Streaming reads do not support time travel.
+    val streamingRead = read.toBuilder.setIsStreaming(true).build()
+    val e = intercept[AnalysisException] {
+      transform(proto.Relation.newBuilder.setRead(streamingRead).build())
+    }
+    assert(e.getCondition === "UNSUPPORTED_FEATURE.TIME_TRAVEL")
   }
 
   test("Simple Table with options") {

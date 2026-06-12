@@ -55,7 +55,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, C
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, QuotingUtils}
 import org.apache.spark.sql.classic.{Catalog, DataFrameWriter, Dataset, MergeIntoWriter, RelationalGroupedDataset, SparkSession, TypedAggUtils, UserDefinedFunctionUtils}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.client.arrow.ArrowSerializer
@@ -1671,10 +1671,17 @@ class SparkConnectPlanner(
 
     rel.getReadTypeCase match {
       case proto.Read.ReadTypeCase.NAMED_TABLE =>
-        UnresolvedRelation(
-          parser.parseMultipartIdentifier(rel.getNamedTable.getUnparsedIdentifier),
+        val temporalIdent =
+          parser.parseTemporalTableIdentifier(rel.getNamedTable.getUnparsedIdentifier)
+        if (temporalIdent.isTemporal && rel.getIsStreaming) {
+          throw QueryCompilationErrors.timeTravelUnsupportedError(
+            QuotingUtils.quoteNameParts(temporalIdent.nameParts))
+        }
+        val relation = UnresolvedRelation(
+          temporalIdent.nameParts,
           new CaseInsensitiveStringMap(rel.getNamedTable.getOptionsMap),
           isStreaming = rel.getIsStreaming)
+        temporalIdent.wrapTimeTravel(relation)
 
       case proto.Read.ReadTypeCase.DATA_SOURCE if !rel.getIsStreaming =>
         val reader = session.read

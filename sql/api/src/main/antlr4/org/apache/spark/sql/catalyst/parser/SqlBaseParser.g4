@@ -201,6 +201,10 @@ singleTableIdentifier
     : tableIdentifier EOF
     ;
 
+singleTemporalTableIdentifier
+    : temporalTableIdentifier EOF
+    ;
+
 singleMultipartIdentifier
     : multipartIdentifier EOF
     ;
@@ -1133,7 +1137,7 @@ relationPrimary
     : streamRelationPrimary                                 #streamRelation
     | identifierReference changesClause
       optionsClause? tableAlias                             #changelogTableName
-    | identifierReference temporalClause?
+    | temporalTableIdentifierReference temporalClause?
       optionsClause? sample? watermarkClause? tableAlias    #tableName
     | LEFT_PAREN query RIGHT_PAREN sample? watermarkClause?
       tableAlias                                            #aliasedQuery
@@ -1237,6 +1241,18 @@ multipartIdentifierProperty
 
 tableIdentifier
     : (db=errorCapturingIdentifier DOT)? table=errorCapturingIdentifier
+    ;
+
+temporalTableIdentifier
+    : id=multipartIdentifier AT_SIGN timestamp=INTEGER_VALUE
+    | id=multipartIdentifier AT_VERSION version
+    | id=multipartIdentifier
+    ;
+
+temporalTableIdentifierReference
+    : identifierReference AT_SIGN timestamp=INTEGER_VALUE
+    | identifierReference AT_VERSION version
+    | identifierReference
     ;
 
 functionIdentifier

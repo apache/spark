@@ -590,6 +590,8 @@ OPERATOR_PIPE: '|>';
 HAT: '^';
 COLON: ':';
 DOUBLE_COLON: '::';
+AT_SIGN: '@';
+AT_VERSION: '@V';
 ARROW: '->';
 FAT_ARROW : '=>';
 HENT_START: '/*+';

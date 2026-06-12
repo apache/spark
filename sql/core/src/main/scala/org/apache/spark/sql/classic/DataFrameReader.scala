@@ -315,10 +315,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession)
   /** @inheritdoc */
   def table(tableName: String): DataFrame = {
     assertNoSpecifiedSchema("table")
-    val multipartIdentifier =
-      sparkSession.sessionState.sqlParser.parseMultipartIdentifier(tableName)
-    Dataset.ofRows(sparkSession, UnresolvedRelation(multipartIdentifier,
-      new CaseInsensitiveStringMap(extraOptions.toMap.asJava)))
+    val temporalIdent =
+      sparkSession.sessionState.sqlParser.parseTemporalTableIdentifier(tableName)
+    val relation = UnresolvedRelation(temporalIdent.nameParts,
+      new CaseInsensitiveStringMap(extraOptions.toMap.asJava))
+    Dataset.ofRows(sparkSession, temporalIdent.wrapTimeTravel(relation))
   }
 
   /** @inheritdoc */

@@ -70,6 +70,16 @@ trait ParserInterface extends DataTypeParserInterface {
   def parseMultipartIdentifier(sqlText: String): Seq[String]
 
   /**
+   * Parse a string to a [[TemporalIdentifier]].
+   */
+  @throws[ParseException]("Text cannot be parsed to a temporal table identifier")
+  def parseTemporalTableIdentifier(sqlText: String): TemporalIdentifier = {
+    // Default implementation does not recognize the time travel suffix. Concrete
+    // implementations can override this to support it.
+    TemporalIdentifier(parseMultipartIdentifier(sqlText), None, None)
+  }
+
+  /**
    * Parse a query string to a [[LogicalPlan]].
    */
   @throws[ParseException]("Text cannot be parsed to a LogicalPlan")
