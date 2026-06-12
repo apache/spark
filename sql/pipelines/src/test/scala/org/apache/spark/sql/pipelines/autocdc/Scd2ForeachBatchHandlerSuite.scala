@@ -174,6 +174,55 @@ class Scd2ForeachBatchHandlerSuite
     checkAnswer(targetTable, targetRow(1, "old", 10L, null, 10L))
   }
 
+  test("a record with a null key fails the microbatch without applying any changes") {
+    createAuxTable()
+    createTargetTable(targetRow(1, "old", 10L, null, 10L))
+
+    val batch = microbatchOf(sourceSchema)(Row(null, "bad", 10L, false))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        exec.execute(batch, batchId = 7L)
+      },
+      condition = "AUTOCDC_MICROBATCH_VALIDATION.NULL_KEY",
+      sqlState = "22000",
+      parameters = Map(
+        "tableName" -> defaultTargetTableIdentifier.quotedString,
+        "batchId" -> "7",
+        "nullKeyCounts" -> "`id`=1"
+      )
+    )
+
+    assert(auxTable.collect().isEmpty)
+    checkAnswer(targetTable, targetRow(1, "old", 10L, null, 10L))
+  }
+
+  test("an empty microbatch leaves both tables unchanged") {
+    createAuxTable()
+    createTargetTable(targetRow(1, "a", 10L, null, 10L))
+
+    runBatch(2L)() // zero source rows
+
+    checkAnswer(targetTable, targetRow(1, "a", 10L, null, 10L))
+    assert(auxTable.collect().isEmpty)
+  }
+
+  test("an empty microbatch garbage-collects a stale aux row from a prior batch") {
+    // Batch 1: a late upsert logically deletes a tombstone, stamping deletedByBatchId=1.
+    createAuxTable()
+    createTargetTable()
+    runBatch(1L)(del(1, 20L))
+    runBatch(2L)(upsert(1, "x", 10L))
+    checkAnswer(auxTable, auxRow(1, null, 20L, 20L, 20L, 2L)) // tombstone stamped, not yet GC'd
+
+    // Batch 3: empty microbatch - no new work, but the GC clause still sweeps the aux table.
+    // The tombstone (deletedByBatchId=2, not equal to current batchId=3) is physically removed.
+    runBatch(3L)()
+
+    assert(auxTable.collect().isEmpty)
+    checkAnswer(targetTable, targetRow(1, "x", 10L, 20L, 10L))
+  }
+
   test("inserting a new key creates an open current record") {
     createAuxTable()
     createTargetTable()
@@ -372,6 +421,32 @@ class Scd2ForeachBatchHandlerSuite
     assert(auxTable.collect().isEmpty)
   }
 
+  test("two late events in one batch each bisect a distinct closed target row") {
+    createAuxTable()
+    createTargetTable(
+      targetRow(1, "a", 1L, 5L, 1L),
+      targetRow(1, "b", 5L, 10L, 5L),
+      targetRow(1, "c", 10L, 20L, 10L),
+      targetRow(1, "d", 20L, null, 20L)
+    )
+
+    // Late x at seq=7 bisects [5,10); late y at seq=15 bisects [10,20) — both in the same batch.
+    runBatch(5L)(upsert(1, "x", 7L), upsert(1, "y", 15L))
+
+    checkAnswer(
+      targetTable,
+      Seq(
+        targetRow(1, "a", 1L, 5L, 1L),
+        targetRow(1, "b", 5L, 7L, 5L),
+        targetRow(1, "x", 7L, 10L, 7L),
+        targetRow(1, "c", 10L, 15L, 10L),
+        targetRow(1, "y", 15L, 20L, 15L),
+        targetRow(1, "d", 20L, null, 20L)
+      )
+    )
+    assert(auxTable.collect().isEmpty)
+  }
+
   test("re-inserting a key after it was deleted opens a new current record") {
     createAuxTable(auxRow(1, null, 20L, 20L, 20L, null))
     createTargetTable()
@@ -462,7 +537,7 @@ class Scd2ForeachBatchHandlerSuite
     )
   }
 
-  test("reprocessing an update microbatch is idempotent") {
+  test("reprocessing an update microbatch leaves both tables unchanged") {
     createAuxTable()
     createTargetTable(targetRow(1, "a", 10L, null, 10L))
 
@@ -478,7 +553,7 @@ class Scd2ForeachBatchHandlerSuite
     assert(auxTable.collect().isEmpty)
   }
 
-  test("reprocessing a delete microbatch is idempotent") {
+  test("reprocessing a delete microbatch leaves both tables unchanged") {
     createAuxTable()
     createTargetTable(targetRow(1, "a", 10L, null, 10L))
 
@@ -488,7 +563,7 @@ class Scd2ForeachBatchHandlerSuite
     assert(auxTable.collect().isEmpty)
   }
 
-  test("reprocessing a microbatch of repeated values is idempotent") {
+  test("reprocessing a microbatch of repeated values leaves both tables unchanged") {
     createAuxTable()
     createTargetTable()
 
@@ -506,7 +581,7 @@ class Scd2ForeachBatchHandlerSuite
     )
   }
 
-  test("reprocessing a delete of an unknown key is idempotent") {
+  test("reprocessing a delete of an unknown key leaves both tables unchanged") {
     createAuxTable()
     createTargetTable()
 
