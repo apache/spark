@@ -764,7 +764,7 @@ autoCdcBody
     ;
 
 autoCdcParameters
-    : FROM source=relation
+    : FROM source=relationPrimary
         KEYS LEFT_PAREN keys=multipartIdentifierList RIGHT_PAREN
         (autoCdcDeleteClause
         | autoCdcSequenceByClause
@@ -2002,8 +2002,8 @@ ansiNonReserved
     | ASC
     | ASENSITIVE
     | AT
-    | AUTO
     | ATOMIC
+    | AUTO
     | BEGIN
     | BERNOULLI
     | BETWEEN
@@ -2389,7 +2389,6 @@ nonReserved
     | APPLY
     | APPROX
     | ARCHIVE
-    | AUTO
     | ARRAY
     | AS
     | ASC
@@ -2397,6 +2396,7 @@ nonReserved
     | AT
     | ATOMIC
     | AUTHORIZATION
+    | AUTO
     | BEGIN
     | BERNOULLI
     | BETWEEN
@@ -2696,9 +2696,9 @@ nonReserved
     | SECOND
     | SECONDS
     | SECURITY
-    | SEQUENCE
     | SELECT
     | SEPARATED
+    | SEQUENCE
     | SERDE
     | SERDEPROPERTIES
     | SESSION_USER

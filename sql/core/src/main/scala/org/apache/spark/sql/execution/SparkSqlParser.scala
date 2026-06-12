@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryParsingErrors}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
@@ -1584,101 +1585,30 @@ class SparkSqlAstBuilder extends AstBuilder {
     )
   }
 
-  override def visitCreateStreamingTableAutoCdc(
-      ctx: CreateStreamingTableAutoCdcContext): LogicalPlan = withOrigin(ctx) {
-    val headerCtx = ctx.createPipelineDatasetHeader()
-
-    if (headerCtx.materializedView() != null) {
-      throw operationNotAllowed(
-        "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW.", ctx)
-    }
-
+  /**
+   * Shared helper for pipeline dataset creation statements (CREATE STREAMING TABLE,
+   * CREATE MATERIALIZED VIEW, CREATE STREAMING TABLE ... FLOW AUTO CDC).
+   *
+   * Validates and extracts column definitions, partitioning, and table spec from the common
+   * grammar elements shared by these statements.
+   *
+   * @return (colDefs, partitioning, spec, ifNotExists, tableIdent)
+   */
+  private def parsePipelineDatasetPrelude(
+      syntaxTypeErrorStr: String,
+      headerCtx: CreatePipelineDatasetHeaderContext,
+      tableProviderCtx: TableProviderContext,
+      tableElementListCtx: TableElementListContext,
+      createTableClausesCtx: CreateTableClausesContext,
+      ctx: ParserRuleContext): (
+      Seq[ColumnDefinition],
+      Seq[Transform],
+      TableSpec,
+      Boolean,
+      LogicalPlan) = {
     val ifNotExists = headerCtx.EXISTS() != null
-    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
-    val (colDefs, colConstraints) = Option(ctx.tableElementList()).map(visitTableElementList)
-      .getOrElse((Nil, Nil))
-
-    if (colConstraints.nonEmpty) {
-      throw operationNotAllowed(
-        "Pipeline datasets do not currently support column constraints.", ctx)
-    }
-
-    val (partTransforms, partCols, bucketSpec,
-    properties, options, location, comment, collation, serdeInfoOpt,
-    clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
-
-    val partitioning =
-      partitionExpressions(partTransforms, partCols, ctx) ++
-        clusterBySpec.map(_.asTransform)
-
-    if (bucketSpec.isDefined) {
-      throw operationNotAllowed(
-        "Bucketing is not supported for CREATE STREAMING TABLE statements.", ctx)
-    }
-    if (options.options.nonEmpty) {
-      throw operationNotAllowed(
-        "Options are not supported for CREATE STREAMING TABLE statements.", ctx)
-    }
-    serdeInfoOpt.foreach { _ =>
-      throw operationNotAllowed(
-        "Hive SerDe format options are not supported for CREATE STREAMING TABLE statements.", ctx)
-    }
-    if (location.nonEmpty) {
-      throw operationNotAllowed(
-        "Specifying location is not supported for CREATE STREAMING TABLE statements.", ctx)
-    }
-
-    val spec = TableSpec(
-      properties = properties,
-      provider = provider,
-      options = Map.empty,
-      location = location,
-      comment = comment,
-      collation = collation,
-      serde = None,
-      external = false,
-      constraints = Seq.empty
-    )
-
-    val tableIdent = withIdentClause(
-      headerCtx.identifierReference,
-      UnresolvedIdentifier(_)
-    )
-
-    val (src, keys, delete, seq, specCols, exceptCols) =
-      parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
-
-    CreateStreamingTableAutoCdc(
-      name = tableIdent,
-      columns = colDefs,
-      partitioning = partitioning,
-      tableSpec = spec,
-      ifNotExists = ifNotExists,
-      sourceTable = src,
-      keys = keys,
-      deleteCondition = delete,
-      sequenceByExpr = seq,
-      specifiedCols = specCols,
-      exceptCols = exceptCols
-    )
-  }
-
-  override def visitCreatePipelineDataset(
-      ctx: CreatePipelineDatasetContext): LogicalPlan = withOrigin(ctx) {
-    val createPipelineDatasetHeaderCtx = ctx.createPipelineDatasetHeader()
-
-    val syntaxTypeErrorStr = if (createPipelineDatasetHeaderCtx.materializedView() != null) {
-      "MATERIALIZED VIEW"
-    } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
-      "STREAMING TABLE"
-    } else {
-      // Should never be possible based on grammar definition.
-      throw invalidStatement(ctx.getText, ctx)
-    }
-
-    val ifNotExists = createPipelineDatasetHeaderCtx.EXISTS() != null
-    val provider = Option(ctx.tableProvider).map(_.multipartIdentifier.getText)
-    val (colDefs, colConstraints) = Option(ctx.tableElementList()).map(visitTableElementList)
+    val provider = Option(tableProviderCtx).map(_.multipartIdentifier.getText)
+    val (colDefs, colConstraints) = Option(tableElementListCtx).map(visitTableElementList)
       .getOrElse((Nil, Nil))
 
     if (colConstraints.nonEmpty) {
@@ -1689,13 +1619,13 @@ class SparkSqlAstBuilder extends AstBuilder {
 
     val (partTransforms, partCols, bucketSpec,
     properties, options, location, comment, collation, serdeInfoOpt,
-    clusterBySpec) = visitCreateTableClauses(ctx.createTableClauses())
+    clusterBySpec) = visitCreateTableClauses(createTableClausesCtx)
 
     val partitioning =
       partitionExpressions(partTransforms, partCols, ctx) ++
         clusterBySpec.map(_.asTransform)
 
-    // Because the createTableClauses grammar is reused for createPipelineDataset but pipeline
+    // Because the createTableClauses grammar is reused for pipeline datasets but pipeline
     // datasets don't support bucketing, options, storage location, or Hive SerDe, validate they
     // are not set.
     if (bucketSpec.isDefined) {
@@ -1732,10 +1662,71 @@ class SparkSqlAstBuilder extends AstBuilder {
       constraints = Seq.empty
     )
 
-    val datasetIdentifier = withIdentClause(
-      createPipelineDatasetHeaderCtx.identifierReference,
+    val tableIdent = withIdentClause(
+      headerCtx.identifierReference,
       UnresolvedIdentifier(_)
     )
+
+    (colDefs, partitioning, spec, ifNotExists, tableIdent)
+  }
+
+  override def visitCreateStreamingTableAutoCdc(
+      ctx: CreateStreamingTableAutoCdcContext): LogicalPlan = withOrigin(ctx) {
+    val headerCtx = ctx.createPipelineDatasetHeader()
+
+    if (headerCtx.materializedView() != null) {
+      throw operationNotAllowed(
+        "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW.", ctx)
+    }
+
+    val (colDefs, partitioning, spec, ifNotExists, tableIdent) =
+      parsePipelineDatasetPrelude(
+        "STREAMING TABLE",
+        headerCtx,
+        ctx.tableProvider,
+        ctx.tableElementList(),
+        ctx.createTableClauses(),
+        ctx)
+
+    val (src, keys, delete, seq, specCols, exceptCols) =
+      parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
+
+    CreateStreamingTableAutoCdc(
+      name = tableIdent,
+      columns = colDefs,
+      partitioning = partitioning,
+      tableSpec = spec,
+      ifNotExists = ifNotExists,
+      sourceTable = src,
+      keys = keys,
+      deleteCondition = delete,
+      sequenceByExpr = seq,
+      specifiedCols = specCols,
+      exceptCols = exceptCols
+    )
+  }
+
+  override def visitCreatePipelineDataset(
+      ctx: CreatePipelineDatasetContext): LogicalPlan = withOrigin(ctx) {
+    val createPipelineDatasetHeaderCtx = ctx.createPipelineDatasetHeader()
+
+    val syntaxTypeErrorStr = if (createPipelineDatasetHeaderCtx.materializedView() != null) {
+      "MATERIALIZED VIEW"
+    } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
+      "STREAMING TABLE"
+    } else {
+      // Should never be possible based on grammar definition.
+      throw invalidStatement(ctx.getText, ctx)
+    }
+
+    val (colDefs, partitioning, spec, ifNotExists, datasetIdentifier) =
+      parsePipelineDatasetPrelude(
+        syntaxTypeErrorStr,
+        createPipelineDatasetHeaderCtx,
+        ctx.tableProvider,
+        ctx.tableElementList(),
+        ctx.createTableClauses(),
+        ctx)
 
     if (createPipelineDatasetHeaderCtx.materializedView() != null) {
       val query: ParserRuleContext = Option(ctx.query).getOrElse(

@@ -1380,14 +1380,25 @@ class AstBuilder extends DataTypeAstBuilder
     withOrigin(params) {
       checkDuplicateClauses(params.autoCdcDeleteClause(), "APPLY AS DELETE", params)
       checkDuplicateClauses(params.autoCdcSequenceByClause(), "SEQUENCE BY", params)
+      val allColumnsClauses = params.autoCdcColumnsClause().asScala
+      if (allColumnsClauses.exists(_.columns != null) &&
+          allColumnsClauses.exists(_.exceptCols != null)) {
+        throw new ParseException(
+          errorClass = "AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST",
+          ctx = params)
+      }
       checkDuplicateClauses(params.autoCdcColumnsClause(), "COLUMNS", params)
 
       if (params.autoCdcSequenceByClause().isEmpty) {
-        throw QueryParsingErrors.missingClausesForOperation(
-          params, "SEQUENCE BY", "AUTO CDC INTO")
+        throw new ParseException(
+          errorClass = "AUTOCDC_MISSING_SEQUENCE_BY",
+          ctx = params)
       }
 
-      val sourceTable = plan(params.source.relationPrimary)
+      val sourceTable = plan(params.source) match {
+        case r: UnresolvedRelation => r.copy(isStreaming = true)
+        case other => other
+      }
       val keys = visitMultipartIdentifierList(params.keys)
       val deleteCondition = params.autoCdcDeleteClause().asScala.headOption
         .map(c => expression(c.deleteCondition))

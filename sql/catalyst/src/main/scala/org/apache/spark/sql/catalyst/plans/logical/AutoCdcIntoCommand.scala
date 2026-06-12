@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
  * This represents a CDC (Change Data Capture) operation that applies an ordered change event
  * stream from [[sourceTable]] into [[targetTable]] using SCD Type 1 (upsert) semantics.
  *
- * This node is a parse-time placeholder. It is only executable within a Declarative Pipelines
- * pipeline context; attempting to execute it directly will fail at analysis time.
+ * This node serves as a parse-time placeholder for a pipeline CDC definition and cannot be
+ * executed directly. It will be interpreted by the pipeline submodule once execution support
+ * is added (SPARK-57402).
  *
  * @param targetTable    The target table to apply changes into.
  * @param sourceTable    The source relation providing the change events.

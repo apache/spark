@@ -827,7 +827,8 @@ case class CreateStreamingTable(
 /**
  * Command parsed from `CREATE STREAMING TABLE <name> FLOW AUTO CDC ...` SQL syntax.
  * This command serves as a parse-time placeholder for a pipeline CDC definition and cannot be
- * executed directly. It is interpreted by the pipeline submodule during a pipeline execution.
+ * executed directly. It will be interpreted by the pipeline submodule once execution support
+ * is added (SPARK-57402).
  *
  * The target of the CDC operation is the streaming table itself (given by [[name]]).
  *
