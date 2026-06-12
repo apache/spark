@@ -188,6 +188,27 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
     }
   }
 
+  test("JSON: archive inference auto-detects a non-UTF-8 charset with no encoding option") {
+    // With no `encoding` set, inference parses each record from its raw bytes, so Jackson
+    // auto-detects the charset (here UTF-16, carrying a BOM) exactly as the scan and a directory
+    // read do. Forcing the bytes through UTF-8 would mis-parse them into a corrupt-record-only
+    // schema, diverging from a directory read of the same files.
+    val opts = Map("multiLine" -> "true")
+    val bytes = "{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}".getBytes(StandardCharsets.UTF_16)
+    withTempDir { dir =>
+      writeArchive(new File(dir, s"data.${archiveExtensions.head}"), Seq(entryName(0) -> bytes))
+      val schema = inferredSchema(Seq(dir.getCanonicalPath), opts)
+      withTempDir { looseDir =>
+        Files.write(new File(looseDir, entryName(0)).toPath, bytes)
+        val dirSchema = inferredSchema(Seq(looseDir.getCanonicalPath), opts)
+        assert(schema == dirSchema,
+          s"auto-detected inference diverged from a directory read; archive=$schema dir=$dirSchema")
+      }
+      assert(schema.fieldNames.toSet == Set("id", "name"),
+        s"expected id/name auto-detected from UTF-16, got $schema")
+    }
+  }
+
   // ----- JSON-specific read tests --------------------------------------------
 
   test("JSON: entries with differing fields union like a directory") {
@@ -204,6 +225,24 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
         "a.json" -> jsonBytes("{\n  \"id\": 1,\n  \"name\": \"Alice\"\n}"),
         "b.json" -> jsonBytes("{\n  \"id\": 2,\n  \"name\": \"Bob\"\n}")),
       extraOptions = Map("multiLine" -> "true"))
+  }
+
+  test("JSON: a malformed record in an archive entry matches a directory read (both modes)") {
+    // Permissive mode (the default): a malformed record parses to nulls with its raw text echoed
+    // into `_corrupt_record`. The archive path wires its own FailureSafeParser in `readStream` --
+    // and in multiLine it echoes the entry's pre-buffered bytes rather than re-reading the file --
+    // so assert the corrupt-record column matches a directory read of the same files in both the
+    // line-delimited and whole-document modes.
+    val corruptSchema = s"$readSchema, _corrupt_record STRING"
+    // Line-delimited: a good record, then a malformed one on the next line.
+    assertArchiveMatchesDir(
+      Seq("a.json" -> jsonBytes("{\"id\":1,\"name\":\"Alice\"}\n{ not valid json\n")),
+      schema = corruptSchema)
+    // multiLine: the whole entry is one malformed document.
+    assertArchiveMatchesDir(
+      Seq("a.json" -> jsonBytes("{ not valid json")),
+      extraOptions = Map("multiLine" -> "true"),
+      schema = corruptSchema)
   }
 
   test("JSON: the DSv2 path refuses to infer a schema for an archive (UNABLE_TO_INFER_SCHEMA)") {

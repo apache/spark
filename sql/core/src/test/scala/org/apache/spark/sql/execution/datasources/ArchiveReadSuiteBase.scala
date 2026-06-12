@@ -125,7 +125,7 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
 
   /**
    * Whether this format can represent nested/complex types (struct/array/map). Gates the shared
-   * complex-type round-trip test; CSV and text leave it false, JSON/Avro/Parquet/XML override true.
+   * complex-type round-trip test; CSV and text leave it false, JSON overrides it to true.
    */
   protected def supportsComplexTypes: Boolean = false
 

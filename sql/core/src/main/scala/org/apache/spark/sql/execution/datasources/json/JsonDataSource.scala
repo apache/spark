@@ -145,27 +145,19 @@ abstract class JsonDataSource extends Serializable with Logging {
     val encoding = parsedOptions.encoding
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
-    // Each input is streamed lazily; records are copied into fresh `UTF8String`s (the line reader
-    // reuses one buffer) so they stay valid after the stream advances. An archive is read entry by
-    // entry; a loose file is read directly -- both yield the same record units, so all inputs feed
-    // one inference pass.
-    val records: RDD[UTF8String] = streams.flatMap { stream =>
+    // Each input is streamed lazily, carrying each record as its raw bytes in a fresh array (the
+    // line reader reuses one buffer, so a line is copied off it). The bytes are parsed downstream
+    // exactly as the scan parses a file: a byte-array parser auto-detects the charset when no
+    // `encoding` is set (so UTF-16/UTF-32 is read correctly, not just UTF-8), and a stream decoder
+    // applies the explicit `encoding` when one is given. An archive is read entry by entry; a loose
+    // file is read directly -- both yield the same record units, so all inputs feed one pass.
+    val records: RDD[Array[Byte]] = streams.flatMap { stream =>
       val path = new Path(stream.getPath())
-      // Decode each record with the configured `encoding` (re-encoding to UTF-8) so archive
-      // inference matches the scan and a directory read. With no `encoding`, the raw bytes are
-      // kept and parsed as UTF-8 by `CreateJacksonParser.utf8String`.
-      def toRecord(bytes: Array[Byte], length: Int): UTF8String = encoding match {
-        case Some(enc) => UTF8String.fromString(new String(bytes, 0, length, enc))
-        case None => UTF8String.fromBytes(bytes, 0, length)
-      }
-      def recordsOf(in: InputStream): Iterator[UTF8String] =
+      def recordsOf(in: InputStream): Iterator[Array[Byte]] =
         if (multiLine) {
-          val bytes = in.readAllBytes()
-          Iterator.single(toRecord(bytes, bytes.length))
+          Iterator.single(in.readAllBytes())
         } else {
-          ArchiveReader.lineIterator(in, lineSeparator).map { line =>
-            toRecord(line.getBytes, line.getLength)
-          }
+          ArchiveReader.lineIterator(in, lineSeparator).map(_.copyBytes())
         }
       try {
         if (ArchiveReader.isArchivePath(path)) {
@@ -189,11 +181,12 @@ abstract class JsonDataSource extends Serializable with Logging {
     // Honor `samplingRatio` like the loose-file infer paths, so an archive samples its records like
     // a directory read rather than always reading every one.
     val sampled = JsonUtils.sample(records, parsedOptions)
+    val recordParser = encoding
+      .map(enc => CreateJacksonParser.bytes(enc, _: JsonFactory, _: Array[Byte]))
+      .getOrElse(CreateJacksonParser.bytes(_: JsonFactory, _: Array[Byte]))
     SQLExecution.withSQLConfPropagated(sparkSession) {
       new JsonInferSchema(parsedOptions)
-        .infer[UTF8String](
-          sampled, CreateJacksonParser.utf8String(_: JsonFactory, _: UTF8String),
-          isReadFile = multiLine)
+        .infer[Array[Byte]](sampled, recordParser, isReadFile = multiLine)
     }
   }
 }
