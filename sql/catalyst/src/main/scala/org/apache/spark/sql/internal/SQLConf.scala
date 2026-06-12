@@ -4802,6 +4802,17 @@ object SQLConf {
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
 
+  val PYSPARK_TRACEBACK_WITH_LOCALS =
+    buildConf("spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled")
+      .doc(
+        "When true, include the local variables in the traceback from Python UDFs. " +
+        "Note that this config will print the value of every local variable in the call stack, " +
+        "including sensitive data like passwords or API keys. Please use this config with caution.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_ARROW_VALIDATE_SCHEMA =
     buildConf("spark.sql.execution.arrow.pyspark.validateSchema.enabled")
       .doc(
@@ -8431,6 +8442,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
+
+  def pysparkTracebackWithLocals: Boolean = getConf(PYSPARK_TRACEBACK_WITH_LOCALS)
 
   def pysparkArrowValidateSchema: Boolean = getConf(PYSPARK_ARROW_VALIDATE_SCHEMA)
 
