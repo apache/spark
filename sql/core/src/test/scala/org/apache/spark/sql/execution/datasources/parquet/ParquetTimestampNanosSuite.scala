@@ -27,7 +27,7 @@ import org.apache.parquet.schema.{LogicalTypeAnnotation, MessageType, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.INT64
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -39,15 +39,6 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     withSQLConf(
       SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true",
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true")(f)
-  }
-
-  private def hasCause(t: Throwable, clazz: Class[_]): Boolean = {
-    var cur = t
-    while (cur != null) {
-      if (clazz.isInstance(cur)) return true
-      cur = cur.getCause
-    }
-    false
   }
 
   private def writeForeignNanosParquet(
@@ -182,15 +173,28 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   test("SPARK-57102: writing a timestamp outside the INT64 epoch-nanos range fails loudly") {
     withNanosEnabled {
-      Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
-        withTempPath { dir =>
-          val df = spark.sql(s"SELECT $typeName '9999-12-31 23:59:59.999999999' AS ts")
-          val e = intercept[SparkException] {
-            df.write.parquet(dir.getCanonicalPath)
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
+          withTempPath { dir =>
+            val df = spark.sql(s"SELECT $typeName '9999-12-31 23:59:59.999999999' AS ts")
+            val e = intercept[SparkException] {
+              df.write.parquet(dir.getCanonicalPath)
+            }
+            var cause: Throwable = e
+            while (cause != null && !cause.isInstanceOf[SparkArithmeticException]) {
+              cause = cause.getCause
+            }
+            assert(
+              cause != null,
+              s"Expected a DATETIME_OVERFLOW error for $typeName, but got: ${e.getMessage}")
+            checkError(
+              exception = cause.asInstanceOf[SparkArithmeticException],
+              condition = "DATETIME_OVERFLOW",
+              parameters = Map("operation" ->
+                ("write the timestamp value 9999-12-31T23:59:59.999999999Z as Parquet INT64 " +
+                  "epoch-nanoseconds (supported range: 1677-09-21T00:12:43.145224192Z to " +
+                  "2262-04-11T23:47:16.854775807Z)")))
           }
-          assert(
-            hasCause(e, classOf[ArithmeticException]),
-            s"Expected an arithmetic overflow for $typeName, but got: ${e.getMessage}")
         }
       }
     }

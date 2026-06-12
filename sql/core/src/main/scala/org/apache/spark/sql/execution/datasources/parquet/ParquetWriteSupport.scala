@@ -35,6 +35,7 @@ import org.apache.spark.sql.{SPARK_LEGACY_DATETIME_METADATA_KEY, SPARK_LEGACY_IN
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, STUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -190,9 +191,14 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   }
 
   private def timestampNanosToEpochNanos(value: TimestampNanosVal): Long = {
-    Math.addExact(
-      Math.multiplyExact(value.epochMicros, DateTimeConstants.NANOS_PER_MICROS),
-      value.nanosWithinMicro.toLong)
+    try {
+      Math.addExact(
+        Math.multiplyExact(value.epochMicros, DateTimeConstants.NANOS_PER_MICROS),
+        value.nanosWithinMicro.toLong)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.parquetTimestampNanosOverflowError(value)
+    }
   }
 
   // `inShredded` indicates whether the current traversal is nested within a shredded Variant
