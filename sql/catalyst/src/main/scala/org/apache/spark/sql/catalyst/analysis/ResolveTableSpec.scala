@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
 
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.{ArrayType, MapType, StructType}
  * table specifications wherein these OPTIONS list values are represented as strings instead, for
  * convenience.
  */
-object ResolveTableSpec extends Rule[LogicalPlan] {
+object ResolveTableSpec extends Rule[LogicalPlan] with QueryErrorsBase {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val preparedPlan = if (SQLConf.get.legacyEvalCurrentTime && plan.containsPattern(COMMAND)) {
       AnalysisHelper.allowInvokingTransformsInAnalyzer {
@@ -94,6 +94,21 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
               errorClass = "NON_DETERMINISTIC_CHECK_CONSTRAINT",
               messageParameters = Map("checkCondition" -> check.condition)
             )
+          }
+          // Reject session/temp variables in persisted CHECK constraints.
+          check.child.collectFirst {
+            case v: VariableReference => v
+          }.foreach { v =>
+            // For an inline (unnamed) constraint the name is not yet available here
+            // (it is synthesized later from the table name), so the empty name is intentional.
+            v.failAnalysis(
+              errorClass = "INVALID_TEMP_OBJ_REFERENCE",
+              messageParameters = Map(
+                "obj" -> "CHECK CONSTRAINT",
+                "objName" -> toSQLId(
+                  Option(check.userProvidedName).getOrElse("")),
+                "tempObj" -> "VARIABLE",
+                "tempObjName" -> toSQLId(v.originalNameParts)))
           }
         case _ =>
       }
