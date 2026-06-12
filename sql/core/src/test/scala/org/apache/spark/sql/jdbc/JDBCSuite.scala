@@ -912,24 +912,31 @@ class JDBCSuite extends SharedSparkSession {
 
   test("SPARK-57243: IS [NOT] NULL parenthesizes a predicate operand") {
     val dialect = JdbcDialects.get("jdbc:")
-    val eq = new Predicate("=", Array[V2Expression](FieldReference("a"), FieldReference("b")))
-    val isNull = new Predicate("IS_NULL", Array[V2Expression](eq))
-    val isNotNull = new Predicate("IS_NOT_NULL", Array[V2Expression](eq))
-    // The binary comparison operand must be parenthesized.
-    assert(dialect.compileExpression(isNull).get === "(\"a\" = \"b\") IS NULL")
-    assert(dialect.compileExpression(isNotNull).get === "(\"a\" = \"b\") IS NOT NULL")
-    val lt = new Predicate("<", Array[V2Expression](FieldReference("a"), FieldReference("b")))
-    assert(dialect.compileExpression(new Predicate("IS_NULL", Array[V2Expression](lt))).get ===
-      "(\"a\" < \"b\") IS NULL")
-    // A bare column reference is not parenthesized.
-    val bareIsNull = new Predicate("IS_NULL", Array[V2Expression](FieldReference("a")))
-    assert(dialect.compileExpression(bareIsNull).get === "\"a\" IS NULL")
-
-    // MsSqlServer has no boolean type, so it must not push down IS [NOT] NULL over a
-    // predicate operand, but IS [NOT] NULL over a plain column is still pushed.
     val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
-    assert(msSqlServer.compileExpression(isNull).isEmpty)
-    assert(msSqlServer.compileExpression(isNotNull).isEmpty)
+    val a = FieldReference("a")
+    val b = FieldReference("b")
+
+    // Every binary comparison operand is parenthesized for both IS NULL and IS NOT NULL, and is
+    // not pushed down on MsSqlServer (no boolean type), so Spark evaluates it locally.
+    for (op <- Seq("=", "<>", "<", "<=", ">", ">=");
+         (isNullOp, keyword) <- Seq("IS_NULL" -> "IS NULL", "IS_NOT_NULL" -> "IS NOT NULL")) {
+      val cmp = new Predicate(op, Array[V2Expression](a, b))
+      val expr = new Predicate(isNullOp, Array[V2Expression](cmp))
+      assert(dialect.compileExpression(expr).get === s"""("a" $op "b") $keyword""")
+      assert(msSqlServer.compileExpression(expr).isEmpty)
+    }
+
+    // `<=>` (null-safe equal) is also a comparison, so the operand is parenthesized; it never
+    // returns NULL so IS NULL over it is always false, but the rendering is still wrapped.
+    val nullSafeIsNull =
+      new Predicate("IS_NULL", Array[V2Expression](new Predicate("<=>", Array[V2Expression](a, b))))
+    val nullSafeSql = dialect.compileExpression(nullSafeIsNull).get
+    assert(nullSafeSql.startsWith("(") && nullSafeSql.endsWith(") IS NULL"))
+    assert(msSqlServer.compileExpression(nullSafeIsNull).isEmpty)
+
+    // A bare column reference is not parenthesized and is pushed down even on MsSqlServer.
+    val bareIsNull = new Predicate("IS_NULL", Array[V2Expression](a))
+    assert(dialect.compileExpression(bareIsNull).get === "\"a\" IS NULL")
     assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
   }
 
