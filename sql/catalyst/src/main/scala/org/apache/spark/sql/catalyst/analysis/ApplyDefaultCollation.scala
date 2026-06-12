@@ -372,9 +372,7 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
         val newGenExpr = columnDef.generationExpression.map { genExpr =>
           val newChild = genExpr.child.transform {
             case a: AttributeReference if hasDefaultStringCharOrVarcharType(a.dataType) =>
-              a.copy(dataType =
-                replaceDefaultStringCharAndVarcharTypes(a.dataType, collation))(
-                a.exprId, a.qualifier)
+              a.withDataType(replaceDefaultStringCharAndVarcharTypes(a.dataType, collation))
           }
           if (newChild eq genExpr.child) genExpr else genExpr.copy(child = newChild)
         }
@@ -407,7 +405,17 @@ object ApplyDefaultCollation extends Rule[LogicalPlan] {
    */
   private def generationExpressionNeedsCollation(columnDef: ColumnDefinition): Boolean = {
     columnDef.generationExpression.exists { genExpr =>
-      genExpr.child.exists(e => hasDefaultStringCharOrVarcharType(e.dataType))
+      // Only inspect AttributeReferences: `resolveExpressionsUp` evaluates this guard on
+      // unresolved expressions too, and calling `dataType` on an unresolved node (e.g.
+      // UnresolvedAttribute / UnresolvedFunction from a typo'd column) throws UnresolvedException
+      // (surfaced as INTERNAL_ERROR) before CheckAnalysis can report the real unresolved-column
+      // error. Matching only AttributeReference skips unresolved nodes, and also avoids the guard
+      // staying true forever when the only default-string node is a non-attribute (where the
+      // re-pointing transform is an identity anyway).
+      genExpr.child.exists {
+        case a: AttributeReference => hasDefaultStringCharOrVarcharType(a.dataType)
+        case _ => false
+      }
     }
   }
 
