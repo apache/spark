@@ -1585,7 +1585,7 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 <tr>
   <td><code>spark.kubernetes.executor.useDriverPodIP</code></td>
-  <td><code>false</code></td>
+  <td><code>true</code></td>
   <td>
     If true, executor pods use Driver pod IP directly instead of Driver Service.
   </td>

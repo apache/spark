@@ -18,7 +18,7 @@
 package org.apache.spark.sql.pipelines.autocdc
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{functions => F, AnalysisException}
+import org.apache.spark.sql.{functions => F}
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.util.QuotingUtils
@@ -130,9 +130,6 @@ case class Scd1BatchProcessor(
    */
   private[autocdc] def extendMicrobatchRowsWithCdcMetadata(
       validatedMicrobatch: DataFrame): DataFrame = {
-    // Proactively validate the reserved CDC metadata column does not exist in the microbatch.
-    validateCdcMetadataColumnNotPresent(validatedMicrobatch)
-
     val rowDeleteSequence: Column = changeArgs.deleteCondition match {
       case Some(deleteCondition) =>
         F.when(deleteCondition, changeArgs.sequencing).otherwise(F.lit(null))
@@ -146,7 +143,7 @@ case class Scd1BatchProcessor(
       F.when(rowDeleteSequence.isNull, changeArgs.sequencing).otherwise(F.lit(null))
 
     validatedMicrobatch.withColumn(
-      Scd1BatchProcessor.cdcMetadataColName,
+      AutoCdcReservedNames.cdcMetadataColName,
       Scd1BatchProcessor.constructCdcMetadataCol(
         deleteSequence = rowDeleteSequence,
         upsertSequence = rowUpsertSequence,
@@ -178,7 +175,7 @@ case class Scd1BatchProcessor(
       schema = microbatchWithCdcMetadataDf.schema,
       columnSelection = Some(
         ColumnSelection.ExcludeColumns(
-          Seq(UnqualifiedColumnName(Scd1BatchProcessor.cdcMetadataColName))
+          Seq(UnqualifiedColumnName(AutoCdcReservedNames.cdcMetadataColName))
         )
       ),
       caseSensitive = caseSensitiveColumnComparison
@@ -200,7 +197,7 @@ case class Scd1BatchProcessor(
         // select. Identifiers could have special characters such as '.'.
         F.col(QuotingUtils.quoteIdentifier(colName))
       }) :+ F.col(
-        Scd1BatchProcessor.cdcMetadataColName
+        AutoCdcReservedNames.cdcMetadataColName
       )
 
     microbatchWithCdcMetadataDf.select(
@@ -226,7 +223,7 @@ case class Scd1BatchProcessor(
     val aliasedMicrobatchDf = microbatchDf.alias("microbatch")
     val aliasedAuxiliaryTableDf = auxiliaryTableDf.alias("auxiliaryTable")
 
-    val cdcMetadata = Scd1BatchProcessor.cdcMetadataColName
+    val cdcMetadata = AutoCdcReservedNames.cdcMetadataColName
 
     val microbatchCdcMetadata = F.col(s"microbatch.$cdcMetadata")
     val effectiveSeq = F.greatest(
@@ -270,7 +267,7 @@ case class Scd1BatchProcessor(
       auxiliaryTableIdentifier: TableIdentifier
   ): Unit = {
     val auxIdentQuoted = auxiliaryTableIdentifier.quotedString
-    val meta = Scd1BatchProcessor.cdcMetadataColName
+    val meta = AutoCdcReservedNames.cdcMetadataColName
 
     // Project the reconciled microbatch down to just keys + `_cdc_metadata`; data columns are
     // irrelevant for the auxiliary table and should not be persisted.
@@ -333,7 +330,7 @@ case class Scd1BatchProcessor(
       reconciledMicrobatchDf: DataFrame,
       targetTableIdentifier: TableIdentifier
   ): Unit = {
-    val meta = Scd1BatchProcessor.cdcMetadataColName
+    val meta = AutoCdcReservedNames.cdcMetadataColName
 
     val destinationTableStr = targetTableIdentifier.quotedString
     // (Re-)alias the reconciled microbatch DF for easy reference for the remainder of the merge.
@@ -409,25 +406,6 @@ case class Scd1BatchProcessor(
       .insert(columnsToInsertOnNewKey)
       .merge()
   }
-
-  private def validateCdcMetadataColumnNotPresent(microbatch: DataFrame): Unit = {
-    val microbatchSqlConf = microbatch.sparkSession.sessionState.conf
-    val resolver = microbatchSqlConf.resolver
-
-    microbatch.schema.fieldNames
-      .find(resolver(_, Scd1BatchProcessor.cdcMetadataColName))
-      .foreach { conflictingColumnName =>
-        throw new AnalysisException(
-          errorClass = "AUTOCDC_RESERVED_COLUMN_NAME_CONFLICT",
-          messageParameters = Map(
-            "caseSensitivity" -> CaseSensitivityLabels.of(microbatchSqlConf.caseSensitiveAnalysis),
-            "columnName" -> conflictingColumnName,
-            "schemaName" -> "microbatch",
-            "reservedColumnName" -> Scd1BatchProcessor.cdcMetadataColName
-          )
-        )
-      }
-  }
 }
 
 object Scd1BatchProcessor {
@@ -437,7 +415,6 @@ object Scd1BatchProcessor {
    * enforced at [[org.apache.spark.sql.pipelines.graph.AutoCdcMergeFlow]] construction.
    */
   private[autocdc] val winningRowColName: String = s"${AutoCdcReservedNames.prefix}winning_row"
-  private[pipelines] val cdcMetadataColName: String = s"${AutoCdcReservedNames.prefix}metadata"
 
   private[pipelines] val cdcDeleteSequenceFieldName: String = "deleteSequence"
   private[pipelines] val cdcUpsertSequenceFieldName: String = "upsertSequence"

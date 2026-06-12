@@ -63,6 +63,7 @@ class TypeChangeResetsColIdTableCatalog extends InMemoryTableCatalog {
       alteredTable.constraints,
       id = alteredTable.id)
     tableWithResetIds.alterTableWithData(alteredTable.data, alteredTable.schema)
+    tableWithResetIds.setVersionAndValidatedVersionFrom(alteredTable)
     tables.put(ident, tableWithResetIds)
     tableWithResetIds
   }

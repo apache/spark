@@ -27,8 +27,7 @@ import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.unsafe.types.BinaryView;
 
 /**
  * Array abstraction in {@link ColumnVector}.
@@ -178,13 +177,8 @@ public final class ColumnarArray extends ArrayData {
   }
 
   @Override
-  public GeographyVal getGeography(int ordinal) {
-    return data.getGeography(offset + ordinal);
-  }
-
-  @Override
-  public GeometryVal getGeometry(int ordinal) {
-    return data.getGeometry(offset + ordinal);
+  public BinaryView getBinaryView(int ordinal) {
+    return data.getBinaryView(offset + ordinal);
   }
 
   @Override

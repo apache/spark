@@ -43,7 +43,7 @@ import java.util.Map;
  * @since 4.3.0
  */
 @Unstable
-public final class TimestampNanosVal implements Serializable {
+public final class TimestampNanosVal implements Comparable<TimestampNanosVal>, Serializable {
   /** Size of the {@code UnsafeRow} variable-length payload for this type (two 8-byte words). */
   public static final int SIZE_IN_BYTES = 16;
 
@@ -113,6 +113,21 @@ public final class TimestampNanosVal implements Serializable {
     // Manual mix, not Objects.hash: avoids the varargs array + autoboxing on every call. This
     // shows up on hash-bound paths (HashAggregate, HashJoin, distinct, set membership).
     return 31 * Long.hashCode(epochMicros) + nanosWithinMicro;
+  }
+
+  /**
+   * Lexicographic order on the pair ({@link #epochMicros}, {@link #nanosWithinMicro}), which
+   * matches calendar order: instants with a smaller {@code epochMicros} come first, and within
+   * the same microsecond the value with fewer extra nanoseconds comes first. Consistent with
+   * {@link #equals}: {@code a.compareTo(b) == 0} iff {@code a.equals(b)}.
+   */
+  @Override
+  public int compareTo(TimestampNanosVal that) {
+    // Long.compare avoids the overflow that plain subtraction has near Long.MinValue/MaxValue.
+    int cmp = Long.compare(epochMicros, that.epochMicros);
+    if (cmp != 0) return cmp;
+    // short - short widens to int, so any pair of shorts fits without overflow.
+    return nanosWithinMicro - that.nanosWithinMicro;
   }
 
   @Override

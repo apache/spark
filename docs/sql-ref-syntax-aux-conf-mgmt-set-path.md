@@ -101,7 +101,9 @@ path_element
 
 * **`SYSTEM_PATH`**
 
-  Expands to the two system namespaces, `system.builtin` and `system.session`.
+  Expands to the system-managed namespaces under the `system` catalog. Today this is just
+  `system.builtin`, but it is reserved for future system-managed schemas (for example, hosting
+  built-in AI, geospatial, or ML functions).
 
 * **`PATH`**
 
@@ -169,9 +171,16 @@ path_element
 
 -- DEFAULT_PATH and SYSTEM_PATH shortcuts.
 > SET PATH = DEFAULT_PATH;
+> SELECT current_path();
+ system.builtin,system.session,spark_catalog.default
 > SET PATH = SYSTEM_PATH;
 > SELECT current_path();
- system.builtin,system.session
+ system.builtin
+
+-- SYSTEM_PATH composes naturally with the working schema.
+> SET PATH = SYSTEM_PATH, CURRENT_SCHEMA;
+> SELECT current_path();
+ system.builtin,spark_catalog.default
 
 -- Append an entry by referring to the current path.
 > SET PATH = spark_catalog.default, system.builtin;

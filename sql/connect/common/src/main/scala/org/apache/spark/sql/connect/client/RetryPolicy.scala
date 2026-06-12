@@ -169,6 +169,11 @@ object RetryPolicy extends Logging {
           return true
         }
 
+        // DEADLINE_EXCEEDED on the reattachable execute path is handled directly in
+        // ExecutePlanResponseReattachableIterator, which converts it to RetryException so the
+        // server-side operation continues and a fresh ReattachExecute is issued. We do not retry
+        // other RPCs on deadline: those are non-idempotent or the deadline signals a genuine
+        // timeout that retrying won't fix.
         false
       case _ => false
     }

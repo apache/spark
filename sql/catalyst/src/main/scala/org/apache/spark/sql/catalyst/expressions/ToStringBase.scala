@@ -66,9 +66,13 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
       case NoConstraint => castToString(from)
     }
 
+  // The Types Framework is the single integration point for framework types' cast-to-string, via
+  // the zone-less formatUTF8. The cast's session zone is threaded into the lookup so TIMESTAMP_LTZ
+  // nanos renders in it; zone-independent types (TimeType, TIMESTAMP_NTZ nanos) ignore it
+  // (SPARK-57285).
   private def castToString(from: DataType): Any => UTF8String =
-    TypeApiOps(from)
-      .map(ops => acceptAny[Any](v => ops.formatUTF8(v)))
+    TypeApiOps(from, zoneId)
+      .map(ops => acceptAny[Any](ops.formatUTF8))
       .getOrElse(castToStringDefault(from))
 
   private def castToStringDefault(from: DataType): Any => UTF8String = from match {
@@ -234,6 +238,17 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        // Route nanosecond timestamp cast-to-string through the Types Framework: emit a runtime
+        // call into the ops reference object. The cast's session zone is threaded into the lookup
+        // so LTZ carries it; NTZ is zone-independent (SPARK-57285).
+        val ops = TypeApiOps(from, zoneId).get
+        // Pin the reference-object cast type to the public TypeApiOps class; the runtime ops class
+        // lives in sql/api, so the inferred concrete-class cast would be unnecessarily specific.
+        val opsRef = JavaCode.global(
+          ctx.addReferenceObj("typeApiOps", ops, classOf[TypeApiOps].getName),
+          classOf[TypeApiOps])
+        (c, evPrim) => code"$evPrim = $opsRef.formatUTF8($c);"
       case _: TimeType =>
         val tf = JavaCode.global(
           ctx.addReferenceObj("timeFormatter", timeFormatter),

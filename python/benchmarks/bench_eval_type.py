@@ -26,9 +26,11 @@ by constructing the complete binary protocol that ``worker.py``'s
 import io
 import os
 import json
+import socket
 import struct
 import sys
 import tempfile
+import threading
 from typing import Any, Callable, Iterator
 
 import numpy as np
@@ -758,17 +760,15 @@ class _CogroupedMapArrowBenchMixin:
         "multi_key": (200, 5_000, 3, 5),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a cogroup scenario: two DataFrames with the same grouping structure.
 
         Unlike grouped map (which wraps columns in a struct), cogroup batches
         have flat columns: [key_col_0, ..., key_col_k, val_col_0, ..., val_col_v].
         """
         np.random.seed(42)
-        num_groups, rows_per_group, num_key_cols, num_value_cols = (
-            _CogroupedMapArrowBenchMixin._scenario_configs[name]
-        )
+        num_groups, rows_per_group, num_key_cols, num_value_cols = cls._scenario_configs[name]
         n_cols = num_key_cols + num_value_cols
         type_pool = MockDataFactory.MIXED_TYPES[:n_cols]
         while len(type_pool) < n_cols:
@@ -784,22 +784,27 @@ class _CogroupedMapArrowBenchMixin:
         return_type = StructType(schema.fields[num_key_cols:])
         return (cogroups, return_type, num_key_cols, num_value_cols)
 
+    _eval_type = PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF
+    # Each UDF entry: (func, n_args). n_args=2 -> func(left, right);
+    # n_args=3 -> func(key, left, right). The Arrow path has no 3-arg variant,
+    # but the tuple shape is shared with the Pandas sibling so ``_write_scenario``
+    # can be inherited unchanged.
     _udfs = {
-        "identity_udf": _cogrouped_map_arrow_identity,
-        "concat_udf": _cogrouped_map_arrow_concat,
-        "left_semi_udf": _cogrouped_map_arrow_left_semi,
+        "identity_udf": (_cogrouped_map_arrow_identity, 2),
+        "concat_udf": (_cogrouped_map_arrow_concat, 2),
+        "left_semi_udf": (_cogrouped_map_arrow_left_semi, 2),
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
 
     def _write_scenario(self, scenario, udf_name, buf):
         groups, schema, num_key_cols, num_value_cols = self._build_scenario(scenario)
-        udf_func = self._udfs[udf_name]
+        udf_func, _ = self._udfs[udf_name]
         left_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, num_value_cols)
         right_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, num_value_cols)
         arg_offsets = left_offsets + right_offsets
         MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+            self._eval_type,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
             lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
@@ -819,8 +824,15 @@ class CogroupedMapArrowUDFPeakmemBench(_CogroupedMapArrowBenchMixin, _PeakmemBen
 # ``pandas.DataFrame``. Optional 3-arg variant ``(key, left, right)``.
 
 
-class _CogroupedMapPandasBenchMixin:
-    """Provides _write_scenario for SQL_COGROUPED_MAP_PANDAS_UDF."""
+class _CogroupedMapPandasBenchMixin(_CogroupedMapArrowBenchMixin):
+    """Provides _write_scenario for SQL_COGROUPED_MAP_PANDAS_UDF.
+
+    Inherits ``_build_scenario`` and ``_write_scenario`` from the Arrow
+    sibling; only the eval type, the UDFs, and the per-scenario row counts
+    differ. Adds a 3-arg ``key_identity_udf`` variant the Arrow path lacks
+    (``_write_scenario`` ignores the ``n_args`` slot, so the extra entry is
+    handled by the inherited writer).
+    """
 
     def _cogrouped_map_pandas_identity(left, right):
         """Identity cogroup UDF: returns left DataFrame as-is."""
@@ -852,32 +864,7 @@ class _CogroupedMapPandasBenchMixin:
         "multi_key": (100, 1_000, 3, 5),
     }
 
-    @staticmethod
-    def _build_scenario(name):
-        """Build a cogroup scenario: two DataFrames with the same grouping structure.
-
-        Like cogrouped arrow, batches have flat columns:
-        [key_col_0, ..., key_col_k, val_col_0, ..., val_col_v].
-        """
-        np.random.seed(42)
-        num_groups, rows_per_group, num_key_cols, num_value_cols = (
-            _CogroupedMapPandasBenchMixin._scenario_configs[name]
-        )
-        n_cols = num_key_cols + num_value_cols
-        type_pool = MockDataFactory.MIXED_TYPES[:n_cols]
-        while len(type_pool) < n_cols:
-            type_pool = type_pool + MockDataFactory.MIXED_TYPES[: n_cols - len(type_pool)]
-
-        cogroups, schema = MockDataFactory.make_cogrouped_batches(
-            num_groups=num_groups,
-            num_rows=rows_per_group,
-            num_cols=n_cols,
-            spark_type_pool=type_pool,
-            batch_size=rows_per_group,
-        )
-        return_type = StructType(schema.fields[num_key_cols:])
-        return (cogroups, return_type, num_key_cols, num_value_cols)
-
+    _eval_type = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
     # Each UDF entry: (func, n_args). n_args=2 -> func(left, right);
     # n_args=3 -> func(key, left, right).
     _udfs = {
@@ -888,19 +875,6 @@ class _CogroupedMapPandasBenchMixin:
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, schema, num_key_cols, num_value_cols = self._build_scenario(scenario)
-        udf_func, _ = self._udfs[udf_name]
-        left_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, num_value_cols)
-        right_offsets = MockUDFFactory.make_grouped_arg_offsets(num_key_cols, num_value_cols)
-        arg_offsets = left_offsets + right_offsets
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-            lambda b: MockProtocolWriter.write_udf_payload(udf_func, schema, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
-            buf,
-        )
 
 
 class CogroupedMapPandasUDFTimeBench(_CogroupedMapPandasBenchMixin, _TimeBenchBase):
@@ -1729,11 +1703,11 @@ class _WindowAggArrowBenchMixin:
         "wide_cols": (200, 5_000, 20),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single scenario by name."""
         np.random.seed(42)
-        num_groups, rows_per_group, n_cols = _WindowAggArrowBenchMixin._scenario_configs[name]
+        num_groups, rows_per_group, n_cols = cls._scenario_configs[name]
         return MockDataFactory.make_grouped_batches(
             num_groups=num_groups,
             num_rows=rows_per_group,
@@ -1742,6 +1716,7 @@ class _WindowAggArrowBenchMixin:
             batch_size=rows_per_group,
         )
 
+    _eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
     _udfs = {
         "sum_udf": _window_agg_arrow_sum,
         "mean_multi_udf": _window_agg_arrow_mean_multi,
@@ -1765,7 +1740,7 @@ class _WindowAggArrowBenchMixin:
             MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
 
         MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
+            self._eval_type,
             write_udf,
             lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
             buf,
@@ -1785,8 +1760,15 @@ class WindowAggArrowUDFPeakmemBench(_WindowAggArrowBenchMixin, _PeakmemBenchBase
 # UDF receives ``pd.Series`` columns for the entire window partition, returns scalar.
 
 
-class _WindowAggPandasBenchMixin:
-    """Provides _write_scenario for SQL_WINDOW_AGG_PANDAS_UDF."""
+class _WindowAggPandasBenchMixin(_WindowAggArrowBenchMixin):
+    """Provides _write_scenario for SQL_WINDOW_AGG_PANDAS_UDF.
+
+    Inherits ``_build_scenario`` and ``_write_scenario`` from the Arrow
+    sibling; only the eval type and the UDFs differ. ``_scenario_configs``
+    is intentionally identical to the Arrow variant for apples-to-apples
+    comparison (the aggregations are cheap enough that pandas conversion
+    is not the bottleneck here).
+    """
 
     def _window_agg_pandas_sum(col):
         """Sum a single Pandas Series."""
@@ -1796,56 +1778,13 @@ class _WindowAggPandasBenchMixin:
         """Mean of two Pandas Series combined."""
         return (col0.mean() or 0) + (col1.mean() or 0)
 
-    _scenario_configs = {
-        "few_groups_sm": (50, 5_000, 5),
-        "few_groups_lg": (50, 50_000, 5),
-        "many_groups_sm": (2_000, 500, 5),
-        "many_groups_lg": (500, 10_000, 5),
-        "wide_cols": (200, 5_000, 20),
-    }
-
-    @staticmethod
-    def _build_scenario(name):
-        """Build a single scenario by name."""
-        np.random.seed(42)
-        num_groups, rows_per_group, n_cols = _WindowAggPandasBenchMixin._scenario_configs[name]
-        return MockDataFactory.make_grouped_batches(
-            num_groups=num_groups,
-            num_rows=rows_per_group,
-            num_cols=n_cols,
-            spark_type_pool=MockDataFactory.NUMERIC_TYPES,
-            batch_size=rows_per_group,
-        )
-
+    _eval_type = PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
     _udfs = {
         "sum_udf": _window_agg_pandas_sum,
         "mean_multi_udf": _window_agg_pandas_mean_multi,
     }
-    params = [list(_scenario_configs), list(_udfs)]
+    params = [list(_WindowAggArrowBenchMixin._scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        groups, _schema = self._build_scenario(scenario)
-        udf_func = self._udfs[udf_name]
-
-        # sum_udf uses 1 arg, mean_multi_udf uses 2 args
-        if "multi" in udf_name:
-            arg_offsets = [0, 1]
-        else:
-            arg_offsets = [0]
-
-        return_type = DoubleType()
-
-        def write_udf(b):
-            MockProtocolWriter.write_udf_payload(udf_func, return_type, arg_offsets, b)
-
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-            write_udf,
-            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
-            buf,
-            runner_conf={"window_bound_types": "unbounded"},
-        )
 
 
 class WindowAggPandasUDFTimeBench(_WindowAggPandasBenchMixin, _TimeBenchBase):
@@ -1853,4 +1792,197 @@ class WindowAggPandasUDFTimeBench(_WindowAggPandasBenchMixin, _TimeBenchBase):
 
 
 class WindowAggPandasUDFPeakmemBench(_WindowAggPandasBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_TRANSFORM_WITH_STATE_PANDAS_UDF ---------------------------------------
+# Stateful streaming with Pandas. UDF signature is
+# ``(api_client, mode, key, pdfs)`` and returns ``Iterator[pandas.DataFrame]``.
+# The input wire stream is a single plain Arrow stream pre-sorted by the
+# grouping key column at offset 0; ``TransformWithStateInPandasSerializer``
+# chunks rows into one ``(mode, key, pdfs)`` tuple per group, then emits a
+# phantom ``PROCESS_TIMER`` and ``COMPLETE`` call with an empty pdf iterator.
+# ``StatefulProcessorApiClient.__init__`` opens a real TCP socket to the JVM
+# state server; the stub listener below satisfies that connect. The benchmark
+# UDFs never invoke any state API method, so no protocol exchange is needed.
+
+
+class _StubStateServer:
+    """Stub TCP listener so ``StatefulProcessorApiClient`` init succeeds.
+
+    One instance per benchmark process; the port is reused across all scenarios
+    and ASV iterations. The accept loop stashes connections to keep them open
+    until the worker process tears them down (the worker never closes its end
+    explicitly, but Python GCs the socket on ``main`` return).
+    """
+
+    _instance: "_StubStateServer | None" = None
+
+    @classmethod
+    def get_port(cls) -> int:
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance.port
+
+    def __init__(self) -> None:
+        self._sock = socket.socket()
+        self._sock.bind(("127.0.0.1", 0))
+        self._sock.listen(128)
+        self.port = self._sock.getsockname()[1]
+        self._connections: list[socket.socket] = []
+        self._thread = threading.Thread(target=self._accept_loop, daemon=True)
+        self._thread.start()
+
+    def _accept_loop(self) -> None:
+        while True:
+            try:
+                conn, _ = self._sock.accept()
+            except OSError:
+                break
+            self._connections.append(conn)
+
+
+class _TransformWithStatePandasBenchMixin:
+    """Provides ``_write_scenario`` for SQL_TRANSFORM_WITH_STATE_PANDAS_UDF.
+
+    Each scenario emits one plain Arrow stream pre-sorted by the leading int
+    key column. UDFs receive an iterator of value-only Pandas DataFrames per
+    group (the grouping key is projected out before the UDF, mirroring
+    ``worker.py``'s ``values_gen``) plus phantom ``PROCESS_TIMER``/``COMPLETE``
+    calls (empty iterator).
+    """
+
+    # Per-scenario value-column type pool. ``mixed_cols`` exercises the
+    # string/binary/boolean encode paths and ``nested_struct`` exercises the
+    # struct (dict) conversion path; the rest stay numeric to keep encode cost
+    # dominated by row volume rather than per-value Python work.
+    _MIXED_POOL = MockDataFactory.MIXED_TYPES
+    _NESTED_POOL = [
+        MockDataFactory.TYPE_REGISTRY["int"],
+        MockDataFactory.make_struct_type(num_fields=3, base_types=MockDataFactory.MIXED_TYPES),
+    ]
+
+    # Each scenario: (num_groups, rows_per_group, num_value_cols, value_pool).
+    # Row counts are scaled so identity_udf (full pdf passthrough -> ~equal
+    # input and output volume) stays under ASV's 60s per-sample timeout.
+    _scenario_configs = {
+        "few_groups_sm": (50, 5_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "few_groups_lg": (50, 50_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "many_groups_sm": (2_000, 500, 5, MockDataFactory.NUMERIC_TYPES),
+        "many_groups_lg": (500, 2_000, 5, MockDataFactory.NUMERIC_TYPES),
+        "wide_cols": (200, 5_000, 20, MockDataFactory.NUMERIC_TYPES),
+        "mixed_cols": (200, 5_000, 5, _MIXED_POOL),
+        "nested_struct": (200, 5_000, 4, _NESTED_POOL),
+    }
+
+    @staticmethod
+    def _build_scenario(name):
+        """Build a single TWS Pandas scenario.
+
+        Returns ``(batches, schema)`` where ``batches`` is a plain list of Arrow
+        RecordBatches with rows pre-sorted by the leading int32 key column.
+        """
+        np.random.seed(42)
+        num_groups, rows_per_group, num_value_cols, value_pool = (
+            _TransformWithStatePandasBenchMixin._scenario_configs[name]
+        )
+        total_rows = num_groups * rows_per_group
+        key_array = pa.array(
+            np.repeat(np.arange(num_groups, dtype=np.int32), rows_per_group),
+            type=pa.int32(),
+        )
+        value_arrays = [
+            value_pool[i % len(value_pool)][0](total_rows) for i in range(num_value_cols)
+        ]
+        names = ["col_0"] + [f"col_{i + 1}" for i in range(num_value_cols)]
+        full_batch = pa.RecordBatch.from_arrays([key_array] + value_arrays, names=names)
+        batch_size = MockDataFactory.MAX_RECORDS_PER_BATCH
+        batches = [
+            full_batch.slice(offset, min(batch_size, total_rows - offset))
+            for offset in range(0, total_rows, batch_size)
+        ]
+        schema = StructType(
+            [StructField("col_0", IntegerType())]
+            + [
+                StructField(f"col_{i + 1}", value_pool[i % len(value_pool)][1])
+                for i in range(num_value_cols)
+            ]
+        )
+        return batches, schema
+
+    def _tws_pandas_identity(api_client, mode, key, pdfs):
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            yield from pdfs
+
+    def _tws_pandas_sort(api_client, mode, key, pdfs):
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            for pdf in pdfs:
+                yield pdf.sort_values(pdf.columns[0])
+
+    def _tws_pandas_count(api_client, mode, key, pdfs):
+        import pandas as pd
+        from pyspark.sql.streaming.stateful_processor_util import (
+            TransformWithStateInPandasFuncMode,
+        )
+
+        if mode == TransformWithStateInPandasFuncMode.PROCESS_DATA:
+            total = sum(len(pdf) for pdf in pdfs)
+            # The input pdfs are value-only, so an aggregating UDF reconstructs
+            # the grouping key from the ``key`` arg to keep it in the output --
+            # the common shape for transformWithState (see the
+            # transformWithStateInPandas docstring example).
+            yield pd.DataFrame({"col_0": [key[0]], "col_1": [total]})
+
+    # ret_type=None means "use all value columns of the input schema" (identity
+    # and sort are pure value-column passthroughs, so their output omits the
+    # key, which the input pdf never carries). count_udf re-emits the key, so it
+    # declares an explicit output schema of (key, count).
+    _udfs = {
+        "identity_udf": (_tws_pandas_identity, None),
+        "sort_udf": (_tws_pandas_sort, None),
+        "count_udf": (
+            _tws_pandas_count,
+            StructType([StructField("col_0", IntegerType()), StructField("col_1", IntegerType())]),
+        ),
+    }
+    params = [list(_scenario_configs), list(_udfs)]
+    param_names = ["scenario", "udf"]
+
+    _NUM_KEY_COLS = 1
+
+    def _write_scenario(self, scenario, udf_name, buf):
+        batches, schema = self._build_scenario(scenario)
+        udf_func, ret_type = self._udfs[udf_name]
+        if ret_type is None:
+            ret_type = StructType(schema.fields[self._NUM_KEY_COLS :])
+        n_value_cols = len(schema.fields) - self._NUM_KEY_COLS
+        arg_offsets = MockUDFFactory.make_grouped_arg_offsets(self._NUM_KEY_COLS, n_value_cols)
+        grouping_key_schema = StructType(schema.fields[: self._NUM_KEY_COLS])
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+            eval_conf={
+                "state_server_socket_port": str(_StubStateServer.get_port()),
+                "grouping_key_schema": grouping_key_schema.json(),
+            },
+        )
+
+
+class TransformWithStatePandasUDFTimeBench(_TransformWithStatePandasBenchMixin, _TimeBenchBase):
+    pass
+
+
+class TransformWithStatePandasUDFPeakmemBench(
+    _TransformWithStatePandasBenchMixin, _PeakmemBenchBase
+):
     pass

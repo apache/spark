@@ -32,6 +32,7 @@ if should_test_connect:
     import pandas as pd
     import pyarrow as pa
     from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
+    from pyspark.sql.connect.client.core import RpcDeadlines
     from pyspark.sql.connect.client.retries import (
         Retrying,
         DefaultPolicy,
@@ -125,7 +126,6 @@ if should_test_connect:
             if req.HasField("release_all"):
                 self.release_calls += 1
             elif req.HasField("release_until"):
-                print("increment")
                 self.release_until_calls += 1
 
     class MockService:
@@ -154,7 +154,7 @@ if should_test_connect:
                 operation_statuses = self.DEFAULT_OPERATION_STATUSES
             self._operation_statuses = {s.operation_id: s for s in operation_statuses}
 
-        def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata):
+        def ExecutePlan(self, req: proto.ExecutePlanRequest, metadata, timeout=None):
             self.req = req
             self.client_user_context_extensions = list(req.user_context.extensions)
             resp = proto.ExecutePlanResponse()
@@ -175,14 +175,14 @@ if should_test_connect:
             resp.arrow_batch.row_count = 2
             return [resp]
 
-        def Interrupt(self, req: proto.InterruptRequest, metadata):
+        def Interrupt(self, req: proto.InterruptRequest, metadata, timeout=None):
             self.req = req
             self.client_user_context_extensions = list(req.user_context.extensions)
             resp = proto.InterruptResponse()
             resp.session_id = self._session_id
             return resp
 
-        def Config(self, req: proto.ConfigRequest, metadata):
+        def Config(self, req: proto.ConfigRequest, metadata, timeout=None):
             self.req = req
             self.client_user_context_extensions = list(req.user_context.extensions)
             resp = proto.ConfigResponse()
@@ -197,7 +197,7 @@ if should_test_connect:
                 pair.value = req.operation.get_with_default.pairs[0].value or "true"
             return resp
 
-        def AnalyzePlan(self, req: proto.AnalyzePlanRequest, metadata):
+        def AnalyzePlan(self, req: proto.AnalyzePlanRequest, metadata, timeout=None):
             self.req = req
             self.client_user_context_extensions = list(req.user_context.extensions)
             resp = proto.AnalyzePlanResponse()
@@ -206,7 +206,7 @@ if should_test_connect:
             resp.semantic_hash.result = 12345
             return resp
 
-        def GetStatus(self, req: proto.GetStatusRequest, metadata):
+        def GetStatus(self, req: proto.GetStatusRequest, metadata, timeout=None):
             self.req = req
             self.client_user_context_extensions = list(req.user_context.extensions)
             self.received_custom_server_session_id = req.client_observed_server_side_session_id
@@ -499,7 +499,10 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client._release_session_on_exit = True
         client._closed = True
 
-        call_tracker = {"release_session": 0, "close": 0}
+        call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
+
+        def mock_cleanup_ml_cache():
+            call_tracker["cleanup_ml_cache"] += 1
 
         def mock_release_session():
             call_tracker["release_session"] += 1
@@ -507,11 +510,13 @@ class SparkConnectClientTestCase(unittest.TestCase):
         def mock_close():
             call_tracker["close"] += 1
 
+        client._cleanup_ml_cache = mock_cleanup_ml_cache
         client.release_session = mock_release_session
         client.close = mock_close
 
         client._on_exit()
 
+        self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
         self.assertEqual(call_tracker["release_session"], 0)
         self.assertEqual(call_tracker["close"], 0)
 
@@ -706,6 +711,111 @@ class SparkConnectClientTestCase(unittest.TestCase):
         resp.extensions[0].Unpack(resp_echoed)
         self.assertEqual(resp_echoed.value, "request_extension")
 
+    def test_analyze_plan_short_deadline_fires_then_succeeds_after_disabling(self):
+        """With a short deadline the call fails; after disabling deadlines it succeeds."""
+
+        class CapturingMock(MockService):
+            """Captures the timeout passed by the client; raises DEADLINE_EXCEEDED if set."""
+
+            def __init__(self, session_id):
+                super().__init__(session_id)
+                self.captured_timeout = "not_called"
+
+            def AnalyzePlan(self, req, metadata, timeout=None):
+                self.captured_timeout = timeout
+                if timeout is not None:
+                    raise TestException("deadline exceeded", grpc.StatusCode.DEADLINE_EXCEEDED)
+                return super().AnalyzePlan(req, metadata, timeout=timeout)
+
+        client_with_deadline = SparkConnectClient(
+            "sc://foo/",
+            use_reattachable_execute=False,
+            rpc_deadlines=RpcDeadlines(analyze_plan=0.050),
+            retry_policy=dict(max_retries=0),
+        )
+        mock_with_deadline = CapturingMock(session_id=client_with_deadline._session_id)
+        client_with_deadline._stub = mock_with_deadline
+        with self.assertRaises(SparkConnectGrpcException) as cm:
+            client_with_deadline._analyze("schema", plan=proto.Plan())
+        self.assertEqual(cm.exception.getGrpcStatusCode(), grpc.StatusCode.DEADLINE_EXCEEDED)
+        self.assertEqual(mock_with_deadline.captured_timeout, 0.050)
+
+        client_disabled = SparkConnectClient(
+            "sc://foo/",
+            use_reattachable_execute=False,
+            rpc_deadlines=RpcDeadlines.disabled(),
+            retry_policy=dict(max_retries=0),
+        )
+        mock_disabled = CapturingMock(session_id=client_disabled._session_id)
+        client_disabled._stub = mock_disabled
+        client_disabled._analyze("schema", plan=proto.Plan())
+        self.assertIsNone(mock_disabled.captured_timeout)
+
+    def test_each_rpc_receives_configured_deadline(self):
+        """Every RPC that accepts a deadline should forward it as timeout to the stub."""
+
+        class TimeoutCapturingMock(MockService):
+            """Records the timeout kwarg for each RPC call."""
+
+            def __init__(self, session_id):
+                super().__init__(session_id)
+                self.captured_timeouts = {}
+
+            def AnalyzePlan(self, req, metadata, timeout=None):
+                self.captured_timeouts["AnalyzePlan"] = timeout
+                return super().AnalyzePlan(req, metadata, timeout=timeout)
+
+            def Config(self, req, metadata, timeout=None):
+                self.captured_timeouts["Config"] = timeout
+                return super().Config(req, metadata, timeout=timeout)
+
+            def Interrupt(self, req, metadata, timeout=None):
+                self.captured_timeouts["Interrupt"] = timeout
+                return super().Interrupt(req, metadata, timeout=timeout)
+
+            def ReleaseSession(self, req, metadata, timeout=None):
+                self.captured_timeouts["ReleaseSession"] = timeout
+                resp = proto.ReleaseSessionResponse()
+                resp.session_id = self._session_id
+                return resp
+
+            def GetStatus(self, req, metadata, timeout=None):
+                self.captured_timeouts["GetStatus"] = timeout
+                return super().GetStatus(req, metadata, timeout=timeout)
+
+        deadlines = RpcDeadlines(
+            analyze_plan=11.0,
+            config=22.0,
+            interrupt=33.0,
+            release_session=44.0,
+            get_status=55.0,
+        )
+        client = SparkConnectClient(
+            "sc://foo/",
+            use_reattachable_execute=False,
+            rpc_deadlines=deadlines,
+            retry_policy=dict(max_retries=0),
+        )
+        mock = TimeoutCapturingMock(session_id=client._session_id)
+        client._stub = mock
+
+        client._analyze("schema", plan=proto.Plan())
+        self.assertEqual(mock.captured_timeouts["AnalyzePlan"], 11.0)
+
+        op = proto.ConfigRequest.Operation()
+        op.get.keys.append("spark.sql.shuffle.partitions")
+        client.config(op)
+        self.assertEqual(mock.captured_timeouts["Config"], 22.0)
+
+        client.interrupt_all()
+        self.assertEqual(mock.captured_timeouts["Interrupt"], 33.0)
+
+        client.release_session()
+        self.assertEqual(mock.captured_timeouts["ReleaseSession"], 44.0)
+
+        client._get_operation_statuses()
+        self.assertEqual(mock.captured_timeouts["GetStatus"], 55.0)
+
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
 class SparkConnectClientReattachTestCase(unittest.TestCase):
@@ -880,6 +990,59 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
         self.request.client_observed_server_side_session_id = session_id
         reattach = ite._create_reattach_execute_request()
         self.assertEqual(reattach.client_observed_server_side_session_id, session_id)
+
+    def test_deadline_exceeded_triggers_reattach(self):
+        """DEADLINE_EXCEEDED mid-stream on ExecutePlan should trigger a ReattachExecute."""
+
+        def deadline_exceeded():
+            raise TestException("deadline", grpc.StatusCode.DEADLINE_EXCEEDED)
+
+        stub = self._stub_with(
+            [self.response, deadline_exceeded],
+            [self.response, self.finished],
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+        for _ in ite:
+            pass
+
+        def check():
+            self.assertEqual(1, stub.execute_calls)
+            self.assertEqual(1, stub.attach_calls)
+            self.assertEqual(1, stub.release_calls)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
+    def test_deadline_exceeded_mid_stream_completes_successfully(self):
+        """After a mid-stream DEADLINE_EXCEEDED, reattach resumes and all responses are collected."""
+
+        response2 = proto.ExecutePlanResponse(response_id="2")
+        response3 = proto.ExecutePlanResponse(response_id="3")
+
+        def deadline_exceeded():
+            raise TestException("deadline", grpc.StatusCode.DEADLINE_EXCEEDED)
+
+        finished = proto.ExecutePlanResponse(
+            result_complete=proto.ExecutePlanResponse.ResultComplete(),
+            response_id="final",
+        )
+        stub = self._stub_with(
+            [self.response, response2, deadline_exceeded],
+            [response3, finished],
+        )
+        collected = []
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+        for r in ite:
+            if not r.HasField("result_complete"):
+                collected.append(r.response_id)
+
+        self.assertEqual(collected, ["1", "2", "3"])
+
+        def check():
+            self.assertEqual(1, stub.execute_calls)
+            self.assertEqual(1, stub.attach_calls)
+            self.assertEqual(1, stub.release_calls)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
 
     def test_server_unreachable(self):
         # DNS resolution should fail for "foo". This error is a retriable UNAVAILABLE error.

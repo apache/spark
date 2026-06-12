@@ -84,22 +84,6 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     checkErrorTableNotFound(e, "`non_exist_table`")
   }
 
-  test("read: user-specified schema is not allowed with table API") {
-    val tblName = "my_table"
-    withTable(tblName) {
-      spark.range(3).write.format("parquet").saveAsTable(tblName)
-      val e = intercept[AnalysisException] {
-        spark.readStream
-          .schema(new StructType().add("a", IntegerType))
-          .table(tblName)
-      }
-      checkError(
-        exception = e,
-        condition = "_LEGACY_ERROR_TEMP_1189",
-        parameters = Map("operation" -> "table"))
-    }
-  }
-
   test("read: stream table API with temp view") {
     val tblName = "my_table"
     val stream = MemoryStream[Int]

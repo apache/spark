@@ -129,6 +129,7 @@ private[hive] class HiveClientImpl(
     case hive.v3_1 => new Shim_v3_1()
     case hive.v4_0 => new Shim_v4_0()
     case hive.v4_1 => new Shim_v4_1()
+    case hive.v4_2 => new Shim_v4_2()
   }
 
   // Create an internal session state for this HiveClientImpl.
@@ -425,6 +426,10 @@ private[hive] class HiveClientImpl(
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
         .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
     } catch {
+      // SPARK-57263: HIVE-27473 may fail batch lookup on missing tables; keep Spark's
+      // contract of returning only tables that exist.
+      case _: NoSuchObjectException if shim.databaseExists(client, dbName) =>
+        tableNames.flatMap(getRawTableOption(dbName, _))
       case ex: Exception =>
         throw QueryExecutionErrors.cannotFetchTablesOfDatabaseError(dbName, ex)
     }

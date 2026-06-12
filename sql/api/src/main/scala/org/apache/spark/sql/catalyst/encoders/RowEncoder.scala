@@ -50,6 +50,8 @@ import org.apache.spark.util.ArrayImplicits._
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
  *
  *   TimestampNTZType -> java.time.LocalDateTime
+ *   TimestampNTZNanosType -> java.time.LocalDateTime
+ *   TimestampLTZNanosType -> java.time.Instant
  *   TimeType -> java.time.LocalTime
  *
  *   DayTimeIntervalType -> java.time.Duration

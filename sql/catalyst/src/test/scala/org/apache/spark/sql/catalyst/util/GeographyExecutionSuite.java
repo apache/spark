@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.SparkIllegalArgumentException;
-import org.apache.spark.unsafe.types.GeographyVal;
+import org.apache.spark.SparkRuntimeException;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -56,7 +57,7 @@ class GeographyExecutionSuite {
 
   @Test
   void testFromValue() {
-    GeographyVal value = GeographyVal.fromBytes(testGeographyVal);
+    BinaryView value = BinaryView.fromBytes(testGeographyVal);
     Geography geography = Geography.fromValue(value);
     assertNotNull(geography);
     assertEquals(value, geography.getValue());
@@ -248,6 +249,35 @@ class GeographyExecutionSuite {
   @Test
   void testSrid() {
     Geography geography = Geography.fromBytes(testGeographyVal);
+    assertEquals(4326, geography.srid());
+  }
+
+  @Test
+  void testSetSridOnTightOwner() {
+    // fromBytes wraps a tight on-heap array, so setSrid writes through in place.
+    Geography geography = Geography.fromBytes(testGeographyVal.clone());
+    geography.setSrid(4269);
+    assertEquals(4269, geography.srid());
+  }
+
+  @Test
+  void testSetSridThrowsWhenNotTightOwner() {
+    // A sub-range view does not own a tight backing array, so getBytes() returns a copy and an
+    // in-place setSrid would be silently lost. It must fail loudly instead of dropping the write.
+    byte[] padded = new byte[testGeographyVal.length + 4];
+    System.arraycopy(testGeographyVal, 0, padded, 4, testGeographyVal.length);
+    Geography geography = Geography.fromValue(
+      BinaryView.fromBytes(padded, 4, testGeographyVal.length));
+    // Reads still work (they copy out), and the original SRID is intact.
+    assertEquals(4326, geography.srid());
+    SparkRuntimeException e = assertThrows(
+      SparkRuntimeException.class, () -> geography.setSrid(4269));
+    assertEquals("INTERNAL_ERROR", e.getCondition());
+    // After copy() the value owns a tight array, so setSrid succeeds and writes through.
+    Geography owned = geography.copy();
+    owned.setSrid(4269);
+    assertEquals(4269, owned.srid());
+    // The original sub-range view is untouched.
     assertEquals(4326, geography.srid());
   }
 }

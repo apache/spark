@@ -62,6 +62,8 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
 
   override def getJavaClass: Class[_] = classOf[Long]
 
+  override def getBoxedJavaClass: Class[_] = classOf[java.lang.Long]
+
   override def getMutableValue: MutableValue = new MutableLong
 
   override def getRowWriter(ordinal: Int): (InternalRow, Any) => Unit =

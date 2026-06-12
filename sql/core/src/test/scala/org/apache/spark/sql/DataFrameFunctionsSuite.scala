@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1991,6 +1992,40 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       ),
       queryContext = Array(ExpectedContext("", "", 0, 21, "array_join(x, ', ', 1)"))
     )
+  }
+
+  test("array_join with nullable nullReplacement under whole-stage codegen") {
+    // With a nullable nullReplacement column and an upstream IsNotNull
+    // filter that tightens the array (and delimiter) to non-nullable, whole-stage codegen used to
+    // build the joined string but leave ev.isNull = true, discarding every row as NULL. The result
+    // must match interpreted eval(). The source is materialized via a cached temp view (an
+    // InMemoryRelation), so the plan is not folded to interpreted eval by ConvertToLocalRelation.
+    withTempView("array_join_codegen") {
+      Seq(
+        (Seq[String]("a", null, "b"), ",", "NR"),
+        (Seq[String]("a", null, "b"), ",", null),
+        (Seq[String]("x", "y"), "-", "NR")
+      ).toDF("arr", "delim_col", "repl_col").createOrReplaceTempView("array_join_codegen")
+      spark.catalog.cacheTable("array_join_codegen")
+
+      val query =
+        "SELECT array_join(arr, delim_col, repl_col) FROM array_join_codegen " +
+          "WHERE arr IS NOT NULL AND delim_col IS NOT NULL"
+
+      withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+        val df = sql(query)
+        assert(
+          df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "expected the array_join query to run inside whole-stage codegen")
+        checkAnswer(df, Seq(Row("a,NR,b"), Row(null), Row("x-y")))
+      }
+
+      withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+          SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN") {
+        checkAnswer(sql(query), Seq(Row("a,NR,b"), Row(null), Row("x-y")))
+      }
+    }
   }
 
   test("array_min function") {
@@ -4774,6 +4809,53 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     // Test with cached relation, the Project will be evaluated with codegen
     df.cache()
     testArrayOfPrimitiveTypeNotContainsNull()
+  }
+
+  test("aggregate function - null array does not evaluate zero expression through CSE") {
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY",
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> "true") {
+      checkAnswer(
+        spark.range(1).selectExpr(
+          """
+            |aggregate(
+            |  CAST(NULL AS ARRAY<INT>),
+            |  (CAST(id AS INT) / 0) + (CAST(id AS INT) / 0),
+            |  (acc, x) -> acc + x)
+            |""".stripMargin),
+        Row(null))
+    }
+  }
+
+  test("aggregate function - generated code clears accumulator null state within row") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+      checkAnswer(
+        spark.range(1).selectExpr(
+          """
+            |aggregate(
+            |  array(CAST(id AS INT) + 1, CAST(id AS INT) + 2),
+            |  CAST(NULL AS INT),
+            |  (acc, x) -> coalesce(acc, 0) + x,
+            |  acc -> coalesce(acc, -1))
+            |""".stripMargin),
+        Row(3))
+    }
+  }
+
+  test("aggregate function - generated code clears accumulator null state across rows") {
+    withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY") {
+      checkAnswer(
+        spark.range(0, 2, 1, 1).selectExpr(
+          """
+            |aggregate(
+            |  CASE WHEN id = 0 THEN array(CAST(NULL AS INT)) ELSE array() END,
+            |  0,
+            |  (acc, x) -> acc + x,
+            |  acc -> coalesce(acc, -1))
+            |""".stripMargin),
+        Seq(Row(-1), Row(0)))
+    }
   }
 
   test("aggregate function - array for primitive type containing null") {

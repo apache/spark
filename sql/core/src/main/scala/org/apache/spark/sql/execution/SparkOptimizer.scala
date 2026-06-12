@@ -41,6 +41,10 @@ class SparkOptimizer(
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
       V2ScanRelationPushDown,
+      // V2 applies this fallback before building its scan. For V1, apply it here and rerun
+      // nested pruning because the original grouping expressions may have kept extra fields.
+      CollapseGroupedSumOfCount,
+      SchemaPruning,
       V2ScanPartitioningAndOrdering,
       V2Writes,
       PruneFileSourcePartitions,

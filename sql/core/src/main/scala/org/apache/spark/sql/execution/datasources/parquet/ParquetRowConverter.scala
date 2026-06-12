@@ -43,7 +43,7 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -624,7 +624,7 @@ private[parquet] class ParquetRowConverter(
   private final class ParquetGeometryConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
 
-    private var expandedDictionary: Array[GeometryVal] = null
+    private var expandedDictionary: Array[BinaryView] = null
 
     override def hasDictionarySupport: Boolean = true
 
@@ -660,7 +660,7 @@ private[parquet] class ParquetRowConverter(
   private final class ParquetGeographyConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
 
-    private var expandedDictionary: Array[GeographyVal] = null
+    private var expandedDictionary: Array[BinaryView] = null
 
     override def hasDictionarySupport: Boolean = true
 

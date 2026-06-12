@@ -173,8 +173,31 @@ object Literal {
       case _: ObjectType => Literal(v, dataType)
       case _: CharType | _: VarcharType if SQLConf.get.preserveCharVarcharTypeInfo =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _ if requiresSchemaAwareNanosConversion(dataType, v) =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
     }
+  }
+
+  /**
+   * The schema-less [[CatalystTypeConverters.convertToCatalyst]] keeps bare external nanosecond
+   * timestamp values (`java.time.LocalDateTime` / `java.time.Instant`, and arrays/maps/structs of
+   * them) on the microsecond converters by design (SPARK-57033). When the declared type contains a
+   * nanosecond timestamp type anywhere, route the value through the schema-driven converter so
+   * external values are converted to the internal `TimestampNanosVal` representation. Values
+   * already in Catalyst internal form (`TimestampNanosVal`, `ArrayData`, `MapData`, `InternalRow`)
+   * and nulls keep using the lenient schema-less path, preserving the behavior of callers such as
+   * `Literal.default` that pass internal values.
+   */
+  private def requiresSchemaAwareNanosConversion(dataType: DataType, v: Any): Boolean = {
+    v != null &&
+      !v.isInstanceOf[TimestampNanosVal] &&
+      !v.isInstanceOf[ArrayData] &&
+      !v.isInstanceOf[MapData] &&
+      !v.isInstanceOf[InternalRow] &&
+      dataType.existsRecursively { t =>
+        t.isInstanceOf[TimestampNTZNanosType] || t.isInstanceOf[TimestampLTZNanosType]
+      }
   }
 
   def create[T : TypeTag](v: T): Literal = Try {
@@ -204,8 +227,6 @@ object Literal {
     case DateType => create(0, DateType)
     case TimestampType => create(0L, TimestampType)
     case TimestampNTZType => create(0L, TimestampNTZType)
-    case t: TimestampNTZNanosType => create(TimestampNanosVal.ZERO, t)
-    case t: TimestampLTZNanosType => create(TimestampNanosVal.ZERO, t)
     case t: TimeType => create(0L, t)
     case it: DayTimeIntervalType => create(0L, it)
     case it: YearMonthIntervalType => create(0, it)
@@ -261,8 +282,7 @@ object Literal {
         case PhysicalNullType => true
         case PhysicalShortType => v.isInstanceOf[Short]
         case _: PhysicalStringType => v.isInstanceOf[UTF8String]
-        case _: PhysicalGeographyType => v.isInstanceOf[GeographyVal]
-        case _: PhysicalGeometryType => v.isInstanceOf[GeometryVal]
+        case _: PhysicalBinaryViewType => v.isInstanceOf[BinaryView]
         case PhysicalVariantType => v.isInstanceOf[VariantVal]
         case st: PhysicalStructType =>
           v.isInstanceOf[InternalRow] && {

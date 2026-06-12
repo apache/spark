@@ -27,16 +27,18 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
-import org.apache.spark.unsafe.types.{CalendarInterval, GeographyVal, GeometryVal, TimestampNanosVal, UTF8String}
+import org.apache.spark.unsafe.types.{BinaryView, CalendarInterval, TimestampNanosVal, UTF8String}
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
@@ -99,6 +101,74 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     checkEvaluation(Literal.default(CharType(5)), "     ")
     checkEvaluation(Literal.default(VarcharType(5)), "")
+  }
+
+  test("SPARK-57165: random literals for nanosecond-capable timestamp types") {
+    TimestampNanosTestUtils.foreachNanosPrecision { precision =>
+      val truncate = TimestampNanosTestUtils.nanoOfSecTruncator(precision)
+      Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach { dt =>
+        val gen = LiteralGenerator.randomGen(dt)
+        // Interpreted and codegen evaluation of the generated literals must agree.
+        forAll(gen) { (lit: Literal) =>
+          assert(lit.dataType === dt)
+          val v = lit.value.asInstanceOf[TimestampNanosVal]
+          val nanos = v.nanosWithinMicro.toInt
+          assert(nanos >= 0 && nanos <= TimestampNanosVal.MAX_NANOS_WITHIN_MICRO,
+            s"nanosWithinMicro $nanos out of range for $dt")
+          assert(truncate(nanos) == nanos,
+            s"nanosWithinMicro $nanos is not valid for precision $precision")
+          cmpInterpretWithCodegen(EmptyRow, lit)
+        }
+        // The generator must expose visible, precision-valid nanosecond variation.
+        val sampled = (1 to 5000)
+          .flatMap(_ => gen.sample)
+          .map(_.value.asInstanceOf[TimestampNanosVal].nanosWithinMicro.toInt)
+          .toSet
+        assert(sampled.size > 1, s"expected nanosecond variation for $dt")
+        assert(sampled.forall(n => n >= 0 && truncate(n) == n))
+        // At full precision the edge values {0, 1, 999} must show up.
+        if (precision == TimestampNTZNanosType.NANOS_PRECISION) {
+          Seq(0, 1, TimestampNanosVal.MAX_NANOS_WITHIN_MICRO).foreach { edge =>
+            assert(sampled.contains(edge), s"expected edge value $edge for $dt")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57317: create literals from external nanosecond timestamp values") {
+    val instant = Instant.parse("2020-12-31T23:59:59.123456789Z")
+    val ldt = LocalDateTime.parse("2020-12-31T23:59:59.123456789")
+    TimestampNanosTestUtils.foreachNanosPrecision { precision =>
+      val ltzType = TimestampLTZNanosType(precision)
+      val ntzType = TimestampNTZNanosType(precision)
+      val ltzVal = DateTimeUtils.instantToTimestampNanos(instant, precision)
+      val ntzVal = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision)
+
+      // Scalar external values (java.time.Instant / LocalDateTime) must be converted to the
+      // internal TimestampNanosVal, not kept as epoch micros (a Long) by the schema-less path.
+      val ltzLit = Literal.create(instant, ltzType)
+      assert(ltzLit.dataType === ltzType)
+      assert(ltzLit.value === ltzVal)
+      val ntzLit = Literal.create(ldt, ntzType)
+      assert(ntzLit.dataType === ntzType)
+      assert(ntzLit.value === ntzVal)
+
+      // Arrays of external nanosecond timestamp values are converted element-wise.
+      val arrayLit = Literal.create(Seq(instant), ArrayType(ltzType))
+      val array = arrayLit.value.asInstanceOf[ArrayData]
+      assert(array.numElements() === 1)
+      assert(array.get(0, ltzType) === ltzVal)
+
+      // Structs containing nanosecond timestamp fields are converted field-wise.
+      val structType = new StructType().add("c", ntzType)
+      val structLit = Literal.create(Row(ldt), structType)
+      assert(structLit.value.asInstanceOf[InternalRow].get(0, ntzType) === ntzVal)
+
+      // Values already in Catalyst internal form and nulls keep using the schema-less path.
+      assert(Literal.create(ltzVal, ltzType).value === ltzVal)
+      assert(Literal.create(null, ltzType).value === null)
+    }
   }
 
   test("boolean literals") {
@@ -672,7 +742,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val geog = Geography.fromWKB(pointBytes, 4326)
     val lit = Literal.create(geog, GeographyType(4326))
     assert(lit.dataType === GeographyType(4326))
-    assert(lit.value.isInstanceOf[GeographyVal])
+    assert(lit.value.isInstanceOf[BinaryView])
   }
 
   test("Literal.create with null Geometry value") {
@@ -687,6 +757,6 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val geom = Geometry.fromWKB(pointBytes, 0)
     val lit = Literal.create(geom, GeometryType(0))
     assert(lit.dataType === GeometryType(0))
-    assert(lit.value.isInstanceOf[GeometryVal])
+    assert(lit.value.isInstanceOf[BinaryView])
   }
 }

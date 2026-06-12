@@ -125,7 +125,7 @@ private[spark] object Config extends Logging {
       .doc("If true, executor pods use Driver pod IP directly instead of Driver Service.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
