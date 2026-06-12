@@ -861,4 +861,74 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
     }
   }
+
+  test("get nested array of struct type") {
+    withExecuteQuery("SELECT array(named_struct('a', 1), named_struct('a', 2))") { rs =>
+      assert(rs.next())
+      val value = rs.getObject(1)
+      assert(value.isInstanceOf[scala.collection.Seq[_]])
+      val seq = value.asInstanceOf[scala.collection.Seq[Row]]
+      assert(seq.size === 2)
+      assert(seq(0).getInt(0) === 1)
+      assert(seq(1).getInt(0) === 2)
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnType(1) === Types.ARRAY)
+      assert(metaData.getColumnTypeName(1) === "ARRAY<STRUCT<a: INT NOT NULL>>")
+      assert(metaData.getColumnClassName(1) === "scala.collection.Seq")
+      assert(Class.forName(metaData.getColumnClassName(1)).isInstance(value))
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 0)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
+    }
+  }
+
+  test("get nested map of array type") {
+    withExecuteQuery("SELECT map('x', array(1, 2))") { rs =>
+      assert(rs.next())
+      val value = rs.getObject(1)
+      assert(value.isInstanceOf[Map[_, _]])
+      val map = value.asInstanceOf[Map[String, Seq[Int]]]
+      assert(map("x") === Seq(1, 2))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnType(1) === Types.JAVA_OBJECT)
+      assert(metaData.getColumnTypeName(1) === "MAP<STRING, ARRAY<INT>>")
+      assert(metaData.getColumnClassName(1) === "scala.collection.Map")
+      assert(Class.forName(metaData.getColumnClassName(1)).isInstance(value))
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 0)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
+    }
+  }
+
+  test("get nested struct of map type") {
+    withExecuteQuery("SELECT named_struct('m', map('k', 1))") { rs =>
+      assert(rs.next())
+      val value = rs.getObject(1)
+      assert(value.isInstanceOf[Row])
+      val row = value.asInstanceOf[Row]
+      assert(row.getMap[String, Int](0) === Map("k" -> 1))
+      assert(!rs.wasNull)
+      assert(!rs.next())
+
+      val metaData = rs.getMetaData
+      assert(metaData.getColumnCount === 1)
+      assert(metaData.getColumnType(1) === Types.STRUCT)
+      assert(metaData.getColumnTypeName(1) === "STRUCT<m: MAP<STRING, INT> NOT NULL>")
+      assert(metaData.getColumnClassName(1) === "org.apache.spark.sql.Row")
+      assert(metaData.isSigned(1) === false)
+      assert(metaData.getPrecision(1) === 0)
+      assert(metaData.getScale(1) === 0)
+      assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
+    }
+  }
 }
