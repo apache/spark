@@ -24,6 +24,7 @@ import scala.util.Using
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
+import org.apache.spark.util.SparkClassUtils
 
 class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSession
     with JdbcHelper {
@@ -806,7 +807,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnType(1) === Types.ARRAY)
       assert(metaData.getColumnTypeName(1) === "ARRAY<INT>")
       assert(metaData.getColumnClassName(1) === "scala.collection.Seq")
-      assert(Class.forName(metaData.getColumnClassName(1)).isInstance(value))
+      assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
       assert(metaData.getScale(1) === 0)
@@ -829,7 +830,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnType(1) === Types.JAVA_OBJECT)
       assert(metaData.getColumnTypeName(1) === "MAP<STRING, INT>")
       assert(metaData.getColumnClassName(1) === "scala.collection.Map")
-      assert(Class.forName(metaData.getColumnClassName(1)).isInstance(value))
+      assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
       assert(metaData.getScale(1) === 0)
@@ -879,7 +880,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnType(1) === Types.ARRAY)
       assert(metaData.getColumnTypeName(1) === "ARRAY<STRUCT<a: INT NOT NULL>>")
       assert(metaData.getColumnClassName(1) === "scala.collection.Seq")
-      assert(Class.forName(metaData.getColumnClassName(1)).isInstance(value))
+      assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
       assert(metaData.getScale(1) === 0)
@@ -902,7 +903,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnType(1) === Types.JAVA_OBJECT)
       assert(metaData.getColumnTypeName(1) === "MAP<STRING, ARRAY<INT>>")
       assert(metaData.getColumnClassName(1) === "scala.collection.Map")
-      assert(Class.forName(metaData.getColumnClassName(1)).isInstance(value))
+      assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
       assert(metaData.getScale(1) === 0)
