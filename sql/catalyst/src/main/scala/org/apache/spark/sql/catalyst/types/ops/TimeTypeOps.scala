@@ -98,7 +98,7 @@ case class TimeTypeOps(override val t: TimeType) extends TimeTypeApiOps(t) with 
   // dispatch at the head of Serializer/DeserializerBuildHelper routes LocalTimeEncoder through
   // these methods, so this is the single gate on the encoder path. Throw rather than return None
   // so the dispatch surfaces UNSUPPORTED_TIME_TYPE instead of falling through to the default
-  // match, which no longer handles LocalTimeEncoder.
+  // match, which does not handle LocalTimeEncoder.
   private def checkTimeTypeEnabled(): Unit = {
     if (!SQLConf.get.isTimeTypeEnabled) {
       throw QueryCompilationErrors.unsupportedTimeTypeError()

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.{DeserializerBuildHelper, SerializerBuildHe
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.LocalTimeEncoder
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ObjectType, TimeType}
 
 /**
  * Tests for the Types Framework wiring of TimeType.
@@ -30,7 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
  * The TIME-type-enabled gate lives in TimeTypeOps.createSerializer / createDeserializer; the
  * framework dispatch at the head of Serializer/DeserializerBuildHelper routes LocalTimeEncoder
  * through it. Disabling spark.sql.timeType.enabled must therefore still reject building a TIME
- * serializer/deserializer with UNSUPPORTED_TIME_TYPE, rather than silently producing one.
+ * serializer/deserializer with UNSUPPORTED_TIME_TYPE, rather than silently producing one. The
+ * enabled path is asserted too, so the gate is covered in both directions.
  */
 class TimeTypeOpsSuite extends SparkFunSuite with SQLHelper {
 
@@ -53,6 +55,22 @@ class TimeTypeOpsSuite extends SparkFunSuite with SQLHelper {
         },
         condition = "UNSUPPORTED_TIME_TYPE",
         parameters = Map.empty[String, String])
+    }
+  }
+
+  test("building a TIME serializer succeeds when the TIME type is enabled") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      // The gate passes and the framework builds a TIME serializer.
+      val serializer = SerializerBuildHelper.createSerializer(LocalTimeEncoder)
+      assert(serializer.dataType.isInstanceOf[TimeType])
+    }
+  }
+
+  test("building a TIME deserializer succeeds when the TIME type is enabled") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      // The gate passes and the framework builds a TIME deserializer returning java.time.LocalTime.
+      val deserializer = DeserializerBuildHelper.createDeserializer(LocalTimeEncoder)
+      assert(deserializer.dataType === ObjectType(classOf[java.time.LocalTime]))
     }
   }
 }
