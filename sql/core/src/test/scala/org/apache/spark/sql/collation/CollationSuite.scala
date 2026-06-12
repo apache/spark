@@ -1100,11 +1100,7 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-57412: unresolved column in generated column under DEFAULT COLLATION reports a " +
-    "friendly error, not INTERNAL_ERROR") {
-    // ApplyDefaultCollation's generation-expression guard must not call dataType on unresolved
-    // nodes. Otherwise a typo'd column reference raises UnresolvedException (surfaced as
-    // INTERNAL_ERROR) before CheckAnalysis can report the real unresolved-column error.
+  test("Unresolved column in generated column under DEFAULT COLLATION reports a friendly error") {
     val query =
       s"""
          |CREATE TABLE testcat.test_table(
