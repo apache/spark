@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
+import org.apache.spark.sql.connector.read.{SampleMethod => SampleMethodV2, Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.VariantExtractionImpl
@@ -165,18 +165,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         rightProjections.forall(_.isInstanceOf[AttributeReference]) &&
         // Cross joins are not supported because they increase the amount of data.
         condition.isDefined &&
-        // Do not push down join if either side has a pushed sample with
-        // fraction < 1, because the merged scan builder would silently
-        // discard it and change the result. At fraction = 1 without
-        // replacement the sample is a no-op on the result set, so dropping
-        // it is safe. With replacement (Poisson sampling), even fraction 1
-        // can emit each row 0, 1, 2, ... times, so it is not a no-op.
-        // TODO(SPARK-56504): Extend SupportsPushDownJoin to accept pushed
-        //   samples so sources supporting both can handle the composition.
-        leftHolder.pushedSample.forall(s =>
-          !s.withReplacement && s.upperBound - s.lowerBound >= 1.0) &&
-        rightHolder.pushedSample.forall(s =>
-          !s.withReplacement && s.upperBound - s.lowerBound >= 1.0) &&
         lBuilder.isOtherSideCompatibleForJoin(rBuilder) =>
       // Process left and right columns in original order
       val (leftSideRequiredColumnsWithAliases, rightSideRequiredColumnsWithAliases) =
@@ -237,7 +225,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           translatedJoinType.get,
           leftSideRequiredColumnsWithAliases,
           rightSideRequiredColumnsWithAliases,
-          translatedCondition.get)
+          translatedCondition.get,
+          toJoinTableSample(leftHolder.pushedSample),
+          toJoinTableSample(rightHolder.pushedSample))
       ) {
         val leftSidePushedDownOperators = getPushedDownOperators(leftHolder)
         val rightSidePushedDownOperators = getPushedDownOperators(rightHolder)
@@ -1171,6 +1161,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     PushedDownOperators(sHolder.pushedAggregate, sHolder.pushedSample,
       sHolder.pushedLimit, sHolder.pushedOffset, sHolder.sortOrders, sHolder.pushedPredicates,
       sHolder.joinedRelationsPushedDownOperators, optRelationName)
+  }
+
+  private def toJoinTableSample(
+      sample: Option[TableSampleInfo]): SupportsPushDownJoin.TableSample = {
+    sample.map { s =>
+      new SupportsPushDownJoin.TableSample(
+        s.lowerBound,
+        s.upperBound,
+        s.withReplacement,
+        s.seed,
+        s.sampleMethod match {
+          case SampleMethod.Bernoulli => SampleMethodV2.BERNOULLI
+          case SampleMethod.System => SampleMethodV2.SYSTEM
+        })
+    }.orNull
   }
 }
 

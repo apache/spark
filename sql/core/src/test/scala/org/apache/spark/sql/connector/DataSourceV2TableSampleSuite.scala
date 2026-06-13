@@ -18,7 +18,11 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{InMemoryTableWithJoinAndSampleCatalog, InMemoryTableWithLegacyTableSampleCatalog, InMemoryTableWithTableSampleCatalog}
+import org.apache.spark.sql.connector.catalog.{
+  InMemoryTableWithJoinAndSampleCatalog,
+  InMemoryTableWithLegacyJoinAndSampleCatalog,
+  InMemoryTableWithLegacyTableSampleCatalog,
+  InMemoryTableWithTableSampleCatalog}
 import org.apache.spark.sql.internal.SQLConf
 
 class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
@@ -156,7 +160,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     }
   }
 
-  test("SPARK-55978: join pushdown is skipped when a side has a pushed sample") {
+  test("SPARK-56504: join pushdown includes left side pushed sample") {
     val joinSampleCatalog = "testjoinsample"
     registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
     val t1 = s"$joinSampleCatalog.ns.t1"
@@ -171,15 +175,48 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         val dfNoSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
         checkJoinPushed(dfNoSample)
 
-        // With a SYSTEM sample (fraction < 1) on one side: join pushdown
-        // should be skipped because the merged scan builder would silently
-        // discard the sample.
+        // With the sample-aware join pushdown API, the pushed sample remains
+        // attached to the left side of the pushed join.
         val dfWithSample = sql(
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
           s"JOIN $t2 ON $t1.id = $t2.id")
-        checkJoinNotPushed(dfWithSample)
-        // The sample should still be pushed down though
+        checkJoinPushed(dfWithSample)
         checkSamplePushed(dfWithSample, pushed = true)
+        checkPushedInfo(dfWithSample, "LEFT SAMPLE: SYSTEM SAMPLE (50.0)")
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-56504: join pushdown includes right and both side pushed samples") {
+    val joinSampleCatalog = "testjoinsampleboth"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        val rightSample = sql(
+          s"SELECT * FROM $t1 JOIN $t2 TABLESAMPLE BERNOULLI (50 PERCENT) " +
+          s"ON $t1.id = $t2.id")
+        checkJoinPushed(rightSample)
+        checkSamplePushed(rightSample, pushed = true)
+        checkPushedInfo(rightSample, "RIGHT SAMPLE: BERNOULLI SAMPLE (50.0)")
+
+        val bothSamples = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
+          s"JOIN $t2 TABLESAMPLE BERNOULLI (50 PERCENT) ON $t1.id = $t2.id")
+        checkJoinPushed(bothSamples)
+        checkSamplePushed(bothSamples, pushed = true)
+        checkPushedInfo(
+          bothSamples,
+          "LEFT SAMPLE: SYSTEM SAMPLE (50.0)",
+          "RIGHT SAMPLE: BERNOULLI SAMPLE (50.0)")
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")
@@ -198,14 +235,44 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
       sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
       sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
       withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-        // At fraction = 1 the sample is a no-op on the result set, so
-        // dropping it inside the merged scan builder is safe. The guard
-        // in V2ScanRelationPushDown short-circuits and join pushdown
-        // proceeds.
+        // At fraction = 1 the sample is a no-op on the result set, so join
+        // pushdown can proceed even for connectors that treat it as ordinary
+        // sample-aware join pushdown input.
         val dfWithSample = sql(
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
           s"JOIN $t2 ON $t1.id = $t2.id")
         checkJoinPushed(dfWithSample)
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-56504: old join pushdown API rejects real pushed samples by default") {
+    val joinSampleCatalog = "testlegjoinandsample"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithLegacyJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        val noSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinPushed(noSample)
+
+        val noOpSample = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
+          s"JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinPushed(noOpSample)
+
+        val realSample = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
+          s"JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinNotPushed(realSample)
+        checkSamplePushed(realSample, pushed = true)
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")

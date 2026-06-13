@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.read;
 
+import javax.annotation.Nullable;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.filter.Predicate;
 import org.apache.spark.sql.connector.join.JoinType;
@@ -62,6 +64,61 @@ public interface SupportsPushDownJoin extends ScanBuilder {
       ColumnWithAlias[] rightSideRequiredColumnsWithAliases,
       Predicate condition
   );
+
+  /**
+   * Pushes down the join of the current {@code SupportsPushDownJoin} and the other side of join
+   * {@code SupportsPushDownJoin}, with pushed samples from either side.
+   *
+   * @param other {@code SupportsPushDownJoin} that this {@code SupportsPushDownJoin}
+   * gets joined with.
+   * @param joinType the type of join.
+   * @param leftSideRequiredColumnsWithAliases required output of the
+   *                                           left side {@code SupportsPushDownJoin}
+   * @param rightSideRequiredColumnsWithAliases required output of the
+   *                                            right side {@code SupportsPushDownJoin}
+   * @param condition join condition. Columns are named after the specified aliases in
+   * {@code leftSideRequiredColumnWithAliases} and {@code rightSideRequiredColumnWithAliases}
+   * @param leftSample pushed sample from the left side, or null if there is no pushed sample.
+   * @param rightSample pushed sample from the right side, or null if there is no pushed sample.
+   * @return True if join has been successfully pushed down.
+   *
+   * @since 4.2.0
+   */
+  default boolean pushDownJoin(
+      SupportsPushDownJoin other,
+      JoinType joinType,
+      ColumnWithAlias[] leftSideRequiredColumnsWithAliases,
+      ColumnWithAlias[] rightSideRequiredColumnsWithAliases,
+      Predicate condition,
+      @Nullable TableSample leftSample,
+      @Nullable TableSample rightSample) {
+    if ((leftSample == null || leftSample.isNoOp()) &&
+        (rightSample == null || rightSample.isNoOp())) {
+      return pushDownJoin(
+          other,
+          joinType,
+          leftSideRequiredColumnsWithAliases,
+          rightSideRequiredColumnsWithAliases,
+          condition);
+    }
+    return false;
+  }
+
+  /**
+   * A pushed table sample from one side of the join.
+   *
+   * @since 4.2.0
+   */
+  record TableSample(
+      double lowerBound,
+      double upperBound,
+      boolean withReplacement,
+      long seed,
+      SampleMethod sampleMethod) {
+    private boolean isNoOp() {
+      return !withReplacement && upperBound - lowerBound >= 1.0;
+    }
+  }
 
   /**
    *  A helper class used when there are duplicated names coming from 2 sides of the join

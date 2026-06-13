@@ -182,6 +182,24 @@ case class JDBCScanBuilder(
       leftSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
       condition: Predicate ): Boolean = {
+    pushDownJoin(
+      other,
+      joinType,
+      leftSideRequiredColumnsWithAliases,
+      rightSideRequiredColumnsWithAliases,
+      condition,
+      null,
+      null)
+  }
+
+  override def pushDownJoin(
+      other: SupportsPushDownJoin,
+      joinType: JoinType,
+      leftSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      rightSideRequiredColumnsWithAliases: Array[SupportsPushDownJoin.ColumnWithAlias],
+      condition: Predicate,
+      leftSample: SupportsPushDownJoin.TableSample,
+      rightSample: SupportsPushDownJoin.TableSample): Boolean = {
     if (!jdbcOptions.pushDownJoin || !dialect.supportsJoin) {
       return false
     }
@@ -206,6 +224,12 @@ case class JDBCScanBuilder(
     }
 
     val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
+    if ((leftSample != null && tableSampleClause.isEmpty) ||
+        (rightSample != null && otherJdbcScanBuilder.tableSampleClause.isEmpty)) {
+      logError(log"Failed to push down join to JDBC because a pushed table sample " +
+        log"could not be represented in the join query")
+      return false
+    }
 
     // requiredSchema will become the finalSchema of this JDBCScanBuilder
     var requiredSchema = StructType(Seq())
@@ -263,13 +287,13 @@ case class JDBCScanBuilder(
     val quotedAliases = columnsWithAliases
       .map(col => Option(col.alias()).map(dialect.quoteIdentifier))
 
-    // Only filters can be pushed down before join pushdown, so we need to craft SQL query
-    // that contains filters as well.
-    // Joins on top of samples are not supported so we don't need to provide tableSample here.
-    dialect
+    val builder = dialect
       .getJdbcSQLQueryBuilder(jdbcOptions)
       .withPredicates(pushedPredicate, JDBCPartition(whereClause = null, idx = 1))
       .withAliasedColumns(quotedColumns, quotedAliases)
+
+    tableSampleClause.foreach(builder.withTableSampleClause)
+    builder
   }
 
   override def pushTableSample(

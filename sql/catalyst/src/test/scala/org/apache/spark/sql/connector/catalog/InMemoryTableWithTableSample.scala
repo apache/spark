@@ -141,7 +141,7 @@ class InMemoryTableWithTableSample(
 
 /**
  * An in-memory table that supports both TABLESAMPLE pushdown and JOIN pushdown.
- * Used to test the guard that prevents join pushdown when a side has a pushed sample.
+ * Used to test join pushdown when a side has a pushed sample.
  */
 class InMemoryTableWithJoinAndSample(
     name: String,
@@ -163,6 +163,7 @@ class InMemoryTableWithJoinAndSample(
     private[catalog] val ownSchema: StructType = tableSchema
     private var pushed: Array[Predicate] = Array.empty
     private var joinedSchema: Option[StructType] = None
+    private var joinedSampleDescription: Option[String] = None
 
     override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
       pushed = predicates
@@ -189,7 +190,126 @@ class InMemoryTableWithJoinAndSample(
         leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         condition: Predicate): Boolean = {
+      pushDownJoin(
+        other,
+        joinType,
+        leftSideRequiredColumnsWithAliases,
+        rightSideRequiredColumnsWithAliases,
+        condition,
+        null,
+        null)
+    }
+
+    override def pushDownJoin(
+        other: SupportsPushDownJoin,
+        joinType: JoinType,
+        leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
+        rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
+        condition: Predicate,
+        leftSample: SupportsPushDownJoin.TableSample,
+        rightSample: SupportsPushDownJoin.TableSample): Boolean = {
+      if (Option(leftSample).exists(_.withReplacement()) ||
+          Option(rightSample).exists(_.withReplacement())) {
+        return false
+      }
+
       val otherSchema = other.asInstanceOf[InMemoryJoinAndSampleScanBuilder].ownSchema
+      val leftFields = leftSideRequiredColumnsWithAliases.map { col =>
+        val name = if (col.alias() != null) col.alias() else col.colName()
+        tableSchema(col.colName()).copy(name = name)
+      }
+      val rightFields = rightSideRequiredColumnsWithAliases.map { col =>
+        val name = if (col.alias() != null) col.alias() else col.colName()
+        otherSchema(col.colName()).copy(name = name)
+      }
+      joinedSchema = Some(StructType(leftFields ++ rightFields))
+      joinedSampleDescription = Some(
+        Seq(sampleDescription("LEFT", leftSample), sampleDescription("RIGHT", rightSample))
+          .flatten
+          .mkString(" "))
+      true
+    }
+
+    override def build: Scan = {
+      joinedSchema match {
+        case Some(js) =>
+          new InMemoryBatchScanWithJoinSample(
+            data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq,
+            js, tableSchema, options, joinedSampleDescription.getOrElse(""))
+        case None => super.build
+      }
+    }
+
+    private def sampleDescription(
+        side: String,
+        sample: SupportsPushDownJoin.TableSample): Option[String] = {
+      Option(sample).map { s =>
+        val pct = (s.upperBound() - s.lowerBound()) * 100
+        val method = s.sampleMethod().toString.toUpperCase(Locale.ROOT)
+        s"$side SAMPLE: $method SAMPLE ($pct)"
+      }
+    }
+
+    private class InMemoryBatchScanWithJoinSample(
+        data: Seq[InputPartition],
+        readSchema: StructType,
+        tableSchema: StructType,
+        options: CaseInsensitiveStringMap,
+        sampleDescription: String)
+      extends InMemoryBatchScan(data, readSchema, tableSchema, options) {
+
+      override def description(): String = {
+        Seq(super.description(), sampleDescription).filter(_.nonEmpty).mkString(" ")
+      }
+    }
+  }
+}
+
+/**
+ * An in-memory table that supports TABLESAMPLE pushdown and only the original
+ * JOIN pushdown API. Used to test the default sample-aware JOIN pushdown behavior.
+ */
+class InMemoryTableWithLegacyJoinAndSample(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String])
+  extends InMemoryTableWithTableSample(name, columns, partitioning, properties) {
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new InMemoryLegacyJoinAndSampleScanBuilder(schema, options)
+  }
+
+  class InMemoryLegacyJoinAndSampleScanBuilder(
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap)
+    extends InMemoryTableSampleScanBuilder(tableSchema, options)
+      with SupportsPushDownJoin with SupportsPushDownV2Filters {
+
+    private[catalog] val ownSchema: StructType = tableSchema
+    private var pushed: Array[Predicate] = Array.empty
+    private var joinedSchema: Option[StructType] = None
+
+    override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+      pushed = predicates
+      Array.empty
+    }
+
+    override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+      Array.empty
+    }
+
+    override def pushedPredicates(): Array[Predicate] = pushed
+
+    override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = true
+
+    override def pushDownJoin(
+        other: SupportsPushDownJoin,
+        joinType: JoinType,
+        leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
+        rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
+        condition: Predicate): Boolean = {
+      val otherSchema = other.asInstanceOf[InMemoryLegacyJoinAndSampleScanBuilder].ownSchema
       val leftFields = leftSideRequiredColumnsWithAliases.map { col =>
         val name = if (col.alias() != null) col.alias() else col.colName()
         tableSchema(col.colName()).copy(name = name)
