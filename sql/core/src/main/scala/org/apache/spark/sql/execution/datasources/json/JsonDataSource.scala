@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{ByteArrayInputStream, FileNotFoundException, InputStream, IOException}
+import java.io.{FileNotFoundException, InputStream, IOException}
 
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
@@ -139,69 +140,62 @@ abstract class JsonDataSource extends Serializable with Logging {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType = {
-    val streams = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    val baseRdd = JsonDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
     val multiLine = parsedOptions.multiLine
     val lineSeparator = parsedOptions.lineSeparatorInRead
     val encoding = parsedOptions.encoding
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
-    // Each input is streamed lazily, carrying each record as its raw bytes in a fresh array (the
-    // line reader reuses one buffer, so a line is copied off it). The bytes are parsed below the
-    // way the matching scan parses them (see `recordParser`). An archive is read entry by entry; a
-    // loose file is read directly -- both yield the same record units, so all inputs feed one pass.
-    val records: RDD[Array[Byte]] = streams.flatMap { stream =>
-      val path = new Path(stream.getPath())
-      def recordsOf(in: InputStream): Iterator[Array[Byte]] =
-        if (multiLine) {
-          Iterator.single(in.readAllBytes())
-        } else {
-          ArchiveReader.lineIterator(in, lineSeparator).map(_.copyBytes())
+
+    // Applies `perEntry` to each input -- once per archive entry, once for a loose file -- skipping
+    // a whole input on corrupt/missing input when the ignore flags are set. The entry/file stream
+    // is consumed lazily by `perEntry`, never buffered whole; mirrors CSV's `inferWithArchives`.
+    def perInput[T: ClassTag](perEntry: InputStream => Iterator[T]): RDD[T] = baseRdd.flatMap {
+      stream =>
+        val path = new Path(stream.getPath())
+        try {
+          if (ArchiveReader.isArchivePath(path)) {
+            ArchiveReader(path).readEntries(stream.getConfiguration) { (_, in) => perEntry(in) }
+          } else {
+            perEntry(
+              CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
+          }
+        } catch {
+          case e: FileNotFoundException if ignoreMissingFiles =>
+            logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
+            Iterator.empty
+          case e: FileNotFoundException => throw e
+          case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
+            logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
+            Iterator.empty
+          case NonFatal(e) =>
+            throw QueryExecutionErrors.cannotReadFilesError(
+              e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
         }
-      try {
-        if (ArchiveReader.isArchivePath(path)) {
-          ArchiveReader(path).readEntries(stream.getConfiguration)((_, in) => recordsOf(in))
-        } else {
-          recordsOf(CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path))
-        }
-      } catch {
-        case e: FileNotFoundException if ignoreMissingFiles =>
-          logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
-          Iterator.empty
-        case e: FileNotFoundException => throw e
-        case e @ (_: RuntimeException | _: IOException) if ignoreCorruptFiles =>
-          logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
-          Iterator.empty
-        case NonFatal(e) =>
-          throw QueryExecutionErrors.cannotReadFilesError(
-            e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
-      }
     }
-    // Honor `samplingRatio` like the loose-file infer paths, so an archive samples its records like
-    // a directory read rather than always reading every one.
-    val sampled = JsonUtils.sample(records, parsedOptions)
-    // Parse each record exactly as its mode's scan does. multiLine mirrors MultiLineJsonDataSource
-    // (`CreateJacksonParser.inputStream`): an InputStreamReader of the `encoding` (or auto-detect
-    // when unset), matching the scan's decoder -- including its lenient handling of bytes that are
-    // malformed in that charset, where the strict stream decoder would instead fail inference.
-    // Line-delimited mirrors TextInputJsonDataSource (`CreateJacksonParser.text`): the
-    // byte-array / stream-decoder path, which already matches.
-    val recordParser: (JsonFactory, Array[Byte]) => JsonParser = if (multiLine) {
-      encoding match {
-        case Some(enc) =>
-          (factory, bytes) =>
-            CreateJacksonParser.inputStream(enc, factory, new ByteArrayInputStream(bytes))
-        case None =>
-          (factory, bytes) =>
-            CreateJacksonParser.inputStream(factory, new ByteArrayInputStream(bytes))
-      }
-    } else {
-      encoding
-        .map(enc => CreateJacksonParser.bytes(enc, _: JsonFactory, _: Array[Byte]))
-        .getOrElse(CreateJacksonParser.bytes(_: JsonFactory, _: Array[Byte]))
-    }
+
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      new JsonInferSchema(parsedOptions)
-        .infer[Array[Byte]](sampled, recordParser, isReadFile = multiLine)
+      val inferSchema = new JsonInferSchema(parsedOptions)
+      if (multiLine) {
+        // Each input/entry is one JSON document: hand its stream straight to the parser
+        // (`CreateJacksonParser.inputStream`, matching MultiLineJsonDataSource and its charset
+        // auto-detect) so the document is parsed incrementally rather than buffered.
+        val docs = perInput(in => Iterator.single(in))
+        val docParser: (JsonFactory, InputStream) => JsonParser = encoding
+          .map(enc => CreateJacksonParser.inputStream(enc, _: JsonFactory, _: InputStream))
+          .getOrElse(CreateJacksonParser.inputStream(_: JsonFactory, _: InputStream))
+        inferSchema.infer[InputStream](
+          JsonUtils.sample(docs, parsedOptions), docParser, isReadFile = true)
+      } else {
+        // Line-delimited: each line is a record, copied off the reused line buffer and parsed from
+        // its bytes (`CreateJacksonParser.bytes`, matching TextInputJsonDataSource).
+        val lines = perInput(in => ArchiveReader.lineIterator(in, lineSeparator).map(_.copyBytes()))
+        val lineParser: (JsonFactory, Array[Byte]) => JsonParser = encoding
+          .map(enc => CreateJacksonParser.bytes(enc, _: JsonFactory, _: Array[Byte]))
+          .getOrElse(CreateJacksonParser.bytes(_: JsonFactory, _: Array[Byte]))
+        inferSchema.infer[Array[Byte]](
+          JsonUtils.sample(lines, parsedOptions), lineParser, isReadFile = false)
+      }
     }
   }
 }

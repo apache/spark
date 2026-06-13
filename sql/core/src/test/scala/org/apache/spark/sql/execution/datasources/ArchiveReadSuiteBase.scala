@@ -106,13 +106,6 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       schema: String = readSchema): DataFrame =
     spark.read.format(format).options(readOptions ++ extraOptions).schema(schema).load(path)
 
-  // ----- capability hooks (default on; subclasses opt out) -------------------
-  //
-  // These gate the shared inference / complex-type / schema-merge tests below. They default to
-  // true so a new format automatically runs every applicable test, and a format opts OUT (overrides
-  // to false) only where a capability does not apply -- so adding a format cannot silently skip a
-  // test by forgetting to flip a flag on.
-
   /**
    * Whether this format infers its read schema from the textual content of the files (CSV, JSON,
    * XML), as opposed to carrying an embedded schema (Avro, Parquet) or none (text). Gates the

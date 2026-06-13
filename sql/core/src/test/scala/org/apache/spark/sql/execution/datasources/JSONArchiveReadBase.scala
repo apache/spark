@@ -44,11 +44,6 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
-  // JSON infers its schema from record content, represents nested structs, and unions fields by
-  // name, so it keeps all three capability defaults on (supportsSchemaInference,
-  // supportsComplexTypes, supportsSchemaMerge). Inference needs no trigger option, so the inherited
-  // `inferenceOptions` stays empty.
-
   override protected def encodeFile(
       df: DataFrame,
       writeOptions: Map[String, String]): Array[Byte] = {
@@ -69,13 +64,6 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
 
   /** Raw JSON bytes, for tests that need precise control over the record layout. */
   protected def jsonBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)
-
-  // ----- JSON-specific schema inference --------------------------------------
-  // The format-agnostic parity/widening/corrupt-skip, schema-merge (differing-field union), and
-  // complex-type tests run from ArchiveReadSuiteBase (gated by the `supports*` hooks above); the
-  // tests below assert JSON-specific inference behavior -- NullType canonicalization, null-in-loose
-  // widening, multi-line merging, and charset handling -- that has no format-agnostic analogue.
-  // They use the shared `inferredSchema` helper from the base.
 
   test("JSON: a column null across all archive entries infers as string") {
     // Field `v` is null in every record across both entries, so each per-record type is NullType.
