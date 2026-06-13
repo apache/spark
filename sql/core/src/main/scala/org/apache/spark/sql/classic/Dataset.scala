@@ -582,7 +582,11 @@ class Dataset[T] private[sql](
       }
 
       withTypedPlan[T] {
-        LogicalRDD.fromDataset(rdd = internalRdd, originDataset = this, isStreaming = isStreaming)
+        LogicalRDD.fromDataset(
+          rdd = internalRdd,
+          originDataset = this,
+          isStreaming = isStreaming,
+          fromCheckpoint = true)
       }
     }
   }

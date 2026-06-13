@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
@@ -199,11 +200,22 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
 
   /**
-   * Search a filtering predicate in a given logical plan
+   * Search for a selective filtering operation, a LocalRelation, or a checkpoint-derived
+   * LogicalRDD.
+   *
+   * LocalRelation rows are already locally available. A checkpoint-derived LogicalRDD establishes
+   * an explicit checkpoint boundary and can be used as a broadcast build side for DPP without
+   * evaluating the computation upstream of that boundary again.
+   *
+   * InMemoryRelation is intentionally excluded because cache() and persist() are lazy: its
+   * presence does not guarantee the cached data has been materialized, and missing or evicted
+   * blocks may require evaluating the upstream computation again.
    */
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
+  private def hasSelectivePredicateOrLocalOrCheckpointedInput(plan: LogicalPlan): Boolean = {
     plan.exists {
       case f: Filter => isLikelySelective(f.condition)
+      case _: LocalRelation => true
+      case r: LogicalRDD => r.isCheckpointedInput
       case _ => false
     }
   }
@@ -212,10 +224,11 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * To be able to prune partitions on a join key, the filtering side needs to
    * meet the following requirements:
    *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate used for filtering
+   *   (2) it needs to contain a selective predicate, a LocalRelation, or a checkpoint-derived
+   *       LogicalRDD
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
+    !plan.isStreaming && hasSelectivePredicateOrLocalOrCheckpointedInput(plan)
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
