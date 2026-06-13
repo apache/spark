@@ -24,7 +24,12 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.column.{Encoding, ParquetProperties}
+import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
+import org.apache.parquet.example.data.simple.SimpleGroup
 import org.apache.parquet.hadoop.ParquetOutputFormat
+import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.io.api.Binary
+import org.apache.parquet.schema.MessageTypeParser
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 
 import org.apache.spark.TestUtils
@@ -257,6 +262,194 @@ class ParquetEncodingSuite extends ParquetCompatibilityTest with SharedSparkSess
           .asPrimitiveType()
         // TIMESTAMP_MICROS is stored as INT64, not INT96
         assert(tsField.getPrimitiveTypeName === PrimitiveTypeName.INT64)
+      }
+    }
+  }
+
+  test("BYTE_STREAM_SPLIT encoding round-trip for float and double columns") {
+    // parquet-mr already includes the BYTE_STREAM_SPLIT encoder; Spark's existing
+    // config passthrough forwards `parquet.enable.bytestreamsplit` to the writer.
+    // This test verifies the full write-read round-trip through the vectorized reader.
+    val extraOptions = Map[String, String](
+      ParquetOutputFormat.ENABLE_BYTE_STREAM_SPLIT -> "true",
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "false"
+    )
+
+    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
+    withMemoryModes { offHeapMode =>
+      withSQLConf(
+        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true",
+        ParquetOutputFormat.JOB_SUMMARY_LEVEL -> "ALL") {
+        withTempPath { dir =>
+          val path = s"${dir.getCanonicalPath}/test.parquet"
+          val size = 8193
+          val data = (1 to size).map { i =>
+            Row(i, i.toLong, i.toFloat, i.toDouble,
+              if (i % 3 == 0) null else (i * 0.1f),
+              if (i % 5 == 0) null else (i * 0.01))
+          }
+          val schema = new org.apache.spark.sql.types.StructType()
+            .add("i", org.apache.spark.sql.types.IntegerType)
+            .add("l", org.apache.spark.sql.types.LongType)
+            .add("f", org.apache.spark.sql.types.FloatType)
+            .add("d", org.apache.spark.sql.types.DoubleType)
+            .add("f_nullable", org.apache.spark.sql.types.FloatType, nullable = true)
+            .add("d_nullable", org.apache.spark.sql.types.DoubleType, nullable = true)
+
+          spark.createDataFrame(spark.sparkContext.parallelize(data, 1), schema)
+            .write.options(extraOptions).mode("overwrite").parquet(path)
+
+          val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+          val columnChunkMetadataList = blockMetadata.getColumns.asScala
+
+          assert(columnChunkMetadataList.length === 6)
+          // INT32 and INT64 columns should NOT use BYTE_STREAM_SPLIT (the boolean
+          // flag only enables the FLOATING_POINT mode, not the extended INT32/INT64 mode)
+          assert(
+            !columnChunkMetadataList(0).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+          assert(
+            !columnChunkMetadataList(1).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+          // FLOAT and DOUBLE columns (including nullable ones) should use BYTE_STREAM_SPLIT
+          assert(
+            columnChunkMetadataList(2).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+          assert(
+            columnChunkMetadataList(3).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+          assert(
+            columnChunkMetadataList(4).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+          assert(
+            columnChunkMetadataList(5).getEncodings.contains(Encoding.BYTE_STREAM_SPLIT))
+
+          // Verify round-trip data correctness through the vectorized reader
+          val actual = spark.read.parquet(path).collect()
+          assert(actual.length === size)
+          val sorted = actual.sortBy(_.getInt(0))
+          (1 to size).foreach { i =>
+            val row = sorted(i - 1)
+            assert(row.getInt(0) === i)
+            assert(row.getLong(1) === i.toLong)
+            assert(row.getFloat(2) === i.toFloat)
+            assert(row.getDouble(3) === i.toDouble)
+            if (i % 3 == 0) {
+              assert(row.isNullAt(4))
+            } else {
+              assert(row.getFloat(4) === i * 0.1f)
+            }
+            if (i % 5 == 0) {
+              assert(row.isNullAt(5))
+            } else {
+              assert(row.getDouble(5) === i * 0.01)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("BYTE_STREAM_SPLIT encoding round-trip for all supported types") {
+    // The EXTENDED byte-stream-split mode supports INT32, INT64, FLOAT, DOUBLE, and
+    // FIXED_LEN_BYTE_ARRAY. This test writes a Parquet file programmatically using the
+    // parquet-mr ExampleParquetWriter with per-column BSS encoding (which uses EXTENDED
+    // mode) and verifies the vectorized reader correctly decodes all column types.
+    val schemaStr =
+      """message root {
+        |  required int32 int_col;
+        |  required int64 long_col;
+        |  required float float_col;
+        |  required double double_col;
+        |  required fixed_len_byte_array(4) flba_col;
+        |  optional int32 int_nullable;
+        |  optional float float_nullable;
+        |}
+      """.stripMargin
+    val schema = MessageTypeParser.parseMessageType(schemaStr)
+
+    withMemoryModes { offHeapMode =>
+      withSQLConf(
+        SQLConf.COLUMN_VECTOR_OFFHEAP_ENABLED.key -> offHeapMode,
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        withTempDir { dir =>
+          val path = new Path(dir.toURI.toString, "bss_all_types.parquet")
+          val size = 8193
+
+          // Write the file using ExampleParquetWriter with per-column BSS enabled.
+          // The per-column withByteStreamSplitEncoding(col, true) sets EXTENDED mode.
+          val hadoopConf = spark.sessionState.newHadoopConf()
+          val writer = ExampleParquetWriter.builder(path)
+            .withType(schema)
+            .withDictionaryEncoding(false)
+            .withByteStreamSplitEncoding("int_col", true)
+            .withByteStreamSplitEncoding("long_col", true)
+            .withByteStreamSplitEncoding("float_col", true)
+            .withByteStreamSplitEncoding("double_col", true)
+            .withByteStreamSplitEncoding("flba_col", true)
+            .withByteStreamSplitEncoding("int_nullable", true)
+            .withByteStreamSplitEncoding("float_nullable", true)
+            .withWriterVersion(PARQUET_1_0)
+            .withConf(hadoopConf)
+            .build()
+
+          try {
+            (1 to size).foreach { i =>
+              val record = new SimpleGroup(schema)
+              record.add("int_col", i)
+              record.add("long_col", i.toLong * 100000L)
+              record.add("float_col", i * 0.1f)
+              record.add("double_col", i * 0.001)
+              // FLBA(4): use the 4 bytes of the integer
+              val flbaBytes = Array[Byte](
+                ((i >> 24) & 0xFF).toByte,
+                ((i >> 16) & 0xFF).toByte,
+                ((i >> 8) & 0xFF).toByte,
+                (i & 0xFF).toByte)
+              record.add("flba_col", Binary.fromConstantByteArray(flbaBytes))
+              // Nullable columns: null every 3rd row for int, every 5th for float
+              if (i % 3 != 0) record.add("int_nullable", i * 7)
+              if (i % 5 != 0) record.add("float_nullable", i * 0.5f)
+              writer.write(record)
+            }
+          } finally {
+            writer.close()
+          }
+
+          // Verify encoding metadata: all columns should use BYTE_STREAM_SPLIT
+          val footer = readAllFootersWithoutSummaryFiles(
+            path.getParent, hadoopConf).head.getParquetMetadata
+          val columnChunks = footer.getBlocks.asScala.head.getColumns.asScala
+          assert(columnChunks.length === 7)
+          columnChunks.foreach { chunk =>
+            assert(chunk.getEncodings.contains(Encoding.BYTE_STREAM_SPLIT),
+              s"Column ${chunk.getPath} should use BYTE_STREAM_SPLIT encoding")
+          }
+
+          // Read back with the vectorized reader and verify data
+          val actual = spark.read.parquet(path.toString).collect()
+          assert(actual.length === size)
+          val sorted = actual.sortBy(_.getInt(0))
+          (1 to size).foreach { i =>
+            val row = sorted(i - 1)
+            assert(row.getInt(0) === i, s"int_col mismatch at i=$i")
+            assert(row.getLong(1) === i.toLong * 100000L, s"long_col mismatch at i=$i")
+            assert(row.getFloat(2) === i * 0.1f, s"float_col mismatch at i=$i")
+            assert(row.getDouble(3) === i * 0.001, s"double_col mismatch at i=$i")
+            val expectedFlba = Array[Byte](
+              ((i >> 24) & 0xFF).toByte,
+              ((i >> 16) & 0xFF).toByte,
+              ((i >> 8) & 0xFF).toByte,
+              (i & 0xFF).toByte)
+            assert(row.getAs[Array[Byte]](4) === expectedFlba, s"flba_col mismatch at i=$i")
+            if (i % 3 == 0) {
+              assert(row.isNullAt(5), s"int_nullable should be null at i=$i")
+            } else {
+              assert(row.getInt(5) === i * 7, s"int_nullable mismatch at i=$i")
+            }
+            if (i % 5 == 0) {
+              assert(row.isNullAt(6), s"float_nullable should be null at i=$i")
+            } else {
+              assert(row.getFloat(6) === i * 0.5f, s"float_nullable mismatch at i=$i")
+            }
+          }
+        }
       }
     }
   }
