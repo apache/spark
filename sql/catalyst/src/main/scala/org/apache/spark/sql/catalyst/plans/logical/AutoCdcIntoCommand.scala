@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.expressions.Expression
 
 /**
  * Logical plan node for an AUTO CDC INTO command, used by Spark Declarative Pipelines.
@@ -51,7 +51,9 @@ case class AutoCdcIntoCommand(
     sequenceByExpr: Expression,
     specifiedCols: Seq[UnresolvedAttribute],
     exceptCols: Seq[UnresolvedAttribute]
-) extends LeafCommand {
-  // Output is not meaningful; this node is a pipeline-context placeholder.
-  override def output: Seq[Attribute] = Nil
+) extends UnaryCommand {
+  override def child: LogicalPlan = sourceTable
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(sourceTable = newChild)
 }

@@ -1670,42 +1670,6 @@ class SparkSqlAstBuilder extends AstBuilder {
     (colDefs, partitioning, spec, ifNotExists, tableIdent)
   }
 
-  override def visitCreateStreamingTableAutoCdc(
-      ctx: CreateStreamingTableAutoCdcContext): LogicalPlan = withOrigin(ctx) {
-    val headerCtx = ctx.createPipelineDatasetHeader()
-
-    if (headerCtx.materializedView() != null) {
-      throw operationNotAllowed(
-        "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW.", ctx)
-    }
-
-    val (colDefs, partitioning, spec, ifNotExists, tableIdent) =
-      parsePipelineDatasetPrelude(
-        "STREAMING TABLE",
-        headerCtx,
-        ctx.tableProvider,
-        ctx.tableElementList(),
-        ctx.createTableClauses(),
-        ctx)
-
-    val (src, keys, delete, seq, specCols, exceptCols) =
-      parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
-
-    CreateStreamingTableAutoCdc(
-      name = tableIdent,
-      columns = colDefs,
-      partitioning = partitioning,
-      tableSpec = spec,
-      ifNotExists = ifNotExists,
-      sourceTable = src,
-      keys = keys,
-      deleteCondition = delete,
-      sequenceByExpr = seq,
-      specifiedCols = specCols,
-      exceptCols = exceptCols
-    )
-  }
-
   override def visitCreatePipelineDataset(
       ctx: CreatePipelineDatasetContext): LogicalPlan = withOrigin(ctx) {
     val createPipelineDatasetHeaderCtx = ctx.createPipelineDatasetHeader()
@@ -1729,6 +1693,10 @@ class SparkSqlAstBuilder extends AstBuilder {
         ctx)
 
     if (createPipelineDatasetHeaderCtx.materializedView() != null) {
+      if (ctx.autoCdcBody() != null) {
+        throw operationNotAllowed(
+          "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW.", ctx)
+      }
       val query: ParserRuleContext = Option(ctx.query).getOrElse(
         throw operationNotAllowed(
           s"Unable to find query for CREATE $syntaxTypeErrorStr statement.", ctx)
@@ -1743,25 +1711,43 @@ class SparkSqlAstBuilder extends AstBuilder {
         ifNotExists = ifNotExists
       )
     } else if (createPipelineDatasetHeaderCtx.streamingTable() != null) {
-      Option(ctx.query) match {
-        case Some(query) =>
-          CreateStreamingTableAsSelect(
-            name = datasetIdentifier,
-            columns = colDefs,
-            partitioning = partitioning,
-            tableSpec = spec,
-            query = plan(query),
-            originalText = source(query),
-            ifNotExists = ifNotExists
-          )
-        case None =>
-          CreateStreamingTable(
-            name = datasetIdentifier,
-            columns = colDefs,
-            partitioning = partitioning,
-            tableSpec = spec,
-            ifNotExists = ifNotExists
-          )
+      if (ctx.autoCdcBody() != null) {
+        val (src, keys, delete, seq, specCols, exceptCols) =
+          parseAutoCdcParams(ctx.autoCdcBody().autoCdcParameters())
+        CreateStreamingTableAutoCdc(
+          name = datasetIdentifier,
+          columns = colDefs,
+          partitioning = partitioning,
+          tableSpec = spec,
+          ifNotExists = ifNotExists,
+          sourceTable = src,
+          keys = keys,
+          deleteCondition = delete,
+          sequenceByExpr = seq,
+          specifiedCols = specCols,
+          exceptCols = exceptCols
+        )
+      } else {
+        Option(ctx.query) match {
+          case Some(query) =>
+            CreateStreamingTableAsSelect(
+              name = datasetIdentifier,
+              columns = colDefs,
+              partitioning = partitioning,
+              tableSpec = spec,
+              query = plan(query),
+              originalText = source(query),
+              ifNotExists = ifNotExists
+            )
+          case None =>
+            CreateStreamingTable(
+              name = datasetIdentifier,
+              columns = colDefs,
+              partitioning = partitioning,
+              tableSpec = spec,
+              ifNotExists = ifNotExists
+            )
+        }
       }
     } else {
       // Should never be possible based on grammar definition.

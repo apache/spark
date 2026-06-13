@@ -416,10 +416,7 @@ statement
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
         createTableClauses
-        (AS query)?                                                    #createPipelineDataset
-    | createPipelineDatasetHeader (LEFT_PAREN tableElementList? RIGHT_PAREN)? tableProvider?
-        createTableClauses
-        FLOW autoCdcBody                                               #createStreamingTableAutoCdc
+        (AS query | FLOW autoCdcBody)?                                 #createPipelineDataset
     | createPipelineFlowHeader insertInto query                        #createPipelineInsertIntoFlow
     | createPipelineFlowHeader autoCdcCommand                          #createFlowAutoCdc
     ;
