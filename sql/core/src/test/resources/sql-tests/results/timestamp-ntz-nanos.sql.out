@@ -138,7 +138,7 @@ struct<named_struct(f, CAST(NULL AS TIMESTAMP_NTZ(9))):struct<f:timestamp_ntz(9)
 -- !query
 SELECT hour(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<hour(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
+struct<hour(TimestampNanosVal(1577885075123456, 789)):int>
 -- !query output
 13
 
@@ -146,7 +146,7 @@ struct<hour(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query
 SELECT minute(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<minute(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
+struct<minute(TimestampNanosVal(1577885075123456, 789)):int>
 -- !query output
 24
 
@@ -154,7 +154,7 @@ struct<minute(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query
 SELECT second(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<second(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
+struct<second(TimestampNanosVal(1577885075123456, 789)):int>
 -- !query output
 35
 
@@ -186,7 +186,7 @@ NULL
 -- !query
 SELECT hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query schema
-struct<hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789'):int>
+struct<hour(TimestampNanosVal(-315570924876544, 789)):int>
 -- !query output
 13
 
@@ -194,7 +194,7 @@ struct<hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789'):int>
 -- !query
 SELECT minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query schema
-struct<minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789'):int>
+struct<minute(TimestampNanosVal(-315570924876544, 789)):int>
 -- !query output
 24
 
@@ -202,7 +202,7 @@ struct<minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789'):int>
 -- !query
 SELECT second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query schema
-struct<second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789'):int>
+struct<second(TimestampNanosVal(-315570924876544, 789)):int>
 -- !query output
 35
 
