@@ -429,7 +429,11 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      valuesReader.readIntegersAsTimestampMicros(total, values, offset);
+      valuesReader.readIntegersAsLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        values.putLong(offset + i,
+            DateTimeUtils.daysToMicros((int) values.getLong(offset + i), ZoneOffset.UTC));
+      }
     }
 
     @Override
@@ -470,8 +474,10 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readIntegersAsLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        int rebasedDays = rebaseDays((int) values.getLong(offset + i), failIfRebase);
+        values.putLong(offset + i, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
       }
     }
 
@@ -796,8 +802,9 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        values.putLong(offset + i, DateTimeUtils.millisToMicros(values.getLong(offset + i)));
       }
     }
 
@@ -840,8 +847,10 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        long julianMicros = DateTimeUtils.millisToMicros(values.getLong(offset + i));
+        values.putLong(offset + i, rebaseMicros(julianMicros, failIfRebase, timeZone));
       }
     }
 
@@ -878,8 +887,9 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        values.putLong(offset + i, DateTimeUtils.microsToNanos(values.getLong(offset + i)));
       }
     }
 
