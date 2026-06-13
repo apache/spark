@@ -5193,6 +5193,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val BIN_BY_ENABLED =
+    buildConf("spark.sql.binByRelationOperator.enabled")
+      .doc("Enable the BIN BY relation operator for aligning range-typed rows to " +
+        "fixed-width bin boundaries.")
+      .internal()
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
   }

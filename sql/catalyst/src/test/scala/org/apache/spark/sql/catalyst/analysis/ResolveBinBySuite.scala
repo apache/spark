@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -27,6 +30,17 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class ResolveBinBySuite extends AnalysisTest {
+
+  // BIN BY is gated off by default; run the resolution tests with it enabled. The dedicated
+  // gate test below uses `super.test` to observe the default-off behavior.
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+                             (implicit pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+        testFun
+      }
+    }
+  }
 
   private val tsStart = $"ts_start".timestamp
   private val tsEnd = $"ts_end".timestamp
@@ -303,5 +317,11 @@ class ResolveBinBySuite extends AnalysisTest {
     val appendedExprIds = binBys.flatMap(_.appendedAttributes.map(_.exprId))
     assert(appendedExprIds.distinct.size == appendedExprIds.size,
       "appended BinBy attributes must have distinct exprIds across the two join sides")
+  }
+
+  // `super.test` escapes the suite-wide flag-on wrapper so this runs with the default (off).
+  super.test("BIN BY is gated off by default") {
+    assert(!SQLConf.get.getConf(SQLConf.BIN_BY_ENABLED))
+    expectError(unresolved(), "UNSUPPORTED_FEATURE.BIN_BY")
   }
 }
