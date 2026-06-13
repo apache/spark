@@ -270,24 +270,32 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   // ---------------------------------------------------------------------------
 
   test("CREATE FLOW AS AUTO CDC INTO - SEQUENCE BY is required") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "end of input", "hint" -> "")
+    )
   }
 
   test("CREATE STREAMING TABLE FLOW AUTO CDC - SEQUENCE BY is required") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE STREAMING TABLE target
-          |FLOW AUTO CDC
-          |FROM source
-          |KEYS (id)""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE STREAMING TABLE target
+            |FLOW AUTO CDC
+            |FROM source
+            |KEYS (id)""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "end of input", "hint" -> "")
+    )
   }
 
   // ---------------------------------------------------------------------------
@@ -295,27 +303,35 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   // ---------------------------------------------------------------------------
 
   test("SEQUENCE BY before APPLY AS DELETE is not allowed") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts
-          |APPLY AS DELETE WHEN a = 1""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)
+            |SEQUENCE BY ts
+            |APPLY AS DELETE WHEN a = 1""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'APPLY'", "hint" -> "")
+    )
   }
 
   test("COLUMNS before SEQUENCE BY is not allowed") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |COLUMNS a, b
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)
+            |COLUMNS a, b
+            |SEQUENCE BY ts""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'COLUMNS'", "hint" -> "")
+    )
   }
 
   // ---------------------------------------------------------------------------
@@ -323,14 +339,18 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   // ---------------------------------------------------------------------------
 
   test("standalone AUTO CDC INTO is not supported") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)
+            |SEQUENCE BY ts""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'AUTO'", "hint" -> "")
+    )
   }
 
   // ---------------------------------------------------------------------------
@@ -338,79 +358,109 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   // ---------------------------------------------------------------------------
 
   test("AUTO CDC is not supported for MATERIALIZED VIEW") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE MATERIALIZED VIEW target
-          |FLOW AUTO CDC
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getMessage.contains("AUTO CDC is only supported for STREAMING TABLE"))
+    val sql =
+      """CREATE MATERIALIZED VIEW target
+        |FLOW AUTO CDC
+        |FROM source
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin
+    checkError(
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map(
+        "message" -> "AUTO CDC is only supported for STREAMING TABLE, not MATERIALIZED VIEW."),
+      queryContext = Array(ExpectedContext(sql, 0, sql.length - 1))
+    )
   }
 
   test("column constraints are not supported for AUTO CDC streaming table") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE STREAMING TABLE target (id INT PRIMARY KEY, name STRING)
-          |FLOW AUTO CDC
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getMessage.contains("column constraints"))
+    val sql =
+      """CREATE STREAMING TABLE target (id INT PRIMARY KEY, name STRING)
+        |FLOW AUTO CDC
+        |FROM source
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin
+    checkError(
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" ->
+        ("Pipeline datasets do not currently support column constraints. " +
+          "Please remove any CHECK, UNIQUE, PK, and FK constraints " +
+          "specified on the pipeline dataset.")),
+      queryContext = Array(ExpectedContext(sql, 0, sql.length - 1))
+    )
   }
 
   test("bucketing is not supported for AUTO CDC streaming table") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE STREAMING TABLE target
-          |CLUSTERED BY (id) INTO 4 BUCKETS
-          |FLOW AUTO CDC
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getMessage.contains("Bucketing is not supported"))
+    val sql =
+      """CREATE STREAMING TABLE target
+        |CLUSTERED BY (id) INTO 4 BUCKETS
+        |FLOW AUTO CDC
+        |FROM source
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin
+    checkError(
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" ->
+        ("Bucketing is not supported for CREATE STREAMING TABLE statements. " +
+          "Please remove any bucket spec specified in the statement.")),
+      queryContext = Array(ExpectedContext(sql, 0, sql.length - 1))
+    )
   }
 
   test("options are not supported for AUTO CDC streaming table") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE STREAMING TABLE target
-          |OPTIONS (key = 'value')
-          |FLOW AUTO CDC
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getMessage.contains("Options are not supported"))
+    val sql =
+      """CREATE STREAMING TABLE target
+        |OPTIONS (key = 'value')
+        |FLOW AUTO CDC
+        |FROM source
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin
+    checkError(
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" ->
+        ("Options are not supported for CREATE STREAMING TABLE statements. " +
+          "Please remove any OPTIONS lists specified in the statement.")),
+      queryContext = Array(ExpectedContext(sql, 0, sql.length - 1))
+    )
   }
 
   test("serde is not supported for AUTO CDC streaming table") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE STREAMING TABLE target
-          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
-          |FLOW AUTO CDC
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getMessage.contains("SerDe"))
+    val sql =
+      """CREATE STREAMING TABLE target
+        |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+        |FLOW AUTO CDC
+        |FROM source
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin
+    checkError(
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" ->
+        ("Hive SerDe format options are not supported for " +
+          "CREATE STREAMING TABLE statements.")),
+      queryContext = Array(ExpectedContext(sql, 0, sql.length - 1))
+    )
   }
 
   test("location is not supported for AUTO CDC streaming table") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE STREAMING TABLE target
-          |LOCATION '/tmp/data'
-          |FLOW AUTO CDC
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getMessage.contains("location is not supported"))
+    val sql =
+      """CREATE STREAMING TABLE target
+        |LOCATION '/tmp/data'
+        |FLOW AUTO CDC
+        |FROM source
+        |KEYS (id)
+        |SEQUENCE BY ts""".stripMargin
+    checkError(
+      intercept[ParseException] { parser.parsePlan(sql) },
+      condition = "_LEGACY_ERROR_TEMP_0035",
+      parameters = Map("message" ->
+        ("Specifying location is not supported for CREATE STREAMING TABLE statements. " +
+          "The storage location for a pipeline dataset is managed by the pipeline itself.")),
+      queryContext = Array(ExpectedContext(sql, 0, sql.length - 1))
+    )
   }
 
   // ---------------------------------------------------------------------------
@@ -418,50 +468,66 @@ class AutoCdcParserSuite extends CommandSuiteBase with AnalysisTest {
   // ---------------------------------------------------------------------------
 
   test("APPLY AS TRUNCATE WHEN is not supported") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |APPLY AS TRUNCATE WHEN op = 'TRUNCATE'
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)
+            |APPLY AS TRUNCATE WHEN op = 'TRUNCATE'
+            |SEQUENCE BY ts""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'TRUNCATE'", "hint" -> "")
+    )
   }
 
   test("IGNORE NULL UPDATES is not supported") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |IGNORE NULL UPDATES
-          |SEQUENCE BY ts""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)
+            |IGNORE NULL UPDATES
+            |SEQUENCE BY ts""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'IGNORE'", "hint" -> "")
+    )
   }
 
   test("STORED AS SCD TYPE 2 is not supported") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts
-          |STORED AS SCD TYPE 2""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)
+            |SEQUENCE BY ts
+            |STORED AS SCD TYPE 2""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'STORED'", "hint" -> "")
+    )
   }
 
   test("TRACK HISTORY ON is not supported") {
-    val e = intercept[ParseException] {
-      parser.parsePlan(
-        """CREATE FLOW f AS AUTO CDC INTO target
-          |FROM source
-          |KEYS (id)
-          |SEQUENCE BY ts
-          |TRACK HISTORY ON value1, value2""".stripMargin)
-    }
-    assert(e.getCondition == "PARSE_SYNTAX_ERROR")
+    checkError(
+      intercept[ParseException] {
+        parser.parsePlan(
+          """CREATE FLOW f AS AUTO CDC INTO target
+            |FROM source
+            |KEYS (id)
+            |SEQUENCE BY ts
+            |TRACK HISTORY ON value1, value2""".stripMargin)
+      },
+      condition = "PARSE_SYNTAX_ERROR",
+      sqlState = "42601",
+      parameters = Map("error" -> "'TRACK'", "hint" -> "")
+    )
   }
 }
