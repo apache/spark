@@ -20,6 +20,7 @@ package org.apache.spark.network.protocol;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
 import org.roaringbitmap.RoaringBitmap;
@@ -41,6 +42,7 @@ public class Encoders {
 
     public static String decode(ByteBuf buf) {
       int length = buf.readInt();
+      Objects.checkFromIndexSize(0, length, buf.readableBytes());
       byte[] bytes = new byte[length];
       buf.readBytes(bytes);
       return new String(bytes, StandardCharsets.UTF_8);
