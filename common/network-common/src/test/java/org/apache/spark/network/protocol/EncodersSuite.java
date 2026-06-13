@@ -49,6 +49,28 @@ public class EncodersSuite {
   }
 
   @Test
+  public void testStringsEncodeDecode() {
+    String s = "spark";
+    ByteBuf buf = Unpooled.buffer(Encoders.Strings.encodedLength(s));
+    Encoders.Strings.encode(buf, s);
+    assertEquals(s, Encoders.Strings.decode(buf));
+  }
+
+  @Test
+  public void testStringsDecodeShouldFailWhenLengthIsNegative() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(-1);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.Strings.decode(buf));
+  }
+
+  @Test
+  public void testStringsDecodeShouldFailWhenLengthExceedsReadableBytes() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(Integer.MAX_VALUE);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.Strings.decode(buf));
+  }
+
+  @Test
   public void testBitmapArraysEncodeDecode() {
     RoaringBitmap[] bitmaps = new RoaringBitmap[] {
       new RoaringBitmap(),
