@@ -79,6 +79,32 @@ class InMemoryRowLevelOperationTable private (
   // (operation, id, metadata, row)
   var lastWriteLog: Seq[InternalRow] = Seq.empty
 
+  override def copy(): Table = {
+    val copied = InMemoryRowLevelOperationTable.withColumns(
+      name = name,
+      columns = columns(),
+      partitioning = partitioning,
+      properties = properties,
+      constraints = constraints,
+      tableId = id)
+    dataMap.synchronized {
+      dataMap.foreach { case (key, splits) =>
+        val copiedSplits = splits.map { bufferedRows =>
+          val copiedBufferedRows = new BufferedRows(bufferedRows.key, bufferedRows.schema)
+          copiedBufferedRows.rows ++= bufferedRows.rows.map(_.copy())
+          copiedBufferedRows
+        }
+        copied.dataMap.put(key, copiedSplits)
+      }
+    }
+    copied.commits ++= commits.map(_.copy())
+    copied.setVersionAndValidatedVersionFrom(this)
+    copied.replacedPartitions = replacedPartitions
+    copied.lastWriteInfo = lastWriteInfo
+    copied.lastWriteLog = lastWriteLog
+    copied
+  }
+
   override def newRowLevelOperationBuilder(
       info: RowLevelOperationInfo): RowLevelOperationBuilder = {
     if (properties.getOrDefault(SUPPORTS_DELTAS, "false") == "true") {

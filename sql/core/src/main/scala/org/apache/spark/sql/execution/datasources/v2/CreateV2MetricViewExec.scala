@@ -30,8 +30,8 @@ import org.apache.spark.sql.connector.catalog.{DependencyList, Identifier, Table
  * METRIC_VIEW`) via the [[V2ViewPreparation]] hooks.
  *
  * Routed by [[DataSourceV2Strategy]] from
- * [[org.apache.spark.sql.execution.command.CreateMetricViewCommand]] when the resolved
- * catalog is a non-session v2 catalog.
+ * [[org.apache.spark.sql.metricview.logical.CreateMetricView]] when the resolved catalog
+ * is a non-session v2 catalog.
  */
 case class CreateV2MetricViewExec(
     catalog: ViewCatalog,

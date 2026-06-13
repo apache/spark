@@ -379,6 +379,13 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
+    def zip(self, other: ParentDataFrame) -> ParentDataFrame:
+        other = self._check_same_session(other)
+        return DataFrame(
+            plan.Zip(self._plan, other._plan),
+            session=self._session,
+        )
+
     def _check_same_session(self, other: ParentDataFrame) -> "DataFrame":
         if (
             not isinstance(other, DataFrame)

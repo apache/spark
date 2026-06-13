@@ -149,7 +149,7 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
             self.spark.read.table(self.tbl_name).filter("id > 3").randomSplit([1.0, 2.0, 3.0], 2)
         )
 
-        self.assertTrue(len(relations) == len(datasets))
+        self.assertEqual(len(relations), len(datasets))
         i = 0
         while i < len(relations):
             self.assert_eq(relations[i].toPandas(), datasets[i].toPandas())

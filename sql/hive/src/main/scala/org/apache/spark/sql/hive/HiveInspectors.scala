@@ -839,8 +839,9 @@ private[hive] trait HiveInspectors {
       PrimitiveObjectInspectorFactory.javaHiveIntervalDayTimeObjectInspector
     case _: YearMonthIntervalType =>
       PrimitiveObjectInspectorFactory.javaHiveIntervalYearMonthObjectInspector
-    // TODO decimal precision?
-    case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
+    case DecimalType.Fixed(precision, scale) =>
+      PrimitiveObjectInspectorFactory.getPrimitiveJavaObjectInspector(
+        new DecimalTypeInfo(precision, scale))
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
         java.util.Arrays.asList(fields.map(f => f.name) : _*),
@@ -880,8 +881,8 @@ private[hive] trait HiveInspectors {
       getDateWritableConstantObjectInspector(value)
     case Literal(value, TimestampType) =>
       getTimestampWritableConstantObjectInspector(value)
-    case Literal(value, DecimalType()) =>
-      getDecimalWritableConstantObjectInspector(value)
+    case Literal(value, DecimalType.Fixed(precision, scale)) =>
+      getDecimalWritableConstantObjectInspector(value, precision, scale)
     case Literal(_, NullType) =>
       getPrimitiveNullWritableConstantObjectInspector
     case Literal(_, _: DayTimeIntervalType) =>
@@ -1035,9 +1036,10 @@ private[hive] trait HiveInspectors {
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       TypeInfoFactory.timestampTypeInfo, getTimestampWritable(value))
 
-  private def getDecimalWritableConstantObjectInspector(value: Any): ObjectInspector =
+  private def getDecimalWritableConstantObjectInspector(
+      value: Any, precision: Int, scale: Int): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
-      TypeInfoFactory.decimalTypeInfo, getDecimalWritable(value))
+      new DecimalTypeInfo(precision, scale), getDecimalWritable(value))
 
   private def getPrimitiveNullWritableConstantObjectInspector: ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(

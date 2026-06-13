@@ -448,6 +448,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         s"failed to match ${toSQLId(funcName)} at `addNewFunction`.")
   }
 
+  def lambdaVariableAlreadyDefinedError(id: Long): Throwable = {
+    new IllegalArgumentException(s"Lambda variable $id cannot be redefined")
+  }
+
+  def lambdaVariableNotDefinedError(id: Long): Throwable = {
+    new IllegalArgumentException(
+      s"Lambda variable $id is not defined in the current codegen scope")
+  }
+
   def cannotGenerateCodeForIncomparableTypeError(
       codeType: String, dataType: DataType): Throwable = {
     SparkException.internalError(
@@ -692,6 +701,17 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def wkbParseError(msg: String, pos: Long): SparkIllegalArgumentException = {
     wkbParseError(msg, pos.toString)
+  }
+
+  def cannotMutateReadOnlyGeoValueError(): SparkRuntimeException = {
+    // This guards an internal invariant: setSrid mutates the backing buffer in place, which only
+    // works when the value owns a tight on-heap array. It is never reachable from user input (the
+    // only caller copies first), so a misuse here is a Spark bug, hence INTERNAL_ERROR.
+    new SparkRuntimeException(
+      errorClass = "INTERNAL_ERROR",
+      messageParameters = Map("message" ->
+        ("setSrid requires a value that owns its backing buffer; call copy() before mutating a " +
+          "value read directly from an UnsafeRow / ColumnVector buffer.")))
   }
 
   def withSuggestionIntervalArithmeticOverflowError(
@@ -1202,6 +1222,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       new java.util.HashMap[String, String]())
   }
 
+  def aggregateOutOfMemoryError(): SparkOutOfMemoryError = {
+    new SparkOutOfMemoryError(
+      "AGGREGATE_OUT_OF_MEMORY",
+      new java.util.HashMap[String, String]())
+  }
+
   def cannotAcquireMemoryForWindowAggregateError(
       requestedBytes: Long,
       receivedBytes: Long): SparkOutOfMemoryError = {
@@ -1708,6 +1734,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "version" -> version,
         "key" -> key))
+  }
+
+  def unsupportedHiveMetastoreVersionForJavaError(
+      version: String,
+      requiredJavaVersion: Int,
+      currentJavaVersion: Int): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_HIVE_METASTORE_VERSION_FOR_JAVA",
+      messageParameters = Map(
+        "version" -> version,
+        "requiredJavaVersion" -> requiredJavaVersion.toString,
+        "currentJavaVersion" -> currentJavaVersion.toString))
   }
 
   def loadHiveClientCausesNoClassDefFoundError(
@@ -3348,5 +3386,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "function" -> toSQLId(function),
         "expectedFamily" -> expectedFamily,
         "actualFamily" -> actualFamily))
+  }
+
+  def lineSepCannotBeNullError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.NULL")
+  }
+
+  def lineSepCannotBeEmptyError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.EMPTY")
+  }
+
+  def lineSepTooLongError(length: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_LINE_SEPARATOR.TOO_LONG",
+      messageParameters = Map("length" -> length.toString))
   }
 }

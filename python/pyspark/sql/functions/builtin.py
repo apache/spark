@@ -49,6 +49,7 @@ from pyspark.sql.types import (
     DataType,
     StringType,
     StructType,
+    MapType,
     NumericType,
     _from_numpy_type,
 )
@@ -1643,6 +1644,12 @@ def sum(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.min`
+    :meth:`pyspark.sql.functions.max`
+    :meth:`pyspark.sql.functions.avg`
+
     Examples
     --------
     Example 1: Calculating the sum of values in a column
@@ -1700,6 +1707,12 @@ def avg(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.min`
+    :meth:`pyspark.sql.functions.max`
+    :meth:`pyspark.sql.functions.sum`
 
     Examples
     --------
@@ -1799,6 +1812,12 @@ def median(col: "ColumnOrName") -> Column:
 
     :meth:`pyspark.sql.functions.percentile`
     :meth:`pyspark.sql.functions.approx_percentile`
+    :meth:`pyspark.sql.functions.percentile_approx`
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.approx_percentile`
+    :meth:`pyspark.sql.functions.percentile`
     :meth:`pyspark.sql.functions.percentile_approx`
 
     Examples
@@ -2641,6 +2660,10 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     :class:`~pyspark.sql.Column`
         A column for the computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ceiling`
+
     Examples
     --------
     Example 1: Compute the ceiling of a column value
@@ -2694,6 +2717,10 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     -------
     :class:`~pyspark.sql.Column`
         A column for the computed results.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ceil`
 
     Examples
     --------
@@ -3407,6 +3434,10 @@ def signum(col: "ColumnOrName") -> Column:
     :class:`~pyspark.sql.Column`
         the column for computed results.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.sign`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -3444,6 +3475,10 @@ def sign(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         the column for computed results.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.signum`
 
     Examples
     --------
@@ -3888,6 +3923,7 @@ def getbit(col: "ColumnOrName", pos: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.bit_get`
+    :meth:`pyspark.sql.functions.bit_count`
 
     Examples
     --------
@@ -4411,6 +4447,7 @@ def variance(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.stddev`
     :meth:`pyspark.sql.functions.skewness`
     :meth:`pyspark.sql.functions.kurtosis`
+    :meth:`pyspark.sql.functions.std`
 
     Examples
     --------
@@ -4451,7 +4488,7 @@ def var_samp(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.variance`
     :meth:`pyspark.sql.functions.var_pop`
-    :meth:`pyspark.sql.functions.std_samp`
+    :meth:`pyspark.sql.functions.stddev_samp`
 
     Examples
     --------
@@ -4491,7 +4528,7 @@ def var_pop(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.variance`
     :meth:`pyspark.sql.functions.var_samp`
-    :meth:`pyspark.sql.functions.std_pop`
+    :meth:`pyspark.sql.functions.stddev_pop`
 
     Examples
     --------
@@ -6480,7 +6517,7 @@ def counter_diff(value: "ColumnOrName", startTime: Optional["ColumnOrName"] = No
     Use the ORDER BY clause of the window to order the observations by the associated timestamp
     in ascending order.
 
-    .. versionadded:: 4.2.0
+    .. versionadded:: 4.3.0
 
     Parameters
     ----------
@@ -6982,6 +7019,10 @@ def count_distinct(col: "ColumnOrName", *cols: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         distinct values of these two column values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.approx_count_distinct`
 
     Examples
     --------
@@ -8454,6 +8495,10 @@ def log(arg1: Union["ColumnOrName", float], arg2: Optional["ColumnOrName"] = Non
     :class:`~pyspark.sql.Column`
         logariphm of given value.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.ln`
+
     Examples
     --------
     Example 1: Specify both base number and the input value
@@ -8520,6 +8565,10 @@ def ln(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         natural logarithm of given value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.log`
 
     Examples
     --------
@@ -10112,6 +10161,7 @@ def day(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.extract`
     :meth:`pyspark.sql.functions.datepart`
     :meth:`pyspark.sql.functions.date_part`
+    :meth:`pyspark.sql.functions.weekday`
 
     Examples
     --------
@@ -10198,6 +10248,7 @@ def dayofyear(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.dayofyear`
     :meth:`pyspark.sql.functions.dayofmonth`
     :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
 
     Examples
     --------
@@ -10613,6 +10664,9 @@ def weekday(col: "ColumnOrName") -> Column:
     --------
     :meth:`pyspark.sql.functions.day`
     :meth:`pyspark.sql.functions.weekofyear`
+    :meth:`pyspark.sql.functions.dayofweek`
+    :meth:`pyspark.sql.functions.dayofyear`
+    :meth:`pyspark.sql.functions.dayofmonth`
 
     Examples
     --------
@@ -11074,6 +11128,7 @@ def date_add(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     :meth:`pyspark.sql.functions.datediff`
     :meth:`pyspark.sql.functions.date_diff`
     :meth:`pyspark.sql.functions.timestamp_add`
+    :meth:`pyspark.sql.functions.add_months`
 
     Examples
     --------
@@ -11133,6 +11188,7 @@ def dateadd(start: "ColumnOrName", days: Union["ColumnOrName", int]) -> Column:
     :meth:`pyspark.sql.functions.datediff`
     :meth:`pyspark.sql.functions.date_diff`
     :meth:`pyspark.sql.functions.timestamp_add`
+    :meth:`pyspark.sql.functions.add_months`
 
     Examples
     --------
@@ -11302,6 +11358,7 @@ def date_diff(end: "ColumnOrName", start: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.date_sub`
     :meth:`pyspark.sql.functions.datediff`
     :meth:`pyspark.sql.functions.timestamp_diff`
+    :meth:`pyspark.sql.functions.time_diff`
 
     Examples
     --------
@@ -11515,6 +11572,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.try_to_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.try_to_date`
 
     Examples
     --------
@@ -11571,6 +11629,7 @@ def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.try_to_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.to_date`
 
     Examples
     --------
@@ -12018,6 +12077,8 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     :meth:`pyspark.sql.functions.to_timestamp`
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.try_to_date`
+    :meth:`pyspark.sql.functions.try_to_time`
 
     Examples
     --------
@@ -13095,6 +13156,7 @@ def timestamp_diff(unit: str, start: "ColumnOrName", end: "ColumnOrName") -> Col
     --------
     :meth:`pyspark.sql.functions.datediff`
     :meth:`pyspark.sql.functions.date_diff`
+    :meth:`pyspark.sql.functions.time_diff`
 
     Examples
     --------
@@ -13614,6 +13676,7 @@ def to_timestamp_ltz(
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
 
     Examples
     --------
@@ -13684,6 +13747,7 @@ def to_timestamp_ntz(
     :meth:`pyspark.sql.functions.to_utc_timestamp`
     :meth:`pyspark.sql.functions.to_unix_timestamp`
     :meth:`pyspark.sql.functions.date_format`
+    :meth:`pyspark.sql.functions.try_to_timestamp`
 
     Examples
     --------
@@ -14356,6 +14420,7 @@ def upper(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.lower`
+    :meth:`pyspark.sql.functions.ucase`
 
     Examples
     --------
@@ -14396,6 +14461,7 @@ def lower(col: "ColumnOrName") -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.upper`
+    :meth:`pyspark.sql.functions.lcase`
 
     Examples
     --------
@@ -15541,7 +15607,7 @@ def levenshtein(
         if set when the levenshtein distance of the two given strings
         less than or equal to a given threshold then return result distance, or -1
 
-        .. versionadded: 3.5.0
+        .. versionadded:: 3.5.0
 
     Returns
     -------
@@ -15574,6 +15640,40 @@ def levenshtein(
         return _invoke_function(
             "levenshtein", _to_java_column(left), _to_java_column(right), _enum_to_value(threshold)
         )
+
+
+@_try_remote_functions
+def jaro_winkler_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Computes the Jaro-Winkler similarity between the two given strings.
+
+    The result is a double between 0.0 (no similarity) and 1.0 (identical strings).
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        first column value.
+    right : :class:`~pyspark.sql.Column` or column name
+        second column value.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        Jaro-Winkler similarity as a double value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> df = spark.createDataFrame([('MARTHA', 'MARHTA')], ['l', 'r'])
+    >>> df.select(sf.jaro_winkler_similarity('l', 'r')).show()
+    +-----------------------------+
+    |jaro_winkler_similarity(l, r)|
+    +-----------------------------+
+    |           0.9611111111111111|
+    +-----------------------------+
+    """
+    return _invoke_function_over_columns("jaro_winkler_similarity", left, right)
 
 
 @_try_remote_functions
@@ -16349,7 +16449,10 @@ def regexp_extract_all(
 
 @_try_remote_functions
 def regexp_replace(
-    string: "ColumnOrName", pattern: Union[str, Column], replacement: Union[str, Column]
+    string: "ColumnOrName",
+    pattern: Union[str, Column],
+    replacement: Union[str, Column],
+    position: Optional[Union[int, Column]] = None,
 ) -> Column:
     r"""Replace all substrings of the specified string value that match regexp with replacement.
 
@@ -16357,6 +16460,8 @@ def regexp_replace(
 
     .. versionchanged:: 3.4.0
         Supports Spark Connect.
+    .. versionchanged:: 4.3.0
+        Supports the `position` parameter.
 
     Parameters
     ----------
@@ -16366,6 +16471,8 @@ def regexp_replace(
         column object or str containing the regexp pattern
     replacement : :class:`~pyspark.sql.Column` or str
         column object or str containing the replacement
+    position : :class:`~pyspark.sql.Column` or int, optional
+        position to start replacement. The first position is 1.
 
     Returns
     -------
@@ -16403,8 +16510,29 @@ def regexp_replace(
     +-------+-------+-----------+--------------------------------------------+
     |100-200|  (\d+)|         --|                                       -----|
     +-------+-------+-----------+--------------------------------------------+
+
+    Example 3: Replaces substrings starting from the specified position.
+    For the input string "100-200", position 5 starts replacement after "100-".
+
+    >>> df.select(sf.regexp_replace("str", r"(\d+)", "--", 5).alias("d")).show()
+    +------+
+    |     d|
+    +------+
+    |100---|
+    +------+
     """
-    return _invoke_function_over_columns("regexp_replace", string, lit(pattern), lit(replacement))
+    if position is None:
+        return _invoke_function_over_columns(
+            "regexp_replace", string, lit(pattern), lit(replacement)
+        )
+    else:
+        return _invoke_function_over_columns(
+            "regexp_replace",
+            string,
+            lit(pattern),
+            lit(replacement),
+            lit(position),
+        )
 
 
 @_try_remote_functions
@@ -16763,6 +16891,11 @@ def uniform(
     :class:`~pyspark.sql.Column`
         The generated random number within the specified range.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.rand`
+    :meth:`pyspark.sql.functions.randn`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -16814,6 +16947,11 @@ def length(col: "ColumnOrName") -> Column:
     -------
     :class:`~pyspark.sql.Column`
         length of the value.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.char_length`
+    :meth:`pyspark.sql.functions.character_length`
 
     Examples
     --------
@@ -16961,6 +17099,10 @@ def to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) -> C
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert binary values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_to_binary`
+
     Examples
     --------
     Example 1: Convert string to a binary with encoding specified
@@ -17107,6 +17249,10 @@ def to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert number values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.try_to_number`
+
     Examples
     --------
     >>> df = spark.createDataFrame([("$78.12",)], ["e"])
@@ -17226,6 +17372,7 @@ def substr(
     :meth:`pyspark.sql.functions.substring`
     :meth:`pyspark.sql.functions.substring_index`
     :meth:`pyspark.sql.Column.substr`
+    :meth:`pyspark.sql.functions.locate`
 
     Examples
     --------
@@ -17482,6 +17629,10 @@ def printf(format: "ColumnOrName", *cols: "ColumnOrName") -> Column:
         string that can contain embedded format tags and used as result column's value
     cols : :class:`~pyspark.sql.Column` or str
         column names or :class:`~pyspark.sql.Column`\\s to be used in formatting
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.format_string`
 
     Examples
     --------
@@ -17894,6 +18045,11 @@ def char_length(str: "ColumnOrName") -> Column:
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.character_length`
+    :meth:`pyspark.sql.functions.length`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -17920,6 +18076,11 @@ def character_length(str: "ColumnOrName") -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.char_length`
+    :meth:`pyspark.sql.functions.length`
 
     Examples
     --------
@@ -17984,6 +18145,10 @@ def try_to_binary(col: "ColumnOrName", format: Optional["ColumnOrName"] = None) 
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert binary values.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_binary`
+
     Examples
     --------
     Example 1: Convert string to a binary with encoding specified
@@ -18037,6 +18202,10 @@ def try_to_number(col: "ColumnOrName", format: "ColumnOrName") -> Column:
         Input column or strings.
     format : :class:`~pyspark.sql.Column` or str, optional
         format to use to convert number values.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.to_number`
 
     Examples
     --------
@@ -18272,6 +18441,12 @@ def lcase(str: "ColumnOrName") -> Column:
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
 
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.lower`
+    :meth:`pyspark.sql.functions.ucase`
+    :meth:`pyspark.sql.functions.upper`
+
     Examples
     --------
     >>> import pyspark.sql.functions as sf
@@ -18296,6 +18471,12 @@ def ucase(str: "ColumnOrName") -> Column:
     ----------
     str : :class:`~pyspark.sql.Column` or str
         Input column or strings.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.upper`
+    :meth:`pyspark.sql.functions.lcase`
+    :meth:`pyspark.sql.functions.lower`
 
     Examples
     --------
@@ -19532,6 +19713,7 @@ def get(col: "ColumnOrName", index: Union["ColumnOrName", int]) -> Column:
     See Also
     --------
     :meth:`pyspark.sql.functions.element_at`
+    :meth:`pyspark.sql.functions.try_element_at`
 
     Examples
     --------
@@ -21044,7 +21226,7 @@ def json_tuple(col: "ColumnOrName", *fields: str) -> Column:
 @_try_remote_functions
 def from_json(
     col: "ColumnOrName",
-    schema: Union[ArrayType, StructType, Column, str],
+    schema: Union[ArrayType, StructType, MapType, Column, str],
     options: Optional[Mapping[str, str]] = None,
 ) -> Column:
     """
@@ -21061,8 +21243,8 @@ def from_json(
     ----------
     col : :class:`~pyspark.sql.Column` or str
         a column or column name in JSON format
-    schema : :class:`DataType` or str
-        a StructType, ArrayType of StructType or Python string literal with a DDL-formatted string
+    schema : :class:`StructType`, :class:`ArrayType`, :class:`MapType`, or str
+        a StructType, ArrayType of StructType, MapType, or Python string literal with a DDL-formatted string
         to use when parsing the json column
     options : dict, optional
         options to control parsing. accepts the same options as the json datasource.
@@ -27605,7 +27787,7 @@ def kll_merge_agg_bigint(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------
@@ -27649,7 +27831,7 @@ def kll_merge_agg_float(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------
@@ -27693,7 +27875,7 @@ def kll_merge_agg_double(
     sketch (range 8-65535). If k is not specified, the merged sketch adopts the k value
     from the first input sketch.
 
-    .. versionadded:: 4.1.0
+    .. versionadded:: 4.1.2
 
     Parameters
     ----------
@@ -30379,6 +30561,7 @@ def bitmap_construct_agg(col: "ColumnOrName") -> Column:
     :meth:`pyspark.sql.functions.bitmap_bucket_number`
     :meth:`pyspark.sql.functions.bitmap_count`
     :meth:`pyspark.sql.functions.bitmap_or_agg`
+    :meth:`pyspark.sql.functions.bitmap_and_agg`
 
     Examples
     --------
@@ -30949,6 +31132,230 @@ def arrow_udtf(
         return functools.partial(_create_pyarrow_udtf, returnType=returnType)
     else:
         return _create_pyarrow_udtf(cls=cls, returnType=returnType)
+
+
+# ---------------------- Vector Functions ----------------------
+
+
+@_try_remote_functions
+def vector_cosine_similarity(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Returns the cosine similarity between two float vectors.
+    The vectors must have the same dimension.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        first vector column.
+    right : :class:`~pyspark.sql.Column` or column name
+        second vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        cosine similarity as a float value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('a', ArrayType(FloatType())), StructField('b', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])], schema)
+    >>> df.select(sf.vector_cosine_similarity('a', 'b')).first()[0]
+    0.974631...
+    """
+    return _invoke_function_over_columns("vector_cosine_similarity", left, right)
+
+
+@_try_remote_functions
+def vector_inner_product(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Returns the inner product (dot product) between two float vectors.
+    The vectors must have the same dimension.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        first vector column.
+    right : :class:`~pyspark.sql.Column` or column name
+        second vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        inner product as a float value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('a', ArrayType(FloatType())), StructField('b', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])], schema)
+    >>> df.select(sf.vector_inner_product('a', 'b')).first()[0]
+    32.0
+    """
+    return _invoke_function_over_columns("vector_inner_product", left, right)
+
+
+@_try_remote_functions
+def vector_l2_distance(left: "ColumnOrName", right: "ColumnOrName") -> Column:
+    """Returns the Euclidean (L2) distance between two float vectors.
+    The vectors must have the same dimension.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    left : :class:`~pyspark.sql.Column` or column name
+        first vector column.
+    right : :class:`~pyspark.sql.Column` or column name
+        second vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        L2 distance as a float value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('a', ArrayType(FloatType())), StructField('b', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0, 3.0], [4.0, 5.0, 6.0])], schema)
+    >>> df.select(sf.vector_l2_distance('a', 'b')).first()[0]
+    5.196152...
+    """
+    return _invoke_function_over_columns("vector_l2_distance", left, right)
+
+
+@_try_remote_functions
+def vector_norm(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    """Returns the Lp norm of a float vector using the specified degree.
+    Degree defaults to 2.0 (Euclidean norm) if unspecified.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    vector : :class:`~pyspark.sql.Column` or column name
+        input vector column.
+    degree : :class:`~pyspark.sql.Column` or column name, optional
+        norm degree (1.0 for L1, 2.0 for L2, float('inf') for infinity norm).
+        Defaults to 2.0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the Lp norm as a float value.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('v', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([3.0, 4.0],)], schema)
+    >>> df.select(sf.vector_norm('v', sf.lit(2.0).cast('float'))).first()[0]
+    5.0
+    """
+    if degree is None:
+        return _invoke_function_over_columns("vector_norm", vector)
+    else:
+        return _invoke_function_over_columns("vector_norm", vector, degree)
+
+
+@_try_remote_functions
+def vector_normalize(vector: "ColumnOrName", degree: Optional["ColumnOrName"] = None) -> Column:
+    """Normalizes a float vector to unit length using the specified norm degree.
+    Degree defaults to 2.0 (Euclidean norm) if unspecified.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    vector : :class:`~pyspark.sql.Column` or column name
+        input vector column.
+    degree : :class:`~pyspark.sql.Column` or column name, optional
+        norm degree (1.0 for L1, 2.0 for L2, float('inf') for infinity norm).
+        Defaults to 2.0.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the normalized vector as an array of floats.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('v', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([3.0, 4.0],)], schema)
+    >>> df.select(sf.vector_normalize('v', sf.lit(2.0).cast('float'))).first()[0]
+    [0.6..., 0.8...]
+    """
+    if degree is None:
+        return _invoke_function_over_columns("vector_normalize", vector)
+    else:
+        return _invoke_function_over_columns("vector_normalize", vector, degree)
+
+
+@_try_remote_functions
+def vector_avg(col: "ColumnOrName") -> Column:
+    """Aggregate function: returns the element-wise mean of float vectors in a group.
+    All vectors must have the same dimension.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the element-wise average vector as an array of floats.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('v', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0],), ([3.0, 4.0],)], schema)
+    >>> df.select(sf.vector_avg('v')).first()[0]
+    [2.0, 3.0]
+    """
+    return _invoke_function_over_columns("vector_avg", col)
+
+
+@_try_remote_functions
+def vector_sum(col: "ColumnOrName") -> Column:
+    """Aggregate function: returns the element-wise sum of float vectors in a group.
+    All vectors must have the same dimension.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input vector column.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the element-wise sum vector as an array of floats.
+
+    Examples
+    --------
+    >>> from pyspark.sql import functions as sf
+    >>> from pyspark.sql.types import ArrayType, FloatType, StructType, StructField
+    >>> schema = StructType([StructField('v', ArrayType(FloatType()))])
+    >>> df = spark.createDataFrame([([1.0, 2.0],), ([3.0, 4.0],)], schema)
+    >>> df.select(sf.vector_sum('v')).first()[0]
+    [4.0, 6.0]
+    """
+    return _invoke_function_over_columns("vector_sum", col)
 
 
 def _test() -> None:

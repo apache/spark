@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{EvaluateUnresolvedInlineTable, IntervalUtils}
-import org.apache.spark.sql.connector.catalog.{ChangelogInfo, ChangelogRange}
+import org.apache.spark.sql.connector.catalog.{ChangelogContext, ChangelogRange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{Decimal, DecimalType, IntegerType, LongType, StringType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -994,8 +994,8 @@ class PlanParserSuite extends AnalysisTest {
     val fragment2 = "tablesample(bucket 11 out of 10)"
     checkError(
       exception = parseException(sql2),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (1.1) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "1.1"),
       context = ExpectedContext(
         fragment = fragment2,
         start = 16,
@@ -1157,8 +1157,8 @@ class PlanParserSuite extends AnalysisTest {
     // > 100 PERCENT
     checkError(
       exception = parseException(s"$sql tablesample system (150 percent) as x"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (1.5) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "1.5"),
       context = ExpectedContext(
         fragment = "tablesample system (150 percent)",
         start = 16,
@@ -1166,8 +1166,8 @@ class PlanParserSuite extends AnalysisTest {
     // Negative PERCENT
     checkError(
       exception = parseException(s"$sql tablesample system (-10 percent) as x"),
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Sampling fraction (-0.1) must be on interval [0, 1]"),
+      condition = "INVALID_TABLESAMPLE_FRACTION",
+      parameters = Map("fraction" -> "-0.1"),
       context = ExpectedContext(
         fragment = "tablesample system (-10 percent)",
         start = 16,
@@ -1997,17 +1997,24 @@ class PlanParserSuite extends AnalysisTest {
         val sql8 = s"select * from my_tvf(arg1 => $sql8tableArg $sql8partition)"
         checkError(
           exception = parseException(sql8),
-          condition = "_LEGACY_ERROR_TEMP_0064",
-          parameters = Map(
-            "msg" ->
-              ("The table function call includes a table argument with an invalid " +
-              "partitioning/ordering specification: the PARTITION BY clause included multiple " +
-              "expressions without parentheses surrounding them; please add parentheses around " +
-              "these expressions and then retry the query again")),
+          condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+          parameters = Map("clause" -> "PARTITION BY"),
           context = ExpectedContext(
             fragment = s"$sql8tableArg $sql8partition",
             start = 29,
             stop = 110 + partition.length)
+        )
+        val sql9tableArg = "table(select col1, col2, col3 from v2)"
+        val sql9partition = s"$partition by col1 $order by col2 asc, col3 desc"
+        val sql9 = s"select * from my_tvf(arg1 => $sql9tableArg $sql9partition)"
+        checkError(
+          exception = parseException(sql9),
+          condition = "INVALID_SQL_SYNTAX.INVALID_TABLE_FUNCTION_TABLE_ARGUMENT_PARTITIONING",
+          parameters = Map("clause" -> "ORDER BY"),
+          context = ExpectedContext(
+            fragment = s"$sql9tableArg $sql9partition",
+            start = 29,
+            stop = 99 + partition.length + order.length)
         )
       }
     }
@@ -2194,14 +2201,14 @@ class PlanParserSuite extends AnalysisTest {
         endInclusive: Boolean = true): RelationChanges = {
       RelationChanges(
         UnresolvedRelation(Seq("a", "b", "c")),
-        new ChangelogInfo(
+        new ChangelogContext(
           new ChangelogRange.VersionRange(
             startVersion,
             endVersion.map(java.util.Optional.of[String])
               .getOrElse(java.util.Optional.empty[String]),
             startInclusive,
             endInclusive),
-          ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+          ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
           false))
     }
 
@@ -2262,7 +2269,7 @@ class PlanParserSuite extends AnalysisTest {
         case rc: RelationChanges => rc
         case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
       }
-      changes.changelogInfo.range().asInstanceOf[ChangelogRange.TimestampRange]
+      changes.changelogContext.range().asInstanceOf[ChangelogRange.TimestampRange]
     }
 
     // Basic timestamp range
@@ -2300,54 +2307,54 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("CHANGES clause - with options") {
-    def assertChangelogInfo(sql: String): ChangelogInfo = {
+    def assertChangelogContext(sql: String): ChangelogContext = {
       val plan = parsePlan(sql)
       val project = plan.asInstanceOf[Project]
       val changes = project.child match {
         case rc: RelationChanges => rc
         case sa: SubqueryAlias => sa.child.asInstanceOf[RelationChanges]
       }
-      changes.changelogInfo
+      changes.changelogContext
     }
 
     // Default: DROP_CARRYOVERS and computeUpdates = false
-    val info1 = assertChangelogInfo(
+    val info1 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20")
-    assert(info1.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info1.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(!info1.computeUpdates())
 
     // deduplicationMode = none
-    val info2 = assertChangelogInfo(
+    val info2 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none')")
-    assert(info2.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info2.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
     assert(!info2.computeUpdates())
 
     // deduplicationMode = netChanges
-    val info3 = assertChangelogInfo(
+    val info3 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'netChanges')")
-    assert(info3.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES)
+    assert(info3.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES)
 
     // computeUpdates = true
-    val info4 = assertChangelogInfo(
+    val info4 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (computeUpdates = 'true')")
-    assert(info4.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info4.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
     assert(info4.computeUpdates())
 
     // Both options together
-    val info5 = assertChangelogInfo(
+    val info5 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'none', computeUpdates = 'true')")
-    assert(info5.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE)
+    assert(info5.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE)
     assert(info5.computeUpdates())
 
     // Case-insensitive deduplicationMode value
-    val info6 = assertChangelogInfo(
+    val info6 = assertChangelogContext(
       "SELECT * FROM a.b.c CHANGES FROM VERSION 10 TO VERSION 20 " +
         "WITH (deduplicationMode = 'DROPCARRYOVERS')")
-    assert(info6.deduplicationMode() == ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS)
+    assert(info6.deduplicationMode() == ChangelogContext.DeduplicationMode.DROP_CARRYOVERS)
   }
 
   test("CHANGES clause - invalid deduplicationMode") {
@@ -2378,10 +2385,10 @@ class PlanParserSuite extends AnalysisTest {
       Project(Seq(UnresolvedStar(None)),
         RelationChanges(
           UnresolvedRelation(Seq("my_table")),
-          new ChangelogInfo(
+          new ChangelogContext(
             new ChangelogRange.VersionRange(
               "1", java.util.Optional.empty[String], true, true),
-            ChangelogInfo.DeduplicationMode.DROP_CARRYOVERS,
+            ChangelogContext.DeduplicationMode.DROP_CARRYOVERS,
             false))))
   }
 
@@ -2746,6 +2753,174 @@ class PlanParserSuite extends AnalysisTest {
       parameters = Map("error" -> "'ts'", "hint" -> ""))
   }
 
+  test("BIN BY: clause parses into the expected UnresolvedBinBy") {
+    // Minimal clause: all optionals (ALIGN TO, output renames) omitted.
+    val minimal = singleBinBy(parsePlan(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin))
+    assert(minimal.rangeStartCol == UnresolvedAttribute(Seq("ts_start")))
+    assert(minimal.rangeEndCol == UnresolvedAttribute(Seq("ts_end")))
+    assert(minimal.originExpr.isEmpty)
+    assert(minimal.distributeColumns == Seq(UnresolvedAttribute(Seq("value"))))
+    assert(minimal.outputAliases == BinByOutputAliases.empty)
+
+    // Qualified column references and a partial HOUR TO MINUTE interval as BIN WIDTH.
+    val qualified = singleBinBy(parsePlan(
+      """SELECT * FROM t1 JOIN t2 ON t1.id = t2.id BIN BY (
+        |  RANGE t1.ts_start TO t1.ts_end
+        |  BIN WIDTH INTERVAL '5:30' HOUR TO MINUTE
+        |  DISTRIBUTE UNIFORM (t1.value)
+        |)""".stripMargin))
+    assert(qualified.rangeStartCol == UnresolvedAttribute(Seq("t1", "ts_start")))
+    assert(qualified.rangeEndCol == UnresolvedAttribute(Seq("t1", "ts_end")))
+    assert(qualified.distributeColumns == Seq(UnresolvedAttribute(Seq("t1", "value"))))
+
+    // Maximal clause: explicit ALIGN TO, multiple DISTRIBUTE UNIFORM columns, all three renames.
+    val maximal = singleBinBy(parsePlan(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '1' HOUR
+        |  ALIGN TO TIMESTAMP '2024-01-01 00:30:00'
+        |  DISTRIBUTE UNIFORM (bytes_sent, requests)
+        |  BIN_START AS ws
+        |  BIN_END AS we
+        |  BIN_DISTRIBUTE_RATIO AS frac
+        |)""".stripMargin))
+    assert(maximal.originExpr.contains(parseExpression("TIMESTAMP '2024-01-01 00:30:00'")))
+    assert(maximal.distributeColumns == Seq(
+      UnresolvedAttribute(Seq("bytes_sent")),
+      UnresolvedAttribute(Seq("requests"))))
+    assert(maximal.outputAliases.binStart.contains("ws"))
+    assert(maximal.outputAliases.binEnd.contains("we"))
+    assert(maximal.outputAliases.binRatio.contains("frac"))
+  }
+
+  test("BIN BY: malformed clauses raise PARSE_SYNTAX_ERROR") {
+    def assertSyntaxError(query: String): Unit =
+      assert(parseException(query).getCondition == "PARSE_SYNTAX_ERROR")
+
+    // BIN WIDTH missing.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin)
+
+    // DISTRIBUTE UNIFORM missing.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |)""".stripMargin)
+
+    // DISTRIBUTE UNIFORM with an empty column list.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM ()
+        |)""".stripMargin)
+
+    // RANGE missing.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin)
+
+    // Clauses out of order: BIN WIDTH must come after RANGE.
+    assertSyntaxError(
+      """SELECT * FROM metrics BIN BY (
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  RANGE ts_start TO ts_end
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin)
+  }
+
+  test("BIN BY: new keywords stay non-reserved and `bin` still parses as a table alias") {
+    // The seven new keywords are in `ansiNonReserved`, so they stay usable as plain identifiers
+    // outside a BIN BY clause.
+    assert(binByNodes(parsePlan(
+      "SELECT bin, width, uniform, align, bin_start, bin_end, bin_distribute_ratio " +
+        "FROM t WHERE bin > 0")).isEmpty)
+
+    // `bin` not followed by BY stays a table alias, both bare and when referenced downstream.
+    assert(binByNodes(parsePlan("SELECT * FROM t bin")).isEmpty)
+    assert(binByNodes(parsePlan("SELECT bin.x FROM t bin WHERE bin.x > 0")).isEmpty)
+  }
+
+  test("BIN BY: composition, chaining, trailing alias, and pipe operator") {
+    // Composes with a subquery in FROM and a downstream WHERE.
+    assert(binByNodes(parsePlan(
+      """SELECT * FROM (SELECT * FROM metrics) BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |) WHERE value > 0""".stripMargin)).size == 1)
+
+    // Composes after PIVOT.
+    assert(binByNodes(parsePlan(
+      """SELECT * FROM events
+        |PIVOT (sum(amount) FOR category IN ('a', 'b'))
+        |BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (a, b)
+        |)""".stripMargin)).size == 1)
+
+    // Two BIN BY clauses chain on the same relation.
+    assert(binByNodes(parsePlan(
+      """SELECT * FROM metrics
+        |BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |)
+        |BIN BY (
+        |  RANGE bin_start TO bin_end
+        |  BIN WIDTH INTERVAL '1' HOUR
+        |  DISTRIBUTE UNIFORM (value)
+        |  BIN_START AS hr_start
+        |  BIN_END AS hr_end
+        |  BIN_DISTRIBUTE_RATIO AS hr_ratio
+        |)""".stripMargin)).size == 2)
+
+    // Trailing alias, with and without the AS keyword, wraps the BinBy in a SubqueryAlias.
+    Seq(") AS binned", ") binned").foreach { tail =>
+      val parsed = parsePlan(
+        s"""SELECT * FROM metrics BIN BY (
+           |  RANGE ts_start TO ts_end
+           |  BIN WIDTH INTERVAL '5' MINUTE
+           |  DISTRIBUTE UNIFORM (value)
+           |$tail""".stripMargin)
+      val aliases = parsed.collect { case s: SubqueryAlias if s.alias == "binned" => s }
+      assert(aliases.size == 1, s"alias tail '$tail' did not produce a SubqueryAlias")
+      assert(aliases.head.child.isInstanceOf[UnresolvedBinBy])
+    }
+
+    // Works as a SQL pipe-operator stage with |>.
+    assert(binByNodes(parsePlan(
+      """FROM metrics
+        ||> BIN BY (
+        |  RANGE ts_start TO ts_end
+        |  BIN WIDTH INTERVAL '5' MINUTE
+        |  DISTRIBUTE UNIFORM (value)
+        |)""".stripMargin)).size == 1)
+  }
+
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)()
+
+  // Helpers shared by the BIN BY parser tests.
+  private def binByNodes(plan: LogicalPlan): Seq[UnresolvedBinBy] =
+    plan.collect { case b: UnresolvedBinBy => b }
+
+  private def singleBinBy(plan: LogicalPlan): UnresolvedBinBy = {
+    val nodes = binByNodes(plan)
+    assert(nodes.size == 1, s"expected exactly one BIN BY node, got ${nodes.size}")
+    nodes.head
+  }
 }

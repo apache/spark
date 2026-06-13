@@ -49,7 +49,6 @@ import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreeNodeTag, TreePattern}
-import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -705,6 +704,11 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def crossJoin(right: sql.Dataset[_]): DataFrame = withPlan {
     Join(logicalPlan, right.logicalPlan, joinType = Cross, None, JoinHint.NONE)
+  }
+
+  /** @inheritdoc */
+  def zip(other: sql.Dataset[_]): DataFrame = withPlan {
+    Zip(logicalPlan, other.logicalPlan)
   }
 
   /** @inheritdoc */
@@ -1520,15 +1524,10 @@ class Dataset[T] private[sql](
       funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
-    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
-      MapInPandas(
-        func,
-        toAttributes(func.dataType.asInstanceOf[StructType]),
-        logicalPlan,
-        isBarrier,
-        Option(profile)))
+      sparkSession.sessionState.externalUDFPlanner.planPythonMapInPandas(
+        funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
   /**
@@ -1540,15 +1539,10 @@ class Dataset[T] private[sql](
       funcCol: Column,
       isBarrier: Boolean = false,
       profile: ResourceProfile = null): DataFrame = {
-    val func = funcCol.expr
     Dataset.ofRows(
       sparkSession,
-      MapInArrow(
-        func,
-        toAttributes(func.dataType.asInstanceOf[StructType]),
-        logicalPlan,
-        isBarrier,
-        Option(profile)))
+      sparkSession.sessionState.externalUDFPlanner.planPythonMapInArrow(
+        funcCol.expr, logicalPlan, isBarrier, Option(profile)))
   }
 
   /** @inheritdoc */

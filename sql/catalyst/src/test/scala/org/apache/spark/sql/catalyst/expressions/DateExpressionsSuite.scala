@@ -853,6 +853,21 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("TruncTimestamp of Long.MinValue overflows with ArithmeticException") {
+    withDefaultTimeZone(UTC) {
+      // Long.MinValue is the smallest representable timestamp value (in micros). Truncating it
+      // rounds the value down to an earlier instant, which falls below the representable micros
+      // range. The overflow must surface as an ArithmeticException instead of silently wrapping
+      // around to a bogus (positive) timestamp.
+      val minTimestamp = Literal.create(Long.MinValue, TimestampType)
+      Seq("YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE",
+          "SECOND", "MILLISECOND").foreach { fmt =>
+        checkExceptionInExpression[ArithmeticException](
+          TruncTimestamp(Literal.create(fmt, StringType), minTimestamp), "")
+      }
+    }
+  }
+
   test("unsupported fmt fields for trunc/date_trunc results null") {
     Seq("INVALID", "decade", "century", "millennium", "whatever", null).foreach { field =>
       testTruncDate(Date.valueOf("2000-03-08"), field, null)
@@ -1255,6 +1270,35 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         secFrac(timestamp.copy(year = Literal(10))),
         Decimal(10.123456, 16, 6))
     }
+  }
+
+  test("SPARK-57340: extract the seconds part with fraction from nanosecond timestamps") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+    // NTZ extracts the wall-clock fields and is zone-independent: the expression evaluates in
+    // UTC regardless of the session time zone.
+    val ntzValue = localDateTimeToNanosVal(timestampNTZ(2020, 1, 1, 13, 24, 35, 123456789))
+    outstandingTimezonesIds.foreach { timezone =>
+      checkEvaluation(
+        SecondWithFractionNanos(
+          Literal.create(ntzValue, TimestampNTZNanosType(9)), Some(timezone)),
+        Decimal(35123456789L, 11, 9))
+    }
+    // LTZ extracts in the session time zone. The second field (including the nanosecond
+    // fraction) is invariant under whole-minute zone offsets, such as Asia/Kolkata (+05:30).
+    val ltzValue = instantToNanosVal(Instant.parse("2020-01-01T21:24:35.987654321Z"))
+    def ltzExpr(timezone: String): SecondWithFractionNanos =
+      SecondWithFractionNanos(Literal.create(ltzValue, TimestampLTZNanosType(9)), Some(timezone))
+    checkEvaluation(ltzExpr("America/Los_Angeles"), Decimal(35987654321L, 11, 9))
+    checkEvaluation(ltzExpr("Asia/Kolkata"), Decimal(35987654321L, 11, 9))
+    // Pre-epoch values exercise the negative-epoch path; the wall-clock fields stay positive.
+    val preEpoch = localDateTimeToNanosVal(timestampNTZ(1960, 1, 1, 5, 6, 7, 123456789))
+    checkEvaluation(
+      SecondWithFractionNanos(Literal.create(preEpoch, TimestampNTZNanosType(9)), Some("UTC")),
+      Decimal(7123456789L, 11, 9))
+    // NULL input.
+    checkEvaluation(
+      SecondWithFractionNanos(Literal.create(null, TimestampNTZNanosType(9)), Some("UTC")),
+      null)
   }
 
   test("SPARK-34903: timestamps difference") {

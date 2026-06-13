@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogInfo}
+import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSourceV2Relation}
 import org.apache.spark.sql.streaming.{OutputMode, StatefulProcessor}
@@ -123,7 +123,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case rel @ DataSourceV2Relation(table: ChangelogTable, _, _, _, _, _) if !table.resolved =>
       val changelog = table.changelog
-      val req = evaluateRequirements(changelog, table.changelogInfo)
+      val req = evaluateRequirements(changelog, table.changelogContext)
 
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
       var updatedRel: LogicalPlan = resolvedRel
@@ -140,14 +140,14 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         val rowIdExprs =
           V2ExpressionUtils.resolveRefs[NamedExpression](changelog.rowId().toSeq, resolvedRel)
         updatedRel = injectNetChangeComputation(
-          updatedRel, rowIdExprs, table.changelogInfo.computeUpdates())
+          updatedRel, rowIdExprs, table.changelogContext.computeUpdates())
       }
       updatedRel
 
     case rel @ StreamingRelationV2(_, _, table: ChangelogTable, _, _, _, _, _, _)
         if !table.resolved =>
       val changelog = table.changelog
-      val req = evaluateRequirements(changelog, table.changelogInfo)
+      val req = evaluateRequirements(changelog, table.changelogContext)
       val resolvedRel = rel.copy(table = table.copy(resolved = true))
       var updatedRel: LogicalPlan = resolvedRel
       if (req.requiresCarryOverRemoval || req.requiresUpdateDetection) {
@@ -164,7 +164,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
         // output, so name-based resolution against `updatedRel` recovers the right
         // attributes regardless of any preceding wrapping.
         updatedRel = addStreamingNetChangeComputation(
-          updatedRel, changelog, table.changelogInfo.computeUpdates())
+          updatedRel, changelog, table.changelogContext.computeUpdates())
       }
       updatedRel
   }
@@ -175,7 +175,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
 
   /**
    * Captures which post-processing passes a CDC query requires, derived from the
-   * user-provided [[ChangelogInfo]] options and the connector-declared [[Changelog]]
+   * user-provided [[ChangelogContext]] and the connector-declared [[Changelog]]
    * capability flags.
    */
   private case class PostProcessingRequirements(
@@ -194,14 +194,14 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
    */
   private def evaluateRequirements(
       changelog: Changelog,
-      options: ChangelogInfo): PostProcessingRequirements = {
+      context: ChangelogContext): PostProcessingRequirements = {
     val requiresCarryOverRemoval =
-      options.deduplicationMode() != ChangelogInfo.DeduplicationMode.NONE &&
+      context.deduplicationMode() != ChangelogContext.DeduplicationMode.NONE &&
         changelog.containsCarryoverRows()
     val requiresUpdateDetection =
-      options.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
+      context.computeUpdates() && changelog.representsUpdateAsDeleteAndInsert()
     val requiresNetChanges =
-      options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NET_CHANGES &&
+      context.deduplicationMode() == ChangelogContext.DeduplicationMode.NET_CHANGES &&
         changelog.containsIntermediateChanges()
 
     // If carry-overs are surfaced and update detection is enabled without carry-over
@@ -209,7 +209,7 @@ object ResolveChangelogTable extends Rule[LogicalPlan] {
     // results. Hence we throw.
     if (requiresUpdateDetection &&
         changelog.containsCarryoverRows() &&
-        options.deduplicationMode() == ChangelogInfo.DeduplicationMode.NONE) {
+        context.deduplicationMode() == ChangelogContext.DeduplicationMode.NONE) {
       throw QueryCompilationErrors.cdcUpdateDetectionRequiresCarryOverRemoval(
         changelog.name())
     }

@@ -702,3 +702,99 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "inputType" : "\"TIMESTAMP\""
   }
 }
+
+
+-- !query
+SELECT listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
+-- !query analysis
+Aggregate [listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Union false, false
+      :  :- Project [parse_json({"a": "x"}, true) AS v#x]
+      :  :  +- OneRowRelation
+      :  +- Project [parse_json({"a": "y"}, true) AS parse_json({"a": "y"})#x]
+      :     +- OneRowRelation
+      +- Project [parse_json({"a": "x"}, true) AS parse_json({"a": "x"})#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT listagg(v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
+-- !query analysis
+Aggregate [listagg(cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string) ASC NULLS FIRST, 0, 0) AS listagg(CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Union false, false
+      :  :- Project [parse_json({"a": "x"}, true) AS v#x]
+      :  :  +- OneRowRelation
+      :  +- Project [parse_json({"a": "y"}, true) AS parse_json({"a": "y"})#x]
+      :     +- OneRowRelation
+      +- Project [parse_json({"a": "x"}, true) AS parse_json({"a": "x"})#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string DESC) FROM (SELECT parse_json('{"a": "x"}') v UNION ALL SELECT parse_json('{"a": "y"}') UNION ALL SELECT parse_json('{"a": "x"}'))
+-- !query analysis
+Aggregate [listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string) DESC NULLS LAST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) DESC NULLS LAST)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Union false, false
+      :  :- Project [parse_json({"a": "x"}, true) AS v#x]
+      :  :  +- OneRowRelation
+      :  +- Project [parse_json({"a": "y"}, true) AS parse_json({"a": "y"})#x]
+      :     +- OneRowRelation
+      +- Project [parse_json({"a": "x"}, true) AS parse_json({"a": "x"})#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT listagg(DISTINCT v:a.b::string, ',') WITHIN GROUP (ORDER BY v:a.b::string) FROM (SELECT parse_json('{"a": {"b": "x"}}') v UNION ALL SELECT parse_json('{"a": {"b": "y"}}') UNION ALL SELECT parse_json('{"a": {"b": "x"}}'))
+-- !query analysis
+Aggregate [listagg(distinct cast(variant_get(v#x, $.a.b, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a.b, VariantType, true, Some(America/Los_Angeles)) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a.b) AS b AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a.b) AS b AS STRING) ASC NULLS FIRST)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Union false, false
+      :  :- Project [parse_json({"a": {"b": "x"}}, true) AS v#x]
+      :  :  +- OneRowRelation
+      :  +- Project [parse_json({"a": {"b": "y"}}, true) AS parse_json({"a": {"b": "y"}})#x]
+      :     +- OneRowRelation
+      +- Project [parse_json({"a": {"b": "x"}}, true) AS parse_json({"a": {"b": "x"}})#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT grp, listagg(DISTINCT v:a::string, ',') WITHIN GROUP (ORDER BY v:a::string) FROM (SELECT 1 grp, parse_json('{"a": "x"}') v UNION ALL SELECT 1, parse_json('{"a": "y"}') UNION ALL SELECT 2, parse_json('{"a": "x"}') UNION ALL SELECT 2, parse_json('{"a": "x"}') UNION ALL SELECT 1, parse_json('{"a": "x"}')) GROUP BY grp
+-- !query analysis
+Aggregate [grp#x], [grp#x, listagg(distinct cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string), ,, cast(variant_get(v#x, $.a, VariantType, true, Some(America/Los_Angeles)) as string) ASC NULLS FIRST, 0, 0) AS listagg(DISTINCT CAST(variant_get(v, $.a) AS a AS STRING), ,) WITHIN GROUP (ORDER BY CAST(variant_get(v, $.a) AS a AS STRING) ASC NULLS FIRST)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Union false, false
+      :  :- Union false, false
+      :  :  :- Union false, false
+      :  :  :  :- Project [1 AS grp#x, parse_json({"a": "x"}, true) AS v#x]
+      :  :  :  :  +- OneRowRelation
+      :  :  :  +- Project [1 AS 1#x, parse_json({"a": "y"}, true) AS parse_json({"a": "y"})#x]
+      :  :  :     +- OneRowRelation
+      :  :  +- Project [2 AS 2#x, parse_json({"a": "x"}, true) AS parse_json({"a": "x"})#x]
+      :  :     +- OneRowRelation
+      :  +- Project [2 AS 2#x, parse_json({"a": "x"}, true) AS parse_json({"a": "x"})#x]
+      :     +- OneRowRelation
+      +- Project [1 AS 1#x, parse_json({"a": "x"}, true) AS parse_json({"a": "x"})#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT listagg(DISTINCT (v:a)::double::string, ',') WITHIN GROUP (ORDER BY (v:a)::double) FROM (SELECT parse_json('{"a": 1.1}') v UNION ALL SELECT parse_json('{"a": 2.2}') UNION ALL SELECT parse_json('{"a": 1.1}'))
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_WITHIN_GROUP_EXPRESSION.MISMATCH_WITH_DISTINCT_INPUT_UNSAFE_CAST",
+  "sqlState" : "42K0K",
+  "messageParameters" : {
+    "castType" : "\"STRING\"",
+    "funcName" : "`listagg`",
+    "inputType" : "\"DOUBLE\""
+  }
+}

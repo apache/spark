@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.rules._
  *         +- Aggregate [__qid],
  *              [first(left.col0) AS left.col0, ..., first(left.colN-1) AS left.colN-1,
  *               max_by(struct(right.*), expr, k) AS _matches]
- *             +- Join LeftOuter
+ *             +- Join Inner   // or LeftOuter for `LEFT OUTER NEAREST BY`
  *                :- Project [left.*, uuid() AS __qid]
  *                :  +- left
  *                +- right
@@ -56,11 +56,11 @@ import org.apache.spark.sql.catalyst.rules._
  * preserves array order, so the K rows emitted per left row appear best-first in the output
  * of this rule. (Downstream operators may reorder.)
  *
- * If `rankingExpression` is nondeterministic (legal only under `APPROX`), an extra
- * `Project` is inserted above the `Join` to materialize the value as `__ranking__`. The
- * standard projection machinery runs `Nondeterministic.initialize(partitionIndex)` on every
- * nondeterministic descendant before any value is evaluated, so `MaxMinByK` only ever sees a
- * plain `AttributeReference` and never evaluates a nondeterministic expression directly.
+ * If `rankingExpression` is nondeterministic, an extra `Project` is inserted above the `Join`
+ * to materialize the value as `__ranking__`. The standard projection machinery runs
+ * `Nondeterministic.initialize(partitionIndex)` on every nondeterministic descendant before any
+ * value is evaluated, so `MaxMinByK` only ever sees a plain `AttributeReference` and never
+ * evaluates a nondeterministic expression directly.
  *
  * Unlike [[RewriteAsOfJoin]], which uses a correlated scalar subquery, this rule materializes
  * the cross product directly. A scalar subquery returns a single value per left row, so it
@@ -79,18 +79,18 @@ object RewriteNearestByJoin extends Rule[LogicalPlan] {
       val taggedLeft = Project(left.output :+ qidAlias, left)
       val qidAttr = qidAlias.toAttribute
 
-      // 2. LEFT OUTER-join the tagged left with right (no join condition). LEFT OUTER
-      //    (rather than INNER) preserves left rows even when `right` is empty, so that a
-      //    `LEFT OUTER NEAREST BY` query still returns those rows with `NULL` right-side
-      //    columns after the aggregate + inline below. When `right` is non-empty every left
-      //    row already has right-row pairings, so LEFT OUTER and INNER are equivalent.
+      // 2. Join the tagged left with right (no join condition), using the user's join type.
+      //    For `LEFT OUTER`, left rows with no right-side match are preserved with `NULL`
+      //    right-side columns through the aggregate + inline below; for `INNER`, such rows
+      //    are dropped. When `right` is non-empty every left row already has right-row
+      //    pairings, so `LEFT OUTER` and `INNER` are equivalent in that case.
       //
       //    This synthetic join is an unconditioned cross-product, so `NEAREST BY` queries
       //    are subject to `CheckCartesianProducts` and will be rejected when the user has
       //    set `spark.sql.crossJoin.enabled = false`. That is intentional: if the user has
       //    opted out of cross-products, the NEAREST BY rewrite -- which is itself a bounded
       //    cross-product today -- should not silently bypass that choice.
-      val join = Join(taggedLeft, right, LeftOuter, None, JoinHint.NONE)
+      val join = Join(taggedLeft, right, joinType, None, JoinHint.NONE)
 
       val (aggInput, rankingForAgg) = if (!rankingExpression.deterministic) {
         val rankingAlias = Alias(rankingExpression, "__ranking__")()

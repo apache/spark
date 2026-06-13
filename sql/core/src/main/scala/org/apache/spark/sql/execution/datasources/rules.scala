@@ -528,7 +528,7 @@ object PreprocessTableInsertion extends ResolveInsertionBase {
         query,
         byName,
         conf,
-        supportColDefaultValue = true)
+        TableOutputResolver.DefaultValueFillMode.FILL)
     } catch {
       case e: AnalysisException if staticPartCols.nonEmpty &&
         (e.getCondition == "INSERT_COLUMN_ARITY_MISMATCH.NOT_ENOUGH_DATA_COLUMNS" ||

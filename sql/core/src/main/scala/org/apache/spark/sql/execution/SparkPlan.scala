@@ -277,6 +277,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   @transient
   private val runningSubqueries = new ArrayBuffer[ExecSubqueryExpression]
 
+  @transient private val prepareLock = new Object()
+
   /**
    * Finds scalar subquery expressions in this plan node and starts evaluating them.
    */
@@ -293,7 +295,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Blocks the thread until all subqueries finish evaluation and update the results.
    */
-  protected def waitForSubqueries(): Unit = synchronized {
+  protected def waitForSubqueries(): Unit = prepareLock.synchronized {
     // fill in the result of subqueries
     runningSubqueries.foreach { sub =>
       sub.updateResult()
@@ -312,7 +314,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def prepare(): Unit = {
     // doPrepare() may depend on it's children, we should call prepare() on all the children first.
     children.foreach(_.prepare())
-    synchronized {
+    prepareLock.synchronized {
       if (!prepared) {
         prepareSubqueries()
         doPrepare()
@@ -329,7 +331,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note `prepare` method has already walked down the tree, so the implementation doesn't have
    * to call children's `prepare` methods.
    *
-   * This will only be called once, protected by `this`.
+   * This will only be called once, protected by [[prepareLock]].
    */
   protected def doPrepare(): Unit = {}
 

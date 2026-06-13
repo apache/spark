@@ -429,9 +429,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
-      }
+      valuesReader.readIntegersAsTimestampMicros(total, values, offset);
     }
 
     @Override

@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
+import org.apache.spark.sql.connector.catalog.InMemoryCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType}
@@ -272,14 +274,60 @@ class SetPathSuite extends SharedSparkSession {
     }
   }
 
-  test("PATH enabled: SET PATH = SYSTEM_PATH includes system.builtin and system.session") {
+  test("PATH enabled: SET PATH = SYSTEM_PATH expands to system-managed namespaces") {
+    // SPARK-57109: SYSTEM_PATH expands to the system-managed namespaces under the `system`
+    // catalog. Today that is just `system.builtin`; the shortcut is reserved for future
+    // system-managed schemas.
     withPathEnabled {
       sql("SET PATH = SYSTEM_PATH")
       val entries = pathEntries(currentPath())
-      assert(entries.contains("system.builtin"),
-        s"SYSTEM_PATH should include system.builtin; got: $entries")
-      assert(entries.contains("system.session"),
-        s"SYSTEM_PATH should include system.session; got: $entries")
+      assert(entries === Seq("system.builtin"),
+        s"SYSTEM_PATH should expand to exactly [system.builtin]; got: $entries")
+    }
+  }
+
+  test("PATH enabled: SET PATH = DEFAULT_PATH includes system.builtin, system.session, " +
+    "and the current schema") {
+    // SPARK-57109: pin the spark-built-in default ordering used when `spark.sql.defaultPath`
+    // is empty, so a future change to SYSTEM_PATH cannot silently drift the DEFAULT_PATH
+    // contract. The default `sessionFunctionResolutionOrder` is "second" (builtin first, then
+    // session, then catalog entries); ordering tests for the other modes live below.
+    withPathEnabled {
+      sql("USE spark_catalog.default")
+      sql("SET PATH = DEFAULT_PATH")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("system.builtin", "system.session", "spark_catalog.default"),
+        s"DEFAULT_PATH should expand to system.builtin, system.session, and the current " +
+          s"schema; got: $entries")
+    }
+  }
+
+  test("PATH enabled: SET PATH = SYSTEM_PATH, CURRENT_SCHEMA composes cleanly") {
+    // SPARK-57109: SYSTEM_PATH plus CURRENT_SCHEMA is the canonical "system functions plus my
+    // working schema" path; verify the expansion is exactly those two entries in order.
+    withPathEnabled {
+      sql("USE spark_catalog.default")
+      sql("SET PATH = SYSTEM_PATH, CURRENT_SCHEMA")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("system.builtin", "spark_catalog.default"),
+        s"SYSTEM_PATH, CURRENT_SCHEMA should expand to [system.builtin, " +
+          s"current schema]; got: $entries")
+    }
+  }
+
+  test("PATH enabled: SET PATH = SYSTEM_PATH, system.session is the documented migration form") {
+    // SPARK-57109: callers who relied on the old SYSTEM_PATH expansion (system.builtin +
+    // system.session) can name system.session explicitly. Because SYSTEM_PATH now expands to
+    // only system.builtin, listing system.session alongside it is legal and yields
+    // [system.builtin, system.session]. If SYSTEM_PATH ever re-expanded to carry system.session
+    // again, this entry would collide and raise DUPLICATE_SQL_PATH_ENTRY -- which is the
+    // regression this test guards against.
+    withPathEnabled {
+      sql("SET PATH = SYSTEM_PATH, system.session")
+      val entries = pathEntries(currentPath())
+      assert(entries === Seq("system.builtin", "system.session"),
+        s"SYSTEM_PATH, system.session should expand to [system.builtin, system.session]; " +
+          s"got: $entries")
     }
   }
 
@@ -974,6 +1022,123 @@ class SetPathSuite extends SharedSparkSession {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TEMPORARY FUNCTION IF EXISTS count")
       }
+    }
+  }
+
+  test("SPARK-56939: concurrent USE SCHEMA / USE CATALOG and unqualified function lookups " +
+    "do not deadlock") {
+    // Regression for SPARK-56939. Prior to the fix, [[CatalogManager.setCurrentNamespace]]
+    // (driven by `USE SCHEMA`) and [[CatalogManager.setCurrentCatalog]] (driven by
+    // `USE CATALOG`) both held the manager's intrinsic lock while calling into
+    // [[SessionCatalog.setCurrentDatabase*]] (which takes the catalog's intrinsic lock),
+    // while concurrent unqualified function resolution acquired the catalog's intrinsic lock
+    // and then reached back into the manager via
+    // [[CatalogManager.sqlResolutionPathEntries]]. That lock-order inversion deadlocked the
+    // session whenever a `USE`-style command raced with any unqualified function reference.
+    //
+    // The hazard is independent of [[SQLConf.PATH_ENABLED]] and the resolution-order setting,
+    // so this test exercises the default configuration. Both `setCurrentNamespace` and
+    // `setCurrentCatalog` were rewritten with the same split-lock pattern, so the test
+    // exercises both arms symmetrically: one thread toggles `USE SCHEMA`, another toggles
+    // `USE CATALOG` between the session catalog and a registered v2 catalog.
+    val v2Catalog = "spark_56939_testcat"
+    spark.conf.set(s"spark.sql.catalog.$v2Catalog", classOf[InMemoryCatalog].getName)
+    sql("CREATE SCHEMA IF NOT EXISTS spark_56939_s1")
+    sql("CREATE SCHEMA IF NOT EXISTS spark_56939_s2")
+    try {
+      val budget = 200
+      val iterations = new java.util.concurrent.atomic.AtomicInteger(0)
+      val barrier = new java.util.concurrent.CyclicBarrier(3)
+      val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+
+      val useSchemaThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            try {
+              sql(if ((i % 2) == 0) "USE SCHEMA spark_56939_s1" else "USE SCHEMA spark_56939_s2")
+            } catch {
+              // A concurrent `USE` from `useCatalogThread` may switch the current catalog
+              // to the v2 testcat, where these schemas don't exist; the resulting
+              // SCHEMA_NOT_FOUND is an expected interleaving and is unrelated to the
+              // deadlock this test guards against.
+              case _: NoSuchNamespaceException => ()
+            }
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SPARK-56939-use-schema")
+
+      val useCatalogThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            // Toggle between the session catalog and a v2 catalog so each iteration
+            // exercises `setCurrentCatalog` -- the arm that previously held the manager
+            // lock across `v1SessionCatalog.setCurrentDatabase(default)`. The grammar
+            // accepts `USE identifierReference`; a single identifier resolves to a
+            // catalog when one is registered under that name.
+            sql(if ((i % 2) == 0) s"USE $v2Catalog" else "USE spark_catalog")
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SPARK-56939-use-catalog")
+
+      val lookupThread = new Thread(() => {
+        try {
+          barrier.await()
+          var i = 0
+          while (i < budget && errors.isEmpty) {
+            // Unqualified `count(*)` exercises the kinds-order provider that resolves
+            // against the live PATH via [[CatalogManager]] -- the side of the cycle
+            // that previously acquired the catalog lock first and then the manager lock.
+            val n = sql("SELECT count(*) FROM VALUES (1), (2), (3) AS t(a)")
+              .head().getLong(0)
+            assert(n == 3L, s"unexpected count: $n at iteration $i")
+            iterations.incrementAndGet()
+            i += 1
+          }
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      }, "SPARK-56939-lookup")
+
+      useSchemaThread.start()
+      useCatalogThread.start()
+      lookupThread.start()
+
+      // Generous join: 30s is plenty for 200 cheap queries per thread and gives a
+      // clear failure signal if the implementation regresses into a deadlock.
+      val joinMillis = 30000L
+      useSchemaThread.join(joinMillis)
+      useCatalogThread.join(joinMillis)
+      lookupThread.join(joinMillis)
+
+      assert(!useSchemaThread.isAlive,
+        "USE SCHEMA thread did not finish; lock-order inversion between SessionCatalog and " +
+          "CatalogManager likely regressed (SPARK-56939).")
+      assert(!useCatalogThread.isAlive,
+        "USE CATALOG thread did not finish; lock-order inversion between SessionCatalog and " +
+          "CatalogManager likely regressed (SPARK-56939).")
+      assert(!lookupThread.isAlive,
+        "Lookup thread did not finish; lock-order inversion between SessionCatalog and " +
+          "CatalogManager likely regressed (SPARK-56939).")
+      assert(errors.isEmpty,
+        s"Concurrent lookups raised unexpected errors: ${errors.toArray.mkString("; ")}")
+      assert(iterations.get() > 0,
+        "Lookup thread never completed a query; suspect contention or deadlock.")
+    } finally {
+      sql("USE spark_catalog")
+      sql("USE SCHEMA default")
+      sql("DROP SCHEMA IF EXISTS spark_56939_s1 CASCADE")
+      sql("DROP SCHEMA IF EXISTS spark_56939_s2 CASCADE")
+      spark.conf.unset(s"spark.sql.catalog.$v2Catalog")
     }
   }
 

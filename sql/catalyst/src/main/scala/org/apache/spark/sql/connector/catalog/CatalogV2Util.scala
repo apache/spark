@@ -535,10 +535,10 @@ private[sql] object CatalogV2Util {
 
   /**
    * Construct a [[ViewInfo.Builder]] seeded from an existing view's metadata. Used by ALTER
-   * VIEW execs (SET / UNSET TBLPROPERTIES, ALTER VIEW ... WITH SCHEMA BINDING) and by
-   * `ApplyDefaultCollation` -- override the one field that changes, then `build` to produce
-   * the replacement payload for [[ViewCatalog#replaceView]]. Every other field flows through
-   * unchanged so a metadata-only mutation does not perturb the view body.
+   * VIEW execs (SET / UNSET TBLPROPERTIES, ALTER VIEW ... WITH SCHEMA BINDING) -- override
+   * the one field that changes, then `build` to produce the replacement payload for
+   * [[ViewCatalog#replaceView]]. Every other field flows through unchanged so a metadata-only
+   * mutation does not perturb the view body.
    */
   def viewInfoBuilderFrom(existing: ViewInfo): ViewInfo.Builder = {
     val builder = new ViewInfo.Builder()
@@ -749,7 +749,8 @@ private[sql] object CatalogV2Util {
       val cleanedMetadata = metadataWithKeysRemoved(
         Seq("comment", GeneratedColumn.GENERATION_EXPRESSION_METADATA_KEY))
       Column.create(f.name, f.dataType, f.nullable, f.getComment().orNull,
-        GeneratedColumn.getGenerationExpression(f).get, metadataAsJson(cleanedMetadata))
+        new GenerationExpression(GeneratedColumn.getGenerationExpression(f).get),
+        metadataAsJson(cleanedMetadata))
     } else if (isIdentityColumn) {
       val cleanedMetadata = metadataWithKeysRemoved(
         Seq("comment",

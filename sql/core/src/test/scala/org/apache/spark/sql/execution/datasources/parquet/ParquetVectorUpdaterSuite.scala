@@ -27,6 +27,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types._
 
@@ -37,6 +38,7 @@ import org.apache.spark.sql.types._
  *   - `IntegerToDoubleUpdater` (INT32 -> Double)
  *   - `FloatToDoubleUpdater` (FLOAT -> Double)
  *   - `DowncastLongUpdater` (INT64 DECIMAL -> 32-bit Decimal via narrowing cast)
+ *   - `DateToTimestampNTZUpdater` (INT32 DATE -> TimestampNTZ micros at UTC)
  *
  * Covers boundary batch lengths, sign-extension on negative INT32 values, the singular
  * `readValue` path, and the factory's long-decimal dispatch
@@ -407,5 +409,88 @@ class ParquetVectorUpdaterSuite extends SparkFunSuite {
     val input = Array(-999_999_999L, -1L, 0L, 1L, 999_999_999L)
     val actual = readViaDowncastLongUpdater(desc, targetType, input)
     assert(actual === Array[Int](-999_999_999, -1, 0, 1, 999_999_999))
+  }
+
+  // ---- DateToTimestampNTZUpdater: INT32 DATE -> TimestampNTZ micros at UTC ----
+
+  // INT32 column descriptor annotated as DATE; routes the factory through the
+  // `sparkType == TimestampNTZType && isDateTypeMatched(descriptor)` branch.
+  private val int32DateDescriptor: ColumnDescriptor = {
+    val pt = Types.primitive(PrimitiveTypeName.INT32, Repetition.OPTIONAL)
+      .as(LogicalTypeAnnotation.dateType())
+      .named("col")
+    new ColumnDescriptor(Array("col"), pt, 0, 1)
+  }
+
+  // Reads `values.length` INT32 day-counts through `DateToTimestampNTZUpdater.readValues`
+  // and returns the resulting micros column.
+  private def readViaDateToTimestampNTZUpdater(values: Array[Int]): Array[Long] = {
+    val fac = newFactory(int32DateDescriptor)
+    val updater = fac.getUpdater(int32DateDescriptor, DataTypes.TimestampNTZType)
+    val out = new OnHeapColumnVector(values.length.max(1), DataTypes.TimestampNTZType)
+    val reader = newPlainReader(plainIntBytes(values), values.length)
+    updater.readValues(values.length, 0, out, reader)
+    val result = new Array[Long](values.length)
+    var i = 0
+    while (i < values.length) { result(i) = out.getLong(i); i += 1 }
+    result
+  }
+
+  // Realistic day-count sample: epoch, recent dates, pre-epoch, far-past, far-future. All
+  // values are well within `Math.multiplyExact(days * 86400, 1_000_000)`'s safe range.
+  private def dateSampleValues(n: Int): Array[Int] = {
+    val out = new Array[Int](n)
+    var i = 0
+    while (i < n) {
+      out(i) = i % 6 match {
+        case 0 => 0          // 1970-01-01 (epoch)
+        case 1 => -25567     // ~1900-01-01
+        case 2 => 19366      // ~2023-01-01
+        case 3 => -719162    // ~0001-01-01
+        case 4 => 1000000    // ~4707-11-28 (far future, still safe)
+        case _ => i * 37 - 100
+      }
+      i += 1
+    }
+    out
+  }
+
+  private def expectedMicros(values: Array[Int]): Array[Long] =
+    values.map(d => DateTimeUtils.daysToMicros(d, ZoneOffset.UTC))
+
+  for (n <- Seq(0, 1, 7, 8, 9, 17, 1024, 4097)) {
+    test(s"DateToTimestampNTZUpdater produces correct UTC micros (total=$n)") {
+      val input = dateSampleValues(n)
+      assert(readViaDateToTimestampNTZUpdater(input) === expectedMicros(input))
+    }
+  }
+
+  test("DateToTimestampNTZUpdater: readValue converts a single date-day to UTC micros") {
+    // Same rationale as the IntegerToLongUpdater readValue test: the def-level-decoder's
+    // run-of-1 path calls `readInteger()` directly rather than the bulk method.
+    val input = Array(0, 1, -1, 19366, -25567)
+    val fac = newFactory(int32DateDescriptor)
+    val updater = fac.getUpdater(int32DateDescriptor, DataTypes.TimestampNTZType)
+    val out = new OnHeapColumnVector(input.length, DataTypes.TimestampNTZType)
+    val reader = newPlainReader(plainIntBytes(input), input.length)
+    var i = 0
+    while (i < input.length) {
+      updater.readValue(i, out, reader)
+      i += 1
+    }
+    val actual = (0 until input.length).map(out.getLong).toArray
+    assert(actual === input.map(d => DateTimeUtils.daysToMicros(d, ZoneOffset.UTC)))
+  }
+
+  test("DateToTimestampNTZUpdater: epoch and signed day-counts produce expected micros") {
+    // Pins reference micros for a handful of well-known dates so the conversion semantics
+    // are visible at unit-test level without relying on DateTimeUtils for the expected
+    // side.
+    val input = Array(0, 1, -1)
+    val expected = Array(
+      0L,                  // 1970-01-01 00:00:00 UTC
+      86_400_000_000L,     // 1970-01-02 00:00:00 UTC
+      -86_400_000_000L)    // 1969-12-31 00:00:00 UTC
+    assert(readViaDateToTimestampNTZUpdater(input) === expected)
   }
 }

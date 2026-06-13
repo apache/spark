@@ -599,6 +599,7 @@ trait StreamTest extends SharedSparkSession with TimeLimits {
               .streams
               .startQuery(
                 None,
+                None,
                 Some(metadataRoot),
                 stream,
                 extraOptions,

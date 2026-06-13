@@ -278,19 +278,21 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
     case DecimalType.Fixed(precision, scale) =>
-      val errorContextCode = getContextOrNullCode(ctx, failOnError)
-      val updateIsNull = if (failOnError) {
-        ""
+      val castUtils = classOf[CastUtils].getName
+      if (failOnError) {
+        val errorContextCode = getContextOrNullCode(ctx)
+        defineCodeGen(ctx, ev, (eval1, eval2) =>
+          s"$castUtils.changePrecisionExact(" +
+            s"$eval1.$decimalMethod($eval2), $precision, $scale, $errorContextCode)")
       } else {
-        s"${ev.isNull} = ${ev.value} == null;"
+        nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
+          s"""
+             |${ev.value} = $castUtils.changePrecisionOrNull(
+             |  $eval1.$decimalMethod($eval2), $precision, $scale);
+             |${ev.isNull} = ${ev.value} == null;
+           """.stripMargin
+        })
       }
-      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        s"""
-           |${ev.value} = $eval1.$decimalMethod($eval2).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
-           |$updateIsNull
-       """.stripMargin
-      })
     case CalendarIntervalType =>
       val iu = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$iu.$calendarIntervalMethod($eval1, $eval2)")
@@ -301,32 +303,21 @@ abstract class BinaryArithmetic extends BinaryOperator with SupportQueryContext 
       val mathUtils = IntervalMathUtils.getClass.getCanonicalName.stripSuffix("$")
       defineCodeGen(ctx, ev, (eval1, eval2) => s"$mathUtils.${exactMathMethod.get}($eval1, $eval2)")
     // byte and short are casted into int when add, minus, times or divide
+    case ByteType | ShortType if failOnError =>
+      val methodName = symbol match {
+        case "+" => "plus"
+        case "-" => "minus"
+        case "*" => "times"
+        case _ =>
+          throw SparkException.internalError(
+            s"Unexpected symbol '$symbol' for Byte/Short BinaryArithmetic")
+      }
+      val numericObj = (if (dataType == ByteType) ByteExactNumeric else ShortExactNumeric)
+        .getClass.getCanonicalName.stripSuffix("$")
+      defineCodeGen(ctx, ev, (eval1, eval2) => s"$numericObj.$methodName($eval1, $eval2)")
     case ByteType | ShortType =>
-      nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
-        val tmpResult = ctx.freshName("tmpResult")
-        val try_suggestion = symbol match {
-          case "+" => "try_add"
-          case "-" => "try_subtract"
-          case "*" => "try_multiply"
-          case _ => "unknown_function"
-        }
-        val overflowCheck = if (failOnError) {
-          val javaType = CodeGenerator.boxedType(dataType)
-          s"""
-             |if ($tmpResult < $javaType.MIN_VALUE || $tmpResult > $javaType.MAX_VALUE) {
-             |  throw QueryExecutionErrors.binaryArithmeticCauseOverflowError(
-             |  $eval1, "$symbol", $eval2, "$try_suggestion");
-             |}
-           """.stripMargin
-        } else {
-          ""
-        }
-        s"""
-           |${CodeGenerator.JAVA_INT} $tmpResult = $eval1 $symbol $eval2;
-           |$overflowCheck
-           |${ev.value} = (${CodeGenerator.javaType(dataType)})($tmpResult);
-         """.stripMargin
-      })
+      defineCodeGen(ctx, ev, (eval1, eval2) =>
+        s"(${CodeGenerator.javaType(dataType)})($eval1 $symbol $eval2)")
     case IntegerType | LongType if failOnError && exactMathMethod.isDefined =>
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         val errorContext = getContextOrNullCode(ctx)
@@ -662,6 +653,15 @@ trait DivModLike extends BinaryArithmetic {
     case _ => x => x == 0
   }
 
+  // Whether the divisor is a non-null and non-zero literal (foldable divisors are already folded
+  // to a literal before codegen). When true, the divide-by-zero check is dead code (it can never
+  // trigger), so codegen skips emitting both the check and its otherwise-unreachable error-context
+  // reference.
+  private lazy val divisorIsNonZero: Boolean = right match {
+    case Literal(divisor, _) => divisor != null && !isZero(divisor)
+    case _ => false
+  }
+
   final override def eval(input: InternalRow): Any = {
     // evaluate right first as we have a chance to skip left if right is 0
     val input2 = right.eval(input)
@@ -714,19 +714,31 @@ trait DivModLike extends BinaryArithmetic {
       s"${eval2.value} == 0"
     }
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContextCode = getContextOrNullCode(ctx, failOnError)
+    // Lazy so the error-context reference is only registered when actually emitted; a statically
+    // non-zero divisor (see divisorIsNonZero) skips the divide-by-zero check that would use it.
+    lazy val errorContextCode = getContextOrNullCode(ctx, failOnError)
     val operation = super.dataType match {
       case DecimalType.Fixed(precision, scale) =>
+        val castUtils = classOf[CastUtils].getName
         val decimalValue = ctx.freshName("decimalValue")
-        s"""
-           |Decimal $decimalValue = ${eval1.value}.$decimalMethod(${eval2.value}).toPrecision(
-           |  $precision, $scale, Decimal.ROUND_HALF_UP(), ${!failOnError}, $errorContextCode);
-           |if ($decimalValue != null) {
-           |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
-           |} else {
-           |  ${ev.isNull} = true;
-           |}
-           |""".stripMargin
+        if (failOnError) {
+          s"""
+             |Decimal $decimalValue = $castUtils.changePrecisionExact(
+             |  ${eval1.value}.$decimalMethod(${eval2.value}), $precision, $scale,
+             |  $errorContextCode);
+             |${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+             |""".stripMargin
+        } else {
+          s"""
+             |Decimal $decimalValue = $castUtils.changePrecisionOrNull(
+             |  ${eval1.value}.$decimalMethod(${eval2.value}), $precision, $scale);
+             |if ($decimalValue != null) {
+             |  ${ev.value} = ${decimalToDataTypeCodeGen(s"$decimalValue")};
+             |} else {
+             |  ${ev.isNull} = true;
+             |}
+             |""".stripMargin
+        }
       case _ => s"${ev.value} = ($javaType)(${eval1.value} $symbol ${eval2.value});"
     }
     val checkIntegralDivideOverflow = if (checkDivideOverflow) {
@@ -740,25 +752,34 @@ trait DivModLike extends BinaryArithmetic {
 
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
-      val divByZero = if (failOnError) {
-        s"throw ${divideByZeroErrorCode(ctx)};"
+      val divisionBody =
+        s"""
+           |${eval1.code}
+           |$checkIntegralDivideOverflow
+           |$operation""".stripMargin
+      // A statically non-zero divisor makes the zero check dead code, so emit only the division.
+      val guardedBody = if (divisorIsNonZero) {
+        divisionBody
       } else {
-        s"${ev.isNull} = true;"
+        val divByZero = if (failOnError) {
+          s"throw ${divideByZeroErrorCode(ctx)};"
+        } else {
+          s"${ev.isNull} = true;"
+        }
+        s"""
+           |if ($isZero) {
+           |  $divByZero
+           |} else {$divisionBody
+           |}""".stripMargin
       }
       ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if ($isZero) {
-          $divByZero
-        } else {
-          ${eval1.code}
-          $checkIntegralDivideOverflow
-          $operation
-        }""")
+        $guardedBody""")
     } else {
-      val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
-      val failOnErrorBranch = if (failOnError) {
+      val nullOnErrorCondition = if (failOnError || divisorIsNonZero) "" else s" || $isZero"
+      val failOnErrorBranch = if (failOnError && !divisorIsNonZero) {
         s"if ($isZero) throw ${divideByZeroErrorCode(ctx)};"
       } else {
         ""
@@ -1078,13 +1099,21 @@ case class Pmod(
     case _ => x => x == 0
   }
 
+  // Whether the divisor is a non-null and non-zero literal (foldable divisors are already folded
+  // to a literal before codegen). When true, the remainder-by-zero check is dead code, so codegen
+  // skips emitting it.
+  private lazy val divisorIsNonZero: Boolean = right match {
+    case Literal(divisor, _) => divisor != null && !isZero(divisor)
+    case _ => false
+  }
+
   private lazy val pmodFunc: (Any, Any) => Any = dataType match {
-    case _: IntegerType => (l, r) => pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
-    case _: LongType => (l, r) => pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
-    case _: ShortType => (l, r) => pmod(l.asInstanceOf[Short], r.asInstanceOf[Short])
-    case _: ByteType => (l, r) => pmod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
-    case _: FloatType => (l, r) => pmod(l.asInstanceOf[Float], r.asInstanceOf[Float])
-    case _: DoubleType => (l, r) => pmod(l.asInstanceOf[Double], r.asInstanceOf[Double])
+    case _: IntegerType => (l, r) => MathUtils.pmod(l.asInstanceOf[Int], r.asInstanceOf[Int])
+    case _: LongType => (l, r) => MathUtils.pmod(l.asInstanceOf[Long], r.asInstanceOf[Long])
+    case _: ShortType => (l, r) => MathUtils.pmod(l.asInstanceOf[Short], r.asInstanceOf[Short])
+    case _: ByteType => (l, r) => MathUtils.pmod(l.asInstanceOf[Byte], r.asInstanceOf[Byte])
+    case _: FloatType => (l, r) => MathUtils.pmod(l.asInstanceOf[Float], r.asInstanceOf[Float])
+    case _: DoubleType => (l, r) => MathUtils.pmod(l.asInstanceOf[Double], r.asInstanceOf[Double])
     case DecimalType.Fixed(precision, scale) => (l, r) => checkDecimalOverflow(
       pmod(l.asInstanceOf[Decimal], r.asInstanceOf[Decimal]), precision, scale)
   }
@@ -1118,7 +1147,10 @@ case class Pmod(
     }
     val remainder = ctx.freshName("remainder")
     val javaType = CodeGenerator.javaType(dataType)
-    val errorContext = getContextOrNullCode(ctx)
+    // Lazy so the error-context reference is only registered when actually emitted; a statically
+    // non-zero divisor (see divisorIsNonZero) skips the remainder-by-zero check that would use it.
+    lazy val errorContext = getContextOrNullCode(ctx)
+    val mathUtils = MathUtils.getClass.getCanonicalName.stripSuffix("$")
     val result = dataType match {
       case DecimalType.Fixed(precision, scale) =>
         val decimalAdd = "$plus"
@@ -1134,47 +1166,43 @@ case class Pmod(
            |${ev.isNull} = ${ev.value} == null;
            |""".stripMargin
 
-      // byte and short are casted into int when add, minus, times or divide
-      case ByteType | ShortType =>
-        s"""
-          $javaType $remainder = ($javaType)(${eval1.value} % ${eval2.value});
-          if ($remainder < 0) {
-            ${ev.value}=($javaType)(($remainder + ${eval2.value}) % ${eval2.value});
-          } else {
-            ${ev.value}=$remainder;
-          }
-        """
+      // The positive-modulo arithmetic is the same fixed algorithm for every primitive numeric
+      // type, so delegate to the shared MathUtils.pmod helper (also used by the eval path) instead
+      // of emitting the remainder/adjust block inline. byte/short are widened to int by `%`, and
+      // the matching MathUtils.pmod overload narrows the result back.
       case _ =>
-        s"""
-          $javaType $remainder = ${eval1.value} % ${eval2.value};
-          if ($remainder < 0) {
-            ${ev.value}=($remainder + ${eval2.value}) % ${eval2.value};
-          } else {
-            ${ev.value}=$remainder;
-          }
-        """
+        s"${ev.value} = $mathUtils.pmod(${eval1.value}, ${eval2.value});"
     }
 
     // evaluate right first as we have a chance to skip left if right is 0
     if (!left.nullable && !right.nullable) {
-      val divByZero = if (failOnError) {
-        s"throw QueryExecutionErrors.remainderByZeroError($errorContext);"
+      val remainderBody =
+        s"""
+           |${eval1.code}
+           |$result""".stripMargin
+      // A statically non-zero divisor makes the zero check dead code, so emit only the remainder.
+      val guardedBody = if (divisorIsNonZero) {
+        remainderBody
       } else {
-        s"${ev.isNull} = true;"
+        val divByZero = if (failOnError) {
+          s"throw QueryExecutionErrors.remainderByZeroError($errorContext);"
+        } else {
+          s"${ev.isNull} = true;"
+        }
+        s"""
+           |if ($isZero) {
+           |  $divByZero
+           |} else {$remainderBody
+           |}""".stripMargin
       }
       ev.copy(code = code"""
         ${eval2.code}
         boolean ${ev.isNull} = false;
         $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
-        if ($isZero) {
-          $divByZero
-        } else {
-          ${eval1.code}
-          $result
-        }""")
+        $guardedBody""")
     } else {
-      val nullOnErrorCondition = if (failOnError) "" else s" || $isZero"
-      val failOnErrorBranch = if (failOnError) {
+      val nullOnErrorCondition = if (failOnError || divisorIsNonZero) "" else s" || $isZero"
+      val failOnErrorBranch = if (failOnError && !divisorIsNonZero) {
         s"if ($isZero) throw QueryExecutionErrors.remainderByZeroError($errorContext);"
       } else {
         ""
@@ -1195,36 +1223,6 @@ case class Pmod(
           }
         }""")
     }
-  }
-
-  private def pmod(a: Int, n: Int): Int = {
-    val r = a % n
-    if (r < 0) {(r + n) % n} else r
-  }
-
-  private def pmod(a: Long, n: Long): Long = {
-    val r = a % n
-    if (r < 0) {(r + n) % n} else r
-  }
-
-  private def pmod(a: Byte, n: Byte): Byte = {
-    val r = a % n
-    if (r < 0) {((r + n) % n).toByte} else r.toByte
-  }
-
-  private def pmod(a: Double, n: Double): Double = {
-    val r = a % n
-    if (r < 0) {(r + n) % n} else r
-  }
-
-  private def pmod(a: Short, n: Short): Short = {
-    val r = a % n
-    if (r < 0) {((r + n) % n).toShort} else r.toShort
-  }
-
-  private def pmod(a: Float, n: Float): Float = {
-    val r = a % n
-    if (r < 0) {(r + n) % n} else r
   }
 
   private def pmod(a: Decimal, n: Decimal): Decimal = {

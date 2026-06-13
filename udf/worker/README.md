@@ -19,7 +19,7 @@ WorkerDispatcher      -- manages workers, creates sessions
     |
     v
 WorkerSession         -- one UDF execution
-    |  1. session.init(InitMessage(payload, inputSchema, outputSchema))
+    |  1. session.init(Init proto)
     |  2. val results = session.process(inputBatches)
     |  3. session.close()
 ```
@@ -33,20 +33,25 @@ provisioning service or daemon).
 
 ```
 udf/worker/
-├── proto/
-│     worker_spec.proto           -- UDFWorkerSpecification protobuf (+ generated Java classes)
+├── proto/                        -- protobuf message classes only (protobuf-java)
+│     worker_spec.proto           -- UDFWorkerSpecification protobuf
+│     udf_message.proto           -- UDF execution protocol messages (Init, UdfPayload, ...)
+│     udf_service.proto           -- UdfWorker gRPC service (Execute, Manage)
 │     common.proto                -- shared enums (UDFWorkerDataFormat, etc.)
 │
-└── core/                         -- abstract interfaces
-      WorkerDispatcher.scala      -- creates sessions, manages worker lifecycle
-      WorkerSession.scala         -- per-UDF init/process/cancel/close + InitMessage
-      WorkerConnection.scala      -- transport channel abstraction
-      WorkerSecurityScope.scala   -- security boundary for worker pooling
-      │
-      └── direct/                 -- "direct" creation: local OS processes
-            DirectWorkerDispatcher.scala  -- spawns processes, env lifecycle
-            DirectWorkerProcess.scala     -- OS process + connection + UDS socket
-            DirectWorkerSession.scala     -- session backed by a direct process
+├── core/                         -- abstract interfaces
+│     WorkerDispatcher.scala      -- creates sessions, manages worker lifecycle
+│     WorkerSession.scala         -- per-UDF init/process/cancel/close
+│     WorkerConnection.scala      -- transport channel abstraction
+│     WorkerSecurityScope.scala   -- security boundary for worker pooling
+│     │
+│     └── direct/                 -- "direct" creation: local OS processes
+│           DirectWorkerDispatcher.scala  -- spawns processes, env lifecycle
+│           DirectWorkerProcess.scala     -- OS process + connection + UDS socket
+│           DirectWorkerSession.scala     -- session backed by a direct process
+│
+└── grpc/                         -- gRPC transport (gRPC runtime confined here)
+      (generated)                 -- UdfWorkerGrpc service stubs from proto/udf_service.proto
 ```
 
 The `core/` package defines abstract interfaces that are independent of how
@@ -54,6 +59,25 @@ workers are created. The `core/direct/` sub-package implements "direct"
 worker creation where Spark spawns local OS processes. Future packages
 (e.g., `core/indirect/`) can implement alternative creation modes such as
 obtaining workers from a provisioning service or daemon.
+
+The `grpc/` module owns the gRPC service-stub generation (from
+`proto/`'s `udf_service.proto`) and the gRPC runtime dependencies. Keeping
+gRPC here means `proto/`, `core/`, and their consumers (`core`, `catalyst`,
+`sql/core`) carry no gRPC dependency on their classpath.
+
+## Wire protocol
+
+Each UDF execution uses a single bidirectional `Execute` gRPC stream.
+
+```
+Engine -> Worker:  Init -> PayloadChunk* -> (DataRequest)* -> Finish (Cancel)?
+                                                            | Cancel
+Worker -> Engine:          InitResponse  -> (DataResponse)* -> (ErrorResponse)? -> (FinishResponse | CancelResponse)
+```
+
+See `udf/worker/proto/src/main/protobuf/udf_message.proto` for the complete
+message definitions, ordering invariants, and error contract, and
+`udf_service.proto` for the gRPC service.
 
 ### Direct worker creation
 
@@ -76,10 +100,12 @@ Workers are terminated via SIGTERM/SIGKILL when the dispatcher is closed.
 
 ```scala
 import org.apache.spark.udf.worker.{
-  DirectWorker, ProcessCallable, UDFProtoCommunicationPattern,
-  UDFWorkerDataFormat, UDFWorkerProperties, UDFWorkerSpecification,
-  UnixDomainSocket, WorkerCapabilities, WorkerConnectionSpec, WorkerEnvironment}
+  DirectWorker, Init, ProcessCallable, UdfPayload,
+  UDFProtoCommunicationPattern, UDFWorkerDataFormat, UDFWorkerProperties,
+  UDFWorkerSpecification, UnixDomainSocket, WorkerCapabilities,
+  WorkerConnectionSpec, WorkerEnvironment}
 import org.apache.spark.udf.worker.core._
+import com.google.protobuf.ByteString
 
 // 1. Define a worker spec (direct creation mode).
 val spec = UDFWorkerSpecification.newBuilder()
@@ -112,10 +138,16 @@ val dispatcher: WorkerDispatcher = ...
 val session = dispatcher.createSession(securityScope = None)
 try {
   // 4. Initialize with the serialized function and schemas.
-  session.init(InitMessage(
-    functionPayload = serializedFunction,
-    inputSchema = arrowInputSchema,
-    outputSchema = arrowOutputSchema))
+  session.init(Init.newBuilder()
+    .setProtocolVersion(1)
+    .setUdf(UdfPayload.newBuilder()
+      .setPayload(ByteString.copyFrom(serializedFunction))
+      .setFormat(payloadFormat)   // worker-recognised tag
+      .build())
+    .setDataFormat(UDFWorkerDataFormat.ARROW)
+    .setInputSchema(ByteString.copyFrom(arrowInputSchema))
+    .setOutputSchema(ByteString.copyFrom(arrowOutputSchema))
+    .build())
 
   // 5. Process data -- Iterator in, Iterator out.
   val results: Iterator[Array[Byte]] =
@@ -135,19 +167,19 @@ dispatcher.close()
 
 SBT:
 ```
-build/sbt "udf-worker-proto/compile" "udf-worker-core/compile"
+build/sbt "udf-worker-proto/compile" "udf-worker-core/compile" "udf-worker-grpc/compile"
 ```
 
 Maven:
 ```
-build/mvn compile -pl udf/worker/proto,udf/worker/core -am
+build/mvn compile -pl udf/worker/proto,udf/worker/core,udf/worker/grpc -am
 ```
 
 ## Test
 
 SBT:
 ```
-build/sbt "udf-worker-core/test"
+build/sbt "udf-worker-core/test" "udf-worker-grpc/test"
 ```
 
 ## Current status

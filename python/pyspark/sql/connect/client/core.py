@@ -17,10 +17,12 @@
 __all__ = [
     "ChannelBuilder",
     "DefaultChannelBuilder",
+    "RpcDeadlines",
     "SparkConnectClient",
 ]
 
 import atexit
+from dataclasses import dataclass, fields
 
 import pyspark
 from pyspark.sql.connect.proto.base_pb2 import FetchErrorDetailsResponse
@@ -107,7 +109,11 @@ from pyspark.sql.pandas.conversion import _convert_arrow_table_to_pandas
 from pyspark.sql.types import DataType, StructType
 from pyspark.util import PythonEvalType
 from pyspark.storagelevel import StorageLevel
-from pyspark.errors import PySparkValueError, PySparkAssertionError, PySparkNotImplementedError
+from pyspark.errors import (
+    PySparkAssertionError,
+    PySparkNotImplementedError,
+    PySparkValueError,
+)
 from pyspark.sql.connect.shell.progress import Progress, ProgressHandler, from_proto
 
 if TYPE_CHECKING:
@@ -119,6 +125,65 @@ if TYPE_CHECKING:
 
 
 PYSPARK_ROOT = os.path.dirname(pyspark.__file__)
+
+
+@dataclass(frozen=True)
+class RpcDeadlines:
+    """Per-RPC timeout configuration for :class:`SparkConnectClient`.
+
+    Each field controls the timeout (in seconds as a float) for one gRPC call type. Set a field to
+    ``None`` to disable the per-RPC timeout for that call. Use :meth:`RpcDeadlines.disabled` to
+    create an instance with all timeouts disabled.
+
+    Note on ``reattachable_execute_plan`` and ``reattach_execute``: these timeouts apply to each
+    individual gRPC stream segment, not to the overall query execution lifetime. When a deadline
+    fires, the server-side operation continues running; the client opens a new ReattachExecute
+    stream to resume receiving results. Non-reattachable ExecutePlan has no deadline because a
+    timeout there would kill the execution with no recovery path.
+    """
+
+    reattachable_execute_plan: Optional[float] = 10 * 60  # 10 min
+    reattach_execute: Optional[float] = 10 * 60  # 10 min
+    analyze_plan: Optional[float] = 60 * 60  # 1 hour
+    add_artifacts: Optional[float] = 60 * 60  # 1 hour
+    config: Optional[float] = 10 * 60  # 10 min
+    interrupt: Optional[float] = 10 * 60  # 10 min
+    release_session: Optional[float] = 10 * 60  # 10 min
+    artifact_status: Optional[float] = 10 * 60  # 10 min
+    clone_session: Optional[float] = 10 * 60  # 10 min
+    get_status: Optional[float] = 10 * 60  # 10 min
+    fetch_error_details: Optional[float] = 10 * 60  # 10 min
+
+    def __post_init__(self) -> None:
+        for field in fields(self):
+            value = getattr(self, field.name)
+            if value is not None and value <= 0:
+                raise PySparkValueError(
+                    message=(
+                        f"RpcDeadlines.{field.name} must be a positive number or None, "
+                        f"got {value!r}"
+                    ),
+                )
+
+    @classmethod
+    def disabled(cls) -> "RpcDeadlines":
+        """Create an :class:`RpcDeadlines` with all per-RPC timeouts disabled.
+
+        Use this when you want to rely solely on server-side or network-layer timeouts.
+        """
+        return cls(
+            reattachable_execute_plan=None,
+            reattach_execute=None,
+            analyze_plan=None,
+            add_artifacts=None,
+            config=None,
+            interrupt=None,
+            release_session=None,
+            artifact_status=None,
+            clone_session=None,
+            get_status=None,
+            fetch_error_details=None,
+        )
 
 
 def _import_zstandard_if_available() -> Optional[Any]:
@@ -648,6 +713,7 @@ class SparkConnectClient(object):
         session_hooks: Optional[list["SparkSession.Hook"]] = None,
         allow_arrow_batch_chunking: bool = True,
         preferred_arrow_chunk_size: Optional[int] = None,
+        rpc_deadlines: Optional[RpcDeadlines] = None,
     ):
         """
         Creates a new SparkSession for the Spark Connect interface.
@@ -695,6 +761,10 @@ class SparkConnectClient(object):
             results.
             The server will attempt to use this size if it is set and within the valid range
             ([1KB, max batch size on server]). Otherwise, the server's maximum batch size is used.
+        rpc_deadlines : RpcDeadlines, optional
+            Per-RPC gRPC call timeouts in seconds (10 min for most RPCs,
+            1 hour for analyze/addArtifacts, none for non-reattachable execute).
+            Use :meth:`RpcDeadlines.disabled` to turn off all deadlines.
         """
         self.thread_local = threading.local()
 
@@ -730,8 +800,17 @@ class SparkConnectClient(object):
         self._channel = self._builder.toChannel()
         self._closed = False
         self._internal_stub = grpc_lib.SparkConnectServiceStub(self._channel)
+        self._rpc_deadlines: RpcDeadlines = (
+            rpc_deadlines if rpc_deadlines is not None else RpcDeadlines()
+        )
+        logger.info("Spark Connect RPC deadlines: %s", self._rpc_deadlines)
         self._artifact_manager = ArtifactManager(
-            self._user_id, self._session_id, self._channel, self._builder.metadata()
+            self._user_id,
+            self._session_id,
+            self._channel,
+            self._builder.metadata(),
+            add_artifacts_timeout=self._rpc_deadlines.add_artifacts,
+            artifact_status_timeout=self._rpc_deadlines.artifact_status,
         )
         self._use_reattachable_execute = use_reattachable_execute
         self._allow_arrow_batch_chunking = allow_arrow_batch_chunking
@@ -1451,7 +1530,11 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.AnalyzePlan(req, metadata=self._builder.metadata())
+                    resp = self._stub.AnalyzePlan(
+                        req,
+                        metadata=self._builder.metadata(),
+                        timeout=self._rpc_deadlines.analyze_plan,
+                    )
                     self._verify_response_integrity(resp)
                     return AnalyzeResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -1480,7 +1563,12 @@ class SparkConnectClient(object):
             if self._use_reattachable_execute:
                 # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
-                    req, self._stub, self._retrying, self._builder.metadata()
+                    req,
+                    self._stub,
+                    self._retrying,
+                    self._builder.metadata(),
+                    reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
+                    reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
                 try:
                     for b in generator:
@@ -1690,7 +1778,12 @@ class SparkConnectClient(object):
             if self._use_reattachable_execute:
                 # Don't use retryHandler - own retry handling is inside.
                 generator = ExecutePlanResponseReattachableIterator(
-                    req, self._stub, self._retrying, self._builder.metadata()
+                    req,
+                    self._stub,
+                    self._retrying,
+                    self._builder.metadata(),
+                    reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
+                    reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
                 try:
                     for b in generator:
@@ -1842,7 +1935,11 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.Config(req, metadata=self._builder.metadata())
+                    resp = self._stub.Config(
+                        req,
+                        metadata=self._builder.metadata(),
+                        timeout=self._rpc_deadlines.config,
+                    )
                     self._verify_response_integrity(resp)
                     return ConfigResult.fromProto(resp)
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -1884,7 +1981,11 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    resp = self._stub.Interrupt(
+                        req,
+                        metadata=self._builder.metadata(),
+                        timeout=self._rpc_deadlines.interrupt,
+                    )
                     self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -1896,7 +1997,11 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    resp = self._stub.Interrupt(
+                        req,
+                        metadata=self._builder.metadata(),
+                        timeout=self._rpc_deadlines.interrupt,
+                    )
                     self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -1908,7 +2013,11 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.Interrupt(req, metadata=self._builder.metadata())
+                    resp = self._stub.Interrupt(
+                        req,
+                        metadata=self._builder.metadata(),
+                        timeout=self._rpc_deadlines.interrupt,
+                    )
                     self._verify_response_integrity(resp)
                     return list(resp.interrupted_ids)
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -1924,7 +2033,11 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.ReleaseSession(req, metadata=self._builder.metadata())
+                    resp = self._stub.ReleaseSession(
+                        req,
+                        metadata=self._builder.metadata(),
+                        timeout=self._rpc_deadlines.release_session,
+                    )
                     self._verify_response_integrity(resp)
                     return
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -1976,7 +2089,11 @@ class SparkConnectClient(object):
         try:
             for attempt in self._retrying():
                 with attempt:
-                    resp = self._stub.GetStatus(req, metadata=self._builder.metadata())
+                    resp = self._stub.GetStatus(
+                        req,
+                        metadata=self._builder.metadata(),
+                        timeout=self._rpc_deadlines.get_status,
+                    )
                     self._verify_response_integrity(resp)
                     return resp
             raise SparkConnectException("Invalid state during retry exception handling.")
@@ -2101,7 +2218,11 @@ class SparkConnectClient(object):
             req.user_context.user_id = self._user_id
         self._update_request_with_user_context_extensions(req)
         try:
-            return self._stub.FetchErrorDetails(req, metadata=self._builder.metadata())
+            return self._stub.FetchErrorDetails(
+                req,
+                metadata=self._builder.metadata(),
+                timeout=self._rpc_deadlines.fetch_error_details,
+            )
         except grpc.RpcError:
             return None
 
@@ -2143,6 +2264,17 @@ class SparkConnectClient(object):
         # https://grpc.github.io/grpc/python/grpc.html#grpc.UnaryUnaryMultiCallable.__call__
         error: grpc.Call = cast(grpc.Call, rpc_error)
         status_code: grpc.StatusCode = error.code()
+        if status_code == grpc.StatusCode.DEADLINE_EXCEEDED:
+            raise SparkConnectGrpcException(
+                message=(
+                    f"{error}: RPC deadline exceeded. "
+                    "The client applies per-RPC timeouts to prevent silent hangs "
+                    "on broken connections. Deadlines can be configured via the "
+                    "rpc_deadlines parameter of SparkConnectClient. To disable all "
+                    "deadlines: SparkConnectClient(url, rpc_deadlines=RpcDeadlines.disabled())."
+                ),
+                grpc_status_code=status_code,
+            ) from None
         status: Optional[Status] = rpc_status.from_call(error)
         if status:
             for d in status.details:
@@ -2283,8 +2415,15 @@ class SparkConnectClient(object):
             return []
 
     def _on_exit(self) -> None:
+        # If the client has already been explicitly closed, skip all cleanup RPCs.
+        # The server-side resources were released by close(); reissuing them here
+        # is wasted work and, if the server has since become unreachable, can
+        # block process exit on the gRPC call.
+        if self._closed:
+            return
+
         self._cleanup_ml_cache()
-        if self._release_session_on_exit and not self._closed:
+        if self._release_session_on_exit:
             try:
                 self.release_session()
             except Exception:
@@ -2467,7 +2606,9 @@ class SparkConnectClient(object):
         for attempt in self._retrying():
             with attempt:
                 response: pb2.CloneSessionResponse = self._stub.CloneSession(
-                    request, metadata=self._builder.metadata()
+                    request,
+                    metadata=self._builder.metadata(),
+                    timeout=self._rpc_deadlines.clone_session,
                 )
 
         # Assert that the returned session ID matches the requested ID if one was provided
@@ -2486,6 +2627,8 @@ class SparkConnectClient(object):
             connection=new_connection,
             user_id=self._user_id,
             use_reattachable_execute=self._use_reattachable_execute,
+            session_hooks=self._session_hooks,
+            rpc_deadlines=self._rpc_deadlines,
         )
         # Ensure the session ID is correctly set from the response
         new_client._session_id = response.new_session_id

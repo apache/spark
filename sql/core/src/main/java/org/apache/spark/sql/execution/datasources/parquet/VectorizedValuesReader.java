@@ -18,7 +18,9 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.nio.ByteBuffer;
+import java.time.ZoneOffset;
 
+import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 import org.apache.parquet.io.api.Binary;
@@ -133,6 +135,32 @@ public interface VectorizedValuesReader {
   default void readLongsAsInts(int total, WritableColumnVector c, int rowId) {
     for (int i = 0; i < total; i += 1) {
       c.putInt(rowId + i, (int) readLong());
+    }
+  }
+
+  /**
+   * Reads {@code total} INT32 date-day values (days since 1970-01-01, Proleptic Gregorian),
+   * converts each to TimestampNTZ micros at UTC via
+   * {@link DateTimeUtils#daysToMicros(int, java.time.ZoneId)}, and writes them into
+   * {@code c} starting at {@code c[rowId]}. Used by the type-converting updater that
+   * reads parquet INT32 DATE columns into Spark {@code TimestampNTZType} targets in
+   * {@code CORRECTED} datetime-rebase mode. The {@code LEGACY}/{@code EXCEPTION} rebase
+   * variants are out of scope for this method.
+   *
+   * <p>The default implementation is a per-row loop that calls
+   * {@code DateTimeUtils.daysToMicros} per element; it is algorithmically equivalent to
+   * the legacy per-row Updater path but the per-element conversion call dominates the
+   * loop, so the speedup from overriding this method is more modest than for the pure
+   * primitive-cast siblings ({@link #readIntegersAsLongs}, {@link #readIntegersAsDoubles}).
+   * Subclasses backed by contiguous bulk storage (e.g. PLAIN encoding via
+   * {@link VectorizedPlainValuesReader}) should override to read source bytes once and run
+   * a tight in-method conversion loop, avoiding {@code total} virtual dispatches on
+   * {@link #readInteger()}. Readers without an override preserve correctness but gain no
+   * speedup.
+   */
+  default void readIntegersAsTimestampMicros(int total, WritableColumnVector c, int rowId) {
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, DateTimeUtils.daysToMicros(readInteger(), ZoneOffset.UTC));
     }
   }
 
