@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.ops.TypeApiOps
  *
  * Extends [[TypeApiOps]] (the api-side trait) so that callers holding an `Option[TypeOps]` can
  * invoke client-side methods (`format`, `toSQLValue`, `getEncoder`, ...) directly via `.map`,
- * instead of an `isInstanceOf[TypeApiOps]` runtime narrow. Concrete `*TypeOps` classes typically
+ * instead of an `isInstanceOf[TypeApiOps]` runtime narrowing. Concrete `*TypeOps` classes typically
  * extend `*TypeApiOps` to inherit api-side method implementations -- this trait makes that
  * relationship part of the type system rather than a runtime invariant.
  *
