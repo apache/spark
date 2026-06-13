@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{FileNotFoundException, InputStream, IOException}
+import java.io.{ByteArrayInputStream, FileNotFoundException, InputStream, IOException}
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
