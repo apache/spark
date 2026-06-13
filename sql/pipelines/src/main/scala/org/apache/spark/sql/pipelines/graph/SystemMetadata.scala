@@ -39,7 +39,7 @@ case class FlowSystemMetadata(
   /**
    * @return the checkpoint root directory for this flow
    *         (of the form storage/_checkpoints/flow_destination_table/flow_name)
-   * @throws IllegalArgumentException when the flow's destination is neither a table nor sink
+   * @throws IllegalArgumentException when the flow's destination is neither a table nor a sink
    */
   def flowCheckpointsDir(): Path = {
     def isTableOrSink(destination: TableIdentifier): Boolean = {
