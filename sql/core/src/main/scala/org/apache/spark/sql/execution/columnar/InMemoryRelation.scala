@@ -471,7 +471,15 @@ case class InMemoryRelation(
     val newOutputOrdering = outputOrdering
       .map(_.transform { case a: Attribute => map(a) })
       .asInstanceOf[Seq[SortOrder]]
-    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, statsOfPlanToCache)
+    // Remap attributeStats keys to the new ExprIds so column statistics survive attribute
+    // re-aliasing (withOutput is called on every cache lookup). The positional old-to-new
+    // mapping keeps same-named output attributes distinct, unlike a name-based mapping.
+    val remappedColStats = statsOfPlanToCache.attributeStats.flatMap { case (attr, stat) =>
+      map.get(attr).map(_ -> stat)
+    }
+    val remappedStats = statsOfPlanToCache.copy(
+      attributeStats = AttributeMap(remappedColStats.toSeq))
+    InMemoryRelation(newOutput, cacheBuilder, newOutputOrdering, remappedStats)
   }
 
   override def newInstance(): this.type = {

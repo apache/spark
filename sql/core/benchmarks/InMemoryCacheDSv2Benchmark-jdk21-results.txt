@@ -1,0 +1,46 @@
+================================================================================================
+In-memory cache: column pruning
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.9 on Mac OS X 26.4
+Apple M3 Max
+Column pruning - 1000000 rows, 10 cols, select 2:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+sum 2 of 10 cols (column pruning via DSv2)                   19             24           4         52.2          19.2       1.0X
+sum all 10 cols (no pruning - pre-DSv2 baseline)             54             57           3         18.4          54.5       0.4X
+
+
+================================================================================================
+In-memory cache: filter pushdown
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.9 on Mac OS X 26.4
+Apple M3 Max
+Filter pushdown - 1000000 rows, selective filter (c0 < 1000):  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------------
+filter c0 < 1000 (pushed to scan, batch pruning)                          7             10           2        151.3           6.6       1.0X
+filter c0 < 1000 (count with full scan for comparison)                    7             10           2        141.4           7.1       0.9X
+
+
+================================================================================================
+In-memory cache: planning overhead
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.9 on Mac OS X 26.4
+Apple M3 Max
+Planning overhead - 1000 plan-only iterations:     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+optimizedPlan (DSv2 path, V2ScanRelationPushDown)            262            323          55          0.0      261916.9       1.0X
+
+
+================================================================================================
+In-memory cache: end-to-end aggregate
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.9 on Mac OS X 26.4
+Apple M3 Max
+End-to-end aggregate (groupBy + sum) on 1000000 rows:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------
+groupBy(key).sum(val) - DSv2 path                                26             29           3         38.3          26.1       1.0X
+
+

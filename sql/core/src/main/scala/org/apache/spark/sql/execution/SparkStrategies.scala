@@ -809,6 +809,17 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  /**
+   * Strategy for cached in-memory tables.
+   *
+   * Under the default DSv2 path (spark.sql.inMemoryColumnarStorage.enableDatasourceV2 = true),
+   * CacheManager wraps InMemoryRelation in DataSourceV2Relation, so this strategy is only
+   * reached when DSv2 is disabled or when the cached output cannot be represented by the
+   * DSv2 wrapper (duplicate column names; see InMemoryCacheTable.supportsOutput). Both paths
+   * produce InMemoryTableScanExec and support column pruning, filter pushdown, and sort-order
+   * propagation; the DSv2 path additionally enables Dynamic Partition Pruning and
+   * per-partition LIMIT pushdown.
+   */
   object InMemoryScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, filters, mem: InMemoryRelation) =>

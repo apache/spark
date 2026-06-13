@@ -44,6 +44,7 @@ import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBat
 import org.apache.spark.sql.connector.write.{V1Write, Write}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{FilterExec, InSubqueryExec, LeafExecNode, LocalTableScanExec, ProjectExec, RowDataSourceScanExec, ScalarSubquery => ExecScalarSubquery, SparkPlan, SparkStrategy => Strategy}
+import org.apache.spark.sql.execution.columnar.{InMemoryCacheScan, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command.{CommandUtils, MetricViewHelper}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRelationWithTable, PushableColumnAndNestedColumn}
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
@@ -158,6 +159,30 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val localScanExec = LocalTableScanExec(output, scan.rows().toImmutableArraySeq, None)
       DataSourceV2Strategy.withProjectAndFilter(
         project, filters, localScanExec, needsUnsafeConversion = false) :: Nil
+
+    case PhysicalOperation(project, filters,
+        DataSourceV2ScanRelation(_, scan: InMemoryCacheScan, output, _, _, _)) =>
+      // Route cached DataFrames back to InMemoryTableScanExec, preserving the optimized
+      // columnar path. DynamicPruning expressions are separated into runtimeFilters for
+      // batch-level min/max pruning at execution time; compile-time filters are passed
+      // both to InMemoryTableScanExec (for batch pruning) and to withProjectAndFilter
+      // (for row-level re-evaluation). The pushed limit is applied per-partition.
+      //
+      // Scalar subquery filters are NOT extracted here (unlike the generic
+      // DataSourceV2ScanRelation case below). In that case they are routed into runtimeFilters
+      // so BatchScanExec can call scan.filter() for SupportsRuntimeV2Filtering partition pruning.
+      // InMemoryCacheScan never goes through BatchScanExec, so filter() is never called;
+      // scalar subquery filters remain in compiledFilters and are applied by FilterExec above.
+      val (runtimeFilters, compiledFilters) = filters.partition {
+        case _: DynamicPruning => true
+        case _ => false
+      }
+      val scanExec = InMemoryTableScanExec(
+        output, compiledFilters, scan.relation,
+        limit = scan.pushedLimit,
+        runtimeFilters = runtimeFilters)
+      DataSourceV2Strategy.withProjectAndFilter(
+        project, compiledFilters, scanExec, needsUnsafeConversion = false) :: Nil
 
     case PhysicalOperation(project, filters, relation: DataSourceV2ScanRelation) =>
       // projection and filters were already pushed down in the optimizer.

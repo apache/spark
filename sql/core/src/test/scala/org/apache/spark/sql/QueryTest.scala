@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution, SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.columnar.CachedRelation
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestData
@@ -229,7 +229,7 @@ trait QueryTestBase
     val planWithCaching =
       query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {
-      case cached: InMemoryRelation => cached
+      case CachedRelation(cached) => cached
     }
 
     assert(
@@ -246,7 +246,7 @@ trait QueryTestBase
     val planWithCaching =
       query.queryExecution.withCachedData
     val matched = planWithCaching.exists {
-      case cached: InMemoryRelation =>
+      case CachedRelation(cached) =>
         val cacheBuilder = cached.cacheBuilder
         cachedName == cacheBuilder.tableName.get && (storageLevel == cacheBuilder.storageLevel)
       case _ => false
