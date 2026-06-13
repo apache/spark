@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, CreateStruct, Inline, Literal, Rand, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeMap, AttributeReference, CreateStruct, Inline, Literal, Rand, Uuid}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, First, MaxMinByK}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, NearestByDistance, NearestBySimilarity, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Generate, Join, JoinHint, LocalRelation, NearestByJoin, Project}
@@ -46,9 +46,19 @@ class RewriteNearestByJoinSuite extends PlanTest {
     val taggedLeft = Project(left.output :+ qidAlias, left)
     val join = Join(taggedLeft, right, joinType, None, JoinHint.NONE)
 
-    val rightStruct = CreateStruct(right.output)
+    // Mirror the rewrite: a LEFT OUTER join widens right-side columns to nullable, so the
+    // struct and ranking that sit on top of the join must reference them with that nullability.
+    val rightAttrs = joinType match {
+      case LeftOuter => right.output.map(_.withNullability(true))
+      case _ => right.output
+    }
+    val rightNullabilityMap = AttributeMap(right.output.zip(rightAttrs))
+    val rankingInJoin = ranking.transform {
+      case a: Attribute => rightNullabilityMap.getOrElse(a, a)
+    }
+    val rightStruct = CreateStruct(rightAttrs)
     val topKAgg = MaxMinByK(
-      rightStruct, ranking, Literal(numResults), reverse = reverse)
+      rightStruct, rankingInJoin, Literal(numResults), reverse = reverse)
       .toAggregateExpression()
     val matchesAlias = Alias(topKAgg, "__nearest_matches__")()
     val firstLeftAggs = left.output.map { attr =>
@@ -143,6 +153,50 @@ class RewriteNearestByJoinSuite extends PlanTest {
       reverse = true, joinType = LeftOuter)
 
     comparePlans(normalizeUuidSeed(rewritten), expected, checkAnalysis = false)
+  }
+
+  test("SPARK-56395: LEFT OUTER rewrite keeps right-side nullability consistent with its child") {
+    // A LEFT OUTER NEAREST BY widens the synthetic join's right-side columns to nullable. The
+    // Aggregate built on top of that join references those columns (in the `_matches` struct and
+    // the ranking), so each reference must carry the widened nullability -- otherwise the
+    // rewritten plan declares a column non-nullable while its child produces it as nullable, an
+    // internal inconsistency. INNER does not widen the right side, so it stays a no-op.
+    //
+    // The right-side columns are declared non-nullable here: that is what makes LEFT OUTER's
+    // widening observable (with nullable columns the widening is a no-op and the bug is hidden).
+    val left = LocalRelation($"a".int, $"b".int)
+    val right = LocalRelation(
+      AttributeReference("x", IntegerType, nullable = false)(),
+      AttributeReference("y", IntegerType, nullable = false)())
+    Seq(Inner -> false, LeftOuter -> true).foreach { case (joinType, rightNullable) =>
+      val query = NearestByJoin(
+        left, right, joinType, approx = true, numResults = 1,
+        rankingExpression = left.output(0) + right.output(0),
+        direction = NearestBySimilarity)
+
+      val rewritten = RewriteNearestByJoin(query.analyze)
+      val join = rewritten.collect { case j: Join => j }.head
+      val aggregate = rewritten.collect { case a: Aggregate => a }.head
+
+      // Sanity-check the fixture: the synthetic join widens its right-side output to nullable
+      // iff it is LEFT OUTER. (`join.right` is the right relation as it appears in the rewritten
+      // plan, so its ExprIds line up with the join's output.)
+      val rightExprIds = join.right.output.map(_.exprId).toSet
+      val joinRightOutput = join.output.filter(a => rightExprIds.contains(a.exprId))
+      assert(joinRightOutput.nonEmpty)
+      assert(joinRightOutput.forall(_.nullable == rightNullable))
+
+      // Every attribute the Aggregate references that its child (the join) produces must agree
+      // on nullability with the child -- this is exactly what the fix corrects for LEFT OUTER.
+      val childNullability = aggregate.child.output.map(a => a.exprId -> a.nullable).toMap
+      aggregate.aggregateExpressions.foreach(_.foreach {
+        case ref: AttributeReference if childNullability.contains(ref.exprId) =>
+          assert(ref.nullable == childNullability(ref.exprId),
+            s"$joinType: ${ref.name}#${ref.exprId.id} declared nullable=${ref.nullable} " +
+              s"but its child produces nullable=${childNullability(ref.exprId)}")
+        case _ =>
+      })
+    }
   }
 
   test("synthetic Join uses the user's joinType") {
