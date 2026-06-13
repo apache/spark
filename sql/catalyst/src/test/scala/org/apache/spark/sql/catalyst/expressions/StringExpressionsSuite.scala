@@ -1025,6 +1025,52 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(StringInstr(Literal("\"quote"), Literal("\"quote")) :: Nil)
+
+    checkEvaluation(StringInstr4(Literal("abcabc"), Literal("b"), Literal(3), Literal(1)), 5)
+    checkEvaluation(StringInstr4(Literal("abcabc"), Literal("b"), Literal(1), Literal(2)), 5)
+    checkEvaluation(StringInstr4(Literal("abcabc"), Literal("b"), Literal(3), Literal(2)), 0)
+    checkEvaluation(StringInstr4(Literal("abcabc"), Literal("b"), Literal(-1), Literal(1)), 5)
+    checkEvaluation(StringInstr4(Literal("abcabc"), Literal("b"), Literal(-1), Literal(2)), 2)
+    checkEvaluation(StringInstr4(Literal("abcabc"), Literal("a"), Literal(-2), Literal(1)), 4)
+    checkEvaluation(StringInstr4(Literal("abcabc"), Literal("a"), Literal(-1), Literal(2)), 1)
+    checkEvaluation(StringInstr4(Literal("abc"), Literal("b"), Literal(0), Literal(1)), 0)
+    checkEvaluation(StringInstr4(Literal("abc"), Literal("b"), Literal(0), Literal(2)), 0)
+    checkEvaluation(StringInstr4(Literal("abc"), Literal("b"), Literal(1), Literal(3)), 0)
+    checkEvaluation(StringInstr4(Literal("abc"), Literal("b"), Literal(-1), Literal(3)), 0)
+    checkEvaluation(StringInstr4(Literal("abc"), Literal("d"), Literal(1), Literal(1)), 0)
+
+    // NULL
+    checkEvaluation(StringInstr4(
+      Literal.create(null, StringType), Literal("de"), Literal(1), Literal(1)), null)
+    checkEvaluation(StringInstr4(
+      Literal("aaads"), Literal.create(null, StringType), Literal(1), Literal(1)), null)
+    checkEvaluation(StringInstr4(
+      Literal("aaads"), Literal("aa"), Literal.create(null, IntegerType), Literal(1)), null)
+    checkEvaluation(StringInstr4(
+      Literal("aaads"), Literal("aa"), Literal(1), Literal.create(null, IntegerType)), null)
+
+    // scalastyle:off
+    // non ascii characters are not allowed in the source code, so we disable the scalastyle.
+    checkEvaluation(StringInstr4(s1, s2, Literal(1), Literal(1)), 3, create_row("花花世界", "世界"))
+    checkEvaluation(StringInstr4(s1, s2, Literal(1), Literal(2)), 0, create_row("花花世界", "世界"))
+    checkEvaluation(StringInstr4(Literal("你好世界你好"), Literal("你好"), Literal(1), Literal(2)), 5)
+    checkEvaluation(StringInstr4(Literal("你好世界你好"), Literal("你好"), Literal(-1), Literal(1)), 5)
+    checkEvaluation(StringInstr4(Literal("你好世界你好"), Literal("你好"), Literal(-1), Literal(2)), 1)
+    // scalastyle:on
+  }
+
+  test("StringInstrExpressionBuilder") {
+    val seq1 = Seq(Literal("abcabc"), Literal("a"), Literal(-1), Literal(2))
+    val seq2 = Seq(Literal("abcabc"), Literal("a"), Literal(-1))
+    val seq3 = Seq(Literal("abcabc"), Literal("a"))
+
+    val instrExp1 = StringInstrExpressionBuilder.build("instr", seq1)
+    val instrExp2 = StringInstrExpressionBuilder.build("instr", seq2)
+    val instrExp3 = StringInstrExpressionBuilder.build("instr", seq3)
+
+    assert(instrExp1 == StringInstr4(Literal("abcabc"), Literal("a"), Literal(-1), Literal(2)))
+    assert(instrExp2 == StringInstr4(Literal("abcabc"), Literal("a"), Literal(-1), Literal(1)))
+    assert(instrExp3 == StringInstr(Literal("abcabc"), Literal("a")))
   }
 
   test("LOCATE") {

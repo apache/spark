@@ -5175,6 +5175,62 @@ object functions {
   def instr(str: Column, substring: Column): Column = Column.fn("instr", str, substring)
 
   /**
+   * Locate the position of the first occurrence of `substring` in `str`, starting the search from
+   * position `start`. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def instr(str: Column, substring: Column, start: Int): Column =
+    Column.fn("instr", str, substring, lit(start))
+
+  /**
+   * Locate the position of the first occurrence of `substring` in `str`, starting the search from
+   * position `start`. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def instr(str: Column, substring: Column, start: Column): Column =
+    Column.fn("instr", str, substring, start)
+
+  /**
+   * Locate the position of the `occurrence`-th occurrence of `substring` in `str`, starting the
+   * search from position `start`. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def instr(str: Column, substring: Column, start: Int, occurrence: Int): Column =
+    Column.fn("instr", str, substring, lit(start), lit(occurrence))
+
+  /**
+   * Locate the position of the `occurrence`-th occurrence of `substring` in `str`, starting the
+   * search from position `start`. Returns null if either of the arguments are null.
+   *
+   * @note
+   *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
+   *   in str.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def instr(str: Column, substring: Column, start: Column, occurrence: Column): Column =
+    Column.fn("instr", str, substring, start, occurrence)
+
+  /**
    * Computes the character length of a given string or number of bytes of a binary string. The
    * length of character strings include the trailing spaces. The length of binary strings
    * includes binary zeros.

@@ -3403,4 +3403,15 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "INVALID_LINE_SEPARATOR.TOO_LONG",
       messageParameters = Map("length" -> length.toString))
   }
+
+  def invalidOccurrenceError(functionName: String, occurrence: Int): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.OCCURRENCE",
+      messageParameters = Map(
+        "functionName" -> toSQLId(functionName),
+        "parameter" -> toSQLId("occurrence"),
+        "actual" -> occurrence.toString
+      )
+    )
+  }
 }

@@ -2613,8 +2613,21 @@ def format_string(format: str, *cols: "ColumnOrName") -> Column:
 format_string.__doc__ = pysparkfuncs.format_string.__doc__
 
 
-def instr(str: "ColumnOrName", substr: Union[Column, str]) -> Column:
-    return _invoke_function("instr", _to_col(str), lit(substr))
+def instr(
+    str: "ColumnOrName",
+    substr: Union[Column, str],
+    start: Optional[Union[Column, int]] = None,
+    occurrence: Optional[Union[Column, int]] = None,
+) -> Column:
+    if start is None and occurrence is None:
+        return _invoke_function_over_columns("instr", str, lit(substr))
+    elif start is not None and occurrence is None:
+        start = lit(start)
+        return _invoke_function_over_columns("instr", str, lit(substr), start)
+    else:
+        start = lit(start) if start is not None else lit(1)
+        occurrence = lit(occurrence)
+        return _invoke_function_over_columns("instr", str, lit(substr), start, occurrence)
 
 
 instr.__doc__ = pysparkfuncs.instr.__doc__

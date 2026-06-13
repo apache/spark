@@ -625,7 +625,7 @@ object FunctionRegistry {
     expressionBuilder("to_varchar", ToCharacterBuilder, setAlias = true, Some("3.5.0")),
     expression[GetJsonObject]("get_json_object"),
     expression[InitCap]("initcap"),
-    expression[StringInstr]("instr"),
+    expressionBuilder("instr", StringInstrExpressionBuilder),
     expression[Lower]("lcase", true),
     expression[Length]("length"),
     expression[Length]("len", setAlias = true, Some("3.4.0")),

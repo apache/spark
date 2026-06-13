@@ -279,6 +279,56 @@ public class UTF8StringSuite {
     assertEquals(-1, fromString("数据砖头").indexOf(fromString("数"), 3));
     assertEquals(0, fromString("数据砖头").indexOf(fromString("数"), 0));
     assertEquals(3, fromString("数据砖头").indexOf(fromString("头"), 0));
+
+    // Tests for indexOf with start and occurrence parameters
+    // Forward search
+    assertEquals(1, fromString("abcabc").indexOf(fromString("b"), 1, 1));
+    assertEquals(4, fromString("abcabc").indexOf(fromString("b"), 1, 2));
+    assertEquals(4, fromString("abcabc").indexOf(fromString("b"), 3, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("b"), 10, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("b"), 0, 1));
+
+    // Backward search (negative start)
+    assertEquals(4, fromString("abcabc").indexOf(fromString("b"), -1, 1));
+    assertEquals(1, fromString("abcabc").indexOf(fromString("b"), -1, 2));
+    assertEquals(4, fromString("abcabc").indexOf(fromString("b"), -2, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("b"), -10, 1));
+
+    // Overlapping matches ("aa" in "aaaa")
+    assertEquals(0, fromString("aaaa").indexOf(fromString("aa"), 1, 1));
+    assertEquals(1, fromString("aaaa").indexOf(fromString("aa"), 1, 2));
+    assertEquals(2, fromString("aaaa").indexOf(fromString("aa"), 1, 3));
+    assertEquals(-1, fromString("aaaa").indexOf(fromString("aa"), 1, 4));
+    assertEquals(2, fromString("aaaa").indexOf(fromString("aa"), -1, 1));
+    assertEquals(1, fromString("aaaa").indexOf(fromString("aa"), -1, 2));
+    assertEquals(0, fromString("aaaa").indexOf(fromString("aa"), -1, 3));
+
+    // Multi-byte characters
+    assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), 1, 1));
+    assertEquals(4, fromString("你好世界你好").indexOf(fromString("你好"), 1, 2));
+    assertEquals(4, fromString("你好世界你好").indexOf(fromString("你好"), -1, 1));
+    assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), -1, 2));
+
+    // Empty substring (behavior depends on indexOfEmpty, currently returns 0)
+    assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 1, 1));
+    assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 5, 1));
+    assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, -1, 1));
+
+    // Boundary cases
+    assertEquals(0, fromString("x").indexOf(fromString("x"), 1, 1));
+    assertEquals(-1, fromString("x").indexOf(fromString("x"), 1, 2));
+    assertEquals(0, fromString("x").indexOf(fromString("x"), -1, 1));
+    assertEquals(-1, fromString("x").indexOf(fromString("x"), -1, 2));
+    assertEquals(-1, EMPTY_UTF8.indexOf(fromString("a"), 1, 1));
+    assertEquals(-1, EMPTY_UTF8.indexOf(fromString("a"), -1, 1));
+    assertEquals(4, fromString("hello").indexOf(fromString("o"), 5, 1));
+    assertEquals(-1, fromString("hello").indexOf(fromString("o"), 6, 1));
+    assertEquals(0, fromString("hello").indexOf(fromString("h"), -5, 1));
+    assertEquals(-1, fromString("hello").indexOf(fromString("h"), -6, 1));
+
+    // Target larger than string
+    assertEquals(-1, fromString("ab").indexOf(fromString("abc"), 1, 1));
+    assertEquals(-1, fromString("ab").indexOf(fromString("abc"), -1, 1));
   }
 
   @Test

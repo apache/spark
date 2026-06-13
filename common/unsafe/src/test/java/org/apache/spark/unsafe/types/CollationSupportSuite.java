@@ -3890,5 +3890,326 @@ public class CollationSupportSuite {
     return dict;
   }
 
+  private void assertStringInstr4(String string, String substring, int start, int occurrence,
+      String collationName, int expected) throws SparkException {
+    UTF8String str = UTF8String.fromString(string);
+    UTF8String substr = UTF8String.fromString(substring);
+    int collationId = CollationFactory.collationNameToId(collationName);
+    int res = CollationSupport.StringInstr4.exec(str, substr, start, occurrence, collationId) + 1;
+    assertEquals(expected, res);
+  }
+
+  @Test
+  public void testStringInstr4() throws SparkException {
+    // Test start = 1 and occurrence = 1 (equivalent to StringInstr)
+    // Empty strings.
+    assertStringInstr4("", "", 1, 1, UTF8_BINARY, 1);
+    assertStringInstr4("", "", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("", "", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("", "", 1, 1, UNICODE, 1);
+    assertStringInstr4("a", "", 1, 1, UTF8_BINARY, 1);
+    assertStringInstr4("a", "", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("a", "", 1, 1, UNICODE, 1);
+    assertStringInstr4("a", "", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("", "x", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("", "x", 1, 1, UTF8_LCASE, 0);
+    assertStringInstr4("", "x", 1, 1, UNICODE, 0);
+    assertStringInstr4("", "x", 1, 1, UNICODE_CI, 0);
+    // Basic tests.
+    assertStringInstr4("aaads", "aa", 1, 1, UTF8_BINARY, 1);
+    assertStringInstr4("aaads", "aa", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("aaads", "aa", 1, 1, UNICODE, 1);
+    assertStringInstr4("aaads", "aa", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("aaads", "ds", 1, 1, UTF8_BINARY, 4);
+    assertStringInstr4("aaads", "ds", 1, 1, UTF8_LCASE, 4);
+    assertStringInstr4("aaads", "ds", 1, 1, UNICODE, 4);
+    assertStringInstr4("aaads", "ds", 1, 1, UNICODE_CI, 4);
+    assertStringInstr4("aaads", "Aa", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("aaads", "Aa", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("aaads", "Aa", 1, 1, UNICODE, 0);
+    assertStringInstr4("aaads", "Aa", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("aaaDs", "de", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("aaaDs", "de", 1, 1, UTF8_LCASE, 0);
+    assertStringInstr4("aaaDs", "de", 1, 1, UNICODE, 0);
+    assertStringInstr4("aaaDs", "de", 1, 1, UNICODE_CI, 0);
+    assertStringInstr4("aaaDs", "ds", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("aaaDs", "ds", 1, 1, UTF8_LCASE, 4);
+    assertStringInstr4("aaaDs", "ds", 1, 1, UNICODE, 0);
+    assertStringInstr4("aaaDs", "ds", 1, 1, UNICODE_CI, 4);
+    assertStringInstr4("aaadS", "Ds", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("aaadS", "Ds", 1, 1, UTF8_LCASE, 4);
+    assertStringInstr4("aaadS", "Ds", 1, 1, UNICODE, 0);
+    assertStringInstr4("aaadS", "Ds", 1, 1, UNICODE_CI, 4);
+    assertStringInstr4("aaaČŠčšcs", "cs", 1, 1, "SR", 8);
+    assertStringInstr4("aaaČŠčšcs", "cs", 1, 1, "SR_CI_AI", 4);
+    // Advanced tests.
+    assertStringInstr4("test大千世界X大千世界", "大千", 1, 1, UTF8_BINARY, 5);
+    assertStringInstr4("test大千世界X大千世界", "大千", 1, 1, UTF8_LCASE, 5);
+    assertStringInstr4("test大千世界X大千世界", "大千", 1, 1, UNICODE, 5);
+    assertStringInstr4("test大千世界X大千世界", "大千", 1, 1, UNICODE_CI, 5);
+    assertStringInstr4("test大千世界X大千世界", "界X", 1, 1, UTF8_BINARY, 8);
+    assertStringInstr4("test大千世界X大千世界", "界X", 1, 1, UTF8_LCASE, 8);
+    assertStringInstr4("test大千世界X大千世界", "界X", 1, 1, UNICODE, 8);
+    assertStringInstr4("test大千世界X大千世界", "界X", 1, 1, UNICODE_CI, 8);
+    assertStringInstr4("test大千世界X大千世界", "界x", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("test大千世界X大千世界", "界x", 1, 1, UTF8_LCASE, 8);
+    assertStringInstr4("test大千世界X大千世界", "界x", 1, 1, UNICODE, 0);
+    assertStringInstr4("test大千世界X大千世界", "界x", 1, 1, UNICODE_CI, 8);
+    assertStringInstr4("test大千世界X大千世界", "界y", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("test大千世界X大千世界", "界y", 1, 1, UTF8_LCASE, 0);
+    assertStringInstr4("test大千世界X大千世界", "界y", 1, 1, UNICODE, 0);
+    assertStringInstr4("test大千世界X大千世界", "界y", 1, 1, UNICODE_CI, 0);
+    // One-to-many case mapping (e.g. Turkish dotted I).
+    assertStringInstr4("i\u0307", "i", 1, 1, UNICODE_CI, 0);
+    assertStringInstr4("i\u0307", "\u0307", 1, 1, UNICODE_CI, 0);
+    assertStringInstr4("i\u0307", "İ", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("İ", "i", 1, 1, UNICODE_CI, 0);
+    assertStringInstr4("İoi̇o12", "i\u0307o", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("i̇oİo12", "İo", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("abİoi̇o", "i\u0307o", 1, 1, UNICODE_CI, 3);
+    assertStringInstr4("abi̇oİo", "İo", 1, 1, UNICODE_CI, 3);
+    assertStringInstr4("ai̇oxXİo", "Xx", 1, 1, UNICODE_CI, 5);
+    assertStringInstr4("aİoi̇oxx", "XX", 1, 1, UNICODE_CI, 7);
+    assertStringInstr4("i\u0307", "i", 1, 1, UTF8_LCASE, 1); // != UNICODE_CI
+    assertStringInstr4("i\u0307", "\u0307", 1, 1, UTF8_LCASE, 2); // != UNICODE_CI
+    assertStringInstr4("i\u0307", "İ", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("İ", "i", 1, 1, UTF8_LCASE, 0);
+    assertStringInstr4("İoi̇o12", "i\u0307o", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("i̇oİo12", "İo", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("abİoi̇o", "i\u0307o", 1, 1, UTF8_LCASE, 3);
+    assertStringInstr4("abi̇oİo", "İo", 1, 1, UTF8_LCASE, 3);
+    assertStringInstr4("abI\u0307oi̇o", "İo", 1, 1, UTF8_LCASE, 3);
+    assertStringInstr4("ai̇oxXİo", "Xx", 1, 1, UTF8_LCASE, 5);
+    assertStringInstr4("abİoi̇o", "\u0307o", 1, 1, UTF8_LCASE, 6);
+    assertStringInstr4("aİoi̇oxx", "XX", 1, 1, UTF8_LCASE, 7);
+    // Conditional case mapping (e.g. Greek sigmas).
+    assertStringInstr4("σ", "σ", 1, 1, UTF8_BINARY, 1);
+    assertStringInstr4("σ", "ς", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("σ", "Σ", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("ς", "σ", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("ς", "ς", 1, 1, UTF8_BINARY, 1);
+    assertStringInstr4("ς", "Σ", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("Σ", "σ", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("Σ", "ς", 1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("Σ", "Σ", 1, 1, UTF8_BINARY, 1);
+    assertStringInstr4("σ", "σ", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("σ", "ς", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("σ", "Σ", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("ς", "σ", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("ς", "ς", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("ς", "Σ", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("Σ", "σ", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("Σ", "ς", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("Σ", "Σ", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("σ", "σ", 1, 1, UNICODE, 1);
+    assertStringInstr4("σ", "ς", 1, 1, UNICODE, 0);
+    assertStringInstr4("σ", "Σ", 1, 1, UNICODE, 0);
+    assertStringInstr4("ς", "σ", 1, 1, UNICODE, 0);
+    assertStringInstr4("ς", "ς", 1, 1, UNICODE, 1);
+    assertStringInstr4("ς", "Σ", 1, 1, UNICODE, 0);
+    assertStringInstr4("Σ", "σ", 1, 1, UNICODE, 0);
+    assertStringInstr4("Σ", "ς", 1, 1, UNICODE, 0);
+    assertStringInstr4("Σ", "Σ", 1, 1, UNICODE, 1);
+    assertStringInstr4("σ", "σ", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("σ", "ς", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("σ", "Σ", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("ς", "σ", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("ς", "ς", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("ς", "Σ", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("Σ", "σ", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("Σ", "ς", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("Σ", "Σ", 1, 1, UNICODE_CI, 1);
+    // Surrogate pairs.
+    assertStringInstr4("a🙃b", "a", 1, 1, UTF8_BINARY, 1);
+    assertStringInstr4("a🙃b", "a", 1, 1, UTF8_LCASE, 1);
+    assertStringInstr4("a🙃b", "a", 1, 1, UNICODE, 1);
+    assertStringInstr4("a🙃b", "a", 1, 1, UNICODE_CI, 1);
+    assertStringInstr4("a🙃b", "🙃", 1, 1, UTF8_BINARY, 2);
+    assertStringInstr4("a🙃b", "🙃", 1, 1, UTF8_LCASE, 2);
+    assertStringInstr4("a🙃b", "🙃", 1, 1, UNICODE, 2);
+    assertStringInstr4("a🙃b", "🙃", 1, 1, UNICODE_CI, 2);
+    assertStringInstr4("a🙃b", "b", 1, 1, UTF8_BINARY, 3);
+    assertStringInstr4("a🙃b", "b", 1, 1, UTF8_LCASE, 3);
+    assertStringInstr4("a🙃b", "b", 1, 1, UNICODE, 3);
+    assertStringInstr4("a🙃b", "b", 1, 1, UNICODE_CI, 3);
+    assertStringInstr4("a🙃🙃b", "🙃", 1, 1, UTF8_BINARY, 2);
+    assertStringInstr4("a🙃🙃b", "🙃", 1, 1, UTF8_LCASE, 2);
+    assertStringInstr4("a🙃🙃b", "🙃", 1, 1, UNICODE, 2);
+    assertStringInstr4("a🙃🙃b", "🙃", 1, 1, UNICODE_CI, 2);
+    assertStringInstr4("a🙃🙃b", "b", 1, 1, UTF8_BINARY, 4);
+    assertStringInstr4("a🙃🙃b", "b", 1, 1, UTF8_LCASE, 4);
+    assertStringInstr4("a🙃🙃b", "b", 1, 1, UNICODE, 4);
+    assertStringInstr4("a🙃🙃b", "b", 1, 1, UNICODE_CI, 4);
+    assertStringInstr4("a🙃x🙃b", "b", 1, 1, UTF8_BINARY, 5);
+    assertStringInstr4("a🙃x🙃b", "b", 1, 1, UTF8_LCASE, 5);
+    assertStringInstr4("a🙃x🙃b", "b", 1, 1, UNICODE, 5);
+    assertStringInstr4("a🙃x🙃b", "b", 1, 1, UNICODE_CI, 5);
+
+    // Test start != 1 or occurrence != 1
+    // Forward, occurrence > 1
+    assertStringInstr4("abcabc", "b", 1, 2, UTF8_BINARY, 5);
+    assertStringInstr4("abcabc", "b", 1, 2, UTF8_LCASE, 5);
+    assertStringInstr4("abcabc", "b", 1, 2, UNICODE_CI, 5);
+    assertStringInstr4("abcabc", "b", 1, 2, UNICODE, 5);
+    // Forward with start > 1
+    assertStringInstr4("abcabc", "b", 3, 1, UTF8_BINARY, 5);
+    assertStringInstr4("abcabc", "b", 3, 1, UTF8_LCASE, 5);
+    assertStringInstr4("abcabc", "b", 3, 1, UNICODE_CI, 5);
+    assertStringInstr4("abcabc", "b", 3, 1, UNICODE, 5);
+    // Forward, occurrence > 1, start > 1
+    assertStringInstr4("abcbabc", "b", 2, 2, UTF8_BINARY, 4);
+    assertStringInstr4("abcbabc", "b", 2, 2, UTF8_LCASE, 4);
+    assertStringInstr4("abcbabc", "b", 2, 2, UNICODE_CI, 4);
+    assertStringInstr4("abcbabc", "b", 2, 2, UNICODE, 4);
+    // Not found due to excessive occurrence
+    assertStringInstr4("abc", "b", 1, 2, UTF8_BINARY, 0);
+    assertStringInstr4("abc", "b", 1, 2, UTF8_LCASE, 0);
+    assertStringInstr4("abc", "b", 1, 2, UNICODE_CI, 0);
+    assertStringInstr4("abc", "b", 1, 2, UNICODE, 0);
+    // Negative start, occurrence=1
+    assertStringInstr4("abcabc", "b", -1, 1, UTF8_BINARY, 5);
+    assertStringInstr4("abcabc", "b", -1, 1, UTF8_LCASE, 5);
+    assertStringInstr4("abcabc", "b", -1, 1, UNICODE_CI, 5);
+    assertStringInstr4("abcabc", "b", -1, 1, UNICODE, 5);
+    // Negative start, occurrence=2 (find second from right)
+    assertStringInstr4("abcabc", "b", -1, 2, UTF8_BINARY, 2);
+    assertStringInstr4("abcabc", "b", -1, 2, UTF8_LCASE, 2);
+    assertStringInstr4("abcabc", "b", -1, 2, UNICODE_CI, 2);
+    assertStringInstr4("abcabc", "b", -1, 2, UNICODE, 2);
+    // Negative start, not at the end
+    assertStringInstr4("abcabc", "b", -2, 1, UTF8_BINARY, 5);
+    assertStringInstr4("abcabc", "b", -2, 1, UTF8_LCASE, 5);
+    assertStringInstr4("abcabc", "b", -2, 1, UNICODE_CI, 5);
+    assertStringInstr4("abcabc", "b", -2, 1, UNICODE, 5);
+    // Negative start, occurrence=2, start=-2
+    assertStringInstr4("abcabc", "b", -2, 2, UTF8_BINARY, 2);
+    assertStringInstr4("abcabc", "b", -2, 2, UTF8_LCASE, 2);
+    assertStringInstr4("abcabc", "b", -2, 2, UNICODE_CI, 2);
+    assertStringInstr4("abcabc", "b", -2, 2, UNICODE, 2);
+    // Backward lookup of multibyte characters
+    assertStringInstr4("你好世界你好", "你好", -1, 1, UTF8_BINARY, 5);
+    assertStringInstr4("你好世界你好", "你好", -1, 1, UTF8_LCASE, 5);
+    assertStringInstr4("你好世界你好", "你好", -1, 1, UNICODE_CI, 5);
+    assertStringInstr4("你好世界你好", "你好", -1, 1, UNICODE, 5);
+    assertStringInstr4("你好世界你好", "你好", -1, 2, UTF8_BINARY, 1);
+    assertStringInstr4("你好世界你好", "你好", -1, 2, UTF8_LCASE, 1);
+    assertStringInstr4("你好世界你好", "你好", -1, 2, UNICODE_CI, 1);
+    assertStringInstr4("你好世界你好", "你好", -1, 2, UNICODE, 1);
+    // Reverse lookup under case sensitivity/insensitivity
+    assertStringInstr4("AbCaBc", "Bc", -1, 1, UTF8_BINARY, 5);
+    assertStringInstr4("AbCaBc", "Bc", -1, 1, UTF8_LCASE, 5);
+    assertStringInstr4("AbCaBc", "Bc", -1, 1, UNICODE_CI, 5);
+    assertStringInstr4("AbCaBc", "bc", -1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("AbCaBc", "bc", -1, 1, UTF8_LCASE, 5);
+    assertStringInstr4("AbCaBc", "bc", -1, 1, UNICODE_CI, 5);
+    // Forward, occurrence = 2, with UNICODE_CI / UTF8_LCASE
+    assertStringInstr4("İoi\u0307oİo", "İo", 1, 2, UNICODE_CI, 3);
+    assertStringInstr4("İoi\u0307oİo", "i\u0307o", 1, 2, UNICODE_CI, 3);
+    assertStringInstr4("İoi\u0307oİo", "İo", 1, 2, UTF8_LCASE, 3);
+    assertStringInstr4("İoi\u0307oİo", "i\u0307o", 1, 2, UTF8_LCASE, 3);
+    // Backward, occurrence = 1 & 2
+    assertStringInstr4("İoi\u0307oİo", "İo", -1, 1, UNICODE_CI, 6);
+    assertStringInstr4("İoi\u0307oİo", "İo", -1, 2, UNICODE_CI, 3);
+    assertStringInstr4("İoi\u0307oİo", "İo", -1, 2, UTF8_LCASE, 3);
+    // start = -2 (search left from the second-last character)
+    assertStringInstr4("İoi\u0307oİo", "İo", -2, 1, UNICODE_CI, 6);
+    assertStringInstr4("İoi\u0307oİo", "İo", -2, 2, UNICODE_CI, 3);
+    // Boundary: occurrence exceeds actual count
+    assertStringInstr4("İoi\u0307oİo", "İo", 1, 4, UNICODE_CI, 0);
+    assertStringInstr4("İoi\u0307oİo", "İo", -1, 4, UTF8_LCASE, 0);
+    // Boundary: start = 0
+    assertStringInstr4("İoi\u0307oİo", "İo", 0, 1, UNICODE_CI, 0);
+    // Boundary: start out of range (forward/backward)
+    assertStringInstr4("İoi\u0307oİo", "İo", 10, 1, UTF8_LCASE, 0);
+    assertStringInstr4("İoi\u0307oİo", "İo", -10, 1, UNICODE_CI, 0);
+    String sigmaStr = "σΣςσΣς";  // 1:σ, 2:Σ, 3:ς, 4:σ, 5:Σ, 6:ς
+    // UTF8_BINARY: all sigma forms are distinct, only exact byte matches succeed
+    assertStringInstr4("σΣςσΣς", "Σ", 1, 2, UTF8_BINARY, 5);
+    assertStringInstr4("σΣςσΣς", "ς", 1, 1, UTF8_BINARY, 3);
+    assertStringInstr4("σΣςσΣς", "ς", 1, 2, UTF8_BINARY, 6);
+    assertStringInstr4("σΣςσΣς", "ς", -2, 1, UTF8_BINARY, 3);
+    assertStringInstr4("σΣςσΣς", "ς", -1, 1, UTF8_BINARY, 6);
+    // UNICODE_CI: all sigma forms are equivalent
+    assertStringInstr4(sigmaStr, "σ", 1, 2, UNICODE_CI, 2);
+    assertStringInstr4(sigmaStr, "Σ", 1, 3, UNICODE_CI, 3);
+    assertStringInstr4(sigmaStr, "ς", 1, 4, UNICODE_CI, 4);
+    assertStringInstr4(sigmaStr, "σ", -1, 1, UNICODE_CI, 6);
+    assertStringInstr4(sigmaStr, "σ", -1, 2, UNICODE_CI, 5);
+    assertStringInstr4(sigmaStr, "Σ", -2, 1, UNICODE_CI, 5);
+    // UTF8_LCASE: also case-insensitive, sigma forms match
+    assertStringInstr4(sigmaStr, "σ", 1, 2, UTF8_LCASE, 2);
+    assertStringInstr4(sigmaStr, "σ", -1, 1, UTF8_LCASE, 6);
+    // UNICODE: σ, ς, Σ are treated as distinct
+    assertStringInstr4(sigmaStr, "σ", 1, 2, UNICODE, 4);
+    assertStringInstr4(sigmaStr, "ς", -1, 1, UNICODE, 6);
+    assertStringInstr4(sigmaStr, "ς", -1, 2, UNICODE, 3);
+    // Boundary: occurrence too large
+    assertStringInstr4(sigmaStr, "σ", 1, 7, UNICODE_CI, 0);
+    assertStringInstr4(sigmaStr, "σ", 1, 3, UNICODE, 0);
+    assertStringInstr4(sigmaStr, "σ", -1, 7, UTF8_LCASE, 0);
+    assertStringInstr4(sigmaStr, "σ", -1, 7, UTF8_BINARY, 0);
+    // Boundary: start = 0
+    assertStringInstr4(sigmaStr, "σ", 0, 1, UNICODE_CI, 0);
+    assertStringInstr4(sigmaStr, "σ", 0, 1, UNICODE, 0);
+    assertStringInstr4(sigmaStr, "σ", 0, 1, UTF8_LCASE, 0);
+    assertStringInstr4(sigmaStr, "σ", 0, 1, UTF8_BINARY, 0);
+    // Boundary: start out of range
+    assertStringInstr4(sigmaStr, "σ", 7, 1, UNICODE, 0);
+    assertStringInstr4(sigmaStr, "σ", -7, 1, UNICODE, 0);
+    assertStringInstr4(sigmaStr, "σ", 7, 1, UNICODE_CI, 0);
+    assertStringInstr4(sigmaStr, "σ", -7, 1, UNICODE_CI, 0);
+    assertStringInstr4(sigmaStr, "σ", -7, 1, UTF8_LCASE, 0);
+    assertStringInstr4(sigmaStr, "σ", -7, 1, UTF8_BINARY, 0);
+    assertStringInstr4(sigmaStr, "σ", 7, 1, UTF8_BINARY, 0);
+    // surrogate pairs, occurrence > 1
+    String emojiStr = "a🙃🙃b🙃c";
+    assertStringInstr4(emojiStr, "🙃", 1, 1, UTF8_BINARY, 2);
+    assertStringInstr4(emojiStr, "🙃", 1, 2, UTF8_BINARY, 3);
+    assertStringInstr4(emojiStr, "🙃", 1, 3, UTF8_BINARY, 5);
+    assertStringInstr4(emojiStr, "🙃", 1, 4, UTF8_BINARY, 0);
+    assertStringInstr4(emojiStr, "🙃", -1, 1, UTF8_BINARY, 5);
+    assertStringInstr4(emojiStr, "🙃", -1, 2, UTF8_BINARY, 3);
+    assertStringInstr4(emojiStr, "🙃", -1, 3, UTF8_BINARY, 2);
+    assertStringInstr4(emojiStr, "🙃", -1, 4, UTF8_BINARY, 0);
+    assertStringInstr4(emojiStr, "🙃", 1, 2, UNICODE_CI, 3);
+    assertStringInstr4(emojiStr, "🙃", -2, 1, UNICODE, 5);
+    assertStringInstr4(emojiStr, "🙃", -2, 1, UTF8_BINARY, 5);
+    assertStringInstr4("x🙃yz🙃z🙃", "z🙃", -1, 1, UTF8_LCASE, 6);
+    assertStringInstr4("x🙃yz🙃z🙃", "z🙃", -1, 1, UNICODE, 6);
+    assertStringInstr4("x🙃yz🙃z🙃", "z🙃", -1, 1, UNICODE_CI, 6);
+    assertStringInstr4("x🙃yz🙃z🙃", "z🙃", -1, 2, UTF8_BINARY, 4);
+    assertStringInstr4("x🙃yz🙃z🙃", "z🙃", -1, 2, UNICODE_CI, 4);
+    assertStringInstr4("x🙃yz🙃z🙃", "z🙃", -1, 2, UTF8_LCASE, 4);
+    assertStringInstr4("x🙃yz🙃z🙃", "z🙃", -1, 2, UNICODE, 4);
+    assertStringInstr4("x🙃yz🙃z🙃", "y🙃", -1, 1, UTF8_LCASE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "y🙃", -1, 1, UTF8_BINARY, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "y🙃", -1, 1, UNICODE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "y🙃", -1, 1, UNICODE_CI, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 1, 4, UTF8_LCASE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 1, 4, UTF8_BINARY, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 1, 4, UNICODE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 1, 4, UNICODE_CI, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -1, 4, UTF8_LCASE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -1, 4, UTF8_BINARY, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -1, 4, UNICODE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -1, 4, UNICODE_CI, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 3, 2, UTF8_LCASE, 7);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 3, 2, UTF8_BINARY, 7);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 3, 2, UNICODE, 7);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 3, 2, UNICODE_CI, 7);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -3, 2, UTF8_LCASE, 2);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -3, 2, UTF8_BINARY, 2);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -3, 2, UNICODE, 2);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -3, 2, UNICODE_CI, 2);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 8, 1, UTF8_LCASE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 8, 1, UTF8_BINARY, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 8, 1, UNICODE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", 8, 1, UNICODE_CI, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -8, 1, UTF8_LCASE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -8, 1, UTF8_BINARY, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -8, 1, UNICODE, 0);
+    assertStringInstr4("x🙃yz🙃z🙃", "🙃", -8, 1, UNICODE_CI, 0);
+  }
+
 }
 // checkstyle.on: AvoidEscapedUnicodeCharacters

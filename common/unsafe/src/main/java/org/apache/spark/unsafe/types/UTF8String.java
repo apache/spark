@@ -1246,6 +1246,117 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  /**
+   * Finds the {@code occurrence}-th occurrence of {@code pattern} in this string,
+   * starting the search at the specified position.
+   * When {@code start} is positive, the search proceeds forward from the
+   * {@code start}-th character (1‑based). When {@code start} is negative, the
+   * search proceeds backward from the {@code |start|}-th character from the end.
+   * Overlapping matches are supported (e.g. "aa" in "aaa" returns 0, 1, 2 for
+   * occurrence 1, 2, 3 respectively).
+   *
+   * @param pattern    the substring to search for
+   * @param start      1‑based start position; if negative, search direction is reversed
+   * @param occurrence which occurrence to return (must be >= 1)
+   * @return 0‑based character index of the match, or -1 if not found
+   */
+  public int indexOf(UTF8String pattern, int start, int occurrence) {
+    assert occurrence > 0;
+    if (pattern.numBytes() == 0) {
+      return indexOfEmpty(start);
+    }
+    if (start == 0) {
+      return -1;
+    }
+
+    int charCount = 0;
+    int charsToSkip, byteIdx;
+    if (start > 0) {
+      byteIdx = 0; // position in byte
+      charsToSkip = start - 1; // skip character count
+      while (byteIdx < numBytes && charCount < charsToSkip) {
+        byteIdx += numBytesForFirstByte(getByte(byteIdx));
+        charCount += 1;
+      }
+    } else {
+      // For negative start, byteIdx is the exclusive end boundary of the search.
+      // We skip (-start - 1) characters to place byteIdx just past the last
+      // character that may participate in the match.
+      charsToSkip = -start - 1;
+      byteIdx = numBytes;
+      while (byteIdx > 0 && charCount < charsToSkip) {
+        byteIdx = prevCharStart(byteIdx);
+        charCount++;
+      }
+    }
+    // If start position is out of range, return -1 immediately
+    if (charCount < charsToSkip) return -1;
+
+    // For forward search, byteIdx is the starting byte offset of the current character,
+    // and charCount tracks the 0-based character index of that character.
+    // For backward search, byteIdx is the exclusive end boundary (the byte after the
+    // last character that can participate in the match), and charCount is not used
+    // for indexing but kept for consistency.
+    if (start > 0) {
+      // Search for the occurrence-th match, starting from the current byteIdx.
+      while (occurrence > 0) {
+        // If byteIdx equals numBytes, it indicates that we have
+        // reached the end of the string, yet we still enter the loop
+        // and return -1 when the 'not found' condition is met.
+        while (byteIdx <= numBytes) {
+          if (pattern.numBytes + byteIdx > numBytes) {
+            return -1;
+          }
+
+          if (ByteArrayMethods.arrayEquals(base, offset + byteIdx,
+                  pattern.base, pattern.offset, pattern.numBytes)) {
+            break;
+          }
+          byteIdx += numBytesForFirstByte(getByte(byteIdx));
+          charCount += 1;
+        }
+
+        occurrence--;
+        if (occurrence == 0) return charCount;
+
+        byteIdx += numBytesForFirstByte(getByte(byteIdx));
+        charCount += 1;
+      }
+    } else {
+      // Backward search: the search range is [0, byteIdx) in bytes.
+      // byteIdx is initially positioned just after the start character (exclusive end).
+      int startIdx;
+      while (occurrence > 0) {
+        while (byteIdx >= 0) {
+          startIdx = byteIdx - pattern.numBytes;
+          if (startIdx < 0) {
+            return -1;
+          }
+          if (ByteArrayMethods.arrayEquals(base, offset + startIdx,
+                  pattern.base, pattern.offset, pattern.numBytes)) {
+            break;
+          }
+          byteIdx = prevCharStart(byteIdx);
+        }
+
+        occurrence--;
+        if (occurrence == 0) return bytePosToChar(byteIdx - pattern.numBytes);
+
+        byteIdx = prevCharStart(byteIdx);
+      }
+    }
+    return -1;
+  }
+
+  private int prevCharStart(int byteIdx) {
+    byteIdx--;
+    // Skip UTF-8 continuation bytes to reach the start of a character
+    while (byteIdx > 0 && (getByte(byteIdx) & 0xC0) == 0x80) {
+      byteIdx--;
+    }
+    return byteIdx;
+  }
+
   public int charPosToByte(int charPos) {
     if (charPos < 0) {
       return -1;

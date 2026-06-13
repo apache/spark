@@ -1027,6 +1027,142 @@ struct<instr(utf8_binary, collate(AaAA, utf8_lcase)):int,instr(utf8_lcase, colla
 
 
 -- !query
+select instr(utf8_binary, utf8_lcase, 1) from t1
+-- !query schema
+struct<instr(utf8_binary, utf8_lcase, 1, 1):int>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+1
+1
+1
+1
+1
+1
+1
+
+
+-- !query
+select instr(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, -1) from t1
+-- !query schema
+struct<instr(collate(utf8_binary, utf8_lcase), collate(utf8_lcase, utf8_lcase), -1, 1):int>
+-- !query output
+0
+0
+0
+0
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+8
+
+
+-- !query
+select instr(s, utf8_binary, 1, 2) from t1
+-- !query schema
+struct<instr(s, utf8_binary, 1, 2):int>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+
+-- !query
+select instr(utf8_binary, utf8_lcase collate utf8_binary, -1, 2) from t1
+-- !query schema
+struct<instr(utf8_binary, collate(utf8_lcase, utf8_binary), -1, 2):int>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+
+-- !query
+select instr(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 2, 1) from t1
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"collate(utf8_binary, unicode_ai)\"",
+    "inputType" : "\"STRING COLLATE UNICODE_AI\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"instr(collate(utf8_binary, unicode_ai), collate(utf8_lcase, unicode_ai), 2, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 81,
+    "fragment" : "instr(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 2, 1)"
+  } ]
+}
+
+
+-- !query
+select instr(utf8_binary, 'a', 0, 1) from t1
+-- !query schema
+struct<instr(utf8_binary, a, 0, 1):int>
+-- !query output
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+
+-- !query
 select find_in_set(utf8_binary, utf8_lcase) from t1
 -- !query schema
 struct<>

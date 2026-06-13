@@ -74,6 +74,12 @@ select instr(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase) from
 select instr(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai) from t1;
 select instr(utf8_binary, 'a'), instr(utf8_lcase, 'a') from t1;
 select instr(utf8_binary, 'AaAA' collate utf8_lcase), instr(utf8_lcase, 'AAa' collate utf8_binary) from t1;
+select instr(utf8_binary, utf8_lcase, 1) from t1;
+select instr(utf8_binary collate utf8_lcase, utf8_lcase collate utf8_lcase, -1) from t1;
+select instr(s, utf8_binary, 1, 2) from t1;
+select instr(utf8_binary, utf8_lcase collate utf8_binary, -1, 2) from t1;
+select instr(utf8_binary collate unicode_ai, utf8_lcase collate unicode_ai, 2, 1) from t1;
+select instr(utf8_binary, 'a', 0, 1) from t1;
 
 -- FindInSet
 select find_in_set(utf8_binary, utf8_lcase) from t1;
