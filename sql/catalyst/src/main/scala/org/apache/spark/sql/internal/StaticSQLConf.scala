@@ -129,6 +129,7 @@ object StaticSQLConf {
         "through the 'set:system:' session configuration overlay (for example, in a JDBC " +
         "connection string). By default, such system property assignments are rejected.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
