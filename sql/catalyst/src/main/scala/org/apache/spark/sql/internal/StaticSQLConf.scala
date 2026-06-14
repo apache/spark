@@ -125,6 +125,7 @@ object StaticSQLConf {
 
   val LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES =
     buildStaticConf("spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties")
+      .internal()
       .doc("When set to true, the Hive Thrift Server allows setting JVM system properties " +
         "through the 'set:system:' session configuration overlay (for example, in a JDBC " +
         "connection string). By default, such system property assignments are rejected.")
