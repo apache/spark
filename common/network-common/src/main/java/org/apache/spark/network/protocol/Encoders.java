@@ -156,6 +156,7 @@ public class Encoders {
 
     public static int[] decode(ByteBuf buf) {
       int numInts = buf.readInt();
+      Objects.checkFromIndexSize(0, numInts, buf.readableBytes() / 4);
       int[] ints = new int[numInts];
       for (int i = 0; i < ints.length; i ++) {
         ints[i] = buf.readInt();
@@ -179,6 +180,7 @@ public class Encoders {
 
     public static long[] decode(ByteBuf buf) {
       int numLongs = buf.readInt();
+      Objects.checkFromIndexSize(0, numLongs, buf.readableBytes() / 8);
       long[] longs = new long[numLongs];
       for (int i = 0; i < longs.length; i ++) {
         longs[i] = buf.readLong();
