@@ -100,7 +100,7 @@ public class ThriftHttpServlet extends TServlet {
     if (isCookieAuthEnabled) {
       // Generate the signer with secret.
       String secret = Long.toString(RAN.nextLong());
-      LOG.debug("Using the random number as the secret for cookie generation " + secret);
+      LOG.debug("Using the random number as the secret for cookie generation");
       this.signer = new CookieSigner(secret.getBytes());
       this.cookieMaxAge = (int) hiveConf.getTimeVar(
         ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_MAX_AGE, TimeUnit.SECONDS);
