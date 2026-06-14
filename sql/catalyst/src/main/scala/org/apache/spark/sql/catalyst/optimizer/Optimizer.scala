@@ -311,6 +311,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
    */
   def nonExcludableRules: Seq[String] =
     Seq(
+      // ConvertToCatalyst is the only rule that strips the Unevaluable
+      // TranspiledPythonUDF node; excluding it would leak that node into
+      // execution, so it must never be excludable.
+      ConvertToCatalyst.ruleName,
       FinishAnalysis.ruleName,
       RewriteDistinctAggregates.ruleName,
       ReplaceDeduplicateWithAggregate.ruleName,
@@ -1045,10 +1049,18 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
           s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
         } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
-          // Walk the full list of transpiled options and pick the first one
-          // that's actually usable, falling back to the original Python UDF
-          // if nothing fits. If you're plugging in your own transpilation, please add a
-          // separate ConvertToX so you can choose your desired transpiled nodes.
+          // Walk the full list of transpiled options and pick the first non-null
+          // one, falling back to the original Python UDF if none are available.
+          // Options whose declared input-type categories don't match the bound
+          // column types are already pruned during analysis by
+          // ResolveTranspiledPythonUDFOptions, so any option that reaches here is
+          // safe to use. If you're plugging in your own transpilation, please add
+          // a separate ConvertToX so you can choose your desired transpiled nodes.
+          // NOTE: the substituted option is used as-is, with no cast back to the
+          // UDF's declared return type. The built-in transpiler guarantees each
+          // option's dataType already matches; a custom transpiler MUST do the
+          // same (or insert its own Cast), or it will silently change the output
+          // schema.
           val firstEvaluable = s.transpiledOptions.find(expr => expr != null)
           firstEvaluable match {
             case None =>

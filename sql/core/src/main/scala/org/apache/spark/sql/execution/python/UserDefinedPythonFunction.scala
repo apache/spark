@@ -49,7 +49,14 @@ case class UserDefinedPythonFunction(
     pythonEvalType: Int,
     udfDeterministic: Boolean,
     // TODO: Add support for transpilation with Spark Connect and remove the default value.
-    transpiled: JList[Column] = Nil.asJava) {
+    transpiled: JList[Column] = Nil.asJava,
+    // Per-option input-type categories ("numeric"/"string" per public param),
+    // parallel to `transpiled` (same length). The analyzer rule
+    // ResolveTranspiledPythonUDFOptions later keeps only the options whose
+    // categories match the bound argument types; when none match, the call
+    // falls back to the plain Python UDF. `builder` requires the two lists to
+    // be parallel and skips transpilation otherwise.
+    transpiledInputTypes: JList[JList[String]] = Nil.asJava) {
 
   def builder(e: Seq[Expression]): Expression = {
     if (pythonEvalType == PythonEvalType.SQL_BATCHED_UDF
@@ -71,6 +78,8 @@ case class UserDefinedPythonFunction(
     }
     val transpiledExprs: List[Expression] = transpiled.asScala.map(
       column => ColumnConversions.expression(column)).toList
+    val optionInputTypes: List[List[String]] =
+      transpiledInputTypes.asScala.map(_.asScala.toList).toList
 
 
     val udfExpr = if (pythonEvalType == PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
@@ -93,9 +102,24 @@ case class UserDefinedPythonFunction(
     // path execute.
     val transpiledExprsForUse =
       if (e.exists(_.isInstanceOf[NamedArgumentExpression])) Nil else transpiledExprs
-    // If we have a possible transpiled expression insert that node so we can choose later
-    if (transpiledExprsForUse.nonEmpty) {
-      val tpu = TranspiledPythonUDF(name, udfExpr, transpiledExprsForUse)
+    val optionInputTypesForUse =
+      if (e.exists(_.isInstanceOf[NamedArgumentExpression])) Nil else optionInputTypes
+    // If we have possible transpiled expressions insert the node carrying every
+    // option plus its declared input-type categories. We can't pick here: this
+    // builder runs at call-construction time, before the argument columns are
+    // bound, so their types aren't known yet. ResolveTranspiledPythonUDFOptions
+    // prunes the options to those matching the resolved input types (once known,
+    // and before CheckAnalysis), and ConvertToCatalyst picks the survivor.
+    // Only build the node when every option carries its parallel input-type
+    // categories. ResolveTranspiledPythonUDFOptions prunes type-incompatible
+    // options using those categories, but only when they are present (its guard
+    // is `optionInputCategories.nonEmpty`); an empty or mismatched categories
+    // list would leave a type-invalid option to fail CheckAnalysis instead of
+    // falling back. If the two lists don't line up, skip transpilation.
+    if (transpiledExprsForUse.nonEmpty &&
+        optionInputTypesForUse.length == transpiledExprsForUse.length) {
+      val tpu =
+        TranspiledPythonUDF(name, udfExpr, transpiledExprsForUse, optionInputTypesForUse)
       // Resolve the UDF parameters to match the original UDF children
       def resolveUDFParams(expression: Expression, children: Array[Expression]): Expression = {
         expression match {
@@ -133,8 +157,8 @@ case class UserDefinedPythonFunction(
    */
   def fromUDFExpr(expr: Expression): Column = {
     Column(expr match {
-      case TranspiledPythonUDF(name, udaf: PythonUDAF, transpiled) =>
-        TranspiledPythonUDF(name, udaf.toAggregateExpression(), transpiled)
+      case TranspiledPythonUDF(name, udaf: PythonUDAF, transpiled, inputCategories) =>
+        TranspiledPythonUDF(name, udaf.toAggregateExpression(), transpiled, inputCategories)
       case udaf: PythonUDAF => udaf.toAggregateExpression()
       case _ => expr
     })

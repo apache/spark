@@ -636,7 +636,8 @@ class Analyzer(
       typeCoercionRules() ++
       Seq(
         ResolveWithCTE,
-        ExtractDistributedSequenceID) ++
+        ExtractDistributedSequenceID,
+        ResolveTranspiledPythonUDFOptions) ++
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),

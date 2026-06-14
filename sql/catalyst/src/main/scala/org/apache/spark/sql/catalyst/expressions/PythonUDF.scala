@@ -96,7 +96,14 @@ trait PythonFuncExpression extends NonSQLExpression with UserDefinedExpression
 case class TranspiledPythonUDF(
   name: String,
   pythonUDFExpr: Expression,
-  transpiledOptions: List[Expression]) extends Expression with Unevaluable {
+  transpiledOptions: List[Expression],
+  // Per-option input-type categories ("numeric"/"string" per public param),
+  // parallel to `transpiledOptions`. ResolveTranspiledPythonUDFOptions prunes the
+  // options to those whose categories match the resolved input types (before
+  // CheckAnalysis can reject a type-incompatible option) and clears this field;
+  // ConvertToCatalyst then picks the first survivor or falls back to the Python
+  // UDF. Empty means "no restriction" (kept as-is).
+  optionInputCategories: List[List[String]] = Nil) extends Expression with Unevaluable {
   override def children: Seq[Expression] = pythonUDFExpr +: transpiledOptions
   override def dataType: DataType = pythonUDFExpr.dataType
   override def nullable: Boolean = pythonUDFExpr.nullable
