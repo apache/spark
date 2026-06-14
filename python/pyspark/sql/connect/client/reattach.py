@@ -19,7 +19,7 @@ from pyspark.sql.connect.client.retries import Retrying, RetryException
 from threading import RLock
 import uuid
 from collections.abc import Generator
-from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, ClassVar
+from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, Union, cast, ClassVar
 from concurrent.futures import Future, ThreadPoolExecutor
 import os
 import weakref
@@ -53,6 +53,12 @@ class ExecutePlanResponseReattachableIterator(Generator):
     In reattachable execute the server does buffer some responses in case the client needs to
     backtrack. To let server release this buffer sooner, this iterator asynchronously sends
     ReleaseExecute RPCs that instruct the server to release responses that it already processed.
+
+    ``metadata`` may be a static iterable or a zero-arg callable; the callable is invoked
+    before every RPC (so short-TTL credentials refresh across reattach) and must be thread-safe
+    because ``ReleaseExecute`` runs in a background thread pool. A ``PERMISSION_DENIED`` mid-
+    stream is retried once per iterator so the next ``ReattachExecute`` can use a refreshed
+    credential; a second one propagates as a genuine auth failure.
     """
 
     _lock: ClassVar[RLock] = RLock()
@@ -71,7 +77,10 @@ class ExecutePlanResponseReattachableIterator(Generator):
         request: pb2.ExecutePlanRequest,
         stub: grpc_lib.SparkConnectServiceStub,
         retrying: Callable[[], Retrying],
-        metadata: Iterable[Tuple[str, str]],
+        metadata: Union[
+            Iterable[Tuple[str, str]],
+            Callable[[], Iterable[Tuple[str, str]]],
+        ],
         reattachable_execute_plan_timeout: Optional[float] = None,
         reattach_execute_timeout: Optional[float] = None,
     ):
@@ -106,15 +115,23 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # finishes without producing one, another iterator needs to be reattached.
         self._result_complete = False
 
-        # Initial iterator comes from ExecutePlan request.
-        # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
-        # throw error on first self._has_next().
-        self._metadata = metadata
+        # PERMISSION_DENIED budget: one reattach between successful responses.
+        self._permission_denied_retried = False
+
+        self._metadata_provider: Callable[[], Iterable[Tuple[str, str]]]
+        if callable(metadata):
+            self._metadata_provider = metadata
+        else:
+            # one-shot iterators would be exhausted after the first RPC.
+            _cached_metadata = list(metadata)
+            self._metadata_provider = lambda: _cached_metadata
+
+        # ``_metadata_provider()`` runs eagerly here and may raise (e.g. credential refresh).
         with disable_gc():
             self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
                 self._stub.ExecutePlan(
                     self._initial_request,
-                    metadata=metadata,
+                    metadata=self._metadata_provider(),
                     timeout=self._reattachable_execute_plan_timeout,
                 )
             )
@@ -220,9 +237,15 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         def target() -> None:
             try:
+                metadata = self._metadata_provider()
+            except Exception as e:
+                # Don't let provider errors masquerade as server-side release failures.
+                logger.warning(f"metadata provider failed before ReleaseExecute: {e}.")
+                return
+            try:
                 for attempt in self._retrying():
                     with attempt:
-                        self._stub.ReleaseExecute(request, metadata=self._metadata)
+                        self._stub.ReleaseExecute(request, metadata=metadata)
             except Exception as e:
                 logger.warning(f"ReleaseExecute failed with exception: {e}.")
 
@@ -243,9 +266,14 @@ class ExecutePlanResponseReattachableIterator(Generator):
 
         def target() -> None:
             try:
+                metadata = self._metadata_provider()
+            except Exception as e:
+                logger.warning(f"metadata provider failed before ReleaseExecute: {e}.")
+                return
+            try:
                 for attempt in self._retrying():
                     with attempt:
-                        self._stub.ReleaseExecute(request, metadata=self._metadata)
+                        self._stub.ReleaseExecute(request, metadata=metadata)
             except Exception as e:
                 logger.warning(f"ReleaseExecute failed with exception: {e}.")
 
@@ -265,13 +293,13 @@ class ExecutePlanResponseReattachableIterator(Generator):
             self._iterator = iter(
                 self._stub.ReattachExecute(
                     self._create_reattach_execute_request(),
-                    metadata=self._metadata,
+                    metadata=self._metadata_provider(),
                     timeout=self._reattach_execute_timeout,
                 )
             )
 
         try:
-            return iter_fun()
+            result = iter_fun()
         except grpc.RpcError as e:
             status = rpc_status.from_call(cast(grpc.Call, e))
             unexpected_error = next(
@@ -295,7 +323,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 self._iterator = iter(
                     self._stub.ExecutePlan(
                         self._initial_request,
-                        metadata=self._metadata,
+                        metadata=self._metadata_provider(),
                         timeout=self._reattachable_execute_plan_timeout,
                     )
                 )
@@ -310,6 +338,19 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 )
                 self._iterator = None
                 raise RetryException() from e
+            elif (
+                e.code() == grpc.StatusCode.PERMISSION_DENIED
+                and not self._permission_denied_retried
+            ):
+                # Treat the first mid-stream PERMISSION_DENIED as a token-expiry signal; reattach
+                # once so the metadata provider can produce a fresh credential.
+                logger.debug(
+                    f"PERMISSION_DENIED on stream for operation {self._operation_id}; "
+                    f"allowing one reattach with refreshed metadata."
+                )
+                self._permission_denied_retried = True
+                self._iterator = None
+                raise RetryException() from e
             else:
                 # Remove the iterator, so that a new one will be created after retry.
                 self._iterator = None
@@ -318,6 +359,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             # Remove the iterator, so that a new one will be created after retry.
             self._iterator = None
             raise e
+        self._permission_denied_retried = False
+        return result
 
     def _create_reattach_execute_request(self) -> pb2.ReattachExecuteRequest:
         server_side_session_id = (

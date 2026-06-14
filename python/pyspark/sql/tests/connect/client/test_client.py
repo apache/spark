@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 
+import itertools
 import unittest
 import uuid
 from collections.abc import Generator
@@ -113,20 +114,34 @@ if should_test_connect:
             self.release_calls = 0
             self.release_until_calls = 0
             self.attach_calls = 0
+            self.captured_metadata = {
+                "ExecutePlan": [],
+                "ReattachExecute": [],
+                "ReleaseExecuteAll": [],
+                "ReleaseExecuteUntil": [],
+            }
+
+        def _capture_metadata(self, rpc, kwargs):
+            assert "metadata" in kwargs, f"{rpc} called without keyword metadata"
+            self.captured_metadata[rpc].append(list(kwargs["metadata"]))
 
         def ExecutePlan(self, *args, **kwargs):
             self.execute_calls += 1
+            self._capture_metadata("ExecutePlan", kwargs)
             return self._execute_ops
 
         def ReattachExecute(self, *args, **kwargs):
             self.attach_calls += 1
+            self._capture_metadata("ReattachExecute", kwargs)
             return self._attach_ops
 
         def ReleaseExecute(self, req: proto.ReleaseExecuteRequest, *args, **kwargs):
             if req.HasField("release_all"):
                 self.release_calls += 1
+                self._capture_metadata("ReleaseExecuteAll", kwargs)
             elif req.HasField("release_until"):
                 self.release_until_calls += 1
+                self._capture_metadata("ReleaseExecuteUntil", kwargs)
 
     class MockService:
         # Simplest mock of the SparkConnectService.
@@ -1126,6 +1141,368 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
             self.assertEqual(err.getGrpcStatusCode(), expected_status_code)
             self.assertEqual(err.getErrorClass(), expected_error_class)
             self.assertEqual(err.getSqlState(), expected_sql_state)
+
+    @staticmethod
+    def _all_captured(stub):
+        return (
+            stub.captured_metadata["ExecutePlan"]
+            + stub.captured_metadata["ReattachExecute"]
+            + stub.captured_metadata["ReleaseExecuteAll"]
+            + stub.captured_metadata["ReleaseExecuteUntil"]
+        )
+
+    def test_metadata_callable_invoked_per_rpc(self):
+        counter = itertools.count(1)
+
+        def provider():
+            return [("authorization", f"Bearer token-{next(counter)}")]
+
+        def non_fatal():
+            raise TestException("Non Fatal", grpc.StatusCode.UNAVAILABLE)
+
+        stub = self._stub_with(
+            [self.response, non_fatal],
+            [self.response, self.response, self.finished],
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, provider)
+        for _ in ite:
+            pass
+
+        def check():
+            captured = stub.captured_metadata
+            self.assertGreaterEqual(len(captured["ExecutePlan"]), 1)
+            self.assertGreaterEqual(len(captured["ReattachExecute"]), 1)
+            self.assertGreaterEqual(
+                len(captured["ReleaseExecuteAll"]) + len(captured["ReleaseExecuteUntil"]), 1
+            )
+            tokens = [md[0][1] for md in self._all_captured(stub)]
+            self.assertTrue(all(t.startswith("Bearer token-") for t in tokens))
+            self.assertEqual(len(set(tokens)), len(tokens))
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
+    def test_metadata_callable_refreshed_on_operation_not_found(self):
+        counter = itertools.count(1)
+
+        def provider():
+            return [("authorization", f"Bearer token-{next(counter)}")]
+
+        def not_found():
+            raise TestException(
+                "INVALID_HANDLE.OPERATION_NOT_FOUND",
+                grpc.StatusCode.UNAVAILABLE,
+                trailing_status=status_pb2.Status(
+                    code=14,
+                    message="INVALID_HANDLE.OPERATION_NOT_FOUND",
+                    details="",
+                ),
+            )
+
+        stub = self._stub_with([not_found, self.finished])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, provider)
+        for _ in ite:
+            pass
+
+        def check():
+            exec_tokens = [md[0][1] for md in stub.captured_metadata["ExecutePlan"]]
+            self.assertEqual(len(exec_tokens), 2)
+            self.assertNotEqual(exec_tokens[0], exec_tokens[1])
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
+    def test_metadata_iterable_is_cached(self):
+        static_md = [("authorization", "Bearer static")]
+
+        def non_fatal():
+            raise TestException("Non Fatal", grpc.StatusCode.UNAVAILABLE)
+
+        stub = self._stub_with(
+            [self.response, non_fatal],
+            [self.response, self.response, self.finished],
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, static_md)
+        for _ in ite:
+            pass
+
+        def check():
+            all_captured = self._all_captured(stub)
+            self.assertGreater(len(all_captured), 0)
+            for md in all_captured:
+                self.assertEqual(md, static_md)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
+    def test_metadata_one_shot_iterator_is_materialized(self):
+        one_shot = iter([("authorization", "Bearer once")])
+
+        def non_fatal():
+            raise TestException("Non Fatal", grpc.StatusCode.UNAVAILABLE)
+
+        # Force reattach so the cached list must survive multiple RPCs.
+        stub = self._stub_with(
+            [self.response, non_fatal],
+            [self.response, self.response, self.finished],
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, one_shot)
+        for _ in ite:
+            pass
+
+        expected = [("authorization", "Bearer once")]
+
+        def check():
+            all_captured = self._all_captured(stub)
+            self.assertGreaterEqual(len(stub.captured_metadata["ExecutePlan"]), 1)
+            self.assertGreaterEqual(len(stub.captured_metadata["ReattachExecute"]), 1)
+            for md in all_captured:
+                self.assertEqual(md, expected)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
+    def test_permission_denied_retries_once_with_refreshed_metadata(self):
+        counter = itertools.count(1)
+
+        def provider():
+            return [("authorization", f"Bearer token-{next(counter)}")]
+
+        def permission_denied():
+            raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
+
+        stub = self._stub_with(
+            [self.response, permission_denied],
+            [self.response, self.finished],
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, provider)
+        for _ in ite:
+            pass
+
+        def check():
+            self.assertGreaterEqual(stub.attach_calls, 1)
+            exec_tokens = [md[0][1] for md in stub.captured_metadata["ExecutePlan"]]
+            reattach_tokens = [md[0][1] for md in stub.captured_metadata["ReattachExecute"]]
+            self.assertNotEqual(exec_tokens[0], reattach_tokens[0])
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
+    def test_permission_denied_budget_replenishes_after_successful_response(self):
+        counter = itertools.count(1)
+
+        def provider():
+            return [("authorization", f"Bearer token-{next(counter)}")]
+
+        def permission_denied():
+            raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
+
+        finished = proto.ExecutePlanResponse(
+            result_complete=proto.ExecutePlanResponse.ResultComplete(),
+            response_id="4",
+        )
+        stub = self._stub_with(
+            [self.response, permission_denied],
+            [
+                proto.ExecutePlanResponse(response_id="2"),
+                permission_denied,
+                proto.ExecutePlanResponse(response_id="3"),
+                finished,
+            ],
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, provider)
+        for _ in ite:
+            pass
+
+        def check():
+            self.assertEqual(stub.attach_calls, 2)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
+    def test_permission_denied_propagates_after_single_retry(self):
+        provider_calls = itertools.count(1)
+
+        def provider():
+            return [("authorization", f"Bearer token-{next(provider_calls)}")]
+
+        def permission_denied():
+            raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
+
+        stub = self._stub_with(
+            [self.response, permission_denied],
+            [permission_denied],
+        )
+        with self.assertRaises(TestException) as cm:
+            ite = ExecutePlanResponseReattachableIterator(
+                self.request, stub, self.retrying, provider
+            )
+            for _ in ite:
+                pass
+        self.assertEqual(cm.exception.code(), grpc.StatusCode.PERMISSION_DENIED)
+
+    def test_metadata_callable_failure_in_release_does_not_break_iteration(self):
+        calls = itertools.count(1)
+
+        def provider():
+            n = next(calls)
+            if n > 1:
+                raise RuntimeError("token refresh failed")
+            return [("authorization", "Bearer initial")]
+
+        stub = self._stub_with([self.response, self.finished])
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, provider)
+        for _ in ite:
+            pass
+
+        def check():
+            self.assertEqual(
+                stub.captured_metadata["ExecutePlan"][0],
+                [("authorization", "Bearer initial")],
+            )
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class SparkConnectClientReattachGrpcEndToEndTestCase(unittest.TestCase):
+    """Drives the reattach iterator over a real in-process gRPC channel so the
+    metadata callable and PERMISSION_DENIED recovery are exercised at the wire level."""
+
+    @staticmethod
+    def _make_servicer():
+        from pyspark.sql.connect.proto.base_pb2_grpc import SparkConnectServiceServicer
+
+        class _ScriptedServicer(SparkConnectServiceServicer):
+            def __init__(self) -> None:
+                self.metadata_seen: dict[str, list[dict[str, str]]] = {
+                    "ExecutePlan": [],
+                    "ReattachExecute": [],
+                    "ReleaseExecute": [],
+                }
+                self.execute_plans: list[list] = []
+                self.reattach_plans: list[list] = []
+
+            def _record(self, rpc, context) -> None:
+                self.metadata_seen[rpc].append(dict(context.invocation_metadata()))
+
+            def ExecutePlan(self, request, context):
+                self._record("ExecutePlan", context)
+                actions = self.execute_plans.pop(0) if self.execute_plans else []
+                for action in actions:
+                    if isinstance(action, grpc.StatusCode):
+                        context.abort(action, "scripted PERMISSION_DENIED")
+                    yield action
+
+            def ReattachExecute(self, request, context):
+                self._record("ReattachExecute", context)
+                actions = self.reattach_plans.pop(0) if self.reattach_plans else []
+                for action in actions:
+                    if isinstance(action, grpc.StatusCode):
+                        context.abort(action, "scripted PERMISSION_DENIED")
+                    yield action
+
+            def ReleaseExecute(self, request, context):
+                self._record("ReleaseExecute", context)
+                return proto.ReleaseExecuteResponse(session_id=request.session_id)
+
+        return _ScriptedServicer()
+
+    def setUp(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+
+        from pyspark.sql.connect.proto.base_pb2_grpc import (
+            SparkConnectServiceStub,
+            add_SparkConnectServiceServicer_to_server,
+        )
+
+        self.servicer = self._make_servicer()
+        self.server = grpc.server(ThreadPoolExecutor(max_workers=4))
+        add_SparkConnectServiceServicer_to_server(self.servicer, self.server)
+        self.port = self.server.add_insecure_port("localhost:0")
+        self.server.start()
+
+        self.channel = grpc.insecure_channel(f"localhost:{self.port}")
+        self.stub = SparkConnectServiceStub(self.channel)
+        self.request = proto.ExecutePlanRequest()
+        self.retrying = lambda: Retrying(TestPolicy())
+        self.response = proto.ExecutePlanResponse(response_id="1")
+        self.finished = proto.ExecutePlanResponse(
+            result_complete=proto.ExecutePlanResponse.ResultComplete(),
+            response_id="2",
+        )
+
+    def tearDown(self) -> None:
+        self.channel.close()
+        self.server.stop(grace=None)
+
+    def test_callable_metadata_invoked_per_rpc_over_grpc(self):
+        counter = itertools.count(1)
+
+        def provider():
+            return [("authorization", f"bearer token-{next(counter)}")]
+
+        self.servicer.execute_plans = [[self.response, self.finished]]
+
+        ite = ExecutePlanResponseReattachableIterator(
+            self.request, self.stub, self.retrying, provider
+        )
+        for _ in ite:
+            pass
+
+        def check():
+            execute_tokens = [
+                m.get("authorization") for m in self.servicer.metadata_seen["ExecutePlan"]
+            ]
+            release_tokens = [
+                m.get("authorization") for m in self.servicer.metadata_seen["ReleaseExecute"]
+            ]
+            tokens = execute_tokens + release_tokens
+            self.assertTrue(all(t and t.startswith("bearer token-") for t in tokens))
+            self.assertEqual(len(set(tokens)), len(tokens))
+
+        eventually(timeout=2, catch_assertions=True)(check)()
+
+    def test_permission_denied_mid_stream_recovers_over_grpc(self):
+        counter = itertools.count(1)
+
+        def provider():
+            return [("authorization", f"bearer token-{next(counter)}")]
+
+        self.servicer.execute_plans = [[self.response, grpc.StatusCode.PERMISSION_DENIED]]
+        self.servicer.reattach_plans = [
+            [
+                proto.ExecutePlanResponse(response_id="2"),
+                proto.ExecutePlanResponse(
+                    result_complete=proto.ExecutePlanResponse.ResultComplete(),
+                    response_id="3",
+                ),
+            ]
+        ]
+
+        ite = ExecutePlanResponseReattachableIterator(
+            self.request, self.stub, self.retrying, provider
+        )
+        for _ in ite:
+            pass
+
+        def check():
+            self.assertEqual(len(self.servicer.metadata_seen["ExecutePlan"]), 1)
+            self.assertEqual(len(self.servicer.metadata_seen["ReattachExecute"]), 1)
+            exec_token = self.servicer.metadata_seen["ExecutePlan"][0]["authorization"]
+            reattach_token = self.servicer.metadata_seen["ReattachExecute"][0]["authorization"]
+            self.assertNotEqual(exec_token, reattach_token)
+
+        eventually(timeout=2, catch_assertions=True)(check)()
+
+    def test_permission_denied_propagates_after_one_retry_over_grpc(self):
+        def provider():
+            return [("authorization", "bearer static")]
+
+        self.servicer.execute_plans = [[self.response, grpc.StatusCode.PERMISSION_DENIED]]
+        self.servicer.reattach_plans = [[grpc.StatusCode.PERMISSION_DENIED]]
+
+        with self.assertRaises(grpc.RpcError) as cm:
+            ite = ExecutePlanResponseReattachableIterator(
+                self.request, self.stub, self.retrying, provider
+            )
+            for _ in ite:
+                pass
+        self.assertEqual(cm.exception.code(), grpc.StatusCode.PERMISSION_DENIED)
 
 
 if __name__ == "__main__":
