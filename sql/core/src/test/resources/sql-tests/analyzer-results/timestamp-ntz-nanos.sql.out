@@ -184,42 +184,42 @@ Project [second(cast(1960-01-01 13:24:35.123456789 as timestamp_ntz), Some(Ameri
 -- !query
 SELECT extract(HOUR FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [extract(HOUR, TimestampNanosVal(1577885075123456, 789)) AS extract(HOUR FROM TimestampNanosVal(1577885075123456, 789))#x]
+Project [extract(HOUR, 2020-01-01 13:24:35.123456789) AS extract(HOUR FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT extract(MINUTE FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [extract(MINUTE, TimestampNanosVal(1577885075123456, 789)) AS extract(MINUTE FROM TimestampNanosVal(1577885075123456, 789))#x]
+Project [extract(MINUTE, 2020-01-01 13:24:35.123456789) AS extract(MINUTE FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT extract(SECOND FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [extract(SECOND, TimestampNanosVal(1577885075123456, 789)) AS extract(SECOND FROM TimestampNanosVal(1577885075123456, 789))#x]
+Project [extract(SECOND, 2020-01-01 13:24:35.123456789) AS extract(SECOND FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT date_part('HOUR', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [date_part(HOUR, TimestampNanosVal(1577885075123456, 789)) AS date_part(HOUR, TimestampNanosVal(1577885075123456, 789))#x]
+Project [date_part(HOUR, 2020-01-01 13:24:35.123456789) AS date_part(HOUR, TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT date_part('MINUTE', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [date_part(MINUTE, TimestampNanosVal(1577885075123456, 789)) AS date_part(MINUTE, TimestampNanosVal(1577885075123456, 789))#x]
+Project [date_part(MINUTE, 2020-01-01 13:24:35.123456789) AS date_part(MINUTE, TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT date_part('SECOND', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
-Project [date_part(SECOND, TimestampNanosVal(1577885075123456, 789)) AS date_part(SECOND, TimestampNanosVal(1577885075123456, 789))#x]
+Project [date_part(SECOND, 2020-01-01 13:24:35.123456789) AS date_part(SECOND, TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]
 +- OneRowRelation
 
 
@@ -247,5 +247,5 @@ Project [extract(SECOND, cast(null as timestamp_ntz(9))) AS extract(SECOND FROM 
 -- !query
 SELECT extract(SECOND FROM TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query analysis
-Project [extract(SECOND, TimestampNanosVal(-315570924876544, 789)) AS extract(SECOND FROM TimestampNanosVal(-315570924876544, 789))#x]
+Project [extract(SECOND, 1960-01-01 13:24:35.123456789) AS extract(SECOND FROM TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')#x]
 +- OneRowRelation

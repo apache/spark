@@ -210,7 +210,7 @@ struct<second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789'):int>
 -- !query
 SELECT extract(HOUR FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<extract(HOUR FROM TimestampNanosVal(1577885075123456, 789)):int>
+struct<extract(HOUR FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 13
 
@@ -218,7 +218,7 @@ struct<extract(HOUR FROM TimestampNanosVal(1577885075123456, 789)):int>
 -- !query
 SELECT extract(MINUTE FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<extract(MINUTE FROM TimestampNanosVal(1577885075123456, 789)):int>
+struct<extract(MINUTE FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 24
 
@@ -226,7 +226,7 @@ struct<extract(MINUTE FROM TimestampNanosVal(1577885075123456, 789)):int>
 -- !query
 SELECT extract(SECOND FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<extract(SECOND FROM TimestampNanosVal(1577885075123456, 789)):decimal(11,9)>
+struct<extract(SECOND FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):decimal(11,9)>
 -- !query output
 35.123456789
 
@@ -234,7 +234,7 @@ struct<extract(SECOND FROM TimestampNanosVal(1577885075123456, 789)):decimal(11,
 -- !query
 SELECT date_part('HOUR', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<date_part(HOUR, TimestampNanosVal(1577885075123456, 789)):int>
+struct<date_part(HOUR, TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 13
 
@@ -242,7 +242,7 @@ struct<date_part(HOUR, TimestampNanosVal(1577885075123456, 789)):int>
 -- !query
 SELECT date_part('MINUTE', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<date_part(MINUTE, TimestampNanosVal(1577885075123456, 789)):int>
+struct<date_part(MINUTE, TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 24
 
@@ -250,7 +250,7 @@ struct<date_part(MINUTE, TimestampNanosVal(1577885075123456, 789)):int>
 -- !query
 SELECT date_part('SECOND', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<date_part(SECOND, TimestampNanosVal(1577885075123456, 789)):decimal(11,9)>
+struct<date_part(SECOND, TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):decimal(11,9)>
 -- !query output
 35.123456789
 
@@ -282,6 +282,6 @@ NULL
 -- !query
 SELECT extract(SECOND FROM TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789')
 -- !query schema
-struct<extract(SECOND FROM TimestampNanosVal(-315570924876544, 789)):decimal(11,9)>
+struct<extract(SECOND FROM TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789'):decimal(11,9)>
 -- !query output
 35.123456789
