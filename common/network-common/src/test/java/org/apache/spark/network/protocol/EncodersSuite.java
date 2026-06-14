@@ -66,4 +66,26 @@ public class EncodersSuite {
     RoaringBitmap[] decodedBitmaps = Encoders.BitmapArrays.decode(buf);
     assertArrayEquals(bitmaps, decodedBitmaps);
   }
+
+  @Test
+  public void testByteArraysEncodeDecode() {
+    byte[] arr = new byte[] { 1, 2, 3, 4, 5 };
+    ByteBuf buf = Unpooled.buffer(Encoders.ByteArrays.encodedLength(arr));
+    Encoders.ByteArrays.encode(buf, arr);
+    assertArrayEquals(arr, Encoders.ByteArrays.decode(buf));
+  }
+
+  @Test
+  public void testByteArraysDecodeShouldFailWhenLengthIsNegative() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(-1);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.ByteArrays.decode(buf));
+  }
+
+  @Test
+  public void testByteArraysDecodeShouldFailWhenLengthExceedsReadableBytes() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(Integer.MAX_VALUE);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.ByteArrays.decode(buf));
+  }
 }
