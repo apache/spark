@@ -1566,7 +1566,7 @@ class SparkConnectClient(object):
                     req,
                     self._stub,
                     self._retrying,
-                    self._builder.metadata(),
+                    self._builder.metadata,
                     reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
                     reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )
@@ -1781,7 +1781,7 @@ class SparkConnectClient(object):
                     req,
                     self._stub,
                     self._retrying,
-                    self._builder.metadata(),
+                    self._builder.metadata,
                     reattachable_execute_plan_timeout=self._rpc_deadlines.reattachable_execute_plan,
                     reattach_execute_timeout=self._rpc_deadlines.reattach_execute,
                 )

@@ -364,6 +364,9 @@ class DefaultPolicy(RetryPolicy):
         if e.code() == grpc.StatusCode.UNAVAILABLE:
             return True
 
+        if e.code() in [grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIED]:
+            return True
+
         if extract_retry_info(e) is not None:
             # All errors messages containing `RetryInfo` should be retried.
             return True

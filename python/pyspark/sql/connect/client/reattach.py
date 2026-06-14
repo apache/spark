@@ -19,7 +19,7 @@ from pyspark.sql.connect.client.retries import Retrying, RetryException
 from threading import RLock
 import uuid
 from collections.abc import Generator
-from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, ClassVar
+from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, Union, cast, ClassVar
 from concurrent.futures import Future, ThreadPoolExecutor
 import os
 import weakref
@@ -71,7 +71,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
         request: pb2.ExecutePlanRequest,
         stub: grpc_lib.SparkConnectServiceStub,
         retrying: Callable[[], Retrying],
-        metadata: Iterable[Tuple[str, str]],
+        metadata: "Union[Iterable[Tuple[str, str]], Callable[[], Iterable[Tuple[str, str]]]]",
         reattachable_execute_plan_timeout: Optional[float] = None,
         reattach_execute_timeout: Optional[float] = None,
     ):
@@ -109,12 +109,16 @@ class ExecutePlanResponseReattachableIterator(Generator):
         # Initial iterator comes from ExecutePlan request.
         # Note: This is not retried, because no error would ever be thrown here, and GRPC will only
         # throw error on first self._has_next().
-        self._metadata = metadata
+        # Store metadata as a callable so credentials can be refreshed on reattach.
+        if callable(metadata):
+            self._metadata_callable = metadata
+        else:
+            self._metadata_callable = lambda: metadata
         with disable_gc():
             self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
                 self._stub.ExecutePlan(
                     self._initial_request,
-                    metadata=metadata,
+                    metadata=self._metadata_callable(),
                     timeout=self._reattachable_execute_plan_timeout,
                 )
             )
@@ -222,7 +226,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
             try:
                 for attempt in self._retrying():
                     with attempt:
-                        self._stub.ReleaseExecute(request, metadata=self._metadata)
+                        self._stub.ReleaseExecute(request, metadata=self._metadata_callable())
             except Exception as e:
                 logger.warning(f"ReleaseExecute failed with exception: {e}.")
 
@@ -245,7 +249,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
             try:
                 for attempt in self._retrying():
                     with attempt:
-                        self._stub.ReleaseExecute(request, metadata=self._metadata)
+                        self._stub.ReleaseExecute(request, metadata=self._metadata_callable())
             except Exception as e:
                 logger.warning(f"ReleaseExecute failed with exception: {e}.")
 
@@ -265,7 +269,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
             self._iterator = iter(
                 self._stub.ReattachExecute(
                     self._create_reattach_execute_request(),
-                    metadata=self._metadata,
+                    metadata=self._metadata_callable(),
                     timeout=self._reattach_execute_timeout,
                 )
             )
@@ -295,7 +299,7 @@ class ExecutePlanResponseReattachableIterator(Generator):
                 self._iterator = iter(
                     self._stub.ExecutePlan(
                         self._initial_request,
-                        metadata=self._metadata,
+                        metadata=self._metadata_callable(),
                         timeout=self._reattachable_execute_plan_timeout,
                     )
                 )
