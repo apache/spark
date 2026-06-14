@@ -64,8 +64,8 @@ public class JavaGeometryTypeSuite {
   public void geometryTypeWithSpecifiedValidCrsTest() {
     // Valid CRS values for GEOMETRY (including Spark overrides)
     Stream.of(
-        "SRID:0", "EPSG:3857", "OGC:CRS84", "EPSG:4326", "OGC:CRS27", "EPSG:4267", "OGC:CRS83", "EPSG:4269",
-        "EPSG:2000", "ESRI:102100")
+        "SRID:0", "EPSG:3857", "OGC:CRS84", "EPSG:4326", "OGC:CRS27", "EPSG:4267",
+        "OGC:CRS83", "EPSG:4269", "EPSG:2000", "ESRI:102100")
         .forEach(crs -> {
       Integer srid = CartesianSpatialReferenceSystemMapper.getSrid(crs);
       DataType geometryType = DataTypes.createGeometryType(crs);
