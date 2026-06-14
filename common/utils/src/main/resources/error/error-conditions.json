@@ -8089,7 +8089,7 @@
       },
       "BIN_BY" : {
         "message" : [
-          "Physical execution of BIN BY is not yet implemented."
+          "The BIN BY relation operator is not yet supported."
         ]
       },
       "CATALOG_INTERFACE_METHOD" : {
