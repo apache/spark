@@ -16,18 +16,21 @@
  */
 package org.apache.spark.sql.hive.thriftserver
 
+import java.io.{ByteArrayOutputStream, PrintStream}
 import java.lang.reflect.InvocationTargetException
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hive.service.cli.OperationHandle
 import org.apache.hive.service.cli.operation.{GetCatalogsOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl, SessionManager}
 import org.apache.hive.service.rpc.thrift.TProtocolVersion
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.StaticSQLConf
 
 class HiveSessionImplSuite extends SparkFunSuite {
   private var session: HiveSessionImpl = _
@@ -60,6 +63,47 @@ class HiveSessionImplSuite extends SparkFunSuite {
 
     assert(operationManager.getCalledHandles.contains(operationHandle1))
     assert(operationManager.getCalledHandles.contains(operationHandle2))
+  }
+
+  private def withSystemPropSession[T](allowSettingSystemProperties: Boolean)(f: => T): T = {
+    val conf = new HiveConf()
+    conf.setBoolean(
+      StaticSQLConf.LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES.key,
+      allowSettingSystemProperties)
+    val sessionImpl = new HiveSessionImpl(
+      TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1, "", "", conf, "")
+    sessionImpl.setSessionManager(new SessionManager(null))
+    sessionImpl.setOperationManager(new OperationManagerMock())
+    sessionImpl.open(Map.empty[String, String].asJava)
+    // open() does not call SessionState.start(), so err is not initialized in this unit test.
+    SessionState.get().err = new PrintStream(new ByteArrayOutputStream())
+    try f finally sessionImpl.close()
+  }
+
+  test("SPARK-57441: system:* variables can not be set by default") {
+    val key = "spark.test.HiveSessionImplSuite.systemPrefixDefault"
+    try {
+      val rc = withSystemPropSession(allowSettingSystemProperties = false) {
+        HiveSessionImpl.setVariable("system:" + key, "value")
+      }
+      assert(rc == 1)
+      assert(System.getProperty(key) == null)
+    } finally {
+      System.clearProperty(key)
+    }
+  }
+
+  test("SPARK-57441: system:* variables can be set when the legacy conf is enabled") {
+    val key = "spark.test.HiveSessionImplSuite.systemPrefixLegacy"
+    try {
+      val rc = withSystemPropSession(allowSettingSystemProperties = true) {
+        HiveSessionImpl.setVariable("system:" + key, "value")
+      }
+      assert(rc == 0)
+      assert(System.getProperty(key) == "value")
+    } finally {
+      System.clearProperty(key)
+    }
   }
 }
 
