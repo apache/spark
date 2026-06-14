@@ -107,6 +107,7 @@ public class Encoders {
 
     public static byte[] decode(ByteBuf buf) {
       int length = buf.readInt();
+      Objects.checkFromIndexSize(0, length, buf.readableBytes());
       byte[] bytes = new byte[length];
       buf.readBytes(bytes);
       return bytes;
