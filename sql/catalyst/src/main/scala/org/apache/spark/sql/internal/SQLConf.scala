@@ -2358,6 +2358,7 @@ object SQLConf {
       .doc("When true, NearestByJoin uses a streaming heap operator instead of the " +
         "cross-product + aggregate rewrite.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
