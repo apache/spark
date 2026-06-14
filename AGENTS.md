@@ -156,6 +156,22 @@ DO NOT force push or use `--amend` on pushed commits unless the user explicitly 
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
 
+## Versioning and Branch Policy
+
+When a change needs a version — `@since` annotations, config `.version("...")` (`SQLConf` / `*Conf`), new `MimaExcludes` sections, etc. — use the version of the branch it first ships in, with `-SNAPSHOT` stripped. Determine that branch:
+
+- **PR opened against a non-`master` base branch** (e.g. targeting `branch-4.x` directly): use that base branch's version.
+- **PR opened against `master`:** most PRs merge to **both** `master` and the latest `branch-<N>.x` (the branch for the next feature release, e.g. `branch-4.x`), so use the `branch-<N>.x` version. The exception is **master-only** changes — use `master`'s version — which are only:
+  - breaking / binary-incompatible changes that can't ship in a minor release;
+  - dependency upgrades that don't fix a critical issue worth backporting.
+
+Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
+
+Find the latest `branch-<N>.x` and its version (highest `N`):
+
+    git ls-remote --heads <upstream> 'refs/heads/branch-*.x'
+    git show <upstream>/branch-<N>.x:pom.xml | grep -m1 -- -SNAPSHOT
+
 ## Security
 
 Security model: [SECURITY.md](./SECURITY.md)
