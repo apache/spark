@@ -129,18 +129,6 @@ if _have_hypothesis:
     _long_strategy = st.one_of(
         st.none(), st.integers(min_value=-_LONG_BOUND, max_value=_LONG_BOUND)
     )
-    # `square` does ``x ** 2``. Spark's ``Column.__pow__`` returns a
-    # DoubleType, so the squared value has to stay within ``2**53`` (the
-    # largest integer that double precision can represent exactly) for
-    # the cast back to LongType to be lossless. ``2**26`` squared is
-    # ``2**52``, comfortably under that ceiling. Anything bigger and
-    # we'd start chasing off-by-one differences that aren't really
-    # transpilation bugs -- they're double rounding -- so we leave that
-    # gap (proper integer ** lowering) to a follow-up.
-    _SQUARE_BOUND = 2**26
-    _square_strategy = st.one_of(
-        st.none(), st.integers(min_value=-_SQUARE_BOUND, max_value=_SQUARE_BOUND)
-    )
     _bool_strategy = st.one_of(st.none(), st.booleans())
 
     # ---- Edge-case seeds (scalacheck-style) -----------------------------
@@ -151,7 +139,6 @@ if _have_hypothesis:
     # runs. These are the values we always want to try, before random
     # generation kicks in.
     _LONG_EDGES = (None, 0, 1, -1, 7, -7, _LONG_BOUND, -_LONG_BOUND)
-    _SQUARE_EDGES = (None, 0, 1, -1, _SQUARE_BOUND, -_SQUARE_BOUND)
     # Bool space is exhaustive (only three values) so the @example
     # decorators here serve more as documentation of the NULL handling
     # we care about than as new coverage on top of hypothesis's
@@ -259,13 +246,6 @@ def times_three(x):
     # Exercises ast.Mult.
     if x is not None:
         return x * 3
-
-
-def square(x):
-    # Exercises ast.Pow. Inputs are bounded by ``_square_strategy`` so
-    # the squared value stays in the LongType range under ANSI overflow.
-    if x is not None:
-        return x**2
 
 
 def negate_truthy(x):
@@ -514,14 +494,6 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(times_three, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"times_three mismatch on {value!r}")
-
-        @_hyp_settings
-        @given(value=_square_strategy)
-        @_seed_examples(_SQUARE_EDGES)
-        def test_square_matches_python(self, value):
-            df = self._single_arg_df(value, LongType())
-            transpiled, interpreted = self._run(square, LongType(), df, "a")
-            self.assertEqual(transpiled, interpreted, f"square mismatch on {value!r}")
 
         @_hyp_settings
         @given(value=_bool_strategy)

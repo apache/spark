@@ -209,6 +209,10 @@ class UserDefinedFunction:
         # Extract Python UDF details if transpilation is enabled.
         self.transpiled: list = []
         self._transpiled_param_names: list[str] = []
+        # Per-option input-type categories ("numeric"/"string" per public param),
+        # parallel to ``self.transpiled``; the JVM picks the option matching the
+        # actual column types or falls back to interpreted Python.
+        self._transpiled_input_categories: list = []
         # When we have a transpiled rewrite, ``__call__`` resolves any
         # user-supplied kwargs against this positional parameter list so
         # the JVM-side ``_udf_param_N`` substitution sees the inputs in
@@ -216,11 +220,16 @@ class UserDefinedFunction:
         from pyspark.sql import SparkSession
 
         session = SparkSession._instantiatedSession
+        # A nondeterministic UDF must not be transpiled: replacing it with a plain
+        # Catalyst expression would let the optimizer fold/reorder/duplicate it,
+        # discarding the nondeterminism barrier. (asNondeterministic() also clears
+        # any options set here, for the udf(f).asNondeterministic() ordering.)
         transpile_enabled = (
             False
             if session is None
             else (
-                evalType == PythonEvalType.SQL_BATCHED_UDF
+                deterministic
+                and evalType == PythonEvalType.SQL_BATCHED_UDF
                 and session.conf.get("spark.sql.experimental.optimizer.transpilePyUDFs") == "true"
             )
         )
@@ -250,9 +259,12 @@ class UserDefinedFunction:
             from pyspark.sql.transpile import _transpile_func
 
             try:
-                self.transpiled, errors, self._transpiled_param_names = _transpile_func(
-                    session, func, returnType
-                )
+                (
+                    self.transpiled,
+                    errors,
+                    self._transpiled_param_names,
+                    self._transpiled_input_categories,
+                ) = _transpile_func(session, func, returnType)
                 self._transpile_errors.extend(errors)
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
@@ -489,6 +501,7 @@ class UserDefinedFunction:
             self.evalType,
             self.deterministic,
             map(_to_java_column_opt, self.transpiled),
+            self._transpiled_input_categories,
         )
         return judf
 
@@ -650,6 +663,14 @@ class UserDefinedFunction:
         # with 'deterministic' updated. See SPARK-23233.
         self._judf_placeholder = None
         self.deterministic = False
+        # A transpiled rewrite replaces the (now nondeterministic) Python UDF
+        # with a plain Catalyst expression, which the optimizer is free to
+        # fold, reorder, or duplicate -- discarding the nondeterminism barrier
+        # the caller just asked for. Drop any transpiled options so a
+        # nondeterministic UDF always runs as interpreted Python.
+        self.transpiled = []
+        self._transpiled_param_names = []
+        self._transpiled_input_categories = []
         return self
 
 
