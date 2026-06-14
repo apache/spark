@@ -170,7 +170,8 @@ Do **not** just read `master`'s version: a normally-backported PR ships first in
 Find the latest `branch-<N>.x` and its version (highest `N`):
 
     git ls-remote --heads <upstream> 'refs/heads/branch-*.x'
-    git show <upstream>/branch-<N>.x:pom.xml | grep -m1 -- -SNAPSHOT
+    git fetch <upstream> branch-<N>.x
+    git show FETCH_HEAD:pom.xml | grep -m1 -- -SNAPSHOT
 
 ## Security
 
