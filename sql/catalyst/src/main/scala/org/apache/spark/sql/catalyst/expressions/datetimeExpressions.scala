@@ -43,7 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.DAY
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
  * Common base class for time zone aware expressions.
@@ -68,7 +68,8 @@ trait TimeZoneAwareExpression extends Expression {
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 
   def zoneIdForType(dataType: DataType): ZoneId = dataType match {
-    case _: TimestampNTZType => java.time.ZoneOffset.UTC
+    // The TIMESTAMP_NTZ family carries wall-clock fields, so it is evaluated in UTC.
+    case _: TimestampNTZType | _: TimestampNTZNanosType => java.time.ZoneOffset.UTC
     case _ => zoneId
   }
 }
@@ -465,6 +466,62 @@ case class SecondWithFraction(child: Expression, timeZoneId: Option[String] = No
   override val func = DateTimeUtils.getSecondsWithFraction
   override val funcName = "getSecondsWithFraction"
   override protected def withNewChildInternal(newChild: Expression): SecondWithFraction =
+    copy(child = newChild)
+}
+
+/**
+ * Returns the second component with the fractional part of a nanosecond-precision timestamp
+ * (`TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)`, `p` in `[7, 9]`) as `DECIMAL(11, 9)`.
+ *
+ * This is the nanosecond counterpart of [[SecondWithFraction]] on the
+ * `EXTRACT(SECOND FROM ...)` / `date_part('SECOND', ...)` path. Unlike the integer time-of-day
+ * fields, the result depends on the sub-microsecond digits, so the input is not cast down to
+ * microseconds. The scale is fixed at the maximum nanosecond precision, like
+ * [[SecondsOfTimeWithFraction]] does for TIME values: digits below the type's precision `p` are
+ * always zero because values are floored to `p` at the type boundary.
+ */
+case class SecondWithFractionNanos(child: Expression, timeZoneId: Option[String] = None)
+  extends UnaryExpression with TimeZoneAwareExpression {
+
+  def this(child: Expression) = this(child, None)
+
+  override def nullIntolerant: Boolean = true
+
+  // 2 digits for the seconds, and 9 digits for the fractional part with nanosecond precision.
+  override def dataType: DataType = DecimalType(11, 9)
+
+  override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => TypeCheckSuccess
+    case _ =>
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" ->
+            Seq(TimestampNTZNanosType(), TimestampLTZNanosType()).map(toSQLType).mkString(" or "),
+          "inputSql" -> toSQLExpr(child),
+          "inputType" -> toSQLType(child.dataType)))
+  }
+
+  override def withTimeZone(timeZoneId: String): SecondWithFractionNanos =
+    copy(timeZoneId = Option(timeZoneId))
+
+  // TIMESTAMP_NTZ(p) extracts the wall-clock fields, so it is evaluated in UTC;
+  // TIMESTAMP_LTZ(p) uses the session time zone.
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(child.dataType)
+
+  override protected def nullSafeEval(timestamp: Any): Any = {
+    DateTimeUtils.getSecondsWithFractionNanos(
+      timestamp.asInstanceOf[TimestampNanosVal], zoneIdInEval)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    defineCodeGen(ctx, ev, c => s"$dtu.getSecondsWithFractionNanos($c, $zid)")
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): SecondWithFractionNanos =
     copy(child = newChild)
 }
 
@@ -3341,9 +3398,22 @@ object DatePart {
     case "DAYOFWEEK" | "DOW" => DayOfWeek(source)
     case "DAYOFWEEK_ISO" | "DOW_ISO" => Add(WeekDay(source), Literal(1))
     case "DOY" => DayOfYear(source)
-    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" => Hour(source)
-    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" => Minute(source)
-    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" => SecondWithFraction(source)
+    case "HOUR" | "H" | "HOURS" | "HR" | "HRS" =>
+      // Nanosecond-precision timestamps are cast down to the matching microsecond timestamp
+      // type, which is lossless for the integer time-of-day fields (SPARK-57340); other types
+      // are passed through unchanged.
+      Hour(NanosTimestampCast.castToMicros(source))
+    case "MINUTE" | "M" | "MIN" | "MINS" | "MINUTES" =>
+      Minute(NanosTimestampCast.castToMicros(source))
+    case "SECOND" | "S" | "SEC" | "SECONDS" | "SECS" =>
+      source.dataType match {
+        // EXTRACT(SECOND) exposes the fractional digits, so nanosecond-precision timestamps
+        // keep their sub-microsecond digits and widen the result to DECIMAL(11, 9) instead of
+        // casting down to microseconds (SPARK-57340).
+        case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+          SecondWithFractionNanos(source)
+        case _ => SecondWithFraction(source)
+      }
     case _ =>
       throw QueryCompilationErrors.literalTypeUnsupportedForSourceTypeError(extractField, source)
   }
@@ -3413,7 +3483,7 @@ object DatePartExpressionBuilder extends ExpressionBuilder {
               - "DOY" - the day of the year (1 - 365/366)
               - "HOUR", ("H", "HOURS", "HR", "HRS") - The hour field (0 - 23)
               - "MINUTE", ("M", "MIN", "MINS", "MINUTES") - the minutes field (0 - 59)
-              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts
+              - "SECOND", ("S", "SEC", "SECONDS", "SECS") - the seconds field, including fractional parts. Returns a DECIMAL(8, 6) value, or a DECIMAL(11, 9) value for the nanosecond-precision timestamps TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p) with p in [7, 9]
           - Supported string values of `field` for interval(which consists of `months`, `days`, `microseconds`) are(case insensitive):
               - "YEAR", ("Y", "YEARS", "YR", "YRS") - the total `months` / 12
               - "MONTH", ("MON", "MONS", "MONTHS") - the total `months` % 12

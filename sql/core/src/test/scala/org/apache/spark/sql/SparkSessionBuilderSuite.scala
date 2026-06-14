@@ -92,7 +92,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite with Eventually {
     val session = SparkSession.builder()
       .master("local")
       .config(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key, value = true)
-      .config(SQLConf.TYPES_FRAMEWORK_ENABLED.key, value = true)
       .getOrCreate()
     assert(session.conf.get(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key) == "true")
     assert(session.sql("SELECT 1").collect() === Array(Row(1)))

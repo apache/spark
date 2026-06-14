@@ -162,16 +162,15 @@ trait TypeApiOps extends Serializable {
  * Factory object for creating TypeApiOps instances.
  *
  * Returns Option to serve as both lookup and existence check - callers use getOrElse to fall
- * through to legacy handling. The feature flag check is inside apply(), so callers don't need to
- * check it separately.
+ * through to legacy handling for types the framework does not manage.
  */
 object TypeApiOps {
 
   /**
    * Returns a TypeApiOps instance for the given DataType, if supported by the framework.
    *
-   * Returns None if the type is not supported or the framework is disabled. This is the single
-   * registration point for all client-side type operations.
+   * Returns None if the type is not supported. This is the single registration point for all
+   * client-side type operations.
    *
    * @param dt
    *   the DataType to get operations for
@@ -187,15 +186,12 @@ object TypeApiOps {
   def apply(
       dt: DataType,
       zoneId: => ZoneId = SparkDateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone))
-      : Option[TypeApiOps] = {
-    if (!SqlApiConf.get.typesFrameworkEnabled) return None
-    dt match {
-      case tt: TimeType => Some(new TimeTypeApiOps(tt))
-      case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeApiOps(t))
-      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t, zoneId))
-      // Add new types here - single registration point
-      case _ => None
-    }
+      : Option[TypeApiOps] = dt match {
+    case tt: TimeType => Some(new TimeTypeApiOps(tt))
+    case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeApiOps(t))
+    case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeApiOps(t, zoneId))
+    // Add new types here - single registration point
+    case _ => None
   }
 
   /**
@@ -203,7 +199,6 @@ object TypeApiOps {
    */
   def fromArrowType(at: ArrowType): Option[DataType] = {
     import org.apache.arrow.vector.types.TimeUnit
-    if (!SqlApiConf.get.typesFrameworkEnabled) return None
     at match {
       case t: ArrowType.Time if t.getUnit == TimeUnit.NANOSECOND && t.getBitWidth == 8 * 8 =>
         Some(TimeType(TimeType.MICROS_PRECISION))

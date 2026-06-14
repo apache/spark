@@ -540,6 +540,15 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>1.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.yarn.executor.oomKill.enabled</code></td>
+  <td>true</td>
+  <td>
+  Whether to add `-XX:OnOutOfMemoryError='kill %p'` (or its counterpart on Windows) to executor
+  JVM options.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.yarn.tags</code></td>
   <td>(none)</td>
   <td>

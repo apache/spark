@@ -38,8 +38,7 @@ import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
  *
  * Verifies that TimestampNTZNanosType and TimestampLTZNanosType route physical representation,
  * literals, row accessors, mutable values, codegen class selection, conversions, and encoders
- * through TypeOps/TypeApiOps. The Types Framework is the sole integration path for these types, so
- * the suite runs with spark.sql.types.framework.enabled = true (the default under tests).
+ * through TypeOps/TypeApiOps. The Types Framework is the sole integration path for these types.
  */
 class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
 
@@ -265,30 +264,5 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     checkOptionRoundtrip(
       OptionEncoder(InstantNanosEncoder(9)),
       Seq(Some(Instant.parse("2019-02-26T16:56:00.123456789Z")), None))
-  }
-
-  test("framework disabled leaves the nanos types unsupported (no legacy fallback)") {
-    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
-      allCases.foreach { case (dt, _, _) =>
-        assert(TypeOps(dt).isEmpty, s"TypeOps should be empty for $dt when disabled")
-        assert(TypeApiOps(dt).isEmpty, s"TypeApiOps should be empty for $dt when disabled")
-      }
-    }
-  }
-
-  test("the nanos types flag only takes effect when the Types Framework is enabled") {
-    // Setting the flag must always succeed (a checkValue consulting SQLConf.get would recurse
-    // into the session conf's own construction); the framework requirement is enforced in the
-    // effective getter instead.
-    withSQLConf(
-        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
-        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
-      assert(!SQLConf.get.timestampNanosTypesEnabled)
-    }
-    withSQLConf(
-        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
-        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true") {
-      assert(SQLConf.get.timestampNanosTypesEnabled)
-    }
   }
 }

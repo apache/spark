@@ -98,6 +98,54 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       df.selectExpr("hour(ntz)", "minute(ntz)", "second(ntz)"),
       Row(5, 6, 7))
   }
+
+  test("SPARK-57340: extract/date_part HOUR and MINUTE over nanosecond-precision timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val df = nanosDF(p)
+      val result1 = df.selectExpr(
+        "extract(HOUR FROM ntz)", "extract(MINUTE FROM ntz)",
+        "extract(HOUR FROM ltz)", "extract(MINUTE FROM ltz)")
+      val result2 = df.selectExpr(
+        "date_part('HOUR', ntz)", "date_part('MINUTE', ntz)",
+        "date_part('HOUR', ltz)", "date_part('MINUTE', ltz)")
+      val result3 = df.select(
+        extract(lit("HOUR"), col("ntz")), extract(lit("MINUTE"), col("ntz")),
+        extract(lit("HOUR"), col("ltz")), extract(lit("MINUTE"), col("ltz")))
+      checkAnswer(result1, result2)
+      checkAnswer(result1, result3)
+      checkAnswer(result1, Seq(Row(13, 24, 13, 24), Row(null, null, null, null)))
+    }
+  }
+
+  test("SPARK-57340: extract/date_part SECOND keeps the nanosecond fraction") {
+    // EXTRACT(SECOND) widens the result to DECIMAL(11, 9); digits below the type's precision
+    // `p` were floored when the values were created, so they read back as zeros.
+    Seq(
+      7 -> ("35.123456700", "35.987654300"),
+      8 -> ("35.123456780", "35.987654320"),
+      9 -> ("35.123456789", "35.987654321")
+    ).foreach { case (p, (ntzSec, ltzSec)) =>
+      val df = nanosDF(p)
+      val result1 = df.selectExpr("extract(SECOND FROM ntz)", "extract(SECOND FROM ltz)")
+      val result2 = df.selectExpr("date_part('SECOND', ntz)", "date_part('SECOND', ltz)")
+      val result3 = df.select(
+        extract(lit("SECOND"), col("ntz")), extract(lit("SECOND"), col("ltz")))
+      checkAnswer(result1, result2)
+      checkAnswer(result1, result3)
+      checkAnswer(result1, Seq(
+        Row(new java.math.BigDecimal(ntzSec), new java.math.BigDecimal(ltzSec)),
+        Row(null, null)))
+    }
+  }
+
+  test("SPARK-57340: extract SECOND over pre-epoch nanosecond TIMESTAMP_NTZ") {
+    val schema = new StructType().add("ntz", TimestampNTZNanosType(9))
+    val data = Seq(Row(LocalDateTime.parse("1960-01-01T05:06:07.123456789")))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    checkAnswer(
+      df.selectExpr("extract(SECOND FROM ntz)"),
+      Row(new java.math.BigDecimal("7.123456789")))
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.

@@ -46,3 +46,22 @@ SELECT hour(NULL :: timestamp_ntz(9));
 SELECT hour(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
 SELECT minute(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
 SELECT second(TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
+
+-- EXTRACT / date_part over nanosecond-precision values (SPARK-57340). HOUR and MINUTE are
+-- equivalent to the hour()/minute() functions; SECOND keeps the sub-microsecond digits and
+-- widens the result to DECIMAL(11, 9).
+SELECT extract(HOUR FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT extract(MINUTE FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT extract(SECOND FROM TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT date_part('HOUR', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT date_part('MINUTE', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT date_part('SECOND', TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+
+-- Digits below the type's precision are floored at the type boundary, so they read back as
+-- zeros in the DECIMAL(11, 9) result.
+SELECT extract(SECOND FROM '2020-01-01 13:24:35.999999999' :: timestamp_ntz(7));
+SELECT extract(SECOND FROM '2020-01-01 13:24:35.999999999' :: timestamp_ntz(8));
+SELECT extract(SECOND FROM NULL :: timestamp_ntz(9));
+
+-- Pre-epoch nanosecond values exercise the negative-epoch path.
+SELECT extract(SECOND FROM TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');

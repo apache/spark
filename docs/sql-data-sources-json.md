@@ -202,6 +202,12 @@ Data source options of JSON can be set via:
     <td>read/write</td>
   </tr>
   <tr>
+    <td><code>inferTimestamp</code></td>
+    <td><code>false</code></td>
+    <td>Allows inferring of <code>TimestampType</code> and <code>TimestampNTZType</code> from strings that match the timestamp patterns defined by the <code>timestampFormat</code> and <code>timestampNTZFormat</code> options respectively.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>enableDateTimeParsingFallback</code></td>
     <td>Enabled if the time parser policy has legacy settings or if no custom date or timestamp pattern was provided.</td>
     <td>Allows falling back to the backward compatible (Spark 1.x and 2.0) behavior of parsing dates and timestamps if values do not match the set patterns.</td>
