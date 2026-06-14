@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, Tre
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
 
@@ -437,6 +438,44 @@ object LogicalPlanIntegrity {
   }
 
   /**
+   * This method validates that no operator references one of its child's output attributes with a
+   * narrower nullability than the child produces -- declaring the attribute non-nullable while the
+   * child produces it as nullable. Such a mismatch (for example, an outer-join-widened column that
+   * a synthesized operator references with its original non-nullable metadata) is a latent
+   * plan-integrity defect: the rows are unchanged, so result-equivalence reasoning and
+   * `validateSchemaOutput` (which compares types `asNullable`) both miss it, yet a later
+   * optimization that trusts the non-nullable declaration may drop a null check and produce wrong
+   * results. Declaring a reference *wider* (nullable over a non-nullable child) is safe and is not
+   * flagged. References whose `ExprId` is not produced by any child (e.g. outer references) are
+   * ignored.
+   *
+   * The check is disabled unless `spark.sql.planChangeValidation.nullability` is set, because not
+   * all rules maintain precise nullability today; it is intended to be enabled by targeted suites.
+   * Returns the error message if the check does not pass, or None otherwise.
+   */
+  def validateNullability(plan: LogicalPlan): Option[String] = {
+    if (!SQLConf.get.getConf(SQLConf.PLAN_CHANGE_VALIDATION_NULLABILITY)) {
+      return None
+    }
+    plan.collect {
+      case p if p.childrenResolved =>
+        val childNullable = p.children.flatMap(_.output).groupBy(_.exprId).map {
+          // If multiple child attributes share an ExprId, treat the column as nullable if any is.
+          case (exprId, attrs) => exprId -> attrs.exists(_.nullable)
+        }
+        p.expressions.flatMap(_.collect {
+          case ref: AttributeReference
+              if !ref.nullable && childNullable.getOrElse(ref.exprId, false) =>
+            s"${p.nodeName} references ${ref.name}#${ref.exprId.id} as non-nullable but its " +
+              "child produces it as nullable"
+        })
+    }.flatten.headOption.map { mismatch =>
+      "The plan declares an attribute non-nullable while its child produces it as nullable, " +
+        s"which is a plan-integrity defect: $mismatch. The plan:\n${plan.treeString}"
+    }
+  }
+
+  /**
    * Validate the structural integrity of an optimized plan.
    * For example, we can check after the execution of each rule that each plan:
    * - is still resolved
@@ -474,6 +513,7 @@ object LogicalPlanIntegrity {
       .orElse(LogicalPlanIntegrity.validateSchemaOutput(previousPlan, currentPlan))
       .orElse(LogicalPlanIntegrity.validateNoDanglingReferences(currentPlan))
       .orElse(LogicalPlanIntegrity.validateAggregateExpressions(currentPlan))
+      .orElse(LogicalPlanIntegrity.validateNullability(currentPlan))
       .map(err => s"${err}\nPrevious schema:${previousPlan.output.mkString(", ")}" +
         s"\nPrevious plan: ${previousPlan.treeString}")
     validation
