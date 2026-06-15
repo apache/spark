@@ -28,16 +28,17 @@ illustrative; the actual versions advance as branches are cut):
 Choosing between them ("is this change master-only?") is a judgement call and is NOT
 made here -- this script only reports the mechanical facts.
 
-Usage: dev/next_version_candidates.py [remote]
-  remote: a git remote name or URL for apache/spark. Auto-detected from `git remote -v`
-          when omitted; pass it only as a fallback when auto-detection fails, e.g. a
-          fork-only clone with no remote pointing at apache/spark:
-              dev/next_version_candidates.py https://github.com/apache/spark.git
+Takes no arguments: it reuses a local remote that points at apache/spark when one is
+configured (to honor its transport), and otherwise falls back to the canonical URL.
+
+Usage: dev/next_version_candidates.py
 """
 
 import re
 import subprocess
 import sys
+
+APACHE_SPARK_URL = "https://github.com/apache/spark.git"
 
 
 def git(*args):
@@ -84,12 +85,7 @@ def pom_version(remote, ref):
 
 
 def main():
-    remote = sys.argv[1] if len(sys.argv) > 1 else detect_remote()
-    if not remote:
-        sys.exit(
-            "error: no git remote points to apache/spark; "
-            "pass the remote name or apache/spark URL as an argument"
-        )
+    remote = detect_remote() or APACHE_SPARK_URL
 
     branch = latest_maintenance_branch(remote)
     if branch is None:

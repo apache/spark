@@ -167,7 +167,7 @@ When a change needs a version — `@since` annotations, config `.version("...")`
 
 Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
 
-`dev/next_version_candidates.py` prints both candidate versions, auto-detecting the `apache/spark` remote. It reports the mechanical facts only -- choosing between them per the rules above is the judgement call (the numbers below are illustrative and advance over time):
+`dev/next_version_candidates.py` (no arguments) prints both candidate versions, using a local `apache/spark` remote when configured and falling back to the canonical URL otherwise. It reports the mechanical facts only -- choosing between them per the rules above is the judgement call (the numbers below are illustrative and advance over time):
 
     $ dev/next_version_candidates.py
     master       5.0.0
