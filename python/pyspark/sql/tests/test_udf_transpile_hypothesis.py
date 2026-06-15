@@ -396,6 +396,15 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         schema = StructType([StructField("a", dtype, nullable=True)])
         return self.spark.createDataFrame([Row(a=value)], schema=schema)
 
+    def _two_long_arg_df(self, x, y):
+        schema = StructType(
+            [
+                StructField("a", LongType(), nullable=True),
+                StructField("b", LongType(), nullable=True),
+            ]
+        )
+        return self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+
     if _have_hypothesis:
 
         @_hyp_settings
@@ -503,13 +512,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(x=_long_strategy, y=_long_strategy)
         @_seed_pair_examples(_LONG_PAIR_EDGES)
         def test_add_two_matches_python(self, x, y):
-            schema = StructType(
-                [
-                    StructField("a", LongType(), nullable=True),
-                    StructField("b", LongType(), nullable=True),
-                ]
-            )
-            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            df = self._two_long_arg_df(x, y)
             transpiled, interpreted = self._run(add_two, LongType(), df, "a", "b")
             self.assertEqual(transpiled, interpreted, f"add_two mismatch on (x={x!r}, y={y!r})")
 
@@ -524,13 +527,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # transpiled side has to align ``_udf_param_0`` /
             # ``_udf_param_1`` with the same resolved positions, so any
             # mistake here produces a swapped-argument bug.
-            schema = StructType(
-                [
-                    StructField("a", LongType(), nullable=True),
-                    StructField("b", LongType(), nullable=True),
-                ]
-            )
-            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            df = self._two_long_arg_df(x, y)
             transpiled, interpreted = self._run(
                 add_two,
                 LongType(),
@@ -547,13 +544,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(x=_long_strategy, y=_long_strategy)
         @_seed_pair_examples(_BOOLEAN_PAIR_EDGES)
         def test_both_positive_matches_python(self, x, y):
-            schema = StructType(
-                [
-                    StructField("a", LongType(), nullable=True),
-                    StructField("b", LongType(), nullable=True),
-                ]
-            )
-            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            df = self._two_long_arg_df(x, y)
             transpiled, interpreted = self._run(both_positive, BooleanType(), df, "a", "b")
             self.assertEqual(
                 transpiled, interpreted, f"both_positive mismatch on (x={x!r}, y={y!r})"
@@ -563,13 +554,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @given(x=_long_strategy, y=_long_strategy)
         @_seed_pair_examples(_BOOLEAN_PAIR_EDGES)
         def test_either_positive_matches_python(self, x, y):
-            schema = StructType(
-                [
-                    StructField("a", LongType(), nullable=True),
-                    StructField("b", LongType(), nullable=True),
-                ]
-            )
-            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            df = self._two_long_arg_df(x, y)
             transpiled, interpreted = self._run(either_positive, BooleanType(), df, "a", "b")
             self.assertEqual(
                 transpiled, interpreted, f"either_positive mismatch on (x={x!r}, y={y!r})"
@@ -584,13 +569,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             # transpiler's _lower_eq reproduces those semantics, so the
             # transpiled and interpreted runs must agree on every NULL
             # combination as well as the non-NULL cases.
-            schema = StructType(
-                [
-                    StructField("a", LongType(), nullable=True),
-                    StructField("b", LongType(), nullable=True),
-                ]
-            )
-            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            df = self._two_long_arg_df(x, y)
             transpiled, interpreted = self._run(eq_pair, BooleanType(), df, "a", "b")
             self.assertEqual(transpiled, interpreted, f"eq_pair mismatch on (x={x!r}, y={y!r})")
 
@@ -599,13 +578,7 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
         @_seed_pair_examples(_LONG_PAIR_EDGES)
         def test_neq_pair_matches_python(self, x, y):
             # Sister of ``test_eq_pair_matches_python`` for the NotEq arm.
-            schema = StructType(
-                [
-                    StructField("a", LongType(), nullable=True),
-                    StructField("b", LongType(), nullable=True),
-                ]
-            )
-            df = self.spark.createDataFrame([Row(a=x, b=y)], schema=schema)
+            df = self._two_long_arg_df(x, y)
             transpiled, interpreted = self._run(neq_pair, BooleanType(), df, "a", "b")
             self.assertEqual(transpiled, interpreted, f"neq_pair mismatch on (x={x!r}, y={y!r})")
 
