@@ -626,8 +626,10 @@ object SQLConf {
         "additionally checks that no operator references a child output attribute with a " +
         "narrower nullability than the child produces (declaring it non-nullable while the child " +
         "produces it as nullable). Such a mismatch is a latent plan-integrity defect that can " +
-        "enable unsafe optimizations. Disabled by default because not all rules maintain precise " +
-        "nullability today; intended to be enabled by targeted test suites.")
+        "enable unsafe optimizations. The check runs only during plan change validation around " +
+        "the optimizer, so nullability defects introduced during analysis are not caught. " +
+        "Disabled by default because not all rules maintain precise nullability today; intended " +
+        "to be enabled by targeted test suites.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

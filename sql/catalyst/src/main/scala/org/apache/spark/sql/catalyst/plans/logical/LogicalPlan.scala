@@ -449,6 +449,21 @@ object LogicalPlanIntegrity {
    * flagged. References whose `ExprId` is not produced by any child (e.g. outer references) are
    * ignored.
    *
+   * Scope limitations:
+   *  - Only top-level `AttributeReference.nullable` is compared. Nested nullability (struct
+   *    fields, array elements, map values) is not validated, so a child producing
+   *    `struct<a: long /* nullable */>` referenced as `struct<a: long /* non-null */>` keeps the
+   *    same top-level `nullable` and passes. This mirrors `validateSchemaOutput`, which compares
+   *    types `asNullable`.
+   *  - The check is strictly local: it compares a parent operator against its immediate children
+   *    over `p.expressions`. A narrowing introduced at a pure pass-through boundary (an operator
+   *    that narrows an attribute it only forwards via `output`, without re-referencing it in
+   *    `expressions`) is not flagged at that node, and the parent then treats the already-narrowed
+   *    value as the child's truth. The targeted SPARK-56395 shape is caught because the synthesized
+   *    references appear in `expressions`.
+   *  - Subquery plans are not reached by `plan.collect` (they live inside expressions, not as
+   *    children), so narrowing inside a subquery is not validated.
+   *
    * The check is disabled unless `spark.sql.planChangeValidation.nullability` is set, because not
    * all rules maintain precise nullability today; it is intended to be enabled by targeted suites.
    * Returns the error message if the check does not pass, or None otherwise.
@@ -483,7 +498,13 @@ object LogicalPlanIntegrity {
    * - has globally-unique attribute IDs
    * - has the same result schema as the previous plan
    * - has no dangling attribute references
+   * - has valid aggregate expressions
+   * - references each child output attribute with consistent (or wider) nullability
+   *   (only when `spark.sql.planChangeValidation.nullability` is enabled)
    * If `lightweight` is true, we only run the first check above.
+   *
+   * Note that these checks run only during plan-change validation around the optimizer, so defects
+   * introduced during analysis (rather than optimization) are not caught here.
    */
   def validateOptimizedPlan(
       previousPlan: LogicalPlan,
