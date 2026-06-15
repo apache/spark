@@ -1568,6 +1568,12 @@ class JDBCSuite extends SharedSparkSession {
     // Unmapped formats should NOT be pushed down (compileExpression returns None)
     assert(oracleDialect.compileExpression(truncExpr("DAY")).isEmpty,
       "Unmapped format 'DAY' should not be pushed down (compileExpression should return None)")
+
+    // Alias formats (MM, MON, YYYY, YY) should also map correctly
+    val mmSql = oracleDialect.compileExpression(truncExpr("MM")).get
+    assert(mmSql.contains("'MM'"), s"trunc(d, 'MM') should produce Oracle 'MM', got: $mmSql")
+    val yySql = oracleDialect.compileExpression(truncExpr("YY")).get
+    assert(yySql.contains("'YYYY'"), s"trunc(d, 'YY') should produce Oracle 'YYYY', got: $yySql")
   }
 
   private def assertEmptyQuery(sqlString: String): Unit = {
