@@ -28,7 +28,10 @@ Choosing between them ("is this change master-only?") is a judgement call and is
 made here -- this script only reports the mechanical facts.
 
 Usage: dev/next_version_candidates.py [remote]
-  remote: the git remote tracking apache/spark; auto-detected when omitted.
+  remote: a git remote name or URL for apache/spark. Auto-detected from `git remote -v`
+          when omitted; pass it only as a fallback when auto-detection fails, e.g. a
+          fork-only clone with no remote pointing at apache/spark:
+              dev/next_version_candidates.py https://github.com/apache/spark.git
 """
 
 import re
@@ -82,7 +85,10 @@ def pom_version(remote, ref):
 def main():
     remote = sys.argv[1] if len(sys.argv) > 1 else detect_remote()
     if not remote:
-        sys.exit("error: no git remote points to apache/spark; pass the remote name as an argument")
+        sys.exit(
+            "error: no git remote points to apache/spark; "
+            "pass the remote name or apache/spark URL as an argument"
+        )
 
     branch = latest_maintenance_branch(remote)
     if branch is None:
