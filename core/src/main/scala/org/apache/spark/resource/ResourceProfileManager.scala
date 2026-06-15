@@ -139,11 +139,41 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     }
     // do this outside the write lock only when we add a new profile
     if (putNewProfile) {
-      // force the computation of maxTasks and limitingResource now so we don't have cost later
-      rp.limitingResource(sparkConf)
-      logInfo(log"Added ResourceProfile id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rp.id)}")
-      listenerBus.post(SparkListenerResourceProfileAdded(rp))
+      onProfileAdded(rp)
     }
+  }
+
+  /**
+   * Get the registered ResourceProfile whose resources are equal to the given one, registering
+   * the given profile first if no equivalent one exists yet.
+   */
+  def getOrAddEquivalentProfile(rp: ResourceProfile): ResourceProfile = {
+    isSupported(rp)
+    var addedProfile: Option[ResourceProfile] = None
+    val resolvedProfile = {
+      writeLock.lock()
+      try {
+        resourceProfileIdToResourceProfile.collectFirst {
+          case (_, existing) if existing.resourcesEqual(rp) => existing
+        }.getOrElse {
+          resourceProfileIdToResourceProfile.put(rp.id, rp)
+          addedProfile = Some(rp)
+          rp
+        }
+      } finally {
+        writeLock.unlock()
+      }
+    }
+    // do this outside the write lock only when we add a new profile
+    addedProfile.foreach(onProfileAdded)
+    resolvedProfile
+  }
+
+  private def onProfileAdded(rp: ResourceProfile): Unit = {
+    // force the computation of maxTasks and limitingResource now so we don't have cost later
+    rp.limitingResource(sparkConf)
+    logInfo(log"Added ResourceProfile id: ${MDC(LogKeys.RESOURCE_PROFILE_ID, rp.id)}")
+    listenerBus.post(SparkListenerResourceProfileAdded(rp))
   }
 
   /*

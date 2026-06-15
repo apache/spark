@@ -1867,8 +1867,9 @@ abstract class RDD[T: ClassTag](
   @Experimental
   @Since("3.1.0")
   def withResources(rp: ResourceProfile): this.type = {
-    resourceProfile = Option(rp)
-    sc.resourceProfileManager.addResourceProfile(resourceProfile.get)
+    // Reuse an already-registered profile with equal resources if one exists so that equivalent
+    // profiles share a single id, allowing executors to be reused instead of newly allocated.
+    resourceProfile = Option(sc.resourceProfileManager.getOrAddEquivalentProfile(rp))
     this
   }
 

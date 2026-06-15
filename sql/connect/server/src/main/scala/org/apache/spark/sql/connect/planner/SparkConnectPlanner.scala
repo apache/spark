@@ -3948,13 +3948,15 @@ class SparkConnectPlanner(
       name -> new TaskResourceRequest(res.getResourceName, res.getAmount)
     }.toMap
 
-    // Create ResourceProfile add add it to ResourceProfileManager
-    val profile = if (ereqs.isEmpty) {
+    // Create the ResourceProfile and register it, reusing an already-registered profile with
+    // equal resources if one exists so that equivalent profiles share a single id (and thus
+    // can reuse the same executors instead of triggering new allocations).
+    val newProfile = if (ereqs.isEmpty) {
       new TaskResourceProfile(treqs)
     } else {
       new ResourceProfile(ereqs, treqs)
     }
-    session.sparkContext.resourceProfileManager.addResourceProfile(profile)
+    val profile = session.sparkContext.resourceProfileManager.getOrAddEquivalentProfile(newProfile)
 
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
