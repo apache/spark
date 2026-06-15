@@ -234,8 +234,10 @@ public class HiveSessionImpl implements HiveSession {
     }
   }
 
-  // Copy from org.apache.hadoop.hive.ql.processors.SetProcessor, only change:
-  // setConf(varname, propName, varvalue, true) when varname.startsWith(HIVECONF_PREFIX)
+  // Copy from org.apache.hadoop.hive.ql.processors.SetProcessor, only changes:
+  // 1. setConf(varname, propName, varvalue, true) when varname.startsWith(HIVECONF_PREFIX)
+  // 2. system:* variables can not be set unless the legacy configuration
+  //    spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties is enabled
   public static int setVariable(String varname, String varvalue) throws Exception {
     SessionState ss = SessionState.get();
     VariableSubstitution substitution = new VariableSubstitution(() -> ss.getHiveVariables());
@@ -247,8 +249,16 @@ public class HiveSessionImpl implements HiveSession {
       ss.err.println("env:* variables can not be set.");
       return 1;
     } else if (varname.startsWith(SYSTEM_PREFIX)){
-      String propName = varname.substring(SYSTEM_PREFIX.length());
-      System.getProperties().setProperty(propName, substitution.substitute(ss.getConf(),varvalue));
+      // Setting JVM system properties is allowed only when the legacy configuration
+      // spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties is enabled.
+      if (ss.getConf().getBoolean(
+          "spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties", false)) {
+        String propName = varname.substring(SYSTEM_PREFIX.length());
+        System.getProperties().setProperty(propName, substitution.substitute(ss.getConf(),varvalue));
+      } else {
+        ss.err.println("system:* variables can not be set.");
+        return 1;
+      }
     } else if (varname.startsWith(HIVECONF_PREFIX)){
       String propName = varname.substring(HIVECONF_PREFIX.length());
       setConf(varname, propName, varvalue, true);

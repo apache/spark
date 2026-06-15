@@ -426,6 +426,10 @@ private[hive] class HiveClientImpl(
       msClient.getTableObjectsByName(dbName, tableNames.asJava).asScala
         .map(extraFixesForNonView).map(new HiveTable(_)).toSeq
     } catch {
+      // SPARK-57263: HIVE-27473 may fail batch lookup on missing tables; keep Spark's
+      // contract of returning only tables that exist.
+      case _: NoSuchObjectException if shim.databaseExists(client, dbName) =>
+        tableNames.flatMap(getRawTableOption(dbName, _))
       case ex: Exception =>
         throw QueryExecutionErrors.cannotFetchTablesOfDatabaseError(dbName, ex)
     }

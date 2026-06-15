@@ -17,6 +17,8 @@
 package org.apache.spark.sql.execution.externalUDF
 
 import java.io.File
+import java.net.{StandardProtocolFamily, UnixDomainSocketAddress}
+import java.nio.channels.SocketChannel
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
@@ -26,72 +28,57 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.api.python.SimplePythonFunction
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.udf.worker.UDFWorkerSpecification
-import org.apache.spark.udf.worker.core.{TestDirectWorkerDispatcher,
-  UnixSocketWorkerConnection}
+import org.apache.spark.udf.worker.{Cancel, UDFWorkerSpecification}
+import org.apache.spark.udf.worker.core.{TestDirectWorkerDispatcher, WorkerConnection}
 
 /**
- * A test [[UnixSocketWorkerConnection]] that opens a real Unix
- * domain socket channel to the worker.
+ * A [[WorkerConnection]] that opens a real Unix-domain-socket channel to the
+ * worker at construction and considers itself active while the channel is
+ * open. Verifies the worker's socket is actually connectable, not merely
+ * that the file exists.
  */
-private class RealSocketConnection(
-    socketPath: String,
-    private val channel: java.nio.channels.SocketChannel)
-    extends UnixSocketWorkerConnection(socketPath) {
-
+private class ConnectingSocketConnection(
+    private val channel: SocketChannel) extends WorkerConnection {
   override def isActive: Boolean = channel.isOpen
-
-  override def close(): Unit = {
-    channel.close()
-    super.close()
-  }
+  override def close(): Unit = channel.close()
 }
 
-private object RealSocketConnection {
-  def connect(socketPath: String): RealSocketConnection = {
-    val address =
-      java.net.UnixDomainSocketAddress.of(socketPath)
-    val channel = java.nio.channels.SocketChannel.open(
-      java.net.StandardProtocolFamily.UNIX)
-    channel.connect(address)
-    new RealSocketConnection(socketPath, channel)
+private object ConnectingSocketConnection {
+  def connect(socketPath: String): ConnectingSocketConnection = {
+    val channel = SocketChannel.open(StandardProtocolFamily.UNIX)
+    channel.connect(UnixDomainSocketAddress.of(socketPath))
+    new ConnectingSocketConnection(channel)
   }
 }
 
 /**
- * Extends [[TestDirectWorkerDispatcher]] to use a real Unix
- * domain socket connection instead of just checking file
- * existence.
+ * A [[TestDirectWorkerDispatcher]] whose connection actually connects to the
+ * worker socket (rather than just checking file existence), so the test
+ * verifies the spawned Python worker is reachable.
  */
-private class RealSocketTestDispatcher(
-    spec: UDFWorkerSpecification)
+private class ConnectingTestDispatcher(spec: UDFWorkerSpecification)
     extends TestDirectWorkerDispatcher(spec) {
-
-  // Use /tmp to avoid UDS path length limits in deep
-  // worktree paths.
-  override protected def newEndpointAddress(
-      workerId: String): String = {
-    val socketDir = java.nio.file.Files.createTempDirectory(
-      java.nio.file.Paths.get("/tmp"), "udf-test-")
-    socketDir.toFile.deleteOnExit()
-    socketDir.resolve(s"w-$workerId.sock").toString
-  }
-
-  override protected def createConnection(
-      socketPath: String): UnixSocketWorkerConnection =
-    RealSocketConnection.connect(socketPath)
+  override protected def newConnection(address: String): WorkerConnection =
+    ConnectingSocketConnection.connect(address)
 }
 
 /**
  * Tests that [[PythonUDFWorkerSpecification#fromPythonFunction]]
- * produces a valid [[UDFWorkerSpecification]] that can be used by
- * a [[org.apache.spark.udf.worker.core.WorkerDispatcher]]
+ * produces a valid [[org.apache.spark.udf.worker.UDFWorkerSpecification]]
+ * that can be used by a
+ * [[org.apache.spark.udf.worker.core.WorkerDispatcher]]
  * to spawn a real Python worker process.
  *
  * The test overrides `spark.python.worker.module` to point to a
  * test-only Python module that creates the UDS socket and waits
  * for SIGTERM, verifying that pythonExec, PYTHONPATH, env vars,
  * and command construction all work end-to-end.
+ *
+ * Reuses [[TestDirectWorkerDispatcher]]'s spawn / wait-for-ready machinery
+ * (shared from `udf-worker-core` test sources) but overrides the connection
+ * to open a real UDS channel -- the Python test worker only binds a raw
+ * socket, it does not host a gRPC server, so a full gRPC session is not
+ * exercised here.
  */
 class PythonUDFWorkerSpecificationSuite
     extends SharedSparkSession {
@@ -185,15 +172,16 @@ class PythonUDFWorkerSpecificationSuite
     val workerSpec =
       PythonUDFWorkerSpecification.fromPythonFunction(func, conf)
 
-    // Verify the spec works end-to-end with a real
-    // socket connection
-    val dispatcher = new RealSocketTestDispatcher(workerSpec)
+    // Verify the spec works end-to-end: the dispatcher spawns the Python
+    // worker, waits for the socket, and opens a real UDS connection to it
+    // (proving the worker is reachable, not just that the file exists).
+    val dispatcher = new ConnectingTestDispatcher(workerSpec)
     try {
       val session = dispatcher.createSession(
         securityScope = None)
       assert(session != null,
         "Expected a non-null session from the dispatcher")
-      session.close()
+      session.close(() => Cancel.getDefaultInstance)
     } finally {
       dispatcher.close()
     }

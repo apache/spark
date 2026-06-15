@@ -382,7 +382,7 @@ class StreamingTestsMixin:
         # SPARK-46873: There should not be a new StreamingQueryManager created every time
         # spark.streams is called.
         for i in range(5):
-            self.assertTrue(self.spark.streams == self.spark.streams)
+            self.assertEqual(self.spark.streams, self.spark.streams)
 
     def test_query_manager_get(self):
         df = self.spark.readStream.format("rate").load()
@@ -391,7 +391,7 @@ class StreamingTestsMixin:
         q = df.writeStream.format("noop").start()
 
         self.assertTrue(q.isActive)
-        self.assertTrue(q.id == self.spark.streams.get(q.id).id)
+        self.assertEqual(q.id, self.spark.streams.get(q.id).id)
 
         q.stop()
 

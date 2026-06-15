@@ -49,6 +49,28 @@ public class EncodersSuite {
   }
 
   @Test
+  public void testStringsEncodeDecode() {
+    String s = "spark";
+    ByteBuf buf = Unpooled.buffer(Encoders.Strings.encodedLength(s));
+    Encoders.Strings.encode(buf, s);
+    assertEquals(s, Encoders.Strings.decode(buf));
+  }
+
+  @Test
+  public void testStringsDecodeShouldFailWhenLengthIsNegative() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(-1);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.Strings.decode(buf));
+  }
+
+  @Test
+  public void testStringsDecodeShouldFailWhenLengthExceedsReadableBytes() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(Integer.MAX_VALUE);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.Strings.decode(buf));
+  }
+
+  @Test
   public void testBitmapArraysEncodeDecode() {
     RoaringBitmap[] bitmaps = new RoaringBitmap[] {
       new RoaringBitmap(),
@@ -65,5 +87,71 @@ public class EncodersSuite {
     Encoders.BitmapArrays.encode(buf, bitmaps);
     RoaringBitmap[] decodedBitmaps = Encoders.BitmapArrays.decode(buf);
     assertArrayEquals(bitmaps, decodedBitmaps);
+  }
+
+  @Test
+  public void testByteArraysEncodeDecode() {
+    byte[] arr = new byte[] { 1, 2, 3, 4, 5 };
+    ByteBuf buf = Unpooled.buffer(Encoders.ByteArrays.encodedLength(arr));
+    Encoders.ByteArrays.encode(buf, arr);
+    assertArrayEquals(arr, Encoders.ByteArrays.decode(buf));
+  }
+
+  @Test
+  public void testByteArraysDecodeShouldFailWhenLengthIsNegative() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(-1);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.ByteArrays.decode(buf));
+  }
+
+  @Test
+  public void testByteArraysDecodeShouldFailWhenLengthExceedsReadableBytes() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(Integer.MAX_VALUE);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.ByteArrays.decode(buf));
+  }
+
+  @Test
+  public void testIntArraysEncodeDecode() {
+    int[] arr = new int[] { 1, 2, 3, 4, 5 };
+    ByteBuf buf = Unpooled.buffer(Encoders.IntArrays.encodedLength(arr));
+    Encoders.IntArrays.encode(buf, arr);
+    assertArrayEquals(arr, Encoders.IntArrays.decode(buf));
+  }
+
+  @Test
+  public void testIntArraysDecodeShouldFailWhenLengthIsNegative() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(-1);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.IntArrays.decode(buf));
+  }
+
+  @Test
+  public void testIntArraysDecodeShouldFailWhenLengthExceedsReadableBytes() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(Integer.MAX_VALUE);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.IntArrays.decode(buf));
+  }
+
+  @Test
+  public void testLongArraysEncodeDecode() {
+    long[] arr = new long[] { 1L, 2L, 3L, 4L, 5L };
+    ByteBuf buf = Unpooled.buffer(Encoders.LongArrays.encodedLength(arr));
+    Encoders.LongArrays.encode(buf, arr);
+    assertArrayEquals(arr, Encoders.LongArrays.decode(buf));
+  }
+
+  @Test
+  public void testLongArraysDecodeShouldFailWhenLengthIsNegative() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(-1);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.LongArrays.decode(buf));
+  }
+
+  @Test
+  public void testLongArraysDecodeShouldFailWhenLengthExceedsReadableBytes() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(Integer.MAX_VALUE);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.LongArrays.decode(buf));
   }
 }

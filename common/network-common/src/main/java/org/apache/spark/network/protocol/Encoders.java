@@ -20,6 +20,7 @@ package org.apache.spark.network.protocol;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 import io.netty.buffer.ByteBuf;
 import org.roaringbitmap.RoaringBitmap;
@@ -41,6 +42,7 @@ public class Encoders {
 
     public static String decode(ByteBuf buf) {
       int length = buf.readInt();
+      Objects.checkFromIndexSize(0, length, buf.readableBytes());
       byte[] bytes = new byte[length];
       buf.readBytes(bytes);
       return new String(bytes, StandardCharsets.UTF_8);
@@ -105,6 +107,7 @@ public class Encoders {
 
     public static byte[] decode(ByteBuf buf) {
       int length = buf.readInt();
+      Objects.checkFromIndexSize(0, length, buf.readableBytes());
       byte[] bytes = new byte[length];
       buf.readBytes(bytes);
       return bytes;
@@ -153,6 +156,7 @@ public class Encoders {
 
     public static int[] decode(ByteBuf buf) {
       int numInts = buf.readInt();
+      Objects.checkFromIndexSize(0, numInts, buf.readableBytes() / 4);
       int[] ints = new int[numInts];
       for (int i = 0; i < ints.length; i ++) {
         ints[i] = buf.readInt();
@@ -176,6 +180,7 @@ public class Encoders {
 
     public static long[] decode(ByteBuf buf) {
       int numLongs = buf.readInt();
+      Objects.checkFromIndexSize(0, numLongs, buf.readableBytes() / 8);
       long[] longs = new long[numLongs];
       for (int i = 0; i < longs.length; i ++) {
         longs[i] = buf.readLong();

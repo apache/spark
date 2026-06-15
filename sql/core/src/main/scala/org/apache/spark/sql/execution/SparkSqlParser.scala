@@ -1523,6 +1523,38 @@ class SparkSqlAstBuilder extends AstBuilder {
       Option(ctx.pattern).map(x => string(visitStringLit(x))))
   }
 
+  /**
+   * Create a [[ShowTablesJsonCommand]] or [[ShowTables]] command.
+   */
+  override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.JSON == null) return super.visitShowTables(ctx)
+    val ns = if (ctx.identifierReference() != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
+    ShowTablesJsonCommand(ns, pattern, isExtended = false)
+  }
+
+  /**
+   * Create a [[ShowTablesJsonCommand]], [[ShowTablesExtended]], or [[ShowTablePartition]] command.
+   */
+  override def visitShowTableExtended(
+      ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
+    val asJson = ctx.JSON != null
+    if (asJson && ctx.partitionSpec != null) {
+      throw QueryCompilationErrors.showTableExtendedJsonWithPartitionError()
+    }
+    if (!asJson || ctx.partitionSpec != null) return super.visitShowTableExtended(ctx)
+    val ns = if (ctx.identifierReference() != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    ShowTablesJsonCommand(ns, Some(string(visitStringLit(ctx.pattern))), isExtended = true)
+  }
+
   override def visitDescribeProcedure(
       ctx: DescribeProcedureContext): LogicalPlan = withOrigin(ctx) {
     withIdentClause(ctx.identifierReference(), procIdentifier =>

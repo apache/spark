@@ -1787,20 +1787,10 @@ case class UnresolvedBinBy(
  * `[range_start, range_end)` crosses a boundary and proportionally redistributing values in
  * `distributeColumns` across the resulting sub-ranges. Emits one or more output rows per input row
  * plus three appended columns with default names `bin_start`, `bin_end`, `bin_distribute_ratio`.
- * The names come from the resolved `appendedAttributes`.
  *
  * Bin boundaries align to `originMicros + k * binWidthMicros` for integer `k`.
  * For `TIMESTAMP` (LTZ) inputs the boundary arithmetic uses civil-time in the session zone for
  * multi-day bins; sub-day LTZ bins and `TIMESTAMP_NTZ` bins use UTC microsecond arithmetic.
- *
- * Construction invariants (bin width is positive day-time, range columns are timestamps and share
- * a type, origin matches the range column type, distribute columns are numeric and distinct) are
- * enforced by `ResolveBinBy`. Code paths that construct `BinBy` outside the analyzer are
- * responsible for upholding the same invariants; only the `timeZoneId`-vs-range-type pairing is
- * checked in the constructor itself (raises `INTERNAL_ERROR`). The three appended-column names
- * are not checked for collisions with `child.output`; a colliding name surfaces as
- * `AMBIGUOUS_REFERENCE` when the output is referenced downstream rather than at the BIN BY clause
- * itself.
  *
  * @param binWidthMicros      Bin width in microseconds: the folded value of the day-time interval
  *                            `BIN WIDTH` expression. Always positive.
@@ -1809,9 +1799,7 @@ case class UnresolvedBinBy(
  * @param originMicros        Alignment anchor in microseconds since the epoch: the folded value of
  *                            `ALIGN TO`, or the type-specific default when the clause is omitted.
  * @param distributeColumns   Resolved columns to proportionally redistribute.
- * @param appendedAttributes  The three output attributes appended after `child.output`. Provided
- *                            by the analyzer; held in the case class so the attribute `ExprId`s
- *                            remain stable across `.output` calls and `withNewChildInternal`.
+ * @param appendedAttributes  The three output attributes appended after `child.output`.
  * @param child               Input relation.
  * @param timeZoneId          Captured session local time zone for LTZ inputs; `None` for NTZ.
  *                            Required when `rangeStart.dataType` is `TimestampType`; must be

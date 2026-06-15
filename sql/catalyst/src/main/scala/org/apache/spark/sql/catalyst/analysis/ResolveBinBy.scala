@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_BIN_BY
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{AnyTimestampType, DayTimeIntervalType, NumericType, TimestampType}
+import org.apache.spark.sql.types.{AnyTimestampType, DayTimeIntervalType, DoubleType, FloatType, TimestampType}
 
 /**
  * Resolves [[UnresolvedBinBy]] into [[BinBy]]: looks up column references against the child's
@@ -39,6 +39,8 @@ object ResolveBinBy extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_BIN_BY), ruleId) {
+    case _: UnresolvedBinBy if !SQLConf.get.getConf(SQLConf.BIN_BY_ENABLED) =>
+      throw QueryCompilationErrors.binByDisabledError()
     case b: UnresolvedBinBy if !readyToResolve(b) => b
     case b: UnresolvedBinBy => resolve(b)
   }
@@ -128,7 +130,7 @@ object ResolveBinBy extends Rule[LogicalPlan] {
     }
     distributeAttrs.foreach { attr =>
       attr.dataType match {
-        case _: NumericType | _: DayTimeIntervalType => // ok
+        case _: FloatType | _: DoubleType => // ok
         case other =>
           throw QueryCompilationErrors.binByDistributeTypeMismatchError(attr.name, other)
       }

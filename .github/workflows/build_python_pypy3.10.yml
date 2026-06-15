@@ -17,31 +17,21 @@
 # under the License.
 #
 
-name: "Build / Python-only (branch-4.1, PyPy 3.10)"
+# This is a placeholder. PyPy support was dropped since Spark 4.2, so master
+# does not run this build. The file exists here only so that the README build
+# status badge, which resolves a workflow by its path on the default branch,
+# renders for the branches that still run it (e.g. branch-4.1). The actual
+# build is defined in the same file on those branches.
+
+name: "Build / Python-only (PyPy 3.10)"
 
 on:
-  schedule:
-    - cron: '0 16 */2 * *'
   workflow_dispatch:
 
 jobs:
-  run-build:
-    permissions:
-      packages: write
-    name: Run
-    uses: ./.github/workflows/build_and_test.yml
+  noop:
     if: github.repository == 'apache/spark'
-    with:
-      java: 17
-      branch: branch-4.1
-      hadoop: hadoop3
-      envs: >-
-        {
-          "PYSPARK_IMAGE_TO_TEST": "pypy-310",
-          "PYTHON_TO_TEST": "pypy3"
-        }
-      jobs: >-
-        {
-          "pyspark": "true",
-          "pyspark-pandas": "true"
-        }
+    runs-on: ubuntu-latest
+    steps:
+      - name: No-op
+        run: echo "PyPy 3.10 is not built on this branch. See branches that still support it (e.g. branch-4.1)."

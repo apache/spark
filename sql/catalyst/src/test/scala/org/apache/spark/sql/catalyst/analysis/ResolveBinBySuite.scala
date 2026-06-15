@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.scalactic.source.Position
+import org.scalatest.Tag
+
 import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -28,11 +31,22 @@ import org.apache.spark.sql.types._
 
 class ResolveBinBySuite extends AnalysisTest {
 
+  // BIN BY is gated off by default; run the resolution tests with it enabled. The dedicated
+  // gate test below uses `super.test` to observe the default-off behavior.
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+                             (implicit pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+        testFun
+      }
+    }
+  }
+
   private val tsStart = $"ts_start".timestamp
   private val tsEnd = $"ts_end".timestamp
   private val tsStartNtz = $"ts_start".timestampNTZ
   private val tsEndNtz = $"ts_end".timestampNTZ
-  private val value = $"value".long
+  private val value = $"value".double
   private val label = $"label".string
 
   private val ltzChild: LogicalPlan = LocalRelation(tsStart, tsEnd, value, label)
@@ -190,7 +204,7 @@ class ResolveBinBySuite extends AnalysisTest {
     val t1End = AttributeReference("ts_end", TimestampType, nullable = true)()
     val t2Start = AttributeReference("ts_start", TimestampType, nullable = true)()
     val t2End = AttributeReference("ts_end", TimestampType, nullable = true)()
-    val t2Value = AttributeReference("value", LongType, nullable = true)()
+    val t2Value = AttributeReference("value", DoubleType, nullable = true)()
     val t1 = SubqueryAlias("t1", LocalRelation(t1Start, t1End))
     val t2 = SubqueryAlias("t2", LocalRelation(t2Start, t2End, t2Value))
     val join = Join(t1, t2, Inner, None, JoinHint.NONE)
@@ -236,7 +250,7 @@ class ResolveBinBySuite extends AnalysisTest {
         StructField("ts_start", TimestampType, nullable = true),
         StructField("ts_end", TimestampType, nullable = true))),
       nullable = true)()
-    val numeric = AttributeReference("value", LongType, nullable = true)()
+    val numeric = AttributeReference("value", DoubleType, nullable = true)()
     val plan = UnresolvedBinBy(
       binWidthExpr = fiveMinutes,
       rangeStartCol = UnresolvedAttribute(Seq("outer", "ts_start")),
@@ -259,10 +273,26 @@ class ResolveBinBySuite extends AnalysisTest {
   }
 
   test("rejects invalid DISTRIBUTE UNIFORM columns") {
-    // Empty (defensive: the parser also rejects this), non-numeric, and duplicate columns.
+    // Empty (defensive: the parser also rejects this) and duplicate columns.
     expectError(unresolved(distribute = Seq.empty), "BIN_BY_MISSING_DISTRIBUTE")
-    expectError(unresolved(distribute = Seq(label)), "BIN_BY_DISTRIBUTE_TYPE_MISMATCH")
     expectError(unresolved(distribute = Seq(value, value)), "BIN_BY_DUPLICATE_DISTRIBUTE_COLUMN")
+  }
+
+  test("DISTRIBUTE UNIFORM accepts only FLOAT and DOUBLE columns") {
+    val floatCol = $"f".float
+    val intCol = $"i".int
+    val decimalCol = AttributeReference("dec", DecimalType(10, 2), nullable = true)()
+    val intervalCol = AttributeReference("dur", DayTimeIntervalType(), nullable = true)()
+    val child = LocalRelation(tsStart, tsEnd, floatCol, intCol, decimalCol, intervalCol, label)
+
+    // FLOAT resolves; DOUBLE is exercised by the default `value` fixture throughout.
+    ResolveBinBy.apply(unresolved(child = child, distribute = Seq(floatCol)))
+
+    // Integral, DECIMAL, DT INTERVAL, and other non-float/double types are rejected;
+    // users CAST to DOUBLE in an upstream projection.
+    Seq(intCol, decimalCol, intervalCol, label).foreach { c =>
+      expectError(unresolved(child = child, distribute = Seq(c)), "BIN_BY_DISTRIBUTE_TYPE_MISMATCH")
+    }
   }
 
   test("BinBy survives full Analyzer + CheckAnalysis (regression for producedAttributes)") {
@@ -287,5 +317,11 @@ class ResolveBinBySuite extends AnalysisTest {
     val appendedExprIds = binBys.flatMap(_.appendedAttributes.map(_.exprId))
     assert(appendedExprIds.distinct.size == appendedExprIds.size,
       "appended BinBy attributes must have distinct exprIds across the two join sides")
+  }
+
+  // `super.test` escapes the suite-wide flag-on wrapper so this runs with the default (off).
+  super.test("BIN BY is gated off by default") {
+    assert(!SQLConf.get.getConf(SQLConf.BIN_BY_ENABLED))
+    expectError(unresolved(), "UNSUPPORTED_FEATURE.BIN_BY")
   }
 }
