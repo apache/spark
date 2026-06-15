@@ -322,21 +322,21 @@ SELECT DATE '2020-01-01'::timestamp_ltz(7)
 -- !query
 SELECT TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'::date
 -- !query analysis
-Project [cast(TimestampNanosVal(1577910615123456, 789) as date) AS CAST(TimestampNanosVal(1577910615123456, 789) AS DATE)#x]
+Project [cast(2020-01-01 12:30:15.123456789 as date) AS CAST(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789' AS DATE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001'::date
 -- !query analysis
-Project [cast(TimestampNanosVal(-315590400000000, 1) as date) AS CAST(TimestampNanosVal(-315590400000000, 1) AS DATE)#x]
+Project [cast(1960-01-01 00:00:00.000000001 as date) AS CAST(TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001' AS DATE)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC'::date
 -- !query analysis
-Project [cast(TimestampNanosVal(1577851200123456, 789) as date) AS CAST(TimestampNanosVal(1577851200123456, 789) AS DATE)#x]
+Project [cast(2019-12-31 20:00:00.123456789 as date) AS CAST(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789' AS DATE)#x]
 +- OneRowRelation
 
 
@@ -363,7 +363,7 @@ Project [cast(cast(null as timestamp_ltz(9)) as date) AS CAST(CAST(NULL AS TIMES
 -- !query
 SELECT array(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: array<date>
 -- !query analysis
-Project [cast(array(TimestampNanosVal(1577910615123456, 789)) as array<date>) AS array(TimestampNanosVal(1577910615123456, 789))#x]
+Project [cast(array(2020-01-01 12:30:15.123456789) as array<date>) AS array(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789')#x]
 +- OneRowRelation
 
 
@@ -376,7 +376,7 @@ SELECT array(DATE '2020-01-01') :: array<timestamp_ltz(9)>
 -- !query
 SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: map<string, date>
 -- !query analysis
-Project [cast(map(k, TimestampNanosVal(1577910615123456, 789)) as map<string,date>) AS map(k, TimestampNanosVal(1577910615123456, 789))#x]
+Project [cast(map(k, 2020-01-01 12:30:15.123456789) as map<string,date>) AS map(k, TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789')#x]
 +- OneRowRelation
 
 

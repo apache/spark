@@ -306,7 +306,7 @@ struct<CAST(DATE '2020-01-01' AS TIMESTAMP_NTZ(7)):timestamp_ntz(7)>
 -- !query
 SELECT TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789'::date
 -- !query schema
-struct<CAST(TimestampNanosVal(1577881815123456, 789) AS DATE):date>
+struct<CAST(TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789' AS DATE):date>
 -- !query output
 2020-01-01
 
@@ -314,7 +314,7 @@ struct<CAST(TimestampNanosVal(1577881815123456, 789) AS DATE):date>
 -- !query
 SELECT TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001'::date
 -- !query schema
-struct<CAST(TimestampNanosVal(-315619200000000, 1) AS DATE):date>
+struct<CAST(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001' AS DATE):date>
 -- !query output
 1960-01-01
 
@@ -346,7 +346,7 @@ NULL
 -- !query
 SELECT array(TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789') :: array<date>
 -- !query schema
-struct<array(TimestampNanosVal(1577881815123456, 789)):array<date>>
+struct<array(TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789'):array<date>>
 -- !query output
 [2020-01-01]
 
@@ -362,7 +362,7 @@ struct<array(DATE '2020-01-01'):array<timestamp_ntz(9)>>
 -- !query
 SELECT map('k', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789') :: map<string, date>
 -- !query schema
-struct<map(k, TimestampNanosVal(1577881815123456, 789)):map<string,date>>
+struct<map(k, TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789'):map<string,date>>
 -- !query output
 {"k":2020-01-01}
 

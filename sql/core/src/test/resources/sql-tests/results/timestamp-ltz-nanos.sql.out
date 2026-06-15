@@ -370,7 +370,7 @@ struct<CAST(DATE '2020-01-01' AS TIMESTAMP_LTZ(7)):timestamp_ltz(7)>
 -- !query
 SELECT TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'::date
 -- !query schema
-struct<CAST(TimestampNanosVal(1577910615123456, 789) AS DATE):date>
+struct<CAST(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789' AS DATE):date>
 -- !query output
 2020-01-01
 
@@ -378,7 +378,7 @@ struct<CAST(TimestampNanosVal(1577910615123456, 789) AS DATE):date>
 -- !query
 SELECT TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001'::date
 -- !query schema
-struct<CAST(TimestampNanosVal(-315590400000000, 1) AS DATE):date>
+struct<CAST(TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001' AS DATE):date>
 -- !query output
 1960-01-01
 
@@ -386,7 +386,7 @@ struct<CAST(TimestampNanosVal(-315590400000000, 1) AS DATE):date>
 -- !query
 SELECT TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC'::date
 -- !query schema
-struct<CAST(TimestampNanosVal(1577851200123456, 789) AS DATE):date>
+struct<CAST(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789' AS DATE):date>
 -- !query output
 2019-12-31
 
@@ -418,7 +418,7 @@ NULL
 -- !query
 SELECT array(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: array<date>
 -- !query schema
-struct<array(TimestampNanosVal(1577910615123456, 789)):array<date>>
+struct<array(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'):array<date>>
 -- !query output
 [2020-01-01]
 
@@ -434,7 +434,7 @@ struct<array(DATE '2020-01-01'):array<timestamp_ltz(9)>>
 -- !query
 SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: map<string, date>
 -- !query schema
-struct<map(k, TimestampNanosVal(1577910615123456, 789)):map<string,date>>
+struct<map(k, TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'):map<string,date>>
 -- !query output
 {"k":2020-01-01}
 
