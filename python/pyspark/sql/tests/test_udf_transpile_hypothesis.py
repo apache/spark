@@ -103,9 +103,13 @@ if _have_hypothesis:
         suppress_health_check=[HealthCheck.function_scoped_fixture],
     )
 
-    # 64-bit signed range, kept clear of overflow so arithmetic in both
-    # Python and Spark stays in the safe LongType range.
-    _LONG_BOUND = 2**31 - 1
+    # Full 64-bit signed range. Arithmetic UDFs (plus_four, times_three, etc.)
+    # can overflow LongType at extreme values; in ANSI mode both the transpiled
+    # path (Spark expression) and the interpreted path (Python UDF returning a
+    # value too large for LongType) should both raise, so _run's "both raised"
+    # equivalence should keep those tests passing. Any test that fails here
+    # indicates a real asymmetry in overflow/error handling between the two paths.
+    _LONG_BOUND = 2**63 - 1
     _long_strategy = st.one_of(
         st.none(), st.integers(min_value=-_LONG_BOUND, max_value=_LONG_BOUND)
     )
