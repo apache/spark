@@ -21,12 +21,19 @@ import java.lang.{Boolean => JBoolean, Byte => JByte, Double => JDouble, Float =
 import java.math.{BigDecimal => JBigDecimal}
 import java.sql.{Array => _, _}
 
+import org.json4s.JObject
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.connect.client.jdbc.{SparkConnectArray, SparkConnectMap, SparkConnectStruct}
 import org.apache.spark.sql.types._
 
 private[jdbc] object JdbcTypeUtils {
 
-  def getColumnType(field: StructField): Int = field.dataType match {
+  def getColumnType(field: StructField): Int = getColumnType(field.dataType)
+
+  def getColumnType(dataType: DataType): Int = dataType match {
     case NullType => Types.NULL
     case BooleanType => Types.BOOLEAN
     case ByteType => Types.TINYINT
@@ -65,9 +72,9 @@ private[jdbc] object JdbcTypeUtils {
     case TimestampNTZType => classOf[Timestamp].getName
     case BinaryType => classOf[Array[Byte]].getName
     case _: TimeType => classOf[Time].getName
-    case _: ArrayType => classOf[scala.collection.Seq[_]].getName
-    case _: MapType => classOf[scala.collection.Map[_, _]].getName
-    case _: StructType => classOf[Row].getName
+    case _: ArrayType => classOf[java.sql.Array].getName
+    case _: MapType => classOf[java.util.Map[_, _]].getName
+    case _: StructType => classOf[java.sql.Struct].getName
     case other =>
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
@@ -146,13 +153,6 @@ private[jdbc] object JdbcTypeUtils {
       throw new SQLFeatureNotSupportedException(s"DataType $other is not supported yet.")
   }
 
-  // For DatabaseMetaData.getColumns COLUMN_SIZE: "Null is returned for data types
-  // where the column size is not applicable."
-  def getColumnSize(field: StructField): Integer = field.dataType match {
-    case _: ArrayType | _: MapType | _: StructType => null
-    case _ => getDisplaySize(field)
-  }
-
   def getDecimalDigits(field: StructField): Integer = field.dataType match {
     case BooleanType | _: IntegralType => 0
     case FloatType => 7
@@ -166,5 +166,39 @@ private[jdbc] object JdbcTypeUtils {
   def getNumPrecRadix(field: StructField): Integer = field.dataType match {
     case _: NumericType => 10
     case _ => null
+  }
+
+  /**
+   * Converts a value materialized by the Spark Connect client (Scala Seq / Map / Row for
+   * complex types) into the corresponding standard JDBC object, recursively:
+   * ARRAY -> java.sql.Array, STRUCT -> java.sql.Struct, MAP -> java.util.Map. Scalar values
+   * are returned as is.
+   */
+  def toJdbcObject(value: Any, dataType: DataType): AnyRef = {
+    if (value == null) {
+      null
+    } else {
+      dataType match {
+        case at: ArrayType =>
+          new SparkConnectArray(value.asInstanceOf[scala.collection.Seq[Any]], at.elementType)
+        case st: StructType =>
+          new SparkConnectStruct(value.asInstanceOf[Row], st)
+        case mt: MapType =>
+          new SparkConnectMap(value.asInstanceOf[scala.collection.Map[Any, Any]], mt)
+        case _ => value.asInstanceOf[AnyRef]
+      }
+    }
+  }
+
+  /**
+   * Renders a complex type value as JSON text following the Row.json format, used as a
+   * stable string representation for getString and the complex type toString fallbacks.
+   * Row.jsonValue requires a Row with a schema, so wrap the value into a single-field row
+   * and extract the field back from the rendered JSON object.
+   */
+  def toJson(value: Any, dataType: DataType): String = {
+    val wrapped = new GenericRowWithSchema(
+      Array(value), StructType(Array(StructField("c", dataType))))
+    compact(render(wrapped.jsonValue.asInstanceOf[JObject].obj.head._2))
   }
 }

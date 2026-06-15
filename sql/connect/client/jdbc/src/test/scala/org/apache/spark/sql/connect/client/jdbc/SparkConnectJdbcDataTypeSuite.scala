@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.connect.client.jdbc
 
-import java.sql.{ResultSet, SQLException, Types}
+import java.sql.{Array => JdbcArray, ResultSet, SQLException, Struct, Types}
 
 import scala.util.Using
 
-import org.apache.spark.sql.Row
 import org.apache.spark.sql.connect.client.jdbc.test.JdbcHelper
 import org.apache.spark.sql.connect.test.{ConnectFunSuite, RemoteSparkSession}
 import org.apache.spark.util.SparkClassUtils
@@ -796,7 +795,13 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT array(1, 2, 3)") { rs =>
       assert(rs.next())
       val value = rs.getObject(1)
-      assert(value === Seq(1, 2, 3))
+      assert(value.isInstanceOf[JdbcArray])
+      val array = value.asInstanceOf[JdbcArray]
+      assert(array.getBaseType === Types.INTEGER)
+      assert(array.getArray.asInstanceOf[Array[_]].length === 3)
+      assert(array.toString === "[1,2,3]")
+      assert(rs.getArray(1).getArray.asInstanceOf[Array[_]].length === 3)
+      assert(rs.getString(1) === "[1,2,3]")
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -806,7 +811,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnLabel(1) === "array(1, 2, 3)")
       assert(metaData.getColumnType(1) === Types.ARRAY)
       assert(metaData.getColumnTypeName(1) === "ARRAY<INT>")
-      assert(metaData.getColumnClassName(1) === "scala.collection.Seq")
+      assert(metaData.getColumnClassName(1) === "java.sql.Array")
       assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
@@ -819,7 +824,11 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT map('a', 1)") { rs =>
       assert(rs.next())
       val value = rs.getObject(1)
-      assert(value === Map("a" -> 1))
+      assert(value.isInstanceOf[java.util.Map[_, _]])
+      val map = value.asInstanceOf[java.util.Map[String, AnyRef]]
+      assert(map.get("a") === 1)
+      assert(value.toString === """{"a":1}""")
+      assert(rs.getString(1) === """{"a":1}""")
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -829,7 +838,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnLabel(1) === "map(a, 1)")
       assert(metaData.getColumnType(1) === Types.JAVA_OBJECT)
       assert(metaData.getColumnTypeName(1) === "MAP<STRING, INT>")
-      assert(metaData.getColumnClassName(1) === "scala.collection.Map")
+      assert(metaData.getColumnClassName(1) === "java.util.Map")
       assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
@@ -842,10 +851,13 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT named_struct('a', 1, 'b', 'x')") { rs =>
       assert(rs.next())
       val value = rs.getObject(1)
-      assert(value.isInstanceOf[Row])
-      val row = value.asInstanceOf[Row]
-      assert(row.getInt(0) === 1)
-      assert(row.getString(1) === "x")
+      assert(value.isInstanceOf[Struct])
+      val struct = value.asInstanceOf[Struct]
+      val attrs = struct.getAttributes
+      assert(attrs(0) === 1)
+      assert(attrs(1) === "x")
+      assert(value.toString === """{"a":1,"b":"x"}""")
+      assert(rs.getString(1) === """{"a":1,"b":"x"}""")
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -855,7 +867,8 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnLabel(1) === "named_struct(a, 1, b, x)")
       assert(metaData.getColumnType(1) === Types.STRUCT)
       assert(metaData.getColumnTypeName(1) === "STRUCT<a: INT NOT NULL, b: STRING NOT NULL>")
-      assert(metaData.getColumnClassName(1) === "org.apache.spark.sql.Row")
+      assert(metaData.getColumnClassName(1) === "java.sql.Struct")
+      assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
       assert(metaData.getScale(1) === 0)
@@ -867,11 +880,14 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT array(named_struct('a', 1), named_struct('a', 2))") { rs =>
       assert(rs.next())
       val value = rs.getObject(1)
-      assert(value.isInstanceOf[scala.collection.Seq[_]])
-      val seq = value.asInstanceOf[scala.collection.Seq[Row]]
-      assert(seq.size === 2)
-      assert(seq(0).getInt(0) === 1)
-      assert(seq(1).getInt(0) === 2)
+      assert(value.isInstanceOf[JdbcArray])
+      val elems = value.asInstanceOf[JdbcArray].getArray.asInstanceOf[Array[_]]
+      assert(elems.length === 2)
+      assert(elems(0).isInstanceOf[Struct])
+      assert(elems(0).asInstanceOf[Struct].getAttributes()(0) === 1)
+      assert(elems(1).asInstanceOf[Struct].getAttributes()(0) === 2)
+      assert(value.toString === """[{"a":1},{"a":2}]""")
+      assert(rs.getString(1) === """[{"a":1},{"a":2}]""")
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -879,7 +895,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnCount === 1)
       assert(metaData.getColumnType(1) === Types.ARRAY)
       assert(metaData.getColumnTypeName(1) === "ARRAY<STRUCT<a: INT NOT NULL>>")
-      assert(metaData.getColumnClassName(1) === "scala.collection.Seq")
+      assert(metaData.getColumnClassName(1) === "java.sql.Array")
       assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
@@ -892,9 +908,12 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT map('x', array(1, 2))") { rs =>
       assert(rs.next())
       val value = rs.getObject(1)
-      assert(value.isInstanceOf[Map[_, _]])
-      val map = value.asInstanceOf[Map[String, Seq[Int]]]
-      assert(map("x") === Seq(1, 2))
+      assert(value.isInstanceOf[java.util.Map[_, _]])
+      val map = value.asInstanceOf[java.util.Map[String, AnyRef]]
+      assert(map.get("x").isInstanceOf[JdbcArray])
+      assert(map.get("x").asInstanceOf[JdbcArray].getArray.asInstanceOf[Array[_]].length === 2)
+      assert(value.toString === """{"x":[1,2]}""")
+      assert(rs.getString(1) === """{"x":[1,2]}""")
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -902,7 +921,7 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnCount === 1)
       assert(metaData.getColumnType(1) === Types.JAVA_OBJECT)
       assert(metaData.getColumnTypeName(1) === "MAP<STRING, ARRAY<INT>>")
-      assert(metaData.getColumnClassName(1) === "scala.collection.Map")
+      assert(metaData.getColumnClassName(1) === "java.util.Map")
       assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
@@ -915,9 +934,12 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
     withExecuteQuery("SELECT named_struct('m', map('k', 1))") { rs =>
       assert(rs.next())
       val value = rs.getObject(1)
-      assert(value.isInstanceOf[Row])
-      val row = value.asInstanceOf[Row]
-      assert(row.getMap[String, Int](0) === Map("k" -> 1))
+      assert(value.isInstanceOf[Struct])
+      val attr = value.asInstanceOf[Struct].getAttributes()(0)
+      assert(attr.isInstanceOf[java.util.Map[_, _]])
+      assert(attr.asInstanceOf[java.util.Map[String, AnyRef]].get("k") === 1)
+      assert(value.toString === """{"m":{"k":1}}""")
+      assert(rs.getString(1) === """{"m":{"k":1}}""")
       assert(!rs.wasNull)
       assert(!rs.next())
 
@@ -925,7 +947,8 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnCount === 1)
       assert(metaData.getColumnType(1) === Types.STRUCT)
       assert(metaData.getColumnTypeName(1) === "STRUCT<m: MAP<STRING, INT> NOT NULL>")
-      assert(metaData.getColumnClassName(1) === "org.apache.spark.sql.Row")
+      assert(metaData.getColumnClassName(1) === "java.sql.Struct")
+      assert(SparkClassUtils.classForName(metaData.getColumnClassName(1)).isInstance(value))
       assert(metaData.isSigned(1) === false)
       assert(metaData.getPrecision(1) === 0)
       assert(metaData.getScale(1) === 0)

@@ -573,7 +573,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
        COLUMN_NAME: String,
        DATA_TYPE: Int,
        TYPE_NAME: String,
-       COLUMN_SIZE: Integer,
+       COLUMN_SIZE: Int,
        BUFFER_LENGTH: Int,
        DECIMAL_DIGITS: Int,
        NUM_PREC_RADIX: Int,
@@ -615,7 +615,7 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
             COLUMN_NAME = rs.getString("COLUMN_NAME"),
             DATA_TYPE = rs.getInt("DATA_TYPE"),
             TYPE_NAME = rs.getString("TYPE_NAME"),
-            COLUMN_SIZE = rs.getObject("COLUMN_SIZE").asInstanceOf[Integer],
+            COLUMN_SIZE = rs.getInt("COLUMN_SIZE"),
             BUFFER_LENGTH = rs.getInt("BUFFER_LENGTH"),
             DECIMAL_DIGITS = rs.getInt("DECIMAL_DIGITS"),
             NUM_PREC_RADIX = rs.getInt("NUM_PREC_RADIX"),
@@ -730,16 +730,6 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
                 ("spark_catalog", "db_", "t_", 2, "i_"),
                 ("spark_catalog", "db_2", "t_2", 1, "id"),
                 ("testcat", "t_db1", "t_t1", 1, "id"))
-            }
-
-            // COLUMN_SIZE is not applicable for complex types
-            val complexColumns = Set("col_array", "col_map", "col_struct")
-            getColumnResults.foreach { r =>
-              if (complexColumns.contains(r.COLUMN_NAME)) {
-                assert(r.COLUMN_SIZE === null)
-              } else {
-                assert(r.COLUMN_SIZE !== null)
-              }
             }
 
             // TODO verify the remaining attributes
