@@ -940,8 +940,9 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val boolExpr = VariantGet(ref, path, BooleanType, failOnError = true)
     val x = AttributeReference("x", IntegerType)()
     val orExpr = Or(boolExpr, GreaterThan(x, Literal(0)))
-    // Without the fix, And/Or assert V2Predicate and crash with AssertionError.
-    // With the fix, boolExpr is wrapped in BOOLEAN_EXPRESSION and Or translates.
+    // A boolean-typed VariantGet in predicate position must translate to a V2Predicate, or the
+    // enclosing And/Or's `isInstanceOf[V2Predicate]` assert crashes planning;
+    // the BOOLEAN_EXPRESSION predicate provides that.
     val result = new V2ExpressionBuilder(orExpr, isPredicate = true).build()
     assert(result.isDefined, "Or with boolean VariantGet should translate without AssertionError")
     result.get match {
@@ -971,6 +972,40 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
   test("V2VariantGet toString renders as try_variant_get with timezone") {
     val vg = new V2VariantGet(FieldReference("v"), "$.ts", TimestampType, false, "UTC")
     assert(vg.toString == "try_variant_get(v, '$.ts', timestamp, tz=UTC)")
+  }
+
+  test("VariantGet with resolved timeZoneId passes it through the builder") {
+    val ref = AttributeReference("v", VariantType)()
+    val path = Literal.create("$.ts", StringType)
+    val expr = VariantGet(ref, path, TimestampType, failOnError = true, timeZoneId = Some("UTC"))
+    val gt = GreaterThan(expr, Literal.create(null, TimestampType))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    assert(result.isDefined)
+    result.get.children()(0) match {
+      case vg: V2VariantGet =>
+        assert(vg.timeZoneId() == "UTC")
+        assert(vg.targetType() == TimestampType)
+      case other => fail(s"expected V2VariantGet, got ${other.getClass.getName}")
+    }
+  }
+
+  test("VariantGet with struct-nested variant column translates to nested FieldReference") {
+    val structType = StructType(Seq(StructField("v", VariantType)))
+    val parentRef = AttributeReference("s", structType)()
+    val nestedVariant = GetStructField(parentRef, 0)
+    val path = Literal.create("$.city", StringType)
+    val expr = VariantGet(nestedVariant, path, StringType, failOnError = true)
+    val gt = GreaterThan(expr, Literal.create("NYC", StringType))
+    val result = new V2ExpressionBuilder(gt, isPredicate = true).build()
+    assert(result.isDefined)
+    result.get.children()(0) match {
+      case vg: V2VariantGet =>
+        assert(vg.children()(0) == FieldReference(Seq("s", "v")))
+        assert(vg.path() == "$.city")
+        assert(vg.targetType() == StringType)
+      case other => fail(s"expected V2VariantGet with nested FieldReference, got " +
+        s"${other.getClass.getName}")
+    }
   }
 
   test("Current Like functions are not supported") {
