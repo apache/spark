@@ -1049,8 +1049,8 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
             log"is disabled but we still got TranspiledPythonUDFs in our plan.")
           s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
         } else if (!parentIsUdf || !s.hasOnlyPythonUDFInputs) {
-          // Walk the full list of transpiled options and pick the first non-null
-          // one, falling back to the original Python UDF if none are available.
+          // Walk the full list of transpiled options and pick the first one,
+          // falling back to the original Python UDF if none are available.
           // Options whose declared input-type categories don't match the bound
           // column types are already pruned during analysis by
           // ResolveTranspiledPythonUDFOptions, so any option that reaches here is
@@ -1061,7 +1061,7 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
           // option's dataType already matches; a custom transpiler MUST do the
           // same (or insert its own Cast), or it will silently change the output
           // schema.
-          val firstEvaluable = s.transpiledOptions.find(expr => expr != null)
+          val firstEvaluable = s.transpiledOptions.headOption
           firstEvaluable match {
             case None =>
               s.pythonUDFExpr.mapChildren(applyExpr(_, parentIsUdf = true))
