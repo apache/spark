@@ -124,7 +124,7 @@ private[sql] object H2Dialect extends JdbcDialect {
       options: JDBCOptions): Boolean = {
     val sql = "SELECT * FROM INFORMATION_SCHEMA.INDEXES WHERE " +
       s"TABLE_SCHEMA = '${tableIdent.namespace().last}' AND " +
-      s"TABLE_NAME = '${tableIdent.name()}' AND INDEX_NAME = '$indexName'"
+      s"TABLE_NAME = '${tableIdent.name()}' AND INDEX_NAME = '${escapeSql(indexName)}'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
