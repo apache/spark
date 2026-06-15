@@ -1314,6 +1314,38 @@ class SparkConnectClientReattachTestCase(unittest.TestCase):
 
         eventually(timeout=1, catch_assertions=True)(check)()
 
+    def test_permission_denied_budget_resets_after_operation_not_found(self):
+        def permission_denied():
+            raise TestException("PERMISSION_DENIED", grpc.StatusCode.PERMISSION_DENIED)
+
+        def not_found():
+            raise TestException(
+                "INVALID_HANDLE.OPERATION_NOT_FOUND",
+                grpc.StatusCode.UNAVAILABLE,
+                trailing_status=status_pb2.Status(
+                    code=14,
+                    message="INVALID_HANDLE.OPERATION_NOT_FOUND",
+                    details="",
+                ),
+            )
+
+        # ExecutePlan #1 hits PERMISSION_DENIED before any response, the reattach attempt
+        # observes OPERATION_NOT_FOUND so a fresh ExecutePlan is started. The fresh stream
+        # is logically new, so a second PERMISSION_DENIED on it must be retried again.
+        stub = self._stub_with(
+            [permission_denied, permission_denied],
+            [not_found, self.response, self.finished],
+        )
+        ite = ExecutePlanResponseReattachableIterator(self.request, stub, self.retrying, [])
+        for _ in ite:
+            pass
+
+        def check():
+            self.assertEqual(stub.execute_calls, 2)
+            self.assertEqual(stub.attach_calls, 2)
+
+        eventually(timeout=1, catch_assertions=True)(check)()
+
     def test_permission_denied_propagates_after_single_retry(self):
         provider_calls = itertools.count(1)
 
