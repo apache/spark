@@ -42,8 +42,8 @@ object JsonUtils {
 
   /**
    * Sample a JSON record RDD as configured by `samplingRatio`. Generic over the record type so the
-   * multiLine path (`RDD[PortableDataStream]`) and the archive inference path (`RDD[Array[Byte]]`)
-   * share one sampler.
+   * multiLine path (`RDD[PortableDataStream]`) and the archive inference paths (`RDD[InputStream]`
+   * for multi-line, `RDD[Array[Byte]]` for line-delimited) share one sampler.
    */
   def sample[T](json: RDD[T], options: JSONOptions): RDD[T] = {
     require(options.samplingRatio > 0,
