@@ -138,7 +138,7 @@ struct<named_struct(f, CAST(NULL AS TIMESTAMP_LTZ(9))):struct<f:timestamp_ltz(9)
 -- !query
 SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<hour(TimestampNanosVal(1577913875123456, 789)):int>
+struct<hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 13
 
@@ -146,7 +146,7 @@ struct<hour(TimestampNanosVal(1577913875123456, 789)):int>
 -- !query
 SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<minute(TimestampNanosVal(1577913875123456, 789)):int>
+struct<minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 24
 
@@ -154,7 +154,7 @@ struct<minute(TimestampNanosVal(1577913875123456, 789)):int>
 -- !query
 SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<second(TimestampNanosVal(1577913875123456, 789)):int>
+struct<second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 35
 
@@ -186,7 +186,7 @@ NULL
 -- !query
 SELECT hour(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789')
 -- !query schema
-struct<hour(TimestampNanosVal(-315542124876544, 789)):int>
+struct<hour(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789'):int>
 -- !query output
 13
 
@@ -194,7 +194,7 @@ struct<hour(TimestampNanosVal(-315542124876544, 789)):int>
 -- !query
 SELECT minute(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789')
 -- !query schema
-struct<minute(TimestampNanosVal(-315542124876544, 789)):int>
+struct<minute(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789'):int>
 -- !query output
 24
 
@@ -202,7 +202,7 @@ struct<minute(TimestampNanosVal(-315542124876544, 789)):int>
 -- !query
 SELECT second(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789')
 -- !query schema
-struct<second(TimestampNanosVal(-315542124876544, 789)):int>
+struct<second(TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789'):int>
 -- !query output
 35
 
@@ -210,7 +210,7 @@ struct<second(TimestampNanosVal(-315542124876544, 789)):int>
 -- !query
 SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata')
 -- !query schema
-struct<hour(TimestampNanosVal(1577865275123456, 789)):int>
+struct<hour(TIMESTAMP_LTZ '2019-12-31 23:54:35.123456789'):int>
 -- !query output
 23
 
@@ -218,7 +218,7 @@ struct<hour(TimestampNanosVal(1577865275123456, 789)):int>
 -- !query
 SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata')
 -- !query schema
-struct<minute(TimestampNanosVal(1577865275123456, 789)):int>
+struct<minute(TIMESTAMP_LTZ '2019-12-31 23:54:35.123456789'):int>
 -- !query output
 54
 
@@ -226,7 +226,7 @@ struct<minute(TimestampNanosVal(1577865275123456, 789)):int>
 -- !query
 SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata')
 -- !query schema
-struct<second(TimestampNanosVal(1577865275123456, 789)):int>
+struct<second(TIMESTAMP_LTZ '2019-12-31 23:54:35.123456789'):int>
 -- !query output
 35
 
@@ -234,7 +234,7 @@ struct<second(TimestampNanosVal(1577865275123456, 789)):int>
 -- !query
 SELECT hour(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 -- !query schema
-struct<hour(TimestampNanosVal(1577885075123456, 789)):int>
+struct<hour(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):int>
 -- !query output
 5
 
@@ -242,7 +242,7 @@ struct<hour(TimestampNanosVal(1577885075123456, 789)):int>
 -- !query
 SELECT minute(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 -- !query schema
-struct<minute(TimestampNanosVal(1577885075123456, 789)):int>
+struct<minute(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):int>
 -- !query output
 24
 
@@ -250,7 +250,7 @@ struct<minute(TimestampNanosVal(1577885075123456, 789)):int>
 -- !query
 SELECT second(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 -- !query schema
-struct<second(TimestampNanosVal(1577885075123456, 789)):int>
+struct<second(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):int>
 -- !query output
 35
 
@@ -258,7 +258,7 @@ struct<second(TimestampNanosVal(1577885075123456, 789)):int>
 -- !query
 SELECT extract(HOUR FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<extract(HOUR FROM TimestampNanosVal(1577913875123456, 789)):int>
+struct<extract(HOUR FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 13
 
@@ -266,7 +266,7 @@ struct<extract(HOUR FROM TimestampNanosVal(1577913875123456, 789)):int>
 -- !query
 SELECT extract(MINUTE FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<extract(MINUTE FROM TimestampNanosVal(1577913875123456, 789)):int>
+struct<extract(MINUTE FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 24
 
@@ -274,7 +274,7 @@ struct<extract(MINUTE FROM TimestampNanosVal(1577913875123456, 789)):int>
 -- !query
 SELECT extract(SECOND FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<extract(SECOND FROM TimestampNanosVal(1577913875123456, 789)):decimal(11,9)>
+struct<extract(SECOND FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):decimal(11,9)>
 -- !query output
 35.123456789
 
@@ -282,7 +282,7 @@ struct<extract(SECOND FROM TimestampNanosVal(1577913875123456, 789)):decimal(11,
 -- !query
 SELECT date_part('HOUR', TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<date_part(HOUR, TimestampNanosVal(1577913875123456, 789)):int>
+struct<date_part(HOUR, TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 13
 
@@ -290,7 +290,7 @@ struct<date_part(HOUR, TimestampNanosVal(1577913875123456, 789)):int>
 -- !query
 SELECT date_part('MINUTE', TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<date_part(MINUTE, TimestampNanosVal(1577913875123456, 789)):int>
+struct<date_part(MINUTE, TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):int>
 -- !query output
 24
 
@@ -298,7 +298,7 @@ struct<date_part(MINUTE, TimestampNanosVal(1577913875123456, 789)):int>
 -- !query
 SELECT date_part('SECOND', TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
-struct<date_part(SECOND, TimestampNanosVal(1577913875123456, 789)):decimal(11,9)>
+struct<date_part(SECOND, TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'):decimal(11,9)>
 -- !query output
 35.123456789
 
@@ -330,7 +330,7 @@ NULL
 -- !query
 SELECT extract(SECOND FROM TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789')
 -- !query schema
-struct<extract(SECOND FROM TimestampNanosVal(-315542124876544, 789)):decimal(11,9)>
+struct<extract(SECOND FROM TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789'):decimal(11,9)>
 -- !query output
 35.123456789
 
@@ -338,7 +338,7 @@ struct<extract(SECOND FROM TimestampNanosVal(-315542124876544, 789)):decimal(11,
 -- !query
 SELECT extract(MINUTE FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata')
 -- !query schema
-struct<extract(MINUTE FROM TimestampNanosVal(1577865275123456, 789)):int>
+struct<extract(MINUTE FROM TIMESTAMP_LTZ '2019-12-31 23:54:35.123456789'):int>
 -- !query output
 54
 
@@ -346,6 +346,6 @@ struct<extract(MINUTE FROM TimestampNanosVal(1577865275123456, 789)):int>
 -- !query
 SELECT extract(SECOND FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata')
 -- !query schema
-struct<extract(SECOND FROM TimestampNanosVal(1577865275123456, 789)):decimal(11,9)>
+struct<extract(SECOND FROM TIMESTAMP_LTZ '2019-12-31 23:54:35.123456789'):decimal(11,9)>
 -- !query output
 35.123456789
