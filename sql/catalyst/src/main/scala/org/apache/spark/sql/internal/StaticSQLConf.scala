@@ -20,6 +20,8 @@ package org.apache.spark.sql.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.util.Try
+
 import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.util.Utils
@@ -325,4 +327,19 @@ object StaticSQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val REFLECT_ALLOW_LIST = buildStaticConf("spark.sql.reflect.allowList")
+    .doc("A comma-separated allow list of regular expressions matched against the canonical " +
+      "static method name (in the form `class.method`, e.g. `java.util.UUID.randomUUID`) " +
+      "that the `reflect` and `java_method` SQL functions are allowed to invoke. A method is " +
+      "allowed when its `class.method` name fully matches at least one of the patterns. " +
+      "When the list is empty (the default), all such invocations are allowed.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .stringConf
+    .toSequence
+    .checkValue(
+      _.forall(pattern => Try(pattern.r).isSuccess),
+      "Every entry must be a valid regular expression.")
+    .createWithDefault(Nil)
 }
