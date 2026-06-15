@@ -167,11 +167,11 @@ When a change needs a version — `@since` annotations, config `.version("...")`
 
 Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
 
-Find the latest `branch-<N>.x` (highest `N`) and print its version (e.g. `4.3.0`):
+`dev/next_version_candidates.py` prints both candidate versions (it auto-detects the `apache/spark` remote, or pass the remote name as an argument). It reports the mechanical facts only -- choosing between them per the rules above is the judgement call:
 
-    branch=$(git ls-remote --heads <upstream> 'refs/heads/branch-*.x' | sed 's#.*/##' | sort -V | tail -1)
-    git fetch <upstream> "$branch"
-    git show FETCH_HEAD:pom.xml | grep -m1 -- -SNAPSHOT | sed -E 's#.*<version>(.+)-SNAPSHOT</version>.*#\1#'
+    $ dev/next_version_candidates.py
+    master       5.0.0
+    branch-4.x   4.3.0
 
 ## Security
 
