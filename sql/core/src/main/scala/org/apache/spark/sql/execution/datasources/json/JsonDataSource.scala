@@ -148,8 +148,17 @@ abstract class JsonDataSource extends Serializable with Logging {
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
 
     // Applies `perEntry` to each input -- once per archive entry, once for a loose file -- skipping
-    // a whole input on corrupt/missing input when the ignore flags are set. The entry/file stream
+    // a whole input when it is corrupt/missing and the ignore flags are set. The entry/file stream
     // is consumed lazily by `perEntry`, never buffered whole; mirrors CSV's `inferWithArchives`.
+    //
+    // An archive entry's stream is a `CloseShieldInputStream` view over the one shared
+    // `TarArchiveInputStream` cursor, valid only until `readEntries` advances to the next entry
+    // (`getNextEntry` skips the prior entry's unread bytes). A consumer that emits the raw stream
+    // (the multiLine path below) must therefore fully consume each element before the iterator
+    // advances; `JsonInferSchema.infer` does, parsing each record before pulling the next.
+    // Buffering, look-ahead, or parallelizing the per-partition consumption would read from an
+    // advanced cursor and infer a wrong schema. The line-delimited path sidesteps this by
+    // materializing each record (`copyBytes()`).
     def perInput[T: ClassTag](perEntry: InputStream => Iterator[T]): RDD[T] = baseRdd.flatMap {
       stream =>
         val path = new Path(stream.getPath())
