@@ -244,7 +244,7 @@ private case class PostgresDialect()
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     val sql = s"SELECT * FROM pg_indexes WHERE tablename = '${tableIdent.name()}' AND" +
-      s" indexname = '$indexName'"
+      s" indexname = '${escapeSql(indexName)}'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
