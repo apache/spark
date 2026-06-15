@@ -160,7 +160,7 @@ Always get user approval before external operations such as pushing commits, cre
 
 When a change needs a version — `@since` annotations, config `.version("...")` (`SQLConf` / `*Conf`), new `MimaExcludes` sections, etc. — use the version of the branch it first ships in, with `-SNAPSHOT` stripped. Determine that branch:
 
-- **PR opened against a non-`master` base branch** (e.g. targeting `branch-4.x` directly): use that base branch's version (read `pom.xml` on that branch; the helper below covers the common `master`-base case).
+- **PR opened against a non-`master` base branch** (e.g. a maintenance line like `branch-4.2`): use that base branch's version -- when you're checked out on it, that's just the working tree's `pom.xml`. The helper below covers only the common `master`-base case.
 - **PR opened against `master`:** most PRs merge to **both** `master` and the latest `branch-<N>.x` (the branch for the next feature release, e.g. `branch-4.x`), so use the `branch-<N>.x` version. The exception is **master-only** changes — use `master`'s version — which are only:
   - breaking / binary-incompatible changes that can't ship in a minor release;
   - dependency upgrades that don't fix a critical issue worth backporting.
