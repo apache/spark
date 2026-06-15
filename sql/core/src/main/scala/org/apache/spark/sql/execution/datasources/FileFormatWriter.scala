@@ -150,8 +150,12 @@ object FileFormatWriter extends Logging {
 
     // SPARK-56919: setupJob must run before materializeAdaptiveSparkPlan, which can throw.
     // Otherwise INSERT OVERWRITE permanently loses the table path if AQE fails.
+    // A leaked staging dir (_temporary / .spark-staging-*) is acceptable vs. losing the table
+    // path — these dirs are dot/underscore-prefixed (filtered from reads) and self-heal on the
+    // next overwrite.
     committer.setupJob(job)
 
+    try {
     // SPARK-40588: when planned writing is disabled and AQE is enabled,
     // plan contains an AdaptiveSparkPlanExec, which does not know
     // its final plan's ordering, so we have to materialize that plan first
@@ -198,6 +202,11 @@ object FileFormatWriter extends Logging {
     } else {
       executeWrite(sparkSession, plan, job, description, committer, outputSpec,
         requiredOrdering, partitionColumns, sortColumns, orderingMatched)
+    }
+    } catch {
+      case cause: Throwable =>
+        committer.abortJob(job)
+        throw cause
     }
   }
   // scalastyle:on argcount

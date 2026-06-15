@@ -3094,7 +3094,7 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "true",
-      "spark.sql.optimizer.plannedWrite.enabled" -> "false") {
+      SQLConf.PLANNED_WRITE_ENABLED.key -> "false") {
       withTempPath { path =>
         val tablePath = path.getAbsolutePath
         spark.range(10).toDF("id")
