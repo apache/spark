@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.GetArrayItem;
+import org.apache.spark.sql.connector.expressions.VariantGet;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NullOrdering;
 import org.apache.spark.sql.connector.expressions.SortDirection;
@@ -113,6 +114,8 @@ public class V2ExpressionSQLBuilder {
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
     } else if (expr instanceof GetArrayItem getArrayItem) {
       return visitGetArrayItem(getArrayItem);
+    } else if (expr instanceof VariantGet variantGet) {
+      return visitVariantGet(variantGet);
     } else if (expr instanceof GeneralScalarExpression e) {
       String name = e.name();
       if (isBinaryComparisonOperator(name)) {
@@ -416,6 +419,13 @@ public class V2ExpressionSQLBuilder {
     throw new SparkUnsupportedOperationException(
       "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED",
       Map.of("expr", getArrayItem.toString())
+    );
+  }
+
+  protected String visitVariantGet(VariantGet variantGet) {
+    throw new SparkUnsupportedOperationException(
+      "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED",
+      Map.of("expr", variantGet.toString())
     );
   }
 
