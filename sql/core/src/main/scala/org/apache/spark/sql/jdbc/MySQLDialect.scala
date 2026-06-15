@@ -198,7 +198,7 @@ private case object MySQLDialect extends JdbcDialect with SQLConfHelper {
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
   override def getTableCommentQuery(table: String, comment: String): String = {
-    s"ALTER TABLE $table COMMENT = '$comment'"
+    s"ALTER TABLE $table COMMENT = '${escapeSql(comment)}'"
   }
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
