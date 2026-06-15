@@ -231,6 +231,11 @@ ERROR_CLASSES_JSON = """
       "Duplicated field names in Arrow Struct are not allowed, got <field_names>"
     ]
   },
+  "FIELD_TYPE_MISMATCH": {
+    "message": [
+      "<obj> is not an instance of type <data_type>."
+    ]
+  },
   "HIGHER_ORDER_FUNCTION_SHOULD_RETURN_COLUMN" : {
     "message" : [
       "Function `<func_name>` should return Column, got <return_type>."

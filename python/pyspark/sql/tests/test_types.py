@@ -49,6 +49,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     NullType,
+    UserDefinedType,
 )
 from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
@@ -540,6 +541,16 @@ class TypesTestsMixin:
         self.assertEqual(_infer_type(p), PythonOnlyUDT())
         _make_type_verifier(PythonOnlyUDT())(PythonOnlyPoint(1.0, 2.0))
         self.assertRaises(ValueError, lambda: _make_type_verifier(PythonOnlyUDT())([1.0, 2.0]))
+
+    def test_udt_from_json_import_type_mismatch(self):
+        json = {
+            "type": "udt",
+            "pyClass": "random.random",
+            "serializedClass": "",
+            "sqlType": StringType().jsonValue(),
+        }
+        with self.assertRaises(PySparkTypeError):
+            UserDefinedType.fromJson(json)
 
     def test_simple_udt_in_df(self):
         schema = StructType().add("key", LongType()).add("val", PythonOnlyUDT())

@@ -1210,6 +1210,11 @@ class UserDefinedType(DataType):
             )
         else:
             UDT = getattr(m, pyClass)
+            if not (isinstance(UDT, type) and issubclass(UDT, UserDefinedType)):
+                raise PySparkTypeError(
+                    error_class="FIELD_TYPE_MISMATCH",
+                    message_parameters={"obj": str(UDT), "data_type": "UserDefinedType"},
+                )
         return UDT()
 
     def __eq__(self, other: Any) -> bool:
