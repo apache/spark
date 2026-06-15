@@ -104,6 +104,11 @@ case class TranspiledPythonUDF(
   // ConvertToCatalyst then picks the first survivor or falls back to the Python
   // UDF. Empty means "no restriction" (kept as-is).
   optionInputCategories: List[List[String]] = Nil) extends Expression with Unevaluable {
+  require(
+    optionInputCategories.isEmpty || optionInputCategories.length == transpiledOptions.length,
+    s"optionInputCategories (${optionInputCategories.length}) must be parallel to " +
+    s"transpiledOptions (${transpiledOptions.length}) or empty"
+  )
   override def children: Seq[Expression] = pythonUDFExpr +: transpiledOptions
   override def dataType: DataType = pythonUDFExpr.dataType
   override def nullable: Boolean = pythonUDFExpr.nullable
