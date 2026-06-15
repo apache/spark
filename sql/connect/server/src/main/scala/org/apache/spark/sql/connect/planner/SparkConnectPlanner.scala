@@ -1459,7 +1459,7 @@ class SparkConnectPlanner(
       columnNames = rel.getColumnNamesList.asScala.toSeq,
       allColumnsAsKeys = rel.getAllColumnsAsKeys,
       withinWatermark = rel.getWithinWatermark,
-      legacyDedupColumnNames = false,
+      viaSparkClassic = false,
       child = transformRelation(rel.getInput))
   }
 

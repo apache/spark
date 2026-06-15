@@ -1181,17 +1181,18 @@ case class UnresolvedQualify(condition: Expression, child: LogicalPlan) extends 
  * @param columnNames the user-specified subset of column names (ignored when `allColumnsAsKeys`).
  * @param allColumnsAsKeys when true, every column of the child is a deduplication key.
  * @param withinWatermark when true, resolves to `DeduplicateWithinWatermark`.
- * @param legacyDedupColumnNames legacy-fallback semantics, consulted ONLY when the deterministic
- *   key order is disabled (an existing query restored from a checkpoint that predates this change).
- *   true reproduces Spark Classic's legacy resolution (`toSet`-based dedup, `Set` order); false
- *   reproduces Spark Connect's legacy resolution (no dedup, input order). Ignored on the
- *   deterministic path.
+ * @param viaSparkClassic whether the deduplication was requested via Spark Classic
+ *   (`Dataset.dropDuplicates*`, true) or Spark Connect (`transformDeduplicate`, false). This only
+ *   matters on the legacy-fallback path, consulted ONLY when the deterministic key order is
+ *   disabled (an existing query restored from a checkpoint that predates this change): Spark
+ *   Classic reproduces its legacy resolution (`toSet`-based dedup, `Set` order) while Spark
+ *   Connect reproduces its own (no dedup, input order). Ignored on the deterministic path.
  */
 case class UnresolvedDeduplicate(
     columnNames: Seq[String],
     allColumnsAsKeys: Boolean,
     withinWatermark: Boolean,
-    legacyDedupColumnNames: Boolean,
+    viaSparkClassic: Boolean,
     child: LogicalPlan) extends UnaryNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = child.output

@@ -1418,7 +1418,7 @@ class Dataset[T] private[sql](
       columnNames = Nil,
       allColumnsAsKeys = true,
       withinWatermark = false,
-      legacyDedupColumnNames = true,
+      viaSparkClassic = true,
       child = logicalPlan)
   }
 
@@ -1428,7 +1428,7 @@ class Dataset[T] private[sql](
       columnNames = colNames,
       allColumnsAsKeys = false,
       withinWatermark = false,
-      legacyDedupColumnNames = true,
+      viaSparkClassic = true,
       child = logicalPlan)
   }
 
@@ -1439,7 +1439,7 @@ class Dataset[T] private[sql](
       columnNames = Nil,
       allColumnsAsKeys = true,
       withinWatermark = true,
-      legacyDedupColumnNames = true,
+      viaSparkClassic = true,
       child = logicalPlan)
   }
 
@@ -1450,7 +1450,7 @@ class Dataset[T] private[sql](
       columnNames = colNames,
       allColumnsAsKeys = false,
       withinWatermark = true,
-      legacyDedupColumnNames = true,
+      viaSparkClassic = true,
       child = logicalPlan)
   }
 

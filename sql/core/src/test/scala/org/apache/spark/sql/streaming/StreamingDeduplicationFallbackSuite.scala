@@ -121,12 +121,19 @@ class StreamingDeduplicationFallbackSuite extends StateStoreMetricsTest {
         StopStream)
       assert(readPinnedConf(checkpoint, batchId = 0).contains("true"))
 
-      // Restart and confirm the dedup state is honored under the (pinned) deterministic order.
-      testStream(dedupAllColumns(input), Append)(
-        StartStream(checkpointLocation = checkpoint.getCanonicalPath),
-        AddData(input, (1, 2, 3, 4, 5), (6, 7, 8, 9, 10)),
-        CheckLastBatch((6, 7, 8, 9, 10)),
-        StopStream)
+      // Restart with the session default flipped to the legacy order. The "true" pinned in the
+      // offset log must override the session value, so the dedup state is still honored under the
+      // deterministic order. (If the session value were used instead, the keys would be encoded in
+      // the legacy order while the restored state holds them in the deterministic order, so the
+      // previously-seen row would no longer be recognized as a duplicate and would be
+      // (incorrectly) emitted, failing CheckLastBatch.)
+      withSQLConf(confKey -> "false") {
+        testStream(dedupAllColumns(input), Append)(
+          StartStream(checkpointLocation = checkpoint.getCanonicalPath),
+          AddData(input, (1, 2, 3, 4, 5), (6, 7, 8, 9, 10)),
+          CheckLastBatch((6, 7, 8, 9, 10)),
+          StopStream)
+      }
     }
   }
 }

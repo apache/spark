@@ -50,20 +50,20 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
   }
 
   private def resolveDeduplicationKeys(d: UnresolvedDeduplicate): Seq[Attribute] = {
-    val deterministic = conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
+    val orderDeterministically = conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
     if (d.allColumnsAsKeys) {
-      // All child columns are keys. Deterministic and legacy Spark Connect both key on the child
-      // output directly (in output order, no name resolution); only legacy Spark Classic reorders
-      // the names through a Set (see legacyClassicColumnNames).
-      if (!deterministic && d.legacyDedupColumnNames) {
+      // All child columns are keys. The deterministic order and legacy Spark Connect both key on
+      // the child output directly (in output order, no name resolution); only legacy Spark Classic
+      // reorders the names through a Set (see legacyClassicColumnNames).
+      if (!orderDeterministically && d.viaSparkClassic) {
         resolveColumnNames(d.child, legacyClassicColumnNames(d.child.output.map(_.name)))
       } else {
         d.child.output
       }
     } else {
-      val orderedNames = if (deterministic) {
+      val orderedNames = if (orderDeterministically) {
         dedupKeepingOrder(d.columnNames)
-      } else if (d.legacyDedupColumnNames) {
+      } else if (d.viaSparkClassic) {
         legacyClassicColumnNames(d.columnNames)
       } else {
         // Legacy Spark Connect resolution: no dedup, caller-provided input order.

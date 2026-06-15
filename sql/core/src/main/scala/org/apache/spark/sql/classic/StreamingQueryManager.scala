@@ -224,10 +224,12 @@ class StreamingQueryManager private[sql] (
 
     // SPARK-XXXXX: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys during the
     // initial analysis (via the ResolveDeduplicate rule) based on a conf pinned in the offset log.
-    // The traditional trick of a backward compatibility flag in the offset log only works "after"
-    // initial analysis, but resolution of these nodes happens in the initial analysis, hence we
-    // have to bootstrap some work in an earlier phase. It has additional overhead, so we carefully
-    // do this only when needed e.g. there is an UnresolvedDeduplicate in the plan.
+    // We intentionally do NOT reuse the usual OffsetSeqMetadata mechanism (OffsetSeqMetadata
+    // .setSessionConf) for this: that applies the offset-log confs only "after" the initial
+    // analysis (when running a batch), but resolution of these nodes happens during the initial
+    // analysis, so we bootstrap the pinned conf in this earlier phase instead. This has additional
+    // overhead (an extra checkpoint-location resolution + offset-log read + re-analysis), so we
+    // scope it tightly: only when the plan actually contains an UnresolvedDeduplicate.
     val maybeNewDataStreamWritePlan = trigger match {
       case _: ContinuousTrigger => dataStreamWritePlan
       case _ =>

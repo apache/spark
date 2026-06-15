@@ -41,10 +41,10 @@ class ResolveDeduplicateSuite extends AnalysisTest {
       columnNames: Seq[String],
       allColumnsAsKeys: Boolean = false,
       withinWatermark: Boolean = false,
-      legacyDedupColumnNames: Boolean = true,
+      viaSparkClassic: Boolean = true,
       child: LogicalPlan = rel): Seq[Attribute] = {
     ResolveDeduplicate(UnresolvedDeduplicate(
-      columnNames, allColumnsAsKeys, withinWatermark, legacyDedupColumnNames, child)) match {
+      columnNames, allColumnsAsKeys, withinWatermark, viaSparkClassic, child)) match {
       case d: Deduplicate => d.keys
       case d: DeduplicateWithinWatermark => d.keys
       case other => fail(s"Expected a (Deduplicate|DeduplicateWithinWatermark), got: $other")
@@ -66,13 +66,13 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     // attributes (same exprIds, same order). This is what lets a checkpoint written by one engine
     // restart under the other.
     withSQLConf(confKey -> "true") {
-      val classicSubset = resolveKeys(Seq("c", "a", "c", "b"), legacyDedupColumnNames = true)
-      val connectSubset = resolveKeys(Seq("c", "a", "c", "b"), legacyDedupColumnNames = false)
+      val classicSubset = resolveKeys(Seq("c", "a", "c", "b"), viaSparkClassic = true)
+      val connectSubset = resolveKeys(Seq("c", "a", "c", "b"), viaSparkClassic = false)
       assert(classicSubset.map(_.exprId) === connectSubset.map(_.exprId))
       assert(classicSubset.map(_.name) === Seq("c", "a", "b"))
 
-      val classicAll = resolveKeys(Nil, allColumnsAsKeys = true, legacyDedupColumnNames = true)
-      val connectAll = resolveKeys(Nil, allColumnsAsKeys = true, legacyDedupColumnNames = false)
+      val classicAll = resolveKeys(Nil, allColumnsAsKeys = true, viaSparkClassic = true)
+      val connectAll = resolveKeys(Nil, allColumnsAsKeys = true, viaSparkClassic = false)
       assert(classicAll.map(_.exprId) === connectAll.map(_.exprId))
       assert(classicAll === rel.output)
     }
@@ -80,7 +80,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
 
   test("SPARK-XXXXX: legacy fallback - Classic dedups the subset (Set order)") {
     withSQLConf(confKey -> "false") {
-      val keys = resolveKeys(Seq("c", "a", "c", "b"), legacyDedupColumnNames = true)
+      val keys = resolveKeys(Seq("c", "a", "c", "b"), viaSparkClassic = true)
       // Classic legacy used `toSet.toSeq`: duplicate names are collapsed (order is Set-defined and
       // intentionally not asserted here).
       assert(keys.length === 3)
@@ -90,7 +90,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
 
   test("SPARK-XXXXX: legacy fallback - Connect keeps duplicates in input order") {
     withSQLConf(confKey -> "false") {
-      val keys = resolveKeys(Seq("c", "a", "c", "b"), legacyDedupColumnNames = false)
+      val keys = resolveKeys(Seq("c", "a", "c", "b"), viaSparkClassic = false)
       // Connect legacy did not dedup the requested names.
       assert(keys.map(_.name) === Seq("c", "a", "c", "b"))
     }
@@ -100,14 +100,14 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     // Deterministic (regardless of engine flag) keys on all child columns in output order.
     withSQLConf(confKey -> "true") {
       assert(
-        resolveKeys(Nil, allColumnsAsKeys = true, legacyDedupColumnNames = true) === rel.output)
+        resolveKeys(Nil, allColumnsAsKeys = true, viaSparkClassic = true) === rel.output)
       assert(
-        resolveKeys(Nil, allColumnsAsKeys = true, legacyDedupColumnNames = false) === rel.output)
+        resolveKeys(Nil, allColumnsAsKeys = true, viaSparkClassic = false) === rel.output)
     }
     // Legacy Spark Connect also keys on all child columns in output order.
     withSQLConf(confKey -> "false") {
       assert(
-        resolveKeys(Nil, allColumnsAsKeys = true, legacyDedupColumnNames = false) === rel.output)
+        resolveKeys(Nil, allColumnsAsKeys = true, viaSparkClassic = false) === rel.output)
     }
   }
 
@@ -115,7 +115,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     withSQLConf(confKey -> "false") {
       // Legacy Classic `dropDuplicates()` resolved `columns.toSet.toSeq`: every column is present
       // (order is Set-defined and intentionally not asserted here).
-      val keys = resolveKeys(Nil, allColumnsAsKeys = true, legacyDedupColumnNames = true)
+      val keys = resolveKeys(Nil, allColumnsAsKeys = true, viaSparkClassic = true)
       assert(keys.map(_.exprId).toSet === rel.output.map(_.exprId).toSet)
     }
   }
@@ -123,7 +123,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
   test("SPARK-XXXXX: withinWatermark resolves to DeduplicateWithinWatermark") {
     val resolved = ResolveDeduplicate(
       UnresolvedDeduplicate(Seq("a"), allColumnsAsKeys = false, withinWatermark = true,
-        legacyDedupColumnNames = true, rel))
+        viaSparkClassic = true, rel))
     assert(resolved.isInstanceOf[DeduplicateWithinWatermark])
     assert(resolved.asInstanceOf[DeduplicateWithinWatermark].keys.map(_.name) === Seq("a"))
   }
@@ -142,9 +142,9 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     ).foreach { case (deterministic, legacy) =>
       withSQLConf(confKey -> deterministic) {
         assert(
-          resolveKeys(Seq("a"), legacyDedupColumnNames = legacy, child = dupRel).map(_.exprId)
+          resolveKeys(Seq("a"), viaSparkClassic = legacy, child = dupRel).map(_.exprId)
             === Seq(a.exprId, a2.exprId),
-          s"deterministic=$deterministic, legacyDedupColumnNames=$legacy")
+          s"deterministic=$deterministic, viaSparkClassic=$legacy")
       }
     }
   }
@@ -154,7 +154,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
       exception = intercept[AnalysisException] {
         ResolveDeduplicate(UnresolvedDeduplicate(
           Seq("does_not_exist"), allColumnsAsKeys = false, withinWatermark = false,
-          legacyDedupColumnNames = true, rel))
+          viaSparkClassic = true, rel))
       },
       condition = "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",
       parameters = Map("colName" -> "does_not_exist", "fieldNames" -> "c, a, b"))
