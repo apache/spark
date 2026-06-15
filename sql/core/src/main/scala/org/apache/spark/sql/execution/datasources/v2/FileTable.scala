@@ -157,9 +157,9 @@ abstract class FileTable(
    * @return
    */
   protected def mergedOptions(options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val finalOptions = this.options.asCaseSensitiveMap().asScala ++
-      options.asCaseSensitiveMap().asScala
-    new CaseInsensitiveStringMap(finalOptions.asJava)
+    val tableOnly = this.options.asCaseSensitiveMap().asScala
+      .filter { case (key, _) => !options.containsKey(key) }
+    new CaseInsensitiveStringMap((tableOnly ++ options.asCaseSensitiveMap().asScala).asJava)
   }
 
   /**

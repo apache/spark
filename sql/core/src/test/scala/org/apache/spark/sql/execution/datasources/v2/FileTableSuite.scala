@@ -156,4 +156,44 @@ class FileTableSuite extends SharedSparkSession {
       }
     }
   }
+
+  allFileBasedDataSources.foreach { format =>
+    test("SPARK-49519, SPARK-50287: relation options override table options case-insensitively " +
+      s"when merging table and relation options - $format") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        val userSpecifiedSchema = StructType(Seq(StructField("c1", StringType)))
+
+        DataSource.lookupDataSourceV2(format, spark.sessionState.conf) match {
+          case Some(provider) =>
+            val dsOptions = new CaseInsensitiveStringMap(Map("lineSep" -> "table_val").asJava)
+            val table = provider.getTable(
+              userSpecifiedSchema,
+              Array.empty,
+              dsOptions.asCaseSensitiveMap()).asInstanceOf[FileTable]
+            val relationOptions = new CaseInsensitiveStringMap(
+              Map("linesep" -> "relation_val").asJava)
+
+            val mergedReadOptions = table.newScanBuilder(relationOptions) match {
+              case csv: CSVScanBuilder => csv.options
+              case json: JsonScanBuilder => json.options
+              case orc: OrcScanBuilder => orc.options
+              case parquet: ParquetScanBuilder => parquet.options
+              case text: TextScanBuilder => text.options
+            }
+            assert(mergedReadOptions.size === 1)
+            assert(mergedReadOptions.get("lineSep") === "relation_val")
+            assert(mergedReadOptions.get("linesep") === "relation_val")
+
+            val writeInfo = LogicalWriteInfoImpl("query-id", userSpecifiedSchema, relationOptions)
+            val mergedWriteOptions = table.newWriteBuilder(writeInfo).build()
+              .asInstanceOf[FileWrite].options
+            assert(mergedWriteOptions.size === 1)
+            assert(mergedWriteOptions.get("lineSep") === "relation_val")
+            assert(mergedWriteOptions.get("linesep") === "relation_val")
+          case _ =>
+            throw new IllegalArgumentException(s"Failed to get table provider for $format")
+        }
+      }
+    }
+  }
 }
