@@ -2078,6 +2078,19 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS =
+    ConfigBuilder("spark.master.rest.allowedAppResourcePatterns")
+      .doc("Comma-separated list of regular expressions matched against the application " +
+        "resource (application jar path) in the Spark Master REST API. When non-empty, a " +
+        "driver submission is rejected unless its application resource fully matches at " +
+        "least one of the patterns. When empty (the default), all application resources " +
+        "are allowed. Example: \"file:.*,hdfs://.*\".")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")
     .intConf
