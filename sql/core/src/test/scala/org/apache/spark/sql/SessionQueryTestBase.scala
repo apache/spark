@@ -39,7 +39,7 @@ trait SessionQueryTestBase
    * {{{
    *   test(...) {
    *     val df = // query with connect-specific behaviour
-   *     if (sessionType = 'connect') {
+   *     if (sessionType == "connect") {
    *       checkError(...)
    *     } else {
    *       checkAnswer(df, ...)

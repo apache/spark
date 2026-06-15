@@ -100,7 +100,7 @@ trait SparkSessionBinderBase
   protected override def spark: SparkSession = _spark
 
   /**
-   * The [[test.TestSQLContext]] to use for all tests in this suite.
+   * The [[SQLContext]] to use for all tests in this suite.
    */
   protected implicit def sqlContext: SQLContext = _spark.sqlContext
 

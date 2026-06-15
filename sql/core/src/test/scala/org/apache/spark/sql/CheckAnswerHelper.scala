@@ -21,9 +21,16 @@ import java.util.TimeZone
 
 import org.scalatest.Assertions
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.util.{SparkErrorUtils, SparkStringUtils}
 
+/**
+ * Provides [[checkAnswer]] helper for SQL- & DataFrame-API tests.
+ *
+ * TODO: should be moved to sql/api together with SessionQueryTestBase
+ */
+@Experimental
 trait CheckAnswerHelper extends Assertions {
 
   /**
@@ -39,6 +46,10 @@ trait CheckAnswerHelper extends Assertions {
     }
   }
 
+  /*
+   * Note: when moving this to sql/api, implementation should stay in sql/core
+   * (i.e. only have abstract decl in sql/api)
+   */
   protected def isDfSorted(df: DataFrame): Boolean = {
     df match {
       case df: classic.DataFrame =>

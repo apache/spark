@@ -796,12 +796,18 @@ object QueryTest extends CheckAnswerHelper {
    *
    * @param df the DataFrame to be executed
    * @param expectedAnswer the expected result in a Seq of Rows.
-   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
   def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Unit = {
     checkAnswer(df, expectedAnswer, checkToRDD = true)
   }
 
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   *
+   * @param df the DataFrame to be executed
+   * @param expectedAnswer the expected result in a Seq of Rows.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
+   */
   def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row], checkToRDD: Boolean): Unit = {
     if (checkToRDD) {
       SQLExecution.withSQLConfPropagated(df.sparkSession) {
