@@ -1336,6 +1336,9 @@ class _MapArrowIterBenchMixin:
             batch_size=batch_size,
         )
 
+    _eval_type = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
+    # Each UDF entry: (func, ret_type, arg_offsets). ret_type=None means
+    # "use the input row schema".
     _udfs = {
         "identity_udf": (_identity_batch_iter, None, [0]),
         "sort_udf": (_sort_batch_iter, None, [0]),
@@ -1348,12 +1351,12 @@ class _MapArrowIterBenchMixin:
         batches, schema = self._build_scenario(scenario)
         udf_func, ret_type, arg_offsets = self._udfs[udf_name]
         if ret_type is None:
-            # mapInArrow UDFs return an Iterator[pa.RecordBatch] with the same
+            # map-in-batch UDFs return an iterator of frames with the same
             # schema as the input row (the inner struct, since make_batches
             # wraps the row schema in a single struct column for the wire).
             ret_type = schema.fields[0].dataType
         MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            self._eval_type,
             lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
             lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
             buf,
@@ -1372,10 +1375,12 @@ class MapArrowIterUDFPeakmemBench(_MapArrowIterBenchMixin, _PeakmemBenchBase):
 # UDF receives ``Iterator[pandas.DataFrame]``, returns ``Iterator[pandas.DataFrame]``.
 
 
-class _MapPandasIterBenchMixin:
+class _MapPandasIterBenchMixin(_MapArrowIterBenchMixin):
     """Provides ``_write_scenario`` for SQL_MAP_PANDAS_ITER_UDF.
 
-    Wraps input batches in a struct column to match the JVM-side wire format
+    Inherits ``_build_scenario`` and ``_write_scenario`` from the Arrow
+    sibling; only the eval type, the UDFs, and the per-scenario row counts
+    differ. The struct-column wrapping matches the JVM-side wire format
     (``MapInBatchEvaluatorFactory`` wraps each row in another row, and the
     Pandas serializer turns that struct back into a ``pandas.DataFrame``
     when ``df_for_struct=True``).
@@ -1406,41 +1411,14 @@ class _MapPandasIterBenchMixin:
         "mixed_types": ("mixed", 200_000, 10, 5_000),
     }
 
-    @classmethod
-    def _build_scenario(cls, name):
-        """Build a single scenario by name."""
-        np.random.seed(42)
-        type_key, num_rows, num_cols, batch_size = cls._scenario_configs[name]
-        pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
-        struct_type = MockDataFactory.make_struct_type(
-            num_fields=num_cols,
-            base_types=pool,
-        )
-        return MockDataFactory.make_batches(
-            num_rows=num_rows,
-            num_cols=1,
-            spark_type_pool=[struct_type],
-            batch_size=batch_size,
-        )
-
+    _eval_type = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
     _udfs = {
-        "identity_udf": (_identity_pdf_iter, [0]),
-        "sort_udf": (_sort_pdf_iter, [0]),
-        "filter_udf": (_filter_pdf_iter, [0]),
+        "identity_udf": (_identity_pdf_iter, None, [0]),
+        "sort_udf": (_sort_pdf_iter, None, [0]),
+        "filter_udf": (_filter_pdf_iter, None, [0]),
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
-
-    def _write_scenario(self, scenario, udf_name, buf):
-        batches, schema = self._build_scenario(scenario)
-        udf_func, arg_offsets = self._udfs[udf_name]
-        ret_type = schema.fields[0].dataType
-        MockProtocolWriter.write_worker_input(
-            PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
-            lambda b: MockProtocolWriter.write_udf_payload(udf_func, ret_type, arg_offsets, b),
-            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
-            buf,
-        )
 
 
 class MapPandasIterUDFTimeBench(_MapPandasIterBenchMixin, _TimeBenchBase):
@@ -1849,17 +1827,15 @@ class _TransformWithStatePandasBenchMixin:
         "nested_struct": (200, 5_000, 4, _NESTED_POOL),
     }
 
-    @staticmethod
-    def _build_scenario(name):
+    @classmethod
+    def _build_scenario(cls, name):
         """Build a single TWS Pandas scenario.
 
         Returns ``(batches, schema)`` where ``batches`` is a plain list of Arrow
         RecordBatches with rows pre-sorted by the leading int32 key column.
         """
         np.random.seed(42)
-        num_groups, rows_per_group, num_value_cols, value_pool = (
-            _TransformWithStatePandasBenchMixin._scenario_configs[name]
-        )
+        num_groups, rows_per_group, num_value_cols, value_pool = cls._scenario_configs[name]
         total_rows = num_groups * rows_per_group
         key_array = pa.array(
             np.repeat(np.arange(num_groups, dtype=np.int32), rows_per_group),
