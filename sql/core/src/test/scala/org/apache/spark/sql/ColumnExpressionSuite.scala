@@ -31,6 +31,7 @@ import org.apache.spark.sql.UpdateFieldsBenchmark._
 import org.apache.spark.sql.catalyst.expressions.{InSet, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{outstandingTimezonesIds, outstandingZoneIds}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.ProjectExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -3167,7 +3168,7 @@ class ColumnExpressionSuite extends SharedSparkSession {
 
   test("SPARK-57164: Column.cast/try_cast(String) and sessionState parser for nanos types") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION).foreach { p =>
+      foreachNanosPrecision { p =>
         Seq(
           s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
           s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),

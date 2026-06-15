@@ -32,6 +32,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset.ofRows
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
@@ -166,7 +167,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   test("SPARK-57164: DataStreamReader.schema(String) parses nanos timestamp types") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION).foreach { p =>
+      foreachNanosPrecision { p =>
         Seq(
           s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
           s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
