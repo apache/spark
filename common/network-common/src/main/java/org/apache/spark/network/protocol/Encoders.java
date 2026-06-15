@@ -133,6 +133,7 @@ public class Encoders {
 
     public static String[] decode(ByteBuf buf) {
       int numStrings = buf.readInt();
+      Objects.checkFromIndexSize(0, numStrings, buf.readableBytes() / 4);
       String[] strings = new String[numStrings];
       for (int i = 0; i < strings.length; i ++) {
         strings[i] = Strings.decode(buf);
