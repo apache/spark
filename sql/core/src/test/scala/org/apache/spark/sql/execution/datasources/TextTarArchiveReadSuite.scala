@@ -183,4 +183,23 @@ class TextTarArchiveReadSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  Seq(true, false).foreach { ignoreMissing =>
+    test(s"ignoreMissingFiles=$ignoreMissing controls whether a missing archive is skipped") {
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq("a.txt" -> textBytes("line1\nline2\n")))
+        withSQLConf(SQLConf.IGNORE_MISSING_FILES.key -> ignoreMissing.toString) {
+          // The archive is listed when the DataFrame is built, then deleted before the scan opens
+          // it, so the reader hits a missing file -- handled by `FileScanRDD`, like any file.
+          val df = read(archive.getCanonicalPath)
+          assert(archive.delete(), s"failed to delete $archive")
+          if (ignoreMissing) {
+            checkAnswer(df, Seq.empty[Row])
+          } else {
+            intercept[SparkException](df.collect())
+          }
+        }
+      }
+    }
+  }
 }
