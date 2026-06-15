@@ -203,7 +203,7 @@ trait QueryTestBase
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
    * @param absTol the absolute tolerance between actual and expected answers.
    */
-  @deprecated("rarely used")
+  @deprecated("rarely used", since = "4.2.0")
   protected def checkAggregatesWithTol(dataFrame: DataFrame,
       expectedAnswer: Seq[Row],
       absTol: Double): Unit = {
@@ -218,7 +218,7 @@ trait QueryTestBase
     }
   }
 
-  @deprecated("rarely used")
+  @deprecated("rarely used", since = "4.2.0")
   protected def checkAggregatesWithTol(dataFrame: DataFrame,
       expectedAnswer: Row,
       absTol: Double): Unit = {
@@ -425,7 +425,7 @@ trait QueryTestBase
   /**
    * Restores the current catalog/database after calling `f`.
    */
-  @deprecated("rarely used")
+  @deprecated("rarely used", since = "4.2.0")
   protected def withCurrentCatalogAndNamespace(f: => Unit): Unit = {
     val curCatalog = sql("select current_catalog()").head().getString(0)
     val curDatabase = sql("select current_database()").head().getString(0)
@@ -473,7 +473,7 @@ trait QueryTestBase
   /**
    * Strip Spark-side filtering in order to check if a datasource filters rows correctly.
    */
-  @deprecated("Classic-only method, use classic.QueryTest", "4.2.0")
+  @deprecated("Classic-only method, use classic.QueryTest", since = "4.2.0")
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
     val withoutFilters = df.queryExecution.executedPlan.transform {
@@ -488,7 +488,7 @@ trait QueryTestBase
    * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
    * way to construct `DataFrame` directly out of local data without relying on implicits.
    */
-  @deprecated("Classic-only method, use classic.QueryTest", "4.2.0")
+  @deprecated("Classic-only method, use classic.QueryTest", since = "4.2.0")
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): classic.DataFrame = {
     classic.Dataset.ofRows(spark.asInstanceOf[classic.SparkSession], plan)
   }
@@ -498,7 +498,7 @@ trait QueryTestBase
    * does not contain a scheme, this path will not be changed after the default
    * FileSystem is changed.
    */
-  @deprecated("Classic-only method, use classic.QueryTest", "4.2.0")
+  @deprecated("Classic-only method, use classic.QueryTest", since = "4.2.0")
   def makeQualifiedPath(path: String): URI = {
     val hadoopPath = new Path(path)
     val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
@@ -789,7 +789,7 @@ trait QueryTest extends SparkFunSuite with QueryTestBase {
   }
 }
 
-@deprecated("superseded by CheckAnswerHelper", since = "4.2")
+@deprecated("superseded by CheckAnswerHelper", since = "4.2.0")
 object QueryTest extends CheckAnswerHelper {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
