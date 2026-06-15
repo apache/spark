@@ -236,7 +236,6 @@ class UserDefinedFunction:
         ansi_enabled = (
             False if session is None else session.conf.get("spark.sql.ansi.enabled") == "true"
         )
-        self._transpile_errors = []
         # Transpilation only attempts to reproduce ANSI-mode Spark SQL semantics
         # (no silent integer overflow, divide-by-zero raises, etc.). Running it
         # against non-ANSI Spark would balloon the test matrix we'd have to
@@ -252,7 +251,6 @@ class UserDefinedFunction:
                 f"{func} -- enable ANSI mode or set transpilePyUDFs=false to "
                 "silence this warning."
             )
-            self._transpile_errors.append("Transpilation only functions in ANSI mode.")
             transpile_enabled = False
         if transpile_enabled and session:
             # Import only if needed, also avoid circular import loops.
@@ -265,11 +263,9 @@ class UserDefinedFunction:
                     self._transpiled_param_names,
                     self._transpiled_input_categories,
                 ) = _transpile_func(session, func, returnType)
-                self._transpile_errors.extend(errors)
                 if not self.transpiled:
                     detail = f": {errors}" if errors else ""
                     warnings.warn(f"Unable to transpile UDF {func}{detail}")
-                    self._transpile_errors.append("Transpilation attempted but no result")
             except Exception as e:
                 # An inability to transpile must never break a working
                 # UDF -- fall back to interpreted Python execution and
@@ -278,7 +274,6 @@ class UserDefinedFunction:
                 warnings.warn(f"Exception transpiling UDF {func}: {e}")
                 self.transpiled = []
                 self._transpiled_param_names = []
-                self._transpile_errors.append(f"Exception during transpilation: {e}")
 
     @staticmethod
     def _check_return_type(returnType: DataType, evalType: int) -> None:
