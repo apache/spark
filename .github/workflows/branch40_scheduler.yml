@@ -21,13 +21,11 @@ name: "Branch-4.0 CI Scheduler"
 
 on:
   schedule:
-    - cron: '0 0 */2 * *'
-    - cron: '0 3 */2 * *'
-    - cron: '0 6 */2 * *'
-    - cron: '0 8 */2 * *'
-    - cron: '0 14 */2 * *'
-    - cron: '0 20 */2 * *'
-    - cron: '0 23 */2 * *'
+    - cron: '0 2 */4 * *'
+    - cron: '0 5 */4 * *'
+    - cron: '0 12 */4 * *'
+    - cron: '0 14 */4 * *'
+    - cron: '0 16 */4 * *'
   workflow_dispatch:
     inputs:
       target:
@@ -56,49 +54,49 @@ jobs:
     steps:
       - name: Maven Build
         if: >-
-          github.event.schedule == '0 14 */2 * *' ||
+          github.event.schedule == '0 14 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven' || inputs.target == 'all'))
         run: |
           gh workflow run build_maven.yml --repo ${{ github.repository }} --ref branch-4.0
       - name: Maven Java 21 Build
         if: >-
-          github.event.schedule == '0 20 */2 * *' ||
+          github.event.schedule == '0 14 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'maven_java21' || inputs.target == 'all'))
         run: |
           gh workflow run build_maven_java21.yml --repo ${{ github.repository }} --ref branch-4.0
       - name: Java 17 Build
         if: >-
-          github.event.schedule == '0 8 */2 * *' ||
+          github.event.schedule == '0 12 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java17' || inputs.target == 'all'))
         run: |
           gh workflow run build_java17.yml --repo ${{ github.repository }} --ref branch-4.0
       - name: Java 21 Build
         if: >-
-          github.event.schedule == '0 3 */2 * *' ||
+          github.event.schedule == '0 5 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'java21' || inputs.target == 'all'))
         run: |
           gh workflow run build_java21.yml --repo ${{ github.repository }} --ref branch-4.0
       - name: Non-ANSI Build
         if: >-
-          github.event.schedule == '0 0 */2 * *' ||
+          github.event.schedule == '0 2 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'non_ansi' || inputs.target == 'all'))
         run: |
           gh workflow run build_non_ansi.yml --repo ${{ github.repository }} --ref branch-4.0
       - name: Python 3.11 Build
         if: >-
-          github.event.schedule == '0 6 */2 * *' ||
+          github.event.schedule == '0 12 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_3.11' || inputs.target == 'all'))
         run: |
           gh workflow run build_python_3.11.yml --repo ${{ github.repository }} --ref branch-4.0
       - name: Python PyPy 3.10 Build
         if: >-
-          github.event.schedule == '0 23 */2 * *' ||
+          github.event.schedule == '0 16 */4 * *' ||
           (github.event_name == 'workflow_dispatch' &&
             (inputs.target == 'python_pypy3.10' || inputs.target == 'all'))
         run: |
