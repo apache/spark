@@ -404,4 +404,59 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
     assert(sorter.closeAndGetSpills().length === 2)
     sorter.cleanupResources()
   }
+
+  test("data page allocation should not starve pointer restoration") {
+    val numCores = 4
+    val conf = new SparkConf(false)
+      .setMaster(s"local[$numCores]")
+      .setAppName("ShuffleExternalSorterSuite")
+      .set(TEST_MEMORY, 512L * 1024 * 1024)
+      .set(MEMORY_FRACTION, 0.01)
+
+    sc = new SparkContext(conf)
+    val memoryManager = UnifiedMemoryManager(conf, numCores)
+    val taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
+    val taskContext = mock[TaskContext]
+    when(taskContext.taskMetrics()).thenReturn(new TaskMetrics)
+    val sorter = new ShuffleExternalSorter(
+      taskMemoryManager,
+      sc.env.blockManager,
+      taskContext,
+      4096,
+      1,
+      conf,
+      new ShuffleWriteMetrics)
+
+    val pageSize = taskMemoryManager.pageSizeBytes()
+    assert(memoryManager.maxHeapMemory / numCores < pageSize)
+    val firstRecord = new Array[Byte]((pageSize - UnsafeAlignedOffset.getUaoSize).toInt)
+    sorter.insertRecord(firstRecord, Platform.BYTE_ARRAY_OFFSET, firstRecord.length, 0)
+
+    val acquireExecutionMemoryMethod =
+      memoryManager.getClass.getMethods.filter(_.getName == "acquireExecutionMemory").head
+    val releaseExecutionMemoryMethod =
+      memoryManager.getClass.getMethods.filter(_.getName == "releaseExecutionMemory").head
+    (1L until numCores.toLong).foreach { taskAttemptId =>
+      val granted = acquireExecutionMemoryMethod.invoke(
+        memoryManager,
+        JLong.valueOf(1L),
+        JLong.valueOf(taskAttemptId),
+        MemoryMode.ON_HEAP).asInstanceOf[JLong]
+      assert(granted === 1L)
+    }
+
+    try {
+      sorter.insertRecord(new Array[Byte](1), Platform.BYTE_ARRAY_OFFSET, 1, 0)
+    } finally {
+      sorter.cleanupResources()
+      (1L until numCores.toLong).foreach { taskAttemptId =>
+        releaseExecutionMemoryMethod.invoke(
+          memoryManager,
+          JLong.valueOf(1L),
+          JLong.valueOf(taskAttemptId),
+          MemoryMode.ON_HEAP)
+      }
+      assert(taskMemoryManager.cleanUpAllAllocatedMemory() === 0L)
+    }
+  }
 }

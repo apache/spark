@@ -117,7 +117,8 @@ public abstract class MemoryConsumer {
    * @throws SparkOutOfMemoryError
    */
   protected MemoryBlock allocatePage(long required) {
-    MemoryBlock page = taskMemoryManager.allocatePage(Math.max(pageSize, required), this);
+    MemoryBlock page =
+      taskMemoryManager.allocatePageWithMinimum(Math.max(pageSize, required), required, this);
     if (page == null || page.size() < required) {
       throwOom(page, required);
     }

@@ -485,7 +485,22 @@ final class ShuffleExternalSorter extends MemoryConsumer implements ShuffleCheck
     final int required = length + uaoSize;
     acquireNewPageWithPointerArrayFallback(required);
     // Data page allocation may spill and reset the pointer array, so check its capacity again.
-    growPointerArrayIfNecessary();
+    try {
+      growPointerArrayIfNecessary();
+    } catch (SparkOutOfMemoryError e) {
+      if (!"UNABLE_TO_ACQUIRE_MEMORY".equals(e.getCondition()) ||
+          inMemSorter.hasPointerArray() ||
+          inMemSorter.numRecords() != 0 ||
+          currentPage == null ||
+          allocatedPages.size() != 1) {
+        throw e;
+      }
+      // The newly acquired empty data page consumed the remaining fair-share memory. Release it,
+      // restore the minimum pointer array first, and retry the data page once.
+      freeMemory();
+      allocateInitialPointerArray();
+      acquireNewPageIfNecessary(required);
+    }
 
     assert(currentPage != null);
     final Object base = currentPage.getBaseObject();

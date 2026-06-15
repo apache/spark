@@ -18,6 +18,7 @@
 package org.apache.spark.memory;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -349,6 +350,43 @@ public class TaskMemoryManagerSuite {
 
     requestingConsumer.freeAllocatedPage(page);
     Assertions.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
+    Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+    memoryManager.releaseExecutionMemory(2048L, 1L, MemoryMode.ON_HEAP);
+  }
+
+  @Test
+  public void pageAllocationFailureReleasesSurplusGrantAfterFullSpill() {
+    final SparkConf conf = new SparkConf(false)
+      .set("spark.testing", "true")
+      .set("spark.testing.memory", "10240")
+      .set("spark.memory.fraction", "1.0")
+      .set("spark.memory.storageFraction", "0.5");
+    final MemoryManager memoryManager = UnifiedMemoryManager$.MODULE$.apply(conf, 1);
+    final CompetingTaskAllocator allocator = new CompetingTaskAllocator(memoryManager);
+    final AtomicInteger acquireCalls = new AtomicInteger();
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0, allocator) {
+      @Override
+      public long acquireExecutionMemory(long size, MemoryConsumer consumer) {
+        Assertions.assertEquals(
+          1, acquireCalls.incrementAndGet(), "page recovery must not acquire another grant");
+        return super.acquireExecutionMemory(size, consumer);
+      }
+    };
+    final TestMemoryConsumer existingConsumer = new TestMemoryConsumer(manager);
+    final PageAllocatingConsumer requestingConsumer = new PageAllocatingConsumer(manager, 4096);
+    existingConsumer.use(4096);
+    acquireCalls.set(0);
+
+    final MemoryBlock page = requestingConsumer.allocate(1024);
+    Assertions.assertEquals(1, acquireCalls.get());
+    Assertions.assertEquals(1024, page.size());
+    Assertions.assertEquals(3, allocator.allocationAttempts);
+    Assertions.assertEquals(0, existingConsumer.getUsed());
+    Assertions.assertEquals(1024, requestingConsumer.getUsed());
+    Assertions.assertEquals(1024, manager.getMemoryConsumptionForThisTask());
+
+    requestingConsumer.freeAllocatedPage(page);
+    Assertions.assertEquals(0, manager.getMemoryConsumptionForThisTask());
     Assertions.assertEquals(0, manager.cleanUpAllAllocatedMemory());
     memoryManager.releaseExecutionMemory(2048L, 1L, MemoryMode.ON_HEAP);
   }

@@ -126,6 +126,17 @@ public class TaskMemoryManager {
   private final ThreadLocal<Boolean> inPageAllocationRecovery =
     ThreadLocal.withInitial(() -> false);
 
+  private static final class PageAllocationRequest {
+    private MemoryConsumer consumer;
+    private long minimumSize;
+  }
+
+  /**
+   * Carries a padded page request's minimum usable size through the existing virtual allocatePage
+   * entry point, so subclasses overriding that method continue to intercept page allocations.
+   */
+  private final ThreadLocal<PageAllocationRequest> pageAllocationRequest = new ThreadLocal<>();
+
   /**
    * Current off heap memory usage by this task.
    */
@@ -483,6 +494,39 @@ public class TaskMemoryManager {
    * @throws TooLargePageException
    */
   public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
+    PageAllocationRequest request = pageAllocationRequest.get();
+    long minimumSize = request != null && request.consumer == consumer
+      ? Math.min(request.minimumSize, size)
+      : size;
+    return allocatePageInternal(size, minimumSize, consumer);
+  }
+
+  MemoryBlock allocatePageWithMinimum(
+      long size,
+      long minimumSize,
+      MemoryConsumer consumer) {
+    assert(minimumSize >= 0 && minimumSize <= size);
+    PageAllocationRequest request = pageAllocationRequest.get();
+    if (request == null) {
+      request = new PageAllocationRequest();
+      pageAllocationRequest.set(request);
+    }
+    MemoryConsumer previousConsumer = request.consumer;
+    long previousMinimumSize = request.minimumSize;
+    request.consumer = consumer;
+    request.minimumSize = minimumSize;
+    try {
+      return allocatePage(size, consumer);
+    } finally {
+      request.consumer = previousConsumer;
+      request.minimumSize = previousMinimumSize;
+    }
+  }
+
+  private MemoryBlock allocatePageInternal(
+      long size,
+      long minimumSize,
+      MemoryConsumer consumer) {
     assert(consumer != null);
     assert(consumer.getMode() == tungstenMemoryMode);
     if (inPageAllocationRecovery.get()) {
@@ -556,6 +600,15 @@ public class TaskMemoryManager {
             }
             acquired = Math.addExact(acquired, additionalAcquired);
             allocationSize = additionalAcquired;
+            tryingPartialAllocation = true;
+          } else if (minimumSize > 0 && minimumSize < allocationSize) {
+            // The original grant is still reserved. If the caller padded a smaller allocation to
+            // the configured page size, make one bounded attempt at the minimum usable size without
+            // acquiring more execution memory.
+            long surplus = Math.subtractExact(acquired, minimumSize);
+            releaseExecutionMemory(surplus, consumer);
+            acquired = minimumSize;
+            allocationSize = minimumSize;
             tryingPartialAllocation = true;
           } else {
             return null;
