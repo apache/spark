@@ -308,6 +308,193 @@ Project [extract(SECOND, 2019-12-31 23:54:35.123456789) AS extract(SECOND FROM T
 
 
 -- !query
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '2020-02-29 23:59:59.999999999') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, quarter(cast(v#x as date)) AS quarter(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x, dayofweek(cast(v#x as date)) AS dayofweek(v)#x, weekday(cast(v#x as date)) AS weekday(v)#x, weekofyear(cast(v#x as date)) AS weekofyear(v)#x, extract(YEAROFWEEK, v#x) AS extract(YEAROFWEEK FROM v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '1900-02-28 12:00:00.000000001') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, quarter(cast(v#x as date)) AS quarter(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x, dayofweek(cast(v#x as date)) AS dayofweek(v)#x, weekday(cast(v#x as date)) AS weekday(v)#x, weekofyear(cast(v#x as date)) AS weekofyear(v)#x, extract(YEAROFWEEK, v#x) AS extract(YEAROFWEEK FROM v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '2021-01-01 00:00:00.000000001') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, quarter(cast(v#x as date)) AS quarter(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x, dayofweek(cast(v#x as date)) AS dayofweek(v)#x, weekday(cast(v#x as date)) AS weekday(v)#x, weekofyear(cast(v#x as date)) AS weekofyear(v)#x, extract(YEAROFWEEK, v#x) AS extract(YEAROFWEEK FROM v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '2016-01-01 06:30:00.123456789') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, quarter(cast(v#x as date)) AS quarter(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x, dayofweek(cast(v#x as date)) AS dayofweek(v)#x, weekday(cast(v#x as date)) AS weekday(v)#x, weekofyear(cast(v#x as date)) AS weekofyear(v)#x, extract(YEAROFWEEK, v#x) AS extract(YEAROFWEEK FROM v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '2020-12-31 23:59:59.999999999') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, quarter(cast(v#x as date)) AS quarter(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x, dayofweek(cast(v#x as date)) AS dayofweek(v)#x, weekday(cast(v#x as date)) AS weekday(v)#x, weekofyear(cast(v#x as date)) AS weekofyear(v)#x, extract(YEAROFWEEK, v#x) AS extract(YEAROFWEEK FROM v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '1960-07-15 06:07:08.123456789') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, quarter(cast(v#x as date)) AS quarter(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x, dayofweek(cast(v#x as date)) AS dayofweek(v)#x, weekday(cast(v#x as date)) AS weekday(v)#x, weekofyear(cast(v#x as date)) AS weekofyear(v)#x, extract(YEAROFWEEK, v#x) AS extract(YEAROFWEEK FROM v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '0001-01-01 00:00:00.000000001') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, quarter(cast(v#x as date)) AS quarter(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x, dayofweek(cast(v#x as date)) AS dayofweek(v)#x, weekday(cast(v#x as date)) AS weekday(v)#x, weekofyear(cast(v#x as date)) AS weekofyear(v)#x, extract(YEAROFWEEK, v#x) AS extract(YEAROFWEEK FROM v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.000000001' :: timestamp_ltz(7)) AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.999999999' :: timestamp_ltz(8)) AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.000000000' :: timestamp_ltz(9)) AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), month(v), day(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), month(v), day(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-03-01 06:00:00.123456789 Asia/Kolkata') AS t(v)
+-- !query analysis
+Project [year(cast(v#x as date)) AS year(v)#x, month(cast(v#x as date)) AS month(v)#x, day(cast(v#x as date)) AS day(v)#x, dayofyear(cast(v#x as date)) AS dayofyear(v)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x]
+
+
+-- !query
+SELECT extract(YEAR FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789')
+-- !query analysis
+Project [extract(YEAR, 2020-02-29 12:00:00.123456789) AS extract(YEAR FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT extract(MONTH FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789')
+-- !query analysis
+Project [extract(MONTH, 2020-02-29 12:00:00.123456789) AS extract(MONTH FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT extract(DAY FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789')
+-- !query analysis
+Project [extract(DAY, 2020-02-29 12:00:00.123456789) AS extract(DAY FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT extract(DOY FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789')
+-- !query analysis
+Project [extract(DOY, 2020-02-29 12:00:00.123456789) AS extract(DOY FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT extract(WEEK FROM TIMESTAMP_LTZ '2021-01-01 12:00:00.123456789')
+-- !query analysis
+Project [extract(WEEK, 2021-01-01 12:00:00.123456789) AS extract(WEEK FROM TIMESTAMP_LTZ '2021-01-01 12:00:00.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_part('QUARTER', TIMESTAMP_LTZ '2020-04-01 00:00:00.000000001')
+-- !query analysis
+Project [date_part(QUARTER, 2020-04-01 00:00:00.000000001) AS date_part(QUARTER, TIMESTAMP_LTZ '2020-04-01 00:00:00.000000001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_part('DOW', TIMESTAMP_LTZ '2020-02-29 00:00:00.000000001')
+-- !query analysis
+Project [date_part(DOW, 2020-02-29 00:00:00.000000001) AS date_part(DOW, TIMESTAMP_LTZ '2020-02-29 00:00:00.000000001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_part('YEAROFWEEK', TIMESTAMP_LTZ '2021-01-01 00:00:00.000000001')
+-- !query analysis
+Project [date_part(YEAROFWEEK, 2021-01-01 00:00:00.000000001) AS date_part(YEAROFWEEK, TIMESTAMP_LTZ '2021-01-01 00:00:00.000000001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT year(NULL :: timestamp_ltz(9)), month(NULL :: timestamp_ltz(9))
+-- !query analysis
+Project [year(cast(cast(null as timestamp_ltz(9)) as date)) AS year(CAST(NULL AS TIMESTAMP_LTZ(9)))#x, month(cast(cast(null as timestamp_ltz(9)) as date)) AS month(CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
 SELECT DATE '2020-01-01'::timestamp_ltz(9)
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
