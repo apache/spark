@@ -115,19 +115,20 @@ public class V2ExpressionSQLBuilder {
       return visitGetArrayItem(getArrayItem);
     } else if (expr instanceof GeneralScalarExpression e) {
       String name = e.name();
+      if (isBinaryComparisonOperator(name)) {
+        return visitBinaryComparison(name, e.children()[0], e.children()[1]);
+      }
       return switch (name) {
         case "IN" -> {
           Expression[] expressions = e.children();
           List<String> children = expressionsToStringList(expressions, 1, expressions.length - 1);
           yield visitIn(build(expressions[0]), children);
         }
-        case "IS_NULL" -> visitIsNull(build(e.children()[0]));
-        case "IS_NOT_NULL" -> visitIsNotNull(build(e.children()[0]));
+        case "IS_NULL" -> visitIsNull(visitIsNullOperand(e.children()[0]));
+        case "IS_NOT_NULL" -> visitIsNotNull(visitIsNullOperand(e.children()[0]));
         case "STARTS_WITH" -> visitStartsWith(build(e.children()[0]), build(e.children()[1]));
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
-        case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
-          visitBinaryComparison(name, e.children()[0], e.children()[1]);
         case "BOOLEAN_EXPRESSION" ->
           build(expr.children()[0]);
         case "+", "*", "/", "%", "&", "|", "^" ->
@@ -205,6 +206,24 @@ public class V2ExpressionSQLBuilder {
       return "CASE WHEN " + v + " IS NULL THEN NULL ELSE FALSE END";
     }
     return joinListToString(list, ", ", v + " IN (", ")");
+  }
+
+  // The binary comparison operators, kept in one place so build, visitIsNullOperand and
+  // dialect overrides stay in sync.
+  protected boolean isBinaryComparisonOperator(String name) {
+    return switch (name) {
+      case "=", "<>", "<=>", "<", "<=", ">", ">=" -> true;
+      default -> false;
+    };
+  }
+
+  // Parenthesize a binary comparison operand so `col = 'x' IS NULL` renders as
+  // `(col = 'x') IS NULL`. Dialects such as Snowflake bind IS NULL tighter than =.
+  protected String visitIsNullOperand(Expression operand) {
+    if (operand instanceof GeneralScalarExpression e && isBinaryComparisonOperator(e.name())) {
+      return "(" + build(operand) + ")";
+    }
+    return build(operand);
   }
 
   protected String visitIsNull(String v) {
