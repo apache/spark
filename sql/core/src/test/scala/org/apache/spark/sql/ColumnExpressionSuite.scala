@@ -3164,4 +3164,38 @@ class ColumnExpressionSuite extends SharedSparkSession {
       Seq(20, 40, 60).toDF()
     )
   }
+
+  test("SPARK-57164: Column.cast/try_cast(String) and sessionState parser for nanos types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION).foreach { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            // Column.cast(String) / Column.try_cast(String) parse the type at call time.
+            assert($"id".cast(spelling).expr.dataType === expected)
+            assert($"id".try_cast(spelling).expr.dataType === expected)
+            // The programmatic catalog-string entry point.
+            assert(spark.sessionState.sqlParser.parseDataType(spelling) === expected)
+        }
+      }
+    }
+    // With the preview flag off, the string overloads reject the nanos spelling at call time.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq[() => Any](
+        () => $"id".cast("TIMESTAMP_NTZ(9)"),
+        () => $"id".try_cast("TIMESTAMP_LTZ(7)"),
+        () => spark.sessionState.sqlParser.parseDataType("TIMESTAMP_NTZ(9)")).foreach { f =>
+        checkError(
+          exception = intercept[SparkException](f()),
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+    }
+  }
 }
