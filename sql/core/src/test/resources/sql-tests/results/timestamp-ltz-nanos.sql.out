@@ -384,6 +384,14 @@ struct<CAST(TimestampNanosVal(-315590400000000, 1) AS DATE):date>
 
 
 -- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC'::date
+-- !query schema
+struct<CAST(TimestampNanosVal(1577851200123456, 789) AS DATE):date>
+-- !query output
+2019-12-31
+
+
+-- !query
 SELECT DATE '2020-01-01'::timestamp_ltz(9)::date
 -- !query schema
 struct<CAST(CAST(DATE '2020-01-01' AS TIMESTAMP_LTZ(9)) AS DATE):date>

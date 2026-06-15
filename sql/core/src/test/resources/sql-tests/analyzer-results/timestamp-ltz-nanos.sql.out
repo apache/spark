@@ -334,6 +334,13 @@ Project [cast(TimestampNanosVal(-315590400000000, 1) as date) AS CAST(TimestampN
 
 
 -- !query
+SELECT TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC'::date
+-- !query analysis
+Project [cast(TimestampNanosVal(1577851200123456, 789) as date) AS CAST(TimestampNanosVal(1577851200123456, 789) AS DATE)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT DATE '2020-01-01'::timestamp_ltz(9)::date
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
