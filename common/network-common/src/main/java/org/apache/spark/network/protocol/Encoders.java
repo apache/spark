@@ -213,6 +213,9 @@ public class Encoders {
 
     public static RoaringBitmap[] decode(ByteBuf buf) {
       int numBitmaps = buf.readInt();
+      // The divisor 8 is the minimum on-wire size of one element, since an empty RoaringBitmap
+      // serializes to 8 bytes (a 4-byte cookie followed by a 4-byte size).
+      Objects.checkFromIndexSize(0, numBitmaps, buf.readableBytes() / 8);
       RoaringBitmap[] bitmaps = new RoaringBitmap[numBitmaps];
       for (int i = 0; i < bitmaps.length; i ++) {
         bitmaps[i] = Bitmaps.decode(buf);

@@ -90,6 +90,20 @@ public class EncodersSuite {
   }
 
   @Test
+  public void testBitmapArraysDecodeShouldFailWhenLengthIsNegative() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(-1);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.BitmapArrays.decode(buf));
+  }
+
+  @Test
+  public void testBitmapArraysDecodeShouldFailWhenLengthExceedsReadableBytes() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(Integer.MAX_VALUE);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.BitmapArrays.decode(buf));
+  }
+
+  @Test
   public void testByteArraysEncodeDecode() {
     byte[] arr = new byte[] { 1, 2, 3, 4, 5 };
     ByteBuf buf = Unpooled.buffer(Encoders.ByteArrays.encodedLength(arr));
