@@ -79,3 +79,24 @@ SELECT extract(SECOND FROM TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789');
 -- while the second field (including the nanosecond fraction) is offset-invariant.
 SELECT extract(MINUTE FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata');
 SELECT extract(SECOND FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata');
+
+-- DATE <-> TIMESTAMP_LTZ(p) casts (SPARK-57323): midnight in the session zone / date extraction.
+-- Nanosecond typed literals derive precision from the fractional digits (SPARK-57250).
+SELECT DATE '2020-01-01'::timestamp_ltz(9);
+SELECT DATE '2020-01-01'::timestamp_ltz(7);
+SELECT TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789'::date;
+SELECT TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001'::date;
+-- Zone-dependence: a UTC instant in the early hours of Jan 1 falls on Dec 31 in the session
+-- zone (America/Los_Angeles, UTC-08:00), so LTZ -> DATE yields the previous calendar day.
+SELECT TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC'::date;
+-- Round trip date -> ltz(p) -> date.
+SELECT DATE '2020-01-01'::timestamp_ltz(9)::date;
+-- NULLs in both directions.
+SELECT (NULL :: date) :: timestamp_ltz(9);
+SELECT (NULL :: timestamp_ltz(9)) :: date;
+-- DATE <-> nanos nested in complex types (array / map value / map key / struct field).
+SELECT array(TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: array<date>;
+SELECT array(DATE '2020-01-01') :: array<timestamp_ltz(9)>;
+SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: map<string, date>;
+SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ltz(9), string>;
+SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ltz(9)>;
