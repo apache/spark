@@ -29,22 +29,6 @@ Python's ``if x:`` semantics and SQL's ``CASE WHEN``). Failures here should
 be treated as real correctness gaps in the transpiler, not as test bugs to
 silence.
 
-History of bugs this suite has caught (each since fixed in the transpiler
-proper -- listed for context, not as expected failures):
-
-* ``PLAN_VALIDATION_FAILED_RULE_IN_BATCH`` from the rewritten plan
-  reporting ``VOID`` output type. Fixed by casting the rewritten
-  expression to the UDF's declared return type.
-* A truthiness / NULL leak: ``if test:`` was lowered as
-  ``when(test, body).otherwise(when(~test, else))``, but ``~NULL`` is
-  ``NULL`` so a ``None`` test fell through both branches and yielded
-  ``NULL`` instead of the else value. Fixed by lowering as
-  ``when(coalesce(test, lit(False)), body).otherwise(else)``.
-* ``%`` semantic mismatch between Python (sign of divisor) and Spark
-  SQL (sign of dividend), e.g. ``(-8 + 7) % 5 == 4`` in Python vs
-  ``-1`` in Spark SQL. Fixed by lowering ``%`` as
-  ``sign(b) * pmod(sign(b) * a, abs(b))``.
-
 The suite is gated on two things, both required:
 
 * the ``RUN_HYPOTHESIS`` env var must be present in the environment
