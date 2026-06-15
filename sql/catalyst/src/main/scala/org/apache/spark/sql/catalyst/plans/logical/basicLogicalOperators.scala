@@ -2344,6 +2344,9 @@ case class Deduplicate(
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
   override def isStateful: Boolean = child.isStreaming
+  // `dedupSpec` is internal metadata used only to recompute keys on streaming restart; keep it out
+  // of the tree string (EXPLAIN output and golden plans).
+  override protected def stringArgs: Iterator[Any] = Iterator(keys, child)
 }
 
 /** See [[DeduplicateSpec]] for the meaning of `dedupSpec`. */
@@ -2363,6 +2366,9 @@ case class DeduplicateWithinWatermark(
   override protected def withNewChildInternal(newChild: LogicalPlan): DeduplicateWithinWatermark =
     copy(child = newChild)
   override def isStateful: Boolean = child.isStreaming
+  // `dedupSpec` is internal metadata used only to recompute keys on streaming restart; keep it out
+  // of the tree string (EXPLAIN output and golden plans).
+  override protected def stringArgs: Iterator[Any] = Iterator(keys, child)
 }
 
 /**
