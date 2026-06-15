@@ -92,15 +92,11 @@ _skip_reason = (
 if _have_hypothesis:
     from hypothesis import HealthCheck, example, given, settings, strategies as st
 
-    _DEFAULT_MAX_EXAMPLES = int(os.environ.get("RUN_HYPOTHESIS_MAX_EXAMPLES", "100"))
+    _DEFAULT_MAX_EXAMPLES = int(os.environ.get("RUN_HYPOTHESIS_MAX_EXAMPLES", "1000"))
 
-    # Spark jobs are expensive but coverage at ~100 examples per case felt
-    # too thin for a property-based suite -- 1k gives hypothesis room to
-    # explore boundary regions properly. The ``function_scoped_fixture``
-    # health check is suppressed because we intentionally reuse the
-    # class-level SparkSession across examples; the per-example
-    # ``deadline`` is disabled because a JVM round-trip is much slower
-    # than hypothesis's default budget.
+    # The ``function_scoped_fixture` health check is suppressed because we intentionally reuse the
+    # class-level SparkSession across examples; the per-example ``deadline`` is disabled because
+    # Spark task execution is much slower than hypothesis's default budget.
     _hyp_settings = settings(
         max_examples=_DEFAULT_MAX_EXAMPLES,
         deadline=None,
