@@ -52,7 +52,6 @@ from pyspark.sql.functions import (
     pmod,
     raise_error,
     repeat,
-    sign,
     when,
 )
 
@@ -544,7 +543,14 @@ class CatalystTranspiler(AbstractTranspiler):
                             # Python's `%` takes the sign of the divisor; Spark's
                             # takes the dividend's. `sign(b) * pmod(sign(b) * a,
                             # abs(b))` reproduces Python for any non-zero divisor.
-                            sb = sign(right_col)
+                            # Use a CASE-based integer sign rather than sign() to
+                            # avoid promoting operands to DoubleType, which loses
+                            # precision near LongType boundaries.
+                            sb = (
+                                when(right_col > 0, lit(1))
+                                .when(right_col < 0, lit(-1))
+                                .otherwise(lit(0))
+                            )
                             return sb * pmod(sb * left_col, _abs(right_col))
                     case _:
                         raise UnsupportedOperationException(
