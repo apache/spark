@@ -67,6 +67,13 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
 
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
 
+  // ==================== Thrift Mapping ====================
+
+  // Over the Thrift / JDBC server the nanosecond timestamp value is sent as a string column
+  // (RowSetUtils renders it via HiveResult.toHiveString at the column precision), so map the
+  // column to STRING_TYPE for consistency, mirroring the reference TimeType ops.
+  override def thriftTypeName: Option[String] = Some("STRING_TYPE")
+
   // ==================== Row Encoding ====================
 
   // Honor the spark.sql.timestampNanosTypes.enabled gate just like the legacy
