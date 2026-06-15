@@ -43,6 +43,9 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
+    // Other suites using mocks leave a mess in the global executionManager,
+    // shut it down so that it's cleared before starting server.
+    SparkConnectService.executionManager.shutdown()
     val prevPort = SparkEnv.get.conf.get(Connect.CONNECT_GRPC_BINDING_PORT)
     try {
       // set GRPC_BINDING_PORT to 0 so that the server picks a random, freely available port.
@@ -76,7 +79,7 @@ trait SparkSessionBinder extends sql.SparkSessionBinder { self: SparkFunSuite =>
   }
 
   override def afterAll(): Unit = {
-    super.afterAll()
     SparkConnectService.stop()
+    super.afterAll()
   }
 }

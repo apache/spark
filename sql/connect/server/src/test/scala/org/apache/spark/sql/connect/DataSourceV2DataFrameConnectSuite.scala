@@ -21,9 +21,9 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{classic, connect, SparkSession}
+import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 import org.apache.spark.sql.connector.{DSv2CacheTableReadTests, DSv2IncrementallyConstructedQueryTests, DSv2RepeatedTableAccessTests, DSv2TempViewWithStoredPlanTests}
 import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, InMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, TableCatalog}
-import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
 
 /**
  * Connect-mode counterpart of [[org.apache.spark.sql.connector.DataSourceV2DataFrameSuite]].
