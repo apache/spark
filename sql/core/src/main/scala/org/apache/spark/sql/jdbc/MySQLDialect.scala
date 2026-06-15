@@ -325,7 +325,7 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
       tableIdent: Identifier,
       options: JDBCOptions): Boolean = {
     val sql = s"SHOW INDEXES FROM ${quoteIdentifier(tableIdent.name())} " +
-      s"WHERE key_name = '$indexName'"
+      s"WHERE key_name = '${escapeSql(indexName)}'"
     JdbcUtils.checkIfIndexExists(conn, sql, options)
   }
 
