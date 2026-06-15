@@ -1556,6 +1556,16 @@ class DataTypeSuite extends SparkFunSuite with SQLHelper {
       assert(DataType.fromJson(arrayOfNanos.json) === arrayOfNanos)
       val mapOfNanos = MapType(StringType, TimestampNTZNanosType(7), valueContainsNull = true)
       assert(DataType.fromJson(mapOfNanos.json) === mapOfNanos)
+
+      // Family B agrees with Family A: a nanos type's typeName re-parses (as a JSON name) to
+      // the same type. For atomic types `json` is exactly the quoted `typeName`, so this pins
+      // the type-name spelling that Family A produces against Family B's JSON parser.
+      variants.foreach { case (_, _, factory) =>
+        TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION foreach { n =>
+          val t = factory(n)
+          assert(DataType.fromJson("\"" + t.typeName + "\"") === t)
+        }
+      }
     }
 
     // Bare names without parens still map to the legacy single-precision types, regardless
