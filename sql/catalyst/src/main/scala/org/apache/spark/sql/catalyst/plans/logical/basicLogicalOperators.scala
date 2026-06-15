@@ -2312,10 +2312,29 @@ case class OneRowRelation() extends LeafNode {
   }
 }
 
+/**
+ * The original recipe behind a [[Deduplicate]] / [[DeduplicateWithinWatermark]] node, set by the
+ * `ResolveDeduplicate` analyzer rule and retained so a streaming query can recompute its key
+ * attributes at query start in the ordering pinned in the offset log (see
+ * `ResolveDeduplicate.computeKeys`). A `None` spec on a node means it was not built from
+ * `dropDuplicates*` (e.g. an internally/test-constructed node) and its keys must NOT be recomputed.
+ *
+ * @param subset the user-requested subset of column names (ignored when `allColumnsAsKeys`).
+ * @param allColumnsAsKeys when true, every column of the child is a deduplication key.
+ * @param viaSparkClassic whether this was built via Spark Classic (`Dataset.dropDuplicates*`, true)
+ *   or Spark Connect (`transformDeduplicate`, false). Only consulted when recomputing the keys in
+ *   the legacy order, where the two engines historically differed. See SPARK-XXXXX.
+ */
+case class DeduplicateSpec(
+    subset: Seq[String],
+    allColumnsAsKeys: Boolean,
+    viaSparkClassic: Boolean)
+
 /** A logical plan for `dropDuplicates`. */
 case class Deduplicate(
     keys: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    dedupSpec: Option[DeduplicateSpec] = None) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
   override def output: Seq[Attribute] = {
     val base = child.output
@@ -2327,7 +2346,11 @@ case class Deduplicate(
   override def isStateful: Boolean = child.isStreaming
 }
 
-case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+/** See [[DeduplicateSpec]] for the meaning of `dedupSpec`. */
+case class DeduplicateWithinWatermark(
+    keys: Seq[Attribute],
+    child: LogicalPlan,
+    dedupSpec: Option[DeduplicateSpec] = None) extends UnaryNode {
   // Ensure that references include event time columns so they are not pruned away.
   override def references: AttributeSet = AttributeSet(keys) ++
     AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))

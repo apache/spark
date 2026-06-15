@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateWithinWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateSpec, DeduplicateWithinWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_DEDUPLICATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -31,45 +31,60 @@ import org.apache.spark.sql.internal.SQLConf
  * the Deduplicate relation in the Spark Connect planner) into a [[Deduplicate]] /
  * [[DeduplicateWithinWatermark]] with resolved key attributes, shared by both engines.
  *
- * With [[SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER]] = true (the default) the requested
- * columns are deduplicated with a stable ordering. When false (an existing streaming query whose
- * checkpoint predates this change) each engine's legacy resolution is reproduced so the persisted
- * state key order is preserved. See SPARK-XXXXX.
+ * The key attributes are computed with [[SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER]] read
+ * from the current session: true (the default) produces a stable, first-occurrence ordering; false
+ * reproduces each engine's legacy resolution. The resolved node also carries the original recipe
+ * (`subset`, `allColumnsAsKeys`, `viaSparkClassic`) so that streaming queries can recompute the
+ * keys at query start with the value pinned in the offset log (see
+ * `StreamingQueryManager.createQuery` and [[computeKeys]]). See SPARK-XXXXX.
  */
 object ResolveDeduplicate extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
     _.containsPattern(UNRESOLVED_DEDUPLICATE)) {
     case d: UnresolvedDeduplicate if d.child.resolved =>
-      val keys = resolveDeduplicationKeys(d)
+      val deterministic = conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
+      val spec = DeduplicateSpec(d.columnNames, d.allColumnsAsKeys, d.viaSparkClassic)
+      val keys = computeKeys(d.child, spec, deterministic, conf.resolver)
       if (d.withinWatermark) {
-        DeduplicateWithinWatermark(keys, d.child)
+        DeduplicateWithinWatermark(keys, d.child, Some(spec))
       } else {
-        Deduplicate(keys, d.child)
+        Deduplicate(keys, d.child, Some(spec))
       }
   }
 
-  private def resolveDeduplicationKeys(d: UnresolvedDeduplicate): Seq[Attribute] = {
-    val orderDeterministically = conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
-    if (d.allColumnsAsKeys) {
+  /**
+   * Computes the deduplication key attributes from the requested recipe against `child`'s output.
+   * Shared by the analyzer rule (with the session config) and by the streaming bootstrap (with the
+   * value pinned in the offset log), so the ordering rules stay in one place.
+   *
+   * @param deterministic when true, a stable first-occurrence order; when false, the legacy
+   *   (engine-specific) order selected by `spec.viaSparkClassic`.
+   */
+  def computeKeys(
+      child: LogicalPlan,
+      spec: DeduplicateSpec,
+      deterministic: Boolean,
+      resolver: Resolver): Seq[Attribute] = {
+    if (spec.allColumnsAsKeys) {
       // All child columns are keys. The deterministic order and legacy Spark Connect both key on
       // the child output directly (in output order, no name resolution); only legacy Spark Classic
       // reorders the names through a Set (see legacyClassicColumnNames).
-      if (!orderDeterministically && d.viaSparkClassic) {
-        resolveColumnNames(d.child, legacyClassicColumnNames(d.child.output.map(_.name)))
+      if (!deterministic && spec.viaSparkClassic) {
+        resolveColumnNames(child, legacyClassicColumnNames(child.output.map(_.name)), resolver)
       } else {
-        d.child.output
+        child.output
       }
     } else {
-      val orderedNames = if (orderDeterministically) {
-        dedupKeepingOrder(d.columnNames)
-      } else if (d.viaSparkClassic) {
-        legacyClassicColumnNames(d.columnNames)
+      val orderedNames = if (deterministic) {
+        dedupKeepingOrder(spec.subset)
+      } else if (spec.viaSparkClassic) {
+        legacyClassicColumnNames(spec.subset)
       } else {
         // Legacy Spark Connect resolution: no dedup, caller-provided input order.
-        d.columnNames
+        spec.subset
       }
-      resolveColumnNames(d.child, orderedNames)
+      resolveColumnNames(child, orderedNames, resolver)
     }
   }
 
@@ -81,8 +96,8 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
    */
   private def legacyClassicColumnNames(names: Seq[String]): Seq[String] = names.toSet.toSeq
 
-  private def resolveColumnNames(child: LogicalPlan, names: Seq[String]): Seq[Attribute] = {
-    val resolver = conf.resolver
+  private def resolveColumnNames(
+      child: LogicalPlan, names: Seq[String], resolver: Resolver): Seq[Attribute] = {
     names.flatMap { colName =>
       // It is possible there is more than one column with the same name, so we call filter
       // instead of find.

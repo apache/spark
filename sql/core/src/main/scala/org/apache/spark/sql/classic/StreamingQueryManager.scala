@@ -28,8 +28,9 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedDeduplicate
+import org.apache.spark.sql.catalyst.analysis.ResolveDeduplicate
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateWithinWatermark}
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -222,66 +223,78 @@ class StreamingQueryManager private[sql] (
       catalogAndIdent,
       catalogTable)
 
-    // SPARK-XXXXX: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys during the
-    // initial analysis (via the ResolveDeduplicate rule) based on a conf pinned in the offset log.
-    // We intentionally do NOT reuse the usual OffsetSeqMetadata mechanism (OffsetSeqMetadata
-    // .setSessionConf) for this: that applies the offset-log confs only "after" the initial
-    // analysis (when running a batch), but resolution of these nodes happens during the initial
-    // analysis, so we bootstrap the pinned conf in this earlier phase instead. This has additional
-    // overhead (an extra checkpoint-location resolution + offset-log read + re-analysis), so we
-    // scope it tightly: only when the plan actually contains an UnresolvedDeduplicate.
+    // SPARK-XXXXX: dropDuplicates / dropDuplicatesWithinWatermark resolve their key columns during
+    // the initial analysis (via the ResolveDeduplicate rule), using the deterministic order by
+    // default. Streaming deduplication binds state-store keys by position, so a query restored from
+    // a checkpoint that predates this change must keep its original (legacy) key order. The
+    // resolved Deduplicate/DeduplicateWithinWatermark nodes carry the original recipe
+    // (DeduplicateSpec), so here - after reading the order pinned in the offset log - we recompute
+    // their key attributes in place. The traditional OffsetSeqMetadata mechanism only applies the
+    // offset-log confs "after" the initial analysis (when running a batch), which is too late for
+    // these position-bound keys, hence this earlier bootstrap. It reads the offset log, so we scope
+    // it tightly: only when the plan actually contains a recipe-carrying Deduplicate node.
     val maybeNewDataStreamWritePlan = trigger match {
       case _: ContinuousTrigger => dataStreamWritePlan
       case _ =>
-        val unanalyzed = df.queryExecution.logical
-
-        val unresolvedDeduplicate = unanalyzed.exists {
-          case _: UnresolvedDeduplicate => true
+        val hasDeduplicate = analyzedPlan.exists {
+          case d: Deduplicate => d.dedupSpec.isDefined
+          case d: DeduplicateWithinWatermark => d.dedupSpec.isDefined
           case _ => false
         }
 
-        if (unresolvedDeduplicate) {
+        if (hasDeduplicate) {
           val (resolvedCheckpointRoot, _) =
             ResolveWriteToStream.resolveCheckpointLocation(dataStreamWritePlan)
           val checkpointMetadata =
             new StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointRoot)
           val offsetLog = checkpointMetadata.offsetLog
 
+          // The dedup keys on `analyzedPlan` were already resolved with this (session) value.
+          val sessionDeterministic =
+            sparkSession.sessionState.conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
+
           offsetLog.getLatest().map {
             case (_, offsetSeq: OffsetSeqBase) =>
               val confMapInOffset = offsetSeq.metadataOpt.get.conf
 
-              // Clone the session and override the relevant flags with the effective values stored
-              // in the offset log, so nodes resolved during the initial analysis use the values
-              // pinned for this query rather than the current session defaults.
-              val newSession = sparkSession.cloneSession()
-
               // Existing checkpoints predate deterministic dedup key resolution, so absent the
               // conf they fall back to the legacy (engine-specific) key order; queries started
               // after this change persist "true" at batch 0 and keep the deterministic order.
-              val effectiveValue = confMapInOffset.get(
+              val deterministic = confMapInOffset.get(
                 SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key) match {
                 case Some(value) => value.toBoolean
                 case _ => false
               }
-              newSession.conf.set(
-                SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER,
-                effectiveValue)
 
-              val reAnalyzedPlan = newSession.sessionState.executePlan(unanalyzed).analyzed
-              WriteToStreamStatement(
-                userSpecifiedName,
-                userSpecifiedSinkName,
-                userSpecifiedCheckpointLocation,
-                useTempCheckpointLocation,
-                recoverFromCheckpointLocation,
-                sink,
-                outputMode,
-                df.sparkSession.sessionState.newHadoopConf(),
-                trigger,
-                reAnalyzedPlan,
-                catalogAndIdent,
-                catalogTable)
+              if (deterministic == sessionDeterministic) {
+                // The pinned value matches what the keys were already resolved with; recomputing
+                // would be a no-op, so keep the analyzed plan as is.
+                dataStreamWritePlan
+              } else {
+                val resolver = sparkSession.sessionState.analyzer.resolver
+                val repinnedPlan = analyzedPlan.transformUp {
+                  case d @ Deduplicate(_, child, Some(spec)) =>
+                    d.copy(keys =
+                      ResolveDeduplicate.computeKeys(child, spec, deterministic, resolver))
+                  case d @ DeduplicateWithinWatermark(_, child, Some(spec)) =>
+                    d.copy(keys =
+                      ResolveDeduplicate.computeKeys(child, spec, deterministic, resolver))
+                }
+
+                WriteToStreamStatement(
+                  userSpecifiedName,
+                  userSpecifiedSinkName,
+                  userSpecifiedCheckpointLocation,
+                  useTempCheckpointLocation,
+                  recoverFromCheckpointLocation,
+                  sink,
+                  outputMode,
+                  df.sparkSession.sessionState.newHadoopConf(),
+                  trigger,
+                  repinnedPlan,
+                  catalogAndIdent,
+                  catalogTable)
+              }
           }.getOrElse(dataStreamWritePlan)
         } else {
           dataStreamWritePlan

@@ -38,8 +38,12 @@ class StreamingDeduplicationFallbackSuite extends StateStoreMetricsTest {
 
   private val confKey = SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key
 
+  // A projection AFTER dropDuplicates is the case that matters: by the time the streaming query is
+  // started the dedup keys are already resolved (with the recipe attached to the Deduplicate node),
+  // so the offset-log fallback must recompute them from the recipe rather than rely on an
+  // unresolved node surviving until query start.
   private def dedupAllColumns(input: MemoryStream[(Int, Int, Int, Int, Int)]) =
-    input.toDS().toDF("a", "b", "c", "d", "e").dropDuplicates()
+    input.toDS().toDF("a", "b", "c", "d", "e").dropDuplicates().select("a", "b", "c", "d", "e")
 
   /** Rewrites batch `batchId`'s offset-log metadata, applying `f` to its persisted conf map. */
   private def rewriteOffsetLogConf(

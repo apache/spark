@@ -1188,8 +1188,9 @@ class Dataset[T] private[sql](
       case Distinct(u: Union) =>
         Distinct(flattenUnion(u, isUnionDistinct = true))
       // Only handle distinct-like 'Deduplicate', where the keys == output
-      case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
-        Deduplicate(keys, flattenUnion(u, isUnionDistinct = true))
+      case d @ Deduplicate(keys: Seq[Attribute], u: Union, _)
+          if AttributeSet(keys) == u.outputSet =>
+        d.copy(child = flattenUnion(u, isUnionDistinct = true))
       case u: Union =>
         flattenUnion(u, isUnionDistinct = false)
     }
@@ -1205,7 +1206,7 @@ class Dataset[T] private[sql](
         changed = true
         children
       // Only handle distinct-like 'Deduplicate', where the keys == output
-      case Deduplicate(keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol))
+      case Deduplicate(keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol), _)
           if AttributeSet(keys) == child.outputSet && isUnionDistinct && byName == u.byName &&
             allowMissingCol == u.allowMissingCol =>
         changed = true
