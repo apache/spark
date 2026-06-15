@@ -42,6 +42,13 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * resolved session zone, while zone-less callers (Row JSON via formatExternal) accept the
  * default, the session-local time zone config.
  *
+ * External-value rendering (SPARK-57386): both consumers go through the single-arg
+ * [[formatExternal]] each subclass overrides - Row JSON (Row.json / Row.prettyJson) calls it
+ * directly, and the Hive result path (HiveResult.toHiveString) calls the two-arg overload whose
+ * default delegates to it (`nested` does not affect timestamp formatting). So both render the
+ * external value at the column precision rather than truncating to microseconds via the legacy
+ * path.
+ *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
  * matches the legacy RowEncoder.encoderForDataTypeDefault behavior rather than regressing it.
@@ -57,15 +64,6 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
   protected def precision: Int
 
   // ==================== String Formatting ====================
-
-  // Both external-value consumers share the single-arg formatExternal each subclass overrides:
-  //   - Row JSON (Row.json / Row.prettyJson) holds the external Row value (java.time.Instant for
-  //     LTZ, java.time.LocalDateTime for NTZ).
-  //   - The Hive result path (HiveResult.toHiveString) calls the two-arg overload, whose default
-  //     delegates to the single-arg renderer; `nested` does not affect timestamp formatting.
-  // Each subclass renders the external value through the same formatter as its zone-aware
-  // cast-to-string, so both paths show the nanosecond value rather than silently truncating to
-  // microseconds via the legacy path.
 
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
 
