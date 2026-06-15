@@ -40,14 +40,17 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  */
 class StreamingDeduplicationConnectInteropSuite extends SparkConnectServerTest {
 
-  private val rowSchema = StructType(Seq(
-    StructField("a", IntegerType),
-    StructField("b", IntegerType),
-    StructField("c", IntegerType),
-    StructField("d", IntegerType),
-    StructField("e", IntegerType)))
+  private val rowSchema = StructType(
+    Seq(
+      StructField("a", IntegerType),
+      StructField("b", IntegerType),
+      StructField("c", IntegerType),
+      StructField("d", IntegerType),
+      StructField("e", IntegerType)))
 
-  /** Writes one CSV file (one batch worth of input) into `inputDir` without any commit markers. */
+  /**
+   * Writes one CSV file (one batch worth of input) into `inputDir` without any commit markers.
+   */
   private def writeInputCsv(inputDir: File, rows: Seq[(Int, Int, Int, Int, Int)]): Unit = {
     inputDir.mkdirs()
     val content =
