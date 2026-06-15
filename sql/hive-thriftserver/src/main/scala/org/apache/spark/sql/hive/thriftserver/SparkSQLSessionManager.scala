@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession: SparkSession)
@@ -40,6 +40,12 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
 
   override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
+    // Propagate the legacy toggle into HiveConf so that HiveSessionImpl.setVariable,
+    // which runs during session open before the SparkSession is attached, can read it.
+    hiveConf.setBoolean(
+      StaticSQLConf.LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES.key,
+      sparkSession.sessionState.conf.getConf(
+        StaticSQLConf.LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES))
     super.init(hiveConf)
   }
 
