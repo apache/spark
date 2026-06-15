@@ -160,14 +160,14 @@ Always get user approval before external operations such as pushing commits, cre
 
 When a change needs a version — `@since` annotations, config `.version("...")` (`SQLConf` / `*Conf`), new `MimaExcludes` sections, etc. — use the version of the branch it first ships in, with `-SNAPSHOT` stripped. Determine that branch:
 
-- **PR opened against a non-`master` base branch** (e.g. targeting `branch-4.x` directly): use that base branch's version.
+- **PR opened against a non-`master` base branch** (e.g. targeting `branch-4.x` directly): use that base branch's version (read `pom.xml` on that branch; the helper below covers the common `master`-base case).
 - **PR opened against `master`:** most PRs merge to **both** `master` and the latest `branch-<N>.x` (the branch for the next feature release, e.g. `branch-4.x`), so use the `branch-<N>.x` version. The exception is **master-only** changes — use `master`'s version — which are only:
   - breaking / binary-incompatible changes that can't ship in a minor release;
   - dependency upgrades that don't fix a critical issue worth backporting.
 
 Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
 
-`dev/next_version_candidates.py` prints both candidate versions, auto-detecting the `apache/spark` remote. It reports the mechanical facts only -- choosing between them per the rules above is the judgement call:
+`dev/next_version_candidates.py` prints both candidate versions, auto-detecting the `apache/spark` remote. It reports the mechanical facts only -- choosing between them per the rules above is the judgement call (the numbers below are illustrative and advance over time):
 
     $ dev/next_version_candidates.py
     master       5.0.0
