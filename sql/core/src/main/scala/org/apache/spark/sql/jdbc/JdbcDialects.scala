@@ -664,11 +664,11 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   def getTableCommentQuery(table: String, comment: String): String = {
-    s"COMMENT ON TABLE $table IS '$comment'"
+    s"COMMENT ON TABLE $table IS '${escapeSql(comment)}'"
   }
 
   def getSchemaCommentQuery(schema: String, comment: String): String = {
-    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '$comment'"
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '${escapeSql(comment)}'"
   }
 
   def removeSchemaCommentQuery(schema: String): String = {
