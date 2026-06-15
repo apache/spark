@@ -744,14 +744,9 @@ class CrossValidator(
         super(CrossValidator, self).__init__()
         self._setDefault(numFolds=3, parallelism=1, collectSubModels=False, foldCol="")
         kwargs = self._input_kwargs
-        
-        # [ĐOẠN CODE NHÓM BẠN THÊM VÀO BẮT ĐẦU TỪ ĐÂY]
-        # Fix SPARK-45154: Đảm bảo seed luôn cố định trên Python 3 nếu người dùng không tự nhập
         if kwargs.get("seed") is None:
             import zlib
             kwargs["seed"] = zlib.crc32(b"CrossValidator")
-        # [KẾT THÚC ĐOẠN THÊM VÀO]
-
         self._set(**kwargs)
 
     @keyword_only
