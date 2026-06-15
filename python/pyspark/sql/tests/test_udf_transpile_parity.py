@@ -60,6 +60,7 @@ from pyspark.util import is_remote_only
 # Transpilation is gated on both of these being enabled, both at UDF
 # construction time (python/pyspark/sql/udf.py) and again in the Catalyst
 # optimizer (the ConvertToCatalyst rule).
+# spark.conf.set requires strings, so we use "true" rather than Python True here.
 _TRANSPILE_CONF = {
     "spark.sql.experimental.optimizer.transpilePyUDFs": "true",
     "spark.sql.ansi.enabled": "true",
