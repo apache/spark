@@ -86,6 +86,15 @@ class SeriesStringOpsAdvMixin:
                 lambda x: x.str.findall("wh.*", flags=re.IGNORECASE), self.pser, ignore_null=True
             )
 
+        pser = pd.Series(["abc-123 def-456", "no match"])
+        expected = pser.str.findall("([a-z]+)-([0-9]+)").map(
+            lambda matches: [list(match) for match in matches]
+        )
+        self.assert_eq(
+            ps.from_pandas(pser).str.findall("([a-z]+)-([0-9]+)"),
+            expected,
+        )
+
     def test_string_index(self):
         pser = pd.Series(["tea", "eat"])
         self.check_func_on_series(lambda x: x.str.index("ea"), pser)
