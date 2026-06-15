@@ -28,8 +28,9 @@ illustrative; the actual versions advance as branches are cut):
 Choosing between them ("is this change master-only?") is a judgement call and is NOT
 made here -- this script only reports the mechanical facts.
 
-Takes no arguments: it reuses a local remote that points at apache/spark when one is
-configured (to honor its transport), and otherwise falls back to the canonical URL.
+Takes no arguments. Reads from a local git remote pointing at apache/spark (the
+`upstream` the AGENTS.md pre-flight has you configure); errors out if none exists,
+rather than fetching full histories over the network into your working repo.
 
 Usage: dev/next_version_candidates.py
 """
@@ -37,8 +38,6 @@ Usage: dev/next_version_candidates.py
 import re
 import subprocess
 import sys
-
-APACHE_SPARK_URL = "https://github.com/apache/spark.git"
 
 
 def git(*args):
@@ -85,7 +84,12 @@ def pom_version(remote, ref):
 
 
 def main():
-    remote = detect_remote() or APACHE_SPARK_URL
+    remote = detect_remote()
+    if remote is None:
+        sys.exit(
+            "error: no git remote points to apache/spark. Add one and retry:\n"
+            "    git remote add upstream https://github.com/apache/spark.git"
+        )
 
     branch = latest_maintenance_branch(remote)
     if branch is None:
