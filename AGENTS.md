@@ -167,11 +167,11 @@ When a change needs a version — `@since` annotations, config `.version("...")`
 
 Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
 
-Find the latest `branch-<N>.x` and its version (highest `N`):
+Find the latest `branch-<N>.x` (highest `N`) and print its version (e.g. `4.3.0`):
 
-    git ls-remote --heads <upstream> 'refs/heads/branch-*.x'
-    git fetch <upstream> branch-<N>.x
-    git show FETCH_HEAD:pom.xml | grep -m1 -- -SNAPSHOT
+    branch=$(git ls-remote --heads <upstream> 'refs/heads/branch-*.x' | sed 's#.*/##' | sort -V | tail -1)
+    git fetch <upstream> "$branch"
+    git show FETCH_HEAD:pom.xml | grep -m1 -- -SNAPSHOT | sed -E 's#.*<version>(.+)-SNAPSHOT</version>.*#\1#'
 
 ## Security
 
