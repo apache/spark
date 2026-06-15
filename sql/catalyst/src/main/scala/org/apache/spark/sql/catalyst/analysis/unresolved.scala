@@ -1169,6 +1169,38 @@ case class UnresolvedQualify(condition: Expression, child: LogicalPlan) extends 
 }
 
 /**
+ * An unresolved logical plan for `dropDuplicates` / `dropDuplicatesWithinWatermark`. It holds the
+ * user-requested deduplication columns (by name, or "all columns") and is resolved by the
+ * `ResolveDeduplicate` analyzer rule into a [[Deduplicate]] / [[DeduplicateWithinWatermark]].
+ *
+ * Resolving the keys in the analyzer (rather than eagerly in the DataFrame API or the Spark Connect
+ * planner) lets both engines share one resolution with a stable key order. A stable order matters
+ * for streaming deduplication, whose state store binds keys by position: a different key order
+ * across restarts would break state-store key-schema compatibility. See SPARK-XXXXX.
+ *
+ * @param columnNames the user-specified subset of column names (ignored when `allColumnsAsKeys`).
+ * @param allColumnsAsKeys when true, every column of the child is a deduplication key.
+ * @param withinWatermark when true, resolves to `DeduplicateWithinWatermark`.
+ * @param legacyDedupColumnNames legacy-fallback semantics, consulted ONLY when the deterministic
+ *   key order is disabled (an existing query restored from a checkpoint that predates this change).
+ *   true reproduces Spark Classic's legacy resolution (`toSet`-based dedup, `Set` order); false
+ *   reproduces Spark Connect's legacy resolution (no dedup, input order). Ignored on the
+ *   deterministic path.
+ */
+case class UnresolvedDeduplicate(
+    columnNames: Seq[String],
+    allColumnsAsKeys: Boolean,
+    withinWatermark: Boolean,
+    legacyDedupColumnNames: Boolean,
+    child: LogicalPlan) extends UnaryNode {
+  override lazy val resolved: Boolean = false
+  override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedDeduplicate =
+    copy(child = newChild)
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_DEDUPLICATE)
+}
+
+/**
  * A place holder expression used in random functions, will be replaced after analyze.
  */
 case object UnresolvedSeed extends LeafExpression with Unevaluable {

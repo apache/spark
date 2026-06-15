@@ -28,13 +28,15 @@ import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CLASS_NAME, QUERY_ID, RUN_ID}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedDeduplicate
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.streaming.{WriteToStream, WriteToStreamStatement}
 import org.apache.spark.sql.connector.catalog.{Identifier, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.checkpointing.OffsetSeqBase
 import org.apache.spark.sql.execution.streaming.continuous.ContinuousExecution
-import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, StreamingQueryListenerBus, StreamingQueryWrapper}
+import org.apache.spark.sql.execution.streaming.runtime.{AsyncProgressTrackingMicroBatchExecution, MicroBatchExecution, ResolveWriteToStream, StreamingQueryCheckpointMetadata, StreamingQueryListenerBus, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.STREAMING_QUERY_LISTENERS
@@ -220,8 +222,72 @@ class StreamingQueryManager private[sql] (
       catalogAndIdent,
       catalogTable)
 
+    // SPARK-XXXXX: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys during the
+    // initial analysis (via the ResolveDeduplicate rule) based on a conf pinned in the offset log.
+    // The traditional trick of a backward compatibility flag in the offset log only works "after"
+    // initial analysis, but resolution of these nodes happens in the initial analysis, hence we
+    // have to bootstrap some work in an earlier phase. It has additional overhead, so we carefully
+    // do this only when needed e.g. there is an UnresolvedDeduplicate in the plan.
+    val maybeNewDataStreamWritePlan = trigger match {
+      case _: ContinuousTrigger => dataStreamWritePlan
+      case _ =>
+        val unanalyzed = df.queryExecution.logical
+
+        val unresolvedDeduplicate = unanalyzed.exists {
+          case _: UnresolvedDeduplicate => true
+          case _ => false
+        }
+
+        if (unresolvedDeduplicate) {
+          val (resolvedCheckpointRoot, _) =
+            ResolveWriteToStream.resolveCheckpointLocation(dataStreamWritePlan)
+          val checkpointMetadata =
+            new StreamingQueryCheckpointMetadata(sparkSession, resolvedCheckpointRoot)
+          val offsetLog = checkpointMetadata.offsetLog
+
+          offsetLog.getLatest().map {
+            case (_, offsetSeq: OffsetSeqBase) =>
+              val confMapInOffset = offsetSeq.metadataOpt.get.conf
+
+              // Clone the session and override the relevant flags with the effective values stored
+              // in the offset log, so nodes resolved during the initial analysis use the values
+              // pinned for this query rather than the current session defaults.
+              val newSession = sparkSession.cloneSession()
+
+              // Existing checkpoints predate deterministic dedup key resolution, so absent the
+              // conf they fall back to the legacy (engine-specific) key order; queries started
+              // after this change persist "true" at batch 0 and keep the deterministic order.
+              val effectiveValue = confMapInOffset.get(
+                SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key) match {
+                case Some(value) => value.toBoolean
+                case _ => false
+              }
+              newSession.conf.set(
+                SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER,
+                effectiveValue)
+
+              val reAnalyzedPlan = newSession.sessionState.executePlan(unanalyzed).analyzed
+              WriteToStreamStatement(
+                userSpecifiedName,
+                userSpecifiedSinkName,
+                userSpecifiedCheckpointLocation,
+                useTempCheckpointLocation,
+                recoverFromCheckpointLocation,
+                sink,
+                outputMode,
+                df.sparkSession.sessionState.newHadoopConf(),
+                trigger,
+                reAnalyzedPlan,
+                catalogAndIdent,
+                catalogTable)
+          }.getOrElse(dataStreamWritePlan)
+        } else {
+          dataStreamWritePlan
+        }
+    }
+
     val analyzedStreamWritePlan =
-      sparkSession.sessionState.executePlan(dataStreamWritePlan).analyzed
+      sparkSession.sessionState.executePlan(maybeNewDataStreamWritePlan).analyzed
         .asInstanceOf[WriteToStream]
 
     (sink, trigger) match {
