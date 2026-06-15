@@ -154,4 +154,26 @@ public class EncodersSuite {
     buf.writeInt(Integer.MAX_VALUE);
     assertThrows(IndexOutOfBoundsException.class, () -> Encoders.LongArrays.decode(buf));
   }
+
+  @Test
+  public void testStringArraysEncodeDecode() {
+    String[] arr = new String[] { "spark", "", "rocks" };
+    ByteBuf buf = Unpooled.buffer(Encoders.StringArrays.encodedLength(arr));
+    Encoders.StringArrays.encode(buf, arr);
+    assertArrayEquals(arr, Encoders.StringArrays.decode(buf));
+  }
+
+  @Test
+  public void testStringArraysDecodeShouldFailWhenLengthIsNegative() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(-1);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.StringArrays.decode(buf));
+  }
+
+  @Test
+  public void testStringArraysDecodeShouldFailWhenLengthExceedsReadableBytes() {
+    ByteBuf buf = Unpooled.buffer();
+    buf.writeInt(Integer.MAX_VALUE);
+    assertThrows(IndexOutOfBoundsException.class, () -> Encoders.StringArrays.decode(buf));
+  }
 }
