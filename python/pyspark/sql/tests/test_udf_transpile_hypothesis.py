@@ -103,16 +103,25 @@ if _have_hypothesis:
         suppress_health_check=[HealthCheck.function_scoped_fixture],
     )
 
-    # Full 64-bit signed range. Arithmetic UDFs (plus_four, times_three, etc.)
-    # can overflow LongType at extreme values; in ANSI mode both the transpiled
-    # path (Spark expression) and the interpreted path (Python UDF returning a
-    # value too large for LongType) should both raise, so _run's "both raised"
-    # equivalence should keep those tests passing. Any test that fails here
-    # indicates a real asymmetry in overflow/error handling between the two paths.
+    # Full 64-bit signed range -- used by comparison and equality tests where
+    # no arithmetic can overflow.
     _LONG_BOUND = 2**63 - 1
     _long_strategy = st.one_of(
         st.none(), st.integers(min_value=-_LONG_BOUND, max_value=_LONG_BOUND)
     )
+
+    # Narrower range for arithmetic tests (+4, -2, *3, +7, x+y).  Python's
+    # arithmetic never overflows, but Spark's ANSI mode raises on LongType
+    # overflow.  Worse, the Python UDF runner silently wraps out-of-range
+    # return values even with ANSI=True, so "both raised" never fires for
+    # overflow values and the test sees a spurious mismatch instead.
+    # 2**61 is safe for all operations: (2**61)*3 ≈ 6.9e18 < 9.2e18 = Long.MAX.
+    _LONG_ARITH_BOUND = 2**61
+    _long_arith_strategy = st.one_of(
+        st.none(),
+        st.integers(min_value=-_LONG_ARITH_BOUND, max_value=_LONG_ARITH_BOUND),
+    )
+
     _bool_strategy = st.one_of(st.none(), st.booleans())
 
     # ---- Edge-case seeds (scalacheck-style) -----------------------------
@@ -123,6 +132,7 @@ if _have_hypothesis:
     # runs. These are the values we always want to try, before random
     # generation kicks in.
     _LONG_EDGES = (None, 0, 1, -1, 7, -7, _LONG_BOUND, -_LONG_BOUND)
+    _LONG_ARITH_EDGES = (None, 0, 1, -1, 7, -7, _LONG_ARITH_BOUND, -_LONG_ARITH_BOUND)
     # Bool space is exhaustive (only three values) so the @example
     # decorators here serve more as documentation of the NULL handling
     # we care about than as new coverage on top of hypothesis's
@@ -140,6 +150,16 @@ if _have_hypothesis:
         (-1, 1),
         (_LONG_BOUND, 1),
         (1, -_LONG_BOUND),
+    )
+    _LONG_ARITH_PAIR_EDGES = (
+        (None, None),
+        (None, 0),
+        (0, None),
+        (0, 0),
+        (1, -1),
+        (-1, 1),
+        (_LONG_ARITH_BOUND, 1),
+        (1, -_LONG_ARITH_BOUND),
     )
     # Sign-combo edges (plus NULL combinations) for the boolean tests.
     # The bodies (``x > 0 and y > 0`` / ``x > 0 or y > 0``) raise in
@@ -370,7 +390,17 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             )
 
         interpreted_error: Optional[Exception] = None
-        with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": False}):
+        # Pin ANSI on for the interpreted path too so both sides see the same
+        # overflow semantics. Without this, the interpreted path would run with
+        # the ambient session default (likely False), causing LongType overflow
+        # to silently wrap in Python UDF results while ANSI raises on the
+        # transpiled path.
+        with self.sql_conf(
+            {
+                "spark.sql.experimental.optimizer.transpilePyUDFs": False,
+                "spark.sql.ansi.enabled": True,
+            }
+        ):
             interpreted_udf = UserDefinedFunction(func, return_type)
             try:
                 interpreted_value = df.select(
@@ -412,16 +442,16 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
     if _have_hypothesis:
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
+        @given(value=_long_arith_strategy)
+        @_seed_examples(_LONG_ARITH_EDGES)
         def test_plus_four_matches_python(self, value):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(plus_four, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"plus_four mismatch on {value!r}")
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
+        @given(value=_long_arith_strategy)
+        @_seed_examples(_LONG_ARITH_EDGES)
         def test_plus_four_with_else_matches_python(self, value):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(plus_four_with_else, LongType(), df, "a")
@@ -461,28 +491,28 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             self.assertEqual(interpreted, expected, f"truthy_bool_branch mismatch on {value!r}")
 
         @_hyp_settings
-        @given(value=_long_strategy)
+        @given(value=_long_arith_strategy)
         # add_then_mod is the case that surfaced the Python-vs-SQL mod
         # sign mismatch; the seed values cover the four sign combinations
         # of `(x + 7) % 5` so we always re-prove the pmod fix on every
         # run regardless of the random seed.
-        @_seed_examples((*_LONG_EDGES, -2, -8, 8, 100, -100))
+        @_seed_examples((*_LONG_ARITH_EDGES, -2, -8, 8, 100, -100))
         def test_add_then_mod_matches_python(self, value):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(add_then_mod, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"add_then_mod mismatch on {value!r}")
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
+        @given(value=_long_arith_strategy)
+        @_seed_examples(_LONG_ARITH_EDGES)
         def test_minus_two_matches_python(self, value):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(minus_two, LongType(), df, "a")
             self.assertEqual(transpiled, interpreted, f"minus_two mismatch on {value!r}")
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
+        @given(value=_long_arith_strategy)
+        @_seed_examples(_LONG_ARITH_EDGES)
         def test_times_three_matches_python(self, value):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(times_three, LongType(), df, "a")
@@ -513,16 +543,16 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             self.assertEqual(interpreted, expected, f"negate_truthy mismatch on {value!r}")
 
         @_hyp_settings
-        @given(x=_long_strategy, y=_long_strategy)
-        @_seed_pair_examples(_LONG_PAIR_EDGES)
+        @given(x=_long_arith_strategy, y=_long_arith_strategy)
+        @_seed_pair_examples(_LONG_ARITH_PAIR_EDGES)
         def test_add_two_matches_python(self, x, y):
             df = self._two_long_arg_df(x, y)
             transpiled, interpreted = self._run(add_two, LongType(), df, "a", "b")
             self.assertEqual(transpiled, interpreted, f"add_two mismatch on (x={x!r}, y={y!r})")
 
         @_hyp_settings
-        @given(x=_long_strategy, y=_long_strategy)
-        @_seed_pair_examples(_LONG_PAIR_EDGES)
+        @given(x=_long_arith_strategy, y=_long_arith_strategy)
+        @_seed_pair_examples(_LONG_ARITH_PAIR_EDGES)
         def test_add_two_named_args_matches_python(self, x, y):
             # Same UDF as above but called with kwargs (and intentionally
             # in reversed order) to exercise the named-argument codepath
@@ -606,8 +636,8 @@ class UDFTranspileHypothesisTests(ReusedSQLTestCase):
             self.assertEqual(transpiled, interpreted, f"neq_zero mismatch on {value!r}")
 
         @_hyp_settings
-        @given(value=_long_strategy)
-        @_seed_examples(_LONG_EDGES)
+        @given(value=_long_arith_strategy)
+        @_seed_examples(_LONG_ARITH_EDGES)
         def test_lambda_plus_four_matches_python(self, value):
             df = self._single_arg_df(value, LongType())
             transpiled, interpreted = self._run(lambda_plus_four, LongType(), df, "a")
