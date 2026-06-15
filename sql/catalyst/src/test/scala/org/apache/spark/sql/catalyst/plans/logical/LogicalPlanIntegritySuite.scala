@@ -91,8 +91,8 @@ class LogicalPlanIntegritySuite extends PlanTest {
 
   test("Nullability check flags the motivating outer-join shape over a multi-child plan") {
     // SPARK-56395: an operator over a LEFT OUTER join references the null-widened (right) side
-    // with its original non-nullable metadata. This is the only shape that exercises the
-    // `groupBy(_.exprId)` over more than one child.
+    // with its original non-nullable metadata. This is the realistic motivating shape -- a
+    // synthesized Aggregate over a join whose output widened the right side to nullable.
     val left = LocalRelation(AttributeReference("a", LongType, nullable = false)())
     val right = LocalRelation(AttributeReference("b", LongType, nullable = false)())
     val a = left.output.head
