@@ -124,8 +124,8 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
  *   The time zone LTZ values are rendered in (LTZ is zone-aware). Passed by-name and forced only
  *   when the formatter is first built, so non-rendering callers never evaluate it. The factories
  *   thread it in: `TypeApiOps.apply` passes the cast's resolved zone (CAST) or the session-local
- *   time zone (zone-less callers such as Row JSON); the catalyst `TimestampLTZNanosTypeOps` passes
- *   the session-local time zone for the server-side `TypeOps` path.
+ *   time zone (zone-less callers such as Row JSON); the catalyst `TimestampLTZNanosTypeOps`
+ *   passes the session-local time zone for the server-side `TypeOps` path.
  * @since 4.3.0
  */
 class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: => ZoneId)
