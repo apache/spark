@@ -696,7 +696,7 @@ case class VariantDelete(children: Seq[Expression])
 
   override def dataType: DataType = VariantType
 
-  override def nullable: Boolean = children.head.nullable
+  override def nullable: Boolean = children.headOption.forall(_.nullable)
 
   override def inputTypes: Seq[AbstractDataType] = {
     // First argument is the variant; subsequent arguments are JSONPath strings.
