@@ -740,14 +740,18 @@ class CrossValidator(
         parallelism: int = 1,
         collectSubModels: bool = False,
         foldCol: str = "",
-    ) -> None:
-        """
-        __init__(self, \\*, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                 seed=None, parallelism=1, collectSubModels=False, foldCol="")
-        """
-        super().__init__()
-        self._setDefault(parallelism=1)
+    ):
+        super(CrossValidator, self).__init__()
+        self._setDefault(numFolds=3, parallelism=1, collectSubModels=False, foldCol="")
         kwargs = self._input_kwargs
+        
+        # [ĐOẠN CODE NHÓM BẠN THÊM VÀO BẮT ĐẦU TỪ ĐÂY]
+        # Fix SPARK-45154: Đảm bảo seed luôn cố định trên Python 3 nếu người dùng không tự nhập
+        if kwargs.get("seed") is None:
+            import zlib
+            kwargs["seed"] = zlib.crc32(b"CrossValidator")
+        # [KẾT THÚC ĐOẠN THÊM VÀO]
+
         self._set(**kwargs)
 
     @keyword_only
