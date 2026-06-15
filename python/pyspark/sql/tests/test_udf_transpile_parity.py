@@ -77,7 +77,7 @@ def _enable_transpilation(cls):
 class TranspiledUDFParityTests(BaseUDFTestsMixin, ReusedSQLTestCase):
     @classmethod
     def setUpClass(cls):
-        super(BaseUDFTestsMixin, cls).setUpClass()
+        ReusedSQLTestCase.setUpClass()
         cls.spark.conf.set("spark.sql.execution.pythonUDF.arrow.enabled", "false")
         _enable_transpilation(cls)
 
