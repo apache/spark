@@ -146,6 +146,99 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       df.selectExpr("extract(SECOND FROM ntz)"),
       Row(new java.math.BigDecimal("7.123456789")))
   }
+
+  // Date field extraction functions, plus the EXTRACT / date_part date components that rewrite
+  // to them. The fields depend only on the calendar date, so the precision, time-of-day and
+  // sub-microsecond digits never change the result.
+  private val dateFieldExprs = Seq(
+    "year(c)", "quarter(c)", "month(c)", "day(c)", "dayofmonth(c)", "dayofyear(c)",
+    "dayofweek(c)", "weekday(c)", "weekofyear(c)",
+    "extract(YEAR FROM c)", "extract(MONTH FROM c)", "extract(DAY FROM c)",
+    "extract(DOY FROM c)", "extract(WEEK FROM c)", "extract(DOW FROM c)",
+    "extract(YEAROFWEEK FROM c)", "date_part('QUARTER', c)", "date_part('DOY', c)")
+
+  private def ntzNanos(ldt: String, precision: Int): DataFrame =
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(LocalDateTime.parse(ldt)))),
+      new StructType().add("c", TimestampNTZNanosType(precision)))
+
+  private def ltzNanos(instant: String, precision: Int): DataFrame =
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(Instant.parse(instant)))),
+      new StructType().add("c", TimestampLTZNanosType(precision)))
+
+  test("SPARK-57469: date field functions over nanosecond TIMESTAMP_NTZ match the micro path") {
+    // Leap day, an ISO-week boundary (week 53 of 2020), a quarter boundary, and a pre-epoch date.
+    val ldts = Seq(
+      "2020-02-29T12:34:56.123456789",
+      "2021-01-01T00:00:00.000000001",
+      "2020-04-01T23:59:59.999999999",
+      "1960-07-15T06:07:08.123456789")
+    Seq(7, 8, 9).foreach { p =>
+      ldts.foreach { s =>
+        val nanos = ntzNanos(s, p)
+        val micro = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(LocalDateTime.parse(s)))),
+          new StructType().add("c", TimestampNTZType))
+        checkAnswer(nanos.selectExpr(dateFieldExprs: _*), micro.selectExpr(dateFieldExprs: _*))
+      }
+    }
+  }
+
+  test("SPARK-57469: date field functions over nanosecond TIMESTAMP_LTZ match the micro path") {
+    // The third and fourth instants roll back to the previous calendar day in the session zone
+    // (America/Los_Angeles), crossing a year and a quarter boundary respectively.
+    val instants = Seq(
+      "2020-02-29T12:34:56.123456789Z",
+      "2020-01-01T04:00:00.123456789Z",
+      "2020-04-01T06:00:00.123456789Z",
+      "1960-07-15T06:07:08.123456789Z")
+    Seq(7, 8, 9).foreach { p =>
+      instants.foreach { s =>
+        val nanos = ltzNanos(s, p)
+        val micro = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(Instant.parse(s)))),
+          new StructType().add("c", TimestampType))
+        checkAnswer(nanos.selectExpr(dateFieldExprs: _*), micro.selectExpr(dateFieldExprs: _*))
+      }
+    }
+  }
+
+  test("SPARK-57469: date field corner cases over nanosecond TIMESTAMP_NTZ") {
+    // year, quarter, month, day, dayofyear, dayofweek (1=Sun..7=Sat), weekday (0=Mon..6=Sun),
+    // weekofyear (ISO), yearofweek (ISO week-based year).
+    val fields = Seq("year(c)", "quarter(c)", "month(c)", "day(c)", "dayofyear(c)",
+      "dayofweek(c)", "weekday(c)", "weekofyear(c)", "extract(YEAROFWEEK FROM c)")
+    Seq(7, 8, 9).foreach { p =>
+      // 2020-02-29 is a Saturday in the leap year 2020: day 60, ISO week 9.
+      checkAnswer(
+        ntzNanos("2020-02-29T23:59:59.999999999", p).selectExpr(fields: _*),
+        Row(2020, 1, 2, 29, 60, 7, 5, 9, 2020))
+      // 2021-01-01 is a Friday that belongs to ISO week 53 of 2020.
+      checkAnswer(
+        ntzNanos("2021-01-01T00:00:00.000000001", p).selectExpr(fields: _*),
+        Row(2021, 1, 1, 1, 1, 6, 4, 53, 2020))
+    }
+  }
+
+  test("SPARK-57469: date field functions match the functions.* Column API over nanos") {
+    val df = ntzNanos("2020-02-29T12:34:56.123456789", 9)
+    checkAnswer(
+      df.selectExpr("year(c)", "month(c)", "dayofmonth(c)", "dayofweek(c)", "weekofyear(c)"),
+      df.select(year(col("c")), month(col("c")), dayofmonth(col("c")),
+        dayofweek(col("c")), weekofyear(col("c"))))
+  }
+
+  test("SPARK-57469: date field functions over NULL nanosecond timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val ntz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      checkAnswer(
+        ntz.selectExpr("year(c)", "month(c)", "day(c)", "extract(DOY FROM c)"),
+        Row(null, null, null, null))
+    }
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.

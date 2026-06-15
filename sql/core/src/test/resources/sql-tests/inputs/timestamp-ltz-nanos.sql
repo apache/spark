@@ -80,6 +80,66 @@ SELECT extract(SECOND FROM TIMESTAMP_LTZ '1960-01-01 13:24:35.123456789');
 SELECT extract(MINUTE FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata');
 SELECT extract(SECOND FROM TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 Asia/Kolkata');
 
+-- Date field functions over nanosecond-precision values (SPARK-57469). Date fields depend only
+-- on the calendar date, so the precision, time-of-day and sub-microsecond digits never affect the
+-- result; LTZ casts to DATE in the session time zone, so a zone shift can move the calendar day.
+-- Columns are year, quarter, month, day, dayofyear, dayofweek (1=Sun..7=Sat),
+-- weekday (0=Mon..6=Sun), weekofyear (ISO), yearofweek (ISO).
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '2020-02-29 23:59:59.999999999') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '1900-02-28 12:00:00.000000001') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '2021-01-01 00:00:00.000000001') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '2016-01-01 06:30:00.123456789') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '2020-12-31 23:59:59.999999999') AS t(v);
+-- Pre-epoch and far-past dates exercise the negative-epoch / minimum-date path.
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '1960-07-15 06:07:08.123456789') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_LTZ '0001-01-01 00:00:00.000000001') AS t(v);
+
+-- Precision (7/8/9) and fraction invariance: the same instant read at different precisions and
+-- fractions yields identical date fields.
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.000000001' :: timestamp_ltz(7)) AS t(v);
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.999999999' :: timestamp_ltz(8)) AS t(v);
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.000000000' :: timestamp_ltz(9)) AS t(v);
+
+-- Time-zone-driven date shifts. An early-hours UTC instant rolls back a day in the session zone
+-- (America/Los_Angeles, UTC-08:00), here crossing the year boundary to 2019-12-31.
+SELECT year(v), month(v), day(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC') AS t(v);
+SELECT year(v), month(v), day(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789') AS t(v);
+-- A sub-hour-offset source zone (Asia/Kolkata, UTC+05:30) near the leap-day boundary.
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  (TIMESTAMP_LTZ '2020-03-01 06:00:00.123456789 Asia/Kolkata') AS t(v);
+
+-- EXTRACT / date_part date components (rewrite transitively to the same functions).
+SELECT extract(YEAR FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789');
+SELECT extract(MONTH FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789');
+SELECT extract(DAY FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789');
+SELECT extract(DOY FROM TIMESTAMP_LTZ '2020-02-29 12:00:00.123456789');
+SELECT extract(WEEK FROM TIMESTAMP_LTZ '2021-01-01 12:00:00.123456789');
+SELECT date_part('QUARTER', TIMESTAMP_LTZ '2020-04-01 00:00:00.000000001');
+SELECT date_part('DOW', TIMESTAMP_LTZ '2020-02-29 00:00:00.000000001');
+SELECT date_part('YEAROFWEEK', TIMESTAMP_LTZ '2021-01-01 00:00:00.000000001');
+
+-- NULL nanosecond timestamp.
+SELECT year(NULL :: timestamp_ltz(9)), month(NULL :: timestamp_ltz(9));
+
 -- DATE <-> TIMESTAMP_LTZ(p) casts (SPARK-57323): midnight in the session zone / date extraction.
 -- Nanosecond typed literals derive precision from the fractional digits (SPARK-57250).
 SELECT DATE '2020-01-01'::timestamp_ltz(9);

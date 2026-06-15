@@ -66,6 +66,62 @@ SELECT extract(SECOND FROM NULL :: timestamp_ntz(9));
 -- Pre-epoch nanosecond values exercise the negative-epoch path.
 SELECT extract(SECOND FROM TIMESTAMP_NTZ '1960-01-01 13:24:35.123456789');
 
+-- Date field functions over nanosecond-precision values (SPARK-57469). Date fields depend only
+-- on the calendar date, so the precision, time-of-day and sub-microsecond digits never affect the
+-- result; the values below exercise leap years, ISO-week and quarter boundaries, pre-epoch and
+-- far-past dates, and varied precisions / fractions. Columns are year, quarter, month, day,
+-- dayofyear, dayofweek (1=Sun..7=Sat), weekday (0=Mon..6=Sun), weekofyear (ISO), yearofweek (ISO).
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '2020-02-29 23:59:59.999999999') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '1900-02-28 12:00:00.000000001') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '2021-01-01 00:00:00.000000001') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '2016-01-01 06:30:00.123456789') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '2020-03-31 13:24:35.123456789') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '2020-04-01 00:00:00.000000001') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '2020-12-31 23:59:59.999999999') AS t(v);
+-- Pre-epoch and far-past dates exercise the negative-epoch / minimum-date path.
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '1960-07-15 06:07:08.123456789') AS t(v);
+SELECT year(v), quarter(v), month(v), day(v), dayofyear(v), dayofweek(v), weekday(v),
+       weekofyear(v), extract(YEAROFWEEK FROM v)
+  FROM VALUES (TIMESTAMP_NTZ '0001-01-01 00:00:00.000000001') AS t(v);
+
+-- Precision (7/8/9) and fraction invariance: the same date read at different precisions and
+-- fractions yields identical date fields.
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.000000001' :: timestamp_ntz(7)) AS t(v);
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.999999999' :: timestamp_ntz(8)) AS t(v);
+SELECT year(v), month(v), day(v), dayofyear(v) FROM VALUES
+  ('2020-02-29 13:24:35.000000000' :: timestamp_ntz(9)) AS t(v);
+
+-- EXTRACT / date_part date components (rewrite transitively to the same functions).
+SELECT extract(YEAR FROM TIMESTAMP_NTZ '2020-02-29 12:00:00.123456789');
+SELECT extract(MONTH FROM TIMESTAMP_NTZ '2020-02-29 12:00:00.123456789');
+SELECT extract(DAY FROM TIMESTAMP_NTZ '2020-02-29 12:00:00.123456789');
+SELECT extract(DOY FROM TIMESTAMP_NTZ '2020-02-29 12:00:00.123456789');
+SELECT extract(WEEK FROM TIMESTAMP_NTZ '2021-01-01 12:00:00.123456789');
+SELECT date_part('QUARTER', TIMESTAMP_NTZ '2020-04-01 00:00:00.000000001');
+SELECT date_part('DOW', TIMESTAMP_NTZ '2020-02-29 00:00:00.000000001');
+SELECT date_part('YEAROFWEEK', TIMESTAMP_NTZ '2021-01-01 00:00:00.000000001');
+
+-- NULL nanosecond timestamp.
+SELECT year(NULL :: timestamp_ntz(9)), month(NULL :: timestamp_ntz(9));
+
 -- DATE <-> TIMESTAMP_NTZ(p) casts (SPARK-57323): midnight UTC / date extraction (zone-independent).
 -- Nanosecond typed literals derive precision from the fractional digits (SPARK-57250).
 SELECT DATE '2020-01-01'::timestamp_ntz(9);
