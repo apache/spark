@@ -39,7 +39,10 @@ class DB2NamespaceSuite extends DockerJDBCIntegrationSuite with V2JDBCNamespaceT
     Map("url" -> db.getJdbcUrl(dockerIp, externalPort),
       "driver" -> "com.ibm.db2.jcc.DB2Driver").asJava)
 
-  catalog.initialize("db2", map)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    catalog.initialize("db2", map)
+  }
 
   override def dataPreparation(conn: Connection): Unit = {}
 
