@@ -176,7 +176,7 @@ public class ColumnVectorUtils {
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
       if (t instanceof CalendarIntervalType || t instanceof VariantType ||
-          t instanceof TimestampNTZNanosType || t instanceof TimestampLTZNanosType) {
+          t instanceof AnyTimestampNanoType) {
         dst.appendStruct(true);
       } else {
         dst.appendNull();
@@ -224,7 +224,7 @@ public class ColumnVectorUtils {
         dst.appendStruct(false);
         dst.getChild(0).appendByteArray(v.getValue(), 0, v.getValue().length);
         dst.getChild(1).appendByteArray(v.getMetadata(), 0, v.getMetadata().length);
-      } else if (t instanceof TimestampNTZNanosType || t instanceof TimestampLTZNanosType) {
+      } else if (t instanceof AnyTimestampNanoType) {
         TimestampNanosVal v = (TimestampNanosVal) o;
         dst.appendStruct(false);
         dst.getChild(0).appendLong(v.epochMicros);

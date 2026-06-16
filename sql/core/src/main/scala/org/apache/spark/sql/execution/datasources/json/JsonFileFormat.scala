@@ -128,7 +128,7 @@ case class JsonFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     case _: GeometryType | _: GeographyType => false
 
     // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => false
+    case _: AnyTimestampNanoType => false
 
     case _: AtomicType => true
 

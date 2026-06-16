@@ -238,7 +238,7 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
           ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
           timestampNTZFormatter.getClass)
         (c, evPrim) => code"$evPrim = UTF8String.fromString($tf.format($c));"
-      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+      case _: AnyTimestampNanoType =>
         // Route nanosecond timestamp cast-to-string through the Types Framework: emit a runtime
         // call into the ops reference object. The cast's session zone is threaded into the lookup
         // so LTZ carries it; NTZ is zone-independent (SPARK-57285).

@@ -113,8 +113,7 @@ object Cast extends QueryErrorsBase {
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (_: StringType, _: TimestampNTZNanosType) => true
-    case (_: StringType, _: TimestampLTZNanosType) => true
+    case (_: StringType, _: AnyTimestampNanoType) => true
 
     case (TimestampNTZType, _: TimestampNTZNanosType) => true
     case (_: TimestampNTZNanosType, TimestampNTZType) => true
@@ -261,8 +260,7 @@ object Cast extends QueryErrorsBase {
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (_: StringType, _: TimestampNTZNanosType) => true
-    case (_: StringType, _: TimestampLTZNanosType) => true
+    case (_: StringType, _: AnyTimestampNanoType) => true
 
     case (TimestampNTZType, _: TimestampNTZNanosType) => true
     case (_: TimestampNTZNanosType, TimestampNTZType) => true

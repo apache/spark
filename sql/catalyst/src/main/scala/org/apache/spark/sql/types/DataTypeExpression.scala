@@ -84,7 +84,7 @@ private[sql] object AnyTimestampTypeExpression {
 
 private[sql] object AnyTimestampNanoTypeExpression {
   def unapply(e: Expression): Boolean =
-    e.dataType.isInstanceOf[TimestampLTZNanosType] || e.dataType.isInstanceOf[TimestampNTZNanosType]
+    e.dataType.isInstanceOf[AnyTimestampNanoType]
 }
 
 private[sql] object DecimalExpression {
