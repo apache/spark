@@ -491,7 +491,7 @@ case class SecondWithFractionNanos(child: Expression, timeZoneId: Option[String]
   override def dataType: DataType = DecimalType(11, 9)
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => TypeCheckSuccess
+    case _: AnyTimestampNanoType => TypeCheckSuccess
     case _ =>
       DataTypeMismatch(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
@@ -3464,7 +3464,7 @@ object DatePart {
         // EXTRACT(SECOND) exposes the fractional digits, so nanosecond-precision timestamps
         // keep their sub-microsecond digits and widen the result to DECIMAL(11, 9) instead of
         // casting down to microseconds (SPARK-57340).
-        case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        case _: AnyTimestampNanoType =>
           SecondWithFractionNanos(source)
         case _ => SecondWithFraction(source)
       }
