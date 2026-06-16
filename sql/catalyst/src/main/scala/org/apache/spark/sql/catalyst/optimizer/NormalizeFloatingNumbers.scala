@@ -38,12 +38,15 @@ import org.apache.spark.util.ArrayImplicits._
  * This special handling is required in several places:
  *   1. When comparing values
  *   2. When grouping keys for aggregates
- *   3. When joining keys
+ *   3. When joining on keys
  *   4. When partitioning keys for windows
  *   5. When executing array set operations
  *
- * Case 1 is already handled in [[SQLOrderingUtil]] and [[CodeGenerator.genEqual]].
- * Cases 2-5 are handled by this optimizer rule.
+ * Case 1 is handled in [[org.apache.spark.sql.catalyst.util.SQLOrderingUtil]] and in the
+ *  `genEqual` method of [[org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext]].
+ * Case 2 is handled during planning in the `Aggregation` and `StatefulAggregationStrategy` objects
+ *  of [[org.apache.spark.sql.execution.SparkStrategies]].
+ * Cases 3-5 are handled by this optimizer rule.
  *
  * This rule runs in two places:
  *   1. Early in `FinishAnalysis` (right after `ReplaceExpressions` and before `EvalInlineTables`)
@@ -86,7 +89,8 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
         // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
         // mixed in its aggregate expressions. It's unreliable to change the grouping expressions
-        // here. For now we normalize grouping expressions in `AggUtils` during planning.
+        // here. For now we normalize grouping expressions during planning. See Case 2 in the
+        // Scaladoc just above.
       }
       .transformAllExpressionsWithPruning(_.containsAnyPattern(
         ARRAY_DISTINCT, ARRAY_UNION, ARRAY_INTERSECT, ARRAY_EXCEPT, ARRAYS_OVERLAP)) {
