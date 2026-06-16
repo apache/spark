@@ -32,7 +32,7 @@ import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row, SaveMode
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.classic.ClassicConversions._
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JdbcUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -719,5 +719,30 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
             "format" -> ".*"))
       }
     }
+  }
+
+  test("SPARK-57471: estimated write data size via accumulator") {
+    // The dedicated SQL metric is only exposed on the v2/catalog write path
+    // (see JDBCV2Suite for plan-level metric tests). This test validates the
+    // accumulator-based estimation logic works in savePartition.
+    val rows = (1 to 10).map(i => Row(i, "hello"))
+    val schema = new StructType().add("id", IntegerType).add("data", StringType)
+
+    val acc = sparkContext.longAccumulator
+    val df = spark.createDataFrame(sparkContext.makeRDD(rows), schema)
+    val dialect = org.apache.spark.sql.jdbc.JdbcDialects.get(url)
+    val opts = new JDBCOptions(url, "TEST.ACC_TEST", Map("driver" -> "org.h2.Driver"))
+    val optsInWrite = new JdbcOptionsInWrite(url, "TEST.ACC_TEST", Map("driver" -> "org.h2.Driver"))
+    val conn = dialect.createConnectionFactory(opts)(-1)
+    JdbcUtils.createTable(conn, "TEST.ACC_TEST", schema, caseSensitive = false, optsInWrite)
+    conn.close()
+    val insertStmt = JdbcUtils.getInsertStatement(
+      "TEST.ACC_TEST", schema, None, isCaseSensitive = false, dialect)
+    df.foreachPartition { iter: Iterator[Row] =>
+      JdbcUtils.savePartition(
+        "TEST.ACC_TEST", iter, schema, insertStmt, 1000, dialect,
+        java.sql.Connection.TRANSACTION_READ_UNCOMMITTED, opts, Some(acc))
+    }
+    assert(acc.value > 0, "accumulator should collect estimated bytes")
   }
 }

@@ -47,7 +47,8 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType, NoopDialect}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.{NextIterator, TaskInterruptListener}
+import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.{LongAccumulator, NextIterator, TaskInterruptListener}
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -359,12 +360,95 @@ object JdbcUtils extends Logging with SQLConfHelper {
     internalRows.map(fromRow)
   }
 
+  /**
+   * Estimates the size in bytes of a row given its schema. For variable-length types
+   * (String, Binary), uses actual value size; for fixed-width types, uses defaultSize.
+   * Null fields contribute 0 bytes.
+   *
+   * Used on the read path: strings measured via UTF8String.numBytes() (actual UTF-8 bytes).
+   * The write-side counterpart (estimateRowSize) uses String.length (char count).
+   */
+  private[jdbc] def estimateInternalRowSize(row: InternalRow, schema: StructType): Long = {
+    var size = 0L
+    var i = 0
+    while (i < schema.length) {
+      if (!row.isNullAt(i)) {
+        schema.fields(i).dataType match {
+          case _: StringType =>
+            size += row.getUTF8String(i).numBytes()
+          case BinaryType =>
+            size += row.getBinary(i).length
+          case at: ArrayType =>
+            val arr = row.getArray(i)
+            at.elementType match {
+              case _: StringType =>
+                var j = 0
+                while (j < arr.numElements()) {
+                  if (!arr.isNullAt(j)) size += arr.getUTF8String(j).numBytes()
+                  j += 1
+                }
+              case BinaryType =>
+                var j = 0
+                while (j < arr.numElements()) {
+                  if (!arr.isNullAt(j)) size += arr.getBinary(j).length
+                  j += 1
+                }
+              case et => size += arr.numElements().toLong * et.defaultSize
+            }
+          case dt =>
+            size += dt.defaultSize
+        }
+      }
+      i += 1
+    }
+    size
+  }
+
+  /**
+   * Estimates the size in bytes of an external Row given its schema. For variable-length types
+   * (String, Binary), uses actual value size; for fixed-width types, uses defaultSize.
+   * Null fields contribute 0 bytes.
+   *
+   * Used on the write path: strings measured via String.length (char count, allocation-free).
+   * The read-side counterpart (estimateInternalRowSize) uses UTF8String.numBytes().
+   */
+  private[jdbc] def estimateRowSize(row: Row, schema: StructType): Long = {
+    var size = 0L
+    var i = 0
+    while (i < schema.length) {
+      if (!row.isNullAt(i)) {
+        schema.fields(i).dataType match {
+          case _: StringType =>
+            // Use char length to avoid per-row UTF8String allocation in the write loop.
+            // Exact for ASCII; a reasonable estimate otherwise.
+            size += row.getString(i).length
+          case BinaryType =>
+            size += row.getAs[Array[Byte]](i).length
+          case at: ArrayType =>
+            val seq = row.getSeq[Any](i)
+            at.elementType match {
+              case _: StringType =>
+                seq.foreach(e => if (e != null) size += e.asInstanceOf[String].length)
+              case BinaryType =>
+                seq.foreach(e => if (e != null) size += e.asInstanceOf[Array[Byte]].length)
+              case et => size += seq.length.toLong * et.defaultSize
+            }
+          case dt =>
+            size += dt.defaultSize
+        }
+      }
+      i += 1
+    }
+    size
+  }
+
   private[spark] def resultSetToSparkInternalRows(
       resultSet: ResultSet,
       dialect: JdbcDialect,
       schema: StructType,
       inputMetrics: InputMetrics,
-      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
+      fetchAndTransformToInternalRowsMetric: Option[SQLMetric] = None,
+      estimatedDataSizeMetric: Option[SQLMetric] = None): Iterator[InternalRow] = {
     new NextIterator[InternalRow] {
       private[this] val rs = resultSet
       private[this] val getters: Array[JDBCValueGetter] = makeGetters(dialect, schema)
@@ -388,6 +472,10 @@ object JdbcUtils extends Logging with SQLConfHelper {
             if (rs.wasNull) mutableRow.setNullAt(i)
             i = i + 1
           }
+          // A second per-row pass over the columns to estimate size. The SQLMetric is always
+          // surfaced in the SQL UI so there is always a consumer. JDBC fetch latency dominates,
+          // making this O(numColumns) per-row cost negligible.
+          estimatedDataSizeMetric.foreach(_.add(estimateInternalRowSize(mutableRow, schema)))
           mutableRow
         } else {
           finished = true
@@ -587,9 +675,9 @@ object JdbcUtils extends Logging with SQLConfHelper {
    * are used.
    *
    * Note that this method records task output metrics. It assumes the method is
-   * running in a task. For now, we only records the number of rows being written
-   * because there's no good way to measure the total bytes being written. Only
-   * effective outputs are taken into account: for example, metric will not be updated
+   * running in a task. Records both the number of rows being written and an estimate
+   * of the total bytes written (based on Spark-side row size estimation).
+   * Only effective outputs are taken into account: for example, metric will not be updated
    * if it supports transaction and transaction is rolled back, but metric will be
    * updated even with error if it doesn't support transaction, as there're dirty outputs.
    */
@@ -601,7 +689,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       batchSize: Int,
       dialect: JdbcDialect,
       isolationLevel: Int,
-      options: JDBCOptions): Unit = {
+      options: JDBCOptions,
+      bytesAccumulator: Option[LongAccumulator] = None): Unit = {
 
     if (iterator.isEmpty) {
       return
@@ -690,6 +779,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
           stmt.addBatch()
           rowCount += 1
           totalRowCount += 1
+          bytesAccumulator.foreach(_.add(estimateRowSize(row, rddSchema)))
           if (rowCount % batchSize == 0) {
             // Hot spot for native blocking reads; TaskInterruptListener (registered after
             // opening the connection in this method) closes conn to unblock. JDBC 4.0 section 9.6:
@@ -860,7 +950,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       df: DataFrame,
       tableSchema: Option[StructType],
       isCaseSensitive: Boolean,
-      options: JdbcOptionsInWrite): Unit = {
+      options: JdbcOptionsInWrite,
+      bytesAccumulator: Option[LongAccumulator] = None): Unit = {
     val url = options.url
     val table = options.table
     val dialect = JdbcDialects.get(url)
@@ -876,7 +967,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       case _ => df
     }
     repartitionedDF.foreachPartition { iterator => savePartition(
-      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options)
+      table, iterator, rddSchema, insertStmt, batchSize, dialect, isolationLevel, options,
+      bytesAccumulator)
     }
   }
 
