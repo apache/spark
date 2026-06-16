@@ -22,8 +22,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path}
 import java.util.{Locale, TimeZone}
 
-import scala.collection.mutable.{ArrayBuffer, ListBuffer}
-import scala.jdk.CollectionConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.logging.log4j._
 import org.apache.logging.log4j.core.{LogEvent, Logger, LoggerContext}
