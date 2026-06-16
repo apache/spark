@@ -1416,8 +1416,7 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def dropDuplicates(): Dataset[T] = withSameTypedPlan {
     UnresolvedDeduplicate(
-      columnNames = Nil,
-      allColumnsAsKeys = true,
+      keySpec = DeduplicateAllColumnsAsKey,
       withinWatermark = false,
       viaSparkClassic = true,
       child = logicalPlan)
@@ -1426,8 +1425,7 @@ class Dataset[T] private[sql](
   /** @inheritdoc */
   def dropDuplicates(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
     UnresolvedDeduplicate(
-      columnNames = colNames,
-      allColumnsAsKeys = false,
+      keySpec = DeduplicateKeyColumns(colNames),
       withinWatermark = false,
       viaSparkClassic = true,
       child = logicalPlan)
@@ -1437,8 +1435,7 @@ class Dataset[T] private[sql](
   def dropDuplicatesWithinWatermark(): Dataset[T] = withSameTypedPlan {
     // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
     UnresolvedDeduplicate(
-      columnNames = Nil,
-      allColumnsAsKeys = true,
+      keySpec = DeduplicateAllColumnsAsKey,
       withinWatermark = true,
       viaSparkClassic = true,
       child = logicalPlan)
@@ -1448,8 +1445,7 @@ class Dataset[T] private[sql](
   def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
     // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
     UnresolvedDeduplicate(
-      columnNames = colNames,
-      allColumnsAsKeys = false,
+      keySpec = DeduplicateKeyColumns(colNames),
       withinWatermark = true,
       viaSparkClassic = true,
       child = logicalPlan)

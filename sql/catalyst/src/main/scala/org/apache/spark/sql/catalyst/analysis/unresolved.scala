@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIden
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
+import org.apache.spark.sql.catalyst.plans.logical.{DeduplicateKeySpec, LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -1178,8 +1178,7 @@ case class UnresolvedQualify(condition: Expression, child: LogicalPlan) extends 
  * for streaming deduplication, whose state store binds keys by position: a different key order
  * across restarts would break state-store key-schema compatibility. See SPARK-57489.
  *
- * @param columnNames the user-specified subset of column names (ignored when `allColumnsAsKeys`).
- * @param allColumnsAsKeys when true, every column of the child is a deduplication key.
+ * @param keySpec which columns form the deduplication key (an explicit set, or all columns).
  * @param withinWatermark when true, resolves to `DeduplicateWithinWatermark`.
  * @param viaSparkClassic whether the deduplication was requested via Spark Classic
  *   (`Dataset.dropDuplicates*`, true) or Spark Connect (`transformDeduplicate`, false). This only
@@ -1189,8 +1188,7 @@ case class UnresolvedQualify(condition: Expression, child: LogicalPlan) extends 
  *   Connect reproduces its own (no dedup, input order). Ignored on the deterministic path.
  */
 case class UnresolvedDeduplicate(
-    columnNames: Seq[String],
-    allColumnsAsKeys: Boolean,
+    keySpec: DeduplicateKeySpec,
     withinWatermark: Boolean,
     viaSparkClassic: Boolean,
     child: LogicalPlan) extends UnaryNode {

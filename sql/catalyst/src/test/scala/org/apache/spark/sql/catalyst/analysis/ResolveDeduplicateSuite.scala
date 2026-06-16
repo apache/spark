@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateWithinWatermark, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateWithinWatermark, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -43,8 +43,10 @@ class ResolveDeduplicateSuite extends AnalysisTest {
       withinWatermark: Boolean = false,
       viaSparkClassic: Boolean = true,
       child: LogicalPlan = rel): Seq[Attribute] = {
+    val keySpec =
+      if (allColumnsAsKeys) DeduplicateAllColumnsAsKey else DeduplicateKeyColumns(columnNames)
     ResolveDeduplicate(UnresolvedDeduplicate(
-      columnNames, allColumnsAsKeys, withinWatermark, viaSparkClassic, child)) match {
+      keySpec, withinWatermark, viaSparkClassic, child)) match {
       case d: Deduplicate => d.keys
       case d: DeduplicateWithinWatermark => d.keys
       case other => fail(s"Expected a (Deduplicate|DeduplicateWithinWatermark), got: $other")
@@ -122,7 +124,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
 
   test("SPARK-57489: withinWatermark resolves to DeduplicateWithinWatermark") {
     val resolved = ResolveDeduplicate(
-      UnresolvedDeduplicate(Seq("a"), allColumnsAsKeys = false, withinWatermark = true,
+      UnresolvedDeduplicate(DeduplicateKeyColumns(Seq("a")), withinWatermark = true,
         viaSparkClassic = true, rel))
     assert(resolved.isInstanceOf[DeduplicateWithinWatermark])
     assert(resolved.asInstanceOf[DeduplicateWithinWatermark].keys.map(_.name) === Seq("a"))
@@ -153,7 +155,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     checkError(
       exception = intercept[AnalysisException] {
         ResolveDeduplicate(UnresolvedDeduplicate(
-          Seq("does_not_exist"), allColumnsAsKeys = false, withinWatermark = false,
+          DeduplicateKeyColumns(Seq("does_not_exist")), withinWatermark = false,
           viaSparkClassic = true, rel))
       },
       condition = "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES",

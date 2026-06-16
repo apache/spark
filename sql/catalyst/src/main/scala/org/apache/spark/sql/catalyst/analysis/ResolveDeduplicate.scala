@@ -44,10 +44,7 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
     _.containsPattern(UNRESOLVED_DEDUPLICATE)) {
     case d: UnresolvedDeduplicate if d.child.resolved =>
       val orderDeterministically = conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
-      val keySpec =
-        if (d.allColumnsAsKeys) DeduplicateAllColumnsAsKey
-        else DeduplicateKeyColumns(d.columnNames)
-      val spec = DeduplicateSpec(keySpec, d.viaSparkClassic)
+      val spec = DeduplicateSpec(d.keySpec, d.viaSparkClassic)
       val keys = computeKeys(d.child, spec, orderDeterministically, conf.resolver)
       if (d.withinWatermark) {
         DeduplicateWithinWatermark(keys, d.child, Some(spec))
