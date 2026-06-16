@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
+import zlib
 import json
 import os
 import sys
@@ -745,7 +745,6 @@ class CrossValidator(
         self._setDefault(numFolds=3, parallelism=1, collectSubModels=False, foldCol="")
         kwargs = self._input_kwargs
         if kwargs.get("seed") is None:
-            import zlib
             kwargs["seed"] = zlib.crc32(b"CrossValidator")
         self._set(**kwargs)
 
