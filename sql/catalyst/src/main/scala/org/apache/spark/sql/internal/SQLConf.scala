@@ -3833,6 +3833,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val GET_JSON_OBJECT_SHARED_PARSING_ENABLED =
+    buildConf("spark.sql.optimizer.getJsonObjectSharedParsing.enabled")
+      .internal()
+      .doc(s"When true and '${JSON_EXPRESSION_OPTIMIZATION.key}' is also true, the optimizer " +
+        "replaces repeated simple top-level get_json_object expressions over the same input " +
+        "with one shared parse.")
+      .version("4.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val CSV_EXPRESSION_OPTIMIZATION =
     buildConf("spark.sql.optimizer.enableCsvExpressionOptimization")
       .doc("Whether to optimize CSV expressions in SQL optimizer. It includes pruning " +
@@ -8258,6 +8268,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def jsonGeneratorIgnoreNullFields: Boolean = getConf(SQLConf.JSON_GENERATOR_IGNORE_NULL_FIELDS)
 
   def jsonExpressionOptimization: Boolean = getConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION)
+
+  def getJsonObjectSharedParsingEnabled: Boolean =
+    getConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED)
 
   def csvExpressionOptimization: Boolean = getConf(SQLConf.CSV_EXPRESSION_OPTIMIZATION)
 

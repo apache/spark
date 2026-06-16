@@ -573,3 +573,152 @@ case class GetJsonObjectEvaluator(cachedPath: UTF8String) {
     }
   }
 }
+
+/**
+ * Evaluates multiple simple top-level JSON fields in one parse.
+ */
+case class MultiGetJsonObjectEvaluator(
+    fieldNames: Seq[String],
+    fallbackPaths: Seq[UTF8String]) {
+  import SharedFactory._
+
+  require(
+    fieldNames.nonEmpty &&
+      fieldNames.distinct.length == fieldNames.length &&
+      fallbackPaths.length == fieldNames.length)
+
+  @transient
+  private lazy val fieldToOrdinal: Map[String, Int] = fieldNames.zipWithIndex.toMap
+
+  @transient
+  private lazy val nullRow: InternalRow =
+    new GenericInternalRow(Array.ofDim[Any](fieldNames.length))
+
+  @transient
+  private lazy val fallbackEvaluators: Seq[GetJsonObjectEvaluator] =
+    fallbackPaths.map(new GetJsonObjectEvaluator(_))
+
+  private def fallback(json: UTF8String): InternalRow = {
+    new GenericInternalRow(fallbackEvaluators.map { evaluator =>
+      evaluator.setJson(json)
+      evaluator.evaluate()
+    }.toArray)
+  }
+
+  def evaluate(json: UTF8String): InternalRow = {
+    if (json == null) return null
+
+    val values = Array.ofDim[Any](fieldNames.length)
+    val matched = Array.ofDim[Boolean](fieldNames.length)
+
+    try {
+      val validObject = Utils.tryWithResource(
+        CreateJacksonParser.utf8String(jsonFactory, json)) { parser =>
+        if (parser.nextToken() != JsonToken.START_OBJECT) {
+          false
+        } else {
+          var token = parser.nextToken()
+          while (token != null && token != JsonToken.END_OBJECT) {
+            if (token == JsonToken.FIELD_NAME) {
+              val fieldName = parser.currentName
+              val ordinal = fieldToOrdinal.get(fieldName).filter(!matched(_))
+              val valueToken = parser.nextToken()
+              if (ordinal.nonEmpty && valueToken != JsonToken.VALUE_NULL) {
+                val index = ordinal.get
+                matched(index) = true
+                copyCurrentStructure(parser).foreach(value => values(index) = value)
+              } else {
+                parser.skipChildren()
+              }
+            } else {
+              parser.skipChildren()
+            }
+            token = parser.nextToken()
+          }
+          token == JsonToken.END_OBJECT
+        }
+      }
+      if (validObject) {
+        new GenericInternalRow(values)
+      } else {
+        nullRow
+      }
+    } catch {
+      // Every simple top-level legacy extraction scans through the root object's closing token,
+      // so a syntax failure makes every sibling null without needing per-path reparsing.
+      case _: JsonParseException => nullRow
+      // A parser-side rendering failure can leave the shared token stream unusable. Reparse each
+      // path with the legacy evaluator so one bad selected value cannot erase sibling results.
+      case _: JsonProcessingException => fallback(json)
+    }
+  }
+
+  private def copyCurrentStructure(parser: JsonParser): Option[UTF8String] = {
+    val output = new ByteArrayOutputStream()
+    var renderingFailed = false
+
+    def render(write: => Unit): Unit = {
+      if (!renderingFailed) {
+        try {
+          write
+        } catch {
+          // A generator-side failure does not invalidate the parser's token stream. Keep
+          // consuming that value so other requested fields remain independent.
+          case _: JsonGenerationException => renderingFailed = true
+        }
+      }
+    }
+
+    def copyValue(generator: JsonGenerator, rawString: Boolean): Unit = {
+      if (parser.currentToken == JsonToken.VALUE_STRING && rawString) {
+        render {
+          if (parser.hasTextCharacters) {
+            generator.writeRaw(
+              parser.getTextCharacters,
+              parser.getTextOffset,
+              parser.getTextLength)
+          } else {
+            generator.writeRaw(parser.getText)
+          }
+        }
+      } else {
+        // Keep this traversal iterative so a value near the configured nesting limit does not
+        // consume one JVM frame per level.
+        var depth = 0
+        var done = false
+        while (!done && parser.currentToken != null) {
+          parser.currentToken match {
+            case JsonToken.START_OBJECT =>
+              render(generator.writeStartObject())
+              depth += 1
+            case JsonToken.START_ARRAY =>
+              render(generator.writeStartArray())
+              depth += 1
+            case JsonToken.END_OBJECT =>
+              render(generator.writeEndObject())
+              depth -= 1
+            case JsonToken.END_ARRAY =>
+              render(generator.writeEndArray())
+              depth -= 1
+            case _ =>
+              render(generator.copyCurrentEvent(parser))
+          }
+          done = depth == 0
+          if (!done) {
+            parser.nextToken()
+          }
+        }
+      }
+    }
+
+    try {
+      Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
+        copyValue(generator, rawString = true)
+      }
+    } catch {
+      case _: JsonGenerationException => renderingFailed = true
+    }
+
+    if (renderingFailed) None else Some(UTF8String.fromBytes(output.toByteArray))
+  }
+}

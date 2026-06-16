@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_NAMED_STRUCT, EXTRACT_VALUE,
-  JSON_TO_STRUCT}
-import org.apache.spark.sql.types.{ArrayType, StructType}
+  GET_JSON_OBJECT, JSON_TO_STRUCT}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Simplify redundant csv/json related expressions.
@@ -34,17 +38,38 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
  *      If(IsNull(json), nullStruct, KnownNotNull(JsonToStructs(prunedSchema, ..., json)))
  *      if JsonToStructs(json) is shared among all fields of CreateNamedStruct. `prunedSchema`
  *      contains all accessed fields in original CreateNamedStruct.
- * 4. Prune unnecessary columns from GetStructField + CsvToStructs.
+ * 4. Share one MultiGetJsonObject when a Project extracts multiple simple paths from a JSON.
+ * 5. Prune unnecessary columns from GetStructField + CsvToStructs.
  */
 object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def nameOfCorruptRecord = conf.columnNameOfCorruptRecord
 
+  private case class SharedJsonFields(
+      json: Expression,
+      fieldNames: Seq[String],
+      alias: Alias) {
+    val ordinalMapping: Map[String, Int] = fieldNames.zipWithIndex.toMap
+  }
+
+  private def evaluatesLeftFirst(binary: BinaryArithmetic): Boolean = binary match {
+    case _: Add | _: Subtract | _: Multiply | _: BitwiseAnd | _: BitwiseOr | _: BitwiseXor => true
+    case _ => false
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT), ruleId) {
+    _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, GET_JSON_OBJECT, JSON_TO_STRUCT),
+    ruleId) {
     case p =>
       val optimized = if (conf.jsonExpressionOptimization) {
-        p.transformExpressionsWithPruning(
-          _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT)
+        val withSharedJsonPaths = p match {
+          case project: Project
+              if conf.getJsonObjectSharedParsingEnabled &&
+                !conf.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE) =>
+            shareGetJsonObjects(project)
+          case _ => p
+        }
+        withSharedJsonPaths.transformExpressionsWithPruning(
+          _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, GET_JSON_OBJECT, JSON_TO_STRUCT)
           )(jsonOptimization)
       } else {
         p
@@ -56,6 +81,129 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       } else {
         optimized
       }
+  }
+
+  /**
+   * Share simple top-level GetJsonObject paths without changing the Hive-compatible semantics of
+   * nested paths, wildcards, or array subscripts. [[MultiGetJsonObject]] preserves the first
+   * non-null duplicate-key match used by GetJsonObject, unlike JsonTuple.
+   */
+  private def shareGetJsonObjects(project: Project): Project = {
+    val candidates = project.projectList.flatMap(collectGetJsonObjectFields)
+    val groups = mutable.ArrayBuffer.empty[
+      (Expression, mutable.ArrayBuffer[(String, String)])]
+    val groupsByHash = mutable.HashMap.empty[
+      Int, mutable.ArrayBuffer[(Expression, mutable.ArrayBuffer[(String, String)])]]
+
+    candidates.foreach { case (getJsonObject, fieldName, path) =>
+      val bucket = groupsByHash.getOrElseUpdate(
+        getJsonObject.json.semanticHash(), mutable.ArrayBuffer.empty)
+      bucket.find(_._1.semanticEquals(getJsonObject.json)) match {
+        case Some((_, fields)) => fields += fieldName -> path
+        case None =>
+          val group = getJsonObject.json -> mutable.ArrayBuffer(fieldName -> path)
+          bucket += group
+          groups += group
+      }
+    }
+
+    val sharedFields = groups.flatMap { case (json, requestedFields) =>
+      val fieldsByName = mutable.LinkedHashMap.empty[String, String]
+      requestedFields.foreach { case (fieldName, path) =>
+        fieldsByName.getOrElseUpdate(fieldName, path)
+      }
+      val fieldNames = fieldsByName.keys.toSeq
+      if (fieldNames.length > 1) {
+        val alias = Alias(
+          MultiGetJsonObject(json, fieldNames, fieldsByName.values.toSeq),
+          "_shared_json_paths")()
+        Some(SharedJsonFields(json, fieldNames, alias))
+      } else {
+        None
+      }
+    }.toSeq
+
+    if (sharedFields.isEmpty) {
+      project
+    } else {
+      val sharedFieldsByHash = sharedFields.groupBy(_.json.semanticHash())
+      val rewrittenProjectList = project.projectList.map { expression =>
+        rewriteGetJsonObjectFields(expression, sharedFieldsByHash)
+          .asInstanceOf[NamedExpression]
+      }
+      val innerProjectList = project.child.output ++ sharedFields.map(_.alias)
+      Project(rewrittenProjectList, Project(innerProjectList, project.child))
+    }
+  }
+
+  private def collectGetJsonObjectFields(
+      expression: Expression): Seq[(GetJsonObject, String, String)] = {
+    expression match {
+      case _: ConditionalExpression | _: And | _: Or | _: In | _: TryEval |
+          _: LambdaFunction | _: CreateNamedStruct =>
+        Nil
+
+      case getJsonObject @ GetJsonObject(_: Attribute, Literal(path: UTF8String, StringType))
+          if getJsonObject.deterministic =>
+        GetJsonObject.simpleTopLevelField(path)
+          .map(fieldName => (getJsonObject, fieldName, path.toString)).toSeq
+
+      case _: GetJsonObject =>
+        Nil
+
+      case alias: Alias =>
+        collectGetJsonObjectFields(alias.child)
+
+      case getStructField: GetStructField =>
+        collectGetJsonObjectFields(getStructField.child)
+
+      case cast: Cast =>
+        collectGetJsonObjectFields(cast.child)
+
+      case binary: BinaryArithmetic if evaluatesLeftFirst(binary) =>
+        collectGetJsonObjectFields(binary.left)
+
+      case _ =>
+        Nil
+    }
+  }
+
+  private def rewriteGetJsonObjectFields(
+      expression: Expression,
+      sharedFieldsByHash: Map[Int, Seq[SharedJsonFields]]): Expression = {
+    expression match {
+      case _: ConditionalExpression | _: And | _: Or | _: In | _: TryEval |
+          _: LambdaFunction | _: CreateNamedStruct =>
+        expression
+
+      case getJsonObject @ GetJsonObject(json, Literal(path: UTF8String, StringType)) =>
+        val replacement = for {
+          fieldName <- GetJsonObject.simpleTopLevelField(path)
+          shared <- sharedFieldsByHash.getOrElse(json.semanticHash(), Nil).find { candidate =>
+            candidate.json.semanticEquals(json) && candidate.ordinalMapping.contains(fieldName)
+          }
+        } yield GetStructField(shared.alias.toAttribute, shared.ordinalMapping(fieldName))
+        replacement.getOrElse(getJsonObject)
+
+      case _: GetJsonObject =>
+        expression
+
+      case alias: Alias =>
+        alias.mapChildren(rewriteGetJsonObjectFields(_, sharedFieldsByHash))
+
+      case getStructField: GetStructField =>
+        getStructField.mapChildren(rewriteGetJsonObjectFields(_, sharedFieldsByHash))
+
+      case cast: Cast =>
+        cast.mapChildren(rewriteGetJsonObjectFields(_, sharedFieldsByHash))
+
+      case binary: BinaryArithmetic if evaluatesLeftFirst(binary) =>
+        binary.withNewChildren(
+          Seq(rewriteGetJsonObjectFields(binary.left, sharedFieldsByHash), binary.right))
+
+      case _ =>
+        expression
+    }
   }
 
   private val jsonOptimization: PartialFunction[Expression, Expression] = {

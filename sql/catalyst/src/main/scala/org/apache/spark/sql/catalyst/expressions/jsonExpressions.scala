@@ -22,10 +22,13 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
-import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils, JsonToStructsEvaluator, JsonTupleEvaluator, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
+import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, JsonExpressionUtils,
+  JsonPathParser, JsonToStructsEvaluator, JsonTupleEvaluator, MultiGetJsonObjectEvaluator,
+  PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, RUNTIME_REPLACEABLE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
+  RUNTIME_REPLACEABLE, TreePattern}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -62,6 +65,8 @@ case class GetJsonObject(json: Expression, path: Expression)
       StringTypeWithCollation(supportsTrimCollation = true))
   override def nullable: Boolean = true
   override def prettyName: String = "get_json_object"
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
 
   @transient
   private lazy val evaluator = if (path.foldable) {
@@ -134,6 +139,79 @@ case class GetJsonObject(json: Expression, path: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): GetJsonObject =
     copy(json = newLeft, path = newRight)
+}
+
+object GetJsonObject {
+  private[sql] def simpleTopLevelField(path: UTF8String): Option[String] = {
+    try {
+      Option(path).flatMap(value => JsonPathParser.parse(value.toString)).collect {
+        case List(PathInstruction.Key, PathInstruction.Named(fieldName)) => fieldName
+      }
+    } catch {
+      // Numeric subscripts are parsed as Long and can overflow before the parser returns None.
+      case _: NumberFormatException => None
+    }
+  }
+}
+
+/**
+ * Extracts multiple simple top-level fields from a JSON string in one parse. This is an internal
+ * expression used to share sibling [[GetJsonObject]] expressions; unsupported JSON paths remain
+ * as independent GetJsonObject expressions.
+ */
+case class MultiGetJsonObject(
+    json: Expression,
+    fieldNames: Seq[String],
+    fallbackPaths: Seq[String])
+  extends UnaryExpression
+  with ExpectsInputTypes {
+
+  require(
+    fieldNames.nonEmpty &&
+      fieldNames.distinct.length == fieldNames.length &&
+      fallbackPaths.length == fieldNames.length)
+
+  override def child: Expression = json
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+
+  override lazy val dataType: DataType = StructType(fieldNames.indices.map { index =>
+    StructField(s"_$index", StringType, nullable = true)
+  })
+
+  override def nullable: Boolean = true
+
+  override def nullIntolerant: Boolean = true
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
+
+  @transient
+  private lazy val evaluator = MultiGetJsonObjectEvaluator(
+    fieldNames,
+    fallbackPaths.map(UTF8String.fromString))
+
+  override def eval(input: InternalRow): Any = {
+    evaluator.evaluate(json.eval(input).asInstanceOf[UTF8String])
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val refEvaluator = ctx.addReferenceObj("evaluator", evaluator)
+    val jsonEval = json.genCode(ctx)
+    val resultType = CodeGenerator.javaType(dataType)
+    ev.copy(code = code"""
+       |${jsonEval.code}
+       |boolean ${ev.isNull} = ${jsonEval.isNull};
+       |$resultType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+       |if (!${ev.isNull}) {
+       |  ${ev.value} = ($resultType) $refEvaluator.evaluate(${jsonEval.value});
+       |  ${ev.isNull} = ${ev.value} == null;
+       |}
+       |""".stripMargin)
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): MultiGetJsonObject =
+    copy(json = newChild)
 }
 
 // scalastyle:off line.size.limit line.contains.tab
