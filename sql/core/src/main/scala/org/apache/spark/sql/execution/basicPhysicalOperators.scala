@@ -48,7 +48,18 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     with PartitioningPreservingUnaryExecNode
     with OrderPreservingUnaryExecNode {
 
-  override def output: Seq[Attribute] = projectList.map(_.toAttribute)
+  override lazy val output: Seq[Attribute] = {
+    if (isCanonicalizedPlan) {
+      projectList.map(_.toAttribute)
+    } else {
+      // Columnar transitions can make a child output physically nullable after this project was
+      // planned. Recompute the projected output nullability against the actual child output so a
+      // later row/codegen boundary does not revive stale non-nullable metadata.
+      projectList.zip(bindReferences[Expression](projectList, child.output)).map {
+        case (project, boundProject) => project.toAttribute.withNullability(boundProject.nullable)
+      }
+    }
+  }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()

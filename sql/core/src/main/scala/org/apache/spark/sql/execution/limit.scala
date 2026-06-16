@@ -22,6 +22,7 @@ import org.apache.spark.rdd.{ParallelCollectionRDD, RDD}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -314,8 +315,17 @@ case class TakeOrderedAndProjectExec(
     child: SparkPlan,
     offset: Int = 0) extends OrderPreservingUnaryExecNode {
 
-  override def output: Seq[Attribute] = {
-    projectList.map(_.toAttribute)
+  override lazy val output: Seq[Attribute] = {
+    if (isCanonicalizedPlan) {
+      projectList.map(_.toAttribute)
+    } else {
+      // Columnar transitions can make a child output physically nullable after this node was
+      // planned. Recompute the projected output nullability against the actual child output so a
+      // later row materialization does not revive stale non-nullable metadata.
+      projectList.zip(bindReferences[Expression](projectList, child.output)).map {
+        case (project, boundProject) => project.toAttribute.withNullability(boundProject.nullable)
+      }
+    }
   }
 
   override def executeCollect(): Array[InternalRow] = executeQuery {

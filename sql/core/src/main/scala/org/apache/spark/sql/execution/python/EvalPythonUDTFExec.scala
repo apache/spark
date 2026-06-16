@@ -41,7 +41,15 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
 
   def resultAttrs: Seq[Attribute]
 
-  override def output: Seq[Attribute] = requiredChildOutput ++ resultAttrs
+  // ColumnarToRowExec can make required child attributes physically nullable after this UDTF was
+  // planned. Keep the passthrough side aligned with the actual child output before the final
+  // unsafe-row materialization joins it with Python output.
+  private lazy val requiredChildOutputForExecution: Seq[Attribute] = {
+    val childOutput = AttributeMap(child.output.map(attr => attr -> attr))
+    requiredChildOutput.map(attr => childOutput.getOrElse(attr, attr))
+  }
+
+  override def output: Seq[Attribute] = requiredChildOutputForExecution ++ resultAttrs
 
   override def producedAttributes: AttributeSet = AttributeSet(resultAttrs)
 
@@ -104,10 +112,10 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
       val outputRowIterator = evaluate(argMetas, projectedRowIter, schema, context)
 
       val pruneChildForResult: InternalRow => InternalRow =
-        if (child.outputSet == AttributeSet(requiredChildOutput)) {
+        if (child.outputSet == AttributeSet(requiredChildOutputForExecution)) {
           identity
         } else {
-          UnsafeProjection.create(requiredChildOutput, child.output)
+          UnsafeProjection.create(requiredChildOutputForExecution, child.output)
         }
 
       val joined = new JoinedRow

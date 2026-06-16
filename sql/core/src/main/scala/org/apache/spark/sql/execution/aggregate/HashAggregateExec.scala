@@ -99,7 +99,7 @@ case class HashAggregateExec(
 
       val beforeAgg = System.nanoTime()
       val hasInput = iter.hasNext
-      val res = if (!hasInput && groupingExpressions.nonEmpty) {
+      val res = if (!hasInput && groupingExpressionsForExecution.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator.empty
@@ -107,11 +107,11 @@ case class HashAggregateExec(
         val aggregationIterator =
           new TungstenAggregationIterator(
             partIndex,
-            groupingExpressions,
+            groupingExpressionsForExecution,
             aggregateExpressions,
             aggregateAttributes,
             initialInputBufferOffset,
-            resultExpressions,
+            resultExpressionsForExecution,
             (expressions, inputSchema) =>
               MutableProjection.create(expressions, inputSchema),
             inputAttributes,
@@ -122,7 +122,7 @@ case class HashAggregateExec(
             spillSize,
             avgHashProbe,
             numTasksFallBacked)
-        if (!hasInput && groupingExpressions.isEmpty) {
+        if (!hasInput && groupingExpressionsForExecution.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
@@ -134,7 +134,7 @@ case class HashAggregateExec(
     }
   }
 
-  private val groupingAttributes = groupingExpressions.map(_.toAttribute)
+  private val groupingAttributes = groupingAttributesForExecution
   private val groupingKeySchema = DataTypeUtils.fromAttributes(groupingAttributes)
   private val declFunctions = aggregateExpressions.map(_.aggregateFunction)
     .filter(_.isInstanceOf[DeclarativeAggregate])
@@ -292,7 +292,7 @@ case class HashAggregateExec(
       // generate output using resultExpressions
       ctx.currentVars = null
       ctx.INPUT_ROW = keyTerm
-      val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
+      val keyVars = groupingExpressionsForExecution.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
       val evaluateKeyVars = evaluateVariables(keyVars)
@@ -311,10 +311,10 @@ case class HashAggregateExec(
       ctx.currentVars = keyVars ++ aggResults
       val inputAttrs = groupingAttributes ++ aggregateAttributes
       val resultVars = bindReferences[Expression](
-        resultExpressions,
+        resultExpressionsForExecution,
         inputAttrs).map(_.genCode(ctx))
       val evaluateNondeterministicResults =
-        evaluateNondeterministicVariables(output, resultVars, resultExpressions)
+        evaluateNondeterministicVariables(output, resultVars, resultExpressionsForExecution)
       s"""
          |$evaluateKeyVars
          |$evaluateBufferVars
@@ -324,14 +324,14 @@ case class HashAggregateExec(
        """.stripMargin
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
       // resultExpressions are Attributes of groupingExpressions and aggregateBufferAttributes.
-      assert(resultExpressions.forall(_.isInstanceOf[Attribute]))
-      assert(resultExpressions.length ==
-        groupingExpressions.length + aggregateBufferAttributes.length)
+      assert(resultExpressionsForExecution.forall(_.isInstanceOf[Attribute]))
+      assert(resultExpressionsForExecution.length ==
+        groupingExpressionsForExecution.length + aggregateBufferAttributes.length)
 
       ctx.currentVars = null
 
       ctx.INPUT_ROW = keyTerm
-      val keyVars = groupingExpressions.zipWithIndex.map { case (e, i) =>
+      val keyVars = groupingExpressionsForExecution.zipWithIndex.map { case (e, i) =>
         BoundReference(i, e.dataType, e.nullable).genCode(ctx)
       }
       val evaluateKeyVars = evaluateVariables(keyVars)
@@ -343,9 +343,9 @@ case class HashAggregateExec(
       val evaluateResultBufferVars = evaluateVariables(resultBufferVars)
 
       ctx.currentVars = keyVars ++ resultBufferVars
-      val inputAttrs = resultExpressions.map(_.toAttribute)
+      val inputAttrs = resultExpressionsForExecution.map(_.toAttribute)
       val resultVars = bindReferences[Expression](
-        resultExpressions,
+        resultExpressionsForExecution,
         inputAttrs).map(_.genCode(ctx))
       s"""
          |$evaluateKeyVars
@@ -357,10 +357,10 @@ case class HashAggregateExec(
       ctx.INPUT_ROW = keyTerm
       ctx.currentVars = null
       val resultVars = bindReferences[Expression](
-        resultExpressions,
+        resultExpressionsForExecution,
         groupingAttributes).map(_.genCode(ctx))
       val evaluateNondeterministicResults =
-        evaluateNondeterministicVariables(output, resultVars, resultExpressions)
+        evaluateNondeterministicVariables(output, resultVars, resultExpressionsForExecution)
       s"""
          |$evaluateNondeterministicResults
          |${consume(ctx, resultVars)}
@@ -632,9 +632,9 @@ case class HashAggregateExec(
   protected override def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     // create grouping key
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
-      ctx, bindReferences[Expression](groupingExpressions, child.output))
+      ctx, bindReferences[Expression](groupingExpressionsForExecution, child.output))
     val fastRowKeys = ctx.generateExpressions(
-      bindReferences[Expression](groupingExpressions, child.output))
+      bindReferences[Expression](groupingExpressionsForExecution, child.output))
     val unsafeRowKeys = unsafeRowKeyCode.value
     val unsafeRowKeyHash = ctx.freshName("unsafeRowKeyHash")
     val unsafeRowBuffer = ctx.freshName("unsafeRowAggBuffer")

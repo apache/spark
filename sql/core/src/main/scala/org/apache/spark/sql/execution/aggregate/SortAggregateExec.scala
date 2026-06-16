@@ -49,11 +49,11 @@ case class SortAggregateExec(
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"))
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = {
-    groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
+    groupingExpressionsForExecution.map(SortOrder(_, Ascending)) :: Nil
   }
 
   override protected def orderingExpressions: Seq[SortOrder] = {
-    groupingExpressions.map(SortOrder(_, Ascending))
+    groupingExpressionsForExecution.map(SortOrder(_, Ascending))
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -63,25 +63,25 @@ case class SortAggregateExec(
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
-      if (!hasInput && groupingExpressions.nonEmpty) {
+      if (!hasInput && groupingExpressionsForExecution.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator[UnsafeRow]()
       } else {
         val outputIter = new SortBasedAggregationIterator(
           partIndex,
-          groupingExpressions,
+          groupingExpressionsForExecution,
           inputAttributes,
           iter,
           aggregateExpressions,
           aggregateAttributes,
           initialInputBufferOffset,
-          resultExpressions,
+          resultExpressionsForExecution,
           (expressions, inputSchema) =>
             MutableProjection.create(expressions, inputSchema),
           numOutputRows,
           aggTime)
-        if (!hasInput && groupingExpressions.isEmpty) {
+        if (!hasInput && groupingExpressionsForExecution.isEmpty) {
           // There is no input and there is no grouping expressions.
           // We need to output a single row as the output.
           numOutputRows += 1

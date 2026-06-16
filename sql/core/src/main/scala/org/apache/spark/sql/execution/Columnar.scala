@@ -66,7 +66,9 @@ trait ColumnarToRowTransition extends UnaryExecNode
  */
 case class ColumnarToRowExec(child: SparkPlan)
     extends ColumnarToRowTransition with CodegenSupport with SafeForKWayMerge {
-  override def output: Seq[Attribute] = child.output
+  // Columnar batches carry their own null bitmap. Keep row consumers from assuming a value is
+  // non-null solely because the logical schema said so when materializing batch rows.
+  override def output: Seq[Attribute] = child.output.map(_.withNullability(true))
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -83,7 +85,7 @@ case class ColumnarToRowExec(child: SparkPlan)
 
   override def doExecute(): RDD[InternalRow] = {
     val evaluatorFactory = new ColumnarToRowEvaluatorFactory(
-      child.output,
+      output,
       longMetric("numOutputRows"),
       longMetric("numInputBatches"))
     if (conf.usePartitionEvaluator) {

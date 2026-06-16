@@ -50,6 +50,16 @@ case class ExpandExec(
   override lazy val references: AttributeSet =
     AttributeSet(projections.flatten.flatMap(_.references))
 
+  private def outputForChild(childOutput: Seq[Attribute]): Seq[Attribute] = {
+    val inputAttributes = AttributeSeq(childOutput)
+    output.zip(projections.transpose).map { case (attr, projectionExprs) =>
+      val nullable = projectionExprs.exists { expr =>
+        BindReferences.bindReference(expr, inputAttributes).nullable
+      }
+      attr.withNullability(nullable)
+    }
+  }
+
   private[this] val projection =
     (exprs: Seq[Expression]) => UnsafeProjection.create(exprs, child.output)
 
@@ -229,5 +239,5 @@ case class ExpandExec(
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): ExpandExec =
-    copy(child = newChild)
+    copy(output = outputForChild(newChild.output), child = newChild)
 }

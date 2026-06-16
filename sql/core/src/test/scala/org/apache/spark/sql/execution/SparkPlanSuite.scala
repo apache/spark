@@ -27,14 +27,18 @@ import org.apache.spark.{SparkEnv, SparkException, SparkUnsupportedOperationExce
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
-  Attribute, AttributeReference, Expression, ExprId, Literal}
+  Alias, Attribute, AttributeReference, Coalesce, CreateArray, Explode, Expression, ExprId,
+  Literal, RLike}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Count, Partial}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.Deduplicate
 import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
 
@@ -135,6 +139,151 @@ class SparkPlanSuite extends SharedSparkSession {
       Seq(AttributeReference("val", IntegerType)()), Seq(InternalRow(1)), None)
     val nonEmpty = ColumnarOp(relation).toRowBased.executeCollect()
     assert(nonEmpty === relation.executeCollect())
+  }
+
+  test("ColumnarToRowExec should materialize null values from non-nullable columnar output") {
+    val output = Seq(AttributeReference("value", StringType, nullable = false)())
+
+    def assertSingleNull(rows: Array[InternalRow]): Unit = {
+      assert(rows.length === 1)
+      assert(rows.head.isNullAt(0))
+    }
+
+    def assertAllNull(rows: Array[InternalRow]): Unit = {
+      assert(rows.length === 1)
+      assert(rows.head.isNullAt(0))
+      assert(rows.head.isNullAt(1))
+    }
+
+    def columnarLeaf(): NullColumnarOp = NullColumnarOp(output)
+
+    def columnarToRow(): ColumnarToRowExec = ColumnarToRowExec(columnarLeaf())
+
+    def withTransitions(plan: SparkPlan): SparkPlan = {
+      ApplyColumnarRulesAndInsertTransitions(Nil, outputsColumnar = false).apply(plan)
+    }
+
+    def projected(): ProjectExec = {
+      withTransitions(ProjectExec(output, columnarLeaf())).asInstanceOf[ProjectExec]
+    }
+
+    def splitProject(child: SparkPlan): WholeStageCodegenExec = {
+      val projectList = Seq(
+        Alias(child.output.head, "first")(),
+        Alias(child.output.head, "second")())
+      WholeStageCodegenExec(ProjectExec(projectList, child))(codegenStageId = 0)
+    }
+
+    Seq(
+      WholeStageCodegenExec(projected())(codegenStageId = 0).executeCollect(),
+      WholeStageCodegenExec(columnarToRow())(codegenStageId = 0).executeCollect(),
+      columnarToRow().executeCollect()).foreach(assertSingleNull)
+
+    withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "true") {
+      val split = splitProject(projected())
+      assert(split.doCodeGen()._2.body.contains("project_doConsume"))
+      assertAllNull(split.executeCollect())
+    }
+
+    val rowBoundaryProjected = projected()
+    Seq(
+      WholeStageCodegenExec(
+        withTransitions(
+          FilterExec(RLike(output.head, Literal("present")), ProjectExec(output, columnarLeaf()))))(
+          codegenStageId = 0).executeCollect(),
+      WholeStageCodegenExec(
+        FilterExec(
+          RLike(rowBoundaryProjected.output.head, Literal("present")),
+          InputAdapter(rowBoundaryProjected)))(codegenStageId = 0).executeCollect())
+      .foreach { rows =>
+        assert(rows.isEmpty)
+      }
+
+    val splitProjected = projected()
+    assert(splitProjected.output.head.nullable)
+    val rowBoundary = InputAdapter(splitProjected)
+    withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "true") {
+      val splitRegex = splitProject(FilterExec(
+        Coalesce(Seq(RLike(rowBoundary.output.head, Literal("present")), Literal(true))),
+        rowBoundary))
+      assert(splitRegex.doCodeGen()._2.body.contains("project_doConsume"))
+      assertAllNull(splitRegex.executeCollect())
+    }
+
+    def partialGroupedAggregate(): HashAggregateExec = {
+      val partialCount = Count(Literal(1)).toAggregateExpression().copy(mode = Partial)
+      withTransitions(HashAggregateExec(
+        requiredChildDistributionExpressions = None,
+        isStreaming = false,
+        numShufflePartitions = None,
+        groupingExpressions = output,
+        aggregateExpressions = Seq(partialCount),
+        aggregateAttributes = partialCount.aggregateFunction.aggBufferAttributes,
+        initialInputBufferOffset = 0,
+        resultExpressions =
+          output.map(_.toAttribute) ++ partialCount.aggregateFunction.inputAggBufferAttributes,
+        child = columnarLeaf()))
+        .asInstanceOf[HashAggregateExec]
+    }
+
+    def assertPartialAggregateNull(rows: Array[InternalRow]): Unit = {
+      assert(rows.length === 1)
+      assert(rows.head.isNullAt(0))
+      assert(rows.head.getLong(1) === 1L)
+    }
+
+    assert(partialGroupedAggregate().canonicalized != null)
+    assert(partialGroupedAggregate().output.head.nullable)
+    Seq(
+      WholeStageCodegenExec(partialGroupedAggregate())(codegenStageId = 0).executeCollect(),
+      partialGroupedAggregate().executeCollect(),
+      partialGroupedAggregate().toSortAggregate.executeCollect()).foreach(assertPartialAggregateNull)
+
+    def generate(): GenerateExec = {
+      withTransitions(GenerateExec(
+        Explode(CreateArray(Seq(Literal(1)))),
+        requiredChildOutput = output,
+        outer = false,
+        generatorOutput = Seq(AttributeReference("col", IntegerType, nullable = false)()),
+        child = columnarLeaf()))
+        .asInstanceOf[GenerateExec]
+    }
+
+    def assertGeneratedNull(rows: Array[InternalRow]): Unit = {
+      assert(rows.length === 1)
+      assert(rows.head.isNullAt(0))
+      assert(rows.head.getInt(1) === 1)
+    }
+
+    assert(generate().output.head.nullable)
+    Seq(
+      WholeStageCodegenExec(generate())(codegenStageId = 0).executeCollect(),
+      generate().executeCollect()).foreach(assertGeneratedNull)
+
+    def takeOrderedAndProject(): TakeOrderedAndProjectExec = {
+      withTransitions(TakeOrderedAndProjectExec(
+        limit = 1,
+        sortOrder = Nil,
+        projectList = output,
+        child = columnarLeaf()))
+        .asInstanceOf[TakeOrderedAndProjectExec]
+    }
+
+    assert(takeOrderedAndProject().output.head.nullable)
+    assertSingleNull(takeOrderedAndProject().executeCollect())
+
+    def expanded(): ExpandExec = {
+      withTransitions(ExpandExec(
+        projections = Seq(output),
+        output = output,
+        child = columnarLeaf()))
+        .asInstanceOf[ExpandExec]
+    }
+
+    assert(expanded().output.head.nullable)
+    Seq(
+      WholeStageCodegenExec(expanded())(codegenStageId = 0).executeCollect(),
+      expanded().executeCollect()).foreach(assertSingleNull)
   }
 
   test("BatchScanExec hashCode includes keyGroupedPartitioning") {
@@ -242,6 +391,24 @@ case class ColumnarOp(child: SparkPlan) extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
   override protected def withNewChildInternal(newChild: SparkPlan): ColumnarOp =
     copy(child = newChild)
+}
+
+case class NullColumnarOp(override val output: Seq[Attribute])
+  extends LeafExecNode with CodegenSupport {
+  override val supportsColumnar: Boolean = true
+  override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
+    sparkContext.parallelize(Seq(0), 1).map { _ =>
+      val column = new OnHeapColumnVector(1, StringType)
+      column.putNull(0)
+      new ColumnarBatch(Array(column), 1)
+    }
+  }
+  override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
+  override def inputRDDs(): Seq[RDD[InternalRow]] = throw new UnsupportedOperationException()
+  override protected def doProduce(ctx: CodegenContext): String =
+    throw new UnsupportedOperationException()
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String =
+    throw new UnsupportedOperationException()
 }
 
 private case class TestSubqueryExec(child: SparkPlan) extends BaseSubqueryExec {

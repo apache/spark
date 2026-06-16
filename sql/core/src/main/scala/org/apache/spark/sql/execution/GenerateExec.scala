@@ -64,7 +64,15 @@ case class GenerateExec(
     child: SparkPlan)
   extends UnaryExecNode with CodegenSupport {
 
-  override def output: Seq[Attribute] = requiredChildOutput ++ generatorOutput
+  // ColumnarToRowExec can make required child attributes physically nullable after GenerateExec
+  // was planned. Keep the passthrough side of GenerateExec aligned with the actual child output so
+  // its own unsafe-row materialization does not revive stale non-nullable metadata.
+  private lazy val requiredChildOutputForExecution: Seq[Attribute] = {
+    val childOutput = AttributeMap(child.output.map(attr => attr -> attr))
+    requiredChildOutput.map(attr => childOutput.getOrElse(attr, attr))
+  }
+
+  override def output: Seq[Attribute] = requiredChildOutputForExecution ++ generatorOutput
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -84,16 +92,16 @@ case class GenerateExec(
         case _ =>
       }
       val generatorNullRow = new GenericInternalRow(generator.elementSchema.length)
-      val rows = if (requiredChildOutput.nonEmpty) {
+      val rows = if (requiredChildOutputForExecution.nonEmpty) {
 
         val pruneChildForResult: InternalRow => InternalRow = {
           // The declared output of this operator is `requiredChildOutput ++ generatorOutput`.
           // If `child.output` is different from `requiredChildOutput`, we must do an projection
           // to adjust the child output and make sure the final result matches the declared output.
-          if (child.output == requiredChildOutput) {
+          if (child.output == requiredChildOutputForExecution) {
             identity
           } else {
-            UnsafeProjection.create(requiredChildOutput, child.output)
+            UnsafeProjection.create(requiredChildOutputForExecution, child.output)
           }
         }
 
@@ -147,7 +155,7 @@ case class GenerateExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val attrToInputCode = AttributeMap(child.output.zip(input))
-    val requiredInput = requiredChildOutput.map(attrToInputCode)
+    val requiredInput = requiredChildOutputForExecution.map(attrToInputCode)
     boundGenerator match {
       case e: CollectionGenerator => codeGenCollection(ctx, e, requiredInput)
       case g => codeGenIterableOnce(ctx, g, requiredInput)

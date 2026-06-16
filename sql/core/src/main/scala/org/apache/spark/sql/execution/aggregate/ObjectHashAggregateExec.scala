@@ -90,7 +90,7 @@ case class ObjectHashAggregateExec(
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
       val beforeAgg = System.nanoTime()
       val hasInput = iter.hasNext
-      val res = if (!hasInput && groupingExpressions.nonEmpty) {
+      val res = if (!hasInput && groupingExpressionsForExecution.nonEmpty) {
         // This is a grouped aggregate and the input kvIterator is empty,
         // so return an empty kvIterator.
         Iterator.empty
@@ -99,11 +99,11 @@ case class ObjectHashAggregateExec(
           new ObjectAggregationIterator(
             partIndex,
             child.output,
-            groupingExpressions,
+            groupingExpressionsForExecution,
             aggregateExpressions,
             aggregateAttributes,
             initialInputBufferOffset,
-            resultExpressions,
+            resultExpressionsForExecution,
             (expressions, inputSchema) =>
               MutableProjection.create(expressions, inputSchema),
             inputAttributes,
@@ -112,7 +112,7 @@ case class ObjectHashAggregateExec(
             numOutputRows,
             spillSize,
             numTasksFallBacked)
-        if (!hasInput && groupingExpressions.isEmpty) {
+        if (!hasInput && groupingExpressionsForExecution.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {

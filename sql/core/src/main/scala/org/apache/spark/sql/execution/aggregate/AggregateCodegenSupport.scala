@@ -65,7 +65,7 @@ trait AggregateCodegenSupport
   protected def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String
 
   protected override def doProduce(ctx: CodegenContext): String = {
-    if (groupingExpressions.isEmpty) {
+    if (groupingExpressionsForExecution.isEmpty) {
       doProduceWithoutKeys(ctx)
     } else {
       doProduceWithKeys(ctx)
@@ -73,7 +73,7 @@ trait AggregateCodegenSupport
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    if (groupingExpressions.isEmpty) {
+    if (groupingExpressionsForExecution.isEmpty) {
       doConsumeWithoutKeys(ctx, input)
     } else {
       doConsumeWithKeys(ctx, input)
@@ -134,7 +134,8 @@ trait AggregateCodegenSupport
       val evaluateAggResults = evaluateVariables(aggResults)
       // evaluate result expressions
       ctx.currentVars = aggResults
-      val resultVars = bindReferences(resultExpressions, aggregateAttributes).map(_.genCode(ctx))
+      val resultVars =
+        bindReferences(resultExpressionsForExecution, aggregateAttributes).map(_.genCode(ctx))
       (resultVars,
         s"""
            |$evaluateAggResults
@@ -145,7 +146,7 @@ trait AggregateCodegenSupport
       (flatBufVars, "")
     } else {
       // no aggregate function, the result should be literals
-      val resultVars = resultExpressions.map(_.genCode(ctx))
+      val resultVars = resultExpressionsForExecution.map(_.genCode(ctx))
       (resultVars, evaluateVariables(resultVars))
     }
 

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference,
+  AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{ExplainUtils, PartitioningPreservingUnaryExecNode, UnaryExecNode}
@@ -80,18 +81,42 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
   }
 
+  // ColumnarToRowExec can make child attributes physically nullable after aggregate planning.
+  // Rebind by exprId so aggregate projections read the actual execution-time nullability instead
+  // of reviving stale non-nullable attributes captured before the row transition was inserted.
+  private def withPhysicalInputAttributes(
+      expressions: Seq[NamedExpression],
+      inputAttributes: Seq[Attribute]): Seq[NamedExpression] = {
+    val inputAttrMap = AttributeMap(inputAttributes.map(attr => attr -> attr))
+    expressions.map(_.transformUp {
+      case attr: Attribute => inputAttrMap.getOrElse(attr, attr)
+    }.asInstanceOf[NamedExpression])
+  }
+
+  protected lazy val groupingExpressionsForExecution: Seq[NamedExpression] =
+    withPhysicalInputAttributes(groupingExpressions, child.output)
+
+  protected lazy val groupingAttributesForExecution: Seq[Attribute] =
+    groupingExpressionsForExecution.map(_.toAttribute)
+
+  protected lazy val resultExpressionsForExecution: Seq[NamedExpression] =
+    withPhysicalInputAttributes(
+      resultExpressions,
+      groupingAttributesForExecution ++ aggregateAttributes)
+
   override def producedAttributes: AttributeSet =
     AttributeSet(aggregateAttributes) ++
-    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
+    AttributeSet(resultExpressionsForExecution.diff(groupingExpressionsForExecution)
+      .map(_.toAttribute)) ++
     AttributeSet(aggregateBufferAttributes) ++
     // it's not empty when the inputAggBufferAttributes is not equal to the aggregate buffer
     // attributes of the child Aggregate, when the child Aggregate contains the subquery in
     // AggregateFunction. See SPARK-31620 for more details.
     AttributeSet(inputAggBufferAttributes) -- child.outputSet
 
-  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = resultExpressionsForExecution.map(_.toAttribute)
 
-  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
+  override protected def outputExpressions: Seq[NamedExpression] = resultExpressionsForExecution
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
@@ -119,8 +144,8 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
    */
   def toSortAggregate: SortAggregateExec = {
     SortAggregateExec(
-      requiredChildDistributionExpressions, isStreaming, numShufflePartitions, groupingExpressions,
-      aggregateExpressions, aggregateAttributes, initialInputBufferOffset, resultExpressions,
-      child)
+      requiredChildDistributionExpressions, isStreaming, numShufflePartitions,
+      groupingExpressionsForExecution, aggregateExpressions, aggregateAttributes,
+      initialInputBufferOffset, resultExpressionsForExecution, child)
   }
 }
