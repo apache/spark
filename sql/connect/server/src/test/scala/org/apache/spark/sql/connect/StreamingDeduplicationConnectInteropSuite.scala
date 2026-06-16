@@ -36,7 +36,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
  * Connect session (`withSession`) sharing one SparkContext / filesystem, so both can drive the
  * same checkpoint directory. Input is plain CSV files (no commit markers) read by a file source
  * with Trigger.AvailableNow for deterministic batching; the sink is a recoverable parquet file
- * sink. See SPARK-XXXXX.
+ * sink. See SPARK-57489.
  */
 class StreamingDeduplicationConnectInteropSuite extends SparkConnectServerTest {
 
@@ -100,7 +100,7 @@ class StreamingDeduplicationConnectInteropSuite extends SparkConnectServerTest {
       .toSeq
       .sortBy(_.mkString(","))
 
-  test("SPARK-XXXXX: dropDuplicates checkpoint written by Classic restarts under Connect") {
+  test("SPARK-57489: dropDuplicates checkpoint written by Classic restarts under Connect") {
     withTempDir { dir =>
       val inputDir = new File(dir, "input")
       val outputDir = new File(dir, "output")
@@ -122,7 +122,7 @@ class StreamingDeduplicationConnectInteropSuite extends SparkConnectServerTest {
     }
   }
 
-  test("SPARK-XXXXX: dropDuplicates checkpoint written by Connect restarts under Classic") {
+  test("SPARK-57489: dropDuplicates checkpoint written by Connect restarts under Classic") {
     withTempDir { dir =>
       val inputDir = new File(dir, "input")
       val outputDir = new File(dir, "output")

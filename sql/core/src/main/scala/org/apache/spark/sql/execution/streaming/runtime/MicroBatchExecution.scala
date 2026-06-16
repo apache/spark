@@ -222,7 +222,7 @@ class MicroBatchExecution(
       }
     }.getOrElse(sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
 
-    // SPARK-XXXXX: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys with the
+    // SPARK-57489: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys with the
     // deterministic order by default, but streaming deduplication binds state-store keys by
     // position. A query restored from a checkpoint that predates this change must keep its original
     // (legacy) key order, so recompute the keys from the recipe carried on the resolved node using

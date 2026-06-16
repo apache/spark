@@ -3491,7 +3491,7 @@ object SQLConf {
         "deduplication binds state-store keys by position, so for streaming the effective " +
         "value is pinned per query in the offset log at batch 0: newly started queries use " +
         "the stable order, while queries restored from a checkpoint that predates this config " +
-        "keep their original key order. Please refer to SPARK-XXXXX for details.")
+        "keep their original key order. Please refer to SPARK-57489 for details.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

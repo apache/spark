@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
  * reproduces each engine's legacy resolution. The resolved node also carries the original recipe
  * (`subset`, `allColumnsAsKeys`, `viaSparkClassic`) so that streaming queries can recompute the
  * keys at query start with the value pinned in the offset log (see
- * `StreamingQueryManager.createQuery` and [[computeKeys]]). See SPARK-XXXXX.
+ * `StreamingQueryManager.createQuery` and [[computeKeys]]). See SPARK-57489.
  */
 object ResolveDeduplicate extends Rule[LogicalPlan] {
 
@@ -114,7 +114,7 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
    * Deduplicate `names` preserving first-occurrence order. The stable ordering is an invariant for
    * stateful operators, so we rely only on the documented contract of `Seq` traversal and explicit
    * append, not on `Seq.distinct`/`Set` (whose ordering is not contractually guaranteed).
-   * See SPARK-XXXXX.
+   * See SPARK-57489.
    */
   private def dedupKeepingOrder(names: Seq[String]): Seq[String] = {
     val seen = mutable.HashSet.empty[String]

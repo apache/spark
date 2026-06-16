@@ -2323,7 +2323,7 @@ case class OneRowRelation() extends LeafNode {
  * @param allColumnsAsKeys when true, every column of the child is a deduplication key.
  * @param viaSparkClassic whether this was built via Spark Classic (`Dataset.dropDuplicates*`, true)
  *   or Spark Connect (`transformDeduplicate`, false). Only consulted when recomputing the keys in
- *   the legacy order, where the two engines historically differed. See SPARK-XXXXX.
+ *   the legacy order, where the two engines historically differed. See SPARK-57489.
  */
 case class DeduplicateSpec(
     subset: Seq[String],

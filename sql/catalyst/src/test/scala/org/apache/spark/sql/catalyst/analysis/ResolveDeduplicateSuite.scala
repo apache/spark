@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 /**
  * Unit tests for [[ResolveDeduplicate]], the analyzer rule that resolves [[UnresolvedDeduplicate]]
  * into a [[Deduplicate]] / [[DeduplicateWithinWatermark]]. The rule is applied directly so the
- * deterministic-key-order conf can be toggled per case. See SPARK-XXXXX.
+ * deterministic-key-order conf can be toggled per case. See SPARK-57489.
  */
 class ResolveDeduplicateSuite extends AnalysisTest {
 
@@ -51,7 +51,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-XXXXX: deterministic resolution keeps first-occurrence input order and dedups") {
+  test("SPARK-57489: deterministic resolution keeps first-occurrence input order and dedups") {
     withSQLConf(confKey -> "true") {
       // The input order is preserved and duplicate names are collapsed at first occurrence. Under
       // the old `toSet.toSeq` this order would not be guaranteed; asserting it exactly guards
@@ -61,7 +61,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-XXXXX: deterministic resolution identical across engines (interop)") {
+  test("SPARK-57489: deterministic resolution identical across engines (interop)") {
     // The deterministic path ignores the engine flag, so Classic and Connect resolve the SAME
     // attributes (same exprIds, same order). This is what lets a checkpoint written by one engine
     // restart under the other.
@@ -78,7 +78,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-XXXXX: legacy fallback - Classic dedups the subset (Set order)") {
+  test("SPARK-57489: legacy fallback - Classic dedups the subset (Set order)") {
     withSQLConf(confKey -> "false") {
       val keys = resolveKeys(Seq("c", "a", "c", "b"), viaSparkClassic = true)
       // Classic legacy used `toSet.toSeq`: duplicate names are collapsed (order is Set-defined and
@@ -88,7 +88,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-XXXXX: legacy fallback - Connect keeps duplicates in input order") {
+  test("SPARK-57489: legacy fallback - Connect keeps duplicates in input order") {
     withSQLConf(confKey -> "false") {
       val keys = resolveKeys(Seq("c", "a", "c", "b"), viaSparkClassic = false)
       // Connect legacy did not dedup the requested names.
@@ -96,7 +96,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-XXXXX: allColumnsAsKeys - deterministic and Connect legacy use child output order") {
+  test("SPARK-57489: allColumnsAsKeys - deterministic and Connect legacy use child output order") {
     // Deterministic (regardless of engine flag) keys on all child columns in output order.
     withSQLConf(confKey -> "true") {
       assert(
@@ -111,7 +111,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-XXXXX: allColumnsAsKeys - Classic legacy fallback uses Set order over all columns") {
+  test("SPARK-57489: allColumnsAsKeys - Classic legacy fallback uses Set order over all columns") {
     withSQLConf(confKey -> "false") {
       // Legacy Classic `dropDuplicates()` resolved `columns.toSet.toSeq`: every column is present
       // (order is Set-defined and intentionally not asserted here).
@@ -120,7 +120,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-XXXXX: withinWatermark resolves to DeduplicateWithinWatermark") {
+  test("SPARK-57489: withinWatermark resolves to DeduplicateWithinWatermark") {
     val resolved = ResolveDeduplicate(
       UnresolvedDeduplicate(Seq("a"), allColumnsAsKeys = false, withinWatermark = true,
         viaSparkClassic = true, rel))
@@ -128,7 +128,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     assert(resolved.asInstanceOf[DeduplicateWithinWatermark].keys.map(_.name) === Seq("a"))
   }
 
-  test("SPARK-XXXXX: duplicate-named columns produce multiple keys (filter, not find)") {
+  test("SPARK-57489: duplicate-named columns produce multiple keys (filter, not find)") {
     val a2 = $"a".int
     val dupRel = LocalRelation(a, a2)
     // A single requested name "a" must resolve to BOTH same-named columns (filter, not find) in
@@ -149,7 +149,7 @@ class ResolveDeduplicateSuite extends AnalysisTest {
     }
   }
 
-  test("SPARK-XXXXX: unknown column name fails analysis") {
+  test("SPARK-57489: unknown column name fails analysis") {
     checkError(
       exception = intercept[AnalysisException] {
         ResolveDeduplicate(UnresolvedDeduplicate(

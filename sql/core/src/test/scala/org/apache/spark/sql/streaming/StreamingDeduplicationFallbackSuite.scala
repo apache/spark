@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
  * [[SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER]] existed has no such entry in its offset log;
  * on restart it must fall back to the legacy key order so the persisted state-store keys (bound by
  * position) still align. The session default stays true (deterministic), so these tests prove the
- * fallback is driven by the offset log, not the session. See SPARK-XXXXX.
+ * fallback is driven by the offset log, not the session. See SPARK-57489.
  */
 class StreamingDeduplicationFallbackSuite extends StateStoreMetricsTest {
   import testImplicits._
@@ -81,7 +81,7 @@ class StreamingDeduplicationFallbackSuite extends StateStoreMetricsTest {
     offsetLog.get(batchId).flatMap(_.metadataOpt.map(_.conf)).flatMap(_.get(confKey))
   }
 
-  test("SPARK-XXXXX: existing checkpoint without the conf falls back to the legacy key order") {
+  test("SPARK-57489: existing checkpoint without the conf falls back to the legacy key order") {
     withTempDir { checkpoint =>
       // The same MemoryStream is reused across both runs so source offsets advance across the
       // restart (a fresh stream would reset to an already-committed offset and process nothing).
@@ -113,7 +113,7 @@ class StreamingDeduplicationFallbackSuite extends StateStoreMetricsTest {
     }
   }
 
-  test("SPARK-XXXXX: newly started query pins the deterministic order and keeps it on restart") {
+  test("SPARK-57489: newly started query pins the deterministic order and keeps it on restart") {
     withTempDir { checkpoint =>
       val input = MemoryStream[(Int, Int, Int, Int, Int)]
 
