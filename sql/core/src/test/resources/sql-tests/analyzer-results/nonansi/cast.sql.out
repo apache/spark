@@ -639,9 +639,9 @@ Project [concat(ts=, cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)
 
 
 -- !query
-select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9)) as string)
+select cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9))
 -- !query analysis
-Project [cast(cast(cast(2020-01-01 00:00:00.123456 as timestamp_ntz) as timestamp_ntz(9)) as string) AS CAST(CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP_NTZ) AS TIMESTAMP_NTZ(9)) AS STRING)#x]
+Project [cast(cast(2020-01-01 00:00:00.123456 as timestamp_ntz) as timestamp_ntz(9)) AS CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP_NTZ) AS TIMESTAMP_NTZ(9))#x]
 +- OneRowRelation
 
 
@@ -660,9 +660,9 @@ Project [cast(cast(cast(2020-01-01 00:00:00.123456 as timestamp_ntz) as timestam
 
 
 -- !query
-select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9)) as string)
+select cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9))
 -- !query analysis
-Project [cast(cast(cast(2020-01-01 00:00:00.123456 as timestamp) as timestamp_ltz(9)) as string) AS CAST(CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP) AS TIMESTAMP_LTZ(9)) AS STRING)#x]
+Project [cast(cast(2020-01-01 00:00:00.123456 as timestamp) as timestamp_ltz(9)) AS CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP) AS TIMESTAMP_LTZ(9))#x]
 +- OneRowRelation
 
 
