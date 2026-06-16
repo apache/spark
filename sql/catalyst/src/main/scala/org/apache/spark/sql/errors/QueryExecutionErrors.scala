@@ -2622,7 +2622,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def parquetTimestampNanosOverflowError(
-      value: TimestampNanosVal, isNtz: Boolean): ArithmeticException = {
+      value: TimestampNanosVal, isNtz: Boolean): SparkArithmeticException = {
     // Render TIMESTAMP_NTZ values without a zone (LocalDateTime, no trailing `Z`); TIMESTAMP_LTZ
     // values are absolute instants and render as UTC with a trailing `Z`.
     val rendered =
