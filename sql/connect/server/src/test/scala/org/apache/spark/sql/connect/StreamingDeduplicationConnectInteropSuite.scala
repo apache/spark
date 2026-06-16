@@ -66,7 +66,7 @@ class StreamingDeduplicationConnectInteropSuite extends SparkConnectServerTest {
    * sink at `outputDir`.
    */
   // Fully qualified on purpose: this file lives in package org.apache.spark.sql.connect, which also
-  // defines a `SparkSession`; an import of the common type is shadowed by it under Scala 2.12. The
+  // defines a `SparkSession`; an import of the common type would be shadowed by it. The
   // common base accepts both the Classic `spark` and the Connect `withSession` session.
   private def runDedup(
       session: org.apache.spark.sql.SparkSession,

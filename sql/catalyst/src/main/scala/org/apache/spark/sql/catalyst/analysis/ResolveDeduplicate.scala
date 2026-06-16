@@ -34,9 +34,9 @@ import org.apache.spark.sql.internal.SQLConf
  * The key attributes are computed with [[SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER]] read
  * from the current session: true (the default) produces a stable, first-occurrence ordering; false
  * reproduces each engine's legacy resolution. The resolved node also carries the original recipe
- * (`subset`, `allColumnsAsKeys`, `viaSparkClassic`) so that streaming queries can recompute the
- * keys at query start with the value pinned in the offset log (see
- * `StreamingQueryManager.createQuery` and [[computeKeys]]). See SPARK-57489.
+ * (a `DeduplicateSpec` holding the key spec and `viaSparkClassic`) so streaming queries can
+ * recompute the keys at query start with the value pinned in the offset log (see
+ * `MicroBatchExecution.logicalPlan` and [[computeKeys]]). See SPARK-57489.
  */
 object ResolveDeduplicate extends Rule[LogicalPlan] {
 
