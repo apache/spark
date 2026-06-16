@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkIllegalStateException}
 import org.apache.spark.internal.LogKeys
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.V2TableReference
+import org.apache.spark.sql.catalyst.analysis.{ResolveDeduplicate, V2TableReference}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, FileSourceMetadataAttribute, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Deduplicate, DeduplicateWithinWatermark, Distinct, FlatMapGroupsInPandasWithState, FlatMapGroupsWithState, GlobalLimit, Join, LeafNode, LocalRelation, LogicalPlan, Project, StreamSourceAwareLogicalPlan, TransformWithState, TransformWithStateInPySpark}
@@ -222,8 +222,31 @@ class MicroBatchExecution(
       }
     }.getOrElse(sparkSessionForStream.sessionState.conf.enableStreamingSourceEvolution)
 
+    // SPARK-XXXXX: dropDuplicates / dropDuplicatesWithinWatermark resolve their keys with the
+    // deterministic order by default, but streaming deduplication binds state-store keys by
+    // position. A query restored from a checkpoint that predates this change must keep its original
+    // (legacy) key order, so recompute the keys from the recipe carried on the resolved node using
+    // the order pinned in the offset log (mirroring how `enforceNamed` is read above). For a new
+    // query the offset log has no entry yet, so the session value is used and pinned at batch 0.
+    val streamConf = sparkSessionForStream.sessionState.conf
+    val orderDeterministically = initialLatestOffsetSeq.flatMap { case (_, offsetSeq) =>
+      offsetSeq.metadataOpt.flatMap { metadata =>
+        OffsetSeqMetadata.readValueOpt(metadata, SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
+          .map(_.toBoolean)
+      }
+    }.getOrElse(streamConf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER))
+    val dedupResolver = sparkSessionForStream.sessionState.analyzer.resolver
+    val planWithDedupKeys = analyzedPlan.transformUp {
+      case d @ Deduplicate(_, child, Some(spec)) =>
+        d.copy(keys =
+          ResolveDeduplicate.computeKeys(child, spec, orderDeterministically, dedupResolver))
+      case d @ DeduplicateWithinWatermark(_, child, Some(spec)) =>
+        d.copy(keys =
+          ResolveDeduplicate.computeKeys(child, spec, orderDeterministically, dedupResolver))
+    }
+
     import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
-    val _logicalPlan = analyzedPlan.transform {
+    val _logicalPlan = planWithDedupKeys.transform {
       case streamingRelation @ StreamingRelation(
           dataSourceV1, sourceName, output, sourceIdentifyingName) =>
         toExecutionRelationMap.getOrElseUpdate(streamingRelation, {
