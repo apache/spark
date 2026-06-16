@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{File, FileOutputStream, OutputStream}
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.util.Locale
-import java.util.zip.GZIPOutputStream
-
-import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
@@ -38,38 +34,15 @@ import org.apache.spark.util.Utils
  *
  * Unlike CSV/JSON this does not reuse [[ArchiveReadSuiteBase]]: the text data source has a single
  * fixed `value` column (one row per line, or per entry with `wholetext`) and no schema inference,
- * so the structured, two-column tests there do not apply.
+ * so the structured, two-column tests there do not apply. The tar container-writing helpers come
+ * from [[TarArchiveTestUtils]] (shared with [[TarArchiveReadBase]]).
  */
-class TextTarArchiveReadSuite extends QueryTest with SharedSparkSession {
+class TextTarArchiveReadSuite extends QueryTest with SharedSparkSession with TarArchiveTestUtils {
 
   override def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ARCHIVE_FORMAT_READER_ENABLED.key, "true")
 
-  /** Archive extensions to exercise; the head is the default. */
-  private val archiveExtensions: Seq[String] = Seq("tar", "tar.gz", "tgz")
-
   private def textBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)
-
-  /** Writes `entries` (name -> bytes) into the archive at `dest`; compression follows the ext. */
-  private def writeArchive(dest: File, entries: Seq[(String, Array[Byte])]): Unit = {
-    val name = dest.getName.toLowerCase(Locale.ROOT)
-    val rawOut: OutputStream = if (name.endsWith(".gz") || name.endsWith(".tgz")) {
-      new GZIPOutputStream(new FileOutputStream(dest))
-    } else {
-      new FileOutputStream(dest)
-    }
-    val out = new TarArchiveOutputStream(rawOut)
-    try {
-      entries.foreach { case (entryName, bytes) =>
-        val entry = new TarArchiveEntry(entryName)
-        entry.setSize(bytes.length.toLong)
-        out.putArchiveEntry(entry)
-        out.write(bytes)
-        out.closeArchiveEntry()
-      }
-      out.finish()
-    } finally out.close()
-  }
 
   /** Provides an archive-extensioned path inside a fresh temp dir to `f`. */
   private def withArchiveFile(
@@ -172,7 +145,7 @@ class TextTarArchiveReadSuite extends QueryTest with SharedSparkSession {
   Seq(true, false).foreach { ignoreCorrupt =>
     test(s"ignoreCorruptFiles=$ignoreCorrupt controls whether a corrupt archive is skipped") {
       withArchiveFile("tar.gz") { archive =>
-        Files.write(archive.toPath, textBytes("this is not a valid gzip-compressed tar archive"))
+        writeCorruptArchive(archive)
         withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> ignoreCorrupt.toString) {
           if (ignoreCorrupt) {
             checkAnswer(read(archive.getCanonicalPath), Seq.empty[Row])
