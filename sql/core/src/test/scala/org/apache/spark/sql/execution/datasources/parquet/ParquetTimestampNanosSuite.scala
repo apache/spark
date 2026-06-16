@@ -137,6 +137,45 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-57102: explicit lower-precision read schema truncates sub-precision nanos") {
+    withNanosEnabled {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        // Foreign file with full 9-digit precision: .123456789 after the epoch, and -1ns (which
+        // floors to epochMicros = -1, nanosWithinMicro = 999).
+        val values = Seq(Some(123456789L), Some(-1L))
+
+        withTempPath { dir =>
+          val file = new File(dir, "ntz.parquet")
+          writeForeignNanosParquet(file, isAdjustedToUTC = false, values)
+          // Reading with an explicit TIMESTAMP_NTZ(7) schema must floor the sub-microsecond
+          // digits to precision 7, matching DateTimeUtils.localDateTimeToTimestampNanos.
+          val read = spark.read.schema("ts TIMESTAMP_NTZ(7)").parquet(file.getCanonicalPath)
+          assert(read.schema("ts").dataType === TimestampNTZNanosType(7))
+          checkAnswer(read, spark.sql(
+            """SELECT * FROM VALUES
+              |  (TIMESTAMP_NTZ '1970-01-01 00:00:00.123456700'),
+              |  (TIMESTAMP_NTZ '1969-12-31 23:59:59.999999900')
+              |  AS t(ts)""".stripMargin).collect().toSeq)
+        }
+
+        withTempPath { dir =>
+          val file = new File(dir, "ltz.parquet")
+          writeForeignNanosParquet(file, isAdjustedToUTC = true, values)
+          // precision 8 drops only the last digit.
+          val read = spark.read.schema("ts TIMESTAMP_LTZ(8)").parquet(file.getCanonicalPath)
+          assert(read.schema("ts").dataType === TimestampLTZNanosType(8))
+          checkAnswer(read, spark.sql(
+            """SELECT * FROM VALUES
+              |  (TIMESTAMP_LTZ '1970-01-01 00:00:00.123456780'),
+              |  (TIMESTAMP_LTZ '1969-12-31 23:59:59.999999990')
+              |  AS t(ts)""".stripMargin).collect().toSeq)
+        }
+      }
+    }
+  }
+
   test("SPARK-57102: legacy nanosAsLong reads a foreign TIMESTAMP(NANOS) file as LongType") {
     withTempPath { dir =>
       val file = new File(dir, "foreign.parquet")
@@ -187,11 +226,15 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
             assert(
               cause != null,
               s"Expected a DATETIME_OVERFLOW error for $typeName, but got: ${e.getMessage}")
+            // NTZ renders without a zone; LTZ renders as a UTC instant with a trailing `Z`.
+            val renderedValue =
+              if (typeName == "TIMESTAMP_NTZ") "9999-12-31T23:59:59.999999999"
+              else "9999-12-31T23:59:59.999999999Z"
             checkError(
               exception = cause.asInstanceOf[SparkArithmeticException],
               condition = "DATETIME_OVERFLOW",
               parameters = Map("operation" ->
-                ("write the timestamp value 9999-12-31T23:59:59.999999999Z as Parquet INT64 " +
+                (s"write the timestamp value $renderedValue as Parquet INT64 " +
                   "epoch-nanoseconds (supported range: 1677-09-21T00:12:43.145224192Z to " +
                   "2262-04-11T23:47:16.854775807Z)")))
           }

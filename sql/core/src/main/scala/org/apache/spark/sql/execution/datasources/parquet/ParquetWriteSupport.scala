@@ -190,14 +190,14 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     }
   }
 
-  private def timestampNanosToEpochNanos(value: TimestampNanosVal): Long = {
+  private def timestampNanosToEpochNanos(value: TimestampNanosVal, isNtz: Boolean): Long = {
     try {
       Math.addExact(
         Math.multiplyExact(value.epochMicros, DateTimeConstants.NANOS_PER_MICROS),
         value.nanosWithinMicro.toLong)
     } catch {
       case _: ArithmeticException =>
-        throw QueryExecutionErrors.parquetTimestampNanosOverflowError(value)
+        throw QueryExecutionErrors.parquetTimestampNanosOverflowError(value, isNtz)
     }
   }
 
@@ -285,11 +285,13 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
       // rebasing; see the TIMESTAMP(NANOS) converters in `ParquetRowConverter` for details.
       case _: TimestampLTZNanosType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addLong(timestampNanosToEpochNanos(row.getTimestampLTZNanos(ordinal)))
+          recordConsumer.addLong(
+            timestampNanosToEpochNanos(row.getTimestampLTZNanos(ordinal), isNtz = false))
 
       case _: TimestampNTZNanosType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addLong(timestampNanosToEpochNanos(row.getTimestampNTZNanos(ordinal)))
+          recordConsumer.addLong(
+            timestampNanosToEpochNanos(row.getTimestampNTZNanos(ordinal), isNtz = true))
 
       case _: TimeType =>
         (row: SpecializedGetters, ordinal: Int) =>

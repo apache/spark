@@ -220,7 +220,8 @@ trait SparkDateTimeUtils {
    * user-reachable input here. An out-of-range value therefore indicates an internal caller bug
    * and raises an internal error rather than silently retaining all sub-microsecond digits.
    */
-  private def truncateNanosWithinMicroToPrecision(nanosWithinMicro: Int, precision: Int): Int = {
+  private[sql] def truncateNanosWithinMicroToPrecision(
+      nanosWithinMicro: Int, precision: Int): Int = {
     precision match {
       case 7 => (nanosWithinMicro / 100) * 100
       case 8 => (nanosWithinMicro / 10) * 10

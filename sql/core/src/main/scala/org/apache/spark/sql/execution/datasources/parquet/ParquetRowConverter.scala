@@ -489,31 +489,11 @@ private[parquet] class ParquetRowConverter(
       // always proleptic Gregorian and are exempt from datetime rebasing
       // (`spark.sql.parquet.datetimeRebaseModeInRead` only covers DATE, TIMESTAMP_MILLIS and
       // TIMESTAMP_MICROS).
-      case _: TimestampLTZNanosType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-          parquetType.getLogicalTypeAnnotation
-            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.NANOS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
-            val nanosWithinMicro =
-              Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toShort
-            this.updater.set(TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro))
-          }
-        }
+      case t: TimestampLTZNanosType if isNanosTimestamp(parquetType) =>
+        makeNanosTimestampConverter(updater, t.precision)
 
-      case _: TimestampNTZNanosType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
-          parquetType.getLogicalTypeAnnotation
-            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.NANOS =>
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
-            val nanosWithinMicro =
-              Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toShort
-            this.updater.set(TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro))
-          }
-        }
+      case t: TimestampNTZNanosType if isNanosTimestamp(parquetType) =>
+        makeNanosTimestampConverter(updater, t.precision)
 
       // Allow upcasting INT32 date to timestampNTZ.
       case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
@@ -617,6 +597,40 @@ private[parquet] class ParquetRowConverter(
   // values.
   private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
     parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation]
+
+  // A Parquet INT64 column annotated as TIMESTAMP(NANOS), read into one of the
+  // nanosecond-precision Spark timestamp types.
+  private def isNanosTimestamp(parquetType: Type): Boolean =
+    parquetType.getLogicalTypeAnnotation match {
+      case ts: TimestampLogicalTypeAnnotation => ts.getUnit == TimeUnit.NANOS
+      case _ => false
+    }
+
+  /**
+   * Builds a converter for a Parquet INT64 `TIMESTAMP(NANOS)` column read into a
+   * nanosecond-precision Spark type ([[TimestampNTZNanosType]] / [[TimestampLTZNanosType]]). The
+   * int64 epoch-nanoseconds value is split into the `(epochMicros, nanosWithinMicro)` pair with
+   * floor semantics (so pre-epoch values keep `nanosWithinMicro` in `[0, 999]`), then the
+   * sub-microsecond digits are truncated to `precision`. The truncation mirrors
+   * [[DateTimeUtils.instantToTimestampNanos]] / [[DateTimeUtils.localDateTimeToTimestampNanos]];
+   * it matters when an explicit read schema (e.g. `TIMESTAMP_NTZ(7)`) is applied to a foreign
+   * full-precision file - otherwise the stored value would carry digits below `precision`,
+   * violating the invariant the rest of the stack maintains. NANOS is exempt from datetime
+   * rebasing (see the call site).
+   */
+  private def makeNanosTimestampConverter(
+      updater: ParentContainerUpdater,
+      precision: Int): ParquetPrimitiveConverter =
+    new ParquetPrimitiveConverter(updater) {
+      override def addLong(value: Long): Unit = {
+        val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
+        val rawNanosWithinMicro =
+          Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toInt
+        val nanosWithinMicro =
+          DateTimeUtils.truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+        this.updater.set(TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort))
+      }
+    }
 
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.

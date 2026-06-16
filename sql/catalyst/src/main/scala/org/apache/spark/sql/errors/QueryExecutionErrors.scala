@@ -2621,12 +2621,18 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       summary = "")
   }
 
-  def parquetTimestampNanosOverflowError(value: TimestampNanosVal): ArithmeticException = {
+  def parquetTimestampNanosOverflowError(
+      value: TimestampNanosVal, isNtz: Boolean): ArithmeticException = {
+    // Render TIMESTAMP_NTZ values without a zone (LocalDateTime, no trailing `Z`); TIMESTAMP_LTZ
+    // values are absolute instants and render as UTC with a trailing `Z`.
+    val rendered =
+      if (isNtz) DateTimeUtils.timestampNanosToLocalDateTime(value).toString
+      else DateTimeUtils.timestampNanosToInstant(value).toString
     new SparkArithmeticException(
       errorClass = "DATETIME_OVERFLOW",
       messageParameters = Map(
-        "operation" -> (s"write the timestamp value " +
-          s"${DateTimeUtils.timestampNanosToInstant(value)} as Parquet INT64 epoch-nanoseconds " +
+        "operation" -> (s"write the timestamp value $rendered as Parquet INT64 " +
+          "epoch-nanoseconds " +
           "(supported range: 1677-09-21T00:12:43.145224192Z to 2262-04-11T23:47:16.854775807Z)")),
       context = Array.empty,
       summary = "")
