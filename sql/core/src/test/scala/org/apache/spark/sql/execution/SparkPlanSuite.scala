@@ -237,7 +237,8 @@ class SparkPlanSuite extends SharedSparkSession {
     Seq(
       WholeStageCodegenExec(partialGroupedAggregate())(codegenStageId = 0).executeCollect(),
       partialGroupedAggregate().executeCollect(),
-      partialGroupedAggregate().toSortAggregate.executeCollect()).foreach(assertPartialAggregateNull)
+      partialGroupedAggregate().toSortAggregate.executeCollect())
+      .foreach(assertPartialAggregateNull)
 
     def generate(): GenerateExec = {
       withTransitions(GenerateExec(
