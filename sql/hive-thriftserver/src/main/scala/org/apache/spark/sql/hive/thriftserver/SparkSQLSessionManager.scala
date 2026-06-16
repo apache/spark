@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.SessionHandle
-import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hive.service.cli.session.{HiveSessionImpl, SessionManager}
 import org.apache.hive.service.rpc.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
@@ -40,10 +40,10 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
 
   override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
-    // Propagate the legacy toggle into HiveConf so that HiveSessionImpl.setVariable,
-    // which runs during session open before the SparkSession is attached, can read it.
-    hiveConf.setBoolean(
-      StaticSQLConf.LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES.key,
+    // Stash the toggle on a static field instead of writing it into HiveConf. Storing it on
+    // per-session HiveConf would let a JDBC client flip it from the same `set:` overlay the
+    // system: gate is meant to guard (via `set:hiveconf:<key>=true`).
+    HiveSessionImpl.setAllowSettingSystemProperties(
       sparkSession.sessionState.conf.getConf(
         StaticSQLConf.LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES))
     super.init(hiveConf)
