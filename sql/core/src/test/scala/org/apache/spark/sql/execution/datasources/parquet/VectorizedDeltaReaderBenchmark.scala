@@ -29,7 +29,7 @@ import org.apache.parquet.io.api.Binary
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.{BinaryType, ByteType, DecimalType, IntegerType, LongType, ShortType}
+import org.apache.spark.sql.types.{BinaryType, ByteType, DecimalType, DoubleType, IntegerType, LongType, ShortType}
 
 /**
  * Low-level benchmark for the three Parquet delta-encoding decoders:
@@ -299,6 +299,7 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
     val byteVec = new OnHeapColumnVector(NUM_ROWS, ByteType)
     val shortVec = new OnHeapColumnVector(NUM_ROWS, ShortType)
     val longVec = new OnHeapColumnVector(NUM_ROWS, LongType)
+    val doubleVec = new OnHeapColumnVector(NUM_ROWS, DoubleType)
     val unsignedLongVec = new OnHeapColumnVector(NUM_ROWS, DecimalType(20, 0))
 
     def newIntReader(): VectorizedDeltaBinaryPackedReader = {
@@ -320,7 +321,14 @@ object VectorizedDeltaReaderBenchmark extends BenchmarkBase {
     benchmark.addCase("readUnsignedIntegers (INT32 -> Long)") { _ =>
       newIntReader().readUnsignedIntegers(NUM_ROWS, longVec, 0)
     }
+    benchmark.addCase("readIntegersAsLongs (INT32 -> Long)") { _ =>
+      newIntReader().readIntegersAsLongs(NUM_ROWS, longVec, 0)
+    }
+    benchmark.addCase("readIntegersAsDoubles (INT32 -> Double)") { _ =>
+      newIntReader().readIntegersAsDoubles(NUM_ROWS, doubleVec, 0)
+    }
     benchmark.addCase("readUnsignedLongs (INT64 -> Decimal(20,0))") { _ =>
+      unsignedLongVec.reset()
       newLongReader().readUnsignedLongs(NUM_ROWS, unsignedLongVec, 0)
     }
     benchmark.addCase("skipBytes") { _ => newIntReader().skipBytes(NUM_ROWS) }
