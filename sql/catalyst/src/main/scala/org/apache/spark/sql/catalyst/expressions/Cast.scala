@@ -121,6 +121,9 @@ object Cast extends QueryErrorsBase {
     case (TimestampType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, TimestampType) => true
 
+    case (_: TimestampNTZNanosType, _: TimestampNTZNanosType) => true
+    case (_: TimestampLTZNanosType, _: TimestampLTZNanosType) => true
+
     case (DateType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, DateType) => true
     case (DateType, _: TimestampNTZNanosType) => true
@@ -268,6 +271,9 @@ object Cast extends QueryErrorsBase {
     case (_: TimestampNTZNanosType, TimestampNTZType) => true
     case (TimestampType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, TimestampType) => true
+
+    case (_: TimestampNTZNanosType, _: TimestampNTZNanosType) => true
+    case (_: TimestampLTZNanosType, _: TimestampLTZNanosType) => true
 
     case (DateType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, DateType) => true
@@ -439,6 +445,12 @@ object Cast extends QueryErrorsBase {
     case (DateType, _: TimestampNTZNanosType) => false
     case (_: TimestampLTZNanosType, DateType) => false
     case (_: TimestampNTZNanosType, DateType) => false
+    // SPARK-57490: same-family cross-precision nanosecond casts: widening (e.g. TIMESTAMP_NTZ(7) ->
+    // TIMESTAMP_NTZ(9)) is lossless and allowed as a silent store assignment, while narrowing
+    // (e.g. (9) -> (7)) drops sub-microsecond digits and stays explicit-only. Equal precision is
+    // already handled by the `from == to` short-circuit above.
+    case (f: TimestampNTZNanosType, t: TimestampNTZNanosType) => f.precision <= t.precision
+    case (f: TimestampLTZNanosType, t: TimestampLTZNanosType) => f.precision <= t.precision
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -855,6 +867,9 @@ case class Cast(
         })
     case TimestampType =>
       buildCast[Long](_, m => TimestampNanosVal.fromParts(m, 0.toShort))
+    case _: TimestampLTZNanosType =>
+      buildCast[TimestampNanosVal](_, v =>
+        DateTimeUtils.truncateTimestampNanosToPrecision(v, precision))
     case DateType =>
       buildCast[Int](_, d => TimestampNanosVal.fromParts(daysToMicros(d, zoneId), 0.toShort))
   }
@@ -871,6 +886,9 @@ case class Cast(
         })
     case TimestampNTZType =>
       buildCast[Long](_, m => TimestampNanosVal.fromParts(m, 0.toShort))
+    case _: TimestampNTZNanosType =>
+      buildCast[TimestampNanosVal](_, v =>
+        DateTimeUtils.truncateTimestampNanosToPrecision(v, precision))
     case DateType =>
       buildCast[Int](_, d =>
         TimestampNanosVal.fromParts(daysToMicros(d, ZoneOffset.UTC), 0.toShort))
@@ -1913,6 +1931,9 @@ case class Cast(
     case TimestampType =>
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
+    case _: TimestampLTZNanosType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = $dateTimeUtilsCls.truncateTimestampNanosToPrecision($c, $precision);"
     case DateType =>
       val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
@@ -1950,6 +1971,9 @@ case class Cast(
     case TimestampNTZType =>
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
+    case _: TimestampNTZNanosType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = $dateTimeUtilsCls.truncateTimestampNanosToPrecision($c, $precision);"
     case DateType =>
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts(" +
