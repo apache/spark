@@ -15268,7 +15268,7 @@ def instr(
     |  xyz|                0|
     +-----+-----------------+
 
-    Example 4: Using start parameters
+    Example 4: Using start parameter
 
     >>> from pyspark.sql import functions as sf
     >>> df = spark.createDataFrame([("aabcd",), ("xyz",)], ["s",])

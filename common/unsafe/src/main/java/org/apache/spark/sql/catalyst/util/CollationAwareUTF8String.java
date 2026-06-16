@@ -828,7 +828,7 @@ public class CollationAwareUTF8String {
     if (pattern.numBytes() == 0) return target.indexOfEmpty(start);
     if (start == 0) return MATCH_NOT_FOUND;
     if (target.isFullAscii() && pattern.isFullAscii()) {
-      return target.toLowerCase().indexOf(pattern.toLowerCase(), start,  occurrence);
+      return target.toLowerCase().indexOf(pattern.toLowerCase(), start, occurrence);
     }
     return lowercaseIndexOfSlow(target, pattern, start, occurrence);
   }
