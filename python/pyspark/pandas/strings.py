@@ -1117,6 +1117,12 @@ class StringMethods:
             All non-overlapping matches of pattern or regular expression in
             each string of this Series.
 
+        Notes
+        -----
+        For regular expressions with more than one capture group, pandas-on-Spark
+        returns nested lists instead of pandas' tuple matches because Spark SQL
+        does not have a tuple type.
+
         Examples
         --------
         >>> s = ps.Series(['Lion', 'Monkey', 'Rabbit'])
