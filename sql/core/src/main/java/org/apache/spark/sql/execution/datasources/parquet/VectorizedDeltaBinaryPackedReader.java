@@ -148,26 +148,35 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
 
   @Override
   public void readIntegersAsLongs(int total, WritableColumnVector c, int rowId) {
-    // Delta decoder already works on long[]; skip the int narrowing and write longs directly.
-    readBulkLongs(total, c, rowId);
-  }
-
-  @Override
-  public void readIntegersAsDoubles(int total, WritableColumnVector c, int rowId) {
+    // The INT32 delta encoder uses int arithmetic (with modular overflow) for deltas and
+    // stores minDelta as a zigzag VarInt. The prefix sum in loadMiniBlockBulk operates in
+    // long space, so we must truncate each result to int (matching the encoder's 32-bit
+    // modular semantics) then sign-extend back to long for the output.
     checkReadBounds(total);
     int remaining = total;
     if (valuesRead == 0) {
-      c.putDouble(rowId, (double) firstValue);
+      c.putLong(rowId, (int) firstValue);
       lastValueRead = firstValue;
       rowId++;
       remaining--;
     }
-    readBulkLoop(remaining, c, rowId,
-        (col, r, buf, s, n) -> {
-          for (int i = s; i < s + n; i++) {
-            col.putDouble(r + i - s, (double) buf[i]);
-          }
-        });
+    readBulkLoop(remaining, c, rowId, this::bulkWriteIntsAsLongs);
+    valuesRead += total;
+  }
+
+  @Override
+  public void readIntegersAsDoubles(int total, WritableColumnVector c, int rowId) {
+    // Same as readIntegersAsLongs: truncate the long prefix-sum result to int (matching the
+    // INT32 encoder's modular arithmetic) then widen to double.
+    checkReadBounds(total);
+    int remaining = total;
+    if (valuesRead == 0) {
+      c.putDouble(rowId, (double) (int) firstValue);
+      lastValueRead = firstValue;
+      rowId++;
+      remaining--;
+    }
+    readBulkLoop(remaining, c, rowId, this::bulkWriteIntsAsDoubles);
     valuesRead += total;
   }
 
@@ -267,6 +276,21 @@ public class VectorizedDeltaBinaryPackedReader extends VectorizedReaderBase {
       intScratchBuffer[i] = (int) buf[i];
     }
     c.putInts(rowId, count, intScratchBuffer, start);
+  }
+
+  private void bulkWriteIntsAsLongs(WritableColumnVector c, int rowId,
+      long[] buf, int start, int count) {
+    for (int i = start; i < start + count; i++) {
+      buf[i] = (int) buf[i];
+    }
+    c.putLongs(rowId, count, buf, start);
+  }
+
+  private void bulkWriteIntsAsDoubles(WritableColumnVector c, int rowId,
+      long[] buf, int start, int count) {
+    for (int i = start; i < start + count; i++) {
+      c.putDouble(rowId + i - start, (double) (int) buf[i]);
+    }
   }
 
   private void readBulkIntegers(int total, WritableColumnVector c, int rowId) {
