@@ -145,10 +145,10 @@ trait TypeApiOps extends Serializable {
    * Renders an external value for Hive-style output (HiveResult.toHiveString). `nested` indicates
    * whether the value appears inside an array/map/struct, which may format/quote it differently.
    * Semantics mirror the single-arg overload: Some(s) is used directly, None falls back to
-   * HiveResult's zone-aware legacy rendering. The default delegates to the single-arg overload;
-   * override it separately when the two consumers need different behavior (e.g. the nanosecond
-   * timestamp types render the external value on the zone-less Row JSON path but return None here
-   * so the zone-aware Hive path renders them through its own formatter).
+   * HiveResult's zone-aware legacy rendering. The default delegates to the single-arg overload,
+   * so Hive shares the same renderer as Row JSON (e.g. the nanosecond timestamp types render the
+   * external Instant/LocalDateTime at the column precision on both paths). Override it separately
+   * only when the two consumers need different behavior.
    */
   def formatExternal(value: Any, nested: Boolean): Option[String] = formatExternal(value)
 

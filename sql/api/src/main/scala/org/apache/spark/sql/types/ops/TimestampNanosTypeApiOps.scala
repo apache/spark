@@ -42,6 +42,13 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * resolved session zone, while zone-less callers (Row JSON via formatExternal) accept the
  * default, the session-local time zone config.
  *
+ * External-value rendering (SPARK-57386): both consumers go through the single-arg
+ * [[formatExternal]] each subclass overrides - Row JSON (Row.json / Row.prettyJson) calls it
+ * directly, and the Hive result path (HiveResult.toHiveString) calls the two-arg overload whose
+ * default delegates to it (`nested` does not affect timestamp formatting). So both render the
+ * external value at the column precision rather than truncating to microseconds via the legacy
+ * path.
+ *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
  * matches the legacy RowEncoder.encoderForDataTypeDefault behavior rather than regressing it.
@@ -57,17 +64,6 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
   protected def precision: Int
 
   // ==================== String Formatting ====================
-
-  // Row JSON (Row.json / Row.prettyJson) holds the external Row value (java.time.Instant for LTZ,
-  // java.time.LocalDateTime for NTZ); each subclass overrides the single-arg formatExternal to
-  // render it through the same formatter as its zone-aware cast-to-string, so Row JSON shows the
-  // nanosecond value rather than silently truncating to microseconds via the legacy path.
-
-  // The Hive result path (HiveResult.toHiveString) renders nanosecond timestamps through its own
-  // zone-aware default formatter, so return None here to fall through to it rather than to the
-  // subclass single-arg rendering. This is a temporary split until nanos external rendering is
-  // unified across the zone-less (Row JSON) and zone-aware (Hive) paths.
-  override def formatExternal(value: Any, nested: Boolean): Option[String] = None
 
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
 
