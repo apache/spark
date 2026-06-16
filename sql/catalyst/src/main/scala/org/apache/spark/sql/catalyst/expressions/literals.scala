@@ -196,7 +196,7 @@ object Literal {
       !v.isInstanceOf[MapData] &&
       !v.isInstanceOf[InternalRow] &&
       dataType.existsRecursively { t =>
-        t.isInstanceOf[TimestampNTZNanosType] || t.isInstanceOf[TimestampLTZNanosType]
+        t.isInstanceOf[AnyTimestampNanoType]
       }
   }
 
@@ -524,7 +524,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(toString)
       case (l: Long, TimestampType | _: TimeType) => JString(toString)
-      case (_: TimestampNanosVal, _: TimestampNTZNanosType | _: TimestampLTZNanosType) =>
+      case (_: TimestampNanosVal, _: AnyTimestampNanoType) =>
         JString(toString)
       case (other, _) => JString(other.toString)
     }
