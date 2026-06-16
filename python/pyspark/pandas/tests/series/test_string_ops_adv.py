@@ -91,8 +91,8 @@ class SeriesStringOpsAdvMixin:
             lambda matches: [list(match) for match in matches]
         )
         self.assert_eq(
-            ps.from_pandas(pser).str.findall("([a-z]+)-([0-9]+)"),
-            expected,
+            ps.from_pandas(pser).str.findall("([a-z]+)-([0-9]+)").apply(str),
+            expected.apply(str),
         )
 
     def test_string_index(self):

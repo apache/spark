@@ -1184,9 +1184,7 @@ class StringMethods:
         num_groups = re.compile(pat, flags=flags).groups
         str_dtype = is_str_dtype(self._data.dtype)
         if num_groups > 1:
-            return_type = ArrayType(
-                ArrayType(StringType(), containsNull=True), containsNull=True
-            )
+            return_type = ArrayType(ArrayType(StringType(), containsNull=True), containsNull=True)
         else:
             return_type = ArrayType(StringType(), containsNull=True)
 
