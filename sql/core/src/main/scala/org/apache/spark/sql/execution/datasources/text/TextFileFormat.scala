@@ -132,9 +132,6 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
    * standalone text file (one row per line, or a single row holding the whole entry when
    * `wholeText` is set), without unpacking the archive to disk. The whole archive is a single
    * split (see `isSplitable`).
-   *
-   * Kept separate from the per-file reader (rather than dispatched inside it) because only this V1
-   * read path supports archives; the V2 data source is intentionally left untouched.
    */
   private def readArchive(
       conf: Broadcast[SerializableConfiguration],
@@ -142,20 +139,22 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
       textOptions: TextOptions): PartitionedFile => Iterator[UnsafeRow] = {
     (file: PartitionedFile) => {
       val confValue = conf.value.value
-      val emptyUnsafeRow = new UnsafeRow(0)
-      val unsafeRowWriter = new UnsafeRowWriter(1)
-      // Mirrors `readToUnsafeMem`: an empty required schema (e.g. `count`) yields one empty row per
-      // record; otherwise each record is written into the single `value` column.
-      def toRow(bytes: Array[Byte], length: Int): UnsafeRow = {
-        if (requiredSchema.isEmpty) {
-          emptyUnsafeRow
-        } else {
-          unsafeRowWriter.reset()
-          unsafeRowWriter.write(0, bytes, 0, length)
-          unsafeRowWriter.getRow()
-        }
-      }
       ArchiveReader(file.toPath).readEntries(confValue) { (_, in) =>
+        // Each entry is read as a standalone text file, so it gets its own row writer, exactly as
+        // `readToUnsafeMem` builds one per file.
+        val emptyUnsafeRow = new UnsafeRow(0)
+        val unsafeRowWriter = new UnsafeRowWriter(1)
+        // Mirrors `readToUnsafeMem`: an empty required schema (e.g. `count`) yields one empty row
+        // per record; otherwise each record is written into the single `value` column.
+        def toRow(bytes: Array[Byte], length: Int): UnsafeRow = {
+          if (requiredSchema.isEmpty) {
+            emptyUnsafeRow
+          } else {
+            unsafeRowWriter.reset()
+            unsafeRowWriter.write(0, bytes, 0, length)
+            unsafeRowWriter.getRow()
+          }
+        }
         if (textOptions.wholeText) {
           val content = in.readAllBytes()
           Iterator.single(toRow(content, content.length))
