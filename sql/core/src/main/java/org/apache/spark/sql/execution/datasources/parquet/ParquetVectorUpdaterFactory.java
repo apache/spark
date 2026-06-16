@@ -717,8 +717,6 @@ public class ParquetVectorUpdaterFactory {
   }
 
   private static class UnsignedLongUpdater implements ParquetVectorUpdater {
-    private final byte[] unsignedLongScratch = new byte[9];
-
     @Override
     public void readValues(
         int total,
@@ -738,9 +736,8 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(
-          valuesReader.readLong(), unsignedLongScratch);
-      values.putByteArray(offset, unsignedLongScratch, start, 9 - start);
+      byte[] bytes = new BigInteger(Long.toUnsignedString(valuesReader.readLong())).toByteArray();
+      values.putByteArray(offset, bytes);
     }
 
     @Override
@@ -750,8 +747,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       long signed = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(signed, unsignedLongScratch);
-      values.putByteArray(offset, unsignedLongScratch, start, 9 - start);
+      byte[] unsigned = new BigInteger(Long.toUnsignedString(signed)).toByteArray();
+      values.putByteArray(offset, unsigned);
     }
   }
 
