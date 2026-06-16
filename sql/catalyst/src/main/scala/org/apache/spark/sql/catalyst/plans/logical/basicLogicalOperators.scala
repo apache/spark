@@ -2349,7 +2349,6 @@ case class Deduplicate(
   override protected def stringArgs: Iterator[Any] = Iterator(keys, child)
 }
 
-/** See [[DeduplicateSpec]] for the meaning of `dedupSpec`. */
 case class DeduplicateWithinWatermark(
     keys: Seq[Attribute],
     child: LogicalPlan,

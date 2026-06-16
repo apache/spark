@@ -250,7 +250,7 @@ class StreamingQueryManager private[sql] (
           val offsetLog = checkpointMetadata.offsetLog
 
           // The dedup keys on `analyzedPlan` were already resolved with this (session) value.
-          val sessionDeterministic =
+          val sessionOrderDeterministically =
             sparkSession.sessionState.conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
 
           offsetLog.getLatest().map {
@@ -260,13 +260,13 @@ class StreamingQueryManager private[sql] (
               // Existing checkpoints predate deterministic dedup key resolution, so absent the
               // conf they fall back to the legacy (engine-specific) key order; queries started
               // after this change persist "true" at batch 0 and keep the deterministic order.
-              val deterministic = confMapInOffset.get(
+              val orderDeterministically = confMapInOffset.get(
                 SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key) match {
                 case Some(value) => value.toBoolean
                 case _ => false
               }
 
-              if (deterministic == sessionDeterministic) {
+              if (orderDeterministically == sessionOrderDeterministically) {
                 // The pinned value matches what the keys were already resolved with; recomputing
                 // would be a no-op, so keep the analyzed plan as is.
                 dataStreamWritePlan
@@ -275,10 +275,10 @@ class StreamingQueryManager private[sql] (
                 val repinnedPlan = analyzedPlan.transformUp {
                   case d @ Deduplicate(_, child, Some(spec)) =>
                     d.copy(keys =
-                      ResolveDeduplicate.computeKeys(child, spec, deterministic, resolver))
+                      ResolveDeduplicate.computeKeys(child, spec, orderDeterministically, resolver))
                   case d @ DeduplicateWithinWatermark(_, child, Some(spec)) =>
                     d.copy(keys =
-                      ResolveDeduplicate.computeKeys(child, spec, deterministic, resolver))
+                      ResolveDeduplicate.computeKeys(child, spec, orderDeterministically, resolver))
                 }
 
                 WriteToStreamStatement(
