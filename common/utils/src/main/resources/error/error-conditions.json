@@ -1286,6 +1286,11 @@
       "Generic Spark Connect error."
     ],
     "subClass" : {
+      "EXECUTE_CONCURRENT_LIMIT_TIMEOUT" : {
+        "message" : [
+          "Could not acquire an execution slot within <timeout> because the maximum number of concurrent queries (<limit>) has been reached. Please retry."
+        ]
+      },
       "INTERCEPTOR_CTOR_MISSING" : {
         "message" : [
           "Cannot instantiate GRPC interceptor because <cls> is missing a default constructor without arguments."
