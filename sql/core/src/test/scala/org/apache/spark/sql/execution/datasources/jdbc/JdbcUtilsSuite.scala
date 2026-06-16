@@ -19,7 +19,10 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -109,5 +112,74 @@ class JdbcUtilsSuite extends SparkFunSuite {
     // Null and empty inputs are passed through.
     assert(JDBCOptions.redactUrl(null, None) === null)
     assert(JDBCOptions.redactUrl("", None) === "")
+  }
+
+  test("SPARK-57471: estimateInternalRowSize estimates ArrayType by element count") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val row = new GenericInternalRow(Array[Any](new GenericArrayData(Array(1, 2, 3))))
+    // 3 elements * 4 bytes (IntegerType.defaultSize) = 12
+    assert(JdbcUtils.estimateInternalRowSize(row, schema) === 12L)
+  }
+
+  test("SPARK-57471: estimateRowSize estimates ArrayType by element count") {
+    val schema = StructType(Seq(StructField("a", ArrayType(IntegerType))))
+    val row = Row(Seq(1, 2, 3))
+    // 3 elements * 4 bytes (IntegerType.defaultSize) = 12
+    assert(JdbcUtils.estimateRowSize(row, schema) === 12L)
+  }
+
+  test("SPARK-57471: estimateInternalRowSize uses actual size for String and Binary") {
+    import org.apache.spark.unsafe.types.UTF8String
+    val schema = StructType(Seq(
+      StructField("s", StringType),
+      StructField("b", BinaryType),
+      StructField("n", StringType)))
+    val row = new GenericInternalRow(Array[Any](
+      UTF8String.fromString("hello"), // 5 bytes
+      Array[Byte](1, 2, 3),          // 3 bytes
+      null))                          // null -> 0
+    assert(JdbcUtils.estimateInternalRowSize(row, schema) === 8L)
+  }
+
+  test("SPARK-57471: estimateRowSize uses actual size for String and Binary") {
+    val schema = StructType(Seq(
+      StructField("s", StringType),
+      StructField("b", BinaryType),
+      StructField("n", StringType)))
+    val row = Row("hello", Array[Byte](1, 2, 3), null)
+    // "hello".length=5 + 3 bytes + null=0
+    assert(JdbcUtils.estimateRowSize(row, schema) === 8L)
+  }
+
+  test("SPARK-57471: estimateInternalRowSize measures ArrayType(StringType) by actual content") {
+    import org.apache.spark.unsafe.types.UTF8String
+    val schema = StructType(Seq(StructField("a", ArrayType(StringType))))
+    val arr = new GenericArrayData(
+      Array(UTF8String.fromString("abc"), UTF8String.fromString("de")))
+    val row = new GenericInternalRow(Array[Any](arr))
+    // "abc"=3 + "de"=2 = 5, NOT 2*20
+    assert(JdbcUtils.estimateInternalRowSize(row, schema) === 5L)
+  }
+
+  test("SPARK-57471: estimateRowSize measures ArrayType(StringType) by actual content") {
+    val schema = StructType(Seq(StructField("a", ArrayType(StringType))))
+    val row = Row(Seq("abc", "de"))
+    // "abc".length=3 + "de".length=2 = 5, NOT 2*20
+    assert(JdbcUtils.estimateRowSize(row, schema) === 5L)
+  }
+
+  test("SPARK-57471: estimateInternalRowSize ArrayType(BinaryType) uses actual lengths") {
+    val schema = StructType(Seq(StructField("a", ArrayType(BinaryType))))
+    val arr = new GenericArrayData(Array(Array[Byte](1, 2), null, Array[Byte](3, 4, 5)))
+    val row = new GenericInternalRow(Array[Any](arr))
+    // 2 + 0 (null) + 3 = 5
+    assert(JdbcUtils.estimateInternalRowSize(row, schema) === 5L)
+  }
+
+  test("SPARK-57471: estimateRowSize ArrayType(BinaryType) uses actual lengths") {
+    val schema = StructType(Seq(StructField("a", ArrayType(BinaryType))))
+    val row = Row(Seq(Array[Byte](1, 2), null, Array[Byte](3, 4, 5)))
+    // 2 + 0 (null) + 3 = 5
+    assert(JdbcUtils.estimateRowSize(row, schema) === 5L)
   }
 }
