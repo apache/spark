@@ -182,7 +182,10 @@ case class MultiGetJsonObject(
 
   override def nullable: Boolean = true
 
+  // This internal unary expression always returns null when its JSON child is null.
   override def nullIntolerant: Boolean = true
+
+  override def prettyName: String = "multi_get_json_object"
 
   final override val nodePatterns: Seq[TreePattern] = Seq(GET_JSON_OBJECT)
 

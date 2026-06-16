@@ -148,17 +148,30 @@ class JsonFunctionsSuite extends SharedSparkSession {
   }
 
   test("SPARK-47670: shared get_json_object falls back after parser-side rendering failure") {
-    withSQLConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "true") {
-      val oversized = "x" * (StreamReadConstraints.DEFAULT_MAX_STRING_LEN + 1)
-      val query = Seq(s"""{"a":"$oversized","b.c":2}""").toDF("json").select(
-        get_json_object($"json", "$.a"),
-        get_json_object($"json", "$['b.c']"))
+    val oversized = "x" * (StreamReadConstraints.DEFAULT_MAX_STRING_LEN + 1)
 
-      assert(query.queryExecution.optimizedPlan.exists { plan =>
-        plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
-      })
-      checkAnswer(query, Row(null, "2"))
+    def result(sharedParsingEnabled: Boolean): Seq[Row] = {
+      var rows = Seq.empty[Row]
+      withSQLConf(
+          SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> "true",
+          SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> sharedParsingEnabled.toString) {
+        val query = Seq(s"""{"a":"$oversized","b.c":2}""").toDF("json").select(
+          get_json_object($"json", "$.a"),
+          get_json_object($"json", "$['b.c']"))
+
+        if (sharedParsingEnabled) {
+          assert(query.queryExecution.optimizedPlan.exists { plan =>
+            plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+          })
+        }
+        rows = query.collect().toSeq
+      }
+      rows
     }
+
+    val sharedResult = result(sharedParsingEnabled = true)
+    assert(sharedResult == result(sharedParsingEnabled = false))
+    assert(sharedResult == Seq(Row(null, "2")))
   }
 
   test("SPARK-47670: shared get_json_object does not return partial malformed results") {

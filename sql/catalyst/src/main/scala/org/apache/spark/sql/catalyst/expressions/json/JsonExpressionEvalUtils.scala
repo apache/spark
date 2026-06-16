@@ -598,6 +598,9 @@ case class MultiGetJsonObjectEvaluator(
   private lazy val fallbackEvaluators: Seq[GetJsonObjectEvaluator] =
     fallbackPaths.map(new GetJsonObjectEvaluator(_))
 
+  @transient
+  private lazy val outputBuffer = new ByteArrayOutputStream()
+
   private def fallback(json: UTF8String): InternalRow = {
     new GenericInternalRow(fallbackEvaluators.map { evaluator =>
       evaluator.setJson(json)
@@ -654,7 +657,7 @@ case class MultiGetJsonObjectEvaluator(
   }
 
   private def copyCurrentStructure(parser: JsonParser): Option[UTF8String] = {
-    val output = new ByteArrayOutputStream()
+    outputBuffer.reset()
     var renderingFailed = false
 
     def render(write: => Unit): Unit = {
@@ -712,13 +715,14 @@ case class MultiGetJsonObjectEvaluator(
     }
 
     try {
-      Utils.tryWithResource(jsonFactory.createGenerator(output, JsonEncoding.UTF8)) { generator =>
+      Utils.tryWithResource(
+        jsonFactory.createGenerator(outputBuffer, JsonEncoding.UTF8)) { generator =>
         copyValue(generator, rawString = true)
       }
     } catch {
       case _: JsonGenerationException => renderingFailed = true
     }
 
-    if (renderingFailed) None else Some(UTF8String.fromBytes(output.toByteArray))
+    if (renderingFailed) None else Some(UTF8String.fromBytes(outputBuffer.toByteArray))
   }
 }

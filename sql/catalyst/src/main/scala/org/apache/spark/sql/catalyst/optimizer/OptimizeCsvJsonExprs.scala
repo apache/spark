@@ -139,10 +139,6 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def collectGetJsonObjectFields(
       expression: Expression): Seq[(GetJsonObject, String, String)] = {
     expression match {
-      case _: ConditionalExpression | _: And | _: Or | _: In | _: TryEval |
-          _: LambdaFunction | _: CreateNamedStruct =>
-        Nil
-
       case getJsonObject @ GetJsonObject(_: Attribute, Literal(path: UTF8String, StringType))
           if getJsonObject.deterministic =>
         GetJsonObject.simpleTopLevelField(path)
@@ -151,20 +147,8 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       case _: GetJsonObject =>
         Nil
 
-      case alias: Alias =>
-        collectGetJsonObjectFields(alias.child)
-
-      case getStructField: GetStructField =>
-        collectGetJsonObjectFields(getStructField.child)
-
-      case cast: Cast =>
-        collectGetJsonObjectFields(cast.child)
-
-      case binary: BinaryArithmetic if evaluatesLeftFirst(binary) =>
-        collectGetJsonObjectFields(binary.left)
-
-      case _ =>
-        Nil
+      case other =>
+        getJsonObjectTraversalChild(other).toSeq.flatMap(collectGetJsonObjectFields)
     }
   }
 
@@ -172,10 +156,6 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       expression: Expression,
       sharedFieldsByHash: Map[Int, Seq[SharedJsonFields]]): Expression = {
     expression match {
-      case _: ConditionalExpression | _: And | _: Or | _: In | _: TryEval |
-          _: LambdaFunction | _: CreateNamedStruct =>
-        expression
-
       case getJsonObject @ GetJsonObject(json, Literal(path: UTF8String, StringType)) =>
         val replacement = for {
           fieldName <- GetJsonObject.simpleTopLevelField(path)
@@ -188,21 +168,34 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       case _: GetJsonObject =>
         expression
 
+      case other =>
+        getJsonObjectTraversalChild(other).map { child =>
+          other.withNewChildren(
+            rewriteGetJsonObjectFields(child, sharedFieldsByHash) +: other.children.tail)
+        }.getOrElse(other)
+    }
+  }
+
+  private def getJsonObjectTraversalChild(expression: Expression): Option[Expression] = {
+    expression match {
+      case _: ConditionalExpression | _: And | _: Or | _: In | _: TryEval |
+          _: LambdaFunction | _: CreateNamedStruct =>
+        None
+
       case alias: Alias =>
-        alias.mapChildren(rewriteGetJsonObjectFields(_, sharedFieldsByHash))
+        Some(alias.child)
 
       case getStructField: GetStructField =>
-        getStructField.mapChildren(rewriteGetJsonObjectFields(_, sharedFieldsByHash))
+        Some(getStructField.child)
 
       case cast: Cast =>
-        cast.mapChildren(rewriteGetJsonObjectFields(_, sharedFieldsByHash))
+        Some(cast.child)
 
       case binary: BinaryArithmetic if evaluatesLeftFirst(binary) =>
-        binary.withNewChildren(
-          Seq(rewriteGetJsonObjectFields(binary.left, sharedFieldsByHash), binary.right))
+        Some(binary.left)
 
       case _ =>
-        expression
+        None
     }
   }
 
