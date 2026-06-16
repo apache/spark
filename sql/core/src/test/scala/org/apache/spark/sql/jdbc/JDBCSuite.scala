@@ -1265,8 +1265,7 @@ class JDBCSuite extends SharedSparkSession {
       "SELECT TOP (123) a,b FROM test")
   }
 
-  // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-  ignore("SPARK-42534: DB2Dialect Limit query test") {
+  test("SPARK-42534: DB2Dialect Limit query test") {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
     assert(
@@ -2439,9 +2438,7 @@ class JDBCSuite extends SharedSparkSession {
     }
     // not supported
     Seq(
-      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-      // "jdbc:db2://host:port",
-      "jdbc:derby:memory", "jdbc:h2://host:port",
+      "jdbc:db2://host:port", "jdbc:derby:memory", "jdbc:h2://host:port",
       "jdbc:sqlserver://host:port", "jdbc:postgresql://host:5432/postgres",
       "jdbc:snowflake://host:443?account=test", "jdbc:teradata://host:port").foreach { url =>
       val options = new JDBCOptions(baseParameters + ("url" -> url))
@@ -2462,8 +2459,7 @@ class JDBCSuite extends SharedSparkSession {
       "jdbc:mysql",
       "jdbc:postgresql",
       "jdbc:sqlserver",
-      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-      // "jdbc:db2",
+      "jdbc:db2",
       "jdbc:h2",
       "jdbc:teradata",
       "jdbc:databricks"
