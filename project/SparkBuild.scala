@@ -1688,18 +1688,20 @@ object Unidoc {
       .map(_.filterNot(_.data.getCanonicalPath.contains("connect-shims")))
   }
 
-  // genjavadoc emits top-level `private[x]` Scala types (e.g. `private[spark] trait Foo`) as
-  // *public* Java stubs even with `-P:genjavadoc:strictVisibility=true`, and the Javadoc
-  // `-public` option cannot drop them because the generated stub really is public. ScalaDoc
-  // honors the qualifier and hides such types, so we drop their stubs here to keep the published
-  // Java API doc aligned with the Scala one. A stub `<module>/target/java/<pkg>/<Name>.java` is
-  // dropped iff EVERY top-level Scala declaration of `<Name>` in that package is `private[...]`;
-  // a public class with a private companion object (e.g. `SparkConf`) is kept, since the class
-  // itself is public.
+  // genjavadoc emits top-level package-private Scala types (`private` or `private[x]`, e.g.
+  // `private[spark] trait Foo` or a bare `private class Bar`) as *public* Java stubs even with
+  // `-P:genjavadoc:strictVisibility=true`, because a top-level package-private type compiles to a
+  // JVM-public symbol, and the Javadoc `-public` option cannot drop a stub that really is public.
+  // ScalaDoc honors the qualifier and hides such types, so we drop their stubs here to keep the
+  // published Java API doc aligned with the Scala one. A stub `<module>/target/java/<pkg>/<Name>.java`
+  // is dropped iff EVERY top-level Scala declaration of `<Name>` in that package is `private` or
+  // `private[...]`; a public class with a private companion object (e.g. `SparkConf`) is kept, since
+  // the class itself is public. The private regex tolerates other modifiers around the access
+  // qualifier (e.g. `final private[x] class`).
   private val publicTopTypeRe =
     """(?m)^(?:@\w+(?:\([^\n)]*\))?\s+)*(?:(?:final|sealed|abstract|implicit|case)\s+)*(?:class|trait|object)\s+(\w+)""".r
   private val privateTopTypeRe =
-    """(?m)^(?:@\w+(?:\([^\n)]*\))?\s+)*private\[[^\]]+\]\s+(?:(?:final|sealed|abstract|implicit|case)\s+)*(?:class|trait|object)\s+(\w+)""".r
+    """(?m)^(?:@\w+(?:\([^\n)]*\))?\s+)*(?:(?:final|sealed|abstract|implicit|case)\s+)*private(?:\[[^\]]+\])?\s+(?:(?:final|sealed|abstract|implicit|case)\s+)*(?:class|trait|object)\s+(\w+)""".r
 
   private def dropPackagePrivateJavaStubs(sources: Seq[Seq[File]]): Seq[Seq[File]] = {
     val cache = scala.collection.mutable.Map.empty[String, (Set[String], Set[String])]
