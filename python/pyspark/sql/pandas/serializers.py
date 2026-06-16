@@ -253,51 +253,6 @@ class ArrowStreamUDTFSerializer(ArrowStreamUDFSerializer):
         return ArrowStreamSerializer.load_stream(self, stream)
 
 
-class ArrowStreamArrowUDTFSerializer(ArrowStreamUDTFSerializer):
-    """
-    Serializer for PyArrow-native UDTFs that work directly with PyArrow RecordBatches and Arrays.
-    """
-
-    def __init__(self, *, table_arg_offsets=None):
-        super().__init__()
-        self.table_arg_offsets = table_arg_offsets if table_arg_offsets else []
-
-    def load_stream(self, stream):
-        """
-        Flatten the struct into Arrow's record batches.
-        """
-        for batch in super().load_stream(stream):
-            # For each column: flatten struct columns at table_arg_offsets into RecordBatch,
-            # keep other columns as Array
-            yield [
-                (
-                    ArrowBatchTransformer.flatten_struct(batch, column_index=i)
-                    if i in self.table_arg_offsets
-                    else batch.column(i)
-                )
-                for i in range(batch.num_columns)
-            ]
-
-    def dump_stream(self, iterator, stream):
-        """
-        Override to handle type coercion for ArrowUDTF outputs.
-        ArrowUDTF returns iterator of (pa.RecordBatch, arrow_return_type) tuples.
-        """
-        import pyarrow as pa
-
-        def apply_type_coercion():
-            for batch, arrow_return_type in iterator:
-                assert isinstance(arrow_return_type, pa.StructType), (
-                    f"Expected pa.StructType, got {type(arrow_return_type)}"
-                )
-                coerced_batch = ArrowBatchTransformer.enforce_schema(
-                    batch, pa.schema(arrow_return_type), safecheck=True
-                )
-                yield coerced_batch, arrow_return_type
-
-        return super().dump_stream(apply_type_coercion(), stream)
-
-
 class ArrowStreamPandasSerializer(ArrowStreamSerializer):
     """
     Serializes pandas.Series as Arrow data with Arrow streaming format.
