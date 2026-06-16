@@ -813,7 +813,11 @@ private[spark] class TaskSetManager(
     val info = taskInfos(tid)
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause successful and tasksSuccessful wrong result.
-    if (info.finished) {
+    if(info.finished) {
+      // For ShuffleMapTasks, detect speculation duplicate push even on late-arriving results.
+      // This task already finished (likely an earlier attempt succeeded), but a speculative
+      // duplicate result arrived late. Check if it has a different mapId for the same partition.
+      detectStalePushIfShuffleTask(tid, info.index, result)
       if (dropTaskInfoAccumulablesOnTaskCompletion) {
         // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
         // lifetime.
@@ -824,6 +828,8 @@ private[spark] class TaskSetManager(
     val index = info.index
     // Check if any other attempt succeeded before this and this attempt has not been handled
     if (successful(index) && killedByOtherAttempt.contains(tid)) {
+      // For ShuffleMapTasks, detect speculation duplicate before handling as killed.
+      detectStalePushIfShuffleTask(tid, info.index, result)
       // Undo the effect on calculatedTasks and totalResultSize made earlier when
       // checking if can fetch more results
       calculatedTasks -= 1
@@ -928,6 +934,42 @@ private[spark] class TaskSetManager(
     }
     sched.dagScheduler.taskEnded(task, reason, result, accumUpdates, metricPeaks,
       taskInfoWithAccumulables)
+  }
+
+  /**
+   * For ShuffleMapTasks, detect stale push: if a partition already has
+   * a registered MapStatus with a different mapId, it means another attempt for the same
+   * partition also pushed data to the merger. Mark this partition so that reducers will
+   * skip the merged block and fallback to unmerged blocks.
+   *
+   * This is called from handleSuccessfulTask for late-arriving or killed attempt results,
+   * where the task result won't be forwarded to DAGScheduler (so DAGScheduler's own
+   * stale detection won't cover these cases).
+   */
+  private def detectStalePushIfShuffleTask(
+      tid: Long, index: Int, result: DirectTaskResult[_]): Unit = {
+    if (!isShuffleMapTasks || shuffleId.isEmpty) {
+      return
+    }
+    val status = result.value()
+    status match {
+      case mapStatus: MapStatus =>
+        val sid = shuffleId.get
+        val partitionId = tasks(index).partitionId
+        val mapOutputTrackerMaster = sched.mapOutputTracker
+        val shuffleStatusOpt = mapOutputTrackerMaster.shuffleStatuses.get(sid)
+        shuffleStatusOpt.foreach { shuffleStatus =>
+          // This method is only called for late-arriving or killed attempts, meaning the
+          // partition already has a successful attempt registered. Any MapStatus arriving
+          // here is from a stale (redundant) attempt that also pushed data.
+          // Mark its mapId as stale so reducers can detect it in merged block chunks.
+          shuffleStatus.markStalePushedMap(partitionId)
+          logInfo(s"[StalePush] Late/killed attempt tid=$tid " +
+            s"for partition=$partitionId (index=$index), mapId=${mapStatus.mapId}. " +
+            s"Marked as stale push.")
+        }
+      case _ => // not a shuffle map task result, ignore
+    }
   }
 
   private[scheduler] def markPartitionCompleted(partitionId: Int): Unit = {

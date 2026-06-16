@@ -21,6 +21,7 @@ import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
 import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.util.TaskCompletionListener
 
 /**
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor
@@ -79,8 +80,25 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
                 log" with shuffle ID ${MDC(SHUFFLE_ID, dep.shuffleId)}")
               logDebug(s"Starting pushing blocks for the task ${context.taskAttemptId()}")
               val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
-              new ShuffleBlockPusher(SparkEnv.get.conf)
-                .initiateBlockPush(dataFile, writer.getPartitionLengths(), dep, mapIndex)
+              val blockPusher = new ShuffleBlockPusher(SparkEnv.get.conf)
+              // Register a completion listener to defer push until the task succeeds.
+              // This prevents killed/failed tasks from wasting cluster resources on push.
+              // The listener callback runs on the Task thread and only does a lightweight
+              // submitTask; actual push I/O runs on BLOCK_PUSHER_POOL threads.
+              context.addTaskCompletionListener(new TaskCompletionListener {
+                override def onTaskCompletion(context: TaskContext): Unit = {
+                  if (!context.isInterrupted() && !context.isFailed()) {
+                    logDebug(s"Task ${context.taskAttemptId()} completed successfully, " +
+                      s"proceeding with shuffle block push for shuffle ${dep.shuffleId}")
+                    blockPusher.initiateBlockPush(
+                      dataFile, writer.getPartitionLengths(), dep, mapIndex)
+                  } else {
+                    logInfo(s"Task ${context.taskAttemptId()} was " +
+                      s"${if (context.isInterrupted()) "killed" else "failed"}, " +
+                      s"skipping shuffle block push for shuffle ${dep.shuffleId}")
+                  }
+                }
+              })
             case _ =>
           }
         }

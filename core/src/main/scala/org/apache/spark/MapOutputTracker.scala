@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{ByteArrayInputStream, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
+import java.io._
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -104,6 +104,28 @@ private class ShuffleStatus(
    * Exposed for testing.
    */
   private[spark] val checksumMismatchIndices: Set[Int] = Set()
+
+  /**
+   * Set of stale mapIds for this shuffle. When task retry or speculation causes multiple
+   * attempts for the same map output to push, the merger may include data from a stale attempt.
+   * We record the stale mapIds here so the reduce side can check chunkBitmaps and fallback
+   * if stale data is present in a merged block.
+   */
+  private[this] val staleMapIds = new java.util.HashSet[Int]()
+
+  /**
+   * Mark a map output as having stale (redundant) push attempts. Called from TaskSetManager when it
+   * detects that multiple task attempts for the same map output pushed data to the merger.
+   * @param staleMapId the mapId of the stale (redundant) attempt
+   */
+  def markStalePushedMap(staleMapId: Int): Unit = withWriteLock {
+    staleMapIds.add(staleMapId)
+  }
+
+  /**
+   * Get all stale mapIds for this shuffle. Returns empty set if none exist.
+   */
+  def getStaleMapIds: Set[Int] = staleMapIds.asScala
 
   /**
    * MergeStatus for each shuffle partition when push-based shuffle is enabled. The index of the
@@ -413,7 +435,7 @@ private class ShuffleStatus(
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
       minBroadcastSize: Int,
-      conf: SparkConf): (Array[Byte], Array[Byte]) = {
+      conf: SparkConf): (Array[Byte], Array[Byte], Array[Byte]) = {
     val mapStatusesBytes: Array[Byte] =
       serializedMapStatus(broadcastManager, isLocal, minBroadcastSize, conf)
     var mergeStatusesBytes: Array[Byte] = null
@@ -437,7 +459,12 @@ private class ShuffleStatus(
       // `withWriteLock`.
       mergeStatusesBytes = cachedSerializedMergeStatus
     }
-    (mapStatusesBytes, mergeStatusesBytes)
+
+    // Serialize staleMapIds set for reduce-side stale chunk-level detection.
+    val staleMapIdBytes = withReadLock {
+      MapOutputTracker.serializeStaleMapIds(staleMapIds)
+    }
+    (mapStatusesBytes, mergeStatusesBytes, staleMapIdBytes)
   }
 
   // Used in testing.
@@ -687,6 +714,12 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * @param shuffleId
    */
   def getShufflePushMergerLocations(shuffleId: Int): Seq[BlockManagerId]
+
+  /**
+   * Get all duplicate mapIds for a given shuffle.
+   * Called from PushBasedFetchHelper on the reduce side for chunk-level detection.
+   */
+  def getStaleMapIds(shuffleId: Int): Set[Int]
 
   /**
    * Deletes map output status information for the specified shuffle stage.
@@ -1260,6 +1293,10 @@ private[spark] class MapOutputTrackerMaster(
     shuffleStatuses.get(shuffleId).map(_.getShufflePushMergerLocations).getOrElse(Seq.empty)
   }
 
+  override def getStaleMapIds(shuffleId: Int): Set[Int] = {
+    shuffleStatuses.get(shuffleId).map(_.getStaleMapIds).getOrElse(Set.empty)
+  }
+
   override def stop(): Unit = {
     mapOutputTrackerMasterMessages.offer(PoisonPill)
     threadpool.shutdown()
@@ -1304,6 +1341,28 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
    * Exposed for testing
    */
   val shufflePushMergerLocations = new ConcurrentHashMap[Int, Seq[BlockManagerId]]().asScala
+
+  /**
+   * Tracks duplicate mapIds per shuffle for speculation duplicate detection.
+   * Populated during getStatuses fetch from driver, used by PushBasedFetchHelper
+   * to check chunkBitmaps for duplicate data at chunk level.
+   */
+  private[spark] val staleMapIds =
+    new ConcurrentHashMap[Int, java.util.HashSet[Int]]().asScala
+
+  /**
+   * Get all duplicate mapIds for a given shuffle. Returns empty set if none exist.
+   * Called from PushBasedFetchHelper on the reduce side for chunk-level duplicate detection.
+   */
+  def getStaleMapIds(shuffleId: Int): Set[Int] = {
+    val dupSetOpt = staleMapIds.get(shuffleId)
+    dupSetOpt match {
+      case Some(dupSet) =>
+        val result = new java.util.HashSet[Int](dupSet) // defensive copy
+        result.asScala
+      case None => Set.empty[Int]
+    }
+  }
 
   /**
    * A [[KeyLock]] whose key is a shuffle id to ensure there is only one thread fetching
@@ -1354,14 +1413,15 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         if (endMapIndex == Int.MaxValue) mapOutputStatuses.length else endMapIndex
       logDebug(s"Convert map statuses for shuffle $shuffleId, " +
         s"mappers $startMapIndex-$actualEndMapIndex, partitions $startPartition-$endPartition")
-      MapOutputTracker.convertMapStatuses(
-        shuffleId, startPartition, endPartition, mapOutputStatuses, startMapIndex,
+        MapOutputTracker.convertMapStatuses(
+          shuffleId, startPartition, endPartition, mapOutputStatuses, startMapIndex,
           actualEndMapIndex, Option(mergedOutputStatuses))
     } catch {
       case e: MetadataFetchFailedException =>
         // We experienced a fetch failure so our mapStatuses cache is outdated; clear it:
         mapStatuses.clear()
         mergeStatuses.clear()
+        staleMapIds.clear()
         throw e
     }
   }
@@ -1386,6 +1446,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       case e: MetadataFetchFailedException =>
         mapStatuses.clear()
         mergeStatuses.clear()
+        staleMapIds.clear()
         throw e
     }
   }
@@ -1407,6 +1468,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
       case e: MetadataFetchFailedException =>
         mapStatuses.clear()
         mergeStatuses.clear()
+        staleMapIds.clear()
         throw e
     }
   }
@@ -1456,13 +1518,20 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           if (fetchedMapStatuses == null || fetchedMergeStatuses == null) {
             logInfo(log"Doing the fetch; tracker endpoint = " +
               log"${MDC(RPC_ENDPOINT_REF, trackerEndpoint)}")
-            val fetchedBytes =
-              askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
+            val fetchedBytes = askTracker[(Array[Byte], Array[Byte], Array[Byte])](
+              GetMapAndMergeResultStatuses(shuffleId))
             try {
               fetchedMapStatuses =
                 MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)
               fetchedMergeStatuses =
                 MapOutputTracker.deserializeOutputStatuses[MergeStatus](fetchedBytes._2, conf)
+              // Deserialize staleMapIds set for speculation duplicate chunk-level detection.
+              val deserializedStaleMapIds = MapOutputTracker.deserializeStaleMapIds(fetchedBytes._3)
+              staleMapIds.put(shuffleId, deserializedStaleMapIds)
+              if (!deserializedStaleMapIds.isEmpty) {
+                logInfo(s"Got stale mapIds for shuffle $shuffleId: " +
+                  deserializedStaleMapIds.asScala.mkString(","))
+              }
             } catch {
               case e: SparkException =>
                 throw new MetadataFetchFailedException(shuffleId, -1,
@@ -1519,6 +1588,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
     mapStatuses.remove(shuffleId)
     mergeStatuses.remove(shuffleId)
     shufflePushMergerLocations.remove(shuffleId)
+    staleMapIds.remove(shuffleId)
   }
 
   /**
@@ -1534,6 +1604,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
         mapStatuses.clear()
         mergeStatuses.clear()
         shufflePushMergerLocations.clear()
+        staleMapIds.clear()
       }
     }
   }
@@ -1641,6 +1712,47 @@ private[spark] object MapOutputTracker extends Logging {
               " output statuses", e)
         }
       case _ => throw new IllegalArgumentException("Unexpected byte tag = " + bytes(0))
+    }
+  }
+
+  /**
+   * Serialize a set of stale (duplicate) mapIds into a compact byte array.
+   * Uses DataOutputStream for a simple, efficient binary format:
+   * [int: count][long: mapId1][long: mapId2]...
+   * This is intentionally lightweight compared to serializeOutputStatuses because
+   * staleMapIds is typically small (only non-empty during speculation retries).
+   */
+  def serializeStaleMapIds(staleMapIds: java.util.HashSet[Int]): Array[Byte] = {
+    val out = new ApacheByteArrayOutputStream()
+    val dataOut = new DataOutputStream(out)
+    Utils.tryWithSafeFinally {
+      dataOut.writeInt(staleMapIds.size())
+      val iter = staleMapIds.iterator()
+      while (iter.hasNext) {
+        dataOut.writeInt(iter.next())
+      }
+    } {
+      dataOut.close()
+    }
+    out.toByteArray
+  }
+
+  /**
+   * Deserialize a byte array produced by [[serializeStaleMapIds]] back into a HashSet of Long.
+   */
+  def deserializeStaleMapIds(bytes: Array[Byte]): java.util.HashSet[Int] = {
+    val dupMapIdIn = new DataInputStream(new ByteArrayInputStream(bytes))
+    Utils.tryWithSafeFinally {
+      val numEntries = dupMapIdIn.readInt()
+      val dupSet = new java.util.HashSet[Int]()
+      var i = 0
+      while (i < numEntries) {
+        dupSet.add(dupMapIdIn.readInt())
+        i += 1
+      }
+      dupSet
+    } {
+      dupMapIdIn.close()
     }
   }
 

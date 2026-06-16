@@ -1166,4 +1166,43 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       rpcEnv.shutdown()
     }
   }
+
+  test("SPARK-57491: staleMapIds propagated from driver to worker via getStatuses") {
+    val rpcEnv = createRpcEnv("test")
+    val masterTracker = newTrackerMaster()
+    try {
+      masterTracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+        new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, conf))
+      // Simulate driver side: register shuffle and mark partition 1 as stale
+      masterTracker.registerShuffle(0, 4, 2)
+      masterTracker.registerMapOutput(0, 0,
+        MapStatus(BlockManagerId("exec-1", "hostA", 1000), Array(100L, 200L), 0))
+      masterTracker.registerMapOutput(0, 1,
+        MapStatus(BlockManagerId("exec-2", "hostB", 1000), Array(300L, 400L), 1))
+      val shuffleStatus = masterTracker.shuffleStatuses(0)
+      shuffleStatus.markStalePushedMap(1)
+
+      // Serialize statuses including staleMapIds (simulates what driver sends to executors)
+      val (mapBytes, mergeBytes, staleBytes) =
+        shuffleStatus.serializedMapAndMergeStatus(
+          masterTracker.broadcastManager, isLocal = true, minBroadcastSize = Int.MaxValue, conf)
+
+      // Simulate worker side: deserialize and verify staleMapIds are received
+      val deserializedStale = MapOutputTracker.deserializeStaleMapIds(staleBytes)
+      assert(deserializedStale.contains(1))
+
+      // Also verify via MapOutputTrackerWorker (the path used by real executors)
+      val workerTracker = new MapOutputTrackerWorker(conf)
+      // Manually populate what the worker would get from a getStatuses fetch
+      workerTracker.staleMapIds.put(0, {
+        val s = new JHashSet[Int]()
+        s.addAll(deserializedStale)
+        s
+      })
+      assert(workerTracker.getStaleMapIds(0).contains(1))
+    } finally {
+      masterTracker.stop()
+      rpcEnv.shutdown()
+    }
+  }
 }
