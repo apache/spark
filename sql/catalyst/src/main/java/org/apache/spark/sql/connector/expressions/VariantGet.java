@@ -24,9 +24,14 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
 import org.apache.spark.sql.types.DataType;
 
 /**
- * Variant get expression.
+ * A DSv2 connector expression that extracts a value from a variant column. It reads the value at
+ * the JSON {@code path} from the variant {@code child} and casts it to {@code targetType}. This is
+ * the connector-facing form of the {@code variant_get} / {@code try_variant_get} SQL functions:
+ * {@link #failOnError()} selects between them (throw vs. return null on a cast failure), and
+ * {@link #timeZoneId()} binds the time zone used for timestamp casts. {@code V2ExpressionBuilder}
+ * produces it so data sources can push variant extractions down (for example into filters).
  *
- * @since 4.1.0
+ * @since 4.3.0
  */
 @Evolving
 public class VariantGet extends ExpressionWithToString {
