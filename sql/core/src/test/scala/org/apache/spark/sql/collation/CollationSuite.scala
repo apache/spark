@@ -22,8 +22,9 @@ import scala.jdk.CollectionConverters.MapHasAsJava
 import com.ibm.icu.util.VersionInfo.ICU_VERSION
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
+import org.apache.spark.sql.catalyst.analysis.ResolvedIdentifier
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.connector.{DatasourceV2SQLBase, FakeV2ProviderWithCustomSchema}
@@ -1118,6 +1119,29 @@ class CollationSuite extends DatasourceV2SQLBase with AdaptiveSparkPlanHelper {
         "objectName" -> "`c_typo`",
         "proposal" -> "`c1`, `c2`"),
       queryContext = Array(ExpectedContext("c_typo", start, start + "c_typo".length - 1)))
+  }
+
+  test("CREATE TABLE with DEFAULT COLLATION correctly applies collation") {
+    val t = "testcat.ns1.tbl"
+    withTable(t) {
+      val queryExecutions = QueryTest.withQueryExecutionsCaptured(spark) {
+        sql(s"CREATE TABLE $t (c1 STRING, c2 STRING COLLATE UNICODE) " +
+          s"DEFAULT COLLATION UTF8_LCASE")
+      }
+      val resolvedIdentifier = queryExecutions.flatMap { qe =>
+        qe.analyzed.collectFirst { case ri: ResolvedIdentifier => ri }
+      }.headOption
+      assert(resolvedIdentifier.nonEmpty,
+        "Expected a ResolvedIdentifier in the analyzed CREATE TABLE plan")
+      val output = resolvedIdentifier.get.output
+      assert(output.nonEmpty,
+        "Expected the ResolvedIdentifier to expose the table columns as output")
+
+      // c1 has no explicit collation, so it inherits the table default collation.
+      assert(output.find(_.name == "c1").map(_.dataType).contains(StringType("UTF8_LCASE")))
+      // c2 has an explicit collation and must be left untouched.
+      assert(output.find(_.name == "c2").map(_.dataType).contains(StringType("UNICODE")))
+    }
   }
 
   test("Cast expression for collations") {

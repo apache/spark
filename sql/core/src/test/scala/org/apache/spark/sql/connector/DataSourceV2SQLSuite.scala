@@ -30,10 +30,10 @@ import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, Spark
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, QualifiedTableName, TableIdentifier}
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, ResolvedIdentifier, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NoSuchNamespaceException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, CatalogUtils}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.statsEstimation.StatsEstimationTestBase
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, _}
@@ -42,7 +42,6 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.expressions.{LiteralValue, Transform}
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.execution.FilterExec
-import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelationWithTable}
@@ -52,7 +51,6 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.internal.SQLConf.{PARTITION_OVERWRITE_MODE, PartitionOverwriteMode, V2_SESSION_CATALOG_IMPLEMENTATION}
 import org.apache.spark.sql.sources.SimpleScanSource
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
-import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
 abstract class DataSourceV2SQLSuite
@@ -3876,45 +3874,6 @@ class DataSourceV2SQLSuiteV1Filter
       assert(properties.get(s"${TableCatalog.OPTION_PREFIX}to") == "1")
       assert(properties.get("prop1") == "1")
       assert(properties.get("prop2") == "2")
-    }
-  }
-
-  test("CREATE TABLE with DEFAULT COLLATION applies the collation to the " +
-    "ResolvedIdentifier output columns") {
-    // ResolveCatalogs populates ResolvedIdentifier.output with the table columns so that
-    // expressions (e.g. constraints) referencing them can resolve. ApplyDefaultCollation must
-    // also apply the table's default collation to those output attributes; otherwise a column
-    // reference resolved against the identifier would keep the uncollated default string type.
-    // Capture the analyzed plan of the executed command via a QueryExecutionListener.
-    var analyzedPlan: LogicalPlan = null
-    val listener = new QueryExecutionListener {
-      override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
-        analyzedPlan = qe.analyzed
-      }
-      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
-    }
-    spark.listenerManager.register(listener)
-    val t = "testcat.ns1.tbl"
-    try {
-      withTable(t) {
-        sql(s"CREATE TABLE $t (c1 STRING, c2 STRING COLLATE UNICODE) " +
-          s"DEFAULT COLLATION UTF8_LCASE")
-        sparkContext.listenerBus.waitUntilEmpty()
-
-        val resolvedIdentifier = analyzedPlan.collectFirst { case ri: ResolvedIdentifier => ri }
-        assert(resolvedIdentifier.nonEmpty,
-          "Expected a ResolvedIdentifier in the analyzed CREATE TABLE plan")
-        val output = resolvedIdentifier.get.output
-        assert(output.nonEmpty,
-          "Expected the ResolvedIdentifier to expose the table columns as output")
-
-        // c1 has no explicit collation, so it inherits the table default collation.
-        assert(output.find(_.name == "c1").map(_.dataType).contains(StringType("UTF8_LCASE")))
-        // c2 has an explicit collation and must be left untouched.
-        assert(output.find(_.name == "c2").map(_.dataType).contains(StringType("UNICODE")))
-      }
-    } finally {
-      spark.listenerManager.unregister(listener)
     }
   }
 
