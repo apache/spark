@@ -47,8 +47,6 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  */
 case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
 
-  override def dataType: DataType = t
-
   // ==================== Schema Conversion ====================
 
   override def convertToParquetType(
