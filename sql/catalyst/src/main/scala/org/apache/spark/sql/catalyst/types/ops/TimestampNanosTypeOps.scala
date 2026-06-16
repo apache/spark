@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampLTZNanosType, PhysicalTimestampNTZNanosType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{ObjectType, TimestampLTZNanosType, TimestampNTZNanosType}
-import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TimestampNTZNanosTypeApiOps}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**

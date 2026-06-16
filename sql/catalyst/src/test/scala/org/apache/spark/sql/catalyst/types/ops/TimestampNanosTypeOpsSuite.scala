@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampL
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
-import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TypeApiOps}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**

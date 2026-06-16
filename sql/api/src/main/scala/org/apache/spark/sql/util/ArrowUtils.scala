@@ -27,9 +27,9 @@ import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, Interval
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
 import org.apache.spark.SparkException
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.util.ArrayImplicits._
 
 private[sql] object ArrowUtils {
