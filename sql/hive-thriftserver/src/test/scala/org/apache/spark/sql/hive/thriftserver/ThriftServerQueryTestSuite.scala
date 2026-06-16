@@ -118,10 +118,7 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "pipe-operators.sql",
     // VARIANT type
     "variant/named-function-arguments.sql",
-    "variant-field-extractions.sql",
-    // SPARK-57257: nanosecond-precision timestamp types are not yet mapped by the Thrift Server
-    "timestamp-ltz-nanos.sql",
-    "timestamp-ntz-nanos.sql"
+    "variant-field-extractions.sql"
   )
 
   override def runQueries(
