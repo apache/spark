@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalLongType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.arrow.{ArrowFieldWriter, TimeWriter}
 import org.apache.spark.sql.types.{ObjectType, TimeType}
-import org.apache.spark.sql.types.ops.TimeTypeApiOps
 
 /**
  * Server-side (catalyst) operations for TimeType.
