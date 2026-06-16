@@ -242,7 +242,9 @@ trait SparkDateTimeUtils {
    * widening (`p2 >= p1`) is lossless and returns the input unchanged, while narrowing
    * (`p2 < p1`) floors toward `-inf` to the target precision step.
    */
-  def truncateTimestampNanosToPrecision(v: TimestampNanosVal, precision: Int): TimestampNanosVal = {
+  def truncateTimestampNanosToPrecision(
+      v: TimestampNanosVal,
+      precision: Int): TimestampNanosVal = {
     val truncated = truncateNanosWithinMicroToPrecision(v.nanosWithinMicro.toInt, precision)
     if (truncated == v.nanosWithinMicro) v
     else TimestampNanosVal.fromParts(v.epochMicros, truncated.toShort)
