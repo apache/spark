@@ -3598,6 +3598,14 @@ Command types in proto.</td>
   <td>4.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.connect.execute.maxConcurrentQueries</code></td>
+  <td>
+    0
+  </td>
+  <td>Maximum number of concurrent queries that can be executed. When this limit is reached, new queries will wait in a queue until a slot becomes available. Set to 0 or negative to disable the limit (unlimited concurrency). This only affects Spark Connect executions. When using FAIR scheduling mode, this prevents resource fragmentation by limiting how many queries can run simultaneously.</td>
+  <td>4.2.0</td>
+</tr>
+<tr>
   <td><code>spark.connect.jvmStacktrace.maxSize</code></td>
   <td>
     1024

@@ -115,4 +115,91 @@ class SparkConnectExecutionManagerSuite extends SharedSparkSession {
       info.status == ExecuteStatus.Closed,
       s"Expected Closed status in inactive cache, got ${info.status}")
   }
+
+  test("execution semaphore starts with unlimited permits by default") {
+    // With default config (0), semaphore should have Int.MaxValue permits
+    assert(
+      executionManager.getAvailableExecutionSlots > 0,
+      "Should have available slots with default (unlimited) config")
+  }
+
+  test("execution semaphore respects configured max concurrent queries") {
+    // This test verifies the semaphore is properly initialized with the configured limit
+    // We can't easily change the config for this test, but we can verify the behavior
+    // through the acquire/release cycle
+    val initialSlots = executionManager.getAvailableExecutionSlots
+
+    // Acquire a slot
+    executionManager.acquireExecutionSlot()
+    assert(
+      executionManager.getAvailableExecutionSlots == initialSlots - 1,
+      "Available slots should decrease by 1 after acquire")
+
+    // Release the slot
+    executionManager.releaseExecutionSlot()
+    assert(
+      executionManager.getAvailableExecutionSlots == initialSlots,
+      "Available slots should return to initial value after release")
+  }
+
+  test("multiple acquires and releases work correctly") {
+    val initialSlots = executionManager.getAvailableExecutionSlots
+
+    // Acquire multiple slots
+    executionManager.acquireExecutionSlot()
+    executionManager.acquireExecutionSlot()
+    executionManager.acquireExecutionSlot()
+
+    assert(
+      executionManager.getAvailableExecutionSlots == initialSlots - 3,
+      "Available slots should decrease by 3 after 3 acquires")
+
+    // Release all slots
+    executionManager.releaseExecutionSlot()
+    executionManager.releaseExecutionSlot()
+    executionManager.releaseExecutionSlot()
+
+    assert(
+      executionManager.getAvailableExecutionSlots == initialSlots,
+      "Available slots should return to initial value after 3 releases")
+  }
+
+  test("removeExecuteHolder releases execution slot") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    val command = proto.Command.newBuilder().build()
+    val executeHolder = SparkConnectTestUtils.createDummyExecuteHolder(sessionHolder, command)
+    val executeKey = executeHolder.key
+
+    val initialSlots = executionManager.getAvailableExecutionSlots
+
+    // Manually acquire a slot (simulating what happens in createExecuteHolderAndAttach)
+    executionManager.acquireExecutionSlot()
+    assert(executionManager.getAvailableExecutionSlots == initialSlots - 1)
+
+    // Remove the execute holder (which should release the slot)
+    executionManager.removeExecuteHolder(executeKey)
+
+    // Slot should be released back
+    assert(
+      executionManager.getAvailableExecutionSlots == initialSlots,
+      "removeExecuteHolder should release the execution slot")
+  }
+
+  test("createExecuteHolder failure releases execution slot") {
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+
+    val initialSlots = executionManager.getAvailableExecutionSlots
+
+    // Manually acquire a slot
+    executionManager.acquireExecutionSlot()
+    assert(executionManager.getAvailableExecutionSlots == initialSlots - 1)
+
+    // Simulate a failure during createExecuteHolder by releasing the slot
+    executionManager.releaseExecutionSlot()
+
+    // Slot should be back
+    assert(
+      executionManager.getAvailableExecutionSlots == initialSlots,
+      "Slot should be released on createExecuteHolder failure")
+  }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connect.service
 
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentMap, Executors, ScheduledExecutorService, Semaphore, TimeUnit}
 import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 
 import scala.concurrent.duration.FiniteDuration
@@ -33,7 +33,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.connect.IllegalStateErrors
-import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.sql.connect.config.Connect.{CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES, CONNECT_EXECUTE_MANAGER_ABANDONED_TOMBSTONES_SIZE, CONNECT_EXECUTE_MANAGER_DETACHED_TIMEOUT, CONNECT_EXECUTE_MANAGER_MAINTENANCE_INTERVAL}
 import org.apache.spark.sql.connect.execution.ExecuteGrpcResponseSender
 import org.apache.spark.sql.connect.planner.InvalidInputErrors
 import org.apache.spark.util.ThreadUtils
@@ -83,6 +83,57 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
   /** Executor for the periodic maintenance */
   private val scheduledExecutor: AtomicReference[ScheduledExecutorService] =
     new AtomicReference[ScheduledExecutorService]()
+
+  /**
+   * Semaphore to control the maximum number of concurrent executions. When maxConcurrentQueries >
+   * 0, this semaphore limits concurrent executions. Acquiring a permit means an execution slot is
+   * available.
+   */
+  private val executionSemaphore: Semaphore = {
+    val maxConcurrent = SparkEnv.get.conf.get(CONNECT_EXECUTE_MAX_CONCURRENT_QUERIES)
+    val semaphore = if (maxConcurrent > 0) {
+      new Semaphore(maxConcurrent)
+    } else {
+      // Unlimited: semaphore with Int.MaxValue permits
+      new Semaphore(Int.MaxValue)
+    }
+    logInfo(log"Spark Connect execution semaphore initialized with maxConcurrentQueries=" +
+      log"${MDC(LogKeys.MAX_SLOTS, maxConcurrent)} (${MDC(LogKeys.NUM_SLOTS, semaphore.availablePermits())} permits)")
+    semaphore
+  }
+
+  /**
+   * Get the current number of permits available in the execution semaphore. Exposed for testing.
+   */
+  private[connect] def getAvailableExecutionSlots: Int = executionSemaphore.availablePermits()
+
+  /**
+   * Acquire a permit from the execution semaphore, blocking if necessary until one is available.
+   * This is called before starting a new execution.
+   */
+  private[connect] def acquireExecutionSlot(): Unit = {
+    val availableBefore = executionSemaphore.availablePermits()
+    if (availableBefore == 0) {
+      val queueLength = executionSemaphore.getQueueLength
+      logInfo(
+        log"All execution slots are in use. Query will wait in queue. " +
+          log"Queue length: ${MDC(LogKeys.THREAD_POOL_WAIT_QUEUE_SIZE, queueLength)}")
+    }
+    executionSemaphore.acquire()
+    if (availableBefore == 0) {
+      logInfo(log"Query acquired execution slot and will start")
+    }
+  }
+
+  /**
+   * Release a permit back to the execution semaphore. This is called when an execution completes.
+   */
+  private[connect] def releaseExecutionSlot(): Unit = {
+    executionSemaphore.release()
+    logDebug(
+      log"Execution slot released. Available slots: " +
+        log"${MDC(LogKeys.NUM_SLOTS, executionSemaphore.availablePermits())}")
+  }
 
   /**
    * Create a new ExecuteHolder and register it with this global manager and with its session.
@@ -171,6 +222,10 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
     logInfo(log"ExecuteHolder ${MDC(LogKeys.EXECUTE_KEY, key)} is removed.")
 
     executeHolder.close()
+
+    // Release the execution slot back to the semaphore so another query can start
+    releaseExecutionSlot()
+
     if (abandoned) {
       // Update in abandonedTombstones: above it wasn't yet updated with closedTime etc.
       abandonedTombstones.put(key, executeHolder.getExecuteInfo)
@@ -190,7 +245,20 @@ private[connect] class SparkConnectExecutionManager() extends Logging {
       request: proto.ExecutePlanRequest,
       sessionHolder: SessionHolder,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): ExecuteHolder = {
-    val executeHolder = createExecuteHolder(executeKey, request, sessionHolder)
+    // Acquire a slot from the semaphore before starting execution.
+    // This blocks if max concurrent queries limit is reached.
+    acquireExecutionSlot()
+
+    val executeHolder =
+      try {
+        createExecuteHolder(executeKey, request, sessionHolder)
+      } catch {
+        case t: Throwable =>
+          // If we fail to create the execute holder, release the slot we acquired
+          releaseExecutionSlot()
+          throw t
+      }
+
     try {
       // SPARK-53339: Validate the plan before starting the execution thread.
       // postStarted() was moved into executeInternal(), so invalid plans that previously
