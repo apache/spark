@@ -237,10 +237,10 @@ trait SparkDateTimeUtils {
    * sub-microsecond `nanosWithinMicro` component (see [[truncateNanosWithinMicroToPrecision]]).
    * `epochMicros` is left untouched, so this only ever drops trailing sub-microsecond digits.
    *
-   * Used by the same-family cross-precision nanosecond cast paths
-   * (`TIMESTAMP_NTZ(p1) -> TIMESTAMP_NTZ(p2)` and `TIMESTAMP_LTZ(q1) -> TIMESTAMP_LTZ(q2)`):
-   * widening (`p2 >= p1`) is lossless and returns the input unchanged, while narrowing
-   * (`p2 < p1`) floors toward `-inf` to the target precision step.
+   * Used by the same-family cross-precision nanosecond cast paths (`TIMESTAMP_NTZ(p1) ->
+   * TIMESTAMP_NTZ(p2)` and `TIMESTAMP_LTZ(q1) -> TIMESTAMP_LTZ(q2)`): widening (`p2 >= p1`) is
+   * lossless and returns the input unchanged, while narrowing (`p2 < p1`) floors toward `-inf` to
+   * the target precision step.
    */
   def truncateTimestampNanosToPrecision(
       v: TimestampNanosVal,
