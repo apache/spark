@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateSpec, DeduplicateWithinWatermark, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Deduplicate, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeduplicateSpec, DeduplicateWithinWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_DEDUPLICATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -44,7 +44,10 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
     _.containsPattern(UNRESOLVED_DEDUPLICATE)) {
     case d: UnresolvedDeduplicate if d.child.resolved =>
       val orderDeterministically = conf.getConf(SQLConf.DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER)
-      val spec = DeduplicateSpec(d.columnNames, d.allColumnsAsKeys, d.viaSparkClassic)
+      val keySpec =
+        if (d.allColumnsAsKeys) DeduplicateAllColumnsAsKey
+        else DeduplicateKeyColumns(d.columnNames)
+      val spec = DeduplicateSpec(keySpec, d.viaSparkClassic)
       val keys = computeKeys(d.child, spec, orderDeterministically, conf.resolver)
       if (d.withinWatermark) {
         DeduplicateWithinWatermark(keys, d.child, Some(spec))
@@ -66,25 +69,26 @@ object ResolveDeduplicate extends Rule[LogicalPlan] {
       spec: DeduplicateSpec,
       orderDeterministically: Boolean,
       resolver: Resolver): Seq[Attribute] = {
-    if (spec.allColumnsAsKeys) {
-      // All child columns are keys. The deterministic order and legacy Spark Connect both key on
-      // the child output directly (in output order, no name resolution); only legacy Spark Classic
-      // reorders the names through a Set (see legacyClassicColumnNames).
-      if (!orderDeterministically && spec.viaSparkClassic) {
-        resolveColumnNames(child, legacyClassicColumnNames(child.output.map(_.name)), resolver)
-      } else {
-        child.output
-      }
-    } else {
-      val orderedNames = if (orderDeterministically) {
-        dedupKeepingOrder(spec.subset)
-      } else if (spec.viaSparkClassic) {
-        legacyClassicColumnNames(spec.subset)
-      } else {
-        // Legacy Spark Connect resolution: no dedup, caller-provided input order.
-        spec.subset
-      }
-      resolveColumnNames(child, orderedNames, resolver)
+    spec.keySpec match {
+      case DeduplicateAllColumnsAsKey =>
+        // All child columns are keys. The deterministic order and legacy Spark Connect both key on
+        // the child output directly (in output order, no name resolution); only legacy Spark
+        // Classic reorders the names through a Set (see legacyClassicColumnNames).
+        if (!orderDeterministically && spec.viaSparkClassic) {
+          resolveColumnNames(child, legacyClassicColumnNames(child.output.map(_.name)), resolver)
+        } else {
+          child.output
+        }
+      case DeduplicateKeyColumns(colNames) =>
+        val orderedNames = if (orderDeterministically) {
+          dedupKeepingOrder(colNames)
+        } else if (spec.viaSparkClassic) {
+          legacyClassicColumnNames(colNames)
+        } else {
+          // Legacy Spark Connect resolution: no dedup, caller-provided input order.
+          colNames
+        }
+        resolveColumnNames(child, orderedNames, resolver)
     }
   }
 

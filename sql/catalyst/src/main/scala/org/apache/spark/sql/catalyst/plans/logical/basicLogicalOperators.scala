@@ -2313,21 +2313,27 @@ case class OneRowRelation() extends LeafNode {
 }
 
 /**
+ * How the deduplication keys are specified: either an explicit set of column names
+ * ([[DeduplicateKeyColumns]]) or all of the child's columns ([[DeduplicateAllColumnsAsKey]]).
+ */
+sealed trait DeduplicateKeySpec
+case class DeduplicateKeyColumns(colNames: Seq[String]) extends DeduplicateKeySpec
+case object DeduplicateAllColumnsAsKey extends DeduplicateKeySpec
+
+/**
  * The original recipe behind a [[Deduplicate]] / [[DeduplicateWithinWatermark]] node, set by the
  * `ResolveDeduplicate` analyzer rule and retained so a streaming query can recompute its key
  * attributes at query start in the ordering pinned in the offset log (see
  * `ResolveDeduplicate.computeKeys`). A `None` spec on a node means it was not built from
  * `dropDuplicates*` (e.g. an internally/test-constructed node) and its keys must NOT be recomputed.
  *
- * @param subset the user-requested subset of column names (ignored when `allColumnsAsKeys`).
- * @param allColumnsAsKeys when true, every column of the child is a deduplication key.
+ * @param keySpec which columns form the deduplication key.
  * @param viaSparkClassic whether this was built via Spark Classic (`Dataset.dropDuplicates*`, true)
  *   or Spark Connect (`transformDeduplicate`, false). Only consulted when recomputing the keys in
  *   the legacy order, where the two engines historically differed. See SPARK-57489.
  */
 case class DeduplicateSpec(
-    subset: Seq[String],
-    allColumnsAsKeys: Boolean,
+    keySpec: DeduplicateKeySpec,
     viaSparkClassic: Boolean)
 
 /** A logical plan for `dropDuplicates`. */
