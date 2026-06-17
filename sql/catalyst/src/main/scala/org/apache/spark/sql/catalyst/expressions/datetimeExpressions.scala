@@ -1794,20 +1794,39 @@ case class TimestampAddInterval(
       TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case TypeCheckSuccess =>
-        (left.dataType, right.dataType) match {
-          case (_: AnyTimestampNanoType, CalendarIntervalType) =>
-            DataTypeMismatch(
-              errorSubClass = "UNEXPECTED_INPUT_TYPE",
-              messageParameters = Map(
-                "paramIndex" -> ordinalNumber(1),
-                "requiredType" -> toSQLType(DayTimeIntervalType()),
-                "inputSql" -> toSQLExpr(right),
-                "inputType" -> toSQLType(right.dataType)))
-          case _ => TypeCheckSuccess
-        }
-      case failure => failure
+    val leftIsTimestamp = AnyTimestampType.acceptsType(left.dataType)
+    val leftIsTimestampNanos = left.dataType.isInstanceOf[AnyTimestampNanoType]
+
+    if (!leftIsTimestamp && !leftIsTimestampNanos) {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          // Keep historical error wording for non-timestamp left operands.
+          "requiredType" -> toSQLType(AnyTimestampType),
+          "inputSql" -> toSQLExpr(left),
+          "inputType" -> toSQLType(left.dataType)))
+    } else {
+      right.dataType match {
+        case _: DayTimeIntervalType => TypeCheckSuccess
+        case CalendarIntervalType if leftIsTimestampNanos =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(1),
+              "requiredType" -> toSQLType(DayTimeIntervalType()),
+              "inputSql" -> toSQLExpr(right),
+              "inputType" -> toSQLType(right.dataType)))
+        case CalendarIntervalType => TypeCheckSuccess
+        case _ =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_INPUT_TYPE",
+            messageParameters = Map(
+              "paramIndex" -> ordinalNumber(1),
+              "requiredType" -> toSQLType(TypeCollection(CalendarIntervalType, DayTimeIntervalType)),
+              "inputSql" -> toSQLExpr(right),
+              "inputType" -> toSQLType(right.dataType)))
+      }
     }
   }
 
