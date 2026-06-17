@@ -30,7 +30,7 @@ import org.apache.spark.sql.{AnalysisException, Column, Observation, Row, SaveMo
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.DataFrame
@@ -1149,10 +1149,18 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   // Compares proto plan with LogicalPlan.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
-    def normalizeDataframeId(plan: LogicalPlan): LogicalPlan = plan transform {
+    def normalizeForComparison(plan: LogicalPlan): LogicalPlan = plan transform {
       case cm: CollectMetrics => cm.copy(dataframeId = 0)
+      // Spark Connect and Spark Classic record different DeduplicateSpec.viaSparkClassic; it only
+      // drives the legacy key-order fallback for streaming restarts, not the resolved plan, so
+      // ignore it when comparing the two engines.
+      case d: Deduplicate => d.copy(dedupSpec = None)
+      case d: DeduplicateWithinWatermark => d.copy(dedupSpec = None)
     }
     val connectAnalyzed = analyzePlan(transform(connectPlan))
-    comparePlans(normalizeDataframeId(connectAnalyzed), normalizeDataframeId(sparkPlan), false)
+    comparePlans(
+      normalizeForComparison(connectAnalyzed),
+      normalizeForComparison(sparkPlan),
+      false)
   }
 }

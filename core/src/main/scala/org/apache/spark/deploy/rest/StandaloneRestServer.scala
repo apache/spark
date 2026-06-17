@@ -195,6 +195,13 @@ private[rest] class StandaloneSubmitRequestServlet(
     val appResource = Option(request.appResource).getOrElse {
       throw new SubmitRestMissingFieldException("Application jar is missing.")
     }
+    Option(this.conf).foreach { c =>
+      val patterns = c.get(config.MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS).map(_.r)
+      if (patterns.nonEmpty &&
+          !patterns.exists(_.pattern.matcher(appResource).matches())) {
+        throw new SubmitRestMissingFieldException("Valid application jar path is required")
+      }
+    }
     val mainClass = Option(request.mainClass).getOrElse {
       throw new SubmitRestMissingFieldException("Main class is missing.")
     }

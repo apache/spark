@@ -246,7 +246,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             .unpivot(["id"], None, "variable", "value")
             ._plan.to_proto(self.connect)
         )
-        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertEqual(len(plan.root.unpivot.ids), 1)
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
         self.assertEqual(plan.root.unpivot.HasField("values"), False)
@@ -278,11 +278,11 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
             .melt(["id"], [], "variable", "value")
             ._plan.to_proto(self.connect)
         )
-        self.assertTrue(len(plan.root.unpivot.ids) == 1)
+        self.assertEqual(len(plan.root.unpivot.ids), 1)
         self.assertTrue(all(isinstance(c, proto.Expression) for c in plan.root.unpivot.ids))
         self.assertEqual(plan.root.unpivot.ids[0].unresolved_attribute.unparsed_identifier, "id")
         self.assertEqual(plan.root.unpivot.HasField("values"), True)
-        self.assertTrue(len(plan.root.unpivot.values.values) == 0)
+        self.assertEqual(len(plan.root.unpivot.values.values), 0)
         self.assertEqual(plan.root.unpivot.variable_column_name, "variable")
         self.assertEqual(plan.root.unpivot.value_column_name, "value")
 
@@ -293,7 +293,7 @@ class SparkConnectPlanTests(PlanOnlyTestFixture):
         df = self.connect.readTable(table_name=self.tbl_name)
 
         def checkRelations(relations: List["DataFrame"]):
-            self.assertTrue(len(relations) == 3)
+            self.assertEqual(len(relations), 3)
 
             plan = relations[0]._plan.to_proto(self.connect)
             self.assertEqual(plan.root.sample.lower_bound, 0.0)

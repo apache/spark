@@ -74,7 +74,7 @@ public class ConstantColumnVector extends ColumnVector {
       this.childData[0] = new ConstantColumnVector(1, DataTypes.IntegerType);
       this.childData[1] = new ConstantColumnVector(1, DataTypes.IntegerType);
       this.childData[2] = new ConstantColumnVector(1, DataTypes.LongType);
-    } else if (type instanceof TimestampNTZNanosType || type instanceof TimestampLTZNanosType) {
+    } else if (type instanceof AnyTimestampNanoType) {
       // Two columns. EpochMicros as Long. NanosWithinMicro as Short.
       this.childData = new ConstantColumnVector[2];
       this.childData[0] = new ConstantColumnVector(1, DataTypes.LongType);

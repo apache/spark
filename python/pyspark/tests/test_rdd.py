@@ -619,10 +619,10 @@ class RDDTests(ReusedPySparkTestCase):
         a = self.sc.parallelize(range(int(1000)), 2)
         xs = a.repartition(num_partitions).glom().map(len).collect()
         zeros = len([x for x in xs if x == 0])
-        self.assertTrue(zeros == 0)
+        self.assertEqual(zeros, 0)
         xs = a.coalesce(num_partitions, True).glom().map(len).collect()
         zeros = len([x for x in xs if x == 0])
-        self.assertTrue(zeros == 0)
+        self.assertEqual(zeros, 0)
 
     def test_repartition_on_textfile(self):
         path = os.path.join(SPARK_HOME, "python/test_support/hello/hello.txt")

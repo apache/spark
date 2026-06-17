@@ -701,6 +701,42 @@ private[v2] trait V2JDBCTest
     assert(rows12(5).getString(0) === "special_character_underscorenot_present")
   }
 
+  // Whether the dialect can push down IS [NOT] NULL over a predicate operand, e.g.
+  // `(a = 10000) IS NULL`. MsSqlServer has no boolean type, so it cannot and Spark evaluates it.
+  protected def supportsIsNullOverPredicate: Boolean = true
+
+  test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down") {
+    val tbl = s"$catalogName.composite_is_null"
+    withTable(tbl) {
+      // b is a string label so the result type is the same across dialects (an INT column
+      // comes back as BigDecimal on some engines such as Oracle).
+      sql(s"CREATE TABLE $tbl (a INT, b VARCHAR(8))")
+      Seq[(Option[Int], String)]((Some(10000), "x"), (Some(20000), "y"), (None, "z"))
+        .toDF("a", "b").write.insertInto(tbl)
+
+      // Binary comparison operand must be parenthesized as `(a = 10000) IS [NOT] NULL`.
+      // The NULL row exercises the IS NULL branch: (NULL = 10000) is NULL, so it matches
+      // IS NULL and not IS NOT NULL. Dialects without a boolean type (e.g. SQL Server) cannot
+      // push this, but Spark evaluates it and returns the same rows.
+      val df1 = sql(s"SELECT b FROM $tbl WHERE (a = 10000) IS NOT NULL")
+      checkFilterPushed(df1, supportsIsNullOverPredicate)
+      assert(df1.collect().map(_.getString(0)).sorted === Array("x", "y"))
+
+      val df2 = sql(s"SELECT b FROM $tbl WHERE (a = 10000) IS NULL")
+      checkFilterPushed(df2, supportsIsNullOverPredicate)
+      assert(df2.collect().map(_.getString(0)) === Array("z"))
+
+      // An arithmetic operand is not a predicate, so it is pushed down by every dialect.
+      val df3 = sql(s"SELECT b FROM $tbl WHERE (a + 10000) IS NOT NULL")
+      checkFilterPushed(df3)
+      assert(df3.collect().map(_.getString(0)).sorted === Array("x", "y"))
+
+      val df4 = sql(s"SELECT b FROM $tbl WHERE (a + 10000) IS NULL")
+      checkFilterPushed(df4)
+      assert(df4.collect().map(_.getString(0)) === Array("z"))
+    }
+  }
+
   test("SPARK-57040: TABLESAMPLE with replacement is not pushed down") {
     withTable(s"$catalogName.new_table") {
       sql(s"CREATE TABLE $catalogName.new_table (col1 INT, col2 INT)")
