@@ -70,7 +70,7 @@ Run test cases matching a substring:
 
     build/sbt '<module>/testOnly *MySuite -- -z "test name"'
 
-Run test cases in optional modules:
+Run test cases in an optional module:
 
     build/sbt -P<maven-profiles> '<module>/testOnly *MySuite'
 
