@@ -6330,6 +6330,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR =
+    buildConf("spark.sql.variant.pushVariantIntoScan.deferCastError")
+      .internal()
+      .doc("When true, strict variant casts that get pushed into the scan are wrapped with a " +
+        "per-row cast-error companion column (nullable string) so that the cast error is only " +
+        "raised when the row is consumed by the user expression. Without this flag, the cast is " +
+        "always evaluated and any failure raises immediately, even when the surrounding " +
+        "expression would not have consumed the failing row.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val VARIANT_WRITE_SHREDDING_ENABLED =
     buildConf("spark.sql.variant.writeShredding.enabled")
       .internal()

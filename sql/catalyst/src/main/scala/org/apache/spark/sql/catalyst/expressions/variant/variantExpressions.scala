@@ -1127,3 +1127,63 @@ case class IsValidVariant(child: Expression) extends UnaryExpression
   override protected def withNewChildInternal(newChild: Expression): IsValidVariant =
     copy(child = newChild)
 }
+
+/**
+ * Internal expression. It surfaces a deferred cast error produced by `PushVariantIntoScan` for a
+ * strict variant cast. Semantically equivalent to
+ *
+ *   if(castError IS NOT NULL, raise_error('INVALID_VARIANT_CAST', ...), value)
+ *
+ * but kept as a single named expression so downstream consumers can easily recognize it.
+ */
+case class UnwrapVariantCastError(castError: Expression, value: Expression)
+    extends BinaryExpression
+    with ExpectsInputTypes
+    with QueryErrorsBase {
+  override def left: Expression = castError
+  override def right: Expression = value
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, AnyDataType)
+
+  override def dataType: DataType = value.dataType
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    val err = castError.eval(input)
+    if (err != null) {
+      throw QueryExecutionErrors.invalidVariantCast(err.asInstanceOf[UTF8String].toString, dataType)
+    }
+    value.eval(input)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dataTypeRef = ctx.addReferenceObj("dataType", dataType, classOf[DataType].getName)
+    val cls = UnwrapVariantCastError.getClass.getName.stripSuffix("$")
+    val errEval = castError.genCode(ctx)
+    val valEval = value.genCode(ctx)
+    val javaType = CodeGenerator.javaType(dataType)
+    val code = code"""
+      ${errEval.code}
+      if (!${errEval.isNull}) {
+        $cls.throwInvalidVariantCast(${errEval.value}, $dataTypeRef);
+      }
+      ${valEval.code}
+      boolean ${ev.isNull} = ${valEval.isNull};
+      $javaType ${ev.value} = ${valEval.value};
+    """
+    ev.copy(code = code)
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): UnwrapVariantCastError =
+    copy(castError = newLeft, value = newRight)
+}
+
+object UnwrapVariantCastError {
+  // Indirection so codegen can throw via a method call; a literal `throw` of a `Throwable`-typed
+  // expression trips Java's checked-exception check.
+  def throwInvalidVariantCast(error: UTF8String, dataType: DataType): Unit = {
+    throw QueryExecutionErrors.invalidVariantCast(error.toString, dataType)
+  }
+}
