@@ -427,12 +427,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // If no variant columns remain after collection, return original plan
     if (variants.mapping.forall(_._2.isEmpty)) return originalPlan
 
-    // Cast-error deferral needs reader support for synthetic companion fields. If a scan only
-    // supports plain variant extraction pushdown, leave the plan untouched while deferral is on.
-    if (variants.deferCastErrorEnabled && !builder.supportsDeferCastError()) return originalPlan
-
     // Build individual VariantExtraction for each field access
     // Track which extraction corresponds to which (attr, field, ordinal)
+    // Cast-error deferral attaches a synthetic companion field to every strict-cast extraction;
+    // record whether any are generated so we can require reader support below.
+    var hasCompanionExtraction = false
     val extractionInfo = schemaAttributes.flatMap { topAttr =>
       val variantFields = variants.mapping.get(topAttr.exprId)
       if (variantFields.isEmpty || variantFields.get.isEmpty) {
@@ -467,6 +466,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 )
                 (extraction, topAttr, field, ordinal)
             }
+            if (companionExtractions.nonEmpty) hasCompanionExtraction = true
             dataExtractions ++ companionExtractions
           } else {
             dataExtractions
@@ -477,6 +477,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
     // Call the API to push down variant extractions
     if (extractionInfo.isEmpty) return originalPlan
+
+    // Companion extractions can only be honored by readers that support cast-error deferral. If
+    // none were generated, the pushdown carries only non-strict accesses (`try_variant_get`, plain
+    // variant reads, casts to variant/string) that are safe regardless of deferral support.
+    if (hasCompanionExtraction && !builder.supportsDeferCastError()) return originalPlan
 
     val extractions: Array[VariantExtraction] = extractionInfo.map(_._1).toArray
     val pushedResults = builder.pushVariantExtractions(extractions)

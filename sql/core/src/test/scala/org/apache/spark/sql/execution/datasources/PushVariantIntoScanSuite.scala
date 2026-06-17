@@ -73,6 +73,14 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
     }
   }
 
+  // Returns true iff `t` or any of its causes is an INVALID_VARIANT_CAST error. The failure may
+  // surface directly or be wrapped in a task failure.
+  protected def hasCastCondition(t: Throwable): Boolean = t match {
+    case null => false
+    case s: org.apache.spark.SparkThrowable if s.getCondition == "INVALID_VARIANT_CAST" => true
+    case _ => hasCastCondition(t.getCause)
+  }
+
   test(s"Strict cast wraps with cast-error-deferred error") {
     withTable("T") {
       withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
@@ -143,13 +151,6 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
       // even though the `if` would have filtered it out.
       withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "false") {
         val ex = intercept[Exception](sql(query).collect())
-        // The cast failure may surface directly or be wrapped in a task failure.
-        def hasCastCondition(t: Throwable): Boolean = t match {
-          case null => false
-          case s: org.apache.spark.SparkThrowable if s.getCondition == "INVALID_VARIANT_CAST" =>
-            true
-          case _ => hasCastCondition(t.getCause)
-        }
         assert(hasCastCondition(ex), s"Expected INVALID_VARIANT_CAST, got $ex")
       }
 
@@ -211,12 +212,6 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
         "(parse_json('[1, \"abc\"]'))") {
       withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
         val ex = intercept[Exception](sql("select cast(v as array<int>) from T").collect())
-        def hasCastCondition(t: Throwable): Boolean = t match {
-          case null => false
-          case s: org.apache.spark.SparkThrowable if s.getCondition == "INVALID_VARIANT_CAST" =>
-            true
-          case _ => hasCastCondition(t.getCause)
-        }
         assert(hasCastCondition(ex), s"Expected INVALID_VARIANT_CAST, got $ex")
       }
     }
@@ -235,23 +230,10 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
         withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
           val ex =
             intercept[Exception](sql("select cast(v as struct<x: int>) from T").collect())
-          def hasCastCondition(t: Throwable): Boolean = t match {
-            case null => false
-            case s: org.apache.spark.SparkThrowable
-                if s.getCondition == "INVALID_VARIANT_CAST" => true
-            case _ => hasCastCondition(t.getCause)
-          }
           assert(hasCastCondition(ex), s"Expected INVALID_VARIANT_CAST, got $ex")
         }
       }
     }
-  }
-
-  // Returns true iff `t` or any of its causes is an INVALID_VARIANT_CAST error.
-  private def hasCastCondition(t: Throwable): Boolean = t match {
-    case null => false
-    case s: org.apache.spark.SparkThrowable if s.getCondition == "INVALID_VARIANT_CAST" => true
-    case _ => hasCastCondition(t.getCause)
   }
 
   test(s"Reader defers strict-cast errors through AND/OR short-circuit") {
