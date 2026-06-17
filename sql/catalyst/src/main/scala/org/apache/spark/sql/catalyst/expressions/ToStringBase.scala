@@ -242,7 +242,10 @@ trait ToStringBase { self: UnaryExpression with TimeZoneAwareExpression =>
         // Route nanosecond timestamp cast-to-string through the Types Framework: emit a runtime
         // call into the ops reference object. The cast's session zone is threaded into the lookup
         // so LTZ carries it; NTZ is zone-independent (SPARK-57285).
-        val ops = TypeApiOps(from, zoneId).get
+        // Resolve the zone here so the reference object holds a ZoneId, not a closure capturing
+        // this Cast; the held value is the cast's resolved zone, not a session-config read.
+        val z = zoneId
+        val ops = TypeApiOps(from, z).get
         // Pin the reference-object cast type to the public TypeApiOps class; the runtime ops class
         // lives in sql/api, so the inferred concrete-class cast would be unnecessarily specific.
         val opsRef = JavaCode.global(
