@@ -1000,6 +1000,26 @@ class JDBCSuite extends SharedSparkSession {
     assert(mySQLSQL(StringStartsWith("c", "a%b_")) === """`c` LIKE 'a\\%b\\_%' ESCAPE '\\'""")
   }
 
+  test("SPARK-57500: escape backslash in pushed-down string literals for comparison/IN") {
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    def d(f: Filter): String = defaultDialect.compileExpression(f.toV2).getOrElse("")
+    def m(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
+
+    assert(d(EqualTo("c", "a\\b")) === """"c" = 'a\b'""")
+    assert(m(EqualTo("c", "a\\b")) === """`c` = 'a\\b'""")
+    assert(d(LessThan("c", "a\\b")) === """"c" < 'a\b'""")
+    assert(m(LessThan("c", "a\\b")) === """`c` < 'a\\b'""")
+    assert(d(In("c", Array[Any]("a\\b", "x\\y"))) === """"c" IN ('a\b', 'x\y')""")
+    assert(m(In("c", Array[Any]("a\\b", "x\\y"))) === """`c` IN ('a\\b', 'x\\y')""")
+    assert(m(EqualTo("c", "a'\\b")) === """`c` = 'a''\\b'""")
+
+    assert(d(StringStartsWith("c", "a\\b")) === """"c" LIKE 'a\\b%' ESCAPE '\'""")
+    assert(m(StringStartsWith("c", "a\\b")) === """`c` LIKE 'a\\\\b%' ESCAPE '\\'""")
+    assert(d(StringContains("c", "a\\b")) === """"c" LIKE '%a\\b%' ESCAPE '\'""")
+    assert(m(StringContains("c", "a\\b")) === """`c` LIKE '%a\\\\b%' ESCAPE '\\'""")
+  }
+
   test("SPARK-57446: escape single quotes in JDBC comment queries") {
     val defaultDialect = JdbcDialects.get("jdbc:")
     assert(defaultDialect.getTableCommentQuery("t", "a'b") ===

@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal, NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
@@ -408,7 +408,29 @@ abstract class JdbcDialect extends Serializable with Logging {
     override def build(expr: Expression): String = expr match {
       case _: AlwaysTrue => "(1 = 1)"
       case _: AlwaysFalse => "(1 = 0)"
+      case e: GeneralScalarExpression if isLikeStringPredicate(e.name()) =>
+        buildLikeStringPredicate(e).getOrElse(super.build(expr))
       case _ => super.build(expr)
+    }
+
+    private def isLikeStringPredicate(name: String): Boolean =
+      name == "STARTS_WITH" || name == "ENDS_WITH" || name == "CONTAINS"
+
+    private def buildLikeStringPredicate(e: GeneralScalarExpression): Option[String] = {
+      val children = e.children()
+      if (children.length != 2) return None
+      children(1) match {
+        case lit: Literal[_] if lit.value() != null && lit.dataType().isInstanceOf[StringType] =>
+          val escaped = escapeSpecialCharsForLikePattern(lit.value().toString)
+          val pattern = e.name() match {
+            case "STARTS_WITH" => escaped + "%"
+            case "ENDS_WITH" => "%" + escaped
+            case _ => "%" + escaped + "%"
+          }
+          val col = build(children(0))
+          Some(col + " LIKE '" + escapeSql(pattern) + "' ESCAPE '" + escapeSql("\\") + "'")
+        case _ => None
+      }
     }
 
     // Some dialects do not support boolean type and this convenient util function is
