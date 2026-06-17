@@ -127,7 +127,6 @@ object HiveResult extends SQLConfHelper {
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
     case (ld: LocalDate, DateType) => formatters.date.format(ld)
-    case (lt: LocalTime, _: TimeType) => formatters.time.format(lt)
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
