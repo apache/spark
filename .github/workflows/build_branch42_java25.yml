@@ -17,7 +17,7 @@
 # under the License.
 #
 
-name: "Build (branch-4.2, Scala 2.13, Hadoop 3, JDK 25)"
+name: "Build (branch-4.2, Scala 2.13, JDK 25)"
 
 on:
   schedule:
