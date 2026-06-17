@@ -99,9 +99,10 @@ public class ThriftHttpServlet extends TServlet {
     // Initialize the cookie based authentication related variables.
     if (isCookieAuthEnabled) {
       // Generate the signer with secret.
-      String secret = Long.toString(RAN.nextLong());
-      LOG.debug("Using the random number as the secret for cookie generation");
-      this.signer = new CookieSigner(secret.getBytes());
+      byte[] secret = new byte[32];
+      RAN.nextBytes(secret);
+      LOG.debug("Using the random bytes as the secret for cookie generation");
+      this.signer = new CookieSigner(secret);
       this.cookieMaxAge = (int) hiveConf.getTimeVar(
         ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_MAX_AGE, TimeUnit.SECONDS);
       this.cookieDomain = hiveConf.getVar(ConfVars.HIVE_SERVER2_THRIFT_HTTP_COOKIE_DOMAIN);
