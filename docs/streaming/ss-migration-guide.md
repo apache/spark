@@ -25,7 +25,7 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
 
 ## Upgrading from Structured Streaming 4.1 to 4.2
 
-- Since Spark 4.2, restarting a streaming query from a checkpoint whose required metadata is missing fails with an error by default, instead of silently proceeding. Recreate the checkpoint, or start the query from a new checkpoint location, if the existing one is incomplete.
+- Since Spark 4.2, restarting a streaming query from a checkpoint whose metadata file is missing while the offset or commit logs contain data fails with `STREAMING_CHECKPOINT_MISSING_METADATA_FILE`, instead of silently generating a new query ID (which can duplicate data in exactly-once sinks). Restore the metadata file or use a new checkpoint location. To restore the previous behavior, set `spark.sql.streaming.checkpoint.verifyMetadataExists.enabled` to `false`. (See [SPARK-55058](https://issues.apache.org/jira/browse/SPARK-55058) for more details.)
 
 ## Upgrading from Structured Streaming 4.0 to 4.1
 
