@@ -1802,8 +1802,7 @@ case class TimestampAddInterval(
         errorSubClass = "UNEXPECTED_INPUT_TYPE",
         messageParameters = Map(
           "paramIndex" -> ordinalNumber(0),
-          // Keep historical error wording for non-timestamp left operands.
-          "requiredType" -> toSQLType(AnyTimestampType),
+          "requiredType" -> toSQLType(TypeCollection(AnyTimestampType, AnyTimestampNanoType)),
           "inputSql" -> toSQLExpr(left),
           "inputType" -> toSQLType(left.dataType)))
     } else {
@@ -1823,7 +1822,8 @@ case class TimestampAddInterval(
             errorSubClass = "UNEXPECTED_INPUT_TYPE",
             messageParameters = Map(
               "paramIndex" -> ordinalNumber(1),
-              "requiredType" -> toSQLType(TypeCollection(CalendarIntervalType, DayTimeIntervalType)),
+              "requiredType" ->
+                toSQLType(TypeCollection(CalendarIntervalType, DayTimeIntervalType)),
               "inputSql" -> toSQLExpr(right),
               "inputType" -> toSQLType(right.dataType)))
       }
