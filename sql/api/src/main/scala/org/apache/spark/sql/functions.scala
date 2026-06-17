@@ -9689,6 +9689,44 @@ object functions {
   def is_valid_variant(v: Column): Column = Column.fn("is_valid_variant", v)
 
   /**
+   * Removes fields or array elements from a variant at the given JSONPath locations. Multiple
+   * paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are skipped.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the column containing the first JSONPath string. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param paths
+   *   additional JSONPath arguments, applied after `path` in order.
+   * @group variant_funcs
+   * @since 5.0.0
+   */
+  @scala.annotation.varargs
+  def variant_delete(v: Column, path: Column, paths: Column*): Column =
+    Column.fn("variant_delete", (v +: path +: paths): _*)
+
+  /**
+   * Removes fields or array elements from a variant at the given JSONPath locations. Multiple
+   * paths are applied left to right. Returns NULL if `v` is NULL; NULL paths are skipped.
+   *
+   * @param v
+   *   a variant column.
+   * @param path
+   *   the first JSONPath identifying a deletion target. A valid path should start with `$` and is
+   *   followed by one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root
+   *   path `$` is not allowed.
+   * @param paths
+   *   additional JSONPath strings, applied after `path` in order.
+   * @group variant_funcs
+   * @since 5.0.0
+   */
+  @scala.annotation.varargs
+  def variant_delete(v: Column, path: String, paths: String*): Column =
+    Column.fn("variant_delete", (v +: lit(path) +: paths.map(lit)): _*)
+
+  /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
    * `targetType`. Returns null if the path does not exist. Throws an exception if the cast fails.
    *

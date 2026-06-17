@@ -478,6 +478,7 @@ __all__ = [  # noqa: F405
     "schema_of_variant",
     "schema_of_variant_agg",
     "try_variant_get",
+    "variant_delete",
     "variant_get",
     "try_parse_json",
     "to_variant_object",
