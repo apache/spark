@@ -72,6 +72,7 @@ class MasterWebUI(
     if (decommissionEnabled) {
       attachHandler(createServletHandler("/workers/kill", new HttpServlet {
         override def doPost(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+          if (!master.securityMgr.checkModifyPermissions(req.getRemoteUser)) return
           val hostnames: Seq[String] = Option(req.getParameterValues("host"))
             .getOrElse(Array[String]()).toImmutableArraySeq
           if (!isDecommissioningRequestAllowed(req)) {
