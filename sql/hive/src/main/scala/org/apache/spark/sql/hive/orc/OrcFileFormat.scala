@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.serde2.objectinspector
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampObjectInspector
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
@@ -43,6 +44,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
@@ -197,8 +199,6 @@ case class OrcFileFormat() extends FileFormat
 
     case _: AnsiIntervalType => false
     case _: TimeType => false
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -226,6 +226,26 @@ case class OrcFileFormat() extends FileFormat
 
 private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
   extends HiveInspectors {
+  private def toHiveCompatibleDataType(dataType: DataType): DataType = {
+    dataType match {
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        TimestampType
+      case StructType(fields) =>
+        StructType(fields.map(f => f.copy(dataType = toHiveCompatibleDataType(f.dataType))))
+      case ArrayType(elementType, containsNull) =>
+        ArrayType(toHiveCompatibleDataType(elementType), containsNull)
+      case MapType(keyType, valueType, valueContainsNull) =>
+        MapType(
+          toHiveCompatibleDataType(keyType),
+          toHiveCompatibleDataType(valueType),
+          valueContainsNull)
+      case other =>
+        other
+    }
+  }
+
+  private[this] val hiveCompatibleSchema = StructType(
+    dataSchema.map(f => f.copy(dataType = toHiveCompatibleDataType(f.dataType))))
 
   def serialize(row: InternalRow): Writable = {
     wrapOrcStruct(cachedOrcStruct, structOI, row)
@@ -235,7 +255,9 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
   private[this] val serializer = {
     val table = new Properties()
     table.setProperty("columns", dataSchema.fieldNames.mkString(","))
-    table.setProperty("columns.types", dataSchema.map(_.dataType.catalogString).mkString(":"))
+    table.setProperty(
+      "columns.types",
+      hiveCompatibleSchema.map(_.dataType.catalogString).mkString(":"))
 
     val serde = new OrcSerde
     serde.initialize(conf, table)
@@ -244,7 +266,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 
   // Object inspector converted from the schema of the relation to be serialized.
   val structOI = {
-    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(dataSchema.catalogString)
+    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(hiveCompatibleSchema.catalogString)
     OrcStruct.createObjectInspector(typeInfo.asInstanceOf[StructTypeInfo])
       .asInstanceOf[SettableStructObjectInspector]
   }
@@ -352,7 +374,36 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
           ref -> ordinal
       }.unzip
 
-      val unwrappers = fieldRefs.map(r => if (r == null) null else unwrapperFor(r))
+      val unwrappers = fieldRefs.zip(requiredSchema).map {
+        case (null, _) => null
+        case (fieldRef, field) =>
+          fieldRef.getFieldObjectInspector match {
+            case oi: TimestampObjectInspector =>
+              field.dataType match {
+                case t: TimestampLTZNanosType =>
+                  (value: Any, row: InternalRow, ordinal: Int) =>
+                    row.update(
+                      ordinal,
+                      DateTimeUtils.instantToTimestampNanos(
+                        oi.getPrimitiveJavaObject(value).toInstant,
+                        t.precision))
+                case t: TimestampNTZNanosType =>
+                  (value: Any, row: InternalRow, ordinal: Int) =>
+                    row.update(
+                      ordinal,
+                      DateTimeUtils.localDateTimeToTimestampNanos(
+                        oi.getPrimitiveJavaObject(value).toLocalDateTime,
+                        t.precision))
+                case _ =>
+                  (value: Any, row: InternalRow, ordinal: Int) =>
+                    row.setLong(
+                      ordinal,
+                      DateTimeUtils.fromJavaTimestamp(oi.getPrimitiveJavaObject(value)))
+              }
+            case _ =>
+              unwrapperFor(fieldRef)
+          }
+      }
 
       iterator.map { value =>
         val raw = deserializer.deserialize(value)

@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{TimestampLTZNanosType, TimestampNTZNanosType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 import org.apache.spark.util.ArrayImplicits._
@@ -461,8 +462,8 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
      * Builds specific unwrappers ahead of time according to object inspector
      * types to avoid pattern matching and branching costs per row.
      */
-    val unwrappers: Seq[(Any, InternalRow, Int) => Unit] = fieldRefs.map {
-      _.getFieldObjectInspector match {
+    val unwrappers: Seq[(Any, InternalRow, Int) => Unit] = fieldRefs.zip(nonPartitionKeyAttrs).map {
+      case (fieldRef, (attr, _)) => fieldRef.getFieldObjectInspector match {
         case oi: BooleanObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) => row.setBoolean(ordinal, oi.get(value))
         case oi: ByteObjectInspector =>
@@ -488,7 +489,18 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
             row.update(ordinal, HiveShim.toCatalystDecimal(oi, value))
         case oi: TimestampObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) =>
-            row.setLong(ordinal, DateTimeUtils.fromJavaTimestamp(oi.getPrimitiveJavaObject(value)))
+            attr.dataType match {
+              case t: TimestampLTZNanosType =>
+                row.update(ordinal, DateTimeUtils.instantToTimestampNanos(
+                  oi.getPrimitiveJavaObject(value).toInstant, t.precision))
+              case t: TimestampNTZNanosType =>
+                row.update(ordinal, DateTimeUtils.localDateTimeToTimestampNanos(
+                  oi.getPrimitiveJavaObject(value).toLocalDateTime, t.precision))
+              case _ =>
+                row.setLong(
+                  ordinal,
+                  DateTimeUtils.fromJavaTimestamp(oi.getPrimitiveJavaObject(value)))
+            }
         case oi: DateObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) =>
             row.setInt(ordinal, DateTimeUtils.fromJavaDate(oi.getPrimitiveJavaObject(value)))

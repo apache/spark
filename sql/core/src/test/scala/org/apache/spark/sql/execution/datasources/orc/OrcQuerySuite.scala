@@ -35,13 +35,16 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.Utils.createArray
 
@@ -910,6 +913,40 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           DateTimeTestUtils.withDefaultTimeZone(zoneId) {
             withAllNativeOrcReaders {
               checkAnswer(sql(query), df)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57455: ORC reads nanos timestamps with vectorized and non-vectorized readers") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision))
+          .foreach { nanosType =>
+          val nanosWithinMicro = precision match {
+            case 7 => 100
+            case 8 => 120
+            case _ => 123
+          }
+          val data = Seq(
+            new TimestampNanosVal(0L, 0.toShort),
+            new TimestampNanosVal(1_000_000L, 900.toShort),
+            new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort))
+          val inputDf = data
+            .map(v => spark.range(1).select(Column(Literal.create(v, nanosType)).as("ts")))
+            .reduce(_.union(_))
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            inputDf.write.mode("overwrite").orc(path)
+            val expected = inputDf.collect()
+            Seq(true, false).foreach { vectorized =>
+              withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+                checkAnswer(
+                  spark.read.schema(new StructType().add("ts", nanosType)).orc(path),
+                  expected)
+              }
             }
           }
         }

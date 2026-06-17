@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * A serializer to serialize Spark rows to ORC structs.
@@ -151,6 +152,19 @@ class OrcSerializer(dataSchema: StructType) {
 
     case TimestampType => (getter, ordinal) =>
       val ts = DateTimeUtils.toJavaTimestamp(getter.getLong(ordinal))
+      val result = new OrcTimestamp(ts.getTime)
+      result.setNanos(ts.getNanos)
+      result
+    case t: TimestampLTZNanosType => (getter, ordinal) =>
+      val v = getter.get(ordinal, t).asInstanceOf[TimestampNanosVal]
+      val instant = DateTimeUtils.timestampNanosToInstant(v)
+      val result = new OrcTimestamp(instant.toEpochMilli)
+      result.setNanos(instant.getNano)
+      result
+    case t: TimestampNTZNanosType => (getter, ordinal) =>
+      val v = getter.get(ordinal, t).asInstanceOf[TimestampNanosVal]
+      val localDateTime = DateTimeUtils.timestampNanosToLocalDateTime(v)
+      val ts = java.sql.Timestamp.valueOf(localDateTime)
       val result = new OrcTimestamp(ts.getTime)
       result.setNanos(ts.getNanos)
       result

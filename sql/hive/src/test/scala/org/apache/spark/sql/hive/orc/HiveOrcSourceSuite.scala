@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.sql.{AnalysisException, Column, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
 import org.apache.spark.sql.hive.HiveUtils
@@ -350,39 +351,25 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     }
   }
 
-  test("SPARK-57166: nanosecond timestamp types are not supported in Hive ORC") {
-    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
+  test("SPARK-57166: nanosecond timestamp types are supported in Hive ORC") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      nanosTypes.foreach { nanosType =>
-        val expectedType = s""""${nanosType.sql}""""
-        withTempDir { dir =>
-          // Write path
-          val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-          val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
-          val writeDir = new File(dir, "write").getCanonicalPath
-          checkError(
-            exception = intercept[AnalysisException] {
-              df.write.format("orc").mode("overwrite").save(writeDir)
-            },
-            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-            parameters = Map(
-              "columnName" -> "`ts`",
-              "columnType" -> expectedType,
-              "format" -> "ORC"))
+      Seq(true, false).foreach { convertMetastore =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
+          foreachNanosPrecision { precision =>
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
+                  val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
+                  val path = new File(dir, "nanos").getCanonicalPath
+                  df.write.format("orc").mode("overwrite").save(path)
 
-          // Read path
-          val readDir = new File(dir, "read").getCanonicalPath
-          spark.range(1).write.format("orc").mode("overwrite").save(readDir)
-          checkError(
-            exception = intercept[AnalysisException] {
-              spark.read.schema(new StructType().add("ts", nanosType))
-                .format("orc").load(readDir).collect()
-            },
-            condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-            parameters = Map(
-              "columnName" -> "`ts`",
-              "columnType" -> expectedType,
-              "format" -> "ORC"))
+                  val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                    .format("orc").load(path)
+                  checkAnswer(readBack, df)
+                }
+            }
+          }
         }
       }
     }

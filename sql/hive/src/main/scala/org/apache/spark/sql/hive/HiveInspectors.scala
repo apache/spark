@@ -38,6 +38,7 @@ import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.execution.datasources.DaysWritable
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -330,8 +331,22 @@ private[hive] trait HiveInspectors {
         withNullSafe(o =>
             DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
       case _: JavaTimestampObjectInspector =>
-        withNullSafe(o =>
-            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _: TimestampNTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _ =>
+            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+        })
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         withNullSafe(o => getDecimalWritable(o.asInstanceOf[Decimal]))
       case _: HiveDecimalObjectInspector =>
@@ -346,9 +361,39 @@ private[hive] trait HiveInspectors {
       case _: DateObjectInspector =>
         withNullSafe(o => DateTimeUtils.toJavaDate(o.asInstanceOf[Int]))
       case _: TimestampObjectInspector if x.preferWritable() =>
-        withNullSafe(o => getTimestampWritable(o))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            new hiveIo.TimestampWritable(o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            })
+          case _: TimestampNTZNanosType =>
+            new hiveIo.TimestampWritable(o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            })
+          case _ =>
+            getTimestampWritable(o)
+        })
       case _: TimestampObjectInspector =>
-        withNullSafe(o => DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long]))
+        withNullSafe(o => dataType match {
+          case _: TimestampLTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.from(
+                DateTimeUtils.timestampNanosToInstant(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _: TimestampNTZNanosType =>
+            o match {
+              case v: TimestampNanosVal => java.sql.Timestamp.valueOf(
+                DateTimeUtils.timestampNanosToLocalDateTime(v))
+              case micros: Long => DateTimeUtils.toJavaTimestamp(micros)
+            }
+          case _ =>
+            DateTimeUtils.toJavaTimestamp(o.asInstanceOf[Long])
+        })
       case _: HiveIntervalDayTimeObjectInspector  if x.preferWritable() =>
         withNullSafe(o => getHiveIntervalDayTimeWritable(o))
       case _: HiveIntervalDayTimeObjectInspector =>
