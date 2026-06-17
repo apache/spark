@@ -359,6 +359,8 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     val unsafeProjection = UnsafeProjection.create(requiredSchema)
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
 
+    def isNanosTimestamp(dt: DataType): Boolean = dt.isInstanceOf[AnyTimestampNanoType]
+
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
       val (fieldRefs, fieldOrdinals) = requiredSchema.zipWithIndex.map {
         case (field, ordinal) =>
@@ -400,6 +402,9 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
                       ordinal,
                       DateTimeUtils.fromJavaTimestamp(oi.getPrimitiveJavaObject(value)))
               }
+            case _ if field.dataType.existsRecursively(isNanosTimestamp) =>
+              val unwrapper = unwrapperFor(fieldRef.getFieldObjectInspector, field.dataType)
+              (value: Any, row: InternalRow, ordinal: Int) => row.update(ordinal, unwrapper(value))
             case _ =>
               unwrapperFor(fieldRef)
           }

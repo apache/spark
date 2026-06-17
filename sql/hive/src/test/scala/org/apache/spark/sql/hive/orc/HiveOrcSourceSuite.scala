@@ -424,6 +424,35 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     }
   }
 
+  test("SPARK-57455: Hive ORC serde round-trips nanos timestamps in nested/complex types") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      val wallClocks = Seq(LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123))
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            withTempView("nanos_input") {
+              nanosTimestampDf(nanosType, wallClocks).createOrReplaceTempView("nanos_input")
+              val nested = sql(
+                """SELECT
+                  |  named_struct('ts', ts) AS struct_ts,
+                  |  array(ts) AS array_ts,
+                  |  map('k', ts) AS map_ts
+                  |FROM nanos_input
+                  |""".stripMargin)
+              withTempDir { dir =>
+                val path = new File(dir, "nanos-nested").getCanonicalPath
+                nested.write.format("orc").mode("overwrite").save(path)
+                val readBack = spark.read.schema(nested.schema).format("orc").load(path)
+                checkAnswer(readBack, nested)
+              }
+            }
+        }
+      }
+    }
+  }
+
   test("SPARK-31580: Read a file written before ORC-569") {
     // Test ORC file came from ORC-621
     val df = readResourceOrcFile("test-data/TestStringDictionary.testRowIndex.orc")

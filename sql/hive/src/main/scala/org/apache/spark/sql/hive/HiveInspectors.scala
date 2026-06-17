@@ -798,6 +798,73 @@ private[hive] trait HiveInspectors {
     }
 
   /**
+   * Returns an unwrapper that converts a Hive value into a Catalyst value, using the target
+   * Catalyst `dataType` to preserve nanosecond timestamp precision. The plain
+   * `unwrapperFor(ObjectInspector)` cannot do this because a Hive `TimestampObjectInspector`
+   * maps to micros by default; here the nanos timestamp types are produced as `TimestampNanosVal`,
+   * recursing through array/map/struct so nested nanos timestamps round-trip correctly. Any other
+   * type is delegated to the `ObjectInspector`-only overload.
+   */
+  def unwrapperFor(objectInspector: ObjectInspector, dataType: DataType): Any => Any =
+    (objectInspector, dataType) match {
+      case (ti: TimestampObjectInspector, t: TimestampNTZNanosType) =>
+        data: Any => {
+          if (data != null) {
+            DateTimeUtils.localDateTimeToTimestampNanos(
+              ti.getPrimitiveJavaObject(data).toLocalDateTime, t.precision)
+          } else {
+            null
+          }
+        }
+      case (ti: TimestampObjectInspector, t: TimestampLTZNanosType) =>
+        data: Any => {
+          if (data != null) {
+            DateTimeUtils.instantToTimestampNanos(
+              ti.getPrimitiveJavaObject(data).toInstant, t.precision)
+          } else {
+            null
+          }
+        }
+      case (li: ListObjectInspector, ArrayType(elementType, _)) =>
+        val unwrapper = unwrapperFor(li.getListElementObjectInspector, elementType)
+        data: Any => {
+          if (data != null) {
+            Option(li.getList(data))
+              .map(l => new GenericArrayData(l.asScala.map(unwrapper).toArray))
+              .orNull
+          } else {
+            null
+          }
+        }
+      case (mi: MapObjectInspector, MapType(keyType, valueType, _)) =>
+        val keyUnwrapper = unwrapperFor(mi.getMapKeyObjectInspector, keyType)
+        val valueUnwrapper = unwrapperFor(mi.getMapValueObjectInspector, valueType)
+        data: Any => {
+          if (data != null) {
+            val map = mi.getMap(data)
+            if (map == null) null else ArrayBasedMapData(map, keyUnwrapper, valueUnwrapper)
+          } else {
+            null
+          }
+        }
+      case (si: StructObjectInspector, st: StructType) =>
+        val fields = si.getAllStructFieldRefs.asScala
+        val unwrappers = fields.zip(st.fields).map { case (field, structField) =>
+          val unwrapper = unwrapperFor(field.getFieldObjectInspector, structField.dataType)
+          data: Any => unwrapper(si.getStructFieldData(data, field))
+        }
+        data: Any => {
+          if (data != null) {
+            new GenericInternalRow(unwrappers.map(_(data)).toArray)
+          } else {
+            null
+          }
+        }
+      case _ =>
+        unwrapperFor(objectInspector)
+    }
+
+  /**
    * Builds unwrappers ahead of time according to object inspector
    * types to avoid pattern matching and branching costs per row.
    *
