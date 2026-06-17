@@ -233,6 +233,24 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Floors a `TimestampNanosVal` to the given timestamp precision `p` in [7, 9] by truncating its
+   * sub-microsecond `nanosWithinMicro` component (see [[truncateNanosWithinMicroToPrecision]]).
+   * `epochMicros` is left untouched, so this only ever drops trailing sub-microsecond digits.
+   *
+   * Used by the same-family cross-precision nanosecond cast paths (`TIMESTAMP_NTZ(p1) ->
+   * TIMESTAMP_NTZ(p2)` and `TIMESTAMP_LTZ(q1) -> TIMESTAMP_LTZ(q2)`): widening (`p2 >= p1`) is
+   * lossless and returns the input unchanged, while narrowing (`p2 < p1`) floors toward `-inf` to
+   * the target precision step.
+   */
+  def truncateTimestampNanosToPrecision(
+      v: TimestampNanosVal,
+      precision: Int): TimestampNanosVal = {
+    val truncated = truncateNanosWithinMicroToPrecision(v.nanosWithinMicro.toInt, precision)
+    if (truncated == v.nanosWithinMicro) v
+    else TimestampNanosVal.fromParts(v.epochMicros, truncated.toShort)
+  }
+
+  /**
    * Converts a `java.time.LocalDateTime` into the composite `(epochMicros, nanosWithinMicro)`
    * pair used by `TimestampNTZNanosType(precision)` (interpreted at UTC). `epochMicros` comes
    * from [[localDateTimeToMicros]] (which is floor toward `-inf` for the integral micro part);
