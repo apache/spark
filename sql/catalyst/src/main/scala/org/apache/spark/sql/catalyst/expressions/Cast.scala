@@ -115,23 +115,13 @@ object Cast extends QueryErrorsBase {
 
     case (_: StringType, _: AnyTimestampNanoType) => true
 
-    case (TimestampNTZType, _: TimestampNTZNanosType) => true
-    case (_: TimestampNTZNanosType, TimestampNTZType) => true
-    case (TimestampType, _: TimestampLTZNanosType) => true
-    case (_: TimestampLTZNanosType, TimestampType) => true
-
-    case (_: TimestampNTZNanosType, _: TimestampNTZNanosType) => true
-    case (_: TimestampLTZNanosType, _: TimestampLTZNanosType) => true
-
-    case (_: TimestampLTZNanosType, _: TimestampNTZNanosType) => true
-    case (_: TimestampNTZNanosType, _: TimestampLTZNanosType) => true
-
-    // Cross-family casts between the micro family member (TIMESTAMP_LTZ(6) = TIMESTAMP and
-    // TIMESTAMP_NTZ(6) = TIMESTAMP_NTZ) and the other family's nanosecond member.
-    case (TimestampType, _: TimestampNTZNanosType) => true
-    case (_: TimestampNTZNanosType, TimestampType) => true
-    case (TimestampNTZType, _: TimestampLTZNanosType) => true
-    case (_: TimestampLTZNanosType, TimestampNTZType) => true
+    // Casts between timestamp types where at least one side is a nanosecond type are allowed for
+    // every micro/nanos and nanos/nanos combination, across both time-zone families. Precision 6 is
+    // the micro family member (TIMESTAMP_LTZ(6) = TIMESTAMP, TIMESTAMP_NTZ(6) = TIMESTAMP_NTZ),
+    // matched here via AnyTimestampType; the all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair is above.
+    case (_: AnyTimestampNanoType, _: AnyTimestampNanoType) => true
+    case (t, _: AnyTimestampNanoType) if AnyTimestampType.acceptsType(t) => true
+    case (_: AnyTimestampNanoType, t) if AnyTimestampType.acceptsType(t) => true
 
     case (DateType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, DateType) => true
@@ -275,23 +265,13 @@ object Cast extends QueryErrorsBase {
 
     case (_: StringType, _: AnyTimestampNanoType) => true
 
-    case (TimestampNTZType, _: TimestampNTZNanosType) => true
-    case (_: TimestampNTZNanosType, TimestampNTZType) => true
-    case (TimestampType, _: TimestampLTZNanosType) => true
-    case (_: TimestampLTZNanosType, TimestampType) => true
-
-    case (_: TimestampNTZNanosType, _: TimestampNTZNanosType) => true
-    case (_: TimestampLTZNanosType, _: TimestampLTZNanosType) => true
-
-    case (_: TimestampLTZNanosType, _: TimestampNTZNanosType) => true
-    case (_: TimestampNTZNanosType, _: TimestampLTZNanosType) => true
-
-    // Cross-family casts between the micro family member (TIMESTAMP_LTZ(6) = TIMESTAMP and
-    // TIMESTAMP_NTZ(6) = TIMESTAMP_NTZ) and the other family's nanosecond member.
-    case (TimestampType, _: TimestampNTZNanosType) => true
-    case (_: TimestampNTZNanosType, TimestampType) => true
-    case (TimestampNTZType, _: TimestampLTZNanosType) => true
-    case (_: TimestampLTZNanosType, TimestampNTZType) => true
+    // Casts between timestamp types where at least one side is a nanosecond type are allowed for
+    // every micro/nanos and nanos/nanos combination, across both time-zone families. Precision 6 is
+    // the micro family member (TIMESTAMP_LTZ(6) = TIMESTAMP, TIMESTAMP_NTZ(6) = TIMESTAMP_NTZ),
+    // matched here via AnyTimestampType; the all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair is above.
+    case (_: AnyTimestampNanoType, _: AnyTimestampNanoType) => true
+    case (t, _: AnyTimestampNanoType) if AnyTimestampType.acceptsType(t) => true
+    case (_: AnyTimestampNanoType, t) if AnyTimestampType.acceptsType(t) => true
 
     case (DateType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, DateType) => true
@@ -458,39 +438,29 @@ object Cast extends QueryErrorsBase {
     case (_: NumericType, _: NumericType) => true
     case (_: AtomicType, _: StringType) => true
     case (_: CalendarIntervalType, _: StringType) => true
-    // SPARK-57293: narrowing a nanosecond-precision timestamp to its microsecond counterpart
-    // drops the sub-microsecond digits, so it is not allowed as a (silent) store assignment.
-    // This conversion stays explicit-only.
-    case (_: TimestampNTZNanosType, TimestampNTZType) => false
-    case (_: TimestampLTZNanosType, TimestampType) => false
-    // SPARK-57323: DATE <-> nanosecond-precision timestamp requires an explicit CAST in both
-    // directions. nanos -> DATE silently drops time-of-day and sub-microsecond digits (the same
-    // rule as the narrowing above). DATE -> nanos is lossless (midnight, zero sub-micro part),
-    // but conversions involving the nanos types stay explicit-only while the types are
-    // unreleased: allowing the store assignment later is a compatible change, revoking it is not.
-    // Note this is stricter than micro DATE <-> TIMESTAMP[_NTZ], which the catch-all below allows.
-    case (DateType, _: TimestampLTZNanosType) => false
-    case (DateType, _: TimestampNTZNanosType) => false
-    case (_: TimestampLTZNanosType, DateType) => false
-    case (_: TimestampNTZNanosType, DateType) => false
     // SPARK-57490: same-family cross-precision nanosecond casts: widening (e.g. TIMESTAMP_NTZ(7) ->
     // TIMESTAMP_NTZ(9)) is lossless and allowed as a silent store assignment, while narrowing
     // (e.g. (9) -> (7)) drops sub-microsecond digits and stays explicit-only. Equal precision is
-    // already handled by the `from == to` short-circuit above.
+    // handled by the `from == to` short-circuit above; micros -> nanos widening (e.g. TIMESTAMP_NTZ
+    // -> TIMESTAMP_NTZ(9)) is lossless and falls to the catch-all below.
     case (f: TimestampNTZNanosType, t: TimestampNTZNanosType) => f.precision <= t.precision
     case (f: TimestampLTZNanosType, t: TimestampLTZNanosType) => f.precision <= t.precision
-    // Cross-family nanosecond casts (TIMESTAMP_LTZ(p) <-> TIMESTAMP_NTZ(q)) reinterpret the value
-    // against the session time zone, so they stay explicit-only rather than silent store
-    // assignments while the nanosecond types are unreleased (same rationale as the cases above).
-    // This includes the mixed micro/nanos cases where one side is the precision-6 micro family
-    // member (TIMESTAMP / TIMESTAMP_NTZ); only the all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair stays
-    // store-assignable via the catch-all below.
-    case (_: TimestampLTZNanosType, _: TimestampNTZNanosType) => false
-    case (_: TimestampNTZNanosType, _: TimestampLTZNanosType) => false
+    // SPARK-57323: DATE <-> nanosecond-precision timestamp requires an explicit CAST in both
+    // directions (nanos -> DATE drops fields; DATE -> nanos is lossless but kept explicit-only
+    // while the nanos types are unreleased). Stricter than micro DATE <-> TIMESTAMP[_NTZ], which
+    // the catch-all below allows.
+    case (DateType, _: AnyTimestampNanoType) => false
+    case (_: AnyTimestampNanoType, DateType) => false
+    // SPARK-57293/57511: narrowing any nanosecond timestamp to a microsecond timestamp drops the
+    // sub-microsecond digits, and cross-family casts additionally reinterpret the value against the
+    // session time zone; both stay explicit-only rather than silent store assignments while the
+    // nanos types are unreleased. This covers same-family narrowing (nanos -> micro), cross-family
+    // nanos <-> nanos, and the mixed micro/nanos pairs at the precision-6 boundary. Only the
+    // all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair stays store-assignable via the catch-all below.
+    case (_: AnyTimestampNanoType, t) if AnyTimestampType.acceptsType(t) => false
     case (TimestampType, _: TimestampNTZNanosType) => false
-    case (_: TimestampNTZNanosType, TimestampType) => false
     case (TimestampNTZType, _: TimestampLTZNanosType) => false
-    case (_: TimestampLTZNanosType, TimestampNTZType) => false
+    case (_: AnyTimestampNanoType, _: AnyTimestampNanoType) => false
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
