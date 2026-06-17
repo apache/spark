@@ -7589,6 +7589,7 @@ object SQLConf {
     buildConf("spark.sql.execution.distributedMapJoin.maxInFlightNum")
       .doc("Maximum number of concurrent RPC lookup batches per task on the probe side.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
       .createWithDefault(8)
 
@@ -7596,6 +7597,7 @@ object SQLConf {
     buildConf("spark.sql.execution.distributedMapJoin.maxBatchSize")
       .doc("Maximum number of probe-side keys per RPC lookup batch.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
       .createWithDefault(1024)
 
@@ -7604,6 +7606,7 @@ object SQLConf {
       .doc("Expected number of distinct keys per shard for the build-side bloom filter. " +
         "The total bloom filter capacity is this value multiplied by the number of shards.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .longConf
       .createWithDefault(5L << 20)
 
@@ -7611,6 +7614,7 @@ object SQLConf {
     buildConf("spark.sql.execution.distributedMapJoin.exchangeTimeout")
       .doc("Timeout in seconds for building shard data in distributed map join.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString(s"${30 * 60}")
 

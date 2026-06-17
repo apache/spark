@@ -44,6 +44,8 @@ object MimaExcludes {
     // [SPARK-54879] Add exitCode field to ApplicationAttemptInfo
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.tupled"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.curried"),
+    // [SPARK-57487][SQL] Distributed map join adds shardManagerFactory parameter to SparkEnv
+    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.this"),
     // [SQL] SafeJsonSerializer.safeMapToJValue: second parameter widened from Function1 to
     // Function2 so the key is passed to the value serializer (progress.scala). Binary-incompatible
     // vs spark-sql-api 4.0.0; not part of the public supported API (private[streaming] package).

@@ -3019,6 +3019,7 @@ package object config {
         "started at application launch, enabling the distributed map join strategy " +
         "via SQL hints.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 }
