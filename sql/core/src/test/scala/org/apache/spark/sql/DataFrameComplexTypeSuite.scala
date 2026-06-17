@@ -30,7 +30,9 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, Decimal, DoubleType, IntegerType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{
+  ArrayType, BooleanType, Decimal, DoubleType, IntegerType, LongType, MapType, StringType,
+  StructField, StructType}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
@@ -235,6 +237,43 @@ class DataFrameComplexTypeSuite extends SharedSparkSession {
     }
   }
 
+  test("ArrayAggregate resolves nested lambda arguments before inspecting their types") {
+    val positionType = StructType(Seq(
+      StructField("turn_idx", LongType, nullable = false),
+      StructField("turn_kind", StringType, nullable = false),
+      StructField("start_message_index", LongType, nullable = false),
+      StructField("previous_start_message_index", LongType, nullable = true)))
+    val positionsType = ArrayType(positionType, containsNull = false)
+    val messages = array(struct(
+      lit("user").as("turn_kind"),
+      lit(0L).as("message_index")))
+    val candidates = filter(
+      transform(messages, message => struct(
+        message.getField("turn_kind").as("turn_kind"),
+        message.getField("message_index").as("message_index"))),
+      candidate => candidate.getField("turn_kind").isNotNull)
+    val lastPosition = aggregate(
+      candidates,
+      array().cast(positionsType),
+      (positions, candidate) => {
+        val previousPosition = try_element_at(positions, lit(-1))
+        when(
+          previousPosition.getField("turn_kind").eqNullSafe(candidate.getField("turn_kind")),
+          positions).otherwise(
+          concat(positions, array(struct(
+            (size(positions).cast(LongType) + 1L).as("turn_idx"),
+            candidate.getField("turn_kind").as("turn_kind"),
+            candidate.getField("message_index").as("start_message_index"),
+            previousPosition.getField("start_message_index")
+              .as("previous_start_message_index")))))
+      },
+      positions => try_element_at(positions, lit(-1)))
+
+    checkAnswer(
+      spark.range(1).select(lastPosition),
+      Row(Row(1L, "user", 0L, null)))
+  }
+
   test("SPARK-31552: array encoder with different types") {
     // primitives
     val booleans = Array(true, false)
@@ -394,5 +433,3 @@ extends DefinedByConstructorParams
 case class S100_5(
   s1: S100 = new S100(), s2: S100 = new S100(), s3: S100 = new S100(),
   s4: S100 = new S100(), s5: S100 = new S100())
-
-

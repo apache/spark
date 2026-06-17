@@ -52,9 +52,23 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
   private def resolve(e: Expression, parentLambdaMap: LambdaVariableMap): Expression = e match {
     case _ if e.resolved => e
 
-    case h: HigherOrderFunction if h.argumentsResolved && h.checkArgumentDataTypes().isSuccess =>
-      SubqueryExpressionInLambdaOrHigherOrderFunctionValidator(e)
-      h.bind(LambdaBinder(_, _)).mapChildren(resolve(_, parentLambdaMap))
+    case h: HigherOrderFunction =>
+      // An argument can contain lambda variables from an outer scope. Resolve those variables
+      // before inspecting the argument type, which may otherwise access an unresolved extractor.
+      val resolvedArguments = h.arguments.map(resolve(_, parentLambdaMap))
+      val resolvedHigherOrderFunction = h
+        .withNewChildren(resolvedArguments ++ h.functions)
+        .asInstanceOf[HigherOrderFunction]
+      if (resolvedHigherOrderFunction.argumentsResolved &&
+          resolvedHigherOrderFunction.checkArgumentDataTypes().isSuccess) {
+        SubqueryExpressionInLambdaOrHigherOrderFunctionValidator(resolvedHigherOrderFunction)
+        resolvedHigherOrderFunction.bind(LambdaBinder(_, _))
+          .mapChildren(resolve(_, parentLambdaMap))
+      } else {
+        val resolvedFunctions = resolvedHigherOrderFunction.functions
+          .map(resolve(_, parentLambdaMap))
+        resolvedHigherOrderFunction.withNewChildren(resolvedArguments ++ resolvedFunctions)
+      }
 
     case l: LambdaFunction if !l.bound =>
       SubqueryExpressionInLambdaOrHigherOrderFunctionValidator(e)
