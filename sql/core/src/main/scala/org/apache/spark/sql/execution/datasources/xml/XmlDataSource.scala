@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.{ByteArrayInputStream, FileNotFoundException, IOException}
 import java.nio.charset.{Charset, StandardCharsets}
 
 import scala.util.control.NonFatal
@@ -62,11 +62,8 @@ abstract class XmlDataSource extends Serializable with Logging {
   /**
    * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the XML parser without
    * unpacking it to disk. The whole archive is a single split (see `XmlFileFormat.isSplitable`);
-   * each entry's bytes are tokenized into `rowTag`-delimited records via
-   * [[StaxXmlParser.parseStream]], exactly like a standalone XML file. Records are `rowTag`-
-   * delimited regardless of line layout, so this is mode-agnostic and needs no per-mode override.
-   * `parseStream` (not the optimized parser) is used because it consumes the entry stream once,
-   * whereas the optimized parser may re-open its input -- impossible for a single-use entry stream.
+   * each entry's bytes are parsed exactly like a standalone XML file. Single-line and multi-line
+   * parse an entry's bytes differently (mirroring [[readFile]]), so each data source overrides it.
    *
    * Kept separate from [[readFile]] (rather than dispatched inside it) because only the V1
    * `XmlFileFormat` read path supports archives; XML has no DSv2 reader.
@@ -78,10 +75,7 @@ abstract class XmlDataSource extends Serializable with Logging {
       conf: Configuration,
       file: PartitionedFile,
       parser: () => StaxXmlParser,
-      schema: StructType): Iterator[InternalRow] =
-    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
-      parser().parseStream(in, schema)
-    }
+      schema: StructType): Iterator[InternalRow]
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -155,6 +149,30 @@ object TextInputXmlDataSource extends XmlDataSource {
     lines.flatMap(safeParser.parse)
   }
 
+  /**
+   * Mirrors [[readFile]] for archive entries: split each entry into lines and run each line through
+   * a [[FailureSafeParser]], so a single-line archive entry gets the same per-record corrupt-record
+   * handling as a non-archive single-line read. (Whole-stream parsing, as the multi-line override
+   * uses, would bypass that handling for single-line input.)
+   */
+  override def readArchive(
+      conf: Configuration,
+      file: PartitionedFile,
+      parser: () => StaxXmlParser,
+      schema: StructType): Iterator[InternalRow] =
+    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
+      val entryParser = parser()
+      val lines = ArchiveReader.lineIterator(in, None).map { line =>
+        new String(line.getBytes, 0, line.getLength, entryParser.options.charset)
+      }
+      val safeParser = new FailureSafeParser[String](
+        input => entryParser.parse(input),
+        entryParser.options.parseMode,
+        schema,
+        entryParser.options.columnNameOfCorruptRecord)
+      lines.flatMap(safeParser.parse)
+    }
+
   override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
@@ -219,6 +237,27 @@ object MultiLineXmlDataSource extends XmlDataSource {
         requiredSchema)
     }
   }
+
+  /**
+   * Parses each archive entry as a single XML document, mirroring [[readFile]]: the optimized
+   * parser re-reads its input (to echo the corrupt-record text on a parse failure), which a
+   * single-use entry stream cannot do, so the entry's bytes are buffered and re-opened over; the
+   * legacy parser reads the entry stream directly.
+   */
+  override def readArchive(
+      conf: Configuration,
+      file: PartitionedFile,
+      parser: () => StaxXmlParser,
+      schema: StructType): Iterator[InternalRow] =
+    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
+      val entryParser = parser()
+      if (entryParser.options.useLegacyXMLParser) {
+        entryParser.parseStream(in, schema)
+      } else {
+        val bytes = in.readAllBytes()
+        entryParser.parseStreamOptimized(() => new ByteArrayInputStream(bytes), schema)
+      }
+    }
 
   override def infer(
       sparkSession: SparkSession,
