@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -918,19 +918,6 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  // Builds a single-column ("ts") DataFrame from external java.time values, letting the schema
-  // precision truncate the sub-microsecond digits: an NTZ column takes java.time.LocalDateTime
-  // values, an LTZ column takes the same wall clocks as java.time.Instant at UTC.
-  private def nanosTimestampDf(nanosType: DataType, wallClocks: Seq[LocalDateTime]): DataFrame = {
-    val values: Seq[Any] = nanosType match {
-      case _: TimestampNTZNanosType => wallClocks
-      case _: TimestampLTZNanosType => wallClocks.map(_.toInstant(ZoneOffset.UTC))
-    }
-    spark.createDataFrame(
-      spark.sparkContext.parallelize(values.map(Row(_))),
-      new StructType().add("ts", nanosType))
-  }
-
   test("SPARK-57455: ORC reads nanos timestamps with vectorized and non-vectorized readers") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       val wallClocks = Seq(
@@ -1034,6 +1021,37 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
                   checkAnswer(
                     spark.read.schema(new StructType().add("ts", nanosType)).orc(path),
                     expected)
+                }
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57455: ORC round-trips nanos timestamps in nested/complex types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val wallClocks = Seq(LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123))
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            withTempView("nanos_input") {
+              nanosTimestampDf(nanosType, wallClocks).createOrReplaceTempView("nanos_input")
+              val nested = sql(
+                """SELECT
+                  |  named_struct('ts', ts) AS struct_ts,
+                  |  array(ts) AS array_ts,
+                  |  map('k', ts) AS map_ts
+                  |FROM nanos_input
+                  |""".stripMargin)
+              withTempPath { dir =>
+                val path = dir.getCanonicalPath
+                nested.write.mode("overwrite").orc(path)
+                Seq(true, false).foreach { vectorized =>
+                  withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+                    val readBack = spark.read.schema(nested.schema).orc(path)
+                    checkAnswer(readBack, nested)
+                  }
                 }
               }
             }

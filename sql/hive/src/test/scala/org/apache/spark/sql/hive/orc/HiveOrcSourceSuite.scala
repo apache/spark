@@ -18,9 +18,9 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.LocalDateTime
 
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
@@ -348,19 +348,6 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         }
       }
     }
-  }
-
-  // Builds a single-column ("ts") DataFrame from external java.time values, letting the schema
-  // precision truncate the sub-microsecond digits: an NTZ column takes java.time.LocalDateTime
-  // values, an LTZ column takes the same wall clocks as java.time.Instant at UTC.
-  private def nanosTimestampDf(nanosType: DataType, wallClocks: Seq[LocalDateTime]): DataFrame = {
-    val values: Seq[Any] = nanosType match {
-      case _: TimestampNTZNanosType => wallClocks
-      case _: TimestampLTZNanosType => wallClocks.map(_.toInstant(ZoneOffset.UTC))
-    }
-    spark.createDataFrame(
-      spark.sparkContext.parallelize(values.map(Row(_))),
-      new StructType().add("ts", nanosType))
   }
 
   test("SPARK-57166: nanosecond timestamp types are supported in Hive ORC") {
