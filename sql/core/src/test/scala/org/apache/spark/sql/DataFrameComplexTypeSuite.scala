@@ -252,6 +252,8 @@ class DataFrameComplexTypeSuite extends SharedSparkSession {
         message.getField("turn_kind").as("turn_kind"),
         message.getField("message_index").as("message_index"))),
       candidate => candidate.getField("turn_kind").isNotNull)
+    // The aggregate first sees `candidates` with its transform/filter lambdas still unbound. Those
+    // argument expressions must resolve before the aggregate inspects their complex data types.
     val lastPosition = aggregate(
       candidates,
       array().cast(positionsType),

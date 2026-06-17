@@ -55,16 +55,21 @@ object ResolveLambdaVariables extends Rule[LogicalPlan] {
     case h: HigherOrderFunction =>
       // An argument can contain lambda variables from an outer scope. Resolve those variables
       // before inspecting the argument type, which may otherwise access an unresolved extractor.
+      // Keep this higher-order function's own lambdas unbound until its argument types are ready.
       val resolvedArguments = h.arguments.map(resolve(_, parentLambdaMap))
+      // HigherOrderFunction children are ordered as arguments followed by functions.
       val resolvedHigherOrderFunction = h
         .withNewChildren(resolvedArguments ++ h.functions)
         .asInstanceOf[HigherOrderFunction]
       if (resolvedHigherOrderFunction.argumentsResolved &&
           resolvedHigherOrderFunction.checkArgumentDataTypes().isSuccess) {
         SubqueryExpressionInLambdaOrHigherOrderFunctionValidator(resolvedHigherOrderFunction)
+        // Arguments are already resolved; this walk resolves the newly bound lambda bodies.
         resolvedHigherOrderFunction.bind(LambdaBinder(_, _))
           .mapChildren(resolve(_, parentLambdaMap))
       } else {
+        // The arguments were already visited above. Resolve only the functions here so nested
+        // arguments are not traversed twice in the same analyzer pass.
         val resolvedFunctions = resolvedHigherOrderFunction.functions
           .map(resolve(_, parentLambdaMap))
         resolvedHigherOrderFunction.withNewChildren(resolvedArguments ++ resolvedFunctions)
