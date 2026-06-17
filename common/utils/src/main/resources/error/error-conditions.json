@@ -5162,6 +5162,13 @@
     ],
     "sqlState" : "22023"
   },
+  "INVALID_VARIANT_PATH" : {
+    "message" : [
+      "The path '<path>' is not a valid <functionName> target.",
+      "A valid path should start with `$` and is followed by segments like `[123]`, `.name`, `['name']`, or `[\"name\"]`."
+    ],
+    "sqlState" : "22023"
+  },
   "INVALID_VARIANT_SHREDDING_SCHEMA" : {
     "message" : [
       "The schema `<schema>` is not a valid variant shredding schema."

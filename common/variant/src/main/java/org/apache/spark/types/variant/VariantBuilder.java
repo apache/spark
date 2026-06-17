@@ -97,6 +97,40 @@ public class VariantBuilder {
     return builder.result();
   }
 
+  // A segment in a JSONPath used by variant manipulation functions.
+  public abstract static class PathSegment {}
+
+  // Object field access (e.g. `.a` or `['a']`).
+  public static final class ObjectKeySegment extends PathSegment {
+    public final String key;
+
+    public ObjectKeySegment(String key) {
+      this.key = key;
+    }
+  }
+
+  // Array index access (e.g. `[0]`).
+  public static final class ArrayIndexSegment extends PathSegment {
+    public final int index;
+
+    public ArrayIndexSegment(int index) {
+      this.index = index;
+    }
+  }
+
+  // Return a new variant with the field or array element at `segments` removed. If the path does
+  // not match (missing key, out-of-range index, or incompatible container type), a semantically
+  // equivalent variant is returned. The result is always rebuilt with fresh metadata, so the
+  // binary representation may differ even when nothing is deleted. `segments` must be non-empty.
+  public static Variant deleteAtPath(Variant v, PathSegment[] segments) {
+    if (segments.length == 0) {
+      throw new IllegalArgumentException("Segments must be non-empty");
+    }
+    VariantBuilder builder = new VariantBuilder(false);
+    builder.appendWithDeletionImpl(v.value, v.metadata, v.pos, segments, 0);
+    return builder.result();
+  }
+
   // Build the variant metadata from `dictionaryKeys` and return the variant result.
   public Variant result() {
     int numKeys = dictionaryKeys.size();
@@ -456,6 +490,63 @@ public class VariantBuilder {
       default:
         shallowAppendVariantImpl(value, pos);
         break;
+    }
+  }
+
+  private void appendWithDeletionImpl(
+      byte[] value, byte[] metadata, int pos, PathSegment[] segments, int depth) {
+    checkIndex(pos, value.length);
+    PathSegment seg = segments[depth];
+    boolean isLast = depth == segments.length - 1;
+    int basicType = value[pos] & BASIC_TYPE_MASK;
+    if (seg instanceof ObjectKeySegment && basicType == OBJECT) {
+      String key = ((ObjectKeySegment) seg).key;
+      handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+        ArrayList<FieldEntry> fields = new ArrayList<>(size);
+        int start = writePos;
+        for (int i = 0; i < size; ++i) {
+          int id = readUnsigned(value, idStart + idSize * i, idSize);
+          int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+          int elementPos = dataStart + offset;
+          String fieldKey = getMetadataKey(metadata, id);
+          boolean isTarget = fieldKey.equals(key);
+          if (!(isTarget && isLast)) {
+            int newId = addKey(fieldKey);
+            fields.add(new FieldEntry(fieldKey, newId, writePos - start));
+            if (isTarget) {
+              appendWithDeletionImpl(value, metadata, elementPos, segments, depth + 1);
+            } else {
+              appendVariantImpl(value, metadata, elementPos);
+            }
+          }
+        }
+        finishWritingObject(start, fields);
+        return null;
+      });
+    } else if (seg instanceof ArrayIndexSegment && basicType == ARRAY) {
+      int index = ((ArrayIndexSegment) seg).index;
+      handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+        ArrayList<Integer> offsets = new ArrayList<>(size);
+        int start = writePos;
+        for (int i = 0; i < size; ++i) {
+          boolean isTarget = i == index;
+          if (!(isTarget && isLast)) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            offsets.add(writePos - start);
+            if (isTarget) {
+              appendWithDeletionImpl(value, metadata, elementPos, segments, depth + 1);
+            } else {
+              appendVariantImpl(value, metadata, elementPos);
+            }
+          }
+        }
+        finishWritingArray(start, offsets);
+        return null;
+      });
+    } else {
+      // Container type does not match the segment kind; append unchanged.
+      appendVariantImpl(value, metadata, pos);
     }
   }
 

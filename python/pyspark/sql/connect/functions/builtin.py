@@ -2206,6 +2206,19 @@ def is_valid_variant(v: "ColumnOrName") -> Column:
 is_valid_variant.__doc__ = pysparkfuncs.is_valid_variant.__doc__
 
 
+def variant_delete(v: "ColumnOrName", *paths: Union[Column, str]) -> Column:
+    if len(paths) == 0:
+        raise PySparkValueError(
+            errorClass="CANNOT_BE_EMPTY",
+            messageParameters={"item": "paths"},
+        )
+    cols = [p if isinstance(p, Column) else lit(p) for p in paths]
+    return _invoke_function("variant_delete", _to_col(v), *cols)
+
+
+variant_delete.__doc__ = pysparkfuncs.variant_delete.__doc__
+
+
 def variant_get(v: "ColumnOrName", path: Union[Column, str], targetType: str) -> Column:
     assert isinstance(path, (Column, str))
     if isinstance(path, str):

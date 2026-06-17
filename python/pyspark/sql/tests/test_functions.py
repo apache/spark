@@ -3516,6 +3516,12 @@ class FunctionsTestsMixin:
 
         check(df.select(F.is_variant_null(v)), [False, False])
         check(df.select(F.is_valid_variant(v)), [True, True])
+        check(df.select(F.to_json(F.variant_delete(v, "$.a"))), ["{}", '{"b":2}'])
+        check(df.select(F.to_json(F.variant_delete(v, df.path))), ["{}", "{}"])
+        check(
+            df.select(F.to_json(F.variant_delete(v, F.lit(None)))),
+            ['{"a":1}', '{"b":2}'],
+        )
         check(df.select(F.schema_of_variant(v)), ["OBJECT<a: BIGINT>", "OBJECT<b: BIGINT>"])
         check(df.select(F.schema_of_variant_agg(v)), ["OBJECT<a: BIGINT, b: BIGINT>"])
 
