@@ -190,19 +190,4 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
       readLock.unlock()
     }
   }
-
-  /*
-   * If the ResourceProfile passed in is equivalent to an existing one, return the
-   * existing one, other return None
-   */
-  def getEquivalentProfile(rp: ResourceProfile): Option[ResourceProfile] = {
-    readLock.lock()
-    try {
-      resourceProfileIdToResourceProfile.find { case (_, rpEntry) =>
-        rpEntry.resourcesEqual(rp)
-      }.map(_._2)
-    } finally {
-      readLock.unlock()
-    }
-  }
 }
