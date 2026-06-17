@@ -134,6 +134,11 @@ public abstract class MemoryConsumer {
     taskMemoryManager.freePage(page, this);
   }
 
+  /** Returns whether this page came from a minimum retry after a partial allocation failed. */
+  protected boolean isPageAllocationFromMinimumRetry(MemoryBlock page) {
+    return taskMemoryManager.isPageAllocationFromMinimumRetry(page);
+  }
+
   /**
    * Allocates memory of `size`.
    */

@@ -95,6 +95,10 @@ public class TaskMemoryManager {
    */
   private final BitSet allocatedPages = new BitSet(PAGE_TABLE_SIZE);
 
+  /** Pages allocated at the caller's minimum after a partial allocation also failed. */
+  @GuardedBy("this")
+  private final BitSet pagesAllocatedFromMinimumRetry = new BitSet(PAGE_TABLE_SIZE);
+
   private final MemoryManager memoryManager;
 
   private final MemoryAllocator tungstenMemoryAllocator;
@@ -557,6 +561,7 @@ public class TaskMemoryManager {
     long allocationSize = acquired;
     long partialAllocationSize = 0;
     boolean tryingPartialAllocation = false;
+    boolean minimumRetryAfterPartialAllocationFailure = false;
     try {
       while (true) {
         try {
@@ -565,6 +570,16 @@ public class TaskMemoryManager {
         } catch (OutOfMemoryError e) {
           logPageAllocationFailure(allocationSize, retryCount, e);
           if (tryingPartialAllocation) {
+            if (minimumSize > 0 && minimumSize < allocationSize) {
+              // Reuse the retained grant for one final attempt at the caller's usable minimum.
+              long surplus = Math.subtractExact(acquired, minimumSize);
+              releaseExecutionMemory(surplus, consumer);
+              acquired = minimumSize;
+              allocationSize = minimumSize;
+              minimumRetryAfterPartialAllocationFailure = true;
+              retryCount++;
+              continue;
+            }
             return null;
           }
           long released = recoverFromPageAllocationFailure(allocationSize, consumer);
@@ -610,6 +625,7 @@ public class TaskMemoryManager {
             acquired = minimumSize;
             allocationSize = minimumSize;
             tryingPartialAllocation = true;
+            minimumRetryAfterPartialAllocationFailure = true;
           } else {
             return null;
           }
@@ -620,6 +636,9 @@ public class TaskMemoryManager {
       pageTable[pageNumber] = page;
       synchronized (this) {
         acquiredButNotUsed = Math.addExact(acquiredButNotUsed, acquired - page.size());
+        if (minimumRetryAfterPartialAllocationFailure) {
+          pagesAllocatedFromMinimumRetry.set(pageNumber);
+        }
       }
       pageAllocated = true;
       if (logger.isTraceEnabled()) {
@@ -655,6 +674,7 @@ public class TaskMemoryManager {
     pageTable[page.pageNumber] = null;
     synchronized (this) {
       allocatedPages.clear(page.pageNumber);
+      pagesAllocatedFromMinimumRetry.clear(page.pageNumber);
     }
     if (logger.isTraceEnabled()) {
       logger.trace("Freed page number {} ({} bytes)", page.pageNumber, page.size());
@@ -666,6 +686,15 @@ public class TaskMemoryManager {
     page.pageNumber = MemoryBlock.FREED_IN_TMM_PAGE_NUMBER;
     tungstenMemoryAllocator.free(page);
     releaseExecutionMemory(pageSize, consumer);
+  }
+
+  boolean isPageAllocationFromMinimumRetry(MemoryBlock page) {
+    synchronized (this) {
+      int pageNumber = page.pageNumber;
+      return pageNumber >= 0 && pageNumber < PAGE_TABLE_SIZE &&
+        allocatedPages.get(pageNumber) &&
+        pagesAllocatedFromMinimumRetry.get(pageNumber);
+    }
   }
 
   /**
@@ -767,6 +796,7 @@ public class TaskMemoryManager {
       }
       Arrays.fill(pageTable, null);
       allocatedPages.clear();
+      pagesAllocatedFromMinimumRetry.clear();
       acquiredButNotUsedToRelease = acquiredButNotUsed;
       acquiredButNotUsed = 0L;
     }
