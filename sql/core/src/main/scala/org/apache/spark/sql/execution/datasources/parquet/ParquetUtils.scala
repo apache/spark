@@ -45,7 +45,7 @@ import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, DataS
 import org.apache.spark.sql.execution.datasources.v2.V2ColumnUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
-import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType, UserDefinedType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, NullType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, UserDefinedType, VariantType}
 import org.apache.spark.util.ArrayImplicits._
 
 object ParquetUtils extends Logging {
@@ -207,6 +207,8 @@ object ParquetUtils extends Logging {
       schema.forall(f => isBatchReadSupported(sqlConf, f.dataType))
 
   def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
+    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+      false
     case _: AtomicType =>
       true
     case _: NullType =>
