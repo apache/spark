@@ -35,10 +35,7 @@ from pyspark.sql.conversion import (
     ArrowBatchTransformer,
     PandasToArrowConversion,
 )
-from pyspark.sql.pandas.types import (
-    from_arrow_schema,
-    to_arrow_type,
-)
+from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import (
     DataType,
     StringType,
@@ -544,39 +541,6 @@ class ArrowStreamAggPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
 
     def __repr__(self):
         return "ArrowStreamAggPandasUDFSerializer"
-
-
-class CogroupPandasUDFSerializer(ArrowStreamPandasUDFSerializer):
-    def load_stream(self, stream):
-        """
-        Deserialize Cogrouped ArrowRecordBatches to a tuple of Arrow tables and yield as two
-        lists of pandas.Series.
-        """
-        import pyarrow as pa
-
-        for left_batches, right_batches in ArrowStreamCoGroupSerializer.load_stream(self, stream):
-            left_table = pa.Table.from_batches(left_batches)
-            right_table = pa.Table.from_batches(right_batches)
-            yield (
-                ArrowBatchTransformer.to_pandas(
-                    left_table,
-                    timezone=self._timezone,
-                    schema=from_arrow_schema(left_table.schema),
-                    struct_in_pandas=self._struct_in_pandas,
-                    ndarray_as_list=self._ndarray_as_list,
-                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
-                    df_for_struct=self._df_for_struct,
-                ),
-                ArrowBatchTransformer.to_pandas(
-                    right_table,
-                    timezone=self._timezone,
-                    schema=from_arrow_schema(right_table.schema),
-                    struct_in_pandas=self._struct_in_pandas,
-                    ndarray_as_list=self._ndarray_as_list,
-                    prefer_int_ext_dtype=self._prefer_int_ext_dtype,
-                    df_for_struct=self._df_for_struct,
-                ),
-            )
 
 
 class ApplyInPandasWithStateSerializer(ArrowStreamPandasUDFSerializer):
