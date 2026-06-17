@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.csv
 
-import com.univocity.parsers.common.AbstractParser
+import com.univocity.parsers.common.{AbstractParser, TextParsingException}
 import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
 
-import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{CSV_HEADER_COLUMN_NAME, CSV_HEADER_COLUMN_NAMES, CSV_HEADER_LENGTH, CSV_SCHEMA_FIELD_NAME, CSV_SCHEMA_FIELD_NAMES, CSV_SOURCE, NUM_COLUMNS}
 import org.apache.spark.sql.internal.SQLConf
@@ -122,7 +122,7 @@ class CSVHeaderChecker(
   def checkHeaderColumnNames(line: String): Unit = {
     if (options.headerFlag) {
       val parser = new CsvParser(options.asParserSettings)
-      checkHeaderColumnNames(parser.parseLine(line))
+      checkHeaderColumnNames(UnivocityParser.parseLine(parser, line))
     }
   }
 
@@ -130,7 +130,16 @@ class CSVHeaderChecker(
   private[csv] def checkHeaderColumnNames(tokenizer: AbstractParser[CsvParserSettings]): Unit = {
     assert(options.multiLine, "This method should be executed with multiLine.")
     if (options.headerFlag) {
-      val firstRecord = tokenizer.parseNext()
+      val firstRecord = try {
+        tokenizer.parseNext()
+      } catch {
+        // scalastyle:off line.size.limit
+        case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+        // scalastyle:on line.size.limit
+          throw malformedCsvHeaderRecord(e, Option(e.getParsedContent).getOrElse(""))
+        case e: ArrayIndexOutOfBoundsException =>
+          throw malformedCsvHeaderRecord(e, "")
+      }
       checkHeaderColumnNames(firstRecord)
     }
     setHeaderForSingleVariantColumn.foreach(f => f(headerColumnNames))
@@ -146,9 +155,33 @@ class CSVHeaderChecker(
     // be not extracted.
     if (options.headerFlag && isStartOfFile) {
       CSVExprUtils.extractHeader(lines, options).foreach { header =>
-        checkHeaderColumnNames(tokenizer.parseLine(header))
+        val tokens = try {
+          tokenizer.parseLine(header)
+        } catch {
+          // scalastyle:off line.size.limit
+          case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
+          // scalastyle:on line.size.limit
+            throw malformedCsvHeaderRecord(e, header)
+          case e: ArrayIndexOutOfBoundsException =>
+            throw malformedCsvHeaderRecord(e, header)
+        }
+        checkHeaderColumnNames(tokens)
       }
     }
     setHeaderForSingleVariantColumn.foreach(f => f(headerColumnNames))
+  }
+
+  // scalastyle:off line.size.limit
+  private def malformedCsvHeaderRecord(cause: Throwable, badRecord: String): SparkRuntimeException = {
+  // scalastyle:on line.size.limit
+    val boundedRecord = if (badRecord.length > CSVOptions.MAX_ERROR_CONTENT_LENGTH) {
+      badRecord.take(CSVOptions.MAX_ERROR_CONTENT_LENGTH) + "..."
+    } else {
+      badRecord
+    }
+    new SparkRuntimeException(
+      errorClass = "MALFORMED_CSV_RECORD",
+      messageParameters = Map("badRecord" -> boundedRecord),
+      cause = cause)
   }
 }

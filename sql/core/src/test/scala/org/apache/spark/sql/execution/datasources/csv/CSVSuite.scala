@@ -3588,6 +3588,72 @@ abstract class CSVSuite
       matchPVals = true)
   }
 
+  test("SPARK-57515: non-multiLine CSV read with header exceeding maxColumns surfaces " +
+    "MALFORMED_CSV_RECORD") {
+    // CSVHeaderChecker called tokenizer.parseLine(header) directly without the AIOOBE guard
+    // that UnivocityParser.parseLine wraps. A header line wider than maxColumns must surface
+    // as MALFORMED_CSV_RECORD, not a raw ArrayIndexOutOfBoundsException.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b,c\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[SparkRuntimeException] {
+        spark.read
+          .option("header", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+          .collect()
+      }
+      checkError(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        sqlState = Some("KD000"),
+        parameters = Map("badRecord" -> ".*"),
+        matchPVals = true)
+    }
+  }
+
+  test("SPARK-57515: multiLine CSV read with header exceeding maxColumns surfaces " +
+    "MALFORMED_CSV_RECORD") {
+    // Same gap as the non-multiLine path: the tokenizer.parseNext() call in CSVHeaderChecker
+    // was unguarded. A multiLine header wider than maxColumns must surface as MALFORMED_CSV_RECORD.
+    withTempPath { path =>
+      Files.write(path.toPath, "a,b,c\n1,2,3\n".getBytes(StandardCharsets.UTF_8))
+      val e = intercept[SparkRuntimeException] {
+        spark.read
+          .option("header", "true")
+          .option("multiLine", "true")
+          .option("maxColumns", "2")
+          .csv(path.getAbsolutePath)
+          .collect()
+      }
+      checkError(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        sqlState = Some("KD000"),
+        parameters = Map("badRecord" -> ".*"),
+        matchPVals = true)
+    }
+  }
+
+  test("SPARK-57515: Dataset[String] CSV read with header exceeding maxColumns surfaces " +
+    "MALFORMED_CSV_RECORD") {
+    // The Dataset[String] path creates a fresh CsvParser in CSVHeaderChecker and called
+    // parser.parseLine(line) directly, bypassing the AIOOBE guard.
+    val lines = spark.createDataset(Seq("a,b,c", "1,2,3"))
+    val e = intercept[SparkRuntimeException] {
+      spark.read
+        .option("header", "true")
+        .option("maxColumns", "2")
+        .csv(lines)
+        .collect()
+    }
+    checkError(
+      exception = e,
+      condition = "MALFORMED_CSV_RECORD",
+      sqlState = Some("KD000"),
+      parameters = Map("badRecord" -> "a,b,c"),
+      matchPVals = false)
+  }
+
   test("csv with variant") {
     withTempPath { path =>
       val data =
