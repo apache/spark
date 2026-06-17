@@ -20,19 +20,15 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 import java.time.{LocalDateTime, ZoneOffset}
 
-import org.apache.spark.sql.{AnalysisException, Column, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
-import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 
 class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
@@ -354,16 +350,29 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     }
   }
 
+  // Builds a single-column ("ts") DataFrame from external java.time values, letting the schema
+  // precision truncate the sub-microsecond digits: an NTZ column takes java.time.LocalDateTime
+  // values, an LTZ column takes the same wall clocks as java.time.Instant at UTC.
+  private def nanosTimestampDf(nanosType: DataType, wallClocks: Seq[LocalDateTime]): DataFrame = {
+    val values: Seq[Any] = nanosType match {
+      case _: TimestampNTZNanosType => wallClocks
+      case _: TimestampLTZNanosType => wallClocks.map(_.toInstant(ZoneOffset.UTC))
+    }
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(values.map(Row(_))),
+      new StructType().add("ts", nanosType))
+  }
+
   test("SPARK-57166: nanosecond timestamp types are supported in Hive ORC") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val wallClock = Seq(LocalDateTime.of(1970, 1, 1, 0, 0, 0, 0))
       Seq(true, false).foreach { convertMetastore =>
         withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> s"$convertMetastore") {
           foreachNanosPrecision { precision =>
             Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
               nanosType =>
                 withTempDir { dir =>
-                  val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-                  val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
+                  val df = nanosTimestampDf(nanosType, wallClock)
                   val path = new File(dir, "nanos").getCanonicalPath
                   df.write.format("orc").mode("overwrite").save(path)
 
@@ -385,39 +394,25 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
     withSQLConf(
         SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
         SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      // A mid-range value plus the documented min/max ends
+      // [0001-01-01T00:00:00, 9999-12-31T23:59:59.999999999] (at UTC for LTZ).
+      val wallClocks = Seq(
+        LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123),
+        LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
+        LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999))
       foreachNanosPrecision { precision =>
-        val nanosWithinMicro = precision match {
-          case 7 => 100
-          case 8 => 120
-          case _ => 123
-        }
-        val value = new TimestampNanosVal(1234567890L, nanosWithinMicro.toShort)
-        // Documented range ends [0001-01-01T00:00:00, 9999-12-31T23:59:59.999999999] (UTC for LTZ).
-        val minLdt = LocalDateTime.of(1, 1, 1, 0, 0, 0, 0)
-        val maxLdt = LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
-
         // Same-zone round trip through the Hive serde path for both nanos types, including the
         // min and max of the documented range.
-        Seq(
-          TimestampNTZNanosType(precision) -> Seq(
-            value,
-            DateTimeUtils.localDateTimeToTimestampNanos(minLdt, precision),
-            DateTimeUtils.localDateTimeToTimestampNanos(maxLdt, precision)),
-          TimestampLTZNanosType(precision) -> Seq(
-            value,
-            DateTimeUtils.instantToTimestampNanos(minLdt.toInstant(ZoneOffset.UTC), precision),
-            DateTimeUtils.instantToTimestampNanos(maxLdt.toInstant(ZoneOffset.UTC), precision))
-        ).foreach { case (nanosType, values) =>
-          val input = values
-            .map(v => spark.range(1).select(Column(Literal.create(v, nanosType)).as("ts")))
-            .reduce(_.union(_))
-          withTempDir { dir =>
-            val path = new File(dir, "nanos").getCanonicalPath
-            input.write.format("orc").mode("overwrite").save(path)
-            checkAnswer(
-              spark.read.schema(new StructType().add("ts", nanosType)).format("orc").load(path),
-              input)
-          }
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val input = nanosTimestampDf(nanosType, wallClocks)
+            withTempDir { dir =>
+              val path = new File(dir, "nanos").getCanonicalPath
+              input.write.format("orc").mode("overwrite").save(path)
+              checkAnswer(
+                spark.read.schema(new StructType().add("ts", nanosType)).format("orc").load(path),
+                input)
+            }
         }
 
         // The NTZ wall clock stays zone-independent across a JVM default time-zone change. Hive
@@ -425,7 +420,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
         // zone-stable through the Hive serde path -- the same caveat as the legacy TimestampType
         // -- so LTZ is only round-tripped within a single zone above.
         val ntzType = TimestampNTZNanosType(precision)
-        val ntzInput = spark.range(1).select(Column(Literal.create(value, ntzType)).as("ts"))
+        val ntzInput = nanosTimestampDf(ntzType, wallClocks.take(1))
         val ntzExpected = ntzInput.collect()
         withTempDir { dir =>
           val path = new File(dir, "ntz-tz").getCanonicalPath

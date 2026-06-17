@@ -35,9 +35,7 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
@@ -45,7 +43,6 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.Utils.createArray
 
@@ -921,35 +918,41 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
+  // Builds a single-column ("ts") DataFrame from external java.time values, letting the schema
+  // precision truncate the sub-microsecond digits: an NTZ column takes java.time.LocalDateTime
+  // values, an LTZ column takes the same wall clocks as java.time.Instant at UTC.
+  private def nanosTimestampDf(nanosType: DataType, wallClocks: Seq[LocalDateTime]): DataFrame = {
+    val values: Seq[Any] = nanosType match {
+      case _: TimestampNTZNanosType => wallClocks
+      case _: TimestampLTZNanosType => wallClocks.map(_.toInstant(ZoneOffset.UTC))
+    }
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(values.map(Row(_))),
+      new StructType().add("ts", nanosType))
+  }
+
   test("SPARK-57455: ORC reads nanos timestamps with vectorized and non-vectorized readers") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val wallClocks = Seq(
+        LocalDateTime.of(1970, 1, 1, 0, 0, 0, 0),
+        LocalDateTime.of(1970, 1, 1, 0, 0, 1, 900),
+        LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123))
       foreachNanosPrecision { precision =>
-        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision))
-          .foreach { nanosType =>
-          val nanosWithinMicro = precision match {
-            case 7 => 100
-            case 8 => 120
-            case _ => 123
-          }
-          val data = Seq(
-            new TimestampNanosVal(0L, 0.toShort),
-            new TimestampNanosVal(1000000L, 900.toShort),
-            new TimestampNanosVal(1234567890L, nanosWithinMicro.toShort))
-          val inputDf = data
-            .map(v => spark.range(1).select(Column(Literal.create(v, nanosType)).as("ts")))
-            .reduce(_.union(_))
-          withTempPath { dir =>
-            val path = dir.getCanonicalPath
-            inputDf.write.mode("overwrite").orc(path)
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val inputDf = nanosTimestampDf(nanosType, wallClocks)
             val expected = inputDf.collect()
-            Seq(true, false).foreach { vectorized =>
-              withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-                checkAnswer(
-                  spark.read.schema(new StructType().add("ts", nanosType)).orc(path),
-                  expected)
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              inputDf.write.mode("overwrite").orc(path)
+              Seq(true, false).foreach { vectorized =>
+                withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+                  checkAnswer(
+                    spark.read.schema(new StructType().add("ts", nanosType)).orc(path),
+                    expected)
+                }
               }
             }
-          }
         }
       }
     }
@@ -963,16 +966,11 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     // epoch-based conversions, so neither depends on the default zone matching across the round
     // trip.
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val wallClock = Seq(LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123))
       foreachNanosPrecision { precision =>
-        val nanosWithinMicro = precision match {
-          case 7 => 100
-          case 8 => 120
-          case _ => 123
-        }
         Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
           nanosType =>
-            val value = new TimestampNanosVal(1234567890L, nanosWithinMicro.toShort)
-            val inputDf = spark.range(1).select(Column(Literal.create(value, nanosType)).as("ts"))
+            val inputDf = nanosTimestampDf(nanosType, wallClock)
             val expected = inputDf.collect()
             withTempPath { dir =>
               val path = dir.getCanonicalPath
@@ -996,16 +994,11 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
   test("SPARK-57455: nanos timestamp type is inferred from ORC without an explicit schema") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val wallClock = Seq(LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123))
       foreachNanosPrecision { precision =>
-        val nanosWithinMicro = precision match {
-          case 7 => 100
-          case 8 => 120
-          case _ => 123
-        }
         Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
           nanosType =>
-            val value = new TimestampNanosVal(1234567890L, nanosWithinMicro.toShort)
-            val inputDf = spark.range(1).select(Column(Literal.create(value, nanosType)).as("ts"))
+            val inputDf = nanosTimestampDf(nanosType, wallClock)
             withTempPath { dir =>
               val path = dir.getCanonicalPath
               inputDf.write.mode("overwrite").orc(path)
@@ -1025,32 +1018,25 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     // (at UTC for LTZ); check both ends round-trip through ORC with both readers, at every
     // supported precision (the max's sub-micro digits are truncated to the precision).
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      val minLdt = LocalDateTime.of(1, 1, 1, 0, 0, 0, 0)
-      val maxLdt = LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
+      val bounds = Seq(
+        LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
+        LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999))
       foreachNanosPrecision { precision =>
-        val cases = Seq(
-          TimestampNTZNanosType(precision) -> Seq(
-            DateTimeUtils.localDateTimeToTimestampNanos(minLdt, precision),
-            DateTimeUtils.localDateTimeToTimestampNanos(maxLdt, precision)),
-          TimestampLTZNanosType(precision) -> Seq(
-            DateTimeUtils.instantToTimestampNanos(minLdt.toInstant(ZoneOffset.UTC), precision),
-            DateTimeUtils.instantToTimestampNanos(maxLdt.toInstant(ZoneOffset.UTC), precision)))
-        cases.foreach { case (nanosType, values) =>
-          val inputDf = values
-            .map(v => spark.range(1).select(Column(Literal.create(v, nanosType)).as("ts")))
-            .reduce(_.union(_))
-          val expected = inputDf.collect()
-          withTempPath { dir =>
-            val path = dir.getCanonicalPath
-            inputDf.write.mode("overwrite").orc(path)
-            Seq(true, false).foreach { vectorized =>
-              withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-                checkAnswer(
-                  spark.read.schema(new StructType().add("ts", nanosType)).orc(path),
-                  expected)
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val inputDf = nanosTimestampDf(nanosType, bounds)
+            val expected = inputDf.collect()
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              inputDf.write.mode("overwrite").orc(path)
+              Seq(true, false).foreach { vectorized =>
+                withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+                  checkAnswer(
+                    spark.read.schema(new StructType().add("ts", nanosType)).orc(path),
+                    expected)
+                }
               }
             }
-          }
         }
       }
     }
