@@ -23,6 +23,10 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.1 to 4.2
+
+- Since Spark 4.2, restarting a streaming query from a checkpoint whose required metadata is missing fails with an error by default, instead of silently proceeding. Recreate the checkpoint, or start the query from a new checkpoint location, if the existing one is incomplete.
+
 ## Upgrading from Structured Streaming 4.0 to 4.1
 
 - Since Spark 4.1, AQE is supported for stateless workloads, and it could affect the behavior of the query after upgrade (especially since AQE is turned on by default). In general, it helps to achieve better performance including resolution of skewed partition, but you can turn off AQE via changing `spark.sql.adaptive.streaming.stateless.enabled` to `false` to restore the behavior if you see regression.

@@ -27,6 +27,14 @@ Upgrading from PySpark 4.1 to 4.2
 * In Spark 4.2, columnar data exchange between PySpark and the JVM uses Apache Arrow by default. The configuration ``spark.sql.execution.arrow.pyspark.enabled`` now defaults to true. To restore the legacy (non-Arrow) row-based data exchange, set ``spark.sql.execution.arrow.pyspark.enabled`` to ``false``.
 * In Spark 4.2, regular Python UDFs are Arrow-optimized by default. The configuration ``spark.sql.execution.pythonUDF.arrow.enabled`` now defaults to true. To restore the legacy behavior for Python UDF execution, set ``spark.sql.execution.pythonUDF.arrow.enabled`` to ``false``.
 * In Spark 4.2, regular Python UDTFs are Arrow-optimized by default. The configuration ``spark.sql.execution.pythonUDTF.arrow.enabled`` now defaults to true. To restore the legacy behavior for Python UDTF execution, set ``spark.sql.execution.pythonUDTF.arrow.enabled`` to ``false``.
+* In Spark 4.2, PyPy is no longer officially supported. Run PySpark on CPython instead.
+* In Spark 4.2, the minimum supported version of pandas for Spark Connect has been raised to 2.2.0. Upgrade pandas to 2.2.0 or later.
+* In Spark 4.2, ``SparkSession.createDataFrame`` from a NumPy ``ndarray`` requires PyArrow to be installed and uses Arrow-based conversion, which may infer a different schema than before. Install PyArrow, and review the inferred schema if your code relied on the previous inference.
+* In Spark 4.2, pandas UDFs receive nullable integer columns as a pandas nullable integer (``Int``) extension dtype instead of ``float64``. Update UDF code that assumed ``float64`` input for nullable integer columns.
+* In Spark 4.2, ``Observation.get`` raises an exception when metric collection fails, instead of returning an empty dictionary. Add error handling if your code relied on receiving an empty result on failure.
+* In Spark 4.2, ``DataFrame.drop`` and ``Series.drop`` in pandas API on Spark raise a ``KeyError`` when any of the specified labels is missing, instead of only when all of them are missing, matching pandas. Make sure all labels exist before dropping, or filter to existing labels.
+* In Spark 4.2, a Python Data Source whose returned rows do not match its declared schema fails with ``DATA_SOURCE_RETURN_SCHEMA_MISMATCH`` instead of silently coercing the data. Make the data source return rows that match its declared schema.
+* In Spark 4.2, a Python streaming data source that reports offsets that do not advance fails the query instead of continuing to accumulate state. Fix the source's offset handling so that offsets advance.
 
 Upgrading from PySpark 4.0 to 4.1
 ---------------------------------
