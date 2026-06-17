@@ -45,8 +45,12 @@ trait EvalPythonUDTFExec extends UnaryExecNode {
   // planned. Keep the passthrough side aligned with the actual child output before the final
   // unsafe-row materialization joins it with Python output.
   private lazy val requiredChildOutputForExecution: Seq[Attribute] = {
-    val childOutput = AttributeMap(child.output.map(attr => attr -> attr))
-    requiredChildOutput.map(attr => childOutput.getOrElse(attr, attr))
+    if (isCanonicalizedPlan) {
+      requiredChildOutput
+    } else {
+      val childOutput = AttributeMap(child.output.map(attr => attr -> attr))
+      requiredChildOutput.map(attr => childOutput.getOrElse(attr, attr))
+    }
   }
 
   override def output: Seq[Attribute] = requiredChildOutputForExecution ++ resultAttrs

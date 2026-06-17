@@ -18,11 +18,12 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference,
-  AttributeSet, Expression, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet,
+  Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Final, PartialMerge}
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
-import org.apache.spark.sql.execution.{ExplainUtils, PartitioningPreservingUnaryExecNode, UnaryExecNode}
+import org.apache.spark.sql.execution.{ExplainUtils, PartitioningPreservingUnaryExecNode,
+  RowBoundaryOutput, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.operators.stateful.StatefulOperatorPartitioning
 
 /**
@@ -81,23 +82,24 @@ trait BaseAggregateExec extends UnaryExecNode with PartitioningPreservingUnaryEx
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
   }
 
-  // ColumnarToRowExec can make child attributes physically nullable after aggregate planning.
-  // Rebind by exprId so aggregate projections read the actual execution-time nullability instead
-  // of reviving stale non-nullable attributes captured before the row transition was inserted.
   private def withPhysicalInputAttributes(
       expressions: Seq[NamedExpression],
       inputAttributes: Seq[Attribute]): Seq[NamedExpression] = {
-    val inputAttrMap = AttributeMap(inputAttributes.map(attr => attr -> attr))
-    expressions.map(_.transformUp {
-      case attr: Attribute => inputAttrMap.getOrElse(attr, attr)
-    }.asInstanceOf[NamedExpression])
+    if (isCanonicalizedPlan) {
+      expressions
+    } else {
+      RowBoundaryOutput.withPhysicalInputAttributes(expressions, inputAttributes)
+    }
   }
 
   protected lazy val groupingExpressionsForExecution: Seq[NamedExpression] =
     withPhysicalInputAttributes(groupingExpressions, child.output)
 
   protected lazy val groupingAttributesForExecution: Seq[Attribute] =
-    groupingExpressionsForExecution.map(_.toAttribute)
+    groupingExpressions.zip(groupingExpressionsForExecution).map {
+      case (groupingExpression, groupingExpressionForExecution) =>
+        groupingExpression.toAttribute.withNullability(groupingExpressionForExecution.nullable)
+    }
 
   protected lazy val resultExpressionsForExecution: Seq[NamedExpression] =
     withPhysicalInputAttributes(

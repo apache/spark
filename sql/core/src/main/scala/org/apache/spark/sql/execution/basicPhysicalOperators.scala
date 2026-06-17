@@ -48,18 +48,17 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     with PartitioningPreservingUnaryExecNode
     with OrderPreservingUnaryExecNode {
 
-  override lazy val output: Seq[Attribute] = {
+  private lazy val projectListForExecution: Seq[NamedExpression] =
     if (isCanonicalizedPlan) {
-      projectList.map(_.toAttribute)
+      projectList
     } else {
       // Columnar transitions can make a child output physically nullable after this project was
-      // planned. Recompute the projected output nullability against the actual child output so a
-      // later row/codegen boundary does not revive stale non-nullable metadata.
-      projectList.zip(bindReferences[Expression](projectList, child.output)).map {
-        case (project, boundProject) => project.toAttribute.withNullability(boundProject.nullable)
-      }
+      // planned. Rebind attributes by exprId without binding the whole expression to ordinals, so
+      // custom expression subclasses still see the execution-time child nullability.
+      RowBoundaryOutput.withPhysicalInputAttributes(projectList, child.output)
     }
-  }
+
+  override lazy val output: Seq[Attribute] = projectListForExecution.map(_.toAttribute)
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
@@ -80,7 +79,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    val exprs = bindReferences[Expression](projectList, child.output)
+    val exprs = bindReferences[Expression](projectListForExecution, child.output)
     val (subExprsCode, resultVars, localValInputs) = if (conf.subexpressionEliminationEnabled) {
       // subexpression elimination
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
@@ -94,7 +93,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
 
     // Evaluation of non-deterministic expressions can't be deferred.
-    val nonDeterministicAttrs = projectList.filterNot(_.deterministic).map(_.toAttribute)
+    val nonDeterministicAttrs =
+      projectListForExecution.filterNot(_.deterministic).map(_.toAttribute)
     s"""
        |// common sub-expressions
        |${evaluateVariables(localValInputs)}
@@ -105,7 +105,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    val evaluatorFactory = new ProjectEvaluatorFactory(projectList, child.output)
+    val evaluatorFactory = new ProjectEvaluatorFactory(projectListForExecution, child.output)
     if (conf.usePartitionEvaluator) {
       child.execute().mapPartitionsWithEvaluator(
         evaluatorFactory, preservesPartitionSizes = true
@@ -120,7 +120,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
-  override protected def outputExpressions: Seq[NamedExpression] = projectList
+  override protected def outputExpressions: Seq[NamedExpression] = projectListForExecution
 
   override protected def orderingExpressions: Seq[SortOrder] = child.outputOrdering
 

@@ -22,7 +22,6 @@ import org.apache.spark.rdd.{ParallelCollectionRDD, RDD}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, LazilyGeneratedOrdering}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -315,18 +314,17 @@ case class TakeOrderedAndProjectExec(
     child: SparkPlan,
     offset: Int = 0) extends OrderPreservingUnaryExecNode {
 
-  override lazy val output: Seq[Attribute] = {
+  private lazy val projectListForExecution: Seq[NamedExpression] =
     if (isCanonicalizedPlan) {
-      projectList.map(_.toAttribute)
+      projectList
     } else {
       // Columnar transitions can make a child output physically nullable after this node was
-      // planned. Recompute the projected output nullability against the actual child output so a
-      // later row materialization does not revive stale non-nullable metadata.
-      projectList.zip(bindReferences[Expression](projectList, child.output)).map {
-        case (project, boundProject) => project.toAttribute.withNullability(boundProject.nullable)
-      }
+      // planned. Rebind attributes by exprId without binding the whole expression to ordinals, so
+      // later row materialization keeps the execution-time child nullability.
+      RowBoundaryOutput.withPhysicalInputAttributes(projectList, child.output)
     }
-  }
+
+  override lazy val output: Seq[Attribute] = projectListForExecution.map(_.toAttribute)
 
   override def executeCollect(): Array[InternalRow] = executeQuery {
     val orderingSatisfies = SortOrder.orderingSatisfies(child.outputOrdering, sortOrder)
@@ -337,8 +335,8 @@ case class TakeOrderedAndProjectExec(
       child.execute().mapPartitionsInternal(_.map(_.copy())).takeOrdered(limit)(ord)
     }
     val data = if (offset > 0) limited.drop(offset) else limited
-    if (projectList != child.output) {
-      val proj = UnsafeProjection.create(projectList, child.output)
+    if (projectListForExecution != child.output) {
+      val proj = UnsafeProjection.create(projectListForExecution, child.output)
       proj.initialize(0)
       data.map(r => proj(r).copy())
     } else {
@@ -384,8 +382,8 @@ case class TakeOrderedAndProjectExec(
       singlePartitionRDD.mapPartitionsWithIndexInternal { (idx, iter) =>
         val limited = Utils.takeOrdered(iter.map(_.copy()), limit)(ord)
         val topK = if (offset > 0) limited.drop(offset) else limited
-        if (projectList != child.output) {
-          val proj = UnsafeProjection.create(projectList, child.output)
+        if (projectListForExecution != child.output) {
+          val proj = UnsafeProjection.create(projectListForExecution, child.output)
           proj.initialize(idx)
           topK.map(r => proj(r))
         } else {
@@ -395,7 +393,7 @@ case class TakeOrderedAndProjectExec(
     }
   }
 
-  override protected def outputExpressions: Seq[NamedExpression] = projectList
+  override protected def outputExpressions: Seq[NamedExpression] = projectListForExecution
 
   override protected def orderingExpressions: Seq[SortOrder] = sortOrder
 

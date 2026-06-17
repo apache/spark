@@ -20,7 +20,8 @@ package org.apache.spark.sql.execution
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder, SpecializedGetters}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder,
+  SpecializedGetters}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -55,6 +56,23 @@ class ColumnarRule {
  * that walk a spark plan looking for this type of transition properly match it.
  */
 trait ColumnarToRowTransition extends UnaryExecNode
+
+private[execution] object RowBoundaryOutput {
+  def withPhysicalInputAttributes[E <: Expression](
+      expression: E,
+      inputAttributes: Seq[Attribute]): E = {
+    val inputAttrMap = AttributeMap(inputAttributes.map(attr => attr -> attr))
+    expression.transformUp {
+      case attr: Attribute => inputAttrMap.getOrElse(attr, attr)
+    }.asInstanceOf[E]
+  }
+
+  def withPhysicalInputAttributes[E <: Expression](
+      expressions: Seq[E],
+      inputAttributes: Seq[Attribute]): Seq[E] = {
+    expressions.map(withPhysicalInputAttributes(_, inputAttributes))
+  }
+}
 
 /**
  * Provides a common executor to translate an [[RDD]] of [[ColumnarBatch]] into an [[RDD]] of

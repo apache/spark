@@ -68,8 +68,12 @@ case class GenerateExec(
   // was planned. Keep the passthrough side of GenerateExec aligned with the actual child output so
   // its own unsafe-row materialization does not revive stale non-nullable metadata.
   private lazy val requiredChildOutputForExecution: Seq[Attribute] = {
-    val childOutput = AttributeMap(child.output.map(attr => attr -> attr))
-    requiredChildOutput.map(attr => childOutput.getOrElse(attr, attr))
+    if (isCanonicalizedPlan) {
+      requiredChildOutput
+    } else {
+      val childOutput = AttributeMap(child.output.map(attr => attr -> attr))
+      requiredChildOutput.map(attr => childOutput.getOrElse(attr, attr))
+    }
   }
 
   override def output: Seq[Attribute] = requiredChildOutputForExecution ++ generatorOutput
@@ -98,7 +102,7 @@ case class GenerateExec(
           // The declared output of this operator is `requiredChildOutput ++ generatorOutput`.
           // If `child.output` is different from `requiredChildOutput`, we must do an projection
           // to adjust the child output and make sure the final result matches the declared output.
-          if (child.output == requiredChildOutputForExecution) {
+          if (child.outputSet == AttributeSet(requiredChildOutputForExecution)) {
             identity
           } else {
             UnsafeProjection.create(requiredChildOutputForExecution, child.output)
