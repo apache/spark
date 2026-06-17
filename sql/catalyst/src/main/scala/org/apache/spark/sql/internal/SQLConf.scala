@@ -6337,7 +6337,8 @@ object SQLConf {
         "raised when the row is consumed by the user expression. Without this flag, the cast is " +
         "always evaluated and any failure raises immediately, even when the surrounding " +
         "expression would not have consumed the failing row.")
-      .version("4.2.0")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)
 
