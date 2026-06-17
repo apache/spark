@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
-import java.time.{Instant, LocalDate, LocalDateTime, LocalTime}
+import java.time.{Instant, LocalDate, LocalDateTime}
 import java.util.Base64
 
 import scala.collection.mutable
@@ -32,7 +32,7 @@ import org.json4s.jackson.JsonMethods.{compact, pretty, render}
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkDateTimeUtils, TimeFormatter, TimestampFormatter, UDTUtils}
+import org.apache.spark.sql.catalyst.util.{DateFormatter, SparkDateTimeUtils, TimestampFormatter, UDTUtils}
 import org.apache.spark.sql.errors.DataTypeErrors
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLType, toSQLValue}
 import org.apache.spark.sql.internal.SqlApiConf
@@ -620,7 +620,6 @@ trait Row extends Serializable {
     lazy val zoneId = SparkDateTimeUtils.getZoneId(SqlApiConf.get.sessionLocalTimeZone)
     lazy val dateFormatter = DateFormatter()
     lazy val timestampFormatter = TimestampFormatter(zoneId)
-    lazy val timeFormatter = TimeFormatter.getFractionFormatter()
 
     // Convert an iterator of values to a json array
     def iteratorToJsonArray(iterator: Iterator[_], elementType: DataType): JArray = {
@@ -648,12 +647,6 @@ trait Row extends Serializable {
       case (b: Byte, _) => JLong(b)
       case (s: Short, _) => JLong(s)
       case (i: Int, _) => JLong(i)
-      // A public Row holds the external java.time.LocalTime for a TimeType column (SPARK-54451).
-      // With the Types Framework off, TypeApiOps returns None and we land here, so render the
-      // LocalTime directly, mirroring HiveResult's legacy fallback. The Long case below is the
-      // internal representation that a public Row never holds; it stays for non-Row callers.
-      case (lt: LocalTime, _: TimeType) => JString(timeFormatter.format(lt))
-      case (nanos: Long, _: TimeType) => JString(timeFormatter.format(nanos))
       case (l: Long, _) => JLong(l)
       case (f: Float, _) => JDouble(f)
       case (d: Double, _) => JDouble(d)
