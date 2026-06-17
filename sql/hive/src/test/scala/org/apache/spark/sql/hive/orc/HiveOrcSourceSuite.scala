@@ -18,11 +18,13 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+import java.time.{LocalDateTime, ZoneOffset}
 
 import org.apache.spark.sql.{AnalysisException, Column, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
@@ -390,18 +392,32 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
           case _ => 123
         }
         val value = new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort)
+        // Documented range ends [0001-01-01T00:00:00, 9999-12-31T23:59:59.999999999] (UTC for LTZ).
+        val minLdt = LocalDateTime.of(1, 1, 1, 0, 0, 0, 0)
+        val maxLdt = LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
 
-        // Same-zone round trip through the Hive serde path for both nanos types.
-        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
-          nanosType =>
-            val input = spark.range(1).select(Column(Literal.create(value, nanosType)).as("ts"))
-            withTempDir { dir =>
-              val path = new File(dir, "nanos").getCanonicalPath
-              input.write.format("orc").mode("overwrite").save(path)
-              checkAnswer(
-                spark.read.schema(new StructType().add("ts", nanosType)).format("orc").load(path),
-                input)
-            }
+        // Same-zone round trip through the Hive serde path for both nanos types, including the
+        // min and max of the documented range.
+        Seq(
+          TimestampNTZNanosType(precision) -> Seq(
+            value,
+            DateTimeUtils.localDateTimeToTimestampNanos(minLdt, precision),
+            DateTimeUtils.localDateTimeToTimestampNanos(maxLdt, precision)),
+          TimestampLTZNanosType(precision) -> Seq(
+            value,
+            DateTimeUtils.instantToTimestampNanos(minLdt.toInstant(ZoneOffset.UTC), precision),
+            DateTimeUtils.instantToTimestampNanos(maxLdt.toInstant(ZoneOffset.UTC), precision))
+        ).foreach { case (nanosType, values) =>
+          val input = values
+            .map(v => spark.range(1).select(Column(Literal.create(v, nanosType)).as("ts")))
+            .reduce(_.union(_))
+          withTempDir { dir =>
+            val path = new File(dir, "nanos").getCanonicalPath
+            input.write.format("orc").mode("overwrite").save(path)
+            checkAnswer(
+              spark.read.schema(new StructType().add("ts", nanosType)).format("orc").load(path),
+              input)
+          }
         }
 
         // The NTZ wall clock stays zone-independent across a JVM default time-zone change. Hive
