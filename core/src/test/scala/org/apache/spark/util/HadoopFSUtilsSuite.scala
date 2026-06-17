@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.io.File
 import java.nio.file.Files
+import java.util.regex.Pattern
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path, PathFilter}
@@ -28,8 +29,11 @@ import org.apache.spark.LocalSparkContext.withSpark
 
 class HadoopFSUtilsSuite extends SparkFunSuite {
 
-  // Accept everything; hidden-file filtering is exercised via the listHiddenFiles flag.
+  // Accept everything; hidden-file filtering is exercised via the ignoredPathSegmentRegex regex.
   private val acceptAllFilter: PathFilter = AcceptAllPathFilter
+
+  // Never matches any name: disables generic hidden-file filtering, leaving only the carve-outs.
+  private val neverMatch: Pattern = Pattern.compile("(?!)")
 
   /**
    * Builds a tree with one regular file, hidden entries ('_'-, '.'-, '._COPYING_'-named) and a
@@ -68,9 +72,30 @@ class HadoopFSUtilsSuite extends SparkFunSuite {
     assert(HadoopFSUtils.shouldFilterOutPathName("_ab_metadata"))
     assert(HadoopFSUtils.shouldFilterOutPathName("_cd_common_metadata"))
     assert(HadoopFSUtils.shouldFilterOutPathName("a._COPYING_"))
-    // listHiddenFiles short-circuits the predicates: nothing is considered hidden.
-    assert(!HadoopFSUtils.shouldFilterOutPathName(".ab", listHiddenFiles = true))
-    assert(!HadoopFSUtils.shouldFilterOutPath("/.ab", listHiddenFiles = true))
+    // A never-matching regex surfaces generically hidden names...
+    assert(!HadoopFSUtils.shouldFilterOutPathName(".ab", neverMatch))
+    assert(!HadoopFSUtils.shouldFilterOutPathName("_cd", neverMatch))
+    assert(!HadoopFSUtils.shouldFilterOutPath("/.ab", neverMatch))
+    // ... but the hardcoded carve-outs are not overridable: '._COPYING_' files stay hidden and
+    // metadata-prefixed files stay visible regardless of the regex.
+    assert(HadoopFSUtils.shouldFilterOutPathName("a._COPYING_", neverMatch))
+    assert(!HadoopFSUtils.shouldFilterOutPathName("_metadata", neverMatch))
+  }
+
+  test("HadoopFSUtils - file filtering with a custom regex") {
+    val backup = Pattern.compile("^backup")
+    // The custom regex hides matching names.
+    assert(HadoopFSUtils.shouldFilterOutPathName("backup_1", backup))
+    // Names not matching the custom regex are listed, even '_'- or '.'-prefixed ones: the
+    // default '^[._]' regex is replaced, not combined, and no carve-out hides them.
+    assert(!HadoopFSUtils.shouldFilterOutPathName("_hidden", backup))
+    assert(!HadoopFSUtils.shouldFilterOutPathName(".dot", backup))
+    assert(!HadoopFSUtils.shouldFilterOutPathName("abcd", backup))
+    // The carve-outs still apply around the custom regex: '._COPYING_' names stay hidden, and
+    // '_'-prefixed names containing '=' (partition dirs) stay visible even when the regex
+    // finds a match (note find semantics: unanchored "backup" matches inside "_backup=1").
+    assert(HadoopFSUtils.shouldFilterOutPathName("backup_1._COPYING_", backup))
+    assert(!HadoopFSUtils.shouldFilterOutPathName("_backup=1", Pattern.compile("backup")))
   }
 
   test("SPARK-45452: HadoopFSUtils - path filtering") {
@@ -103,51 +128,63 @@ class HadoopFSUtilsSuite extends SparkFunSuite {
     assert(HadoopFSUtils.shouldFilterOutPath("/ab/_cd/part=1"))
     assert(HadoopFSUtils.shouldFilterOutPath("/_ab_metadata"))
     assert(HadoopFSUtils.shouldFilterOutPath("/_cd_common_metadata"))
+    // Case 4: the per-name-component walk unifies this predicate with the recursive-descent
+    // listing path. The verdicts below intentionally differ from the old path-based logic:
+    // a '_metadata' leaf no longer rescues a hidden parent directory...
+    assert(HadoopFSUtils.shouldFilterOutPath("/_foo/_metadata"))
+    // ... the metadata exemption is prefix-based, matching shouldFilterOutPathName...
+    assert(!HadoopFSUtils.shouldFilterOutPath("/x/_metadata.json"))
+    // ... and a '._COPYING_' directory component hides its subtree.
+    assert(HadoopFSUtils.shouldFilterOutPath("/d._COPYING_/x"))
   }
 
-  test("listFiles - listHiddenFiles=false filters hidden files and dirs") {
+  test("listFiles - default ignoredPathSegmentRegex hides hidden files and dirs") {
     withTempDir { root =>
       val (path, regularFile) = createHiddenFileTree(root)
       val hadoopConf = new Configuration()
       val names = leafFileNames(
-        HadoopFSUtils.listFiles(path, hadoopConf, acceptAllFilter, listHiddenFiles = false))
+        HadoopFSUtils.listFiles(path, hadoopConf, acceptAllFilter))
       // Only the regular file survives; every hidden entry is filtered out.
       assert(names === Set(regularFile))
     }
   }
 
-  test("listFiles - listHiddenFiles=true surfaces hidden files and dirs") {
+  test("listFiles - never-matching ignoredPathSegmentRegex surfaces hidden files and dirs") {
     withTempDir { root =>
       val (path, regularFile) = createHiddenFileTree(root)
       val hadoopConf = new Configuration()
       val names = leafFileNames(
-        HadoopFSUtils.listFiles(path, hadoopConf, acceptAllFilter, listHiddenFiles = true))
-      assert(names === Set(regularFile, "_hidden", ".dot", "x._COPYING_", "nested.parquet"))
+        HadoopFSUtils.listFiles(path, hadoopConf, acceptAllFilter, neverMatch))
+      // 'x._COPYING_' stays hidden even with a never-matching regex: the carve-out for
+      // in-flight copy files is not overridable.
+      assert(names === Set(regularFile, "_hidden", ".dot", "nested.parquet"))
     }
   }
 
-  test("parallelListLeafFiles - listHiddenFiles toggles hidden file visibility") {
+  test("parallelListLeafFiles - ignoredPathSegmentRegex toggles hidden file visibility") {
     withTempDir { root =>
       val (path, regularFile) = createHiddenFileTree(root)
       val hadoopConf = new Configuration()
       withSpark(new SparkContext("local", "HadoopFSUtilsSuite")) { sc =>
-        def listNames(listHiddenFiles: Boolean): Set[String] =
+        def listNames(ignoredPathSegmentRegex: Pattern): Set[String] =
           leafFileNames(HadoopFSUtils.parallelListLeafFiles(
             sc,
             Seq(path),
             hadoopConf,
             acceptAllFilter,
             ignoreMissingFiles = false,
-            listHiddenFiles = listHiddenFiles,
+            ignoredPathSegmentRegex = ignoredPathSegmentRegex,
             ignoreLocality = true,
             // Use 0 so the parallel (Spark job) code path is exercised rather than the
             // serial short-circuit.
             parallelismThreshold = 0,
             parallelismMax = 1))
 
-        assert(listNames(listHiddenFiles = false) === Set(regularFile))
-        assert(listNames(listHiddenFiles = true) ===
-          Set(regularFile, "_hidden", ".dot", "x._COPYING_", "nested.parquet"))
+        val defaultFilter = Pattern.compile(HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
+        assert(listNames(defaultFilter) === Set(regularFile))
+        // 'x._COPYING_' stays hidden even with a never-matching regex (see the listFiles test).
+        assert(listNames(neverMatch) ===
+          Set(regularFile, "_hidden", ".dot", "nested.parquet"))
       }
     }
   }

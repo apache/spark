@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.nio.file.{Files, StandardOpenOption}
 import java.time.{LocalDateTime, ZoneOffset}
+import java.util.regex.PatternSyntaxException
 
 import scala.collection.mutable
 
@@ -47,6 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.TimestampNanosVal
+import org.apache.spark.util.HadoopFSUtils
 
 class FileBasedDataSourceSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -1430,53 +1432,56 @@ class FileBasedDataSourceSuite extends SharedSparkSession
     }
   }
 
-  // Asserts the listHiddenFiles contract for `format`: default hides the '_'-prefixed file; the
-  // per-read option and the session conf each surface it; the option overrides the conf.
-  private def checkListHiddenFilesContract(format: String, basePath: String): Unit = {
+  // Asserts the ignoredPathSegmentRegex contract for `format`: the default regex hides the
+  // '_'-prefixed file; a never-matching per-read option or session conf each surface it; the
+  // option overrides the conf.
+  private def checkIgnoredPathSegmentRegexContract(format: String, basePath: String): Unit = {
+    val defaultRegex = HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX
+
     // Default: the hidden file is filtered out.
     checkAnswer(spark.read.format(format).load(basePath), Seq(Row("visible")))
 
-    // Per-read option surfaces the hidden data.
+    // A never-matching per-read option surfaces the hidden data.
     checkAnswer(
-      spark.read.option("listHiddenFiles", "true").format(format).load(basePath),
+      spark.read.option("ignoredPathSegmentRegex", "(?!)").format(format).load(basePath),
       Seq(Row("visible"), Row("hidden")))
 
-    // Session conf surfaces the hidden data too.
-    withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> "true") {
+    // A never-matching session conf surfaces the hidden data too.
+    withSQLConf(SQLConf.IGNORED_PATH_SEGMENT_REGEX.key -> "(?!)") {
       checkAnswer(
         spark.read.format(format).load(basePath),
         Seq(Row("visible"), Row("hidden")))
     }
 
     // Precedence: the per-read option overrides the session conf in both directions.
-    withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> "false") {
+    withSQLConf(SQLConf.IGNORED_PATH_SEGMENT_REGEX.key -> defaultRegex) {
       checkAnswer(
-        spark.read.option("listHiddenFiles", "true").format(format).load(basePath),
+        spark.read.option("ignoredPathSegmentRegex", "(?!)").format(format).load(basePath),
         Seq(Row("visible"), Row("hidden")))
     }
-    withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> "true") {
+    withSQLConf(SQLConf.IGNORED_PATH_SEGMENT_REGEX.key -> "(?!)") {
       checkAnswer(
-        spark.read.option("listHiddenFiles", "false").format(format).load(basePath),
+        spark.read.option("ignoredPathSegmentRegex", defaultRegex).format(format).load(basePath),
         Seq(Row("visible")))
     }
   }
 
-  test("Option listHiddenFiles: surfaces hidden files only when enabled - json") {
+  test("Option ignoredPathSegmentRegex: surfaces hidden files only when relaxed - json") {
     withTempDir { dir =>
       val basePath = dir.getCanonicalPath
       // Write JSON files directly: a visible record and a '_'-prefixed hidden record.
       Files.write(new File(dir, "visible.json").toPath, """{"a":"visible"}""".getBytes)
       Files.write(new File(dir, "_hidden.json").toPath, """{"a":"hidden"}""".getBytes)
 
-      checkListHiddenFilesContract("json", basePath)
+      checkIgnoredPathSegmentRegexContract("json", basePath)
     }
   }
 
-  test("Option listHiddenFiles: surfaces hidden files only when enabled - parquet") {
+  test("Option ignoredPathSegmentRegex: surfaces hidden files only when relaxed - parquet") {
     withTempDir { dir =>
       // Copy only the part-*.parquet from a scratch write into basePath -- this drops Spark's own
-      // _SUCCESS / _temporary marker files, so listHiddenFiles surfaces only the intended hidden
-      // file. Flat layout (files directly under basePath) mirrors the JSON test.
+      // _SUCCESS / _temporary marker files, so a relaxed ignoredPathSegmentRegex surfaces only the
+      // intended hidden file. Flat layout (files directly under basePath) mirrors the JSON test.
       val basePath = dir.getCanonicalPath
 
       def copyPartFile(value: String, destName: String): Unit = {
@@ -1493,23 +1498,90 @@ class FileBasedDataSourceSuite extends SharedSparkSession
       copyPartFile("visible", "visible.parquet")
       copyPartFile("hidden", "_hidden.parquet")
 
-      checkListHiddenFilesContract("parquet", basePath)
+      checkIgnoredPathSegmentRegexContract("parquet", basePath)
     }
   }
 
-  test("Option listHiddenFiles: reading an unmodified Spark-written parquet directory works") {
+  test("Option ignoredPathSegmentRegex: reading an unmodified Spark-written parquet directory works") {
     withTempDir { dir =>
       // A normal Spark write leaves a zero-length _SUCCESS marker next to the part files. With
-      // listHiddenFiles enabled, the marker is surfaced by listing but must neither be picked as
-      // a schema inference footer candidate nor scanned as data.
+      // a never-matching ignoredPathSegmentRegex, the marker is surfaced by listing but must neither
+      // be picked as a schema inference footer candidate nor scanned as data.
       val basePath = dir.getCanonicalPath
       // withTempDir pre-creates the directory, so overwrite to avoid PATH_ALREADY_EXISTS.
       Seq("a", "b").toDF("col").write.mode("overwrite").parquet(basePath)
       assert(new File(dir, "_SUCCESS").exists())
 
       checkAnswer(
-        spark.read.option("listHiddenFiles", "true").parquet(basePath),
+        spark.read.option("ignoredPathSegmentRegex", "(?!)").parquet(basePath),
         Seq(Row("a"), Row("b")))
+    }
+  }
+
+  test("Option ignoredPathSegmentRegex: reading a partitioned Spark-written parquet directory works") {
+    withTempDir { dir =>
+      // partitionBy leaves the zero-length _SUCCESS marker at the table root next to the 'p='
+      // partition dirs. Under a never-matching ignoredPathSegmentRegex the marker survives listing,
+      // but partition discovery still works (parsePartition stops at the base path) and the
+      // zero-length marker is neither a schema inference footer candidate nor scanned as data.
+      val basePath = dir.getCanonicalPath
+      // withTempDir pre-creates the directory, so overwrite to avoid PATH_ALREADY_EXISTS.
+      Seq((1, "a"), (2, "b")).toDF("p", "v").write.mode("overwrite").partitionBy("p")
+        .parquet(basePath)
+      assert(new File(dir, "_SUCCESS").exists())
+
+      // The read-back schema appends the discovered partition column after the data column.
+      val expected = Seq(Row("a", 1), Row("b", 2))
+      checkAnswer(spark.read.parquet(basePath), expected)
+      checkAnswer(
+        spark.read.option("ignoredPathSegmentRegex", "(?!)").parquet(basePath),
+        expected)
+    }
+  }
+
+  test("Option ignoredPathSegmentRegex: custom regex replaces the default filter - json") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      // The default '^[._]' hides both the '_'- and '.'-prefixed files. A custom '^_' regex
+      // replaces it entirely: it keeps hiding the '_'-prefixed file but surfaces the
+      // '.'-prefixed one.
+      Files.write(new File(dir, "visible.json").toPath, """{"a":"visible"}""".getBytes)
+      Files.write(new File(dir, "_under.json").toPath, """{"a":"under"}""".getBytes)
+      Files.write(new File(dir, ".dot.json").toPath, """{"a":"dot"}""".getBytes)
+
+      checkAnswer(spark.read.format("json").load(basePath), Seq(Row("visible")))
+      checkAnswer(
+        spark.read.option("ignoredPathSegmentRegex", "^_").format("json").load(basePath),
+        Seq(Row("visible"), Row("dot")))
+    }
+  }
+
+  test("Option ignoredPathSegmentRegex: invalid or empty regexes are rejected") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      Files.write(new File(dir, "visible.json").toPath, """{"a":"visible"}""".getBytes)
+
+      // An invalid regex in the per-read option propagates from the Pattern.compile in
+      // InMemoryFileIndex.bulkListLeafFiles when the read resolves the relation.
+      val optionError = intercept[PatternSyntaxException] {
+        spark.read.option("ignoredPathSegmentRegex", "[").format("json").load(basePath)
+      }
+      assert(optionError.getMessage.contains("["))
+
+      // The session conf rejects invalid and empty values eagerly via checkValue.
+      Seq("[", "").foreach { invalid =>
+        val confError = intercept[IllegalArgumentException] {
+          spark.conf.set(SQLConf.IGNORED_PATH_SEGMENT_REGEX.key, invalid)
+        }
+        assert(confError.getMessage.contains(
+          "must be a non-empty valid Java regular expression"))
+      }
+
+      // An empty per-read option is rejected with a pointer to the '(?!)' escape hatch.
+      val emptyOptionError = intercept[IllegalArgumentException] {
+        spark.read.option("ignoredPathSegmentRegex", "").format("json").load(basePath)
+      }
+      assert(emptyOptionError.getMessage.contains("Use '(?!)' to disable hidden-file filtering"))
     }
   }
 }

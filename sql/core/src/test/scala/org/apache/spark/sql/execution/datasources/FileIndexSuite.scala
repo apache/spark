@@ -38,7 +38,7 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.util.KnownSizeEstimation
+import org.apache.spark.util.{HadoopFSUtils, KnownSizeEstimation}
 
 class FileIndexSuite extends SharedSparkSession {
 
@@ -649,7 +649,7 @@ class FileIndexSuite extends SharedSparkSession {
     assert(FileIndexOptions.getAllOptions.size == 9)
     // Please add validation on any new FileIndex options here
     assert(FileIndexOptions.isValidOption("ignoreMissingFiles"))
-    assert(FileIndexOptions.isValidOption("listHiddenFiles"))
+    assert(FileIndexOptions.isValidOption("ignoredPathSegmentRegex"))
     assert(FileIndexOptions.isValidOption("ignoreInvalidPartitionPaths"))
     assert(FileIndexOptions.isValidOption("timeZone"))
     assert(FileIndexOptions.isValidOption("recursiveFileLookup"))
@@ -705,7 +705,7 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("InMemoryFileIndex: listHiddenFiles option surfaces hidden files in allFiles()") {
+  test("InMemoryFileIndex: ignoredPathSegmentRegex option surfaces hidden files in allFiles()") {
     withTempDir { dir =>
       stringToFile(new File(dir, "data.txt"), "data")
       stringToFile(new File(dir, "_hidden"), "hidden")
@@ -717,18 +717,21 @@ class FileIndexSuite extends SharedSparkSession {
       val defaultIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None)
       assert(defaultIndex.allFiles().map(_.getPath.getName).toSet === Set("data.txt"))
 
-      // With the option set, the hidden file, dot file and copying file all surface.
+      // With a never-matching regex, the hidden file and dot file surface, but the copying
+      // file stays hidden: the '._COPYING_' carve-out is not overridable.
       val hiddenIndex = new InMemoryFileIndex(
-        spark, Seq(path), Map("listHiddenFiles" -> "true"), None)
+        spark, Seq(path), Map("ignoredPathSegmentRegex" -> "(?!)"), None)
       assert(hiddenIndex.allFiles().map(_.getPath.getName).toSet ===
-        Set("data.txt", "_hidden", ".dot", "x._COPYING_"))
+        Set("data.txt", "_hidden", ".dot"))
+      assert(!hiddenIndex.allFiles().map(_.getPath.getName).contains("x._COPYING_"))
     }
   }
 
-  test("InMemoryFileIndex: listHiddenFiles option controls partition dirs with hidden data files") {
+  test("InMemoryFileIndex: ignoredPathSegmentRegex option controls partition dirs with hidden " +
+    "data files") {
     withTempDir { dir =>
       // 'part=1' holds a single hidden ('_'-prefixed) file: filtered out by default (so no
-      // partition is discovered), but surfaced and counted as data when listHiddenFiles=true.
+      // partition is discovered), but surfaced and counted as data with a never-matching regex.
       val partitionDir = new File(dir, "part=1")
       assert(partitionDir.mkdir())
       stringToFile(new File(partitionDir, "_data.txt"), "data")
@@ -742,7 +745,7 @@ class FileIndexSuite extends SharedSparkSession {
       // With the option set, '_data.txt' is a data file (covers isDataPath) and 'part=1' is a
       // partition directory.
       val hiddenIndex = new InMemoryFileIndex(
-        spark, Seq(path), Map("listHiddenFiles" -> "true"), None)
+        spark, Seq(path), Map("ignoredPathSegmentRegex" -> "(?!)"), None)
       assert(hiddenIndex.allFiles().map(_.getPath.getName).toSet === Set("_data.txt"))
       val partitionValues = hiddenIndex.partitionSpec().partitions.map(_.values)
       assert(partitionValues.length == 1)
@@ -752,10 +755,10 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("InMemoryFileIndex: listHiddenFiles with a hidden directory next to partition dirs") {
+  test("InMemoryFileIndex: ignoredPathSegmentRegex with a hidden directory next to partition dirs") {
     withTempDir { dir =>
-      // A hidden directory holding files next to 'part=1' becomes a leaf data dir when
-      // listHiddenFiles=true, so partition discovery sees conflicting base paths.
+      // A hidden directory holding files next to 'part=1' becomes a leaf data dir when the
+      // regex never matches, so partition discovery sees conflicting base paths.
       val partitionDir = new File(dir, "part=1")
       assert(partitionDir.mkdir())
       stringToFile(new File(partitionDir, "data.txt"), "data")
@@ -769,21 +772,21 @@ class FileIndexSuite extends SharedSparkSession {
       assert(defaultIndex.allFiles().map(_.getPath.getName).toSet === Set("data.txt"))
       assert(defaultIndex.partitionSpec().partitionColumns.fieldNames.toSeq === Seq("part"))
 
-      // listHiddenFiles=true: '_stray' is treated as a leaf data dir and discovered as its own
+      // Never-matching regex: '_stray' is treated as a leaf data dir and discovered as its own
       // base path, so partition discovery fails with conflicting directory structures.
       val hiddenIndex = new InMemoryFileIndex(
-        spark, Seq(path), Map("listHiddenFiles" -> "true"), None)
+        spark, Seq(path), Map("ignoredPathSegmentRegex" -> "(?!)"), None)
       val ex = intercept[SparkRuntimeException] {
         hiddenIndex.partitionSpec()
       }
       assert(ex.getMessage.contains("Conflicting directory structures detected"))
 
-      // listHiddenFiles=true + ignoreInvalidPartitionPaths=true: the invalid '_stray' base path
+      // Never-matching regex + ignoreInvalidPartitionPaths=true: the invalid '_stray' base path
       // is ignored, 'part' is still discovered, and both files surface.
       val recoveredIndex = new InMemoryFileIndex(
         spark,
         Seq(path),
-        Map("listHiddenFiles" -> "true", "ignoreInvalidPartitionPaths" -> "true"),
+        Map("ignoredPathSegmentRegex" -> "(?!)", "ignoreInvalidPartitionPaths" -> "true"),
         None)
       assert(recoveredIndex.partitionSpec().partitionColumns.fieldNames.toSeq === Seq("part"))
       assert(recoveredIndex.allFiles().map(_.getPath.getName).toSet ===
@@ -791,27 +794,88 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("InMemoryFileIndex: listHiddenFiles option overrides the listHiddenFiles SQL conf") {
+  test("InMemoryFileIndex: ignoredPathSegmentRegex with a _SUCCESS marker next to partition dirs") {
+    withTempDir { dir =>
+      // Unlike the hidden directory above, a hidden file at the table root surfaces in the
+      // listing under a never-matching regex but does not break partition discovery:
+      // parsePartition stops at the base path, so 'part' is still inferred.
+      val partitionDir = new File(dir, "part=1")
+      assert(partitionDir.mkdir())
+      stringToFile(new File(partitionDir, "data.txt"), "data")
+      assert(new File(dir, "_SUCCESS").createNewFile())
+      val path = new Path(dir.getCanonicalPath)
+
+      val hiddenIndex = new InMemoryFileIndex(
+        spark, Seq(path), Map("ignoredPathSegmentRegex" -> "(?!)"), None)
+      assert(hiddenIndex.allFiles().map(_.getPath.getName).toSet === Set("data.txt", "_SUCCESS"))
+      assert(hiddenIndex.partitionSpec().partitionColumns.fieldNames.toSeq === Seq("part"))
+    }
+  }
+
+  test("InMemoryFileIndex: ignoredPathSegmentRegex option overrides the ignoredPathSegmentRegex SQL conf") {
     withTempDir { dir =>
       stringToFile(new File(dir, "data.txt"), "data")
       stringToFile(new File(dir, "_hidden"), "hidden")
       val path = new Path(dir.getCanonicalPath)
 
+      val defaultRegex = HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX
+
       def hiddenListed(sqlConf: String, options: Map[String, String]): Boolean = {
-        withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> sqlConf) {
+        withSQLConf(SQLConf.IGNORED_PATH_SEGMENT_REGEX.key -> sqlConf) {
           val index = new InMemoryFileIndex(spark, Seq(path), options, None)
           index.allFiles().map(_.getPath.getName).contains("_hidden")
         }
       }
 
-      // conf=false, option=true -> option wins, hidden file listed.
-      assert(hiddenListed("false", Map("listHiddenFiles" -> "true")))
-      // conf=true, option=false -> option wins, hidden file not listed.
-      assert(!hiddenListed("true", Map("listHiddenFiles" -> "false")))
-      // conf=true, no option -> conf takes effect, hidden file listed.
-      assert(hiddenListed("true", Map.empty))
-      // conf=false, no option -> default, hidden file not listed.
-      assert(!hiddenListed("false", Map.empty))
+      // conf=default, option=never-matching -> option wins, hidden file listed.
+      assert(hiddenListed(defaultRegex, Map("ignoredPathSegmentRegex" -> "(?!)")))
+      // conf=never-matching, option=default -> option wins, hidden file not listed.
+      assert(!hiddenListed("(?!)", Map("ignoredPathSegmentRegex" -> defaultRegex)))
+      // conf=never-matching, no option -> conf takes effect, hidden file listed.
+      assert(hiddenListed("(?!)", Map.empty))
+      // conf=default, no option -> default, hidden file not listed.
+      assert(!hiddenListed(defaultRegex, Map.empty))
+    }
+  }
+
+  test("InMemoryFileIndex: non-default ignoredPathSegmentRegex bypasses the FileStatusCache") {
+    withTempDir { dir =>
+      stringToFile(new File(dir, "data.txt"), "data")
+      stringToFile(new File(dir, "_hidden.txt"), "hidden")
+      val path = new Path(dir.getCanonicalPath)
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+
+      // Populate the cache with the default-filtered listing.
+      val defaultIndex = new InMemoryFileIndex(spark, Seq(path), Map.empty, None, fileStatusCache)
+      assert(defaultIndex.allFiles().map(_.getPath.getName).toSet === Set("data.txt"))
+
+      // A non-default filter over the same path and cache must not serve the cached
+      // default-filtered listing: the hidden file surfaces.
+      val hiddenIndex = new InMemoryFileIndex(
+        spark, Seq(path), Map("ignoredPathSegmentRegex" -> "(?!)"), None, fileStatusCache)
+      assert(hiddenIndex.allFiles().map(_.getPath.getName).toSet ===
+        Set("data.txt", "_hidden.txt"))
+    }
+  }
+
+  test("InMemoryFileIndex: metadata summary files are never data paths regardless of " +
+    "ignoredPathSegmentRegex") {
+    withTempDir { dir =>
+      stringToFile(new File(dir, "data.txt"), "data")
+      stringToFile(new File(dir, "_metadata"), "metadata")
+      stringToFile(new File(dir, ".dot"), "dot")
+      val path = new Path(dir.getCanonicalPath)
+
+      // Custom regex matching only dot files: '_metadata' still surfaces in the listing (the
+      // shouldFilterOutPathName carve-out is not overridable), while '.dot' stays hidden.
+      val index = new InMemoryFileIndex(
+        spark, Seq(path), Map("ignoredPathSegmentRegex" -> "^[.]"), None)
+      assert(index.allFiles().map(_.getPath.getName).toSet === Set("data.txt", "_metadata"))
+
+      // Although listed, the summary file must never be scanned as data, even when the regex
+      // does not classify it as hidden.
+      val dataFiles = index.listFiles(Nil, Nil).flatMap(_.files).map(_.getPath.getName)
+      assert(dataFiles.toSet === Set("data.txt"))
     }
   }
 }

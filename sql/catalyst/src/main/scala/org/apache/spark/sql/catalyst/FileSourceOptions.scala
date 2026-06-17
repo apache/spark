@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES, LIST_HIDDEN_FILES}
+import org.apache.spark.sql.catalyst.FileSourceOptions.{IGNORE_CORRUPT_FILES, IGNORE_MISSING_FILES, IGNORED_PATH_SEGMENT_REGEX}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 
@@ -54,12 +54,14 @@ class FileSourceOptions(
    */
   val archiveFormatEnabled: Boolean = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
 
-  val listHiddenFiles: Boolean = parameters.get(LIST_HIDDEN_FILES).map(_.toBoolean)
-    .getOrElse(SQLConf.get.listHiddenFiles)
+  val ignoredPathSegmentRegex: String =
+    parameters.getOrElse(IGNORED_PATH_SEGMENT_REGEX, SQLConf.get.ignoredPathSegmentRegex)
+  require(ignoredPathSegmentRegex.nonEmpty, "The 'ignoredPathSegmentRegex' option must be a non-empty " +
+    "regular expression. Use '(?!)' to disable hidden-file filtering.")
 }
 
 object FileSourceOptions {
   val IGNORE_CORRUPT_FILES = "ignoreCorruptFiles"
   val IGNORE_MISSING_FILES = "ignoreMissingFiles"
-  val LIST_HIDDEN_FILES = "listHiddenFiles"
+  val IGNORED_PATH_SEGMENT_REGEX = "ignoredPathSegmentRegex"
 }

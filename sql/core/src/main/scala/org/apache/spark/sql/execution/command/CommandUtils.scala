@@ -44,6 +44,7 @@ import org.apache.spark.sql.execution.datasources.v2.ExtractV2CatalogAndIdentifi
 import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.HadoopFSUtils
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -197,10 +198,13 @@ object CommandUtils extends Logging {
     val stagingDir = sparkSession.sessionState.conf
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
-    // Pin listHiddenFiles off: stats must skip hidden dirs, matching calculateSingleLocationSize.
+    // Pin the default ignoredPathSegmentRegex: stats must always skip hidden dirs (immune to the
+    // session conf), matching calculateSingleLocationSize.
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
       sparkSession.sessionState.newHadoopConf(), filter, sparkSession,
-      parameters = Map(FileSourceOptions.LIST_HIDDEN_FILES -> "false")).map {
+      parameters = Map(
+        FileSourceOptions.IGNORED_PATH_SEGMENT_REGEX -> HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
+    ).map {
       case (_, files) => files.map(_.getLen).sum
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined

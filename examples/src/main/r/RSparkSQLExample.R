@@ -126,6 +126,12 @@ head(recursiveLoadedDF)
 # 1 file1.parquet
 # 2 file2.parquet
 # $example off:recursive_file_lookup$
+
+# $example on:ignored_path_segment_regex$
+# "(?!)" surfaces files that are hidden by default (e.g. names starting with "_" or ".")
+surfacedDF <- read.df("examples/src/main/resources/dir1", "parquet", ignoredPathSegmentRegex = "(?!)")
+head(surfacedDF)
+# $example off:ignored_path_segment_regex$
 sql("set spark.sql.files.ignoreCorruptFiles=false")
 
 # $example on:generic_load_save_functions$

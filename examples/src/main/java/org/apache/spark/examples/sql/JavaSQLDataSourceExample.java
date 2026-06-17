@@ -156,6 +156,13 @@ public class JavaSQLDataSourceExample {
     // |file2.parquet|
     // +-------------+
     // $example off:recursive_file_lookup$
+    // $example on:ignored_path_segment_regex$
+    // "(?!)" surfaces files that are hidden by default (e.g. names starting with "_" or ".")
+    Dataset<Row> surfacedDF = spark.read().format("parquet")
+            .option("ignoredPathSegmentRegex", "(?!)")
+            .load("examples/src/main/resources/dir1");
+    surfacedDF.show();
+    // $example off:ignored_path_segment_regex$
     spark.sql("set spark.sql.files.ignoreCorruptFiles=false");
     // $example on:load_with_path_glob_filter$
     Dataset<Row> testGlobFilterDF = spark.read().format("parquet")

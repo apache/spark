@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.csv
 
+import java.util.regex.Pattern
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.mapreduce._
@@ -107,6 +109,9 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     val parsedOptions = getCsvOptions(sparkSession, options)
     val isColumnPruningEnabled = parsedOptions.isColumnPruningEnabled(requiredSchema)
+    // The effective `ignoredPathSegmentRegex` for skipping hidden archive entries, compiled once here
+    // (Pattern is Serializable) rather than per file or per entry.
+    val ignoredPathSegmentRegex = Pattern.compile(parsedOptions.ignoredPathSegmentRegex)
 
     // Check a field requirement for corrupt records here to throw an exception in a driver side
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
@@ -141,7 +146,7 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       // archive reads are enabled; otherwise the file is parsed directly.
       if (parsedOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
         CSVDataSource(parsedOptions).readArchive(
-          conf, file, () => newParser(), getHeaderChecker, requiredSchema)
+          conf, file, () => newParser(), getHeaderChecker, requiredSchema, ignoredPathSegmentRegex)
       } else {
         val parser = newParser()
         val headerChecker = getHeaderChecker(file.start == 0, s"CSV file: ${file.urlEncodedPath}")

@@ -67,6 +67,14 @@ def generic_file_source_options_example(spark: SparkSession) -> None:
     # |file2.parquet|
     # +-------------+
     # $example off:recursive_file_lookup$
+
+    # $example on:ignored_path_segment_regex$
+    # "(?!)" surfaces files that are hidden by default (e.g. names starting with "_" or ".")
+    surfaced_df = spark.read.format("parquet")\
+        .option("ignoredPathSegmentRegex", "(?!)")\
+        .load("examples/src/main/resources/dir1")
+    surfaced_df.show()
+    # $example off:ignored_path_segment_regex$
     spark.sql("set spark.sql.files.ignoreCorruptFiles=false")
 
     # $example on:load_with_path_glob_filter$

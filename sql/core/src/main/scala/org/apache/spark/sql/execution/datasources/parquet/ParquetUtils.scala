@@ -144,7 +144,7 @@ object ParquetUtils extends Logging {
     val leaves = allFiles.toArray.sortBy(_.getPath.toString)
 
     FileTypes(
-      // Zero-length files (e.g. `_SUCCESS` markers surfaced by the `listHiddenFiles` option)
+      // Zero-length files (e.g. `_SUCCESS` markers surfaced by a relaxed `ignoredPathSegmentRegex`)
       // cannot contain a Parquet footer, so exclude them from schema inference candidates.
       data = leaves.filter(_.getLen > 0).filterNot(f => isSummaryFile(f.getPath))
         .toImmutableArraySeq,

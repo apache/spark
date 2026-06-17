@@ -64,8 +64,7 @@ abstract class ParquetFileFormatSuite
     HadoopFSUtils.listFiles(
       new Path(basePath),
       hadoopConf,
-      (path: Path) => path.getName != "_SUCCESS",
-      listHiddenFiles = false).flatMap(_._2)
+      (path: Path) => path.getName != "_SUCCESS").flatMap(_._2)
 
   private def deleteFile(hadoopConf: Configuration, status: FileStatus): Unit =
     status.getPath.getFileSystem(hadoopConf).delete(status.getPath, false)
@@ -87,8 +86,7 @@ abstract class ParquetFileFormatSuite
         val fileStatuses = HadoopFSUtils.listFiles(
           new Path(basePath),
           hadoopConf,
-          (path: Path) => path.getName != "_SUCCESS",
-          listHiddenFiles = false).flatMap(_._2)
+          (path: Path) => path.getName != "_SUCCESS").flatMap(_._2)
 
         val footers = ParquetFileFormat.readParquetFootersInParallel(
           hadoopConf, fileStatuses, ignoreCorruptFiles)

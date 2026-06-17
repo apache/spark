@@ -21,6 +21,7 @@ import java.util.{Locale, Properties, TimeZone}
 import java.util
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import java.util.regex.Pattern
 
 import scala.collection.immutable
 import scala.jdk.CollectionConverters._
@@ -52,7 +53,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.storage.{StorageLevel, StorageLevelMapper}
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.{Utils, VersionUtils}
+import org.apache.spark.util.{HadoopFSUtils, Utils, VersionUtils}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines the configuration options for Spark SQL.
@@ -2785,19 +2786,26 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val LIST_HIDDEN_FILES = buildConf("spark.sql.files.listHiddenFiles")
-    .doc("Whether to list and read files and directories whose names start with '_' or '.' " +
-      "(hidden files), which are skipped by default. When true, such files participate in file " +
-      "listing, partition discovery, and reads. This configuration is effective only when using " +
-      "file-based sources such as Parquet, JSON and ORC. It can be overridden per read by the " +
-      "'listHiddenFiles' data source option. Note that hidden directories also participate in " +
-      "partition discovery, so a hidden directory next to partition directories causes a " +
-      "conflicting directory structures error unless " +
+  val IGNORED_PATH_SEGMENT_REGEX = buildConf("spark.sql.files.ignoredPathSegmentRegex")
+    .doc("Java regular expression matched (with find semantics) against each directory and " +
+      "file name during file listing; matching names are skipped from listing, partition " +
+      "discovery, and reads. The default '^[._]' skips names starting with '_' or '.' (hidden " +
+      "files). Regardless of the regex, names starting with '_metadata' or '_common_metadata' " +
+      "are always listed, names ending in '._COPYING_' are always skipped, and '_'-prefixed " +
+      "names containing '=' (partition directories) are always kept. This configuration is " +
+      "effective only when using file-based sources such as Parquet, JSON and ORC. It can be " +
+      "overridden per read by the 'ignoredPathSegmentRegex' data source option. A regex that never " +
+      "matches (e.g. '(?!)') disables generic hidden-file filtering; note that directories it " +
+      "surfaces also participate in partition discovery, so a hidden directory next to " +
+      "partition directories causes a conflicting directory structures error unless " +
       "'spark.sql.files.ignoreInvalidPartitionPaths' is enabled.")
     .version("5.0.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
-    .booleanConf
-    .createWithDefault(false)
+    .stringConf
+    .checkValue(v => v.nonEmpty && Try(Pattern.compile(v)).isSuccess,
+      "The value of spark.sql.files.ignoredPathSegmentRegex must be a non-empty valid Java regular " +
+      "expression. Use '(?!)' to disable hidden-file filtering.")
+    .createWithDefault(HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
 
   val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")
     .doc("Whether to ignore invalid partition paths that do not match <column>=<value>. When " +
@@ -7867,7 +7875,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)
 
-  def listHiddenFiles: Boolean = getConf(LIST_HIDDEN_FILES)
+  def ignoredPathSegmentRegex: String = getConf(IGNORED_PATH_SEGMENT_REGEX)
 
   def ignoreInvalidPartitionPaths: Boolean = getConf(IGNORE_INVALID_PARTITION_PATHS)
 

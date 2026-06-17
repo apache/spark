@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.FileNotFoundException
+import java.util.regex.Pattern
 
 import scala.collection.mutable
 
@@ -78,11 +79,16 @@ abstract class PartitioningAwareFileIndex(
       .getOrElse(sparkSession.sessionState.conf.ignoreInvalidPartitionPaths)
   }
 
-  protected lazy val listHiddenFiles: Boolean = {
+  protected lazy val ignoredPathSegmentRegex: String = {
     caseInsensitiveMap
-      .get(FileIndexOptions.LIST_HIDDEN_FILES)
-      .map(_.toBoolean)
-      .getOrElse(sparkSession.sessionState.conf.listHiddenFiles)
+      .get(FileIndexOptions.IGNORED_PATH_SEGMENT_REGEX)
+      .getOrElse(sparkSession.sessionState.conf.ignoredPathSegmentRegex)
+  }
+
+  private lazy val ignoredPathSegmentRegexPattern: Pattern = {
+    require(ignoredPathSegmentRegex.nonEmpty, "The 'ignoredPathSegmentRegex' option must be a non-empty " +
+      "regular expression. Use '(?!)' to disable hidden-file filtering.")
+    Pattern.compile(ignoredPathSegmentRegex)
   }
 
   override def listFiles(
@@ -271,8 +277,13 @@ abstract class PartitioningAwareFileIndex(
   // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
   // counted as data files, so that they shouldn't participate partition discovery.
   private def isDataPath(path: Path): Boolean = {
-    if (listHiddenFiles) return true
     val name = path.getName
-    !((name.startsWith("_") && !name.contains("=")) || name.startsWith("."))
+    // Partition directories ('_'-prefixed names containing '=') are always data paths.
+    if (name.startsWith("_") && name.contains("=")) return true
+    // Metadata summary files are never data paths, regardless of the ignoredPathSegmentRegex regex
+    // (they always survive listing via the shouldFilterOutPathName carve-out).
+    if (name.startsWith("_common_metadata") || name.startsWith("_metadata")) return false
+    // For all other names the ignoredPathSegmentRegex regex decides.
+    !ignoredPathSegmentRegexPattern.matcher(name).find()
   }
 }

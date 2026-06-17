@@ -2620,7 +2620,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("listHiddenFiles option: hidden files are not streamed by default") {
+  test("ignoredPathSegmentRegex option: hidden files are not streamed by default") {
     withTempDirs { case (src, tmp) =>
       val textStream = createFileStream("text", src.getCanonicalPath)
       val filtered = textStream.filter($"value" contains "keep")
@@ -2634,13 +2634,13 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("listHiddenFiles option: hidden files are streamed when the option is set") {
+  test("ignoredPathSegmentRegex option: hidden files are streamed with a never-matching regex") {
     withTempDirs { case (src, tmp) =>
       val textStream = createFileStream(
-        "text", src.getCanonicalPath, options = Map("listHiddenFiles" -> "true"))
+        "text", src.getCanonicalPath, options = Map("ignoredPathSegmentRegex" -> "(?!)"))
       val filtered = textStream.filter($"value" contains "keep")
 
-      // With listHiddenFiles=true, the '_'-prefixed file participates in streaming.
+      // With a never-matching regex, the '_'-prefixed file participates in streaming.
       testStream(filtered)(
         AddTextFileData("drop1\nkeep2", src, tmp, tmpFilePrefix = "_hidden"),
         CheckAnswer("keep2"),
@@ -2650,14 +2650,14 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("listHiddenFiles SQL conf: hidden files are streamed when the conf is set") {
-    withSQLConf(SQLConf.LIST_HIDDEN_FILES.key -> "true") {
+  test("ignoredPathSegmentRegex SQL conf: hidden files are streamed with a never-matching regex") {
+    withSQLConf(SQLConf.IGNORED_PATH_SEGMENT_REGEX.key -> "(?!)") {
       withTempDirs { case (src, tmp) =>
         val textStream = createFileStream("text", src.getCanonicalPath)
         val filtered = textStream.filter($"value" contains "keep")
 
         // With the session conf set, the '_'-prefixed file participates in streaming even
-        // though the listHiddenFiles option is not set.
+        // though the ignoredPathSegmentRegex option is not set.
         testStream(filtered)(
           AddTextFileData("drop1\nkeep2", src, tmp, tmpFilePrefix = "_hidden"),
           CheckAnswer("keep2"),
@@ -2668,9 +2668,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("listHiddenFiles option does not surface another query's _spark_metadata as data") {
-    // Regression: listHiddenFiles must not change _spark_metadata handling -- a reader on a sink's
-    // output dir still consults the metadata log rather than surfacing the log files as data.
+  test("ignoredPathSegmentRegex option does not surface another query's _spark_metadata as data") {
+    // Regression: ignoredPathSegmentRegex must not change _spark_metadata handling -- a reader on a
+    // sink's output dir still consults the metadata log rather than surfacing the log files as
+    // data.
     withSQLConf(SQLConf.FILESTREAM_SINK_METADATA_IGNORED.key -> "false") {
       withTempDirs { case (outputDir, checkpointDir) =>
         val source = MemoryStream[String]
@@ -2690,8 +2691,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
         // The sink must have created a _spark_metadata directory.
         assert(new File(outputDir, FileStreamSink.metadataDir).exists())
 
-        // listHiddenFiles=true returns the sink's data, not the _spark_metadata log files.
-        val df = spark.read.option("listHiddenFiles", "true").parquet(outputDir.getCanonicalPath)
+        // A never-matching regex returns the sink's data, not the _spark_metadata log files.
+        val df = spark.read.option("ignoredPathSegmentRegex", "(?!)")
+          .parquet(outputDir.getCanonicalPath)
         checkAnswer(df, Seq(Row("keep1"), Row("keep2")))
       }
     }
