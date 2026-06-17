@@ -146,9 +146,11 @@ object MasterWebUISuite {
   private[ui] def sendHttpRequest(
       url: String,
       method: String,
-      body: String = ""): HttpURLConnection = {
+      body: String = "",
+      headers: Seq[(String, String)] = Nil): HttpURLConnection = {
     val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod(method)
+    headers.foreach { case (k, v) => conn.setRequestProperty(k, v) }
     if (body.nonEmpty) {
       conn.setDoOutput(true)
       conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
