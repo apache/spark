@@ -449,7 +449,7 @@ mllib = Module(
 
 pipelines = Module(
     name="pipelines",
-    dependencies=[],
+    dependencies=[sql],
     source_file_regexes=["sql/pipelines"],
     sbt_test_goals=[
         "pipelines/test",
@@ -572,6 +572,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_column",
         "pyspark.sql.tests.test_conf",
         "pyspark.sql.tests.test_context",
+        "pyspark.sql.tests.test_sql_context",
         "pyspark.sql.tests.test_dataframe",
         "pyspark.sql.tests.test_collection",
         "pyspark.sql.tests.test_creation",
@@ -1165,6 +1166,8 @@ pyspark_connect = Module(
         "pyspark.sql.tests.connect.test_parity_geometrytype",
         "pyspark.sql.tests.connect.test_parity_datasources",
         "pyspark.sql.tests.connect.test_parity_errors",
+        "pyspark.sql.tests.connect.test_connect_context",
+        "pyspark.sql.tests.connect.test_parity_sql_context",
         "pyspark.sql.tests.connect.test_parity_catalog",
         "pyspark.sql.tests.connect.test_parity_conf",
         "pyspark.sql.tests.connect.test_parity_serde",

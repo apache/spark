@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -375,6 +376,126 @@ class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
         },
         condition = "PARSE_SYNTAX_ERROR",
         parameters = Map("error" -> "'-'", "hint" -> ""))
+    }
+  }
+
+  test("SPARK-57164: nanos timestamp types via DataType.fromDDL and StructType.fromDDL") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            val expectedStruct = new StructType().add("c", expected)
+            assert(DataType.fromDDL(s"c $spelling") === expectedStruct)
+            assert(StructType.fromDDL(s"c $spelling") === expectedStruct)
+            // A bare type string (no column name) resolves directly to the nanos type.
+            assert(DataType.fromDDL(spelling) === expected)
+        }
+        // Bare TIMESTAMP(p) follows the session default timestamp type.
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+          assert(DataType.fromDDL(s"c TIMESTAMP($p)") ===
+            new StructType().add("c", TimestampNTZNanosType(p)))
+        }
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
+          assert(DataType.fromDDL(s"c TIMESTAMP($p)") ===
+            new StructType().add("c", TimestampLTZNanosType(p)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57164: fromDDL maps TIMESTAMP_*(6) to GA micro types and rejects bad precision") {
+    // Precision 6 maps to the GA micro types regardless of the preview flag.
+    Seq("true", "false").foreach { flag =>
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> flag) {
+        assert(DataType.fromDDL("c TIMESTAMP_NTZ(6)") ===
+          new StructType().add("c", TimestampNTZType))
+        assert(DataType.fromDDL("c TIMESTAMP_LTZ(6)") ===
+          new StructType().add("c", TimestampType))
+      }
+    }
+    // Out-of-range precision surfaces as INVALID_TIMESTAMP_PRECISION. The bare-type spelling is
+    // used so the primary parser raises the precision error (a SparkThrowable), which
+    // parseTypeWithFallback rethrows in preference to the fallback's parse error.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      Seq("TIMESTAMP_NTZ" -> "TIMESTAMP_NTZ", "TIMESTAMP_LTZ" -> "TIMESTAMP_LTZ").foreach {
+        case (spelling, errorType) =>
+          Seq(0, 5, 10).foreach { p =>
+            checkError(
+              exception = intercept[SparkException] {
+                DataType.fromDDL(s"$spelling($p)")
+              },
+              condition = "INVALID_TIMESTAMP_PRECISION",
+              parameters = Map("precision" -> p.toString, "type" -> errorType))
+          }
+      }
+    }
+    // With the flag off, nanos precisions are rejected with FEATURE_NOT_ENABLED.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq("TIMESTAMP_NTZ(9)", "TIMESTAMP_LTZ(7)").foreach { spelling =>
+        checkError(
+          exception = intercept[SparkException] {
+            DataType.fromDDL(spelling)
+          },
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+    }
+  }
+
+  test("SPARK-57164: nanos timestamp types via StructType.add(name, dataTypeString)") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            assert(new StructType().add("c", spelling) ===
+              new StructType().add("c", expected))
+        }
+      }
+    }
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          new StructType().add("c", "TIMESTAMP_NTZ(9)")
+        },
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = Map(
+          "featureName" -> "Nanosecond-precision timestamp types",
+          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+          "configValue" -> "true"))
+    }
+  }
+
+  test("SPARK-57164: parseTypeWithFallback resolves nanos types via DDL and JSON fallback") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        // DDL path: the primary parser (fromDDL) succeeds and the fallback is never consulted.
+        assert(
+          DataType.parseTypeWithFallback(
+            s"c TIMESTAMP_NTZ($p)",
+            DataType.fromDDL,
+            fallbackParser = DataType.fromJson) ===
+            new StructType().add("c", TimestampNTZNanosType(p)))
+        // JSON fallback path: the DDL parser fails on the quoted JSON name, so the JSON parser
+        // handles it. This is the single best guard against Family A (DDL) and Family B (JSON)
+        // drifting apart.
+        val jsonName = TimestampLTZNanosType(p).typeName // "timestamp_ltz(p)"
+        assert(
+          DataType.parseTypeWithFallback(
+            s"""\"$jsonName\"""",
+            parser = DataType.fromDDL,
+            fallbackParser = DataType.fromJson) === TimestampLTZNanosType(p))
+      }
     }
   }
 }

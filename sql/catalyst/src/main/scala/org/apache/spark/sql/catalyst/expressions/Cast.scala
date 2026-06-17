@@ -113,13 +113,20 @@ object Cast extends QueryErrorsBase {
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (_: StringType, _: TimestampNTZNanosType) => true
-    case (_: StringType, _: TimestampLTZNanosType) => true
+    case (_: StringType, _: AnyTimestampNanoType) => true
 
     case (TimestampNTZType, _: TimestampNTZNanosType) => true
     case (_: TimestampNTZNanosType, TimestampNTZType) => true
     case (TimestampType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, TimestampType) => true
+
+    case (_: TimestampNTZNanosType, _: TimestampNTZNanosType) => true
+    case (_: TimestampLTZNanosType, _: TimestampLTZNanosType) => true
+
+    case (DateType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, DateType) => true
+    case (DateType, _: TimestampNTZNanosType) => true
+    case (_: TimestampNTZNanosType, DateType) => true
 
     case (_: StringType, _: CalendarIntervalType) => true
     case (_: StringType, _: AnsiIntervalType) => true
@@ -256,13 +263,20 @@ object Cast extends QueryErrorsBase {
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (_: StringType, _: TimestampNTZNanosType) => true
-    case (_: StringType, _: TimestampLTZNanosType) => true
+    case (_: StringType, _: AnyTimestampNanoType) => true
 
     case (TimestampNTZType, _: TimestampNTZNanosType) => true
     case (_: TimestampNTZNanosType, TimestampNTZType) => true
     case (TimestampType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, TimestampType) => true
+
+    case (_: TimestampNTZNanosType, _: TimestampNTZNanosType) => true
+    case (_: TimestampLTZNanosType, _: TimestampLTZNanosType) => true
+
+    case (DateType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, DateType) => true
+    case (DateType, _: TimestampNTZNanosType) => true
+    case (_: TimestampNTZNanosType, DateType) => true
 
     case (_: StringType, DateType) => true
     case (_: StringType, _: TimeType) => true
@@ -355,6 +369,10 @@ object Cast extends QueryErrorsBase {
     // the LTZ string parse/render depends on the session time zone.
     case (_: StringType, _: TimestampLTZNanosType) => true
     case (_: TimestampLTZNanosType, _: StringType) => true
+    // Only the LTZ directions are zone-sensitive; the NTZ DATE casts use a fixed UTC grid,
+    // mirroring micro TIMESTAMP_NTZ<->DATE which is intentionally absent here.
+    case (DateType, _: TimestampLTZNanosType) => true
+    case (_: TimestampLTZNanosType, DateType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
     case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
       needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)
@@ -415,6 +433,22 @@ object Cast extends QueryErrorsBase {
     // This conversion stays explicit-only.
     case (_: TimestampNTZNanosType, TimestampNTZType) => false
     case (_: TimestampLTZNanosType, TimestampType) => false
+    // SPARK-57323: DATE <-> nanosecond-precision timestamp requires an explicit CAST in both
+    // directions. nanos -> DATE silently drops time-of-day and sub-microsecond digits (the same
+    // rule as the narrowing above). DATE -> nanos is lossless (midnight, zero sub-micro part),
+    // but conversions involving the nanos types stay explicit-only while the types are
+    // unreleased: allowing the store assignment later is a compatible change, revoking it is not.
+    // Note this is stricter than micro DATE <-> TIMESTAMP[_NTZ], which the catch-all below allows.
+    case (DateType, _: TimestampLTZNanosType) => false
+    case (DateType, _: TimestampNTZNanosType) => false
+    case (_: TimestampLTZNanosType, DateType) => false
+    case (_: TimestampNTZNanosType, DateType) => false
+    // SPARK-57490: same-family cross-precision nanosecond casts: widening (e.g. TIMESTAMP_NTZ(7) ->
+    // TIMESTAMP_NTZ(9)) is lossless and allowed as a silent store assignment, while narrowing
+    // (e.g. (9) -> (7)) drops sub-microsecond digits and stays explicit-only. Equal precision is
+    // already handled by the `from == to` short-circuit above.
+    case (f: TimestampNTZNanosType, t: TimestampNTZNanosType) => f.precision <= t.precision
+    case (f: TimestampLTZNanosType, t: TimestampLTZNanosType) => f.precision <= t.precision
     case (_: DatetimeType, _: DatetimeType) => true
 
     case (ArrayType(fromType, fn), ArrayType(toType, tn)) =>
@@ -462,8 +496,12 @@ object Cast extends QueryErrorsBase {
     case (_: TimeType, ByteType | ShortType) => true
     case (FloatType | DoubleType, TimestampType) => true
     case (TimestampType, DateType) => false
+    case (_: TimestampLTZNanosType, DateType) => false
+    case (_: TimestampNTZNanosType, DateType) => false
     case (_, DateType) => true
     case (DateType, TimestampType) => false
+    case (DateType, _: TimestampLTZNanosType) => false
+    case (DateType, _: TimestampNTZNanosType) => false
     case (DateType, _) => true
     case (_, CalendarIntervalType) => true
 
@@ -827,6 +865,11 @@ case class Cast(
         })
     case TimestampType =>
       buildCast[Long](_, m => TimestampNanosVal.fromParts(m, 0.toShort))
+    case _: TimestampLTZNanosType =>
+      buildCast[TimestampNanosVal](_, v =>
+        DateTimeUtils.truncateTimestampNanosToPrecision(v, precision))
+    case DateType =>
+      buildCast[Int](_, d => TimestampNanosVal.fromParts(daysToMicros(d, zoneId), 0.toShort))
   }
 
   private[this] def castToTimestampNTZNanos(
@@ -841,6 +884,12 @@ case class Cast(
         })
     case TimestampNTZType =>
       buildCast[Long](_, m => TimestampNanosVal.fromParts(m, 0.toShort))
+    case _: TimestampNTZNanosType =>
+      buildCast[TimestampNanosVal](_, v =>
+        DateTimeUtils.truncateTimestampNanosToPrecision(v, precision))
+    case DateType =>
+      buildCast[Int](_, d =>
+        TimestampNanosVal.fromParts(daysToMicros(d, ZoneOffset.UTC), 0.toShort))
   }
 
   private[this] def decimalToTimestamp(d: Decimal): Long = {
@@ -878,6 +927,10 @@ case class Cast(
       buildCast[Long](_, t => microsToDays(t, zoneId))
     case TimestampNTZType =>
       buildCast[Long](_, t => microsToDays(t, ZoneOffset.UTC))
+    case _: TimestampLTZNanosType =>
+      buildCast[TimestampNanosVal](_, v => microsToDays(v.epochMicros, zoneId))
+    case _: TimestampNTZNanosType =>
+      buildCast[TimestampNanosVal](_, v => microsToDays(v.epochMicros, ZoneOffset.UTC))
   }
 
   private[this] def castToTime(from: DataType, to: TimeType): Any => Any = from match {
@@ -1558,6 +1611,14 @@ case class Cast(
       case TimestampNTZType =>
         (c, evPrim, evNull) =>
           code"$evPrim = $dateTimeUtilsCls.microsToDays($c, java.time.ZoneOffset.UTC);"
+      case _: TimestampLTZNanosType =>
+        val zidClass = classOf[ZoneId]
+        val zid = JavaCode.global(ctx.addReferenceObj("zoneId", zoneId, zidClass.getName), zidClass)
+        (c, evPrim, evNull) =>
+          code"$evPrim = $dateTimeUtilsCls.microsToDays($c.epochMicros, $zid);"
+      case _: TimestampNTZNanosType =>
+        (c, evPrim, evNull) =>
+          code"$evPrim = $dateTimeUtilsCls.microsToDays($c.epochMicros, java.time.ZoneOffset.UTC);"
       case _ =>
         (c, evPrim, evNull) => code"$evNull = true;"
     }
@@ -1868,6 +1929,17 @@ case class Cast(
     case TimestampType =>
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
+    case _: TimestampLTZNanosType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = $dateTimeUtilsCls.truncateTimestampNanosToPrecision($c, $precision);"
+    case DateType =>
+      val zoneIdClass = classOf[ZoneId]
+      val zid = JavaCode.global(
+        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
+        zoneIdClass)
+      (c, evPrim, evNull) =>
+        code"$evPrim = TimestampNanosVal.fromParts(" +
+          code"$dateTimeUtilsCls.daysToMicros($c, $zid), (short) 0);"
   }
 
   private[this] def castToTimestampNTZNanosCode(
@@ -1897,6 +1969,13 @@ case class Cast(
     case TimestampNTZType =>
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
+    case _: TimestampNTZNanosType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = $dateTimeUtilsCls.truncateTimestampNanosToPrecision($c, $precision);"
+    case DateType =>
+      (c, evPrim, evNull) =>
+        code"$evPrim = TimestampNanosVal.fromParts(" +
+          code"$dateTimeUtilsCls.daysToMicros($c, java.time.ZoneOffset.UTC), (short) 0);"
   }
 
   private[this] def castToIntervalCode(from: DataType): CastFunction = from match {

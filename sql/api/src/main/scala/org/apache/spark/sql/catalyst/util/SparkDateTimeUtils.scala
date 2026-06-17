@@ -221,7 +221,8 @@ trait SparkDateTimeUtils {
    * and raises an internal error rather than silently retaining all sub-microsecond digits.
    */
   private[sql] def truncateNanosWithinMicroToPrecision(
-      nanosWithinMicro: Int, precision: Int): Int = {
+      nanosWithinMicro: Int,
+      precision: Int): Int = {
     precision match {
       case 7 => (nanosWithinMicro / 100) * 100
       case 8 => (nanosWithinMicro / 10) * 10
@@ -231,6 +232,24 @@ trait SparkDateTimeUtils {
           s"Fractional second precision $precision is out of range " +
             s"[${TimestampNTZNanosType.MIN_PRECISION}, ${TimestampNTZNanosType.MAX_PRECISION}].")
     }
+  }
+
+  /**
+   * Floors a `TimestampNanosVal` to the given timestamp precision `p` in [7, 9] by truncating its
+   * sub-microsecond `nanosWithinMicro` component (see [[truncateNanosWithinMicroToPrecision]]).
+   * `epochMicros` is left untouched, so this only ever drops trailing sub-microsecond digits.
+   *
+   * Used by the same-family cross-precision nanosecond cast paths (`TIMESTAMP_NTZ(p1) ->
+   * TIMESTAMP_NTZ(p2)` and `TIMESTAMP_LTZ(q1) -> TIMESTAMP_LTZ(q2)`): widening (`p2 >= p1`) is
+   * lossless and returns the input unchanged, while narrowing (`p2 < p1`) floors toward `-inf` to
+   * the target precision step.
+   */
+  def truncateTimestampNanosToPrecision(
+      v: TimestampNanosVal,
+      precision: Int): TimestampNanosVal = {
+    val truncated = truncateNanosWithinMicroToPrecision(v.nanosWithinMicro.toInt, precision)
+    if (truncated == v.nanosWithinMicro) v
+    else TimestampNanosVal.fromParts(v.epochMicros, truncated.toShort)
   }
 
   /**

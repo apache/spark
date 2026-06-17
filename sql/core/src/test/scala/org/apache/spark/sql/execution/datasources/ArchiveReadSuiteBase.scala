@@ -22,8 +22,10 @@ import java.nio.file.Files
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.functions.{col, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -90,9 +92,9 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
   /** Entry file name for the i-th data file in an archive. */
   protected def entryName(i: Int): String = s"part-$i.$fileExtension"
 
-  /** Provides an archive-extensioned path inside a fresh temp dir to `f`. */
-  protected def withArchiveFile(
-      extension: String = archiveExtensions.head)(f: File => Unit): Unit = {
+  /** Provides an archive-extensioned path inside a fresh temp dir to `f` and returns its result. */
+  protected def withArchiveFile[T](
+      extension: String = archiveExtensions.head)(f: File => T): T = {
     val dir = Utils.createTempDir(namePrefix = "archive-test")
     try f(new File(dir, s"archive.$extension")) finally Utils.deleteRecursively(dir)
   }
@@ -103,6 +105,51 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       extraOptions: Map[String, String] = Map.empty,
       schema: String = readSchema): DataFrame =
     spark.read.format(format).options(readOptions ++ extraOptions).schema(schema).load(path)
+
+  /**
+   * Whether this format infers its read schema from the textual content of the files (CSV, JSON,
+   * XML), as opposed to carrying an embedded schema (Avro, Parquet) or none (text). Gates the
+   * shared schema-inference tests. A format that needs an option to trigger inference (e.g. CSV's
+   * `inferSchema`) also overrides [[inferenceOptions]]; a format that does not infer overrides this
+   * to false.
+   */
+  protected def supportsSchemaInference: Boolean = true
+
+  /** Extra options that trigger/control inference for [[supportsSchemaInference]] formats. */
+  protected def inferenceOptions: Map[String, String] = Map.empty
+
+  /**
+   * Whether this format can represent nested/complex types (struct/array/map). Gates the shared
+   * complex-type round-trip test; JSON keeps it, CSV and text override it to false.
+   */
+  protected def supportsComplexTypes: Boolean = true
+
+  /**
+   * Whether inputs with different field sets are unioned by field name -- the self-describing,
+   * field-name-keyed model of JSON (and Avro/Parquet/XML), as opposed to CSV's positional,
+   * first-header-keyed model. Gates the shared differing-field read/inference tests; CSV and text
+   * override it to false.
+   */
+  protected def supportsSchemaMerge: Boolean = true
+
+  /** Sample data with a nested struct column, used by the complex-type test. */
+  protected def complexSampleDf: DataFrame =
+    Seq((1, "NYC", "10001"), (2, "SF", "94105")).toDF("id", "city", "zip")
+      .select(col("id"), struct(col("city"), col("zip")).as("addr"))
+
+  /** Read schema matching [[complexSampleDf]]. */
+  protected def complexReadSchema: String = "id INT, addr STRUCT<city: STRING, zip: STRING>"
+
+  /**
+   * Schema [[format]] infers from `paths` under [[readOptions]] ++ [[inferenceOptions]] (plus
+   * `extraOptions`). Loading several paths reads them as one fileset, exactly as a directory
+   * read does.
+   */
+  protected def inferredSchema(
+      paths: Seq[String],
+      extraOptions: Map[String, String] = Map.empty): StructType =
+    spark.read.options(readOptions ++ inferenceOptions ++ extraOptions)
+      .format(format).load(paths: _*).schema
 
   /**
    * Writes `entries` both into an archive and as loose files in a directory, then asserts the
@@ -229,6 +276,130 @@ trait ArchiveReadSuiteBase extends QueryTest with SharedSparkSession {
       withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
         checkAnswer(read(dir.getCanonicalPath), good)
       }
+    }
+  }
+
+  // ----- shared schema-inference tests (run when `supportsSchemaInference`) --
+
+  if (supportsSchemaInference) {
+    test("archive infers the same schema as a directory of the same files") {
+      val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
+        .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
+      withArchiveFile() { archive =>
+        writeArchive(archive, entries)
+        val archiveSchema = inferredSchema(Seq(archive.getCanonicalPath))
+        withTempDir { dir =>
+          entries.foreach { case (n, b) => Files.write(new File(dir, n).toPath, b) }
+          assert(archiveSchema == inferredSchema(Seq(dir.getCanonicalPath)),
+            s"inference parity broken; archive=$archiveSchema")
+        }
+      }
+    }
+
+    test("all archive formats infer the same schema") {
+      val entries = Seq(sampleDf((1, "Alice"), (2, "Bob")), sampleDf((3, "Carol")))
+        .zipWithIndex.map { case (p, i) => entryName(i) -> encodeFile(p) }
+      val schemas = archiveExtensions.map { ext =>
+        withArchiveFile(ext) { archive =>
+          writeArchive(archive, entries)
+          inferredSchema(Seq(archive.getCanonicalPath))
+        }
+      }
+      assert(schemas.distinct.size == 1,
+        s"archive formats inferred different schemas: ${archiveExtensions.zip(schemas)}")
+    }
+
+    test("inference skips a corrupt archive among good ones (ignoreCorruptFiles)") {
+      withTempDir { dir =>
+        val good = sampleDf((1, "Alice"), (2, "Bob"))
+        writeArchive(new File(dir, s"good.${archiveExtensions.head}"),
+          Seq(entryName(0) -> encodeFile(good)))
+        writeCorruptArchive(new File(dir, s"bad.$corruptArchiveExtension"))
+        withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+          val schema = inferredSchema(Seq(dir.getCanonicalPath))
+          withTempDir { onlyGood =>
+            Files.write(new File(onlyGood, entryName(0)).toPath, encodeFile(good))
+            assert(schema == inferredSchema(Seq(onlyGood.getCanonicalPath)),
+              s"corrupt archive not skipped during inference; got $schema")
+          }
+        }
+      }
+    }
+
+    test("archive inference widens a column's type across entries like a directory") {
+      // The column is integral in the first entry and string in the second; inference over all
+      // entries widens the merged type to string, exactly as a directory read would.
+      withArchiveFile() { archive =>
+        writeArchive(archive, Seq(
+          entryName(0) -> encodeFile(Seq(1, 2).toDF("c")),
+          entryName(1) -> encodeFile(Seq("x").toDF("c"))))
+        val schema = inferredSchema(Seq(archive.getCanonicalPath))
+        assert(schema.length == 1 && schema.head.dataType == StringType,
+          s"expected the column widened to string across entries, got $schema")
+      }
+    }
+
+    test("inference merges archive entries with loose files in the same directory") {
+      // An archive entry and a loose file with the same schema infer one combined schema, matching
+      // a directory read of the same files.
+      val inArchive = sampleDf((1, "Alice"), (2, "Bob"))
+      val loose = sampleDf((3, "Carol"))
+      withTempDir { dir =>
+        writeArchive(new File(dir, s"data.${archiveExtensions.head}"),
+          Seq(entryName(0) -> encodeFile(inArchive)))
+        Files.write(new File(dir, s"loose.$fileExtension").toPath, encodeFile(loose))
+        val schema = inferredSchema(Seq(dir.getCanonicalPath))
+        withTempDir { looseDir =>
+          Files.write(new File(looseDir, entryName(0)).toPath, encodeFile(inArchive))
+          Files.write(new File(looseDir, s"loose.$fileExtension").toPath, encodeFile(loose))
+          assert(schema == inferredSchema(Seq(looseDir.getCanonicalPath)),
+            s"mixed archive+loose inference diverged from a directory read; got $schema")
+        }
+      }
+    }
+  }
+
+  // ----- shared schema-merge tests (run when `supportsSchemaMerge`) ----------
+
+  if (supportsSchemaMerge) {
+    test("archive entries with differing fields read like a directory") {
+      // One entry carries an extra field the other lacks; read under a schema covering both, the
+      // missing field reads back null -- exactly as a directory read of the same files does.
+      val withName = sampleDf((1, "Alice"), (2, "Bob"))
+      val idOnly = Seq(3).toDF("id")
+      assertArchiveMatchesDir(
+        Seq(entryName(0) -> encodeFile(withName), entryName(1) -> encodeFile(idOnly)))
+    }
+
+    test("inference unions differing fields across archive entries and loose files") {
+      // The archive entry has fields (id, name); the loose file has (id, extra). A field-name-keyed
+      // format unions them by name -- exactly as a directory read of the same files does.
+      val inArchive = sampleDf((1, "Alice"), (2, "Bob"))
+      val loose = Seq((3, 30)).toDF("id", "extra")
+      withTempDir { dir =>
+        writeArchive(new File(dir, s"data.${archiveExtensions.head}"),
+          Seq(entryName(0) -> encodeFile(inArchive)))
+        Files.write(new File(dir, s"loose.$fileExtension").toPath, encodeFile(loose))
+        val schema = inferredSchema(Seq(dir.getCanonicalPath))
+        assert(schema.fieldNames.toSet == Set("id", "name", "extra"),
+          s"expected the union of the entry and loose fields, got $schema")
+        withTempDir { looseDir =>
+          Files.write(new File(looseDir, entryName(0)).toPath, encodeFile(inArchive))
+          Files.write(new File(looseDir, s"loose.$fileExtension").toPath, encodeFile(loose))
+          assert(schema == inferredSchema(Seq(looseDir.getCanonicalPath)),
+            s"differing-field inference diverged from a directory read; got $schema")
+        }
+      }
+    }
+  }
+
+  // ----- shared complex-type test (run when `supportsComplexTypes`) ----------
+
+  if (supportsComplexTypes) {
+    test("archive round-trips nested struct types like a directory") {
+      assertArchiveMatchesDir(
+        Seq(entryName(0) -> encodeFile(complexSampleDf)),
+        schema = complexReadSchema)
     }
   }
 }

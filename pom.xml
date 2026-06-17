@@ -222,7 +222,7 @@
      -->
     <datasketches.version>6.2.0</datasketches.version>
     <netty.version>4.2.15.Final</netty.version>
-    <netty-tcnative.version>2.0.77.Final</netty-tcnative.version>
+    <netty-tcnative.version>2.0.78.Final</netty-tcnative.version>
     <icu4j.version>78.3</icu4j.version>
     <junit.version>6.0.3</junit.version>
     <jline.version>2.14.6</jline.version>
@@ -348,7 +348,7 @@
     <mariadb.java.client.version>3.5.7</mariadb.java.client.version>
     <mysql.connector.version>9.6.0</mysql.connector.version>
     <postgresql.version>42.7.11</postgresql.version>
-    <db2.jcc.version>11.5.9.0</db2.jcc.version>
+    <db2.jcc.version>12.1.4.0</db2.jcc.version>
     <mssql.jdbc.version>13.2.1.jre11</mssql.jdbc.version>
     <ojdbc17.version>23.26.1.0.0</ojdbc17.version>
     <databricks.jdbc.version>3.3.1</databricks.jdbc.version>
@@ -1382,13 +1382,12 @@
         <version>${postgresql.version}</version>
         <scope>test</scope>
       </dependency>
-      <!-- TODO(SPARK-55707: Re-enable DB2 JDBC Driver tests) -->
-      <!--dependency>
+      <dependency>
         <groupId>com.ibm.db2</groupId>
         <artifactId>jcc</artifactId>
         <version>${db2.jcc.version}</version>
         <scope>test</scope>
-      </dependency-->
+      </dependency>
       <dependency>
         <groupId>com.microsoft.sqlserver</groupId>
         <artifactId>mssql-jdbc</artifactId>

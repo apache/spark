@@ -197,6 +197,7 @@ object TreePattern extends Enumeration  {
   val NAMED_STREAMING_RELATION: Value = Value
   val PLAN_WITH_UNRESOLVED_IDENTIFIER: Value = Value
   val UNRESOLVED_BIN_BY: Value = Value
+  val UNRESOLVED_DEDUPLICATE: Value = Value
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value

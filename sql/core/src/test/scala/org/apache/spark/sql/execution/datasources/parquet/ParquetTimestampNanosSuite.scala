@@ -37,7 +37,6 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
   private def withNanosEnabled(f: => Unit): Unit = {
     withSQLConf(
-      SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true",
       SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true")(f)
   }
 

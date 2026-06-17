@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuild
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.csv.CSVDataSource
 import org.apache.spark.sql.execution.datasources.v2.FileTable
-import org.apache.spark.sql.types.{AtomicType, DataType, GeographyType, GeometryType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, UserDefinedType}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, AtomicType, DataType, GeographyType, GeometryType, StructType, UserDefinedType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 case class CSVTable(
@@ -46,7 +46,11 @@ case class CSVTable(
       columnPruning = sparkSession.sessionState.conf.csvColumnPruning,
       sparkSession.sessionState.conf.sessionLocalTimeZone)
 
-    CSVDataSource(parsedOptions).inferSchema(sparkSession, files, parsedOptions)
+    // The DSv2 reader does not route archives to `readArchive` (it calls `readFile` directly), so
+    // archive scans aren't supported here; pass supportsArchiveScan = false so an archive input
+    // keeps failing with UNABLE_TO_INFER_SCHEMA rather than having its raw bytes parsed as CSV.
+    CSVDataSource(parsedOptions)
+      .inferSchema(sparkSession, files, parsedOptions, supportsArchiveScan = false)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -60,7 +64,7 @@ case class CSVTable(
     case _: GeometryType | _: GeographyType => false
 
     // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => false
+    case _: AnyTimestampNanoType => false
 
     case _: AtomicType => true
 

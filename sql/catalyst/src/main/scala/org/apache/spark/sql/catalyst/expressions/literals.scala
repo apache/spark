@@ -196,7 +196,7 @@ object Literal {
       !v.isInstanceOf[MapData] &&
       !v.isInstanceOf[InternalRow] &&
       dataType.existsRecursively { t =>
-        t.isInstanceOf[TimestampNTZNanosType] || t.isInstanceOf[TimestampLTZNanosType]
+        t.isInstanceOf[AnyTimestampNanoType]
       }
   }
 
@@ -475,6 +475,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case TimestampNTZType =>
           TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(value.asInstanceOf[Long])
+        case t: TimestampNTZNanosType =>
+          TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
+            .formatWithoutTimeZoneNanos(value.asInstanceOf[TimestampNanosVal], t.precision)
+        case t: TimestampLTZNanosType =>
+          TimestampFormatter.getFractionFormatter(timeZoneId)
+            .formatNanos(value.asInstanceOf[TimestampNanosVal], t.precision)
         case DayTimeIntervalType(startField, endField) =>
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType(startField, endField) =>
@@ -518,6 +524,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(toString)
       case (l: Long, TimestampType | _: TimeType) => JString(toString)
+      case (_: TimestampNanosVal, _: AnyTimestampNanoType) =>
+        JString(toString)
       case (other, _) => JString(other.toString)
     }
     ("value" -> jsonValue) :: ("dataType" -> dataType.jsonValue) :: Nil
@@ -569,6 +577,19 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     }
   }
 
+  private def padToNanosPrecision(ts: String, precision: Int): String = {
+    val dotIdx = ts.indexOf('.')
+    if (dotIdx < 0) {
+      ts + "." + "0" * precision
+    } else {
+      val fracLen = ts.length - dotIdx - 1
+      // fracLen can never exceed precision: formatNanos/formatWithoutTimeZoneNanos truncate
+      // the value to `precision` digits before formatting, and the fractionFormatter only
+      // strips trailing zeros (never adds digits); the else branch handles fracLen == precision.
+      if (fracLen < precision) ts + "0" * (precision - fracLen) else ts
+    }
+  }
+
   override def sql: String = (value, dataType) match {
     case (_, NullType | _: ArrayType | _: MapType | _: StructType) if value == null => "NULL"
     case _ if value == null => s"CAST(NULL AS ${dataType.sql})"
@@ -607,6 +628,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       s"TIMESTAMP '$toString'"
     case (v: Long, TimestampNTZType) =>
       s"TIMESTAMP_NTZ '$toString'"
+    // toString strips trailing zeros (display-only); pad back to exactly `precision` digits
+    // here so the SQL literal round-trips correctly through the parser.
+    case (_: TimestampNanosVal, t: TimestampNTZNanosType) =>
+      s"TIMESTAMP_NTZ '${padToNanosPrecision(toString, t.precision)}'"
+    case (_: TimestampNanosVal, t: TimestampLTZNanosType) =>
+      s"TIMESTAMP_LTZ '${padToNanosPrecision(toString, t.precision)}'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${HexFormat.of().withUpperCase().formatHex(v)}'"

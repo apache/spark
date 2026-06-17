@@ -367,7 +367,7 @@
   },
   "BIN_BY_DISTRIBUTE_TYPE_MISMATCH" : {
     "message" : [
-      "The DISTRIBUTE UNIFORM columns in BIN BY must be numeric or DAY-TIME INTERVAL. Column <columnName> has type <columnType>."
+      "The DISTRIBUTE UNIFORM columns in BIN BY must be FLOAT or DOUBLE. Column <columnName> has type <columnType>."
     ],
     "sqlState" : "42804"
   },
@@ -391,7 +391,7 @@
   },
   "BIN_BY_INVALID_RANGE" : {
     "message" : [
-      "The input row to BIN BY has range_start (<rangeStart>) greater than range_end (<rangeEnd>). BIN BY requires range_start <= range_end."
+      "The BIN BY range is invalid: the range start (<rangeStart>) must be less than or equal to the range end (<rangeEnd>)."
     ],
     "sqlState" : "22023"
   },
@@ -1453,11 +1453,6 @@
           "Unknown Analyze Method <other>!"
         ]
       },
-      "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES" : {
-        "message" : [
-          "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
-        ]
-      },
       "UNRESOLVED_NAMED_LAMBDA_VARIABLE_REQUIRES_NAME_PART" : {
         "message" : [
           "UnresolvedNamedLambdaVariable requires at least one name part!"
@@ -1864,6 +1859,11 @@
       "MAP_ZIP_WITH_DIFF_TYPES" : {
         "message" : [
           "Input to the <functionName> should have been two maps with compatible key types, but it's [<leftType>, <rightType>]."
+        ]
+      },
+      "METHOD_NOT_ALLOWED" : {
+        "message" : [
+          "the method <methodName> of the class <className> does not match the allow list <config>."
         ]
       },
       "NON_FOLDABLE_INPUT" : {
@@ -8094,7 +8094,7 @@
       },
       "BIN_BY" : {
         "message" : [
-          "Physical execution of BIN BY is not yet implemented."
+          "The BIN BY relation operator is not yet supported."
         ]
       },
       "CATALOG_INTERFACE_METHOD" : {
@@ -8384,6 +8384,11 @@
           "<variableName> is a VARIABLE and cannot be updated using the SET statement. Use SET VARIABLE <variableName> = ... instead."
         ]
       },
+      "SHOW_TABLE_EXTENDED_JSON_WITH_PARTITION" : {
+        "message" : [
+          "SHOW TABLE EXTENDED with PARTITION does not support AS JSON output."
+        ]
+      },
       "SQL_CURSOR" : {
         "message" : [
           "SQL cursor operations (DECLARE CURSOR, OPEN, FETCH, CLOSE) are not supported."
@@ -8452,11 +8457,6 @@
       "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
         "message" : [
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
-        ]
-      },
-      "TIMESTAMP_NANOS_TO_STRING" : {
-        "message" : [
-          "Converting values of the nanosecond timestamp type <dataType> to a string."
         ]
       },
       "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {

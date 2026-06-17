@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.expressions.Extract;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression;
 import org.apache.spark.sql.connector.expressions.GetArrayItem;
+import org.apache.spark.sql.connector.expressions.VariantGet;
 import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NullOrdering;
 import org.apache.spark.sql.connector.expressions.SortDirection;
@@ -54,11 +55,17 @@ import org.apache.spark.sql.types.DataType;
 public class V2ExpressionSQLBuilder {
 
   /**
-   * Escape the special chars for like pattern.
+   * Escape the LIKE pattern special chars, using {@code \} as the escape character. The LIKE
+   * patterns produced by {@link #visitStartsWith}, {@link #visitEndsWith} and
+   * {@link #visitContains} declare {@code ESCAPE '\'}, so the wildcards {@code _} and {@code %}
+   * and the escape character {@code \} itself must each be prefixed with {@code \} to be matched
+   * literally.
    *
    * Note: This method adopts the escape representation within Spark and is not bound to any JDBC
-   * dialect. JDBC dialect should overwrite this API if the underlying database have more special
-   * chars other than _ and %.
+   * dialect. A JDBC dialect should overwrite this API if the underlying database has more LIKE
+   * special chars than {@code _}, {@code %} and {@code \}. Escaping that is instead needed because
+   * the database treats a character specially inside a SQL <em>string literal</em> belongs in
+   * {@link #escapeStringLiteralForLikePattern}.
    */
   protected String escapeSpecialCharsForLikePattern(String str) {
     StringBuilder builder = new StringBuilder();
@@ -73,6 +80,22 @@ public class V2ExpressionSQLBuilder {
     }
 
     return builder.toString();
+  }
+
+  /**
+   * Escape the characters that the target database treats specially inside a SQL string literal,
+   * applied to a LIKE pattern (and its ESCAPE character) when embedding it into a {@code '...'}
+   * literal for predicate pushdown.
+   *
+   * The default returns the input unchanged: a standard SQL string literal is taken verbatim (the
+   * single-quote doubling is already applied when the literal is rendered), so the {@code \} that
+   * {@link #escapeSpecialCharsForLikePattern} uses as the LIKE escape character reaches the LIKE
+   * engine intact. A dialect whose string-literal syntax gives {@code \} a special meaning (e.g.
+   * MySQL, which treats {@code \} as an escape character inside string literals) must override this
+   * to double the backslash, so the LIKE pattern survives string-literal parsing unchanged.
+   */
+  protected String escapeStringLiteralForLikePattern(String str) {
+    return str;
   }
 
   public String build(Expression expr) {
@@ -91,21 +114,24 @@ public class V2ExpressionSQLBuilder {
         build(sortOrder.expression()), sortOrder.direction(), sortOrder.nullOrdering());
     } else if (expr instanceof GetArrayItem getArrayItem) {
       return visitGetArrayItem(getArrayItem);
+    } else if (expr instanceof VariantGet variantGet) {
+      return visitVariantGet(variantGet);
     } else if (expr instanceof GeneralScalarExpression e) {
       String name = e.name();
+      if (isBinaryComparisonOperator(name)) {
+        return visitBinaryComparison(name, e.children()[0], e.children()[1]);
+      }
       return switch (name) {
         case "IN" -> {
           Expression[] expressions = e.children();
           List<String> children = expressionsToStringList(expressions, 1, expressions.length - 1);
           yield visitIn(build(expressions[0]), children);
         }
-        case "IS_NULL" -> visitIsNull(build(e.children()[0]));
-        case "IS_NOT_NULL" -> visitIsNotNull(build(e.children()[0]));
+        case "IS_NULL" -> visitIsNull(visitIsNullOperand(e.children()[0]));
+        case "IS_NOT_NULL" -> visitIsNotNull(visitIsNullOperand(e.children()[0]));
         case "STARTS_WITH" -> visitStartsWith(build(e.children()[0]), build(e.children()[1]));
         case "ENDS_WITH" -> visitEndsWith(build(e.children()[0]), build(e.children()[1]));
         case "CONTAINS" -> visitContains(build(e.children()[0]), build(e.children()[1]));
-        case "=", "<>", "<=>", "<", "<=", ">", ">=" ->
-          visitBinaryComparison(name, e.children()[0], e.children()[1]);
         case "BOOLEAN_EXPRESSION" ->
           build(expr.children()[0]);
         case "+", "*", "/", "%", "&", "|", "^" ->
@@ -185,6 +211,24 @@ public class V2ExpressionSQLBuilder {
     return joinListToString(list, ", ", v + " IN (", ")");
   }
 
+  // The binary comparison operators, kept in one place so build, visitIsNullOperand and
+  // dialect overrides stay in sync.
+  protected boolean isBinaryComparisonOperator(String name) {
+    return switch (name) {
+      case "=", "<>", "<=>", "<", "<=", ">", ">=" -> true;
+      default -> false;
+    };
+  }
+
+  // Parenthesize a binary comparison operand so `col = 'x' IS NULL` renders as
+  // `(col = 'x') IS NULL`. Dialects such as Snowflake bind IS NULL tighter than =.
+  protected String visitIsNullOperand(Expression operand) {
+    if (operand instanceof GeneralScalarExpression e && isBinaryComparisonOperator(e.name())) {
+      return "(" + build(operand) + ")";
+    }
+    return build(operand);
+  }
+
   protected String visitIsNull(String v) {
     return v + " IS NULL";
   }
@@ -197,21 +241,33 @@ public class V2ExpressionSQLBuilder {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
+    return likeWithEscape(l, escapeSpecialCharsForLikePattern(value) + "%");
   }
 
   protected String visitEndsWith(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "' ESCAPE '\\'";
+    return likeWithEscape(l, "%" + escapeSpecialCharsForLikePattern(value));
   }
 
   protected String visitContains(String l, String r) {
     // Remove quotes at the beginning and end.
     // e.g. converts "'str'" to "str".
     String value = r.substring(1, r.length() - 1);
-    return l + " LIKE '%" + escapeSpecialCharsForLikePattern(value) + "%' ESCAPE '\\'";
+    return likeWithEscape(l, "%" + escapeSpecialCharsForLikePattern(value) + "%");
+  }
+
+  /**
+   * Build a {@code <left> LIKE '<pattern>' ESCAPE '\'} predicate. The pattern already has its LIKE
+   * special chars escaped (via {@link #escapeSpecialCharsForLikePattern}); both the pattern and
+   * the {@code \} escape character are then passed through
+   * {@link #escapeStringLiteralForLikePattern} so a dialect can add any string-literal escaping
+   * its SQL syntax requires.
+   */
+  private String likeWithEscape(String l, String pattern) {
+    return l + " LIKE '" + escapeStringLiteralForLikePattern(pattern)
+      + "' ESCAPE '" + escapeStringLiteralForLikePattern("\\") + "'";
   }
 
   protected String inputToSQL(Expression input) {
@@ -363,6 +419,13 @@ public class V2ExpressionSQLBuilder {
     throw new SparkUnsupportedOperationException(
       "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED",
       Map.of("expr", getArrayItem.toString())
+    );
+  }
+
+  protected String visitVariantGet(VariantGet variantGet) {
+    throw new SparkUnsupportedOperationException(
+      "EXPRESSION_TRANSLATION_TO_V2_IS_NOT_SUPPORTED",
+      Map.of("expr", variantGet.toString())
     );
   }
 

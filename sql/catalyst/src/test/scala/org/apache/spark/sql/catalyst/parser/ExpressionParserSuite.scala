@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
@@ -313,6 +313,36 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("cast(a as timestamp)", $"a".cast(TimestampType))
     assertEqual("cast(a as array<int>)", $"a".cast(ArrayType(IntegerType)))
     assertEqual("cast(cast(a as int) as long)", $"a".cast(IntegerType).cast(LongType))
+  }
+
+  test("SPARK-57164: CAST / TRY_CAST to nanos timestamp types") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            assertEqual(s"cast(a as $spelling)", $"a".cast(expected))
+            assertEqual(s"try_cast(a as $spelling)",
+              Cast($"a", expected, evalMode = EvalMode.TRY))
+        }
+      }
+    }
+    // With the preview flag off, a nanos data type in a cast target is rejected.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      Seq("cast(a as TIMESTAMP_NTZ(9))", "try_cast(a as TIMESTAMP_LTZ(7))").foreach { sql =>
+        checkError(
+          exception = intercept[SparkException](defaultParser.parseExpression(sql)),
+          condition = "FEATURE_NOT_ENABLED",
+          parameters = Map(
+            "featureName" -> "Nanosecond-precision timestamp types",
+            "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+            "configValue" -> "true"))
+      }
+    }
   }
 
   test("function expressions") {

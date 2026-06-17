@@ -48,7 +48,7 @@ import org.apache.spark.util.Utils
 /**
  * Common functions for parsing CSV files
  */
-abstract class CSVDataSource extends Serializable {
+abstract class CSVDataSource extends Serializable with Logging {
   def isSplitable: Boolean
 
   /**
@@ -67,16 +67,22 @@ abstract class CSVDataSource extends Serializable {
   final def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      parsedOptions: CSVOptions): Option[StructType] = {
+      parsedOptions: CSVOptions,
+      supportsArchiveScan: Boolean): Option[StructType] = {
     parsedOptions.singleVariantColumn match {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
-        if (parsedOptions.archiveFormatEnabled &&
-            inputPaths.exists(f => ArchiveReader.isArchivePath(f.getPath))) {
-          // Schema inference is not yet supported for tar archives. Returning None makes Spark
-          // raise its standard "Unable to infer schema ... It must be specified manually" error
-          // (UNABLE_TO_INFER_SCHEMA), so reading an archive requires an explicit `.schema(...)`.
-          // Inferring a schema by streaming archive entries is planned as a follow-up.
+        val hasArchive = parsedOptions.archiveFormatEnabled &&
+          inputPaths.exists(f => ArchiveReader.isArchivePath(f.getPath))
+        if (hasArchive && supportsArchiveScan) {
+          // Archives (and any loose files alongside them) are inferred in a single CSVInferSchema
+          // pass over all inputs -- archive entries are streamed, never unpacked -- so the result
+          // matches what the scan returns for the same files.
+          Some(inferWithArchives(sparkSession, inputPaths, parsedOptions))
+        } else if (hasArchive) {
+          // The caller's scan path cannot read archives (e.g. the DSv2 reader), so refuse to infer
+          // a schema when any input is an archive: returning None raises UNABLE_TO_INFER_SCHEMA,
+          // which fails loudly instead of letting the scan parse raw archive bytes as CSV.
           None
         } else if (inputPaths.nonEmpty) {
           Some(infer(sparkSession, inputPaths, parsedOptions))
@@ -90,6 +96,19 @@ abstract class CSVDataSource extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType
+
+  /**
+   * Tokenizes one input's bytes -- a whole loose file or a single decompressed archive entry --
+   * into CSV rows the same way this mode's scan reads it: line by line for
+   * [[TextInputCSVDataSource]] (so a quoted field with an embedded newline splits across rows
+   * exactly as the read does) and as one continuous stream for [[MultiLineCSVDataSource]]. This
+   * input's own first row (its header) is dropped when `dropHeader` is set. Used only by
+   * [[inferWithArchives]]; the stream is not closed here.
+   */
+  protected def tokenizeForInference(
+      in: InputStream,
+      dropHeader: Boolean,
+      options: CSVOptions): Iterator[Array[String]]
 
   /**
    * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the CSV parser without
@@ -130,6 +149,60 @@ abstract class CSVDataSource extends Serializable {
       parseEntry(parser, headerChecker, in)
     }
   }
+
+  /**
+   * Infers a CSV schema when at least one input is a tar archive. Every archive entry is streamed
+   * (never unpacked to disk) and every loose file is read, each tokenized the same way this mode's
+   * scan reads it (see [[tokenizeForInference]]), and all of them feed a single [[CSVInferSchema]]
+   * pass keyed on the first input's header. The column count is fixed by the first header and
+   * `NullType` columns survive to the final `toStructFields`, so the inferred schema matches what
+   * the scan returns for the same inputs. A corrupt/missing input is skipped as a unit (a whole
+   * archive or a whole file) when `ignoreCorruptFiles`/`ignoreMissingFiles` are set. Both the
+   * header and sampling passes honor those flags, so archive inference is strictly more forgiving
+   * here than [[MultiLineCSVDataSource.infer]], whose sampling pass has no such guard.
+   */
+  private def inferWithArchives(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      parsedOptions: CSVOptions): StructType = {
+    val baseRdd = CSVDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    def tokens(dropHeader: Boolean): RDD[Array[String]] = baseRdd.flatMap { stream =>
+      val path = new Path(stream.getPath())
+      try {
+        if (ArchiveReader.isArchivePath(path)) {
+          ArchiveReader(path).readEntries(stream.getConfiguration) { (_, in) =>
+            tokenizeForInference(in, dropHeader, parsedOptions)
+          }
+        } else {
+          tokenizeForInference(
+            CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
+            dropHeader, parsedOptions)
+        }
+      } catch {
+        case e: FileNotFoundException if parsedOptions.ignoreMissingFiles =>
+          logWarning(log"Skipped missing input: ${MDC(PATH, stream.getPath())}", e)
+          Iterator.empty
+        case e: FileNotFoundException => throw e
+        case e @ (_: RuntimeException | _: IOException) if parsedOptions.ignoreCorruptFiles =>
+          logWarning(log"Skipped the corrupted input: ${MDC(PATH, stream.getPath())}", e)
+          Iterator.empty
+        case NonFatal(e) =>
+          throw QueryExecutionErrors.cannotReadFilesError(
+            e, SparkPath.fromPathString(stream.getPath()).urlEncoded)
+      }
+    }
+    tokens(dropHeader = false).take(1).headOption match {
+      case Some(firstRow) =>
+        val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
+        val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
+        val sampled = CSVUtils.sample(tokens(dropHeader = parsedOptions.headerFlag), parsedOptions)
+        SQLExecution.withSQLConfPropagated(sparkSession) {
+          new CSVInferSchema(parsedOptions).infer(sampled, header)
+        }
+      case None =>
+        StructType(Nil)
+    }
+  }
 }
 
 object CSVDataSource extends Logging {
@@ -139,6 +212,33 @@ object CSVDataSource extends Logging {
     } else {
       TextInputCSVDataSource
     }
+  }
+
+  /**
+   * One `PortableDataStream` per input file (the whole file, never split), shared by the multiLine
+   * schema-inference path and the archive inference path.
+   */
+  private[csv] def createBaseRdd(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      options: CSVOptions): RDD[PortableDataStream] = {
+    val paths = inputPaths.map(_.getPath)
+    val name = paths.mkString(",")
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
+      options.parameters))
+    FileInputFormat.setInputPaths(job, paths: _*)
+    val conf = job.getConfiguration
+
+    val rdd = new BinaryFileRDD(
+      sparkSession.sparkContext,
+      classOf[StreamInputFormat],
+      classOf[String],
+      classOf[PortableDataStream],
+      conf,
+      sparkSession.sparkContext.defaultMinPartitions)
+
+    // Only returns `PortableDataStream`s without paths.
+    rdd.setName(s"CSVFile: $name").values
   }
 
   /**
@@ -221,6 +321,19 @@ object TextInputCSVDataSource extends CSVDataSource {
     }
   }
 
+  override protected def tokenizeForInference(
+      in: InputStream,
+      dropHeader: Boolean,
+      options: CSVOptions): Iterator[Array[String]] = {
+    // Match the line-based scan (`readArchive` -> `entryLines` -> `parseIterator`): split into
+    // lines, drop comments/blanks, drop this input's header line, then parse each line on its own,
+    // so a quoted field with an embedded newline splits across rows exactly as the read does.
+    val lines = CSVUtils.filterCommentAndEmpty(entryLines(in, options), options)
+    val rows = if (dropHeader && lines.hasNext) { lines.next(); lines } else lines
+    val parser = new CsvParser(options.asParserSettings)
+    rows.map(parser.parseLine)
+  }
+
   override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
@@ -249,7 +362,10 @@ object TextInputCSVDataSource extends CSVDataSource {
           val linesWithoutHeader =
             CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)
-          linesWithoutHeader.map(parser.parseLine)
+          // Route data rows through UnivocityParser.parseLine so a too-many-columns row surfaces as
+          // MALFORMED_CSV_RECORD, not a raw ArrayIndexOutOfBoundsException (SPARK-57195). The
+          // first-line parse above stays raw to keep SPARK-28431's bounded TextParsingException.
+          linesWithoutHeader.map(UnivocityParser.parseLine(parser, _))
         }
         SQLExecution.withSQLConfPropagated(csv.sparkSession) {
           new CSVInferSchema(parsedOptions).infer(tokenRDD, header)
@@ -286,7 +402,7 @@ object TextInputCSVDataSource extends CSVDataSource {
   }
 }
 
-object MultiLineCSVDataSource extends CSVDataSource with Logging {
+object MultiLineCSVDataSource extends CSVDataSource {
   override val isSplitable: Boolean = false
 
   override def readFile(
@@ -316,11 +432,19 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
       UnivocityParser.parseStream(in, parser, headerChecker, requiredSchema)
     }
 
+  override protected def tokenizeForInference(
+      in: InputStream,
+      dropHeader: Boolean,
+      options: CSVOptions): Iterator[Array[String]] =
+    // The whole input is one continuous stream, exactly as the multi-line scan reads it.
+    UnivocityParser.tokenizeStream(
+      in, dropHeader, new CsvParser(options.asParserSettings), options.charset)
+
   override def infer(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: CSVOptions): StructType = {
-    val csv = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    val csv = CSVDataSource.createBaseRdd(sparkSession, inputPaths, parsedOptions)
     val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
     val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
     csv.flatMap { lines =>
@@ -365,28 +489,5 @@ object MultiLineCSVDataSource extends CSVDataSource with Logging {
         // If the first row could not be read, just return the empty schema.
         StructType(Nil)
     }
-  }
-
-  private def createBaseRdd(
-      sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus],
-      options: CSVOptions): RDD[PortableDataStream] = {
-    val paths = inputPaths.map(_.getPath)
-    val name = paths.mkString(",")
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
-      options.parameters))
-    FileInputFormat.setInputPaths(job, paths: _*)
-    val conf = job.getConfiguration
-
-    val rdd = new BinaryFileRDD(
-      sparkSession.sparkContext,
-      classOf[StreamInputFormat],
-      classOf[String],
-      classOf[PortableDataStream],
-      conf,
-      sparkSession.sparkContext.defaultMinPartitions)
-
-    // Only returns `PortableDataStream`s without paths.
-    rdd.setName(s"CSVFile: $name").values
   }
 }
