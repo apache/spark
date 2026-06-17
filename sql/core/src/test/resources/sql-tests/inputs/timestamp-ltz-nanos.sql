@@ -160,3 +160,11 @@ SELECT array(DATE '2020-01-01') :: array<timestamp_ltz(9)>;
 SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: map<string, date>;
 SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ltz(9), string>;
 SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ltz(9)>;
+
+-- SPARK-57501: TIMESTAMP_LTZ(p) +/- ANSI day-time interval preserves nanos remainder.
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' +
+  INTERVAL '2 00:03:00.000456' DAY TO SECOND;
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' -
+  INTERVAL '1 00:04:00.000321' DAY TO SECOND;
+SELECT TIMESTAMP_LTZ '1960-01-02 03:04:05.123456789 UTC' +
+  INTERVAL '0 00:00:00.000001' DAY TO SECOND;

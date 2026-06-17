@@ -306,6 +306,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
+   * Adds a day-time interval to a nanosecond-precision timestamp value while preserving
+   * the `nanosWithinMicro` remainder.
+   */
+  def timestampNanosAddDayTime(
+      start: TimestampNanosVal,
+      dayTime: Long,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val epochMicros = timestampAddDayTime(start.epochMicros, dayTime, zoneId)
+    TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
+  }
+
+  /**
    * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
@@ -322,6 +334,20 @@ object DateTimeUtils extends SparkDateTimeUtils {
       .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
+  }
+
+  /**
+   * Adds a full interval to a nanosecond-precision timestamp value while preserving
+   * the `nanosWithinMicro` remainder.
+   */
+  def timestampNanosAddInterval(
+      start: TimestampNanosVal,
+      months: Int,
+      days: Int,
+      microseconds: Long,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val epochMicros = timestampAddInterval(start.epochMicros, months, days, microseconds, zoneId)
+    TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }
 
   /**

@@ -1896,6 +1896,66 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57501: add/subtract ANSI day-time interval on nanos timestamps") {
+    val interval = Duration.ofDays(2).plusMinutes(3).plus(456, ChronoUnit.MICROS)
+    val minusInterval = Duration.ofDays(-1).minusMinutes(4).minus(321, ChronoUnit.MICROS)
+
+    val ntzType = TimestampNTZNanosType(9)
+    val ntzStart = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-02T03:04:05.123456789"), precision = 9)
+    val ntzExpectedAdd = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-04T03:07:05.123912789"), precision = 9)
+    val ntzExpectedSub = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-01T03:00:05.123135789"), precision = 9)
+
+    checkEvaluation(
+      TimestampAddInterval(Literal.create(ntzStart, ntzType), Literal(interval), Some("UTC")),
+      ntzExpectedAdd)
+    checkEvaluation(
+      TimestampAddInterval(
+        Literal.create(ntzStart, ntzType),
+        UnaryMinus(Literal(interval)),
+        Some("UTC")),
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2019-12-31T03:01:05.123000789"), precision = 9))
+    checkEvaluation(
+      TimestampAddInterval(Literal.create(ntzStart, ntzType), Literal(minusInterval), Some("UTC")),
+      ntzExpectedSub)
+    assert(ntzExpectedAdd.nanosWithinMicro == ntzStart.nanosWithinMicro)
+    assert(ntzExpectedSub.nanosWithinMicro == ntzStart.nanosWithinMicro)
+
+    val ltzType = TimestampLTZNanosType(9)
+    val ltzStart = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-02T03:04:05.123456789Z"), precision = 9)
+    val ltzExpectedAdd = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-04T03:07:05.123912789Z"), precision = 9)
+    val ltzExpectedSub = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-01T03:00:05.123135789Z"), precision = 9)
+
+    checkEvaluation(
+      TimestampAddInterval(Literal.create(ltzStart, ltzType), Literal(interval), Some("UTC")),
+      ltzExpectedAdd)
+    checkEvaluation(
+      TimestampAddInterval(
+        Literal.create(ltzStart, ltzType),
+        UnaryMinus(Literal(interval)),
+        Some("UTC")),
+      DateTimeUtils.instantToTimestampNanos(
+        Instant.parse("2019-12-31T03:01:05.123000789Z"), precision = 9))
+    checkEvaluation(
+      TimestampAddInterval(Literal.create(ltzStart, ltzType), Literal(minusInterval), Some("UTC")),
+      ltzExpectedSub)
+    assert(ltzExpectedAdd.nanosWithinMicro == ltzStart.nanosWithinMicro)
+    assert(ltzExpectedSub.nanosWithinMicro == ltzStart.nanosWithinMicro)
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (ts: Expression, dt: Expression) => TimestampAddInterval(ts, dt, Some("UTC")),
+      ntzType, DayTimeIntervalType())
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (ts: Expression, dt: Expression) => TimestampAddInterval(ts, dt, Some("UTC")),
+      ltzType, DayTimeIntervalType())
+  }
+
   test("SPARK-37552: convert a timestamp_ntz to another time zone") {
     checkEvaluation(
       ConvertTimezone(

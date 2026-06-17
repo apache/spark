@@ -175,6 +175,20 @@ private[sql] object AnyTimestampNanoType extends AbstractDataType with Serializa
     "(timestamp_ltz(p) or timestamp_ntz(p) with p in [7, 9])"
 }
 
+/**
+ * Any timestamp type in Spark SQL: microsecond-precision or nanosecond-precision variants.
+ */
+private[sql] object AnyTimestampFamilyType extends AbstractDataType with Serializable {
+  override private[sql] def defaultConcreteType: DataType = TimestampType
+
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    AnyTimestampType.acceptsType(other) || AnyTimestampNanoType.acceptsType(other)
+
+  override private[sql] def simpleString =
+    "(timestamp or timestamp without time zone or " +
+      "timestamp_ltz(p)/timestamp_ntz(p) with p in [7, 9])"
+}
+
 private[sql] abstract class DatetimeType extends AtomicType
 
 /**

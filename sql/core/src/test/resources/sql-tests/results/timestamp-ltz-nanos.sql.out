@@ -649,3 +649,30 @@ SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ltz(9)>
 struct<named_struct(f, DATE '2020-01-01'):struct<f:timestamp_ltz(9)>>
 -- !query output
 {"f":2020-01-01 00:00:00}
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' +
+  INTERVAL '2 00:03:00.000456' DAY TO SECOND
+-- !query schema
+struct<TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND:timestamp_ltz(9)>
+-- !query output
+2020-01-03 19:07:05.123912789
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' -
+  INTERVAL '1 00:04:00.000321' DAY TO SECOND
+-- !query schema
+struct<TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND:timestamp_ltz(9)>
+-- !query output
+2019-12-31 19:00:05.123135789
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '1960-01-02 03:04:05.123456789 UTC' +
+  INTERVAL '0 00:00:00.000001' DAY TO SECOND
+-- !query schema
+struct<TIMESTAMP_LTZ '1960-01-01 19:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND:timestamp_ltz(9)>
+-- !query output
+1960-01-01 19:04:05.123457789

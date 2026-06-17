@@ -507,3 +507,24 @@ SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ntz(9), string>
 SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND
+-- !query analysis
+Project [cast(2020-01-02 03:04:05.123456789 + INTERVAL '2 00:03:00.000456' DAY TO SECOND as timestamp_ntz(9)) AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND
+-- !query analysis
+Project [cast(2020-01-02 03:04:05.123456789 - INTERVAL '1 00:04:00.000321' DAY TO SECOND as timestamp_ntz(9)) AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND
+-- !query analysis
+Project [cast(1960-01-02 03:04:05.123456789 + INTERVAL '0 00:00:00.000001' DAY TO SECOND as timestamp_ntz(9)) AS TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND#x]
++- OneRowRelation
