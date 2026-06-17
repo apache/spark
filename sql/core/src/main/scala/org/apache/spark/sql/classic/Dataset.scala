@@ -1192,8 +1192,9 @@ class Dataset[T] private[sql](
       case Distinct(u: Union) =>
         Distinct(flattenUnion(u, isUnionDistinct = true))
       // Only handle distinct-like 'Deduplicate', where the keys == output
-      case Deduplicate(keys: Seq[Attribute], u: Union) if AttributeSet(keys) == u.outputSet =>
-        Deduplicate(keys, flattenUnion(u, isUnionDistinct = true))
+      case d @ Deduplicate(keys: Seq[Attribute], u: Union, _)
+          if AttributeSet(keys) == u.outputSet =>
+        d.copy(child = flattenUnion(u, isUnionDistinct = true))
       case u: Union =>
         flattenUnion(u, isUnionDistinct = false)
     }
@@ -1209,7 +1210,7 @@ class Dataset[T] private[sql](
         changed = true
         children
       // Only handle distinct-like 'Deduplicate', where the keys == output
-      case Deduplicate(keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol))
+      case Deduplicate(keys: Seq[Attribute], child @ Union(children, byName, allowMissingCol), _)
           if AttributeSet(keys) == child.outputSet && isUnionDistinct && byName == u.byName &&
             allowMissingCol == u.allowMissingCol =>
         changed = true
@@ -1417,41 +1418,41 @@ class Dataset[T] private[sql](
   }
 
   /** @inheritdoc */
-  def dropDuplicates(): Dataset[T] = dropDuplicates(this.columns)
-
-  /** @inheritdoc */
-  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
-    val groupCols = groupColsFromDropDuplicates(colNames)
-    Deduplicate(groupCols, logicalPlan)
+  def dropDuplicates(): Dataset[T] = withSameTypedPlan {
+    UnresolvedDeduplicate(
+      keySpec = DeduplicateAllColumnsAsKey,
+      withinWatermark = false,
+      viaSparkClassic = true,
+      child = logicalPlan)
   }
 
   /** @inheritdoc */
-  def dropDuplicatesWithinWatermark(): Dataset[T] = {
-    dropDuplicatesWithinWatermark(this.columns)
+  def dropDuplicates(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
+    UnresolvedDeduplicate(
+      keySpec = DeduplicateKeyColumns(colNames),
+      withinWatermark = false,
+      viaSparkClassic = true,
+      child = logicalPlan)
+  }
+
+  /** @inheritdoc */
+  def dropDuplicatesWithinWatermark(): Dataset[T] = withSameTypedPlan {
+    // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
+    UnresolvedDeduplicate(
+      keySpec = DeduplicateAllColumnsAsKey,
+      withinWatermark = true,
+      viaSparkClassic = true,
+      child = logicalPlan)
   }
 
   /** @inheritdoc */
   def dropDuplicatesWithinWatermark(colNames: Seq[String]): Dataset[T] = withSameTypedPlan {
-    val groupCols = groupColsFromDropDuplicates(colNames)
     // UnsupportedOperationChecker will fail the query if this is called with batch Dataset.
-    DeduplicateWithinWatermark(groupCols, logicalPlan)
-  }
-
-  private def groupColsFromDropDuplicates(colNames: Seq[String]): Seq[Attribute] = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val allColumns = queryExecution.analyzed.output
-    // SPARK-31990: We must keep `toSet.toSeq` here because of the backward compatibility issue
-    // (the Streaming's state store depends on the `groupCols` order).
-    colNames.toSet.toSeq.flatMap { (colName: String) =>
-      // It is possibly there are more than one columns with the same name,
-      // so we call filter instead of find.
-      val cols = allColumns.filter(col => resolver(col.name, colName))
-      if (cols.isEmpty) {
-        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-          colName, schema.fieldNames.mkString(", "))
-      }
-      cols
-    }
+    UnresolvedDeduplicate(
+      keySpec = DeduplicateKeyColumns(colNames),
+      withinWatermark = true,
+      viaSparkClassic = true,
+      child = logicalPlan)
   }
 
   /** @inheritdoc */

@@ -1453,11 +1453,6 @@
           "Unknown Analyze Method <other>!"
         ]
       },
-      "UNRESOLVED_COLUMN_AMONG_FIELD_NAMES" : {
-        "message" : [
-          "Cannot resolve column name \"<colName>\" among (<fieldNames>)."
-        ]
-      },
       "UNRESOLVED_NAMED_LAMBDA_VARIABLE_REQUIRES_NAME_PART" : {
         "message" : [
           "UnresolvedNamedLambdaVariable requires at least one name part!"
