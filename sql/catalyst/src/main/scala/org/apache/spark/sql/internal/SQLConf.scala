@@ -2726,10 +2726,11 @@ object SQLConf {
     .createWithDefaultString("128MB") // parquet.block.size
 
   val ARCHIVE_FORMAT_READER_ENABLED = buildConf("spark.sql.files.archive.reader.enabled")
-    .doc("When true, the CSV data source can read tar archives (.tar, .tar.gz, .tgz): each " +
-      "archive is read as a single split and its entries are streamed through the CSV parser " +
-      "(never unpacked to disk), as if the entries were separate CSV files, both during scan " +
-      "and schema inference. Only the CSV data source supports reading archives.")
+    .doc("When true, a supported data source can read tar archives (.tar, .tar.gz, .tgz): " +
+      "each archive is read as a single split and its entries are streamed through that data " +
+      "source's parser (never unpacked to disk), as if the entries were separate files, both " +
+      "during scan and schema inference. The CSV, JSON, and text data sources support " +
+      "reading archives.")
     .version("5.0.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf

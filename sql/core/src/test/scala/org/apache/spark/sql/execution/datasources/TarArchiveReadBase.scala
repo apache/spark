@@ -17,46 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.io.{File, FileOutputStream, OutputStream}
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-import java.util.Locale
-import java.util.zip.GZIPOutputStream
-
-import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
-
 /**
  * Binds [[ArchiveReadSuiteBase]]'s archive-format hooks to tar containers: plain `.tar`, gzipped
- * `.tar.gz`, and `.tgz`. Reusable across file formats -- a `<format>TarArchiveReadSuite` mixes this
- * in alongside the file-format trait.
+ * `.tar.gz`, and `.tgz`. The container-writing helpers live in [[TarArchiveTestUtils]] (shared with
+ * standalone suites that cannot extend `ArchiveReadSuiteBase`). Reusable across file formats -- a
+ * `<format>TarArchiveReadSuite` mixes this in alongside the file-format trait.
  */
-trait TarArchiveReadBase extends ArchiveReadSuiteBase {
-
-  override protected def archiveExtensions: Seq[String] = Seq("tar", "tar.gz", "tgz")
+trait TarArchiveReadBase extends ArchiveReadSuiteBase with TarArchiveTestUtils {
 
   override protected def corruptArchiveExtension: String = "tar.gz"
-
-  override protected def writeArchive(dest: File, entries: Seq[(String, Array[Byte])]): Unit = {
-    val name = dest.getName.toLowerCase(Locale.ROOT)
-    val rawOut: OutputStream = if (name.endsWith(".gz") || name.endsWith(".tgz")) {
-      new GZIPOutputStream(new FileOutputStream(dest))
-    } else {
-      new FileOutputStream(dest)
-    }
-    val out = new TarArchiveOutputStream(rawOut)
-    try {
-      entries.foreach { case (entryName, bytes) =>
-        val entry = new TarArchiveEntry(entryName)
-        entry.setSize(bytes.length.toLong)
-        out.putArchiveEntry(entry)
-        out.write(bytes)
-        out.closeArchiveEntry()
-      }
-      out.finish()
-    } finally out.close()
-  }
-
-  override protected def writeCorruptArchive(dest: File): Unit =
-    Files.write(dest.toPath, "this is not a valid gzip-compressed tar archive"
-      .getBytes(StandardCharsets.UTF_8))
 }

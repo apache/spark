@@ -55,9 +55,6 @@ case class ParquetTable(
     case g: GeometryType => GeometryType.isSridSupported(g.srid)
     case g: GeographyType => GeographyType.isSridSupported(g.srid)
 
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
-
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportsDataType(f.dataType) }
