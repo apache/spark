@@ -127,7 +127,40 @@ object FlowAnalysis {
           resolved.mergeTagsFrom(u)
           resolved
       }
-    Dataset.ofRows(spark, resolvedPlan)
+    val result = Dataset.ofRows(spark, resolvedPlan)
+
+    // SPARK-57352: Detect inputs that were resolved directly by the user (e.g., via
+    // spark.table()) rather than through the pipeline's UnresolvedRelation path above.
+    // Scan the resolved plan for table relations that match known pipeline inputs and
+    // record them as external inputs so the DAG scheduler orders them correctly.
+    resolvedPlan.foreach {
+      case r: org.apache.spark.sql.catalyst.analysis.UnresolvedRelation =>
+        // Already handled above
+      case node =>
+        val tableIdOpt = node match {
+          case r: org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation =>
+            r.identifier.map(id => TableIdentifier(id.name(),
+              Option(id.namespace()).filter(_.nonEmpty).map(_.last)))
+          case r: org.apache.spark.sql.catalyst.catalog.HiveTableRelation =>
+            Some(r.tableMeta.identifier)
+          case r: org.apache.spark.sql.execution.datasources.LogicalRelation =>
+            r.catalogTable.map(_.identifier)
+          case _ => None
+        }
+        tableIdOpt.foreach { tableId =>
+          // Match by table name, allowing for different catalog/database qualifications
+          val matchesInput = context.allInputs.exists(input =>
+            input.table == tableId.table
+          )
+          if (matchesInput &&
+              !context.batchInputs.exists(_.input.identifier.table == tableId.table) &&
+              !context.streamingInputs.exists(_.input.identifier.table == tableId.table)) {
+            context.externalInputs += tableId
+          }
+        }
+    }
+
+    result
   }
 
   /**
