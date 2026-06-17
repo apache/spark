@@ -1829,14 +1829,8 @@ case class TimestampAddInterval(
       }
     case CalendarIntervalType =>
       val i = interval.asInstanceOf[CalendarInterval]
-      left.dataType match {
-        case _: AnyTimestampNanoType =>
-          timestampNanosAddInterval(
-            start.asInstanceOf[TimestampNanosVal], i.months, i.days, i.microseconds, zoneIdInEval)
-        case _ =>
-          timestampAddInterval(
-            start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneIdInEval)
-      }
+      timestampAddInterval(
+        start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1851,16 +1845,9 @@ case class TimestampAddInterval(
             defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
         }
       case CalendarIntervalType =>
-        left.dataType match {
-          case _: AnyTimestampNanoType =>
-            defineCodeGen(ctx, ev, (sd, i) => {
-              s"""$dtu.timestampNanosAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
-            })
-          case _ =>
-            defineCodeGen(ctx, ev, (sd, i) => {
-              s"""$dtu.timestampAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
-            })
-        }
+        defineCodeGen(ctx, ev, (sd, i) => {
+          s"""$dtu.timestampAddInterval($sd, $i.months, $i.days, $i.microseconds, $zid)"""
+        })
     }
   }
 
