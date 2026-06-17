@@ -75,7 +75,7 @@ class MasterWebUI(
           val hostnames: Seq[String] = Option(req.getParameterValues("host"))
             .getOrElse(Array[String]()).toImmutableArraySeq
           if (!isDecommissioningRequestAllowed(req)) {
-            resp.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED)
+            resp.sendError(HttpServletResponse.SC_FORBIDDEN)
           } else {
             val removedWorkers = masterEndpointRef.askSync[Integer](
               DecommissionWorkersOnHosts(hostnames))
