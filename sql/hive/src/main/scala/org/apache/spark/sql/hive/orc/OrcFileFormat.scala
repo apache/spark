@@ -30,7 +30,6 @@ import org.apache.hadoop.hive.ql.io.orc._
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.hive.serde2.objectinspector
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.TimestampObjectInspector
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
@@ -44,7 +43,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
@@ -378,36 +376,14 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
 
       val unwrappers = fieldRefs.zip(requiredSchema).map {
         case (null, _) => null
-        case (fieldRef, field) =>
-          fieldRef.getFieldObjectInspector match {
-            case oi: TimestampObjectInspector =>
-              field.dataType match {
-                case t: TimestampLTZNanosType =>
-                  (value: Any, row: InternalRow, ordinal: Int) =>
-                    row.update(
-                      ordinal,
-                      DateTimeUtils.instantToTimestampNanos(
-                        oi.getPrimitiveJavaObject(value).toInstant,
-                        t.precision))
-                case t: TimestampNTZNanosType =>
-                  (value: Any, row: InternalRow, ordinal: Int) =>
-                    row.update(
-                      ordinal,
-                      DateTimeUtils.localDateTimeToTimestampNanos(
-                        oi.getPrimitiveJavaObject(value).toLocalDateTime,
-                        t.precision))
-                case _ =>
-                  (value: Any, row: InternalRow, ordinal: Int) =>
-                    row.setLong(
-                      ordinal,
-                      DateTimeUtils.fromJavaTimestamp(oi.getPrimitiveJavaObject(value)))
-              }
-            case _ if field.dataType.existsRecursively(isNanosTimestamp) =>
-              val unwrapper = unwrapperFor(fieldRef.getFieldObjectInspector, field.dataType)
-              (value: Any, row: InternalRow, ordinal: Int) => row.update(ordinal, unwrapper(value))
-            case _ =>
-              unwrapperFor(fieldRef)
-          }
+        // Nanos timestamps (including those nested in struct/array/map) need the target Catalyst
+        // type to produce TimestampNanosVal; the data-type-aware unwrapper handles both the
+        // top-level and nested cases, while everything else keeps the primitive fast paths.
+        case (fieldRef, field) if field.dataType.existsRecursively(isNanosTimestamp) =>
+          val unwrapper = unwrapperFor(fieldRef.getFieldObjectInspector, field.dataType)
+          (value: Any, row: InternalRow, ordinal: Int) => row.update(ordinal, unwrapper(value))
+        case (fieldRef, _) =>
+          unwrapperFor(fieldRef)
       }
 
       iterator.map { value =>

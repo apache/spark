@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.nio.file.{Files, StandardOpenOption}
+import java.time.{LocalDateTime, ZoneOffset}
 
 import scala.collection.mutable
 
@@ -1406,8 +1407,16 @@ class FileBasedDataSourceSuite extends SharedSparkSession
             Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
               nanosType =>
                 withTempDir { dir =>
-                  val nanosLiteral = Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-                  val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
+                  // Build the row from an external java.time value; the column schema carries the
+                  // precision and truncates the sub-microsecond digits, matching the ORC suites.
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val value: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+                  }
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(Row(value))),
+                    new StructType().add("ts", nanosType))
                   val path = new File(dir, s"orc_nanos_${nanosType.typeName}").getCanonicalPath
                   df.write.format("orc").mode("overwrite").save(path)
                   val readBack = spark.read.schema(new StructType().add("ts", nanosType))

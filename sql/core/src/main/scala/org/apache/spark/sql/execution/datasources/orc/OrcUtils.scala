@@ -196,6 +196,23 @@ object OrcUtils extends Logging {
       requiredSchema: StructType,
       orcSchema: TypeDescription,
       conf: Configuration): Option[(Array[Int], Boolean)] = {
+    def isOrcTimestamp(dt: DataType): Boolean = dt match {
+      case TimestampType | TimestampNTZType | _: AnyTimestampNanoType => true
+      case _ => false
+    }
+
+    // The ORC reader does not coerce between timestamp families/precisions, except between
+    // nanos timestamps of the same kind (NTZ or LTZ), which share an ORC physical category and
+    // only differ by the precision applied on read. Any other mismatch (zone or micros<->nanos)
+    // would otherwise fail obscurely, so reject it with a clear error.
+    def timestampReadCompatible(orcType: DataType, dataType: DataType): Boolean =
+      (orcType, dataType) match {
+        case _ if orcType == dataType => true
+        case (_: TimestampNTZNanosType, _: TimestampNTZNanosType) => true
+        case (_: TimestampLTZNanosType, _: TimestampLTZNanosType) => true
+        case _ => false
+      }
+
     def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
       orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
         case (TimestampType, TimestampNTZType) =>
@@ -203,6 +220,10 @@ object OrcUtils extends Logging {
         case (TimestampNTZType, TimestampType) =>
           throw QueryExecutionErrors.cannotConvertOrcTimestampNTZToTimestampLTZError()
         case (t1: StructType, t2: StructType) => checkTimestampCompatibility(t1, t2)
+        case (orcType, dataType)
+            if isOrcTimestamp(orcType) && isOrcTimestamp(dataType) &&
+              !timestampReadCompatible(orcType, dataType) =>
+          throw QueryExecutionErrors.cannotCastOrcTimestampError(orcType, dataType)
         case _ =>
       }
     }
