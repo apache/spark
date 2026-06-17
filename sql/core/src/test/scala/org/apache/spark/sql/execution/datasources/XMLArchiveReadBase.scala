@@ -112,4 +112,24 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
       }
     }
   }
+
+  test("XML: single-line mode reads and infers an archive like a directory") {
+    // multiLine=false: each line is one record in both the scan and inference, matching a
+    // non-archive single-line read. (The default multiLine=true is covered by the tests above.)
+    val opts = Map("multiLine" -> "false")
+    val entries = Seq(
+      entryName(0) -> xmlBytes(
+        "<row><id>1</id><name>Alice</name></row>\n<row><id>2</id><name>Bob</name></row>\n"),
+      entryName(1) -> xmlBytes("<row><id>3</id><name>Carol</name></row>\n"))
+    assertArchiveMatchesDir(entries, extraOptions = opts)
+    withTempDir { dir =>
+      writeArchive(new File(dir, s"data.${archiveExtensions.head}"), entries)
+      val archiveSchema = inferredSchema(Seq(dir.getCanonicalPath), opts)
+      withTempDir { looseDir =>
+        entries.foreach { case (n, b) => Files.write(new File(looseDir, n).toPath, b) }
+        assert(archiveSchema == inferredSchema(Seq(looseDir.getCanonicalPath), opts),
+          s"single-line archive inference diverged from a directory read; got $archiveSchema")
+      }
+    }
+  }
 }
