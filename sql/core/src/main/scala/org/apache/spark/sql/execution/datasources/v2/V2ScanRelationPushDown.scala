@@ -36,9 +36,10 @@ import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, C
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.VariantExtractionImpl
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
 
@@ -415,6 +416,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
     // Build individual VariantExtraction for each field access
     // Track which extraction corresponds to which (attr, field, ordinal)
+    // Cast-error deferral attaches a synthetic companion field to every strict-cast extraction;
+    // record whether any are generated so we can require reader support below.
+    var hasCompanionExtraction = false
     val extractionInfo = schemaAttributes.flatMap { topAttr =>
       val variantFields = variants.mapping.get(topAttr.exprId)
       if (variantFields.isEmpty || variantFields.get.isEmpty) {
@@ -428,7 +432,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             Seq(topAttr.name) ++
               getColumnName(topAttr.dataType.asInstanceOf[StructType], pathToVariant)
           }
-          fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
+          // Keep data extractions in the same order as `VariantInRelation.rewriteType`, so
+          // companion fields can refer to their paired data field by name.
+          val sorted = fields.toArray.sortBy(_._2)
+          val dataExtractions = sorted.map { case (field, ordinal) =>
             val extraction = new VariantExtractionImpl(
               columnName.toArray,
               field.path.toMetadata,
@@ -436,12 +443,32 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             )
             (extraction, topAttr, field, ordinal)
           }
+          if (variants.deferCastErrorEnabled) {
+            val companionExtractions = sorted.collect {
+              case (field, ordinal) if variants.shouldWrapCastError(field) =>
+                val extraction = new VariantExtractionImpl(
+                  columnName.toArray,
+                  VariantMetadata.castErrorCompanionMetadata(ordinal.toString),
+                  StringType
+                )
+                (extraction, topAttr, field, ordinal)
+            }
+            if (companionExtractions.nonEmpty) hasCompanionExtraction = true
+            dataExtractions ++ companionExtractions
+          } else {
+            dataExtractions
+          }
         }
       }
     }
 
     // Call the API to push down variant extractions
     if (extractionInfo.isEmpty) return originalPlan
+
+    // Companion extractions can only be honored by readers that support cast-error deferral. If
+    // none were generated, the pushdown carries only non-strict accesses (`try_variant_get`, plain
+    // variant reads, casts to variant/string) that are safe regardless of deferral support.
+    if (hasCompanionExtraction && !builder.supportsDeferCastError()) return originalPlan
 
     val extractions: Array[VariantExtraction] = extractionInfo.map(_._1).toArray
     val pushedResults = builder.pushVariantExtractions(extractions)
