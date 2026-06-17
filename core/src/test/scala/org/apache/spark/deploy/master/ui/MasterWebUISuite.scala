@@ -24,6 +24,7 @@ import java.util.Date
 
 import scala.collection.mutable.HashMap
 
+import jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN
 import org.mockito.Mockito.{mock, times, verify, when}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -31,6 +32,7 @@ import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillD
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._
 import org.apache.spark.internal.config.DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.UI.MASTER_UI_DECOMMISSION_ALLOW_MODE
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 import org.apache.spark.util.Utils
 
@@ -105,6 +107,26 @@ class MasterWebUISuite extends SparkFunSuite {
 
   test("Kill multiple hosts") {
     testKillWorkers(Seq("noSuchHost", "LocalHost"))
+  }
+
+  test("SPARK-57509: /workers/kill responds with 403 Forbidden when the request is not allowed") {
+    val denyConf = new SparkConf()
+      .set(DECOMMISSION_ENABLED, true)
+      .set(MASTER_UI_DECOMMISSION_ALLOW_MODE.key, "DENY")
+    val denyMaster = mock(classOf[Master])
+    when(denyMaster.securityMgr).thenReturn(new SecurityManager(denyConf))
+    when(denyMaster.conf).thenReturn(denyConf)
+    when(denyMaster.rpcEnv).thenReturn(rpcEnv)
+    when(denyMaster.self).thenReturn(masterEndpointRef)
+    val denyWebUI = new MasterWebUI(denyMaster, 0)
+    try {
+      denyWebUI.bind()
+      val url = s"http://${Utils.localHostNameForURI()}:${denyWebUI.boundPort}/workers/kill/"
+      val body = convPostDataToString(Seq(("host", Utils.localHostNameForURI())))
+      assert(sendHttpRequest(url, "POST", body).getResponseCode === SC_FORBIDDEN)
+    } finally {
+      denyWebUI.stop()
+    }
   }
 }
 
