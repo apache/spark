@@ -1523,6 +1523,70 @@ struct<CAST(CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP) AS TIMESTAMP_LTZ(
 
 
 -- !query
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7))):string>
+-- !query output
+timestamp_ntz(7)
+
+
+-- !query
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8))
+-- !query schema
+struct<typeof(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(8))):string>
+-- !query output
+timestamp_ltz(8)
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)
+-- !query schema
+struct<CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7)):timestamp_ntz(7)>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8)
+-- !query schema
+struct<CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(8)):timestamp_ltz(8)>
+-- !query output
+2020-01-01 00:00:00.12345678
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)::timestamp_ntz(9)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7)) AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+select timestamp_ltz'1960-01-01 00:00:00.123456789'::timestamp_ltz(9)::timestamp_ltz(7)
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_LTZ '1960-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(9)) AS TIMESTAMP_LTZ(7)):timestamp_ltz(7)>
+-- !query output
+1960-01-01 00:00:00.1234567
+
+
+-- !query
+select cast(null as timestamp_ntz(9))::timestamp_ntz(7)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIMESTAMP_NTZ(7)):timestamp_ntz(7)>
+-- !query output
+NULL
+
+
+-- !query
+select cast(null as timestamp_ltz(8))::timestamp_ltz(9)
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_LTZ(8)) AS TIMESTAMP_LTZ(9)):timestamp_ltz(9)>
+-- !query output
+NULL
+
+
+-- !query
 select cast(cast('inf' as double) as timestamp)
 -- !query schema
 struct<>

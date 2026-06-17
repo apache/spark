@@ -150,6 +150,20 @@ select cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9))
 select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9)) as timestamp);
 select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9)) as timestamp);
 
+-- SPARK-57490: cast between nanosecond timestamp types of different precision.
+-- Keep SQL-layer coverage focused on parser / typed-literal / :: resolution paths.
+-- Value semantics (flooring, widening, pre-epoch behavior, null propagation) are covered in
+-- CastSuite* unit tests.
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7));
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8));
+-- Exercise both typed literals and nested/chained :: casts in SQL text parsing.
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7);
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8);
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)::timestamp_ntz(9);
+select timestamp_ltz'1960-01-01 00:00:00.123456789'::timestamp_ltz(9)::timestamp_ltz(7);
+select cast(null as timestamp_ntz(9))::timestamp_ntz(7);
+select cast(null as timestamp_ltz(8))::timestamp_ltz(9);
+
 select cast(cast('inf' as double) as timestamp);
 select cast(cast('inf' as float) as timestamp);
 

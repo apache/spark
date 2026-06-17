@@ -616,10 +616,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object StreamingDeduplicationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case Deduplicate(keys, child) if child.isStreaming =>
+      case Deduplicate(keys, child, _) if child.isStreaming =>
         StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
-      case DeduplicateWithinWatermark(keys, child) if child.isStreaming =>
+      case DeduplicateWithinWatermark(keys, child, _) if child.isStreaming =>
         StreamingDeduplicateWithinWatermarkExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
@@ -1038,7 +1038,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.ResolvedHint(child, hints) =>
         throw SparkException.internalError(
           "ResolvedHint operator should have been replaced by join hint in the optimizer")
-      case Deduplicate(_, child) if !child.isStreaming =>
+      case Deduplicate(_, child, _) if !child.isStreaming =>
         throw SparkException.internalError(
           "Deduplicate operator for non streaming data source should have been replaced " +
             "by aggregate in the optimizer")

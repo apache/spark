@@ -215,6 +215,22 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-57285: catalyst LTZ ops renders in the session-local time zone (not a fixed UTC)") {
+    // The server-side TimestampLTZNanosTypeOps defaults its render zone to the session-local time
+    // zone (passed by-name, forced lazily at first render). Use a non-UTC zone so a regression back
+    // to a fixed UTC zone would change the rendered wall clock and fail here.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      precisions.foreach { p =>
+        val ops = TimestampLTZNanosTypeOps(TimestampLTZNanosType(p))
+        val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
+        val frac = expectedFraction(p)
+        // 2020-01-01 00:00 UTC is 2019-12-31 16:00 in America/Los_Angeles (UTC-8 in January).
+        assert(ops.format(v) === s"2019-12-31 16:00:00.$frac", s"LTZ session-zone format for p=$p")
+        assert(ops.toSQLValue(v) === s"TIMESTAMP_LTZ '2019-12-31 16:00:00.$frac'")
+      }
+    }
+  }
+
   test("SPARK-57285: NTZ formatExternal renders LocalDateTime at the column precision") {
     precisions.foreach { p =>
       val ops = TypeApiOps(TimestampNTZNanosType(p)).get

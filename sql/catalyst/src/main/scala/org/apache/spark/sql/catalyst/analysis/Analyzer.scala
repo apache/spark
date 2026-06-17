@@ -564,6 +564,7 @@ class Analyzer(
       ResolveBinaryArithmetic ::
       new ResolveIdentifierClause(earlyBatches) ::
       ResolveUnion ::
+      ResolveDeduplicate ::
       ResolveZip ::
       FlattenSequentialStreamingUnion ::
       ValidateSequentialStreamingUnion ::

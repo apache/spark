@@ -1584,6 +1584,30 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>3.4.0</td>
 </tr>
 <tr>
+  <td><code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code></td>
+  <td><code>false</code></td>
+  <td>
+    Sets the <code>allowPrivilegeEscalation</code> field of the driver and executor containers' security context. When <code>false</code> (default), a container cannot gain more privileges than its parent process. Set to <code>true</code> to opt out of this restriction. Driver and executor can be configured individually via the container type-specific config below.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.securityContext.allowPrivilegeEscalation</code></td>
+  <td><code>(value of spark.kubernetes.securityContext.allowPrivilegeEscalation)</code></td>
+  <td>
+    Sets the <code>allowPrivilegeEscalation</code> field of the driver container's security context. Falls back to <code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code> if not set.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.securityContext.allowPrivilegeEscalation</code></td>
+  <td><code>(value of spark.kubernetes.securityContext.allowPrivilegeEscalation)</code></td>
+  <td>
+    Sets the <code>allowPrivilegeEscalation</code> field of the executor container's security context. Falls back to <code>spark.kubernetes.securityContext.allowPrivilegeEscalation</code> if not set.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.kubernetes.executor.useDriverPodIP</code></td>
   <td><code>true</code></td>
   <td>

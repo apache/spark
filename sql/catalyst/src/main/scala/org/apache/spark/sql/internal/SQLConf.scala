@@ -2726,10 +2726,11 @@ object SQLConf {
     .createWithDefaultString("128MB") // parquet.block.size
 
   val ARCHIVE_FORMAT_READER_ENABLED = buildConf("spark.sql.files.archive.reader.enabled")
-    .doc("When true, the CSV data source can read tar archives (.tar, .tar.gz, .tgz): each " +
-      "archive is read as a single split and its entries are streamed through the CSV parser " +
-      "(never unpacked to disk), as if the entries were separate CSV files, both during scan " +
-      "and schema inference. Only the CSV data source supports reading archives.")
+    .doc("When true, a supported data source can read tar archives (.tar, .tar.gz, .tgz): " +
+      "each archive is read as a single split and its entries are streamed through that data " +
+      "source's parser (never unpacked to disk), as if the entries were separate files, both " +
+      "during scan and schema inference. The CSV, JSON, and text data sources support " +
+      "reading archives.")
     .version("5.0.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
@@ -3482,6 +3483,21 @@ object SQLConf {
         "partitioning, and set to false for existing streaming queries to not break queries " +
         "which are restored from existing checkpoints. Please refer SPARK-38204 for details.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER =
+    buildConf("spark.sql.dropDuplicates.deterministicKeyOrder.enabled")
+      .internal()
+      .doc("When true, dropDuplicates and dropDuplicatesWithinWatermark resolve their key " +
+        "columns with a stable, first-occurrence ordering shared by Spark Classic and Spark " +
+        "Connect. The order does not affect batch results, but stateful streaming " +
+        "deduplication binds state-store keys by position, so for streaming the effective " +
+        "value is pinned per query in the offset log at batch 0: newly started queries use " +
+        "the stable order, while queries restored from a checkpoint that predates this config " +
+        "keep their original key order. Please refer to SPARK-57489 for details.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
