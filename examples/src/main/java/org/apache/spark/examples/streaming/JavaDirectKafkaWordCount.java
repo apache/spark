@@ -61,7 +61,7 @@ public final class JavaDirectKafkaWordCount {
       System.exit(1);
     }
 
-    StreamingExamples.setStreamingLogLevels();
+    //StreamingExamples.setStreamingLogLevels();
 
     String brokers = args[0];
     String groupId = args[1];

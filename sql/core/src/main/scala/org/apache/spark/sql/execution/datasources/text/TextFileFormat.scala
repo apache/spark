@@ -55,12 +55,79 @@ case class TextFileFormat() extends TextBasedFileFormat with DataSourceRegister 
     }
   }
 
-  override def isSplitable(
-      sparkSession: SparkSession,
-      options: Map[String, String],
-      path: Path): Boolean = {
+  override def isSplitable(sparkSession: SparkSession, options: Map[String, String], path: Path): Boolean = {
+    if (ArchiveOptions.isArchiveEnabled(sparkSession) && ArchiveOptions.isArchive(path)) {
+      false
+    } else {
+      super.isSplitable(sparkSession, options, path)
+    }
+  }
+
+  override def buildReaderWithPartitionValues(
+                                               sparkSession: SparkSession,
+                                               dataSchema: StructType,
+                                               partitionSchema: StructType,
+                                               requiredSchema: StructType,
+                                               filters: Seq[Filter],
+                                               options: Map[String, String],
+                                               hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+
     val textOptions = new TextOptions(options)
-    super.isSplitable(sparkSession, options, path) && !textOptions.wholeText
+    val isArchiveEnabled = ArchiveOptions.isArchiveEnabled(sparkSession)
+    val wholeText = textOptions.wholeTextFiles
+    val broadcastedHadoopConf = sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+
+    (file: PartitionedFile) => {
+      val conf = broadcastedHadoopConf.value.value
+      val path = file.toPath
+
+      // INTERCEPT ROUTE: Process files bundled in Tar/Tar.gz/Tgz archives
+      if (isArchiveEnabled && ArchiveOptions.isArchive(path)) {
+        val fs = path.getFileSystem(conf)
+        val inputStream = fs.open(path)
+        val archiveReader = new ArchiveReader(path, inputStream)
+
+        new Iterator[InternalRow] {
+          private var currentEntryIterator: Iterator[InternalRow] = Iterator.empty
+
+          override def hasNext: Boolean = {
+            // Keep pulling fresh file streams from the archive until one yields data or archive hits EOF
+            while (!currentEntryIterator.hasNext && archiveReader.hasNext) {
+              val entryStream: InputStream = archiveReader.next()
+
+              currentEntryIterator = if (wholeText) {
+                // CASE A: Read whole embedded document into one row
+                val content = IOUtils.toString(entryStream, textOptions.encoding)
+                Iterator.single(InternalRow(UTF8String.fromString(content)))
+              } else {
+                // CASE B: Standard line-by-line streaming behavior
+                val lineIterator = IOUtils.lineIterator(entryStream, textOptions.encoding)
+                new Iterator[InternalRow] {
+                  override def hasNext: Boolean = lineIterator.hasNext
+                  override def next(): InternalRow = InternalRow(UTF8String.fromString(lineIterator.next()))
+                }
+              }
+            }
+
+            // Clean up root input streams if the archive processing loop completes fully
+            if (!currentEntryIterator.hasNext) {
+              archiveReader.close()
+              inputStream.close()
+            }
+            currentEntryIterator.hasNext
+          }
+
+          override def next(): InternalRow = {
+            if (!hasNext) throw new NoSuchElementException("No more records in archive.")
+            currentEntryIterator.next()
+          }
+        }
+      } else {
+        // FALLBACK ROUTE: Standard native uncompressed text processing
+        val reader = MapReduceTextReader.buildReader(conf, file, textOptions)
+        reader.map(line => InternalRow(UTF8String.fromString(line.toString)))
+      }
+    }
   }
 
   override def inferSchema(

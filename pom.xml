@@ -487,6 +487,11 @@
         <version>1.2.0</version>
       </dependency>
       <dependency>
+        <groupId>org.apache.spark</groupId>
+        <artifactId>spark-streaming-kafka-0-10_2.13</artifactId>
+        <version>4.0.1</version>
+      </dependency>
+      <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>${chill.version}</version>
