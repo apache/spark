@@ -87,17 +87,14 @@ abstract class XmlDataSource extends Serializable with Logging {
     parsedOptions.singleVariantColumn match {
       case Some(columnName) => Some(StructType(Array(StructField(columnName, VariantType))))
       case None =>
-        // Tar archives are inferred by streaming their entries (never unpacked to disk) together
-        // with any loose files in a single inference pass, so the schema matches a directory read
-        // of the same files. XML has no DSv2 reader, so this archive scan is always V1.
-        val (archives, nonArchives) = if (parsedOptions.archiveFormatEnabled) {
-          inputPaths.partition(f => ArchiveReader.isArchivePath(f.getPath))
-        } else {
-          (Seq.empty[FileStatus], inputPaths)
-        }
-        if (archives.nonEmpty) {
-          Some(MultiLineXmlDataSource.inferWithArchives(
-            sparkSession, archives, nonArchives, parsedOptions))
+        // When any input is a tar archive, infer over all inputs in a single pass -- archive
+        // entries are streamed (never unpacked to disk) and tokenized as XML records alongside any
+        // loose files -- so the result matches a directory read of the same files. XML has no DSv2
+        // reader, so this archive scan is always V1.
+        val hasArchive = parsedOptions.archiveFormatEnabled &&
+          inputPaths.exists(f => ArchiveReader.isArchivePath(f.getPath))
+        if (hasArchive) {
+          Some(inferWithArchives(sparkSession, inputPaths, parsedOptions))
         } else if (inputPaths.nonEmpty) {
           Some(infer(sparkSession, inputPaths, parsedOptions))
         } else {
@@ -110,6 +107,78 @@ abstract class XmlDataSource extends Serializable with Logging {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: XmlOptions): StructType
+
+  /**
+   * Infers an XML schema when at least one input is a tar archive (`.tar`/`.tar.gz`/`.tgz`). Every
+   * archive entry (streamed through `ArchiveReader`, never unpacked to disk) and every loose file
+   * is tokenized into rowTag-delimited records (`StaxXmlParser.tokenizeStream`) and fed to a single
+   * [[XmlInferSchema]] pass, exactly as a directory of the same XML files would be. Mode-agnostic
+   * (tokenization is rowTag-delimited regardless of line layout), so it serves both data sources.
+   */
+  private def inferWithArchives(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      parsedOptions: XmlOptions): StructType = {
+    val baseRdd = createBaseRdd(sparkSession, inputPaths, parsedOptions)
+    val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
+    val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
+    // Each input is tokenized into its rowTag-delimited record strings: an archive entry by entry
+    // (streamed, so only one entry's bytes are in flight at a time), a loose file directly. Both
+    // flow through the same tokenizer, so the records match a directory read of the same files.
+    val tokenRDD: RDD[String] = baseRdd.flatMap { stream =>
+      val path = new Path(stream.getPath())
+      try {
+        if (ArchiveReader.isArchivePath(path)) {
+          ArchiveReader(path).readEntries(stream.getConfiguration) { (_, in) =>
+            StaxXmlParser.tokenizeStream(in, parsedOptions)
+          }
+        } else {
+          StaxXmlParser.tokenizeStream(
+            CodecStreams.createInputStreamWithCloseResource(stream.getConfiguration, path),
+            parsedOptions)
+        }
+      } catch {
+        case e: FileNotFoundException if ignoreMissingFiles =>
+          logWarning("Skipped missing file", e)
+          Iterator.empty[String]
+        case NonFatal(e) =>
+          Utils.getRootCause(e) match {
+            case root @ (_: AccessControlException | _: BlockMissingException) => throw root
+            case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
+              logWarning("Skipped the rest of the content in the corrupted file", e)
+              Iterator.empty[String]
+            case other => throw other
+          }
+      }
+    }
+    SQLExecution.withSQLConfPropagated(sparkSession) {
+      new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
+        .infer(tokenRDD)
+    }
+  }
+
+  protected def createBaseRdd(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus],
+      options: XmlOptions): RDD[PortableDataStream] = {
+    val paths = inputPaths.map(_.getPath)
+    val name = paths.mkString(",")
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
+      options.parameters))
+    FileInputFormat.setInputPaths(job, paths: _*)
+    val conf = job.getConfiguration
+
+    val rdd = new BinaryFileRDD(
+      sparkSession.sparkContext,
+      classOf[StreamInputFormat],
+      classOf[String],
+      classOf[PortableDataStream],
+      conf,
+      sparkSession.sparkContext.defaultMinPartitions)
+
+    // Only returns `PortableDataStream`s without paths.
+    rdd.setName(s"XMLFile: $name").values
+  }
 }
 
 object XmlDataSource extends Logging {
@@ -300,66 +369,6 @@ object MultiLineXmlDataSource extends XmlDataSource {
     }
   }
 
-  /**
-   * Infers an XML schema from tar archives (`.tar`/`.tar.gz`/`.tgz`) together with any loose files
-   * in a single [[XmlInferSchema]] pass, so the result matches a directory read of the same files.
-   * Each archive is streamed entry by entry (never unpacked to disk) and every entry -- like every
-   * loose file -- is tokenized into its `rowTag`-delimited records; the records from all inputs are
-   * inferred and merged as one set. Tokenizing is `rowTag`-based regardless of line layout, so this
-   * is mode-agnostic and serves both data sources.
-   */
-  def inferWithArchives(
-      sparkSession: SparkSession,
-      archives: Seq[FileStatus],
-      nonArchives: Seq[FileStatus],
-      parsedOptions: XmlOptions): StructType = {
-    val ignoreCorruptFiles = parsedOptions.ignoreCorruptFiles
-    val ignoreMissingFiles = parsedOptions.ignoreMissingFiles
-
-    // Maps the per-stream tokenizer over the inputs, applying the same corrupt/missing-file
-    // handling as the non-archive `infer` above. Each archive is streamed entry by entry, so only
-    // one entry's bytes are in flight at a time.
-    def tokenize(
-        streams: RDD[PortableDataStream],
-        perStream: PortableDataStream => Iterator[String]): RDD[String] = streams.flatMap { s =>
-      try {
-        perStream(s)
-      } catch {
-        case e: FileNotFoundException if ignoreMissingFiles =>
-          logWarning("Skipped missing file", e)
-          Iterator.empty[String]
-        case NonFatal(e) =>
-          Utils.getRootCause(e) match {
-            case root @ (_: AccessControlException | _: BlockMissingException) => throw root
-            case _: RuntimeException | _: IOException if ignoreCorruptFiles =>
-              logWarning("Skipped the rest of the content in the corrupted file", e)
-              Iterator.empty[String]
-            case other => throw other
-          }
-      }
-    }
-
-    val archiveTokens = tokenize(createBaseRdd(sparkSession, archives, parsedOptions), { s =>
-      ArchiveReader(new Path(s.getPath())).readEntries(s.getConfiguration) { (_, in) =>
-        StaxXmlParser.tokenizeStream(in, parsedOptions)
-      }
-    })
-    val tokenRDD = if (nonArchives.nonEmpty) {
-      archiveTokens ++ tokenize(createBaseRdd(sparkSession, nonArchives, parsedOptions), { s =>
-        StaxXmlParser.tokenizeStream(
-          CodecStreams.createInputStreamWithCloseResource(
-            s.getConfiguration, new Path(s.getPath())),
-          parsedOptions)
-      })
-    } else {
-      archiveTokens
-    }
-    SQLExecution.withSQLConfPropagated(sparkSession) {
-      new XmlInferSchema(parsedOptions, sparkSession.sessionState.conf.caseSensitiveAnalysis)
-        .infer(tokenRDD)
-    }
-  }
-
   private def inferOptimized(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
@@ -383,28 +392,5 @@ object MultiLineXmlDataSource extends XmlDataSource {
           .inferFromReaders(xmlParserRdd)
       schema
     }
-  }
-
-  private def createBaseRdd(
-      sparkSession: SparkSession,
-      inputPaths: Seq[FileStatus],
-      options: XmlOptions): RDD[PortableDataStream] = {
-    val paths = inputPaths.map(_.getPath)
-    val name = paths.mkString(",")
-    val job = Job.getInstance(sparkSession.sessionState.newHadoopConfWithOptions(
-      options.parameters))
-    FileInputFormat.setInputPaths(job, paths: _*)
-    val conf = job.getConfiguration
-
-    val rdd = new BinaryFileRDD(
-      sparkSession.sparkContext,
-      classOf[StreamInputFormat],
-      classOf[String],
-      classOf[PortableDataStream],
-      conf,
-      sparkSession.sparkContext.defaultMinPartitions)
-
-    // Only returns `PortableDataStream`s without paths.
-    rdd.setName(s"XMLFile: $name").values
   }
 }
