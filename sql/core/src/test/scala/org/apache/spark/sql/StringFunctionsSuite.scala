@@ -478,11 +478,19 @@ class StringFunctionsSuite extends SharedSparkSession {
       Row(2))
 
     checkAnswer(
+      df.selectExpr("instr(a, '', -1)"),
+      Row(1))
+
+    checkAnswer(
       df.selectExpr("instr(a, b, 1, 2)"),
       Row(2))
 
     checkAnswer(
       df.select(instr($"a", $"b", -1, 2)),
+      Row(1))
+
+    checkAnswer(
+      df.selectExpr("instr(a, '', -1, 2)"),
       Row(1))
 
     // Test return null when ANSI disabled and occurrence <= 0

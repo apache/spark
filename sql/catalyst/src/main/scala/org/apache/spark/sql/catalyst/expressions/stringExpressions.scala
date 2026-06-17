@@ -1682,9 +1682,9 @@ object StringInstrExpressionBuilder extends ExpressionBuilder {
     if (size == 2) {
       StringInstr(expressions.head, expressions(1))
     } else if (size == 3) {
-      StringInstr4(expressions.head, expressions(1), expressions(2), Literal(1))
+      StringInstrWithOccurrence(expressions.head, expressions(1), expressions(2), Literal(1))
     } else if (size == 4) {
-      StringInstr4(expressions.head, expressions(1), expressions(2), expressions(3))
+      StringInstrWithOccurrence(expressions.head, expressions(1), expressions(2), expressions(3))
     } else {
       throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(2, 3, 4), size)
     }
@@ -1742,23 +1742,13 @@ case class StringInstr(str: Expression, substr: Expression)
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
-case class StringInstr4(
+case class StringInstrWithOccurrence(
     str: Expression,
     sub: Expression,
     start: Expression,
     occurrence: Expression,
     failOnError: Boolean = SQLConf.get.ansiEnabled)
   extends QuaternaryExpression with ImplicitCastInputTypes {
-
-  def this(str: Expression, sub: Expression) =
-    this(str, sub, Literal(1), Literal(1), SQLConf.get.ansiEnabled)
-
-  def this(str: Expression, sub: Expression, start: Expression) =
-    this(str, sub, start, Literal(1), SQLConf.get.ansiEnabled)
-
-  def this(str: Expression, sub: Expression, start: Expression, occurrence: Expression) =
-    this(str, sub, start, occurrence, SQLConf.get.ansiEnabled)
-
   override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
@@ -1776,15 +1766,13 @@ case class StringInstr4(
       IntegerType
     )
 
-  override def contextIndependentFoldable: Boolean = super.contextIndependentFoldable
-
   override def nullSafeEval(string: Any, sub: Any, start: Any, occurrence: Any): Any = {
     val occ = occurrence.asInstanceOf[Int]
     if (occ <= 0) {
       if (failOnError) throw QueryExecutionErrors.invalidOccurrenceError(prettyName, occ)
       else return null
     }
-    CollationSupport.StringInstr4.exec(string.asInstanceOf[UTF8String],
+    CollationSupport.StringInstrWithOccurrence.exec(string.asInstanceOf[UTF8String],
       sub.asInstanceOf[UTF8String], start.asInstanceOf[Int], occ, collationId) + 1
   }
 
@@ -1792,7 +1780,7 @@ case class StringInstr4(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (string, substring, start, occurrence) => {
-      val eval = CollationSupport.StringInstr4
+      val eval = CollationSupport.StringInstrWithOccurrence
         .genCode(string, substring, start, occurrence, collationId) + " + 1"
       val errorOrNullCode = if (failOnError) {
         s"""throw QueryExecutionErrors.invalidOccurrenceError("$prettyName", $occurrence);"""
@@ -1811,7 +1799,7 @@ case class StringInstr4(
   }
 
   override protected def withNewChildrenInternal(first: Expression, second: Expression,
-      third: Expression, fourth: Expression): StringInstr4 =
+      third: Expression, fourth: Expression): StringInstrWithOccurrence =
     copy(str = first, sub = second, start = third, occurrence = fourth)
 }
 

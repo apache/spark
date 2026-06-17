@@ -685,7 +685,7 @@ public final class CollationSupport {
     }
   }
 
-  public static class StringInstr4 {
+  public static class StringInstrWithOccurrence {
     public static int exec(final UTF8String string, UTF8String substring,
         final int start, final int occurrence, final int collationId) {
       CollationFactory.Collation collation = CollationFactory.fetchCollation(collationId);
@@ -702,7 +702,7 @@ public final class CollationSupport {
     }
     public static String genCode(final String string, final String substring,
         final String start, final String occurrence, final int collationId) {
-      String expr = "CollationSupport.StringInstr4.exec";
+      String expr = "CollationSupport.StringInstrWithOccurrence.exec";
       if (collationId == CollationFactory.UTF8_BINARY_COLLATION_ID) {
         return String.format(expr + "Binary(%s, %s, %s, %s)", string, substring, start, occurrence);
       } else {
