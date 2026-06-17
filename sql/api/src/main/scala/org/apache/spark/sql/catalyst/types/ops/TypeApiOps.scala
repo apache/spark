@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types.ops
+package org.apache.spark.sql.catalyst.types.ops
 
 import org.apache.arrow.vector.types.pojo.ArrowType
 
