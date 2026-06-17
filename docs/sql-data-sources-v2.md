@@ -94,7 +94,8 @@ A catalog adds capabilities by mixing in additional
 | `TableCatalog` | List, load, create, alter, and drop tables |
 | `StagingTableCatalog` | Atomic create-table-as-select / replace-table-as-select |
 | `SupportsNamespaces` | Create, alter, drop, and list namespaces |
-| `ViewCatalog` | List, load, create, alter, and drop views *(work in progress &mdash; not yet integrated into query resolution)* |
+| `ViewCatalog` | List, load, create, replace, rename, and drop views |
+| `TableViewCatalog` | Expose both tables and views in a single shared namespace |
 | `FunctionCatalog` | List and load functions |
 | `ProcedureCatalog` | Load and list stored procedures |
 
@@ -141,21 +142,52 @@ adds namespace (database/schema) management:
 
 ### ViewCatalog
 
-> **Note:** `ViewCatalog` is a work in progress. The interface is defined but is not yet
-> integrated into Spark's query resolution or planning.
-
 [`ViewCatalog`](api/java/org/apache/spark/sql/connector/catalog/ViewCatalog.html) extends
-`CatalogPlugin` and provides methods for view lifecycle management:
+`CatalogPlugin` and provides methods for view lifecycle management. It is implemented by
+connectors that expose *only* views; connectors that expose both tables and views implement
+[`TableViewCatalog`](#tableviewcatalog) instead. View DDL (`CREATE`/`REPLACE`/`ALTER`/`DROP`/
+`SHOW VIEWS`) and reading from a view (`SELECT`) are resolved and executed against the catalog;
+the presence of `ViewCatalog` on the plugin is the signal that it supports views &mdash; there
+is no capability flag to declare.
+
+A view's metadata is carried by
+[`ViewInfo`](api/java/org/apache/spark/sql/connector/catalog/ViewInfo.html), which holds the
+view's SQL text, schema, and the catalog/namespace and SQL configs captured at creation time so
+the view can later be expanded consistently.
 
 | Method | Description |
 |--------|-------------|
 | `listViews(namespace)` | List views in a namespace |
-| `loadView(ident)` | Load a view by identifier |
-| `createView(viewInfo)` | Create a new view |
-| `replaceView(viewInfo, orCreate)` | Replace (or create) a view |
-| `alterView(ident, changes...)` | Alter a view's properties or schema |
+| `loadView(ident)` | Load a view's `ViewInfo` by identifier |
+| `viewExists(ident)` | Test whether a view exists (has a default implementation) |
+| `invalidateView(ident)` | Invalidate cached metadata for a view (has a default implementation) |
+| `createView(ident, info)` | Create a new view |
+| `replaceView(ident, info)` | Atomically replace an existing view (`ALTER VIEW ... AS`) |
+| `createOrReplaceView(ident, info)` | Create a view, or atomically replace it if it exists (`CREATE OR REPLACE VIEW`; has a default implementation) |
 | `dropView(ident)` | Drop a view |
 | `renameView(oldIdent, newIdent)` | Rename a view |
+
+### TableViewCatalog
+
+[`TableViewCatalog`](api/java/org/apache/spark/sql/connector/catalog/TableViewCatalog.html)
+extends both `TableCatalog` and `ViewCatalog` for connectors that expose **both** tables and
+views in a single shared identifier namespace. A connector that supports both must implement
+`TableViewCatalog`; implementing `TableCatalog` and `ViewCatalog` directly without it is rejected
+at catalog initialization.
+
+The inherited `TableCatalog` and `ViewCatalog` methods are orthogonal &mdash; each behaves as if
+the other kind did not exist &mdash; while tables and views share one keyspace, so the same
+identifier cannot resolve to both. On top of these, `TableViewCatalog` adds single-round-trip
+entry points:
+
+| Method | Description |
+|--------|-------------|
+| `loadTableOrView(ident)` | Load an identifier that may be a table or a view in one call; returns a `Table` for a table or a `MetadataTable` wrapping a `ViewInfo` for a view |
+| `listTableAndViewSummaries(namespace)` | List tables and views together as `TableSummary` entries with the kind preserved (has a default implementation) |
+
+> **Note:** The built-in session catalog (`V2SessionCatalog`) is not a `ViewCatalog`; views in
+> the session catalog continue to use the v1 (Hive-compatible) code path. DSV2 view support
+> applies to custom catalogs registered via `spark.sql.catalog.<name>`.
 
 ### FunctionCatalog
 
