@@ -1793,6 +1793,24 @@ case class TimestampAddInterval(
       TypeCollection(AnyTimestampType, AnyTimestampNanoType),
       TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
+  override def checkInputDataTypes(): TypeCheckResult = {
+    super.checkInputDataTypes() match {
+      case TypeCheckSuccess =>
+        (left.dataType, right.dataType) match {
+          case (_: AnyTimestampNanoType, CalendarIntervalType) =>
+            DataTypeMismatch(
+              errorSubClass = "UNEXPECTED_INPUT_TYPE",
+              messageParameters = Map(
+                "paramIndex" -> ordinalNumber(1),
+                "requiredType" -> toSQLType(DayTimeIntervalType()),
+                "inputSql" -> toSQLExpr(right),
+                "inputType" -> toSQLType(right.dataType)))
+          case _ => TypeCheckSuccess
+        }
+      case failure => failure
+    }
+  }
+
   override def dataType: DataType = start.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =

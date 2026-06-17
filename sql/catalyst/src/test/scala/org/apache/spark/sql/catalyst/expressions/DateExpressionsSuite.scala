@@ -1954,6 +1954,17 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(
       (ts: Expression, dt: Expression) => TimestampAddInterval(ts, dt, Some("UTC")),
       ltzType, DayTimeIntervalType())
+
+    val calendarInterval = Literal(new CalendarInterval(1, 2, 3L))
+    val ntzCalendar = TimestampAddInterval(
+      Literal.create(ntzStart, ntzType), calendarInterval, Some("UTC"))
+    val ntzMismatch = ntzCalendar.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(ntzMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+
+    val ltzCalendar = TimestampAddInterval(
+      Literal.create(ltzStart, ltzType), calendarInterval, Some("UTC"))
+    val ltzMismatch = ltzCalendar.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(ltzMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
   }
 
   test("SPARK-37552: convert a timestamp_ntz to another time zone") {
