@@ -102,6 +102,68 @@ select cast('a' as timestamp);
 select cast('2022-01-01 00:00:00' as timestamp_ntz);
 select cast('a' as timestamp_ntz);
 
+-- SPARK-57211: cast string to nanosecond-precision timestamps TIMESTAMP_NTZ(p)/TIMESTAMP_LTZ(p).
+-- Positive cases assert the result type via typeof. Negative cases exercise the ANSI parse-error
+-- path and use IS NULL so the result column stays non-nanos (a bare nanos result column is not yet
+-- serializable by JDBC/thrift).
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ntz(9)));
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ltz(7)));
+select cast('a' as timestamp_ntz(9)) is null;
+select cast('a' as timestamp_ltz(9)) is null;
+
+-- SPARK-57256: cast nanosecond-precision timestamps to string. The result column is STRING (the
+-- nanos type is only intermediate), so the value is produced by the Cast-to-string expression
+-- (ToStringBase). The nanos preview flag defaults to enabled under tests, and LTZ wall-clock inputs
+-- round-trip in any session time zone, so these cases stay zone-independent.
+-- TIMESTAMP_NTZ(p): precision-driven fraction width and trailing-zero trimming.
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as string);
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(8)) as string);
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(7)) as string);
+select cast(cast('2020-01-01 00:00:00.000000000' as timestamp_ntz(9)) as string);
+select cast(cast('2020-01-01 00:00:00.000000999' as timestamp_ntz(9)) as string);
+select cast(cast('2020-01-01 00:00:00.000000001' as timestamp_ntz(8)) as string);
+-- TIMESTAMP_LTZ(p): exercises the zone-aware path; a wall-clock input round-trips.
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9)) as string);
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(7)) as string);
+-- Pre-1970 (negative-epoch) values.
+select cast(cast('1960-01-01 00:00:00.000000001' as timestamp_ntz(9)) as string);
+select cast(cast('1960-01-01 00:00:00.123456789' as timestamp_ltz(7)) as string);
+-- Complex types cast to string (recursive element path, including a nested NULL).
+select cast(array(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string);
+select cast(map('k', cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9))) as string);
+select cast(named_struct('f', cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9))) as string);
+-- NULL and a real string context.
+select cast(cast(null as timestamp_ntz(9)) as string);
+select concat('ts=', cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as string));
+
+-- SPARK-57293: cast between nanosecond-precision timestamps and their microsecond counterparts.
+-- Both directions stay within one zone family (pure representation conversions, no timezone
+-- involvement); narrowing/round-trip yield micros.
+-- TIMESTAMP_NTZ <-> TIMESTAMP_NTZ(p): widening sets the sub-microsecond part to 0.
+select cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9));
+-- Narrowing TIMESTAMP_NTZ(p) -> TIMESTAMP_NTZ drops the sub-microsecond digits (floor).
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as timestamp_ntz);
+-- Round-trip micros -> nanos(p) -> micros returns the original microseconds.
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9)) as timestamp_ntz);
+-- TIMESTAMP_LTZ <-> TIMESTAMP_LTZ(p): same conversions on the epoch-micros instant.
+select cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9));
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9)) as timestamp);
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9)) as timestamp);
+
+-- SPARK-57490: cast between nanosecond timestamp types of different precision.
+-- Keep SQL-layer coverage focused on parser / typed-literal / :: resolution paths.
+-- Value semantics (flooring, widening, pre-epoch behavior, null propagation) are covered in
+-- CastSuite* unit tests.
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7));
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8));
+-- Exercise both typed literals and nested/chained :: casts in SQL text parsing.
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7);
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8);
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)::timestamp_ntz(9);
+select timestamp_ltz'1960-01-01 00:00:00.123456789'::timestamp_ltz(9)::timestamp_ltz(7);
+select cast(null as timestamp_ntz(9))::timestamp_ntz(7);
+select cast(null as timestamp_ltz(8))::timestamp_ltz(9);
+
 select cast(cast('inf' as double) as timestamp);
 select cast(cast('inf' as float) as timestamp);
 

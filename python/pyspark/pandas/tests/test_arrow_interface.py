@@ -21,7 +21,7 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark import pandas as ps
-from pyspark.testing.sqlutils import SQLTestUtils
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 import pandas as pd
 
@@ -60,7 +60,7 @@ class ArrowInterfaceTestsMixin:
         self.assertEqual(result, expected)
 
 
-class ArrowInterfaceTests(ArrowInterfaceTestsMixin, SQLTestUtils):
+class ArrowInterfaceTests(ArrowInterfaceTestsMixin, PandasOnSparkTestCase):
     pass
 
 

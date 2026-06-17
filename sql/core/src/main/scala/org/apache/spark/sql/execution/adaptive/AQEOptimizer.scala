@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.internal.LogKeys.{BATCH_NAME, RULE_NAME}
-import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
+import org.apache.spark.sql.catalyst.analysis.{UpdateAttributeNullability, WidenStatefulOperatorAttributeNullability}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, EliminateLimits, OptimizeOneRowPlan}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
@@ -44,7 +44,8 @@ class AQEOptimizer(conf: SQLConf, extendedRuntimeOptimizerRules: Seq[Rule[Logica
     Batch("Dynamic Join Selection", Once, DynamicJoinSelection),
     Batch("Eliminate Limits", fixedPoint, EliminateLimits),
     Batch("Optimize One Row Plan", fixedPoint, OptimizeOneRowPlan)) :+
-    Batch("User Provided Runtime Optimizers", fixedPoint, extendedRuntimeOptimizerRules: _*)
+    Batch("User Provided Runtime Optimizers", fixedPoint, extendedRuntimeOptimizerRules: _*) :+
+    Batch("Widen Stateful Op Nullability", Once, WidenStatefulOperatorAttributeNullability)
 
   final override protected def batches: Seq[Batch] = {
     val excludedRules = conf.getConf(SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES)

@@ -22,9 +22,10 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, GetArrayItem => V2GetArrayItem, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, GetArrayItem => V2GetArrayItem, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
@@ -332,6 +333,18 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
           Some(new V2GetArrayItem(v2ArrayChild, v2Ordinal, failOnError))
         case _ =>
           None
+      }
+    case v: VariantGet if v.path.foldable =>
+      (Option(v.path.eval()).map(_.toString), generateExpression(v.child)) match {
+        case (Some(path), Some(colRef: FieldReference)) =>
+          val vg = new V2VariantGet(colRef, path, v.targetType, v.failOnError,
+            v.timeZoneId.orNull)
+          if (isPredicate && v.dataType.isInstanceOf[BooleanType]) {
+            Some(new V2Predicate("BOOLEAN_EXPRESSION", Array[V2Expression](vg)))
+          } else {
+            Some(vg)
+          }
+        case _ => None
       }
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>

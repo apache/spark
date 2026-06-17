@@ -68,7 +68,7 @@ def checked_versions(
         fully-qualified versions of Spark, Hadoop and Hive in a tuple.
         For example, spark-3.2.0, hadoop3 and hive2.3.
     """
-    if re.match("^[0-9]+\\.[0-9]+\\.[0-9]+$", spark_version):
+    if re.match("^[0-9]+\\.[0-9]+\\.[0-9]+(?:\\.dev[0-9]+)?$", spark_version):
         spark_version = "spark-%s" % spark_version
     if not spark_version.startswith("spark-"):
         raise RuntimeError(
@@ -106,7 +106,9 @@ def convert_old_hadoop_version(spark_version: str, hadoop_version: str) -> str:
         "without": "without",
         "without-hadoop": "without-hadoop",
     }
-    spark_version_parts = re.search("^spark-([0-9]+)\\.([0-9]+)\\.[0-9]+$", spark_version)
+    spark_version_parts = re.search(
+        "^spark-([0-9]+)\\.([0-9]+)\\.[0-9]+(?:\\.dev[0-9]+)?$", spark_version
+    )
     assert spark_version_parts is not None
     spark_major_version = int(spark_version_parts.group(1))
     spark_minor_version = int(spark_version_parts.group(2))

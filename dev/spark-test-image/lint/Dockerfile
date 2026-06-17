@@ -29,6 +29,8 @@ ENV FULL_REFRESH_DATE=20260316
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
+RUN printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
@@ -47,6 +49,7 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libssl-dev \
     libtiff5-dev \
+    libuv1-dev \
     libwebp-dev \
     libxml2-dev \
     nodejs \
@@ -60,14 +63,15 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     wget \
     zlib1g-dev \
+    zstd \
     && apt-get autoremove --purge -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN Rscript -e "install.packages(c('devtools', 'knitr', 'markdown', 'rmarkdown', 'testthat', 'remotes'), repos='https://cloud.r-project.org/')" \
-    && Rscript -e "devtools::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" \
-    && Rscript -e "devtools::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" \
-    && Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
+RUN Rscript -e "install.packages(c('remotes', 'knitr', 'markdown', 'rmarkdown', 'testthat'), repos='https://cloud.r-project.org/')" \
+    && Rscript -e "remotes::install_version('pkgdown', version='2.0.1', repos='https://cloud.r-project.org')" \
+    && Rscript -e "remotes::install_version('preferably', version='0.4', repos='https://cloud.r-project.org')" \
+    && Rscript -e "remotes::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
 
 # See more in SPARK-39735
 ENV R_LIBS_SITE="/usr/local/lib/R/site-library:${R_LIBS_SITE}:/usr/lib/R/library"
@@ -92,8 +96,8 @@ RUN python3.12 -m pip install \
     'mypy==1.19.1' \
     'numpy==2.4.1' \
     'numpydoc' \
-    'pandas' \
-    'pandas-stubs' \
+    'pandas==2.3.3' \
+    'pandas-stubs==2.3.3.260113' \
     'plotly>=4.8' \
     'pyarrow>=23.0.0' \
     'pytest-mypy-plugins==1.9.3' \

@@ -53,8 +53,9 @@ import org.apache.spark.sql.types.{DataType, StructType, TimeType}
  * {{{
  *   ParquetTypeOps(dt).map(_.method(...)).getOrElse(methodDefault(dt, ...))
  * }}}
- * The original code is extracted to a *Default method unchanged. When the framework flag is ON,
- * the ops handles the type. When OFF, the *Default fallback executes the original code path.
+ * The original code is extracted to a *Default method unchanged. For a framework-managed type
+ * the ops handles it; for any other type ParquetTypeOps(dt) is None and the *Default fallback
+ * executes the original code path.
  *
  * STRUCT-BACKED TYPES: Types stored as Parquet groups should override the
  * extended newConverter overload (which provides schemaConverter/convertTz/rebase specs for
@@ -205,19 +206,18 @@ private[parquet] trait ParquetTypeOps extends Serializable {
  * Factory object for creating ParquetTypeOps instances.
  *
  * Provides forward lookup (DataType -> ops) for framework-first dispatch at Parquet
- * integration sites. Feature flag gating is inside apply() - callers don't check it
- * separately.
+ * integration sites. apply() returns Some only for framework-managed types, so callers
+ * fall back to the legacy path for everything else.
  */
 private[parquet] object ParquetTypeOps {
 
   /**
    * Returns a ParquetTypeOps instance for the given DataType, if supported.
    *
-   * Returns None if the type has no Parquet ops or the framework is disabled.
+   * Returns None if the type has no Parquet ops.
    * This is the single registration point for all Parquet type operations.
    */
   def apply(dt: DataType): Option[ParquetTypeOps] = {
-    if (!SQLConf.get.typesFrameworkEnabled) return None
     dt match {
       case tt: TimeType => Some(TimeTypeParquetOps(tt))
       // Add new types here - single registration point

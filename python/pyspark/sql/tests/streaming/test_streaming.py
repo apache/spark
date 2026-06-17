@@ -382,7 +382,7 @@ class StreamingTestsMixin:
         # SPARK-46873: There should not be a new StreamingQueryManager created every time
         # spark.streams is called.
         for i in range(5):
-            self.assertTrue(self.spark.streams == self.spark.streams)
+            self.assertEqual(self.spark.streams, self.spark.streams)
 
     def test_query_manager_get(self):
         df = self.spark.readStream.format("rate").load()
@@ -391,7 +391,7 @@ class StreamingTestsMixin:
         q = df.writeStream.format("noop").start()
 
         self.assertTrue(q.isActive)
-        self.assertTrue(q.id == self.spark.streams.get(q.id).id)
+        self.assertEqual(q.id, self.spark.streams.get(q.id).id)
 
         q.stop()
 
@@ -666,6 +666,26 @@ class StreamingTestsMixin:
         q1.stop()
         result = self.spark.sql("SELECT * FROM test_streaming_drop_duplicates_within_wm").collect()
         self.assertTrue(len(result) >= 6 and len(result) <= 9)
+
+    def test_stream_reader_option_none_chains_safely(self):
+        df = (
+            self.spark.readStream.format("rate")
+            .option("rowsPerSecond", None)
+            .options(numPartitions=None)
+            .option("rowsPerSecond", "5")
+            .load()
+        )
+        self.assertIsNotNone(df.schema)
+
+    def test_stream_writer_option_none_chains_safely(self):
+        df = self.spark.readStream.format("rate").option("rowsPerSecond", "5").load()
+        writer = (
+            df.writeStream.format("memory")
+            .queryName("opt_none_test")
+            .option("checkpointLocation", None)
+            .options(checkpointLocation=None)
+        )
+        self.assertIsNotNone(writer)
 
 
 class StreamingTests(StreamingTestsMixin, ReusedSQLTestCase):

@@ -21,10 +21,9 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.catalog.InMemoryRowLevelOperationTableCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveSourceRowLevelOperationSuite extends QueryTest with TestHiveSingleton
-  with BeforeAndAfter with SQLTestUtils {
+  with BeforeAndAfter {
 
   before {
     spark.conf.set("spark.sql.catalog.cat", classOf[InMemoryRowLevelOperationTableCatalog].getName)

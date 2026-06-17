@@ -33,18 +33,18 @@ import org.apache.orc.OrcProto.Stream.Kind
 import org.apache.orc.impl.RecordReaderImpl
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
-import org.apache.spark.sql.{Row, SPARK_VERSION_METADATA_KEY}
+import org.apache.spark.sql.{QueryTestBase, Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtilsBase}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
 abstract class OrcSuite
-  extends OrcTest with CommonFileDataSourceSuite with SQLTestUtilsBase {
+  extends OrcTest with CommonFileDataSourceSuite with QueryTestBase {
   import testImplicits._
 
   override protected def dataSourceFormat = "orc"

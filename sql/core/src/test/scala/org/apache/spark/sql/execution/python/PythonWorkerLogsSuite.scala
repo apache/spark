@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution.python
 import java.util.UUID
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.{PythonWorkerLogBlockId, PythonWorkerLogBlockIdGenerator, PythonWorkerLogLine}
 import org.apache.spark.util.LogUtils
 
-class PythonWorkerLogsSuite extends QueryTest with SharedSparkSession {
+class PythonWorkerLogsSuite extends SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf =

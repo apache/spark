@@ -19,24 +19,22 @@ package org.apache.spark.sql.catalyst.types.ops
 
 import javax.annotation.Nullable
 
+import org.apache.arrow.vector.ValueVector
+
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Literal, MutableValue}
+import org.apache.spark.sql.catalyst.WalkedTypePath
+import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableValue}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, TimeType}
+import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
+import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
  * Server-side (catalyst) type operations for the Types Framework.
  *
  * This trait consolidates all server-side operations that a data type must implement to function in
- * the Spark SQL engine. All methods are mandatory because without any of them the type would fail
- * at runtime - physical type mapping is needed for storage, literals for the optimizer, and
- * external type conversion for user-facing operations like collect() and UDFs.
- *
- * This single-interface design was chosen over separate PhyTypeOps/LiteralTypeOps/ExternalTypeOps
- * traits to make it clear what a new type must implement. There is one mandatory interface with
- * everything required. Optional capabilities (e.g., proto serialization, client integration) are
- * defined as separate traits that can be mixed in incrementally as a type's support expands.
+ * the Spark SQL engine. Mandatory methods (physical type, literals, external conversion) must be
+ * implemented by every type. Optional methods (serialization, Arrow writer) return Option and
+ * default to None - types implement them as they expand their integration coverage.
  *
  * USAGE - integration points use TypeOps(dt) which returns Option[TypeOps]:
  * {{{
@@ -82,6 +80,18 @@ trait TypeOps extends Serializable {
    *   Java class (e.g., classOf[Long] for TimeType)
    */
   def getJavaClass: Class[_]
+
+  /**
+   * Returns the boxed Java class used in code generation where a nullable, reference-typed value
+   * is required (e.g., array/map elements, external-value validation). Defaults to
+   * [[getJavaClass]], which is correct for object-backed types; primitive-backed types must
+   * override it to return the corresponding boxed class (e.g., classOf[java.lang.Long] for a
+   * Long-backed type).
+   *
+   * @return
+   *   boxed Java class
+   */
+  def getBoxedJavaClass: Class[_] = getJavaClass
 
   /**
    * Returns a MutableValue instance for use in SpecificInternalRow.
@@ -181,14 +191,35 @@ trait TypeOps extends Serializable {
   final def toScala(row: InternalRow, column: Int): Any = {
     if (row.isNullAt(column)) null else toScalaImpl(row, column)
   }
+
+  // ==================== Serialization (optional) ====================
+
+  /** Creates a serializer expression (external -> internal). */
+  def createSerializer(input: Expression): Option[Expression] = None
+
+  /**
+   * Creates a deserializer expression (internal -> external).
+   * Most types override this simple version.
+   */
+  def createDeserializer(path: Expression): Option[Expression] = None
+
+  /** Creates a deserializer with full context. Default delegates to the simple version. */
+  def createDeserializer(
+      path: Expression,
+      walkedTypePath: WalkedTypePath,
+      isTopLevel: Boolean): Option[Expression] = createDeserializer(path)
+
+  // ==================== Arrow Writer (optional) ====================
+
+  /** Creates an ArrowFieldWriter for this type. */
+  def createArrowFieldWriter(vector: ValueVector): Option[ArrowFieldWriter] = None
 }
 
 /**
  * Factory object for creating TypeOps instances.
  *
  * Returns Option to serve as both lookup and existence check - callers use getOrElse to fall
- * through to legacy handling. The feature flag check is inside apply(), so callers don't need to
- * check it separately.
+ * through to legacy handling for types the framework does not manage.
  *
  * Uses pattern matching (not Set enumeration) to support parameterized types like
  * TimeType(precision) or DecimalType(precision, scale).
@@ -198,20 +229,19 @@ object TypeOps {
   /**
    * Returns a TypeOps instance for the given DataType, if supported by the framework.
    *
-   * Returns None if the type is not supported or the framework is disabled. This is the single
-   * registration point for all server-side type operations.
+   * Returns None if the type is not supported. This is the single registration point for all
+   * server-side type operations.
    *
    * @param dt
    *   the DataType to get operations for
    * @return
    *   Some(TypeOps) if supported, None otherwise
    */
-  def apply(dt: DataType): Option[TypeOps] = {
-    if (!SQLConf.get.typesFrameworkEnabled) return None
-    dt match {
-      case tt: TimeType => Some(TimeTypeOps(tt))
-      // Add new types here - single registration point
-      case _ => None
-    }
+  def apply(dt: DataType): Option[TypeOps] = dt match {
+    case tt: TimeType => Some(TimeTypeOps(tt))
+    case t: TimestampNTZNanosType => Some(TimestampNTZNanosTypeOps(t))
+    case t: TimestampLTZNanosType => Some(TimestampLTZNanosTypeOps(t))
+    // Add new types here - single registration point
+    case _ => None
   }
 }

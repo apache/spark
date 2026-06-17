@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{DataFrame, QueryTest}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.plans.physical.{RangePartitioning, UnknownPartitioning}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
 import org.apache.spark.sql.execution.joins.ShuffledJoin
@@ -26,8 +26,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 
 abstract class RemoveRedundantSortsSuiteBase
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with AdaptiveSparkPlanHelper {
   import testImplicits._
 

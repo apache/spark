@@ -35,7 +35,7 @@ import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.deploy.master.RecoveryState
-import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
+import org.apache.spark.internal.config.{MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS, MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
 import org.apache.spark.rpc._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -545,6 +545,28 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
       val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
       assert(desc.command.arguments.slice(3, 5) === expectedArguments)
     }
+  }
+
+  test("SPARK-57453: Support allowedAppResourcePatterns") {
+    val conf = new SparkConf()
+      .set(MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS.key, "file:/opt/spark/jars/.*\\.jar")
+    val servlet = new StandaloneSubmitRequestServlet(null, null, conf)
+    val request = new CreateSubmissionRequest
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map.empty[String, String]
+    request.environmentVariables = Map.empty[String, String]
+
+    // An application resource matching the allowed pattern is accepted.
+    request.appResource = "file:/opt/spark/jars/app.jar"
+    servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+
+    // An application resource not matching the allowed pattern is rejected.
+    request.appResource = "file:/tmp/evil.jar"
+    val e = intercept[SubmitRestMissingFieldException] {
+      servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    }
+    assert(e.getMessage === "Valid application jar path is required")
   }
 
   test("SPARK-50381: Support spark.master.rest.maxThreads") {

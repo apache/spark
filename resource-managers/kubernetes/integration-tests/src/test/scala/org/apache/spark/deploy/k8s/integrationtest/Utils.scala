@@ -20,14 +20,13 @@ import java.io.{Closeable, File, FileInputStream, FileOutputStream, PrintWriter}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, Path}
 import java.util.concurrent.CountDownLatch
-import java.util.zip.{ZipEntry, ZipOutputStream}
+import java.util.zip.{GZIPOutputStream, ZipEntry, ZipOutputStream}
 
 import scala.jdk.CollectionConverters._
 
 import io.fabric8.kubernetes.client.dsl.ExecListener
 import io.fabric8.kubernetes.client.dsl.ExecListener.Response
 import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
-import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 import org.apache.commons.io.output.ByteArrayOutputStream
 
 import org.apache.spark.{SPARK_VERSION, SparkException}
@@ -158,7 +157,7 @@ object Utils extends Logging {
     ) { fis =>
       Utils.tryWithResource(
         new TarArchiveOutputStream(
-          new GzipCompressorOutputStream(
+          new GZIPOutputStream(
             new FileOutputStream(oFile)))
       ) { tOut =>
         val tarEntry = new TarArchiveEntry(fileToTarGz, fileToTarGz.getName)

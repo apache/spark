@@ -176,6 +176,7 @@ class StreamingQueryManager private[sql] (
   // scalastyle:off argcount
   private def createQuery(
       userSpecifiedName: Option[String],
+      userSpecifiedSinkName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
       df: Dataset[_],
       extraOptions: Map[String, String],
@@ -207,6 +208,7 @@ class StreamingQueryManager private[sql] (
 
     val dataStreamWritePlan = WriteToStreamStatement(
       userSpecifiedName,
+      userSpecifiedSinkName,
       userSpecifiedCheckpointLocation,
       useTempCheckpointLocation,
       recoverFromCheckpointLocation,
@@ -277,6 +279,7 @@ class StreamingQueryManager private[sql] (
   @throws[TimeoutException]
   private[sql] def startQuery(
       userSpecifiedName: Option[String],
+      userSpecifiedSinkName: Option[String] = None,
       userSpecifiedCheckpointLocation: Option[String],
       df: Dataset[_],
       extraOptions: Map[String, String],
@@ -290,6 +293,7 @@ class StreamingQueryManager private[sql] (
       catalogTable: Option[CatalogTable] = None): StreamingQuery = {
     val query = createQuery(
       userSpecifiedName,
+      userSpecifiedSinkName,
       userSpecifiedCheckpointLocation,
       df,
       extraOptions,

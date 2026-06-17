@@ -17,6 +17,8 @@
 
 package org.apache.spark.unsafe
 
+import java.nio.ByteBuffer
+
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 
 /**
@@ -55,6 +57,7 @@ object PlatformBenchmark extends BenchmarkBase {
     runFloatAccess(count8m, iterations)
     runDoubleAccess(count8m, iterations)
     runBooleanAccess(count8m, iterations)
+    runDirectBufferAddressAccess(count8m, iterations)
 
     val counts = Seq((count4k, str4k), (count16k, str16k), (count256k, str256k),
       (count1m, str1m), (count8m, str8m), (count32m, str32m))
@@ -438,6 +441,52 @@ object PlatformBenchmark extends BenchmarkBase {
       }
     } finally {
       Platform.freeMemory(address)
+    }
+  }
+
+  private def runDirectBufferAddressAccess(count: Long, iterations: Long): Unit = {
+    val addresses = new Array[Long](count.toInt)
+    var j = 0
+    while (j < count) {
+      addresses(j) = Platform.allocateMemory(8)
+      j += 1
+    }
+    val buffers = new Array[ByteBuffer](count.toInt)
+    j = 0
+    while (j < count) {
+      buffers(j) = ByteBuffer.allocateDirect(1)
+      j += 1
+    }
+    val mask = count - 1
+    try {
+      runBenchmark("Platform DirectBuffer Address Access") {
+        val benchmark = new Benchmark("DirectBuffer Address Access", iterations, output = output)
+
+        benchmark.addCase("getLong (baseline)") { _ =>
+          var i = 0L
+          var sum = 0L
+          while (i < iterations) {
+            sum += Platform.getLong(null, addresses((i & mask).toInt))
+            i += 1
+          }
+        }
+
+        benchmark.addCase("getDirectBufferAddress") { _ =>
+          var i = 0L
+          var sum = 0L
+          while (i < iterations) {
+            sum += Platform.getDirectBufferAddress(buffers((i & mask).toInt))
+            i += 1
+          }
+        }
+        benchmark.run()
+      }
+    } finally {
+      j = 0
+      while (j < count) {
+        Platform.freeMemory(addresses(j))
+        j += 1
+      }
     }
   }
 

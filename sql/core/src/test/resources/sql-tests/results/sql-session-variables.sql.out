@@ -562,6 +562,60 @@ struct<scalarsubquery(title):bigint>
 
 
 -- !query
+SET VARIABLE title = 'Dropped struct variable -- field access vs qualified name'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE OR REPLACE VARIABLE session STRUCT<a INT> = NAMED_STRUCT('a', 1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT session.a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+DROP TEMPORARY VARIABLE session
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT session.a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`session`.`a`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "session.a"
+  } ]
+}
+
+
+-- !query
 SET VARIABLE title = 'Test qualifiers - fail'
 -- !query schema
 struct<>
@@ -579,9 +633,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`system`.`session`",
+    "searchPath" : "[`system`.`session`]",
     "variableName" : "`builtin`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 40,
+    "fragment" : "builtin.var1"
+  } ]
 }
 
 
@@ -595,9 +656,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`system`.`session`",
+    "searchPath" : "[`system`.`session`]",
     "variableName" : "`system`.`sesion`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 46,
+    "fragment" : "system.sesion.var1"
+  } ]
 }
 
 
@@ -611,9 +679,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`system`.`session`",
+    "searchPath" : "[`system`.`session`]",
     "variableName" : "`sys`.`session`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 44,
+    "fragment" : "sys.session.var1"
+  } ]
 }
 
 
@@ -723,9 +798,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]",
     "variableName" : "`ses`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 21,
+    "fragment" : "ses.var1"
+  } ]
 }
 
 
@@ -739,9 +821,16 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNRESOLVED_VARIABLE",
   "sqlState" : "42883",
   "messageParameters" : {
-    "searchPath" : "`SYSTEM`.`SESSION`",
+    "searchPath" : "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]",
     "variableName" : "`builtn`.`session`.`var1`"
-  }
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 14,
+    "stopIndex" : 32,
+    "fragment" : "builtn.session.var1"
+  } ]
 }
 
 

@@ -25,7 +25,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class StringFunctionsSuite extends QueryTest with SharedSparkSession {
+class StringFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("string concat") {
@@ -145,6 +145,19 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(df.selectExpr("levenshtein(l, null, 0)"), Seq(Row(null), Row(null)))
   }
 
+  test("string jaro_winkler_similarity") {
+    val df = Seq(("MARTHA", "MARHTA"), ("ABC", "XYZ")).toDF("l", "r")
+    checkAnswer(
+      df.select(jaro_winkler_similarity($"l", $"r")),
+      Seq(Row(0.9611111111111111), Row(0.0)))
+    checkAnswer(
+      df.selectExpr("jaro_winkler_similarity(l, r)"),
+      Seq(Row(0.9611111111111111), Row(0.0)))
+    checkAnswer(
+      df.select(jaro_winkler_similarity($"l", lit(null))),
+      Seq(Row(null), Row(null)))
+  }
+
   test("string rlike / regexp / regexp_like") {
     val df = Seq(
       ("1a 2b 14m", "\\d+b"),
@@ -188,9 +201,12 @@ class StringFunctionsSuite extends QueryTest with SharedSparkSession {
       df.select(
         regexp_replace($"a", "(\\d+)", "num"),
         regexp_replace($"a", $"b", $"c"),
+        regexp_replace($"a", "(\\d+)", "num", 5),
+        regexp_replace($"a", $"b", $"c", lit(5)),
         regexp_extract($"a", "(\\d+)-(\\d+)", 1)),
-      Row("num-num", "300", "100") :: Row("num-num", "400", "100") ::
-        Row("num-num", "400-400", "100") :: Nil)
+      Row("num-num", "300", "100-num", "100-200", "100") ::
+        Row("num-num", "400", "100-num", "100-200", "100") ::
+        Row("num-num", "400-400", "100-num", "100-400", "100") :: Nil)
 
     // for testing the mutable state of the expression in code gen.
     // This is a hack way to enable the codegen, thus the codegen is enable by default,

@@ -34,7 +34,8 @@ object VariantExpressionEvalUtils {
   def parseJson(
       input: UTF8String,
       allowDuplicateKeys: Boolean = false,
-      failOnError: Boolean = true): VariantVal = {
+      failOnError: Boolean = true,
+      validateUnicodeInJsonParsing: Boolean = true): VariantVal = {
     def parseJsonFailure(exception: Throwable): VariantVal = {
       if (failOnError) {
         throw exception
@@ -43,7 +44,8 @@ object VariantExpressionEvalUtils {
       }
     }
     try {
-      val v = VariantBuilder.parseJson(input.toString, allowDuplicateKeys)
+      val v = VariantBuilder.parseJson(
+        input.toString, allowDuplicateKeys, validateUnicodeInJsonParsing)
       new VariantVal(v.getValue, v.getMetadata)
     } catch {
       case _: VariantSizeLimitException =>
@@ -69,6 +71,9 @@ object VariantExpressionEvalUtils {
       }
     }
   }
+
+  def isValidVariant(input: VariantVal): Boolean =
+    VariantUtil.isValidVariant(input.getValue, input.getMetadata)
 
   /** Cast a Spark value from `dataType` into the variant type. */
   def castToVariant(input: Any, dataType: DataType): VariantVal = {

@@ -642,6 +642,237 @@ Project [cast(a as timestamp_ntz) AS CAST(a AS TIMESTAMP_NTZ)#x]
 
 
 -- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ntz(9)))
+-- !query analysis
+Project [typeof(cast(2022-01-01 00:00:00.123456789 as timestamp_ntz(9))) AS typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+select typeof(cast('2022-01-01 00:00:00.123456789' as timestamp_ltz(7)))
+-- !query analysis
+Project [typeof(cast(2022-01-01 00:00:00.123456789 as timestamp_ltz(7))) AS typeof(CAST(2022-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+select cast('a' as timestamp_ntz(9)) is null
+-- !query analysis
+Project [isnull(cast(a as timestamp_ntz(9))) AS (CAST(a AS TIMESTAMP_NTZ(9)) IS NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select cast('a' as timestamp_ltz(9)) is null
+-- !query analysis
+Project [isnull(cast(a as timestamp_ltz(9))) AS (CAST(a AS TIMESTAMP_LTZ(9)) IS NULL)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as string)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)) as string) AS CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(8)) as string)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(8)) as string) AS CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(8)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(7)) as string)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(7)) as string) AS CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(7)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.000000000' as timestamp_ntz(9)) as string)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.000000000 as timestamp_ntz(9)) as string) AS CAST(CAST(2020-01-01 00:00:00.000000000 AS TIMESTAMP_NTZ(9)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.000000999' as timestamp_ntz(9)) as string)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.000000999 as timestamp_ntz(9)) as string) AS CAST(CAST(2020-01-01 00:00:00.000000999 AS TIMESTAMP_NTZ(9)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.000000001' as timestamp_ntz(8)) as string)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.000000001 as timestamp_ntz(8)) as string) AS CAST(CAST(2020-01-01 00:00:00.000000001 AS TIMESTAMP_NTZ(8)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9)) as string)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(9)) as string) AS CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(7)) as string)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(7)) as string) AS CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('1960-01-01 00:00:00.000000001' as timestamp_ntz(9)) as string)
+-- !query analysis
+Project [cast(cast(1960-01-01 00:00:00.000000001 as timestamp_ntz(9)) as string) AS CAST(CAST(1960-01-01 00:00:00.000000001 AS TIMESTAMP_NTZ(9)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('1960-01-01 00:00:00.123456789' as timestamp_ltz(7)) as string)
+-- !query analysis
+Project [cast(cast(1960-01-01 00:00:00.123456789 as timestamp_ltz(7)) as string) AS CAST(CAST(1960-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(array(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string)
+-- !query analysis
+Project [cast(array(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string) AS CAST(array(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)), CAST(NULL AS TIMESTAMP_NTZ(9))) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(map('k', cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9))) as string)
+-- !query analysis
+Project [cast(map(k, cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9))) as string) AS CAST(map(k, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(named_struct('f', cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9))) as string)
+-- !query analysis
+Project [cast(named_struct(f, cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(9))) as string) AS CAST(named_struct(f, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9))) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast(null as timestamp_ntz(9)) as string)
+-- !query analysis
+Project [cast(cast(null as timestamp_ntz(9)) as string) AS CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS STRING)#x]
++- OneRowRelation
+
+
+-- !query
+select concat('ts=', cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as string))
+-- !query analysis
+Project [concat(ts=, cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)) as string)) AS concat(ts=, CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)) AS STRING))#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9))
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456 as timestamp_ntz) as timestamp_ntz(9)) AS CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP_NTZ) AS TIMESTAMP_NTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)) as timestamp_ntz)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)) as timestamp_ntz) AS CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)) AS TIMESTAMP_NTZ)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp_ntz) as timestamp_ntz(9)) as timestamp_ntz)
+-- !query analysis
+Project [cast(cast(cast(2020-01-01 00:00:00.123456 as timestamp_ntz) as timestamp_ntz(9)) as timestamp_ntz) AS CAST(CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP_NTZ) AS TIMESTAMP_NTZ(9)) AS TIMESTAMP_NTZ)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9))
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456 as timestamp) as timestamp_ltz(9)) AS CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP) AS TIMESTAMP_LTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9)) as timestamp)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(9)) as timestamp) AS CAST(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9)) AS TIMESTAMP)#x]
++- OneRowRelation
+
+
+-- !query
+select cast(cast(cast('2020-01-01 00:00:00.123456' as timestamp) as timestamp_ltz(9)) as timestamp)
+-- !query analysis
+Project [cast(cast(cast(2020-01-01 00:00:00.123456 as timestamp) as timestamp_ltz(9)) as timestamp) AS CAST(CAST(CAST(2020-01-01 00:00:00.123456 AS TIMESTAMP) AS TIMESTAMP_LTZ(9)) AS TIMESTAMP)#x]
++- OneRowRelation
+
+
+-- !query
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7))
+-- !query analysis
+Project [typeof(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(7))) AS typeof(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8))
+-- !query analysis
+Project [typeof(cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(8))) AS typeof(CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(8)))#x]
++- OneRowRelation
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)
+-- !query analysis
+Project [cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(7)) AS CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7))#x]
++- OneRowRelation
+
+
+-- !query
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8)
+-- !query analysis
+Project [cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(8)) AS CAST(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(8))#x]
++- OneRowRelation
+
+
+-- !query
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)::timestamp_ntz(9)
+-- !query analysis
+Project [cast(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(7)) as timestamp_ntz(9)) AS CAST(CAST(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' AS TIMESTAMP_NTZ(7)) AS TIMESTAMP_NTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+select timestamp_ltz'1960-01-01 00:00:00.123456789'::timestamp_ltz(9)::timestamp_ltz(7)
+-- !query analysis
+Project [cast(cast(1960-01-01 00:00:00.123456789 as timestamp_ltz(9)) as timestamp_ltz(7)) AS CAST(CAST(TIMESTAMP_LTZ '1960-01-01 00:00:00.123456789' AS TIMESTAMP_LTZ(9)) AS TIMESTAMP_LTZ(7))#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as timestamp_ntz(9))::timestamp_ntz(7)
+-- !query analysis
+Project [cast(cast(null as timestamp_ntz(9)) as timestamp_ntz(7)) AS CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIMESTAMP_NTZ(7))#x]
++- OneRowRelation
+
+
+-- !query
+select cast(null as timestamp_ltz(8))::timestamp_ltz(9)
+-- !query analysis
+Project [cast(cast(null as timestamp_ltz(8)) as timestamp_ltz(9)) AS CAST(CAST(NULL AS TIMESTAMP_LTZ(8)) AS TIMESTAMP_LTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
 select cast(cast('inf' as double) as timestamp)
 -- !query analysis
 Project [cast(cast(inf as double) as timestamp) AS CAST(CAST(inf AS DOUBLE) AS TIMESTAMP)#x]

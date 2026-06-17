@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.analysis.resolver
 
-import org.apache.spark.sql.{Column, QueryTest, Row}
+import org.apache.spark.sql.{Column, Row}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
  * Test cases that cover dataframe analyzer test gaps discovered during single-pass analyzer
  * development.
  */
-class DataFrameAnalyzerTestGapsSuite extends QueryTest with SharedSparkSession {
+class DataFrameAnalyzerTestGapsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("Implicit alias resolution") {

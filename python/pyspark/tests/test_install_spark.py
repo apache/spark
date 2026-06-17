@@ -106,6 +106,17 @@ class SparkInstallationTestCase(unittest.TestCase):
             checked_versions("spark-3.3.0", "hadoop3", "hive2.3"),
         )
 
+        # Prerelease version (e.g. pip dev builds)
+        self.assertEqual(
+            ("spark-4.2.0.dev4", "hadoop3", "hive2.3"),
+            checked_versions("4.2.0.dev4", "3", "2.3"),
+        )
+
+        self.assertEqual(
+            ("spark-4.2.0.dev4", "hadoop3", "hive2.3"),
+            checked_versions("spark-4.2.0.dev4", "hadoop3", "hive2.3"),
+        )
+
         # Negative test cases
         for hadoop_version, hive_version in UNSUPPORTED_COMBINATIONS:
             with self.assertRaisesRegex(RuntimeError, "Hive.*should.*Hadoop"):

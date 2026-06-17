@@ -504,10 +504,8 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
-  "messageParameters" : {
-    "msg" : "Frame bound value must be a literal."
-  },
+  "errorClass" : "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND",
+  "sqlState" : "42000",
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
@@ -599,9 +597,28 @@ struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_1037",
+  "errorClass" : "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+  "sqlState" : "42601",
   "messageParameters" : {
-    "wf" : "row_number()"
+    "wf_expr" : "row_number()",
+    "wf_name" : "row_number"
+  }
+}
+
+
+-- !query
+SELECT lead(t) OVER ()
+FROM VALUES ('A'), ('B'), ('C') AS tbl(t)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WINDOW_FUNCTION_FRAME_NOT_ORDERED",
+  "sqlState" : "42601",
+  "messageParameters" : {
+    "wf_expr" : "lead(tbl.t, 1, NULL)",
+    "wf_name" : "lead"
   }
 }
 

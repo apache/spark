@@ -23,14 +23,17 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.NullType
 
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
@@ -140,11 +143,27 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           }
           matched(ordinal)
 
-        case u @ UnresolvedAttribute(nameParts) if !u.containsTag(LogicalPlan.PLAN_ID_TAG) =>
-          // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn
+        case u @ UnresolvedAttribute(nameParts)
+          if !u.containsTag(LogicalPlan.PLAN_ID_TAG) ||
+            !conf.getConf(SQLConf.STRICT_DATAFRAME_COLUMN_RESOLUTION) =>
+          // UnresolvedAttribute with PLAN_ID_TAG should be resolved in resolveDataFrameColumn.
+          // When strict DataFrame column resolution is disabled, we also allow name-based
+          // resolution as a fallback for tagged attributes.
           val result = withPosition(u) {
-            resolveColumnByName(nameParts)
-              .orElse(LiteralFunctionResolution.resolve(nameParts))
+            // A parameterless built-in function takes precedence over a SQL UDF parameter
+            // that happens to share its name (per the documented SQL name resolution rules).
+            // Real columns from relations -- which don't carry the
+            // SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY -- continue to win as before.
+            // Gated by a legacy kill-switch conf so the pre-fix behavior can be restored.
+            val column = resolveColumnByName(nameParts)
+            val resolved = column match {
+              case Some(c) if isSQLFunctionParameterAlias(c) && !conf.getConf(
+                  SQLConf.LEGACY_ALLOW_UDF_PARAMETER_TO_SHADOW_PARAMETERLESS_FUNCTION) =>
+                LiteralFunctionResolution.resolve(nameParts).orElse(column)
+              case Some(_) => column
+              case None => LiteralFunctionResolution.resolve(nameParts)
+            }
+            resolved
               .map {
                 // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
                 // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
@@ -176,7 +195,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             field
           }
           if (newChild.resolved) {
-            ExtractValue(child = newChild, extraction = resolvedField, resolver = resolver)
+            // applyOrNull propagates NULL when the base is NullType instead of throwing
+            // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
+            val extracted = ExtractValue.applyOrNull(
+              child = newChild, extraction = resolvedField, resolver = resolver)
+            // A NullType base yields a bare NULL literal, which would otherwise produce an output
+            // column named `NULL`. Alias it with the extraction's text (e.g. `col[0]`) to keep a
+            // stable column name; CleanupAliases later trims this alias where it's not a top-level
+            // projection output.
+            if (newChild.dataType == NullType) {
+              Alias(extracted, toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
+            } else {
+              extracted
+            }
           } else {
             u.copy(child = newChild, extraction = resolvedField)
           }
@@ -254,7 +285,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
   // Resolves `UnresolvedAttribute` to its value.
   protected def resolveVariables(e: Expression): Expression = {
-    val variableResolution = new VariableResolution(catalogManager.tempVariableManager)
+    val variableResolution =
+      new VariableResolution(catalogManager.tempVariableManager, catalogManager)
 
     def resolve(nameParts: Seq[String]): Option[Expression] = {
       variableResolution.resolveMultipartName(
@@ -500,7 +532,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //    5, resolve the expression against the target node, the resolved attribute will be
   //       filtered by the output attributes of nodes in the path (from matching to root node);
   //    6. if more than one resolved attributes are found in the above recursive process,
-  //       fails with 'AMBIGUOUS_COLUMN_REFERENCE'.
+  //       disambiguate by preferring regular candidates (visible via `output`) over
+  //       hidden ones (only via `metadataOutput`), then preferring depth-0 (direct)
+  //       matches over deeper ones; fails with 'AMBIGUOUS_COLUMN_REFERENCE' if neither
+  //       tiebreaker yields a single winner.
   //    7. if all the resolved attributes are filtered out, return the original expression
   //       as it is.
   private def tryResolveDataFrameColumns(
@@ -525,7 +560,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
     val isMetadataAccess = u.containsTag(LogicalPlan.IS_METADATA_COL)
 
-    val (resolved, matched) = resolveDataFrameColumnByPlanId(
+    val (candidates, matched) = resolveDataFrameColumnByPlanId(
       u, planId, isMetadataAccess, q, 0)
     if (!matched) {
       // Can not find the target plan node with plan id, e.g.
@@ -534,27 +569,41 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       //  df1.select(df2.a)   <-   illegal reference df2.a
       throw QueryCompilationErrors.cannotResolveDataFrameColumn(u)
     }
-    resolved.map(_._1)
+
+    // If there is at least one regular (`hidden = false`) candidate, run the
+    // merge over regular candidates only and ignore hidden ones (e.g. a
+    // natural/USING join hidden key). Otherwise run the merge over hidden
+    // candidates.
+    val (regular, hidden) = candidates.partition(!_.hidden)
+    val finalists = if (regular.nonEmpty) regular else hidden
+    finalists.sortBy(_.depth).foldLeft(Option.empty[Candidate]) {
+      case (None, c) => Some(c)
+      // If the current winner is a direct match (depth 0) and a further
+      // candidate is nested deeper, prefer the direct one.
+      case (Some(c1), c2) if c1.depth == 0 && c2.depth != 0 => Some(c1)
+      case _ => throw QueryCompilationErrors.ambiguousColumnReferences(u)
+    }.map(_.expr)
   }
+
+  // Candidate threaded through the plan walk:
+  //   - expr:   the resolved expression
+  //   - depth:  the depth at which it was matched
+  //   - hidden: whether the candidate's references live in `p.metadataOutput`
+  //             at some plan node along the way (e.g. a natural/USING join
+  //             wrapper that hides a join key via `Project.hiddenOutputTag`).
+  private case class Candidate(expr: NamedExpression, depth: Int, hidden: Boolean)
 
   private def resolveDataFrameColumnByPlanId(
       u: UnresolvedAttribute,
       id: Long,
       isMetadataAccess: Boolean,
       q: Seq[LogicalPlan],
-      currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
+      currentDepth: Int): (Seq[Candidate], Boolean) = {
     val resolved = q.map(resolveDataFrameColumnRecursively(
       u, id, isMetadataAccess, _, currentDepth))
-    val merged = resolved
-      .flatMap(_._1)
-      .sortBy(_._2) // sort by depth
-      .foldLeft(Option.empty[(NamedExpression, Int)]) {
-        case (None, (r2, d2)) => Some((r2, d2))
-        case (Some((r1, 0)), (r2, d2)) if d2 != 0 => Some((r1, 0))
-        case _ => throw QueryCompilationErrors.ambiguousColumnReferences(u)
-      }
+    val candidates = resolved.flatMap(_._1)
     val matched = resolved.exists(_._2)
-    (merged, matched)
+    (candidates, matched)
   }
 
   private def resolveDataFrameColumnRecursively(
@@ -562,8 +611,8 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       id: Long,
       isMetadataAccess: Boolean,
       p: LogicalPlan,
-      currentDepth: Int): (Option[(NamedExpression, Int)], Boolean) = {
-    val (resolved, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
+      currentDepth: Int): (Seq[Candidate], Boolean) = {
+    val (candidates, matched) = if (p.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(id)) {
       val resolved = if (!isMetadataAccess) {
         p.resolve(u.nameParts, conf.resolver)
       } else if (u.nameParts.size == 1) {
@@ -571,10 +620,12 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       } else {
         None
       }
-      // The targe plan node is found, but might still fail to resolve.
-      // In this case, return None to delay the failure, so it is possible to be
+      // The target plan node is found, but might still fail to resolve. In this
+      // case, return an empty Seq to delay the failure, so it is possible to be
       // resolved in the next iteration.
-      (resolved.map(r => (r, currentDepth)), true)
+      // Always initialize `hidden = false` here; the filter below will set it
+      // correctly based on whether the references live in `p.metadataOutput`.
+      (resolved.map(Candidate(_, currentDepth, hidden = false)).toSeq, true)
     } else {
       val children = p match {
         // treat Union node as the leaf node
@@ -612,12 +663,22 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // df = spark.range(10).withColumn("v", sf.col("id") + 1)
     // df.select(df.v).sort(df.id)
     //
-    // In this case, resolveDataFrameColumnByPlanId returns None,
+    // In this case, resolveDataFrameColumnByPlanId returns an empty Seq,
     // the dataframe column 'df.id' will remain unresolved, and the analyzer
     // will try to resolve 'id' without plan id later.
-    val filtered = resolved.filter { r =>
-      // A DataFrame column can be resolved as a metadata column, we should keep it.
-      r._1.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))
+    //
+    // A DataFrame column can also be resolved as a metadata column at some
+    // ancestor plan (e.g. a natural/USING join wrapper that hides a join key
+    // via `Project.hiddenOutputTag`). We accept that here but tag the candidate
+    // as `hidden` so the top-level merge in `resolveDataFrameColumn` can prefer
+    // a regular (p.output) match over hidden (p.metadataOutput) ones.
+    val filtered = candidates.flatMap { c =>
+      val hidden = c.hidden || c.expr.references.subsetOf(AttributeSet(p.metadataOutput))
+      if (c.expr.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))) {
+        Some(c.copy(hidden = hidden))
+      } else {
+        None
+      }
     }
     (filtered, matched)
   }
@@ -662,4 +723,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
        r.expressions.forall(_.references.subsetOf(outputSet))
      }
    }
+
+  /**
+   * True if `e` originates from a SQL UDF input parameter alias, as marked by
+   * `SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY` at parameter-alias
+   * construction sites. Unwraps `OuterReference` so callers that pass post-outer-resolution
+   * expressions still get a correct answer; the metadata lives on the underlying named
+   * expression.
+   */
+  private def isSQLFunctionParameterAlias(e: Expression): Boolean = e match {
+    case OuterReference(inner) => isSQLFunctionParameterAlias(inner)
+    case n: NamedExpression =>
+      n.metadata.contains(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY)
+    case _ => false
+  }
 }

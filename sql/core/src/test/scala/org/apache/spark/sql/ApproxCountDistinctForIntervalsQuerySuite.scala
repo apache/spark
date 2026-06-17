@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSparkSession {
+class ApproxCountDistinctForIntervalsQuerySuite extends SharedSparkSession {
   import testImplicits._
 
   // ApproxCountDistinctForIntervals is used in equi-height histogram generation. An equi-height

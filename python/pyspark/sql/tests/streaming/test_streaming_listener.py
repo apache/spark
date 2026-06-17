@@ -312,7 +312,12 @@ class StreamingListenerTests(StreamingListenerTestsMixin, ReusedSQLTestCase):
         )
         self.assertEqual(
             get_number_of_public_methods("org.apache.spark.sql.streaming.StateOperatorProgress"),
-            27,
+            # SPARK-56537: bumped from 27 to 30 due to the new snapshotCustomMetricNames
+            # constructor parameter (getter + synthetic default) and the new internal
+            # copyForNoExecution() method on StateOperatorProgress. Both are non-public
+            # API (private[spark] / private[sql]) so they are not mirrored on the
+            # Python side; only the count needs updating.
+            30,
             msg,
         )
         self.assertEqual(

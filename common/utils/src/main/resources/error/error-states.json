@@ -3339,7 +3339,7 @@
         "description": "A duplicate schema name in a special register was detected.",
         "origin": "DB2",
         "standard": "N",
-        "usedBy": ["DB2"]
+        "usedBy": ["DB2", "Spark"]
     },
     "42734": {
         "description": "A duplicate parameter-name, SQL variable name, label, or condition-name was detected.",

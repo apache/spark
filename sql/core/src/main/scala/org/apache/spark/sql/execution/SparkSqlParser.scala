@@ -30,7 +30,8 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CurrentNamespace,
   GlobalTempView, LocalTempView, PersistedView,
   PlanWithUnresolvedIdentifier, SchemaEvolution, SchemaTypeEvolution, UnresolvedAttribute,
-  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedProcedure}
+  UnresolvedIdentifier, UnresolvedNamespace, UnresolvedPartitionSpec, UnresolvedProcedure,
+  UnresolvedTableOrViewSearchPathMode}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
 import org.apache.spark.sql.catalyst.parser._
@@ -45,6 +46,7 @@ import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.types.{DataType, StringType}
 import org.apache.spark.util.Utils.getUriBuilder
 
@@ -349,6 +351,19 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
+   * Create a [[SetPathCommand]] to set the session SQL path.
+   * Example SQL :
+   * {{{
+   *   SET PATH = spark_catalog.default, system.builtin;
+   *   SET PATH = DEFAULT_PATH;
+   *   SET PATH = SYSTEM_PATH, spark_catalog.myschema;
+   * }}}
+   */
+  override def visitSetPath(ctx: SetPathContext): LogicalPlan = withOrigin(ctx) {
+    SetPathCommand(ctx.pathElement().asScala.map(visitPathElement).toSeq)
+  }
+
+  /**
    * Create a [[SetCommand]] logical plan to set [[SQLConf.SESSION_LOCAL_TIMEZONE]]
    * Example SQL :
    * {{{
@@ -417,15 +432,13 @@ class SparkSqlAstBuilder extends AstBuilder {
 
   private def extractUnquotedResourcePath(ctx: RefreshResourceContext): String = withOrigin(ctx) {
     val unquotedPath = remainder(ctx.REFRESH.getSymbol).trim
-    validate(
-      unquotedPath != null && !unquotedPath.isEmpty,
-      "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
-      ctx)
+    if (unquotedPath == null || unquotedPath.isEmpty) {
+      throw QueryParsingErrors.emptyRefreshResourcePathError(ctx)
+    }
     val forbiddenSymbols = Seq(" ", "\n", "\r", "\t")
-    validate(
-      !forbiddenSymbols.exists(unquotedPath.contains(_)),
-      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths",
-      ctx)
+    if (forbiddenSymbols.exists(unquotedPath.contains(_))) {
+      throw QueryParsingErrors.invalidRefreshResourcePathError(ctx)
+    }
     unquotedPath
   }
 
@@ -849,7 +862,7 @@ class SparkSqlAstBuilder extends AstBuilder {
       .getOrElse(Map.empty)
     val codeLiteral = visitCodeLiteral(ctx.codeLiteral())
 
-    CreateMetricViewCommand(
+    CreateMetricView(
       withIdentClause(ctx.identifierReference(), UnresolvedIdentifier(_)),
       userSpecifiedColumns,
       visitCommentSpecList(ctx.commentSpec()),
@@ -1419,8 +1432,8 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * Create a [[DescribeColumn]] or [[DescribeRelation]] or [[DescribeRelationAsJsonCommand]]
-   * command.
+   * Create a [[DescribeColumn]], [[DescribeRelation]], [[DescribeTablePartition]], or
+   * [[DescribeRelationJsonCommand]] command.
    */
   override def visitDescribeRelation(ctx: DescribeRelationContext): LogicalPlan = withOrigin(ctx) {
     val isExtended = ctx.EXTENDED != null || ctx.FORMATTED != null
@@ -1429,7 +1442,11 @@ class SparkSqlAstBuilder extends AstBuilder {
       val tableName = ctx.identifierReference.getText.split("\\.").lastOption.getOrElse("table")
       throw QueryCompilationErrors.describeJsonNotExtendedError(tableName)
     }
-    val relation = createUnresolvedTableOrView(ctx.identifierReference, "DESCRIBE TABLE")
+    val relation = createUnresolvedTableOrView(
+      ctx.identifierReference,
+      "DESCRIBE TABLE",
+      allowTempView = true,
+      UnresolvedTableOrViewSearchPathMode.QueryLike)
     if (ctx.describeColName != null) {
       if (ctx.partitionSpec != null) {
         throw QueryParsingErrors.descColumnForPartitionUnsupportedError(ctx)
@@ -1442,7 +1459,7 @@ class SparkSqlAstBuilder extends AstBuilder {
           isExtended)
       }
     } else {
-      val partitionSpec = if (ctx.partitionSpec != null) {
+      val rawSpec = if (ctx.partitionSpec != null) {
         // According to the syntax, visitPartitionSpec returns `Map[String, Option[String]]`.
         visitPartitionSpec(ctx.partitionSpec).map {
           case (key, Some(value)) => key -> value
@@ -1453,9 +1470,12 @@ class SparkSqlAstBuilder extends AstBuilder {
         Map.empty[String, String]
       }
       if (asJson) {
-        DescribeRelationJsonCommand(relation, partitionSpec, isExtended)
+        // DescribeRelationJsonCommand uses the raw Map directly (V1 path only).
+        DescribeRelationJsonCommand(relation, rawSpec, isExtended)
+      } else if (rawSpec.nonEmpty) {
+        DescribeTablePartition(relation, UnresolvedPartitionSpec(rawSpec), isExtended)
       } else {
-        DescribeRelation(relation, partitionSpec, isExtended)
+        DescribeRelation(relation, isExtended)
       }
     }
   }
@@ -1474,6 +1494,38 @@ class SparkSqlAstBuilder extends AstBuilder {
     ShowNamespacesCommand(
       UnresolvedNamespace(multiPart.getOrElse(Seq.empty[String])),
       Option(ctx.pattern).map(x => string(visitStringLit(x))))
+  }
+
+  /**
+   * Create a [[ShowTablesJsonCommand]] or [[ShowTables]] command.
+   */
+  override def visitShowTables(ctx: ShowTablesContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.JSON == null) return super.visitShowTables(ctx)
+    val ns = if (ctx.identifierReference() != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    val pattern = Option(ctx.pattern).map(x => string(visitStringLit(x)))
+    ShowTablesJsonCommand(ns, pattern, isExtended = false)
+  }
+
+  /**
+   * Create a [[ShowTablesJsonCommand]], [[ShowTablesExtended]], or [[ShowTablePartition]] command.
+   */
+  override def visitShowTableExtended(
+      ctx: ShowTableExtendedContext): LogicalPlan = withOrigin(ctx) {
+    val asJson = ctx.JSON != null
+    if (asJson && ctx.partitionSpec != null) {
+      throw QueryCompilationErrors.showTableExtendedJsonWithPartitionError()
+    }
+    if (!asJson || ctx.partitionSpec != null) return super.visitShowTableExtended(ctx)
+    val ns = if (ctx.identifierReference() != null) {
+      withIdentClause(ctx.identifierReference, UnresolvedNamespace(_))
+    } else {
+      CurrentNamespace
+    }
+    ShowTablesJsonCommand(ns, Some(string(visitStringLit(ctx.pattern))), isExtended = true)
   }
 
   override def visitDescribeProcedure(

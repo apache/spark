@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negat
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Decimal
 
-class UnwrapCastInComparisonEndToEndSuite extends QueryTest with SharedSparkSession {
+class UnwrapCastInComparisonEndToEndSuite extends SharedSparkSession {
   import testImplicits._
 
   val t = "test_table"

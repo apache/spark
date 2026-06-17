@@ -50,7 +50,7 @@ case class ParquetData(intField: Int, stringField: String)
 case class ParquetDataWithKey(intField: Int, pi: Int, stringField: String, ps: String)
 
 abstract class ParquetPartitionDiscoverySuite
-  extends QueryTest with ParquetTest with SharedSparkSession {
+  extends ParquetTest with SharedSparkSession {
   import PartitioningUtils._
   import testImplicits._
 

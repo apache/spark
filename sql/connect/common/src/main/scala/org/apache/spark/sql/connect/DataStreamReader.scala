@@ -75,16 +75,9 @@ final class DataStreamReader private[sql] (sparkSession: SparkSession)
     this
   }
 
-  /**
-   * Specifies a name for the streaming source. This name is used to identify the source in
-   * checkpoint metadata and enables stable checkpoint locations for source evolution.
-   *
-   * @param sourceName
-   *   the name to assign to this streaming source
-   * @since 4.2.0
-   */
+  /** @inheritdoc */
   @Experimental
-  private[sql] def name(sourceName: String): this.type = {
+  override def name(sourceName: String): this.type = {
     validateSourceName(sourceName)
     sourceBuilder.setSourceName(sourceName)
     this

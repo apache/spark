@@ -38,6 +38,7 @@ import org.scalatest.Tag
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, SparkIllegalArgumentException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.catalyst.util.quietly
@@ -47,7 +48,7 @@ import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileMana
 import org.apache.spark.sql.execution.streaming.runtime.StreamExecution
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.unsafe.Platform
@@ -118,7 +119,7 @@ trait RocksDBStateStoreChangelogCheckpointingTestUtil {
  * always be inherited first, so 'testWithChangelogCheckpointingEnabled' tests with
  * both Avro and UnsafeRow enabled.
  */
-trait AlsoTestWithEncodingTypes extends SQLTestUtils {
+trait AlsoTestWithEncodingTypes extends QueryTest {
   override protected def test(testName: String, testTags: Tag*)(testBody: => Any)
                              (implicit pos: Position): Unit = {
     Seq("unsaferow", "avro").foreach { encoding =>
@@ -150,7 +151,7 @@ trait AlsoTestWithEncodingTypes extends SQLTestUtils {
 }
 
 trait AlsoTestWithRocksDBFeatures
-  extends SQLTestUtils with RocksDBStateStoreChangelogCheckpointingTestUtil {
+  extends QueryTest with RocksDBStateStoreChangelogCheckpointingTestUtil {
 
   sealed trait TestMode
   case object TestWithChangelogCheckpointingEnabled extends TestMode
@@ -264,7 +265,14 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       testWithColumnFamilies(newTestName, testMode, testTags: _*) { colFamiliesEnabled =>
-        testBody(enableStateStoreCheckpointIds, colFamiliesEnabled)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds, colFamiliesEnabled)
+        }
       }
     }
   }
@@ -277,7 +285,14 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       test(newTestName, testTags: _*) {
-        testBody(enableStateStoreCheckpointIds)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds)
+        }
       }
     }
   }
@@ -290,12 +305,19 @@ trait AlsoTestWithRocksDBFeatures
       val newTestName = s"$testName - with enableStateStoreCheckpointIds = " +
         s"$enableStateStoreCheckpointIds"
       testWithChangelogCheckpointingDisabled(newTestName, testTags: _*) {
-        enableStateStoreCheckpointIds => testBody(enableStateStoreCheckpointIds)
+        val v2Confs = if (enableStateStoreCheckpointIds) {
+          Seq(SQLConf.STATE_STORE_CHECKPOINT_FORMAT_VERSION.key -> "2")
+        } else {
+          Seq.empty
+        }
+        withSQLConf(v2Confs: _*) {
+          testBody(enableStateStoreCheckpointIds)
+        }
       }
     }
   }
 
-  // The default implementation in SQLTestUtils times out the `withTempDir()` call
+  // The default implementation in QueryTest times out the `withTempDir()` call
   // after 10 seconds. We don't want that because it causes flakiness in tests.
   override protected def waitForTasksToFinish(): Unit = {}
 }
@@ -3254,6 +3276,49 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
   }
 
+  Seq(true, false).foreach { boundedMemoryUsage =>
+    testWithColumnFamilies(
+      s"SPARK-57183: LRUCache is handled correctly on RocksDB.close() " +
+        s"with boundedMemoryUsage=$boundedMemoryUsage",
+      TestWithBothChangelogCheckpointingEnabledAndDisabled) { colFamiliesEnabled =>
+      withTempDir { dir =>
+        try {
+          val sqlConf = new SQLConf
+          sqlConf.setConfString(
+            RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
+              RocksDBConf.BOUNDED_MEMORY_USAGE_CONF_KEY, boundedMemoryUsage.toString)
+          if (boundedMemoryUsage) {
+            sqlConf.setConfString(
+              RocksDBConf.ROCKSDB_SQL_CONF_NAME_PREFIX + "." +
+                RocksDBConf.MAX_MEMORY_USAGE_MB_CONF_KEY, "128")
+          }
+          val dbConf = RocksDBConf(StateStoreConf(sqlConf))
+
+          val (_, cache) = withDB(dir.getCanonicalPath, conf = dbConf,
+            useColumnFamilies = colFamiliesEnabled) { db =>
+            db.load(0)
+            db.put("k", "v")
+            db.commit()
+            db.getWriteBufferManagerAndCache()
+          }
+          if (boundedMemoryUsage) {
+            // Shared singleton -- must remain open after a single instance closes
+            assert(cache.isOwningHandle,
+              "Shared LRUCache handle must not be released after a single RocksDB.close() " +
+                "in bounded mode")
+          } else {
+            // Per-instance cache -- must be released deterministically on close()
+            assert(!cache.isOwningHandle,
+              "LRUCache native handle should be released after RocksDB.close() " +
+                "in unbounded mode")
+          }
+        } finally {
+          RocksDBMemoryManager.resetWriteBufferManagerAndCache
+        }
+      }
+    }
+  }
+
   Seq("100", "1000", "100000").foreach { totalMemorySizeMB =>
     testWithColumnFamilies(s"Memory mgmt - valid config " +
       s"with totalMemorySizeMB=$totalMemorySizeMB",
@@ -3550,7 +3615,9 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
     }
 
     // reload version 2 - should succeed
-    withDB(remoteDir, version = 2, conf = conf) { db =>
+    withDB(remoteDir, version = 2, conf = conf,
+      enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+      versionToUniqueId = versionToUniqueId) { db =>
     }
   }
 
@@ -3584,15 +3651,25 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
           db.commit() // create snapshot again
 
           // load version 1 - should succeed
-          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
+            enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+            versionToUniqueId = versionToUniqueId) { db =>
           }
 
           // upload recently created snapshot
           db.doMaintenance()
-          assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+          // With V2 checkpoint format, each commit gets a unique ID so the second
+          // version-1 snapshot has a different filename and both coexist on disk.
+          if (enableStateStoreCheckpointIds) {
+            assert(snapshotVersionsPresent(remoteDir) == Seq(1, 1))
+          } else {
+            assert(snapshotVersionsPresent(remoteDir) == Seq(1))
+          }
 
           // load version 1 again - should succeed
-          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf) { db =>
+          withDB(remoteDir, version = 1, conf = conf, hadoopConf = hadoopConf,
+            enableStateStoreCheckpointIds = enableStateStoreCheckpointIds,
+            versionToUniqueId = versionToUniqueId) { db =>
           }
         }
       }
@@ -3725,7 +3802,7 @@ class RocksDBSuite extends AlsoTestWithRocksDBFeatures with SharedSparkSession
                 if (inc > 1) {
                   // Create changelog files in the gap
                   for (j <- 1 to inc - 1) {
-                    db2.load(curVer + j)
+                    db2.load(curVer + j, versionToUniqueId.get(curVer + j))
                     db2.put("foo", "bar")
                     db2.commit()
                   }

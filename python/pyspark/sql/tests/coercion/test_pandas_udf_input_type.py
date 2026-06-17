@@ -251,6 +251,14 @@ class PandasUDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         golden = None
         if not generating:
             golden = self.load_golden_csv(golden_csv)
+            # Pandas >= 3.0 reports the dedicated 'str' dtype for string columns,
+            # whereas earlier versions report 'object'. Patch the in-memory golden
+            # so the same file works under both versions.
+            if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+                str_rows = golden["Spark Type"] == "string"
+                golden.loc[str_rows, "Python Type"] = golden.loc[
+                    str_rows, "Python Type"
+                ].str.replace("'object'", "'str'")
 
         results = []
         for idx, (case_name, spark_type, data_func) in enumerate(self.test_cases):

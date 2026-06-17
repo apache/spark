@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders._
 import org.apache.spark.sql.catalyst.util.{SparkDateTimeUtils, SparkIntervalUtils}
+import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.sql.util.{ArrowUtils, CloseableIterator}
@@ -239,7 +240,13 @@ object ArrowSerializer {
   }
 
   // TODO throw better errors on class cast exceptions.
-  private[arrow] def serializerFor[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer = {
+  private[arrow] def serializerFor[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer =
+    ConnectTypeOps
+      .forEncoder(encoder)
+      .map(_.createArrowSerializer(v))
+      .getOrElse(serializerForDefault(encoder, v))
+
+  private def serializerForDefault[E](encoder: AgnosticEncoder[E], v: AnyRef): Serializer = {
     (encoder, v) match {
       case (PrimitiveBooleanEncoder | BoxedBooleanEncoder, v: BitVector) =>
         new FieldSerializer[Boolean, BitVector](v) {
@@ -562,7 +569,8 @@ object ArrowSerializer {
     def write(index: Int, value: Any): Unit
   }
 
-  private abstract class FieldSerializer[E, V <: FieldVector](val vector: V) extends Serializer {
+  private[connect] abstract class FieldSerializer[E, V <: FieldVector](val vector: V)
+      extends Serializer {
     def set(index: Int, value: E): Unit
 
     override def write(index: Int, raw: Any): Unit = {

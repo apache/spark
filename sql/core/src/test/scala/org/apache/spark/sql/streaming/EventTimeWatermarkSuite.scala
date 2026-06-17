@@ -696,6 +696,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
           (input2, Seq(("A", 190L), ("C", 350L)))
         ),
         ExpectFailure[AnalysisException](assertFailure = ex => {
+          assert(ex.asInstanceOf[AnalysisException].getCondition === "MULTIPLE_EVENT_TIME_COLUMNS")
           assert(ex.getMessage.contains("More than one event time columns are available."))
           assert(ex.getMessage.contains(
             "Please ensure there is at most one event time column per stream."))

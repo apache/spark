@@ -20,6 +20,9 @@ package org.apache.spark.sql.internal
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
+import scala.util.Try
+
+import org.apache.spark.internal.config.ConfigBindingPolicy
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.util.Utils
 
@@ -121,6 +124,27 @@ object StaticSQLConf {
       .version("1.6.0")
       .booleanConf
       .createWithDefault(false)
+
+  val LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES =
+    buildStaticConf("spark.sql.legacy.hive.thriftServer.allowSettingSystemProperties")
+      .internal()
+      .doc("When set to true, the Hive Thrift Server allows setting JVM system properties " +
+        "through the 'set:system:' session configuration overlay (for example, in a JDBC " +
+        "connection string). By default, such system property assignments are rejected.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val HIVE_THRIFT_SERVER_HTTP_SNI_HOST_CHECK_ENABLED =
+    buildStaticConf("spark.sql.hive.thriftServer.http.sniHostCheckEnabled")
+      .internal()
+      .doc("Whether to enable Jetty's SNI host check on the ThriftHttpCLIService HTTPS " +
+        "connector. Set to false to restore the behavior prior to SPARK-45522 (Jetty 10+).")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
     .doc("A comma-separated list of classes that implement " +
@@ -314,4 +338,19 @@ object StaticSQLConf {
     .version("4.0.0")
     .booleanConf
     .createWithDefault(true)
+
+  val REFLECT_ALLOW_LIST = buildStaticConf("spark.sql.reflect.allowList")
+    .doc("A comma-separated allow list of regular expressions matched against the canonical " +
+      "static method name (in the form `class.method`, e.g. `java.util.UUID.randomUUID`) " +
+      "that the `reflect` and `java_method` SQL functions are allowed to invoke. A method is " +
+      "allowed when its `class.method` name fully matches at least one of the patterns. " +
+      "When the list is empty (the default), all such invocations are allowed.")
+    .version("4.3.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .stringConf
+    .toSequence
+    .checkValue(
+      _.forall(pattern => Try(pattern.r).isSuccess),
+      "Every entry must be a valid regular expression.")
+    .createWithDefault(Nil)
 }

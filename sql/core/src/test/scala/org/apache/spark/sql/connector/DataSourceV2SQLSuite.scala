@@ -439,6 +439,7 @@ class DataSourceV2SQLSuiteV1Filter
     Seq((basicCatalog, basicIdentifier), (atomicCatalog, atomicIdentifier)).foreach {
       case (catalog, identifier) =>
         spark.sql(s"CREATE TABLE $identifier USING foo AS SELECT id, data FROM source")
+        checkInsertMetrics(identifier, numInsertedRows = 3)
 
         val table = catalog.loadTable(Identifier.of(Array(), "table_name"))
 
@@ -1675,49 +1676,61 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("SPARK-41290: Generated column expression must be valid generation expression") {
+  test("SPARK-41290: generation expression with an unresolved function fails") {
     val tblName = "my_tab"
-    def checkUnsupportedGenerationExpression(
-        expr: String,
-        expectedReason: String,
-        genColType: String = "INT",
-        customTableDef: Option[String] = None): Unit = {
-      val tableDef =
-        s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo"
-      withTable(s"testcat.$tblName") {
-        checkError(
-          exception = analysisException(customTableDef.getOrElse(tableDef)),
-          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
-          parameters = Map(
-            "fieldName" -> "b",
-            "expressionStr" -> expr,
-            "reason" -> expectedReason)
-        )
-      }
-    }
-
-    // Expression cannot be resolved since it doesn't exist
-    checkUnsupportedGenerationExpression(
+    checkUnresolvedRoutineExceptionForCreate(
+      tblName,
       "not_a_function(a)",
-      "failed to resolve `not_a_function` to a built-in function"
+      "`not_a_function`"
     )
+  }
 
-    // Expression cannot be resolved since it's not a built-in function
+  test("SPARK-41290: generation expression with a non-built-in function fails") {
+    val tblName = "my_tab"
     spark.udf.register("timesTwo", (x: Int) => x * 2)
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "timesTwo(a)",
       "failed to resolve `timesTwo` to a built-in function"
     )
+  }
 
-    // Generated column can't reference itself
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression with a persistent SQL function fails") {
+    val tblName = "my_tab"
+    // A persistent SQL function is not a built-in function either. It is rejected earlier in
+    // analysis with UNSUPPORTED_SQL_UDF_USAGE, since SQL functions are not allowed in a
+    // CreateTable plan node.
+    withUserDefinedFunction("timesThree" -> false) {
+      sql("CREATE FUNCTION timesThree(x INT) RETURNS INT RETURN x * 3")
+      val expr = "timesThree(a)"
+      val tableDef =
+        s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+      val start = tableDef.indexOf(expr)
+      withTable(s"testcat.$tblName") {
+        checkError(
+          exception = analysisException(tableDef),
+          condition = "UNSUPPORTED_SQL_UDF_USAGE",
+          parameters = Map(
+            "functionName" -> "`spark_catalog`.`default`.`timesthree`",
+            "nodeName" -> "CreateTable"),
+          context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1)
+        )
+      }
+    }
+  }
+
+  test("SPARK-41290: generation expression cannot reference itself") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "b + 1",
       "generation expression cannot reference itself"
     )
     // Obeys case sensitivity when intercepting the error message
     // Intercepts when case-insensitive
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "B + 1",
         "generation expression cannot reference itself"
       )
@@ -1725,12 +1738,15 @@ class DataSourceV2SQLSuiteV1Filter
     // Doesn't intercept when case-sensitive
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       withTable(s"testcat.$tblName") {
+        val sql = s"CREATE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (B + 1)) USING foo"
+        // "B" appears at position 62 in the SQL string
+        val bPosition = sql.indexOf("(B + 1)") + 1
         checkError(
-          exception = analysisException(s"CREATE TABLE testcat.$tblName(a INT, " +
-              "b INT GENERATED ALWAYS AS (B + 1)) USING foo"),
+          exception = analysisException(sql),
           condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`"),
-          context = ExpectedContext(fragment = "B", start = 0, stop = 0)
+          parameters = Map("objectName" -> "`B`", "proposal" -> "`a`, `b`"),
+          context = ExpectedContext(fragment = "B", start = bPosition, stop = bPosition)
         )
       }
     }
@@ -1742,9 +1758,12 @@ class DataSourceV2SQLSuiteV1Filter
         assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }
+  }
 
-    // Generated column can't reference other generated columns
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression cannot reference other generated columns") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "c + 1",
       "generation expression cannot reference another generated column",
       customTableDef = Some(
@@ -1754,7 +1773,8 @@ class DataSourceV2SQLSuiteV1Filter
     )
     // Respects case-insensitivity
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "C + 1",
         "generation expression cannot reference another generated column",
         customTableDef = Some(
@@ -1762,7 +1782,8 @@ class DataSourceV2SQLSuiteV1Filter
             "b INT GENERATED ALWAYS AS (C + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
         )
       )
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "c + 1",
         "generation expression cannot reference another generated column",
         customTableDef = Some(
@@ -1779,26 +1800,37 @@ class DataSourceV2SQLSuiteV1Filter
         assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
       }
     }
+  }
 
-    // Generated column can't reference non-existent column
+  test("SPARK-41290: generation expression cannot reference a non-existent column") {
+    val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
+      val sql = s"CREATE TABLE testcat.$tblName(a INT, " +
+        "b INT GENERATED ALWAYS AS (c + 1)) USING foo"
+      val cPosition = sql.indexOf("(c + 1)") + 1
       checkError(
-        exception = analysisException(s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED " +
-          s"ALWAYS AS (c + 1)) USING foo"),
+        exception = analysisException(sql),
         condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
-        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`"),
-        context = ExpectedContext(fragment = "c", start = 0, stop = 0)
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
+        context = ExpectedContext(fragment = "c", start = cPosition, stop = cPosition)
       )
     }
+  }
 
-    // Expression must be deterministic
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression must be deterministic") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "rand()",
       "generation expression is not deterministic"
     )
+  }
 
+  test("SPARK-41290: generation expression data type must be compatible with the column type") {
+    val tblName = "my_tab"
     // Data type is incompatible
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "a + 1",
       "generation expression data type int is incompatible with column data type boolean",
       "BOOLEAN"
@@ -1808,31 +1840,208 @@ class DataSourceV2SQLSuiteV1Filter
       sql(s"CREATE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
       assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
     }
+  }
 
-    // No subquery expressions
-    checkUnsupportedGenerationExpression(
+  test("SPARK-41290: generation expression cannot contain a subquery") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT 1)",
       "subquery expressions are not allowed for generated columns"
     )
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT (SELECT 2) + 1)", // nested
       "subquery expressions are not allowed for generated columns"
     )
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(SELECT 1) + a", // refers to another column
       "subquery expressions are not allowed for generated columns"
     )
     withTable("other") {
       sql("create table other(x INT) using parquet")
-      checkUnsupportedGenerationExpression(
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
         "(select min(x) from other)", // refers to another table
         "subquery expressions are not allowed for generated columns"
       )
     }
-    checkUnsupportedGenerationExpression(
+    checkUnsupportedGenerationExpressionForCreate(
+      tblName,
       "(select min(x) from faketable)", // refers to a non-existent table
       "subquery expressions are not allowed for generated columns"
     )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with an unresolved function fails") {
+    val tblName = "my_tab"
+    checkUnresolvedRoutineExceptionForReplace(
+      tblName,
+      "not_a_function(a)",
+      "`not_a_function`"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with a non-built-in function fails") {
+    val tblName = "my_tab"
+    spark.udf.register("timesTwo", (x: Int) => x * 2)
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "timesTwo(a)",
+      "failed to resolve `timesTwo` to a built-in function"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression with a persistent SQL function fails") {
+    val tblName = "my_tab"
+    // A persistent SQL function is not a built-in function either. It is rejected earlier in
+    // analysis with UNSUPPORTED_SQL_UDF_USAGE, since SQL functions are not allowed in a
+    // ReplaceTable plan node.
+    withUserDefinedFunction("timesThree" -> false) {
+      sql("CREATE FUNCTION timesThree(x INT) RETURNS INT RETURN x * 3")
+      val expr = "timesThree(a)"
+      val tableDef =
+        s"REPLACE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+      val start = tableDef.indexOf(expr)
+      withTable(s"testcat.$tblName") {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+        checkError(
+          exception = analysisException(tableDef),
+          condition = "UNSUPPORTED_SQL_UDF_USAGE",
+          parameters = Map(
+            "functionName" -> "`spark_catalog`.`default`.`timesthree`",
+            "nodeName" -> "ReplaceTable"),
+          context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1)
+        )
+      }
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference itself") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "b + 1",
+      "generation expression cannot reference itself"
+    )
+    // Obeys case sensitivity when intercepting the error message
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "B + 1",
+        "generation expression cannot reference itself"
+      )
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference " +
+    "other generated columns") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "c + 1",
+      "generation expression cannot reference another generated column",
+      customTableDef = Some(
+        s"REPLACE TABLE testcat.$tblName(a INT, " +
+          "b INT GENERATED ALWAYS AS (c + 1), c INT GENERATED ALWAYS AS (a + 1)) USING foo"
+      )
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot reference a " +
+    "non-existent column") {
+    val tblName = "my_tab"
+    withTable(s"testcat.$tblName") {
+      sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      val replaceSql = s"REPLACE TABLE testcat.$tblName(a INT, " +
+        "b INT GENERATED ALWAYS AS (c + 1)) USING foo"
+      val cPosition = replaceSql.indexOf("(c + 1)") + 1
+      checkError(
+        exception = analysisException(replaceSql),
+        condition = "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+        parameters = Map("objectName" -> "`c`", "proposal" -> "`a`, `b`"),
+        context = ExpectedContext(fragment = "c", start = cPosition, stop = cPosition)
+      )
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression must be deterministic") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "rand()",
+      "generation expression is not deterministic"
+    )
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression data type must be " +
+    "compatible with the column type") {
+    val tblName = "my_tab"
+    // Data type is incompatible
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "a + 1",
+      "generation expression data type int is incompatible with column data type boolean",
+      "BOOLEAN"
+    )
+    // But we allow valid up-casts
+    withTable(s"testcat.$tblName") {
+      sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      sql(s"REPLACE TABLE testcat.$tblName(a INT, b LONG GENERATED ALWAYS AS (a + 1)) USING foo")
+      assert(catalog("testcat").asTableCatalog.tableExists(Identifier.of(Array(), tblName)))
+    }
+  }
+
+  test("SPARK-41290: REPLACE TABLE - generation expression cannot contain a subquery") {
+    val tblName = "my_tab"
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT 1)",
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT (SELECT 2) + 1)", // nested
+      "subquery expressions are not allowed for generated columns"
+    )
+    checkUnsupportedGenerationExpressionForReplace(
+      tblName,
+      "(SELECT 1) + a", // refers to another column
+      "subquery expressions are not allowed for generated columns"
+    )
+    withTable("other") {
+      sql("create table other(x INT) using parquet")
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "(select min(x) from other)", // refers to another table
+        "subquery expressions are not allowed for generated columns"
+      )
+    }
+  }
+
+  test("SPARK-57360: generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
+  }
+
+  test("SPARK-57360: REPLACE TABLE - generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
   }
 
   test("SPARK-44313: generation expression validation passes when there is a char/varchar column") {
@@ -2966,13 +3175,13 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
-  test("View commands are not supported in v2 catalogs") {
+  test("View commands are not supported in v2 catalogs that don't implement ViewCatalog") {
     def validateViewCommand(sqlStatement: String): Unit = {
       val e = analysisException(sqlStatement)
       checkError(
         e,
-        condition = "UNSUPPORTED_FEATURE.CATALOG_OPERATION",
-        parameters = Map("catalogName" -> "`testcat`", "operation" -> "views"))
+        condition = "MISSING_CATALOG_ABILITY.VIEWS",
+        parameters = Map("plugin" -> "testcat"))
     }
 
     validateViewCommand("DROP VIEW testcat.v")
@@ -3738,6 +3947,29 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("Session variable in INSERT REPLACE WHERE") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      spark.sql("DECLARE OR REPLACE VARIABLE replacement_id BIGINT DEFAULT 2")
+      try {
+        spark.sql(
+          s"""
+             |INSERT INTO $t
+             |  REPLACE WHERE id = replacement_id
+             |  VALUES (2, 'bb')
+             |""".stripMargin)
+
+        checkAnswer(
+          spark.table(t),
+          Seq(Row(1L, "a"), Row(2L, "bb"), Row(3L, "c")))
+      } finally {
+        spark.sql("DROP TEMPORARY VARIABLE IF EXISTS replacement_id")
+      }
+    }
+  }
+
   test("Selective Overwrite: REPLACE WHERE with BY NAME - column reordering") {
     val df = spark.createDataFrame(Seq((1L, "a"), (2L, "b"), (3L, "c"))).toDF("id", "data")
     df.createOrReplaceTempView("source")
@@ -3912,8 +4144,8 @@ class DataSourceV2SQLSuiteV1Filter
         QueryTest.checkAnswer(
           descriptionDf.filter(
             "!(col_name in ('Catalog', 'Created Time', 'Created By', 'Database', " +
-              "'index', 'Location', 'Name', 'Owner', 'Provider', 'Table', 'Table Properties', " +
-              "'Type', '_partition', ''))"),
+              "'index', 'Location', 'Name', 'Namespace', 'Owner', 'Provider', 'Table', " +
+              "'Table Properties', 'Type', '_partition', ''))"),
           Seq(
             Row("# Detailed Table Information", "", ""),
             Row("# Column Default Values", "", ""),
@@ -4302,6 +4534,28 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-56587: Show table names for V2 write nodes in UI") {
+    val t1 = s"testcat.ns1.ns2.table_name"
+    withTable(t1) {
+      sql(s"CREATE TABLE $t1 (id bigint, data string) USING foo")
+      val df1 = sql(s"INSERT INTO $t1 VALUES (1, 'a')")
+      val executed1 = df1.queryExecution.executedPlan
+      assert(executed1.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+
+      val df2 = sql(s"INSERT OVERWRITE $t1 VALUES (2, 'b')")
+      val executed2 = df2.queryExecution.executedPlan
+      assert(executed2.collect {
+        case org.apache.spark.sql.execution.CommandResultExec(
+            _, w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec, _) => w
+        case w: org.apache.spark.sql.execution.datasources.v2.V2ExistingTableWriteExec => w
+      }.head.nodeName.contains("testcat.ns1.ns2.table_name"))
+    }
+  }
+
   private def testNotSupportedV2Command(
       sqlCommand: String,
       sqlParams: String,
@@ -4312,10 +4566,131 @@ class DataSourceV2SQLSuiteV1Filter
       sqlState = "0A000",
       parameters = Map("cmd" -> expectedArgument.getOrElse(sqlCommand)))
   }
+
+  private def checkUnsupportedGenerationExpression(
+      tblName: String,
+      tableDef: String,
+      expr: String,
+      expectedReason: String,
+      createFirst: Boolean): Unit = {
+    withTable(s"testcat.$tblName") {
+      if (createFirst) {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      }
+      checkError(
+        exception = analysisException(tableDef),
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "b",
+          "expressionStr" -> expr,
+          "reason" -> expectedReason))
+    }
+  }
+
+  private def checkUnsupportedGenerationExpressionForCreate(
+      tblName: String,
+      expr: String,
+      expectedReason: String,
+      genColType: String = "INT",
+      customTableDef: Option[String] = None): Unit = {
+    val tableDef = customTableDef.getOrElse(
+      s"CREATE TABLE testcat.$tblName(a INT, b $genColType GENERATED ALWAYS AS ($expr)) USING foo")
+    checkUnsupportedGenerationExpression(
+      tblName, tableDef, expr, expectedReason, createFirst = false)
+  }
+
+  private def checkUnsupportedGenerationExpressionForReplace(
+      tblName: String,
+      expr: String,
+      expectedReason: String,
+      genColType: String = "INT",
+      customTableDef: Option[String] = None): Unit = {
+    val tableDef = customTableDef.getOrElse(
+      s"REPLACE TABLE testcat.$tblName(a INT, b $genColType " +
+        s"GENERATED ALWAYS AS ($expr)) USING foo")
+    checkUnsupportedGenerationExpression(
+      tblName, tableDef, expr, expectedReason, createFirst = true)
+  }
+
+  private def checkUnresolvedRoutineException(
+      tblName: String,
+      tableDef: String,
+      expr: String,
+      routineName: String,
+      createFirst: Boolean): Unit = {
+    val start = tableDef.indexOf(expr)
+    withTable(s"testcat.$tblName") {
+      if (createFirst) {
+        sql(s"CREATE TABLE testcat.$tblName(dummy INT) USING foo")
+      }
+      checkError(
+        exception = analysisException(tableDef),
+        condition = "UNRESOLVED_ROUTINE",
+        parameters = Map(
+          "routineName" -> routineName,
+          "searchPath" -> "[`system`.`builtin`, `system`.`session`, `spark_catalog`.`default`]"),
+        context = ExpectedContext(fragment = expr, start = start, stop = start + expr.length - 1))
+    }
+  }
+
+  private def checkUnresolvedRoutineExceptionForCreate(
+      tblName: String,
+      expr: String,
+      routineName: String): Unit = {
+    val tableDef =
+      s"CREATE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+    checkUnresolvedRoutineException(tblName, tableDef, expr, routineName, createFirst = false)
+  }
+
+  private def checkUnresolvedRoutineExceptionForReplace(
+      tblName: String,
+      expr: String,
+      routineName: String): Unit = {
+    val tableDef =
+      s"REPLACE TABLE testcat.$tblName(a INT, b INT GENERATED ALWAYS AS ($expr)) USING foo"
+    checkUnresolvedRoutineException(tblName, tableDef, expr, routineName, createFirst = true)
+  }
 }
 
 class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
+  import org.apache.spark.sql.catalyst.expressions.DynamicPruning
+  import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
+
   override protected val catalogAndNamespace = "testv2filter.ns1.ns2."
+
+  test("SPARK-56467: scalar subquery filters on partition columns are pushed into runtimeFilters") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (3)")
+
+      val df = sql(s"SELECT * FROM $tbl WHERE part = (SELECT max(val) FROM $dim)")
+
+      // Verify query correctness
+      checkAnswer(df, Row(3, 3))
+
+      // Verify runtime filters contain the scalar subquery filter
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.nonEmpty,
+        "Expected runtimeFilters to contain scalar subquery filter")
+      assert(!batchScan.runtimeFilters.exists(
+        _.isInstanceOf[DynamicPruning]),
+        "Expected non-DPP runtime filter (scalar subquery)")
+
+      // Verify partition pruning: only 1 of 10 partitions should remain
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 1,
+        s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
 }
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {

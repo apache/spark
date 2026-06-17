@@ -19,13 +19,12 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec
 import org.apache.spark.sql.execution.datasources.parquet.ParquetCompressionCodec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-trait FileSourceCodecSuite extends QueryTest with SharedSparkSession {
+trait FileSourceCodecSuite extends SharedSparkSession {
 
   protected def format: String
   protected val codecConfigName: String

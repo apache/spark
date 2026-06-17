@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{BATCH_TIMESTAMP, ERROR}
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOperatorAttributeNullability
 import org.apache.spark.sql.catalyst.expressions.{CurrentBatchTimestamp, ExpressionWithRandomSeed}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -133,7 +134,7 @@ class IncrementalExecution(
       // of sink information.
       case w: WriteToMicroBatchDataSourceV1 => w.child
     }
-    sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
+    val optimized = sparkSession.sessionState.optimizer.executeAndTrack(preOptimized,
       tracker).transformAllExpressionsWithPruning(
       _.containsAnyPattern(CURRENT_LIKE, EXPRESSION_WITH_RANDOM_SEED)) {
       case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
@@ -141,7 +142,11 @@ class IncrementalExecution(
         ts.toLiteral
       case e: ExpressionWithRandomSeed => e.withNewSeed(Utils.random.nextLong())
     }
+    WidenStatefulOperatorAttributeNullability(optimized)
   }
+
+  // Use `this` for explain so the already-open transaction and executedPlan are reused.
+  override protected def queryExecutionForExplain: QueryExecution = this
 
   private val allowMultipleStatefulOperators: Boolean =
     sparkSession.sessionState.conf.getConf(SQLConf.STATEFUL_OPERATOR_ALLOW_MULTIPLE)
@@ -384,6 +389,7 @@ class IncrementalExecution(
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          prevBatchTimestampMs = prevOffsetSeqMetadata.map(_.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           hasInitialState = hasInitialState
@@ -394,6 +400,7 @@ class IncrementalExecution(
         t.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
+          prevBatchTimestampMs = prevOffsetSeqMetadata.map(_.batchTimestampMs),
           eventTimeWatermarkForLateEvents = None,
           eventTimeWatermarkForEviction = None,
           hasInitialState = hasInitialState
@@ -411,7 +418,8 @@ class IncrementalExecution(
         j.copy(
           stateInfo = Some(nextStatefulOperationStateInfo()),
           eventTimeWatermarkForLateEvents = None,
-          eventTimeWatermarkForEviction = None
+          eventTimeWatermarkForEviction = None,
+          outputMode = Some(outputMode)
         )
 
       case l: StreamingGlobalLimitExec =>
@@ -528,13 +536,31 @@ class IncrementalExecution(
       case j: StreamingSymmetricHashJoinExec =>
         val iwLateEvents = inputWatermarkForLateEvents(j.stateInfo.get)
         val iwEviction = inputWatermarkForEviction(j.stateInfo.get)
+        // Use the late-events watermark as the scan lower bound only when we can prove that
+        // it equals the previous batch's eviction watermark for this operator. That holds
+        // when STATEFUL_OPERATOR_ALLOW_MULTIPLE is true.
+        //
+        // When STATEFUL_OPERATOR_ALLOW_MULTIPLE is false (legacy mode), lateEvents == eviction
+        // for the same batch, so using it would collapse the eviction range to (wm, wm] = empty
+        // and silently stop state eviction. Fall back to None (full scan) in that mode, as we
+        // don't expect the legacy mode to be used by many users.
+        //
+        // The prevOffsetSeqMetadata.isDefined check guards against the first batch, where
+        // watermark propagation yields Some(0) for late events even though no state has been
+        // evicted yet, which would incorrectly skip entries at timestamp 0.
+        val prevBatchLateEventsWm =
+          if (prevOffsetSeqMetadata.isDefined && allowMultipleStatefulOperators) {
+            iwLateEvents
+          } else {
+            None
+          }
         j.copy(
           eventTimeWatermarkForLateEvents = iwLateEvents,
           eventTimeWatermarkForEviction = iwEviction,
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
-              iwEviction, !allowMultipleStatefulOperators)
+              iwEviction, prevBatchLateEventsWm, !allowMultipleStatefulOperators)
         )
     }
   }

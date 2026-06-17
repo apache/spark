@@ -1118,7 +1118,22 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       case Some(app) if !lookForEndEvent || app.attempts.head.info.completed =>
         // In this case, we either didn't care about the end event, or we found it. So the
         // listing data is good.
-        invalidateUI(app.info.id, app.attempts.head.info.attemptId)
+        val appId = app.info.id
+        val attemptId = app.attempts.head.info.attemptId
+        invalidateUI(appId, attemptId)
+        // If the app has just completed, any existing disk store may have been built from an
+        // in-progress snapshot and is now stale. invalidateUI() above only handles the case
+        // where the UI is still tracked in activeUIs (i.e., still held in the ApplicationCache).
+        // If the ApplicationCache already evicted the UI entry (e.g., due to LRU pressure),
+        // the UI was removed from activeUIs before invalidateUI() was called, so the disk
+        // store was never marked for deletion. Proactively delete it here so that the next
+        // loadDiskStore() call rebuilds from the completed event log.
+        if (app.attempts.head.info.completed) {
+          val hasActiveUI = synchronized { activeUIs.contains((appId, attemptId)) }
+          if (!hasActiveUI) {
+            diskManager.foreach(_.release(appId, attemptId, delete = true))
+          }
+        }
         addListing(app)
         listing.write(LogInfo(logPath.toString(), scanTime, LogType.EventLogs, Some(app.info.id),
           app.attempts.head.info.attemptId, reader.fileSizeForLastIndex, reader.lastIndex,

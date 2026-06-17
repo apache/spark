@@ -33,6 +33,8 @@ import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.BinaryView;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -287,6 +289,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putBytes(int rowId, int count, byte[] src, int srcIndex);
 
   /**
+   * Copies {@code count} bytes from a {@link ByteBuffer} starting at absolute position
+   * {@code srcIndex} into this column at {@code rowId}. Does not modify the buffer's position.
+   */
+  public abstract void putBytes(int rowId, int count, ByteBuffer src, int srcIndex);
+
+  /**
    * Sets `value` to the value at rowId.
    */
   public abstract void putShort(int rowId, short value);
@@ -435,6 +443,25 @@ public abstract class WritableColumnVector extends ColumnVector {
     return putByteArray(rowId, value, 0, value.length);
   }
 
+  /**
+   * Stores bytes from a {@link ByteBuffer} as a variable-length byte array at {@code rowId}.
+   * Copies {@code length} bytes starting at absolute position {@code srcPosition} in the buffer.
+   * Does not modify the buffer's position.
+   */
+  public final int putByteArray(int rowId, ByteBuffer src, int srcPosition, int length) {
+    int result = arrayData().appendBytes(length, src, srcPosition);
+    putArray(rowId, result, length);
+    return result;
+  }
+
+  final int appendBytes(int length, ByteBuffer src, int srcPosition) {
+    reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putBytes(elementsAppended, length, src, srcPosition);
+    elementsAppended += length;
+    return result;
+  }
+
   @Override
   public Decimal getDecimal(int rowId, int precision, int scale) {
     if (isNullAt(rowId)) return null;
@@ -468,6 +495,16 @@ public abstract class WritableColumnVector extends ColumnVector {
     getChild(2).putLong(rowId, value.microseconds);
   }
 
+  public void putTimestampNTZNanos(int rowId, TimestampNanosVal value) {
+    getChild(0).putLong(rowId, value.epochMicros);
+    getChild(1).putShort(rowId, value.nanosWithinMicro);
+  }
+
+  public void putTimestampLTZNanos(int rowId, TimestampNanosVal value) {
+    getChild(0).putLong(rowId, value.epochMicros);
+    getChild(1).putShort(rowId, value.nanosWithinMicro);
+  }
+
   @Override
   public UTF8String getUTF8String(int rowId) {
     if (isNullAt(rowId)) return null;
@@ -495,6 +532,24 @@ public abstract class WritableColumnVector extends ColumnVector {
       return dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
     }
   }
+
+  @Override
+  public BinaryView getBinaryView(int rowId) {
+    if (isNullAt(rowId)) return null;
+    if (dictionary == null) {
+      return arrayData().getBytesAsBinaryView(getArrayOffset(rowId), getArrayLength(rowId));
+    } else {
+      byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
+      return BinaryView.fromBytes(bytes);
+    }
+  }
+
+  /**
+   * Gets the values of bytes from [rowId, rowId + count), as a BinaryView.
+   * This method is similar to {@link ColumnVector#getBytes(int, int)}, but can save data copy as
+   * BinaryView is used as a pointer.
+   */
+  protected abstract BinaryView getBytesAsBinaryView(int rowId, int count);
 
   /**
    * Gets the values of bytes from [rowId, rowId + count), as a ByteBuffer.
@@ -726,7 +781,9 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType || c.type instanceof VariantType) {
+        if (c.type instanceof StructType || c.type instanceof VariantType
+            || c.type instanceof CalendarIntervalType
+            || c.type instanceof AnyTimestampNanoType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -1031,6 +1088,11 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+    } else if (type instanceof AnyTimestampNanoType) {
+      // Two columns. EpochMicros as Long. NanosWithinMicro as Short.
+      this.childColumns = new WritableColumnVector[2];
+      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.ShortType);
     } else if (type instanceof VariantType) {
       this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.BinaryType);

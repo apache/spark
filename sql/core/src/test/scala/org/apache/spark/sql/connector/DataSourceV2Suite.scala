@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import test.org.apache.spark.sql.connector._
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterThan => CatalystGreaterThan, Literal => CatalystLiteral, ScalarSubquery}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
@@ -53,7 +53,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ArrayImplicits._
 
-class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveSparkPlanHelper {
+class DataSourceV2Suite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private def getBatch(query: DataFrame): AdvancedBatch = {
@@ -1286,6 +1286,26 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
     val prunedStructType = structAttrs.head.dataType.asInstanceOf[StructType]
     assert(prunedStructType.fieldNames.toSeq == Seq("a"),
       s"struct column in pushed filter should be pruned to struct<a> but was $prunedStructType")
+  }
+
+  test("pushedFilters drops filters referencing pruned nested struct fields") {
+    // Disable constraint propagation so IsNotNull(s.a) is not added as a post-scan
+    // filter (it would keep field a alive in the struct).
+    withSQLConf(SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      val df = spark.read.format(classOf[NestedSchemaDataSourceV2].getName).load()
+      // Filter on s.a but select only s.b. Column pruning narrows s to struct<b>,
+      // so the pushed filter on s.a can't be remapped and should be dropped.
+      val q = df.filter($"s.a" > 3).select($"s.b")
+      checkAnswer(q, (4 until 10).map(i => Row(-i)))
+
+      val scanRelation = getScanRelation(q)
+      val referencedStructFields = scanRelation.pushedFilters.flatMap { filter =>
+        filter.collect { case a: AttributeReference if a.name == "s" => a }
+          .flatMap(_.dataType.asInstanceOf[StructType].fieldNames)
+      }
+      assert(!referencedStructFields.contains("a"),
+        "pushedFilters should not reference pruned nested field a")
+    }
   }
 
   test("scan canonicalization with pushedFilters") {

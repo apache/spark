@@ -5980,6 +5980,61 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  test("SPARK-56496: maxStageAttempts enforced in failure path when " +
+    "consecutive limit not reached") {
+    // Verify that maxStageAttempts is checked in the failure-handling path (not only in
+    // submitStage), so the stage is aborted as soon as the total-attempts ceiling is hit
+    // even when the consecutive-failure counter has been cleared by an intervening success.
+    setupStageAbortTest(sc)
+    doAnswer(_ => 5).when(scheduler).maxStageAttempts
+
+    // 3-stage pipeline: stage 0 -> stage 1 -> stage 2 (result)
+    val shuffleOneRdd = new MyRDD(sc, 2, Nil).cache()
+    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, new HashPartitioner(2))
+    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne), tracker = mapOutputTracker).cache()
+    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, new HashPartitioner(1))
+    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo), tracker = mapOutputTracker)
+    submit(finalRdd, Array(0))
+
+    // Stage 1 fails 3 consecutive times due to fetch failures from stage 0.
+    // maxConsecutiveStageAttempts = 4, so 3 failures do not yet trigger the consecutive limit.
+    // maxStageAttempts = 5, so total nextAttemptId (= 3 at this point) is still under the limit.
+    for (attempt <- 0 until 3) {
+      completeShuffleMapStageSuccessfully(0, attempt, numShufflePartitions = 2)
+      completeNextStageWithFetchFailure(1, attempt, shuffleDepOne)
+      scheduler.resubmitFailedStages()
+      assert(scheduler.runningStages.nonEmpty)
+      assert(!ended)
+    }
+
+    // Stage 1 succeeds on attempt 3, clearing the consecutive failure counter.
+    // Stage 1's nextAttemptId is now 4.
+    completeShuffleMapStageSuccessfully(0, 3, numShufflePartitions = 2)
+    completeShuffleMapStageSuccessfully(1, 3, numShufflePartitions = 1)
+
+    // Stage 2 runs but fails due to a fetch failure from stage 1, triggering stage 1 to retry.
+    completeNextStageWithFetchFailure(2, 0, shuffleDepTwo)
+    scheduler.resubmitFailedStages()
+
+    completeShuffleMapStageSuccessfully(0, 4, numShufflePartitions = 2)
+
+    // Stage 1's 5th attempt (attempt 4) fails.
+    // Consecutive failures = 1 (cleared by earlier success), well below
+    // maxConsecutiveStageAttempts. However, nextAttemptId = 5 >= maxStageAttempts = 5,
+    // so the job must be aborted in the failure handler (not submitStage).
+    completeNextStageWithFetchFailure(1, 4, shuffleDepOne)
+
+    sc.listenerBus.waitUntilEmpty()
+    assert(ended)
+    jobResult match {
+      case JobFailed(reason) =>
+        // The failure-path message should report the total-attempts limit, not the consecutive one.
+        assert(reason.getMessage.contains("exceeded the maximum allowable total stage attempts: 5"),
+          s"Unexpected failure reason: ${reason.getMessage}")
+      case other => fail(s"expected JobFailed, not $other")
+    }
+  }
+
   test("SPARK-53564: RpcTimeout while submitting stage should not fail the job/application") {
     val shuffleMapRdd = new MyRDD(sc, 2, Nil)
     shuffleMapRdd.cache()

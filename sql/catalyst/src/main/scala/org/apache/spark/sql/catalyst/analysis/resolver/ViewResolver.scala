@@ -193,7 +193,7 @@ case class ViewResolutionContext(
   def validate(unresolvedView: View): Unit = {
     if (nestedViewDepth > maxNestedViewDepth) {
       throw QueryCompilationErrors.viewDepthExceedsMaxResolutionDepthError(
-        unresolvedView.desc.identifier,
+        unresolvedView.desc.fullIdent,
         maxNestedViewDepth,
         unresolvedView
       )

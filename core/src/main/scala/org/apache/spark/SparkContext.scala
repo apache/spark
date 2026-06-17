@@ -455,7 +455,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // Set Spark driver host and port system properties. This explicitly sets the configuration
     // instead of relying on the default value of the config constant.
     if (SparkMasterRegex.isK8s(master) &&
-        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", false)) {
+        _conf.getBoolean("spark.kubernetes.executor.useDriverPodIP", true)) {
       logInfo("Use DRIVER_BIND_ADDRESS instead of DRIVER_HOST_ADDRESS as driver address " +
         "because spark.kubernetes.executor.useDriverPodIP is true in K8s mode.")
       _conf.set(DRIVER_HOST_ADDRESS, _conf.get(DRIVER_BIND_ADDRESS))
@@ -3152,6 +3152,8 @@ object SparkContext extends Logging {
   private[spark] val RDD_SCOPE_KEY = "spark.rdd.scope"
   private[spark] val RDD_SCOPE_NO_OVERRIDE_KEY = "spark.rdd.scope.noOverride"
   private[spark] val SQL_EXECUTION_ID_KEY = "spark.sql.execution.id"
+  private[spark] val DATASET_QUERY_EXECUTION_ID_KEY =
+    "spark.sql.dataset.queryExecution.id"
 
   /**
    * Executor id for the driver.  In earlier versions of Spark, this was `<driver>`, but this was

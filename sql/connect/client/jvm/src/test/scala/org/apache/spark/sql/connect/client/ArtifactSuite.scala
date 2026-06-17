@@ -26,9 +26,9 @@ import java.util.zip.CRC32
 import com.google.protobuf.ByteString
 import io.grpc.{ManagedChannel, Server}
 import io.grpc.inprocess.{InProcessChannelBuilder, InProcessServerBuilder}
-import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 
 import org.apache.spark.connect.proto.AddArtifactsRequest
+import org.apache.spark.network.util.JavaUtils.sha256Hex
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.connect.client.SparkConnectClient.Configuration
 import org.apache.spark.sql.connect.test.ConnectFunSuite
@@ -57,7 +57,7 @@ class ArtifactSuite extends ConnectFunSuite {
 
   private def createArtifactManager(): Unit = {
     channel = InProcessChannelBuilder.forName(getClass.getName).directExecutor().build()
-    state = new SparkConnectStubState(channel, RetryPolicy.defaultPolicies())
+    state = new SparkConnectStubState(channel, Configuration())
     bstub = new CustomSparkConnectBlockingStub(channel, state)
     stub = new CustomSparkConnectStub(channel, state)
     artifactManager = new ArtifactManager(Configuration(), "", bstub, stub)

@@ -363,9 +363,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putLong(offset + i, valuesReader.readInteger());
-      }
+      valuesReader.readIntegersAsLongs(total, values, offset);
     }
 
     @Override
@@ -398,9 +396,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putDouble(offset + i, valuesReader.readInteger());
-      }
+      valuesReader.readIntegersAsDoubles(total, values, offset);
     }
 
     @Override
@@ -433,8 +429,10 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readIntegersAsLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        values.putLong(offset + i,
+            DateTimeUtils.daysToMicros((int) values.getLong(offset + i), ZoneOffset.UTC));
       }
     }
 
@@ -476,8 +474,10 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readIntegersAsLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        int rebasedDays = rebaseDays((int) values.getLong(offset + i), failIfRebase);
+        values.putLong(offset + i, DateTimeUtils.daysToMicros(rebasedDays, ZoneOffset.UTC));
       }
     }
 
@@ -688,9 +688,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putInt(offset + i, (int) valuesReader.readLong());
-      }
+      valuesReader.readLongsAsInts(total, values, offset);
     }
 
     @Override
@@ -712,11 +710,15 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      values.putLong(offset, dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
+      // 32-bit Decimal target (precision <= 9) is stored in `intData`; `longData` is
+      // unallocated, so use `putInt` with the same narrowing cast as `readValue`/`readValues`.
+      values.putInt(offset, (int) dictionary.decodeToLong(dictionaryIds.getDictId(offset)));
     }
   }
 
   private static class UnsignedLongUpdater implements ParquetVectorUpdater {
+    private final byte[] unsignedLongScratch = new byte[9];
+
     @Override
     public void readValues(
         int total,
@@ -736,8 +738,9 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      byte[] bytes = new BigInteger(Long.toUnsignedString(valuesReader.readLong())).toByteArray();
-      values.putByteArray(offset, bytes);
+      int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(
+          valuesReader.readLong(), unsignedLongScratch);
+      values.putByteArray(offset, unsignedLongScratch, start, 9 - start);
     }
 
     @Override
@@ -747,8 +750,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
       long signed = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      byte[] unsigned = new BigInteger(Long.toUnsignedString(signed)).toByteArray();
-      values.putByteArray(offset, unsigned);
+      int start = VectorizedReaderBase.encodeUnsignedLongBigEndian(signed, unsignedLongScratch);
+      values.putByteArray(offset, unsignedLongScratch, start, 9 - start);
     }
   }
 
@@ -802,8 +805,9 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        values.putLong(offset + i, DateTimeUtils.millisToMicros(values.getLong(offset + i)));
       }
     }
 
@@ -846,8 +850,10 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        long julianMicros = DateTimeUtils.millisToMicros(values.getLong(offset + i));
+        values.putLong(offset + i, rebaseMicros(julianMicros, failIfRebase, timeZone));
       }
     }
 
@@ -884,8 +890,9 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        readValue(offset + i, values, valuesReader);
+      valuesReader.readLongs(total, values, offset);
+      for (int i = 0; i < total; i++) {
+        values.putLong(offset + i, DateTimeUtils.microsToNanos(values.getLong(offset + i)));
       }
     }
 
@@ -953,9 +960,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      for (int i = 0; i < total; ++i) {
-        values.putDouble(offset + i, valuesReader.readFloat());
-      }
+      valuesReader.readFloatsAsDoubles(total, values, offset);
     }
 
     @Override

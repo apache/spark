@@ -19,14 +19,12 @@ package org.apache.spark.sql.connector
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, InMemoryCatalog, InMemoryPartitionTableCatalog, InMemoryTableWithV2FilterCatalog, StagingInMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-trait DatasourceV2SQLBase
-  extends QueryTest with SharedSparkSession with BeforeAndAfter {
+trait DatasourceV2SQLBase extends SharedSparkSession with BeforeAndAfter {
 
   protected def registerCatalog[T <: CatalogPlugin](name: String, clazz: Class[T]): Unit = {
     spark.conf.set(s"spark.sql.catalog.$name", clazz.getName)

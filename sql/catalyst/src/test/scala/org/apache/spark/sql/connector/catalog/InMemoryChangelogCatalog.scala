@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.types._
@@ -39,15 +40,36 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
   private val changeData: mutable.Map[String, mutable.ArrayBuffer[InternalRow]] =
     mutable.Map.empty
 
-  // Stores the most recent ChangelogInfo passed to loadChangelog(), so tests can verify
-  // that the parser/DataFrame API correctly constructed and forwarded it.
-  private var _lastChangelogInfo: Option[ChangelogInfo] = None
-  def lastChangelogInfo: Option[ChangelogInfo] = _lastChangelogInfo
+  // Stores the most recent ChangelogContext and options passed to loadChangelog(), so tests
+  // can verify that the parser/DataFrame API correctly constructed and forwarded them.
+  private var _lastChangelogContext: Option[ChangelogContext] = None
+  def lastChangelogContext: Option[ChangelogContext] = _lastChangelogContext
+
+  private var _lastOptions: Option[CaseInsensitiveStringMap] = None
+  def lastOptions: Option[CaseInsensitiveStringMap] = _lastOptions
+
+  // Per-table overrides for Changelog properties (carry-over rows, intermediate changes,
+  // update representation, row identity). Tests can set these to exercise post-processing.
+  private val changelogProperties: mutable.Map[String, ChangelogProperties] =
+    mutable.Map.empty
+
+  /**
+   * Override the [[Changelog]] properties returned for a given table.
+   * Defaults are: containsCarryoverRows=false, containsIntermediateChanges=false,
+   * representsUpdateAsDeleteAndInsert=false, no rowId, no rowVersion.
+   */
+  def setChangelogProperties(
+      ident: Identifier,
+      properties: ChangelogProperties): Unit = {
+    changelogProperties(ident.toString) = properties
+  }
 
   override def loadChangelog(
       ident: Identifier,
-      changelogInfo: ChangelogInfo): Changelog = {
-    _lastChangelogInfo = Some(changelogInfo)
+      changelogContext: ChangelogContext,
+      options: CaseInsensitiveStringMap): Changelog = {
+    _lastChangelogContext = Some(changelogContext)
+    _lastOptions = Some(options)
     if (!tableExists(ident)) {
       throw new NoSuchTableException(ident.asMultipartIdentifier)
     }
@@ -57,9 +79,10 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
     val numDataCols = table.columns.length
     // _commit_version is at index numDataCols + 1 (after _change_type)
     val commitVersionIdx = numDataCols + 1
-    val filtered = filterByRange(allRows.toSeq, commitVersionIdx, changelogInfo.range())
+    val filtered = filterByRange(allRows.toSeq, commitVersionIdx, changelogContext.range())
+    val props = changelogProperties.getOrElse(ident.toString, ChangelogProperties())
     new InMemoryChangelog(
-      table.name + "_changelog", table.columns, filtered)
+      table.name + "_changelog", table.columns, filtered, props)
   }
 
   /**
@@ -110,29 +133,75 @@ class InMemoryChangelogCatalog extends InMemoryCatalog {
 }
 
 /**
+ * Configurable properties for [[InMemoryChangelog]] that test cases can use to exercise
+ * Spark's post-processing (carry-over removal, update detection, net changes).
+ *
+ * @param containsCarryoverRows whether the change stream may contain identical CoW pairs
+ * @param containsIntermediateChanges whether multiple changes per row may exist
+ * @param representsUpdateAsDeleteAndInsert whether updates appear as raw delete+insert
+ * @param rowIdNames optional row identity columns as top-level names (e.g. Seq("id"))
+ * @param rowIdPaths optional row identity paths for nested struct fields
+ *                   (e.g. Seq(Seq("payload", "id"))); takes precedence over rowIdNames
+ * @param rowVersionName optional row version column (e.g. Some("row_commit_version"));
+ *                       must be a per-row version that distinguishes carry-overs from
+ *                       real updates. Do NOT pass the commit version, which is constant
+ *                       within a partition and would cause every delete+insert pair to
+ *                       look like a carry-over
+ * @param commitTimestampNullable whether the connector declares `_commit_timestamp` as
+ *                                nullable. Defaults to `true`. Tests that need to
+ *                                exercise NullPropagation behaviour on a non-nullable
+ *                                schema can set this to `false`.
+ */
+case class ChangelogProperties(
+    containsCarryoverRows: Boolean = false,
+    containsIntermediateChanges: Boolean = false,
+    representsUpdateAsDeleteAndInsert: Boolean = false,
+    rowIdNames: Seq[String] = Seq.empty,
+    rowIdPaths: Seq[Seq[String]] = Seq.empty,
+    rowVersionName: Option[String] = None,
+    commitTimestampNullable: Boolean = true)
+
+/**
  * A test [[Changelog]] that returns pre-populated change rows.
  *
- * Reports `containsCarryoverRows = false` so Spark skips carry-over removal.
+ * Properties (carry-over presence, update representation, row identity) are configurable
+ * via the [[ChangelogProperties]] parameter so tests can exercise different code paths
+ * in Spark's post-processing analyzer rule.
  */
 class InMemoryChangelog(
     tableName: String,
     dataColumns: Array[Column],
-    changeRows: Seq[InternalRow]) extends Changelog {
+    changeRows: Seq[InternalRow],
+    properties: ChangelogProperties = ChangelogProperties()) extends Changelog {
 
   private val cdcColumns: Array[Column] = dataColumns ++ Array(
     Column.create("_change_type", StringType),
     Column.create("_commit_version", LongType),
-    Column.create("_commit_timestamp", TimestampType))
+    Column.create("_commit_timestamp", TimestampType, properties.commitTimestampNullable))
 
   override def name(): String = tableName
 
   override def columns(): Array[Column] = cdcColumns
 
-  override def containsCarryoverRows(): Boolean = false
+  override def containsCarryoverRows(): Boolean = properties.containsCarryoverRows
 
-  override def containsIntermediateChanges(): Boolean = false
+  override def containsIntermediateChanges(): Boolean = properties.containsIntermediateChanges
 
-  override def representsUpdateAsDeleteAndInsert(): Boolean = false
+  override def representsUpdateAsDeleteAndInsert(): Boolean =
+    properties.representsUpdateAsDeleteAndInsert
+
+  override def rowId(): Array[NamedReference] = {
+    if (properties.rowIdPaths.nonEmpty) {
+      properties.rowIdPaths.map(parts => FieldReference(parts): NamedReference).toArray
+    } else {
+      properties.rowIdNames.map(name => FieldReference.column(name): NamedReference).toArray
+    }
+  }
+
+  override def rowVersion(): NamedReference = properties.rowVersionName match {
+    case Some(name) => FieldReference.column(name)
+    case None => super.rowVersion()
+  }
 
   override def newScanBuilder(
       options: CaseInsensitiveStringMap): ScanBuilder = {

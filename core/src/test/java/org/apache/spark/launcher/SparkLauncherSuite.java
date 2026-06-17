@@ -152,8 +152,10 @@ public class SparkLauncherSuite extends BaseSuite {
         // SPARK-23020: see doc for InProcessTestApp.LOCK for a description of the race. Here
         // we wait until we know that the connection between the app and the launcher has been
         // established before allowing the app to finish.
+        // Use a generous timeout because, under heavy CI load, establishing the connection
+        // between the in-process app and the launcher can take longer than a few seconds.
         final SparkAppHandle _handle = handle;
-        eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () -> {
+        eventually(Duration.ofSeconds(30), Duration.ofMillis(100), () -> {
           assertNotEquals(SparkAppHandle.State.UNKNOWN, _handle.getState());
         });
 
@@ -229,11 +231,17 @@ public class SparkLauncherSuite extends BaseSuite {
       assertTrue(handle.getError().isPresent());
       assertSame(handle.getError().get(), DUMMY_EXCEPTION);
     } finally {
-      if (handle != null) {
-        handle.kill();
+      try {
+        if (handle != null) {
+          handle.kill();
+          // Wait for the handle to be fully disposed so the LauncherServer is properly
+          // cleaned up before postChecks() runs.
+          waitFor(handle);
+        }
+      } finally {
+        restoreSystemProperties(properties);
+        waitForSparkContextShutdown();
       }
-      restoreSystemProperties(properties);
-      waitForSparkContextShutdown();
     }
   }
 
@@ -259,6 +267,9 @@ public class SparkLauncherSuite extends BaseSuite {
     } finally {
       if (handle != null) {
         handle.kill();
+        // Wait for the handle to be fully disposed so the LauncherServer is properly
+        // cleaned up before postChecks() runs.
+        waitFor(handle);
       }
     }
   }
@@ -273,7 +284,7 @@ public class SparkLauncherSuite extends BaseSuite {
     // Here DAGScheduler is stopped, while SparkContext.clearActiveContext may not be called yet.
     // Wait for a reasonable amount of time to avoid creating two active SparkContext in JVM.
     // See SPARK-23019 and SparkContext.stop() for details.
-    eventually(Duration.ofSeconds(5), Duration.ofMillis(10), () ->
+    eventually(Duration.ofSeconds(30), Duration.ofMillis(100), () ->
       assertTrue(SparkContext$.MODULE$.getActive().isEmpty(), "SparkContext is still alive."));
   }
 

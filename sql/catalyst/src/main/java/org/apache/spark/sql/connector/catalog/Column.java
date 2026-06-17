@@ -53,7 +53,16 @@ public interface Column {
       boolean nullable,
       String comment,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null, null, null, metadataInJSON);
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        /* defaultValue = */ null,
+        /* generationExpression = */ null,
+        /* identityColumnSpec = */ null,
+        metadataInJSON,
+        /* id = */ null);
   }
 
   static Column create(
@@ -63,10 +72,26 @@ public interface Column {
       String comment,
       ColumnDefaultValue defaultValue,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, defaultValue,
-            null, null, metadataInJSON);
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        defaultValue,
+        /* generationExpression = */ null,
+        /* identityColumnSpec = */ null,
+        metadataInJSON,
+        /* id = */ null);
   }
 
+  /**
+   * Creates a column with a generation expression in SQL string form.
+   *
+   * @since 4.3.0
+   * @deprecated Use
+   *   {@link #create(String, DataType, boolean, String, GenerationExpression, String)} instead.
+   */
+  @Deprecated
   static Column create(
       String name,
       DataType dataType,
@@ -74,8 +99,42 @@ public interface Column {
       String comment,
       String generationExpression,
       String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null,
-            generationExpression, null, metadataInJSON);
+    GenerationExpression genExpr = generationExpression != null
+        ? new GenerationExpression(generationExpression) : null;
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        /* defaultValue = */ null,
+        genExpr,
+        /* identityColumnSpec = */ null,
+        metadataInJSON,
+        /* id = */ null);
+  }
+
+  /**
+   * Creates a column with a generation expression object.
+   *
+   * @since 4.3.0
+   */
+  static Column create(
+      String name,
+      DataType dataType,
+      boolean nullable,
+      String comment,
+      GenerationExpression generationExpression,
+      String metadataInJSON) {
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        /* defaultValue = */ null,
+        generationExpression,
+        /* identityColumnSpec = */ null,
+        metadataInJSON,
+        /* id = */ null);
   }
 
   static Column create(
@@ -85,8 +144,16 @@ public interface Column {
           String comment,
           IdentityColumnSpec identityColumnSpec,
           String metadataInJSON) {
-    return new ColumnImpl(name, dataType, nullable, comment, null,
-            null, identityColumnSpec, metadataInJSON);
+    return new ColumnImpl(
+        name,
+        dataType,
+        nullable,
+        comment,
+        /* defaultValue = */ null,
+        /* generationExpression = */ null,
+        identityColumnSpec,
+        metadataInJSON,
+        /* id = */ null);
   }
 
   /**
@@ -117,13 +184,29 @@ public interface Column {
   ColumnDefaultValue defaultValue();
 
   /**
-   * Returns the generation expression of this table column. Null means no generation expression.
+   * Returns the generation expression of this table column as a SQL string. Null means no
+   * generation expression.
    * <p>
-   * The generation expression is stored as spark SQL dialect. It is up to the data source to verify
-   * expression compatibility and reject writes as necessary.
+   * This returns only the SQL string form. Prefer {@link #columnGenerationExpression()}, which can
+   * also carry a connector {@link org.apache.spark.sql.connector.expressions.Expression} and
+   * captures the semantics unambiguously. It is up to the data source to verify expression
+   * compatibility and reject writes as necessary.
    */
   @Nullable
-  String generationExpression();
+  default String generationExpression() {
+    return columnGenerationExpression() != null ? columnGenerationExpression().getSql() : null;
+  }
+
+  /**
+   * Returns the generation expression of this table column as a {@link GenerationExpression}.
+   * Null means no generation expression.
+   *
+   * @since 4.3.0
+   */
+  @Nullable
+  default GenerationExpression columnGenerationExpression() {
+    return null;
+  }
 
   /**
    * Returns the identity column specification of this table column. Null means no identity column.
@@ -136,4 +219,36 @@ public interface Column {
    */
   @Nullable
   String metadataInJSON();
+
+  /**
+   * Returns the ID of this top-level column, or null. The ID is an opt-in identifier that the
+   * connector uses to track column identity beyond column name and type.
+   * <p>
+   * When a non-null ID is returned, the connector commits to the following contract:
+   * <ul>
+   *   <li>The ID is stable across renames (logical name changes preserve the ID).</li>
+   *   <li>The ID changes when a top-level column is dropped and re-added, even with the same
+   *       name and type.</li>
+   *   <li>IDs are not reused within a table's history.</li>
+   * </ul>
+   * <p>
+   * When null is returned, Spark skips identity validation for that column. Connectors should
+   * return null when:
+   * <ul>
+   *   <li>The catalog has no notion of column identity beyond name and type, OR</li>
+   *   <li>The connector chooses to treat same-name drop+re-add as the same column
+   *       (lenient semantics).</li>
+   * </ul>
+   * Returning null is per-column: a connector may return IDs for some columns and null for
+   * others.
+   * <p>
+   * This API covers top-level columns only. Nested struct fields, array elements, and map
+   * keys/values do not have separate IDs. Connectors that track nested field IDs can encode
+   * them into the returned top-level Column ID string to detect nested changes, since Spark
+   * only compares string equality.
+   */
+  @Nullable
+  default String id() {
+    return null;
+  }
 }

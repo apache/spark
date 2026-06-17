@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.execution.HiveTempPath
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -39,8 +38,7 @@ case class TestData(key: Int, value: String)
 
 case class ThreeColumnTable(key: Int, value: String, key1: String)
 
-class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils {
+class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(

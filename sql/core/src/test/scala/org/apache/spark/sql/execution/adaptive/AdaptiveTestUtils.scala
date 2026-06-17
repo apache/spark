@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.adaptive
 import org.scalactic.source.Position
 import org.scalatest.Tag
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Test with this tag will be ignored if the test suite extends `EnableAdaptiveExecutionSuite`.
@@ -33,7 +33,7 @@ case class DisableAdaptiveExecution(reason: String) extends Tag("DisableAdaptive
  * Helper trait that enables AQE for all tests regardless of default config values, except that
  * tests tagged with [[DisableAdaptiveExecution]] will be skipped.
  */
-trait EnableAdaptiveExecutionSuite extends SQLTestUtils {
+trait EnableAdaptiveExecutionSuite extends QueryTest {
   protected val forceApply = true
 
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
@@ -57,7 +57,7 @@ trait EnableAdaptiveExecutionSuite extends SQLTestUtils {
 /**
  * Helper trait that disables AQE for all tests regardless of default config values.
  */
-trait DisableAdaptiveExecutionSuite extends SQLTestUtils {
+trait DisableAdaptiveExecutionSuite extends QueryTest {
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
       (implicit pos: Position): Unit = {
     super.test(testName, testTags: _*) {

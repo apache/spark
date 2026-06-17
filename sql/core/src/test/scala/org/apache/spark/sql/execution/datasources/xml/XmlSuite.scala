@@ -37,7 +37,7 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 
 import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 import org.apache.spark.io.ZStdCompressionCodec
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, QueryTest, Row, SaveMode, YearUDT}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, Row, SaveMode, YearUDT}
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
@@ -54,8 +54,7 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class XmlSuite
-    extends QueryTest
-    with SharedSparkSession
+    extends SharedSparkSession
     with CommonFileDataSourceSuite
     with TestXmlData {
   import testImplicits._

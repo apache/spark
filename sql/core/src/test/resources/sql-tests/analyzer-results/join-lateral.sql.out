@@ -3065,6 +3065,136 @@ Project [1 AS 1#x]
 
 
 -- !query
+WITH nj1(k, v1) AS (VALUES (1, 'a')),
+     nj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM nj1 NATURAL JOIN nj2,
+LATERAL (SELECT k AS unq_k)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias nj1
+:     +- Project [col1#x AS k#x, col2#x AS v1#x]
+:        +- LocalRelation [col1#x, col2#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias nj2
+:     +- Project [col1#x AS k#x, col2#x AS v2#x]
+:        +- LocalRelation [col1#x, col2#x]
++- Project [k#x, v1#x, v2#x, unq_k#x]
+   +- LateralJoin lateral-subquery#x [k#x], Inner
+      :  +- SubqueryAlias __auto_generated_subquery_name
+      :     +- Project [outer(k#x) AS unq_k#x]
+      :        +- OneRowRelation
+      +- Project [k#x, v1#x, v2#x]
+         +- Join Inner, (k#x = k#x)
+            :- SubqueryAlias nj1
+            :  +- CTERelationRef xxxx, true, [k#x, v1#x], false, false, 1
+            +- SubqueryAlias nj2
+               +- CTERelationRef xxxx, true, [k#x, v2#x], false, false, 1
+
+
+-- !query
+WITH nj1(k, v1) AS (VALUES (1, 'a')),
+     nj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM nj1 NATURAL JOIN nj2,
+LATERAL (SELECT k AS unq_k, nj1.k AS qual_nj1k, nj2.k AS qual_nj2k)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias nj1
+:     +- Project [col1#x AS k#x, col2#x AS v1#x]
+:        +- LocalRelation [col1#x, col2#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias nj2
+:     +- Project [col1#x AS k#x, col2#x AS v2#x]
+:        +- LocalRelation [col1#x, col2#x]
++- Project [k#x, v1#x, v2#x, unq_k#x, qual_nj1k#x, qual_nj2k#x]
+   +- Project [k#x, v1#x, v2#x, unq_k#x, qual_nj1k#x, qual_nj2k#x]
+      +- LateralJoin lateral-subquery#x [k#x && k#x && k#x], Inner
+         :  +- SubqueryAlias __auto_generated_subquery_name
+         :     +- Project [outer(k#x) AS unq_k#x, outer(k#x) AS qual_nj1k#x, outer(k#x) AS qual_nj2k#x]
+         :        +- OneRowRelation
+         +- Project [k#x, v1#x, v2#x, k#x]
+            +- Join Inner, (k#x = k#x)
+               :- SubqueryAlias nj1
+               :  +- CTERelationRef xxxx, true, [k#x, v1#x], false, false, 1
+               +- SubqueryAlias nj2
+                  +- CTERelationRef xxxx, true, [k#x, v2#x], false, false, 1
+
+
+-- !query
+WITH uj1(k, v1) AS (VALUES (1, 'a')),
+     uj2(k, v2) AS (VALUES (1, 'b'))
+SELECT * FROM uj1 JOIN uj2 USING (k),
+LATERAL (SELECT k AS unq_k, uj1.k AS qual_uj1k, uj2.k AS qual_uj2k)
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias uj1
+:     +- Project [col1#x AS k#x, col2#x AS v1#x]
+:        +- LocalRelation [col1#x, col2#x]
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias uj2
+:     +- Project [col1#x AS k#x, col2#x AS v2#x]
+:        +- LocalRelation [col1#x, col2#x]
++- Project [k#x, v1#x, v2#x, unq_k#x, qual_uj1k#x, qual_uj2k#x]
+   +- Project [k#x, v1#x, v2#x, unq_k#x, qual_uj1k#x, qual_uj2k#x]
+      +- LateralJoin lateral-subquery#x [k#x && k#x && k#x], Inner
+         :  +- SubqueryAlias __auto_generated_subquery_name
+         :     +- Project [outer(k#x) AS unq_k#x, outer(k#x) AS qual_uj1k#x, outer(k#x) AS qual_uj2k#x]
+         :        +- OneRowRelation
+         +- Project [k#x, v1#x, v2#x, k#x]
+            +- Join Inner, (k#x = k#x)
+               :- SubqueryAlias uj1
+               :  +- CTERelationRef xxxx, true, [k#x, v1#x], false, false, 1
+               +- SubqueryAlias uj2
+                  +- CTERelationRef xxxx, true, [k#x, v2#x], false, false, 1
+
+
+-- !query
+WITH cte1(k, v1) AS (VALUES (1, 'a'))
+SELECT * FROM (SELECT k FROM cte1 ORDER BY v1) sub,
+LATERAL (SELECT v1 AS leaked)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 107,
+    "stopIndex" : 108,
+    "fragment" : "v1"
+  } ]
+}
+
+
+-- !query
+WITH cte1(k, v1) AS (VALUES (1, 'a'), (2, 'b'), (3, 'c'))
+SELECT * FROM (SELECT k FROM cte1 GROUP BY k) g,
+LATERAL (SELECT v1 AS leaked)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNRESOLVED_COLUMN.WITHOUT_SUGGESTION",
+  "sqlState" : "42703",
+  "messageParameters" : {
+    "objectName" : "`v1`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 124,
+    "stopIndex" : 125,
+    "fragment" : "v1"
+  } ]
+}
+
+
+-- !query
 DROP VIEW t1
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`t1`, false, true, false

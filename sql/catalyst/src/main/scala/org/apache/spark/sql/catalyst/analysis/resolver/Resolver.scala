@@ -26,6 +26,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.analysis.{
   withPosition,
+  AnalysisContext,
   AnalysisErrorAt,
   CleanupAliases,
   FunctionResolution,
@@ -53,8 +54,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -96,6 +96,7 @@ class Resolver(
   private val subqueryRegistry = new SubqueryRegistry
   private val scopes = new NameScopeStack(
     tempVariableManager = catalogManager.tempVariableManager,
+    catalogManager = catalogManager,
     subqueryRegistry = subqueryRegistry,
     planLogger = planLogger
   )
@@ -583,9 +584,14 @@ class Resolver(
           relationsWithResolvedMetadata
         case None =>
           val multipartId = unresolvedRelation.multipartIdentifier
-          val catalogPath = (catalogManager.currentCatalog.name() +:
-            catalogManager.currentNamespace).toSeq
-          val searchPath = SQLConf.get.resolutionSearchPath(catalogPath).map(toSQLId)
+          val catalogPath = {
+            val ctx = AnalysisContext.get.catalogAndNamespace
+            if (ctx.nonEmpty) ctx
+            else (catalogManager.currentCatalog.name() +: catalogManager.currentNamespace).toSeq
+          }
+          val searchPath = catalogManager
+            .sqlResolutionPathEntries(catalogPath.head, catalogPath.tail.toSeq)
+            .map(toSQLId)
           unresolvedRelation.tableNotFound(multipartId, searchPath)
       }
 
@@ -842,7 +848,7 @@ class Resolver(
         messageParameters = Map(
           "missingAttributes" -> makeCommaSeparatedExpressionString(missingInput.toSeq),
           "input" -> makeCommaSeparatedExpressionString(inputSet.toSeq),
-          "operator" -> operator.simpleString(conf.maxToStringFields),
+          "operator" -> operator.simpleString(SQLConf.get.maxToStringFields),
           "operation" -> makeCommaSeparatedExpressionString(attributesWithSameName.toSeq)
         )
       )
@@ -852,7 +858,7 @@ class Resolver(
         messageParameters = Map(
           "missingAttributes" -> makeCommaSeparatedExpressionString(missingInput.toSeq),
           "input" -> makeCommaSeparatedExpressionString(inputSet.toSeq),
-          "operator" -> operator.simpleString(conf.maxToStringFields)
+          "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
         )
       )
     }

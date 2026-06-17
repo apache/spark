@@ -141,6 +141,7 @@ __all__ = [
     "broadcast",
     "read_orc",
     "json_normalize",
+    "show_versions",
 ]
 
 
@@ -3877,6 +3878,134 @@ def json_normalize(
 
     # Convert back to Pandas-on-Spark DataFrame
     return ps.DataFrame(internal)
+
+
+def _get_sys_info() -> Dict[str, Any]:
+    """Returns system information as a dictionary."""
+    import locale
+    import os
+    import platform
+    import struct
+    import sys as _sys
+
+    uname_result = platform.uname()
+    try:
+        language_code, encoding = locale.getlocale()
+    except (TypeError, ValueError):
+        language_code, encoding = (None, None)
+    return {
+        "python": platform.python_version(),
+        "python-bits": struct.calcsize("P") * 8,
+        "OS": uname_result.system,
+        "OS-release": uname_result.release,
+        "Version": uname_result.version,
+        "machine": uname_result.machine,
+        "processor": uname_result.processor,
+        "byteorder": _sys.byteorder,
+        "LC_ALL": os.environ.get("LC_ALL"),
+        "LANG": os.environ.get("LANG"),
+        "LOCALE": {"language-code": language_code, "encoding": encoding},
+    }
+
+
+def _get_dependency_info() -> Dict[str, Optional[str]]:
+    """Returns dependency information as a dictionary."""
+    import importlib
+
+    import pyspark
+
+    deps = [
+        "pyspark",
+        "pandas",
+        "numpy",
+        "pyarrow",
+        "grpc",
+        "google.protobuf",
+        "matplotlib",
+        "IPython",
+        "sphinx",
+        "plotly",
+        "tabulate",
+        "scipy",
+        "mlflow",
+    ]
+    result: Dict[str, Optional[str]] = {}
+    for modname in deps:
+        if modname == "pyspark":
+            result[modname] = pyspark.__version__
+            continue
+        try:
+            mod = importlib.import_module(modname)
+        except ImportError:
+            result[modname] = None
+        except Exception:
+            # Dependency conflicts may cause non-ImportError failures.
+            result[modname] = "N/A"
+        else:
+            result[modname] = getattr(mod, "__version__", None)
+    return result
+
+
+def show_versions(as_json: Union[str, bool] = False) -> None:
+    """
+    Provide useful information, important for bug reports.
+
+    It comprises info about hosting operation system, pyspark.pandas version,
+    and versions of other installed relative packages.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    as_json : str or bool, default False
+        * If False, outputs info in a human readable form to the console.
+        * If str, it will be considered as a path to a file.
+          Info will be written to that file in JSON format.
+        * If True, outputs info in JSON format to the console.
+
+    Examples
+    --------
+    >>> ps.show_versions()  # doctest: +SKIP
+    INSTALLED VERSIONS
+    ------------------
+    python           : 3.10.6.final.0
+    python-bits      : 64
+    ...
+    pyspark          : 4.3.0.dev0
+    pandas           : 2.2.0
+    numpy            : 1.24.3
+    pyarrow          : 15.0.0
+    ...
+    """
+    sys_info = _get_sys_info()
+    deps = _get_dependency_info()
+
+    if as_json:
+        import sys as _sys
+
+        j = {"system": sys_info, "dependencies": deps}
+
+        if as_json is True:
+            _sys.stdout.writelines(json.dumps(j, indent=2))
+        else:
+            assert isinstance(as_json, str)
+            with open(as_json, "w", encoding="utf-8") as f:
+                json.dump(j, f, indent=2)
+        return
+
+    locale_info = sys_info["LOCALE"]
+    sys_info["LOCALE"] = "{language_code}.{encoding}".format(
+        language_code=locale_info["language-code"], encoding=locale_info["encoding"]
+    )
+
+    maxlen = max(len(x) for x in deps)
+    print("\nINSTALLED VERSIONS")
+    print("------------------")
+    for k, v in sys_info.items():
+        print(f"{k:<{maxlen}}: {v}")
+    print("")
+    for k, v in deps.items():
+        print(f"{k:<{maxlen}}: {v}")
 
 
 def _get_index_map(

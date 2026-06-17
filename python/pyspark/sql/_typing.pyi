@@ -23,6 +23,7 @@ from typing import (
     List,
     Optional,
     Tuple,
+    TypedDict,
     TypeVar,
     Union,
 )
@@ -86,3 +87,9 @@ class UserDefinedFunctionLike(Protocol):
     def asNondeterministic(self) -> UserDefinedFunctionLike: ...
 
 ProfileResults = Dict[Union[int, str], Tuple[Optional[pstats.Stats], Optional[CodeMapDict]]]
+
+class ProfileResult(TypedDict, total=False):
+    perf: pstats.Stats
+    memory: CodeMapDict
+
+ProfileResultsV2 = Dict[Union[int, str], ProfileResult]

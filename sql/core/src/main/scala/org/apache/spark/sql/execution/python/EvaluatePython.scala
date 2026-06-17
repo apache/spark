@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.sql.types.ops.TypeApiOps
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 
 object EvaluatePython {
 
@@ -41,7 +42,11 @@ object EvaluatePython {
    */
   private[python] class BytesWrapper(val data: Array[Byte])
 
-  def needConversionInPython(dt: DataType): Boolean = dt match {
+  def needConversionInPython(dt: DataType): Boolean =
+    TypeApiOps(dt).flatMap(_.needConversionInPython)
+      .getOrElse(needConversionInPythonDefault(dt))
+
+  private def needConversionInPythonDefault(dt: DataType): Boolean = dt match {
     case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
          | _: TimeType | _: GeometryType | _: GeographyType => true
     case _: StructType => true
@@ -92,9 +97,9 @@ object EvaluatePython {
 
       case (s: UTF8String, _: StringType) => s.toString
 
-      case (g: GeometryVal, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
+      case (g: BinaryView, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
 
-      case (g: GeographyVal, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
+      case (g: BinaryView, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
 
       case (bytes: Array[Byte], BinaryType) =>
         if (binaryAsBytes) {
@@ -111,7 +116,10 @@ object EvaluatePython {
    * Make a converter that converts `obj` to the type specified by the data type, or returns
    * null if the type of obj is unexpected. Because Python doesn't enforce the type.
    */
-  def makeFromJava(dataType: DataType): Any => Any = dataType match {
+  def makeFromJava(dataType: DataType): Any => Any =
+    TypeApiOps(dataType).flatMap(_.makeFromJava).getOrElse(makeFromJavaDefault(dataType))
+
+  private def makeFromJavaDefault(dataType: DataType): Any => Any = dataType match {
     case BooleanType => (obj: Any) => nullSafeConvert(obj) {
       case b: Boolean => b
     }
@@ -237,7 +245,8 @@ object EvaluatePython {
         val geographySrid = s.get("srid").asInstanceOf[Int]
         g.assertSridAllowedForType(geographySrid)
         STUtils.stGeogFromWKB(
-          s.get("wkb").asInstanceOf[Array[Byte]])
+          s.get("wkb").asInstanceOf[Array[Byte]],
+          geographySrid)
     }
 
     case g: GeometryType => (obj: Any) => nullSafeConvert(obj) {

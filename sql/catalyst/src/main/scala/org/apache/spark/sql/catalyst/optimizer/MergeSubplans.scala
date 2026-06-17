@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, CTERelationDef, CTERelationRef, LeafNode, LogicalPlan, OneRowRelation, Project, Subquery, WithCTE}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, NO_GROUPING_AGGREGATE_REFERENCE, SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, CTE, NO_GROUPING_AGGREGATE_REFERENCE, SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE, TreePattern}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.DataType
 
@@ -157,8 +157,11 @@ object MergeSubplans extends Rule[LogicalPlan] {
       // This rule does a whole plan traversal, no need to run on subqueries.
       case _: Subquery => plan
 
-      // Plans with CTEs are not supported for now.
-      case _: WithCTE => plan
+      // Plans with CTEs are not supported for now. We check containsPattern instead of
+      // just the top-level node because a Limit or other operator may wrap the WithCTE
+      // (e.g. from Dataset.show()), and creating an outer WithCTE with CTE defs that
+      // reference inner CTE defs causes ReplaceCTERefWithRepartition to crash.
+      case _ if plan.containsPattern(CTE) => plan
 
       case _ => extractCommonScalarSubqueries(plan)
     }
@@ -235,9 +238,7 @@ object MergeSubplans extends Rule[LogicalPlan] {
 
           levelFromSubqueries = levelFromSubqueries.max(level + 1)
 
-          val mergedOutput = mergeResult.outputMap(planWithReferences.output.head)
-          val outputIndex =
-            mergeResult.mergedPlan.plan.output.indexWhere(_.exprId == mergedOutput.exprId)
+          val outputIndex = mergeResult.outputMap(planWithReferences.output.head)
           ScalarSubqueryReference(
             level,
             mergeResult.mergedPlanIndex,
@@ -259,9 +260,7 @@ object MergeSubplans extends Rule[LogicalPlan] {
 
         val mergeResult = getPlanMerger(planMergers, level).merge(aggregateWithReferences, false)
 
-        val mergedOutput = aggregateWithReferences.output.map(mergeResult.outputMap)
-        val outputIndices =
-          mergedOutput.map(a => mergeResult.mergedPlan.plan.output.indexWhere(_.exprId == a.exprId))
+        val outputIndices = aggregateWithReferences.output.map(mergeResult.outputMap)
         val aggregateReference = NonGroupingAggregateReference(
           level,
           mergeResult.mergedPlanIndex,

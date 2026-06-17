@@ -1075,3 +1075,73 @@ Project [c1#x, c2#x, scalar-subquery#x [c1#x] AS scalarsubquery(c1)#xL]
    +- View (`t1`, [c1#x, c2#x])
       +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]
          +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1) FROM VALUES(1) AS t1(col1)
+-- !query analysis
+Project [scalar-subquery#x [col1#x] AS scalarsubquery(col1)#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [outer(col1#x) AS col1#x]
+:           +- SubqueryAlias t2
+:              +- LocalRelation [col1#x]
++- SubqueryAlias t1
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT (SELECT t1.s.* FROM VALUES(2) AS t2(col1) LIMIT 1)
+FROM (SELECT named_struct('a', 1) AS s) AS t1
+-- !query analysis
+Project [scalar-subquery#x [s#x] AS scalarsubquery(s)#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [outer(s#x).a AS a#x]
+:           +- SubqueryAlias t2
+:              +- LocalRelation [col1#x]
++- SubqueryAlias t1
+   +- Project [named_struct(a, 1) AS s#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT (SELECT * FROM VALUES(2) AS t2(col1) LIMIT 1) FROM VALUES(1) AS t1(col1)
+-- !query analysis
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [col1#x]
+:           +- SubqueryAlias t2
+:              +- LocalRelation [col1#x]
++- SubqueryAlias t1
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT (SELECT t1.* FROM (SELECT 3 AS col1) AS t1 LIMIT 1) FROM VALUES(1) AS t1(col1)
+-- !query analysis
+Project [scalar-subquery#x [] AS scalarsubquery()#x]
+:  +- GlobalLimit 1
+:     +- LocalLimit 1
+:        +- Project [col1#x]
+:           +- SubqueryAlias t1
+:              +- Project [3 AS col1#x]
+:                 +- OneRowRelation
++- SubqueryAlias t1
+   +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT (SELECT * FROM (SELECT t1.* FROM VALUES(2) AS t2(col1) LIMIT 1)) FROM VALUES(1) AS t1(col1)
+-- !query analysis
+Project [scalar-subquery#x [col1#x] AS scalarsubquery(col1)#x]
+:  +- Project [col1#x]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- GlobalLimit 1
+:           +- LocalLimit 1
+:              +- Project [outer(col1#x) AS col1#x]
+:                 +- SubqueryAlias t2
+:                    +- LocalRelation [col1#x]
++- SubqueryAlias t1
+   +- LocalRelation [col1#x]

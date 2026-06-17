@@ -33,7 +33,7 @@ import org.apache.spark.sql.test.SharedSparkSession
  * Lateral column alias base suite with LCA off, extended by LateralColumnAliasSuite with LCA on.
  * Should test behaviors remaining the same no matter LCA conf is on or off.
  */
-class LateralColumnAliasSuiteBase extends QueryTest with SharedSparkSession {
+class LateralColumnAliasSuiteBase extends SharedSparkSession {
   // by default the tests in this suites run with LCA off
   val lcaEnabled: Boolean = false
   override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
@@ -1022,8 +1022,8 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
           "(partition by dept order by salary rows between n preceding and current row) as rank " +
           s"from $testTable where dept in (1, 6)")
       },
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Frame bound value must be a literal."),
+      condition = "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND",
+      parameters = Map.empty,
       context = ExpectedContext(fragment = "n preceding", start = 87, stop = 97)
     )
 

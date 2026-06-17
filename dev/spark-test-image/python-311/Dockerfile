@@ -29,6 +29,8 @@ ENV FULL_REFRESH_DATE=20260210
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBCONF_NONINTERACTIVE_SEEN=true
 
+RUN printf 'Types: deb\nURIs: https://mirrors.edge.kernel.org/ubuntu\nSuites: noble noble-updates noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' > /etc/apt/sources.list.d/mirror.sources
+
 RUN apt-get update && apt-get install -y \
     build-essential \
     ca-certificates \
@@ -44,7 +46,8 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     tzdata \
     software-properties-common \
-    zlib1g-dev
+    zlib1g-dev \
+    zstd
 
 # Install Python 3.11
 RUN add-apt-repository ppa:deadsnakes/ppa

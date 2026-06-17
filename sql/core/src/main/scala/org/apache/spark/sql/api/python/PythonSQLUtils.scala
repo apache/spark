@@ -27,7 +27,7 @@ import org.apache.spark.api.python.DechunkedInputStream
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_LOADER
 import org.apache.spark.security.SocketAuthServer
-import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Encoders, Row, SparkSession, TableArg}
+import org.apache.spark.sql.{internal, Column, DataFrame, DataFrameReader, Dataset, Encoders, Row, SparkSession, TableArg}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -196,14 +196,10 @@ private[sql] object PythonSQLUtils extends Logging {
   def internalFn(name: String, inputs: Column*): Column = Column.internalFn(name, inputs: _*)
 
   /**
-   * Parses a [[DataFrame]] containing JSON strings into a structured [[DataFrame]].
-   * The input DataFrame must have exactly one column of StringType.
-   * This is used by PySpark to avoid manual Dataset[String] conversion on the Python side.
+   * Validates that the input [[DataFrame]] has exactly one column of StringType
+   * and converts it to a Dataset[String].
    */
-  def jsonFromDataFrame(
-      reader: DataFrameReader,
-      df: DataFrame): DataFrame = {
-    val classicReader = reader.asInstanceOf[ClassicDataFrameReader]
+  private def toStringDataset(df: DataFrame): Dataset[String] = {
     val fields = df.schema.fields
     if (fields.length != 1) {
       throw QueryCompilationErrors.dataframeInputNotSingleColumnError(fields.length)
@@ -211,7 +207,25 @@ private[sql] object PythonSQLUtils extends Logging {
     if (fields.head.dataType != org.apache.spark.sql.types.StringType) {
       throw QueryCompilationErrors.dataframeInputNotStringTypeError(fields.head.dataType)
     }
-    classicReader.json(df.as(Encoders.STRING))
+    df.as(Encoders.STRING)
+  }
+
+  def jsonFromDataFrame(
+      reader: DataFrameReader,
+      df: DataFrame): DataFrame = {
+    reader.asInstanceOf[ClassicDataFrameReader].json(toStringDataset(df))
+  }
+
+  def csvFromDataFrame(
+      reader: DataFrameReader,
+      df: DataFrame): DataFrame = {
+    reader.asInstanceOf[ClassicDataFrameReader].csv(toStringDataset(df))
+  }
+
+  def xmlFromDataFrame(
+      reader: DataFrameReader,
+      df: DataFrame): DataFrame = {
+    reader.asInstanceOf[ClassicDataFrameReader].xml(toStringDataset(df))
   }
 
   def cleanupPythonWorkerLogs(sessionUUID: String, sparkContext: SparkContext): Unit = {

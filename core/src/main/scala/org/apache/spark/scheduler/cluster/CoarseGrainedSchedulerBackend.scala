@@ -25,11 +25,9 @@ import scala.collection.mutable.{HashMap, HashSet, Queue}
 import scala.concurrent.Future
 
 import com.google.common.cache.CacheBuilder
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorLogUrlHandler
 import org.apache.spark.internal.{config, Logging}
@@ -56,7 +54,8 @@ import org.apache.spark.util.ArrayImplicits._
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
-  extends ExecutorAllocationClient with SchedulerBackend with Logging {
+  extends ExecutorAllocationClient with SchedulerBackend
+    with SupportsDelegationToken with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   protected val totalCoreCount = new AtomicInteger(0)
@@ -132,9 +131,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   // Current set of delegation tokens to send to executors.
   private val delegationTokens = new AtomicReference[Array[Byte]]()
-
-  // The token manager used to create security tokens.
-  private var delegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
   private val reviveThread =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
@@ -621,26 +617,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   override def start(): Unit = {
-    if (UserGroupInformation.isSecurityEnabled()) {
-      delegationTokenManager = createTokenManager()
-      delegationTokenManager.foreach { dtm =>
-        val ugi = UserGroupInformation.getCurrentUser()
-        val tokens = if (dtm.renewalEnabled) {
-          dtm.start()
-        } else {
-          val creds = ugi.getCredentials()
-          dtm.obtainDelegationTokens(creds)
-          if (creds.numberOfTokens() > 0 || creds.numberOfSecretKeys() > 0) {
-            SparkHadoopUtil.get.serialize(creds)
-          } else {
-            null
-          }
-        }
-        if (tokens != null) {
-          updateDelegationTokens(tokens)
-        }
-      }
-    }
+    setupTokenManager()
   }
 
   protected def createDriverEndpoint(): DriverEndpoint = new DriverEndpoint()
@@ -661,7 +638,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     reviveThread.shutdownNow()
     cleanupService.foreach(_.shutdownNow())
     stopExecutors()
-    delegationTokenManager.foreach(_.stop())
+    stopTokenManager()
     try {
       if (driverEndpoint != null) {
         driverEndpoint.askSync[Boolean](StopDriver)
@@ -1047,18 +1024,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   }
 
   /**
-   * Create the delegation token manager to be used for the application. This method is called
-   * once during the start of the scheduler backend (so after the object has already been
-   * fully constructed), only if security is enabled in the Hadoop configuration.
-   */
-  protected def createTokenManager(): Option[HadoopDelegationTokenManager] = None
-
-  /**
    * Called when a new set of delegation tokens is sent to the driver. Child classes can override
    * this method but should always call this implementation, which handles token distribution to
    * executors.
    */
-  protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
+  override protected def updateDelegationTokens(tokens: Array[Byte]): Unit = {
     SparkHadoopUtil.get.addDelegationTokens(tokens, conf)
     delegationTokens.set(tokens)
     executorDataMap.values.foreach { ed =>

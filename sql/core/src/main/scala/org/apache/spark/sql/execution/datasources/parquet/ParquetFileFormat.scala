@@ -422,6 +422,9 @@ class ParquetFileFormat
     case g: GeometryType => GeometryType.isSridSupported(g.srid)
     case g: GeographyType => GeographyType.isSridSupported(g.srid)
 
+    // Nanosecond-capable timestamps are not yet supported by this datasource.
+    case _: AnyTimestampNanoType => false
+
     case _: AtomicType | _: NullType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -522,7 +525,8 @@ object ParquetFileFormat extends Logging {
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean,
       ignoreMissingFiles: Boolean = false): Seq[Footer] = {
-    ThreadUtils.parmap(partFiles, "readingParquetFooters", 8) { currentFile =>
+    ThreadUtils.parmap(partFiles, "readingParquetFooters", 8,
+        preserveSparkThrowable = true) { currentFile =>
       try {
         // Skips row group information since we only need the schema.
         // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,

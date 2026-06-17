@@ -630,6 +630,7 @@ object FunctionRegistry {
     expression[Length]("length"),
     expression[Length]("len", setAlias = true, Some("3.4.0")),
     expression[Levenshtein]("levenshtein"),
+    expression[JaroWinkler]("jaro_winkler_similarity"),
     expression[Luhncheck]("luhn_check"),
     expression[Like]("like"),
     expression[ILike]("ilike"),
@@ -777,6 +778,7 @@ object FunctionRegistry {
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
     expression[ConvertTimezone]("convert_timezone"),
+    expressionBuilder("time_bucket", TimeBucketExpressionBuilder),
 
     // collection functions
     expression[CreateArray]("array"),
@@ -854,6 +856,7 @@ object FunctionRegistry {
     expression[CurrentDatabase]("current_database"),
     expression[CurrentDatabase]("current_schema", true, Some("3.4.0")),
     expression[CurrentCatalog]("current_catalog"),
+    expression[CurrentPath]("current_path", true, Some("4.2.0")),
     expression[CurrentUser]("current_user"),
     expression[CurrentUser]("user", true, Some("3.4.0")),
     expression[CurrentUser]("session_user", true, Some("4.0.0")),
@@ -920,6 +923,7 @@ object FunctionRegistry {
     expression[Rank]("rank"),
     expression[DenseRank]("dense_rank"),
     expression[PercentRank]("percent_rank"),
+    expressionBuilder("counter_diff", CounterDiffExpressionBuilder),
 
     // predicates
     expression[Between]("between"),
@@ -977,6 +981,7 @@ object FunctionRegistry {
     expression[SchemaOfVariant]("schema_of_variant"),
     expression[SchemaOfVariantAgg]("schema_of_variant_agg"),
     expression[ToVariantObject]("to_variant_object"),
+    expression[IsValidVariant]("is_valid_variant"),
 
     // Spatial
     expression[ST_AsBinary]("st_asbinary"),

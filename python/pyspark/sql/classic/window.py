@@ -95,7 +95,6 @@ class Window(ParentWindow):
 class WindowSpec(ParentWindowSpec):
     def __new__(cls, jspec: "JavaObject") -> "WindowSpec":
         self = object.__new__(cls)
-        self.__init__(jspec)  # type: ignore[misc]
         return self
 
     def __init__(self, jspec: "JavaObject") -> None:

@@ -30,6 +30,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
  *     - V1 Hive External catalog: `org.apache.spark.sql.hive.execution.command.DropTableSuite`
  */
 trait DropTableSuiteBase extends QueryTest with DDLCommandTestUtils {
+  import testImplicits._
   override val command = "DROP TABLE"
 
   protected def createTable(tableName: String): Unit = {

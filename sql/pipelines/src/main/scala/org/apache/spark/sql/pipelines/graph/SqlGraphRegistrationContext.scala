@@ -237,7 +237,7 @@ class SqlGraphRegistrationContext(
 
       // Register flow that backs this streaming table.
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = stIdentifier,
           destinationIdentifier = stIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cst.query),
@@ -288,7 +288,7 @@ class SqlGraphRegistrationContext(
 
       // Register flow that backs this materialized view.
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = mvIdentifier,
           destinationIdentifier = mvIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cmv.query),
@@ -331,7 +331,7 @@ class SqlGraphRegistrationContext(
 
       // Register flow that backs this persisted view.
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = viewIdentifier,
           destinationIdentifier = viewIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cv.query),
@@ -375,7 +375,7 @@ class SqlGraphRegistrationContext(
 
       // Register flow definition that backs this temporary view.
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = viewIdentifier,
           destinationIdentifier = viewIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(cvc.plan),
@@ -451,7 +451,7 @@ class SqlGraphRegistrationContext(
         .identifier
 
       graphRegistrationContext.registerFlow(
-        UnresolvedFlow(
+        UntypedFlow(
           identifier = flowIdentifier,
           destinationIdentifier = qualifiedDestinationIdentifier,
           func = FlowAnalysis.createFlowFunctionFromLogicalPlan(flowQueryLogicalPlan),
@@ -609,7 +609,7 @@ object SqlGraphRegistrationContext {
    * terminated statement is not returned.
    */
   private def splitSqlTextBySemicolon(sqlText: String): List[String] = StringUtils
-    .splitSemiColonWithIndex(line = sqlText, enableSqlScripting = false)
+    .splitSemiColon(line = sqlText, enableSqlScripting = false)
 
   /** Class that holds the logical plan and query origin parsed from a SQL statement. */
   case class SqlQueryPlanWithOrigin(plan: LogicalPlan, queryOrigin: QueryOrigin)

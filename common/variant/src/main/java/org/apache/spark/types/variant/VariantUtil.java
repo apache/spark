@@ -428,7 +428,8 @@ public class VariantUtil {
   // Get a decimal value from variant value `value[pos...]`.
   // Throw `MALFORMED_VARIANT` if the variant is malformed.
   public static BigDecimal getDecimalWithOriginalScale(byte[] value, int pos) {
-    checkIndex(pos, value.length);
+    // Decimal should at least have header + scale.
+    checkIndex(pos + 1, value.length);
     int basicType = value[pos] & BASIC_TYPE_MASK;
     int typeInfo = (value[pos] >> BASIC_TYPE_BITS) & TYPE_INFO_MASK;
     if (basicType != PRIMITIVE) throw unexpectedType(Type.DECIMAL);
@@ -587,6 +588,92 @@ public class VariantUtil {
     int offsetStart = pos + 1 + sizeBytes;
     int dataStart = offsetStart + (size + 1) * offsetSize;
     return handler.apply(size, offsetSize, offsetStart, dataStart);
+  }
+
+  // Validate whether a variant is well-formed. Returns true if the variant binary is structurally
+  // well-formed (all bounds and type-info checks pass), false if it is malformed.
+  //
+  // This is close to, but not strictly equivalent to, "`toJson` does not throw": this function
+  // does not enforce the `SIZE_LIMIT` check that the `Variant` constructor applies (which throws
+  // `VARIANT_CONSTRUCTOR_SIZE_LIMIT`). The implementation otherwise has the same structure as
+  // `toJson` (see `Variant.toJsonImpl`).
+  //
+  // Implementation note: this `try { ... } catch (SparkRuntimeException e)` is sound only because
+  // every helper invoked by `validateImpl` throws `MALFORMED_VARIANT` /
+  // `UNKNOWN_PRIMITIVE_TYPE_IN_VARIANT` rather than a raw `ArrayIndexOutOfBoundsException` on
+  // malformed input. Preserve that invariant when adding new cases.
+  public static boolean isValidVariant(byte[] value, byte[] metadata) {
+    if (value == null || metadata == null) return false;
+    // Validate the metadata version, similar to the check in the `Variant` constructor.
+    if (metadata.length < 1 || (metadata[0] & VERSION_MASK) != VERSION) return false;
+    try {
+      validateImpl(value, metadata, 0);
+      return true;
+    } catch (SparkRuntimeException e) {
+      return false;
+    }
+  }
+
+  private static void validateImpl(byte[] value, byte[] metadata, int pos) {
+    switch (getType(value, pos)) {
+      case OBJECT:
+        handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+          for (int i = 0; i < size; ++i) {
+            int id = readUnsigned(value, idStart + idSize * i, idSize);
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            getMetadataKey(metadata, id);
+            validateImpl(value, metadata, elementPos);
+          }
+          return null;
+        });
+        break;
+      case ARRAY:
+        handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+          for (int i = 0; i < size; ++i) {
+            int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
+            int elementPos = dataStart + offset;
+            validateImpl(value, metadata, elementPos);
+          }
+          return null;
+        });
+        break;
+      case NULL:
+        break;
+      case BOOLEAN:
+        getBoolean(value, pos);
+        break;
+      case LONG:
+        getLong(value, pos);
+        break;
+      case STRING:
+        getString(value, pos);
+        break;
+      case DOUBLE:
+        getDouble(value, pos);
+        break;
+      case DECIMAL:
+        getDecimal(value, pos);
+        break;
+      case DATE:
+      case TIMESTAMP:
+      case TIMESTAMP_NTZ:
+        getLong(value, pos);
+        break;
+      case FLOAT:
+        getFloat(value, pos);
+        break;
+      case BINARY:
+        getBinary(value, pos);
+        break;
+      case UUID:
+        getUuid(value, pos);
+        break;
+      default:
+        // This is practically unreachable because we handle all possible types. It only
+        // intends to ensure we don't forget adding a new case when adding a new type.
+        throw malformedVariant();
+    }
   }
 
   // Get a key at `id` in the variant metadata.

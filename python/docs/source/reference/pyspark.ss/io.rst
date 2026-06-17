@@ -25,10 +25,12 @@ Input/Output
 .. autosummary::
     :toctree: api/
 
+    DataStreamReader.changes
     DataStreamReader.csv
     DataStreamReader.format
     DataStreamReader.json
     DataStreamReader.load
+    DataStreamReader.name
     DataStreamReader.option
     DataStreamReader.options
     DataStreamReader.orc

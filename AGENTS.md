@@ -2,15 +2,15 @@
 
 ## Pre-flight Checks
 
-Before the first code read, edit, or test in a session, ensure a clean working environment. DO NOT skip these checks:
+Before the first code edit or running test in a session, ensure a clean working environment. DO NOT skip these checks:
 
 1. Run `git remote -v` to identify the personal fork and upstream (`apache/spark`). If unclear, ask the user to configure their remotes following the standard convention (`origin` for the fork, `upstream` for `apache/spark`).
 2. If the latest commit on `<upstream>/master` is more than a day old (check with `git log -1 --format="%ci" <upstream>/master`), run `git fetch <upstream> master`.
 3. If there are uncommitted changes (check with `git status`), ask the user to stash them before proceeding.
 4. Switch to the appropriate branch:
-   - **Existing PR**: resolve the PR branch name via `gh api repos/databricks-eng/runtime/pulls/<number> --jq '.head.ref'`, then look for a local branch matching that name. If found, switch to it and inform the user. If not found, ask whether to fetch it or if there is a local branch under a different name.
+   - **Existing PR**: resolve the PR branch name via `gh api repos/apache/spark/pulls/<number> --jq '.head.ref'`, then look for a local branch matching that name. If found, switch to it and inform the user. If not found, ask whether to fetch it or if there is a local branch under a different name.
    - **New edits**: ask the user to choose: create a new git worktree from `<upstream>/master` and work from there (recommended), or create and switch to a new branch from `<upstream>/master`.
-   - **Reading code or running tests**: use `<upstream>/master`.
+   - **Running tests**: use `<upstream>/master`.
 
 ## Development Notes
 
@@ -18,9 +18,38 @@ SQL golden file tests are managed by `SQLQueryTestSuite` and its variants. Read 
 
 Spark Connect protocol is defined in proto files under `sql/connect/common/src/main/protobuf/`. Read the README there before modifying proto definitions.
 
+Avoid introducing non-ASCII characters in code or comments. String literals may contain non-ASCII when the content requires it (error messages, test data, etc.). Identifiers are ASCII by convention. The common failure mode is typographic characters (em-dash, smart quotes, ellipsis, non-breaking space) sneaking into comments; scalastyle flags some of these. Spot-check before committing: `grep -rn -P "[^\x00-\x7F]" <files>`.
+
+## Scala Test Base Classes
+
+When writing a new Scala test suite, pick the lowest base class that provides what the test actually needs. Spark uses the `AnyFunSuite` ScalaTest style throughout, so the bases below are the chain to choose from. Each adds capability on top of the previous:
+
+    SparkFunSuite                                                           (core)
+      <- PlanTest                                                           (sql/catalyst)
+        <- QueryTest                                                        (sql/core)
+
+| Test scope | Base | Notes |
+|------------|------|-------|
+| Plain JVM/Scala — no Spark SQL | `SparkFunSuite` | `core` utilities, RDD, network, util classes, etc. Adds per-test timeout, `testRetry`, `gridTest`, thread audit, fixed timezone/locale, `withTempDir`, `withLogAppender`, `checkError`. |
+| Catalyst plan tests — no `SparkSession` | `PlanTest` | Adds `comparePlans`, `normalizePlan`, `normalizeExprIds`. For analyzer / optimizer / planner rule tests. |
+| SQL/DataFrame tests — needs a `SparkSession` | `QueryTest` | Adds `checkAnswer`, codegen-on/off helpers. `spark: SparkSession` is abstract and must be supplied by a session-providing trait (see below). |
+
+### Providing a `SparkSession` for `QueryTest`
+
+`QueryTest` declares `spark: SparkSession` abstractly via `SparkSessionProvider`, so it cannot be instantiated on its own. A concrete suite mixes in one of the session-providing traits below:
+
+    QueryTest                                                               (abstract `spark`)
+      + SharedSparkSession (sql/core)        -> classic in-process `TestSparkSession`
+      + TestHiveSingleton  (sql/hive)        -> Hive-backed `TestHive` session
+
+| Session provider | Module / location | Typical usage |
+|---|---|---|
+| `SharedSparkSession` | `sql/core` | Already extends `QueryTest` for historical reasons, but still mix in `QueryTest` explicitly, e.g. `class X extends QueryTest with SharedSparkSession`. Default for tests under `sql/core`. |
+| `TestHiveSingleton` | `sql/hive` | Mixed in alongside `QueryTest`, e.g. `class X extends QueryTest with TestHiveSingleton`. Used by tests under `sql/hive`. |
+
 ## Build and Test
 
-Build and tests can take a long time. Before running tests, ask the user if they have more changes to make.
+Build and tests can take a long time. If the user explicitly asked to run tests, run them. Otherwise (you are running tests on your own to verify a change), first ask the user if they have more changes to make.
 
 Prefer SBT over Maven for faster incremental compilation. Module names are defined in `project/SparkBuild.scala`.
 
@@ -92,10 +121,60 @@ Each annotation contains the test class, test name, and failure message.
 
 ## Pull Request Workflow
 
-PR title requires a JIRA ticket ID (e.g., `[SPARK-xxxx][SQL] Title`). Ask the user to create a new ticket or provide an existing one if not given. Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
+PR title format is `[SPARK-xxxx][COMPONENT] Title`. The component tag is derived from the JIRA component name: take the last word and uppercase it (e.g. `Project Infra` → `[INFRA]`, `Spark Core` → `[CORE]`, `Structured Streaming` → `[STREAMING]`, `SQL` → `[SQL]`).
+
+Infer the PR title from the changes. If no ticket ID is given, create one using `dev/create_spark_jira.py`, using the PR title (without the JIRA ID and component tag) as the ticket title.
+
+    python3 dev/create_spark_jira.py "<title>" -c <component> { -t <type> | -p <parent-jira-id> }
+
+- **Component** (`-c`): the exact JIRA component name (not the PR title shorthand), e.g. "SQL", "Spark Core", "PySpark", "Connect". Run `python3 dev/create_spark_jira.py --list-components` for the full list.
+- **Issue type** (`-t`): "Bug", "Improvement", "New Feature", "Test", "Documentation", or "Dependency upgrade".
+- **Parent** (`-p`): if the user mentions a parent JIRA ticket (e.g., "this is a subtask of SPARK-12345"), pass it instead of `-t`. The issue type is automatically "Sub-task".
+
+The script sets the latest unreleased version as the default affected version.
+
+After creating a JIRA ticket, print a prominent notice so the user does not miss it:
+
+    ============================================================
+    JIRA ticket created: SPARK-XXXXX
+    https://issues.apache.org/jira/browse/SPARK-XXXXX
+
+    Title:              <title>
+    Component(s):       <component>
+    Issue type:         <type>
+    Affected version(s): <version>
+    Priority:           <priority>
+
+    Please review and adjust these fields if needed.
+    ============================================================
+
+Before writing the PR description, read `.github/PULL_REQUEST_TEMPLATE` and fill in every section from that file.
 
 DO NOT push to the upstream repo. Always push to the personal fork. Open PRs against `master` on the upstream repo.
 
 DO NOT force push or use `--amend` on pushed commits unless the user explicitly asks. If the remote branch has new commits, fetch and rebase before pushing.
 
 Always get user approval before external operations such as pushing commits, creating PRs, or posting comments. Use `gh pr create` to open PRs. If `gh` is not installed, generate the GitHub PR URL for the user and recommend installing the GitHub CLI.
+
+## Versioning and Branch Policy
+
+When a change needs a version — `@since` annotations, config `.version("...")` (`SQLConf` / `*Conf`), new `MimaExcludes` sections, etc. — use the version of the branch it first ships in, with `-SNAPSHOT` stripped. Determine that branch:
+
+- **PR opened against a non-`master` base branch** (e.g. a maintenance line like `branch-4.2`): use that base branch's version -- when you're checked out on it, that's just the working tree's `pom.xml`. The helper below covers only the common `master`-base case.
+- **PR opened against `master`:** most PRs merge to **both** `master` and the latest `branch-<N>.x` (the branch for the next feature release, e.g. `branch-4.x`), so use the `branch-<N>.x` version. The exception is **master-only** changes — use `master`'s version — which are only:
+  - breaking / binary-incompatible changes that can't ship in a minor release;
+  - dependency upgrades that don't fix a critical issue worth backporting.
+
+Do **not** just read `master`'s version: a normally-backported PR ships first in `branch-<N>.x`, whose version is lower than `master`'s. If unsure whether a change is master-only, ask the user.
+
+`dev/next_version_candidates.py` (no arguments) prints both candidate versions, reading from the local `apache/spark` remote (the `upstream` configured during pre-flight). It reports the mechanical facts only -- choosing between them per the rules above is the judgement call (the numbers below are illustrative and advance over time):
+
+    $ dev/next_version_candidates.py
+    master       5.0.0
+    branch-4.x   4.3.0
+
+## Security
+
+Security model: [SECURITY.md](./SECURITY.md)
+
+Agents that scan this repository should consult `SECURITY.md` for the project's threat model, in-scope / out-of-scope declarations, and known non-findings before reporting issues.

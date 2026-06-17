@@ -31,6 +31,7 @@ import com.fasterxml.jackson.core.util.{DefaultIndenter, DefaultPrettyPrinter}
 import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkThrowableHelper._
 import org.apache.spark.util.Utils
@@ -799,5 +800,63 @@ class SparkThrowableSuite extends SparkFunSuite {
 
     assert(errorWithNull.getSqlState == "22018",
       "Should fall back to error class reader SQL state when custom is null")
+  }
+
+  test("checkError reports all mismatches in a single failure message") {
+    class TestQueryContext extends QueryContext {
+      override val contextType = QueryContextType.SQL
+      override val objectName = "v1"
+      override val objectType = "VIEW"
+      override val startIndex = 2
+      override val stopIndex = 10
+      override val fragment = "1 / 0"
+      override val callSite = ""
+      override val summary = ""
+    }
+
+    val exception = new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> "CONFIG"),
+      context = Array(new TestQueryContext),
+      summary = "")
+
+    val error = intercept[TestFailedException] {
+      checkError(
+        exception = exception,
+        condition = "WRONG_CONDITION",
+        sqlState = Some("99999"),
+        parameters = Map("config" -> "WRONG_VALUE"),
+        queryContext = Array(ExpectedContext(
+          objectType = "TABLE",
+          objectName = "t1",
+          startIndex = 0,
+          stopIndex = 5,
+          fragment = "wrong fragment")))
+    }
+    val msg = error.getMessage
+    assert(msg.contains("=== Actual Exception State ==="), "Should contain actual state header")
+    assert(msg.contains("=== Mismatches ==="), "Should contain mismatches header")
+    assert(msg.contains("condition:"), "Should report condition mismatch")
+    assert(msg.contains("sqlState:"), "Should report sqlState mismatch")
+    assert(msg.contains("parameters:"), "Should report parameters mismatch")
+    assert(msg.contains("queryContext[0].objectType:"), "Should report objectType mismatch")
+    assert(msg.contains("queryContext[0].objectName:"), "Should report objectName mismatch")
+    assert(msg.contains("queryContext[0].startIndex:"), "Should report startIndex mismatch")
+    assert(msg.contains("queryContext[0].stopIndex:"), "Should report stopIndex mismatch")
+    assert(msg.contains("queryContext[0].fragment:"), "Should report fragment mismatch")
+  }
+
+  test("checkError succeeds when all fields match") {
+    val exception = new SparkArithmeticException(
+      errorClass = "DIVIDE_BY_ZERO",
+      messageParameters = Map("config" -> "CONFIG"),
+      context = Array.empty,
+      summary = "")
+
+    checkError(
+      exception = exception,
+      condition = "DIVIDE_BY_ZERO",
+      sqlState = Some("22012"),
+      parameters = Map("config" -> "CONFIG"))
   }
 }

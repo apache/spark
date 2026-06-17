@@ -18,7 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.{Connection, Date, DriverManager, ResultSet, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.time.format.DateTimeFormatter
 import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
@@ -26,15 +26,19 @@ import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
@@ -47,7 +51,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class JDBCSuite extends QueryTest with SharedSparkSession {
+class JDBCSuite extends SharedSparkSession {
   import testImplicits._
 
   val url = "jdbc:h2:mem:testdb0"
@@ -835,6 +839,31 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     assert(JdbcDialects.get("test.invalid") === NoopDialect)
   }
 
+  test("SPARK-57447: (H2|MySQL|Postgres)Dialect escape a single quote in indexExists") {
+    // indexExists builds a lookup query with the index name as a SQL string literal, so a single
+    // quote in the name must be escaped to keep the WHERE clause well-formed.
+    Seq(
+      "jdbc:h2:mem:testdb0" -> "INDEX_NAME = 'i''1'",
+      "jdbc:mysql://127.0.0.1/db" -> "key_name = 'i''1'",
+      "jdbc:postgresql://127.0.0.1/db" -> "indexname = 'i''1'"
+    ).foreach { case (jdbcUrl, expectedClause) =>
+      val dialect = JdbcDialects.get(jdbcUrl)
+      val conn = mock(classOf[Connection])
+      val stmt = mock(classOf[Statement])
+      val rs = mock(classOf[ResultSet])
+      when(conn.createStatement()).thenReturn(stmt)
+      when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+      val options = new JDBCOptions(jdbcUrl, "test.people", Map.empty[String, String])
+      dialect.indexExists(conn, "i'1", Identifier.of(Array("test"), "people"), options)
+
+      val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+      verify(stmt).executeQuery(sqlCaptor.capture())
+      assert(sqlCaptor.getValue.contains(expectedClause),
+        s"Unexpected lookup SQL for $jdbcUrl: ${sqlCaptor.getValue}")
+    }
+  }
+
   test("quote column names by jdbc dialect") {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val postgresDialect = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
@@ -890,6 +919,98 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
           """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
     }
     assert(doCompileFilter(EqualTo("col0.nested", 3)).isEmpty)
+  }
+
+  test("SPARK-53454: AlwaysTrue/AlwaysFalse compile to portable SQL in JDBCSQLBuilder") {
+    val dialect = JdbcDialects.get("jdbc:")
+    assert(dialect.compileExpression(new AlwaysTrue).get === "(1 = 1)")
+    assert(dialect.compileExpression(new AlwaysFalse).get === "(1 = 0)")
+
+    // The result must stay valid when AlwaysTrue/AlwaysFalse is nested as an operand
+    // of a larger expression, not just as a standalone WHERE predicate. Without the
+    // surrounding parentheses the bare `1 = 1` would inline into invalid SQL such as
+    // `a = 1 = 1`.
+    val ref = FieldReference("a")
+    val eqTrue = new Predicate("=", Array[V2Expression](ref, new AlwaysTrue))
+    val eqFalse = new Predicate("=", Array[V2Expression](ref, new AlwaysFalse))
+    assert(dialect.compileExpression(eqTrue).get === "\"a\" = (1 = 1)")
+    assert(dialect.compileExpression(eqFalse).get === "\"a\" = (1 = 0)")
+  }
+
+  test("SPARK-57243: IS [NOT] NULL parenthesizes a predicate operand") {
+    val dialect = JdbcDialects.get("jdbc:")
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    val a = FieldReference("a")
+    val b = FieldReference("b")
+
+    // Every binary comparison operand is parenthesized for both IS NULL and IS NOT NULL, and is
+    // not pushed down on MsSqlServer (no boolean type), so Spark evaluates it locally.
+    for (op <- Seq("=", "<>", "<", "<=", ">", ">=");
+         (isNullOp, keyword) <- Seq("IS_NULL" -> "IS NULL", "IS_NOT_NULL" -> "IS NOT NULL")) {
+      val cmp = new Predicate(op, Array[V2Expression](a, b))
+      val expr = new Predicate(isNullOp, Array[V2Expression](cmp))
+      assert(dialect.compileExpression(expr).get === s"""("a" $op "b") $keyword""")
+      assert(msSqlServer.compileExpression(expr).isEmpty)
+    }
+
+    // `<=>` (null-safe equal) is also a comparison, so the operand is parenthesized; it never
+    // returns NULL so IS NULL over it is always false, but the rendering is still wrapped.
+    val nullSafeIsNull =
+      new Predicate("IS_NULL", Array[V2Expression](new Predicate("<=>", Array[V2Expression](a, b))))
+    val nullSafeSql = dialect.compileExpression(nullSafeIsNull).get
+    assert(nullSafeSql.startsWith("(") && nullSafeSql.endsWith(") IS NULL"))
+    assert(msSqlServer.compileExpression(nullSafeIsNull).isEmpty)
+
+    // A bare column reference is not parenthesized and is pushed down even on MsSqlServer.
+    val bareIsNull = new Predicate("IS_NULL", Array[V2Expression](a))
+    assert(dialect.compileExpression(bareIsNull).get === "\"a\" IS NULL")
+    assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
+  }
+
+  test("SPARK-57332: escape backslash in LIKE pattern for STARTS_WITH/ENDS_WITH/CONTAINS") {
+    // Default dialect: standard SQL string literals take backslash verbatim, so the LIKE escape
+    // character `\` appears once in the ESCAPE clause and a literal backslash in the value is
+    // doubled once (by escapeSpecialCharsForLikePattern) to be matched literally.
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    def defaultSQL(f: Filter): String = defaultDialect.compileExpression(f.toV2).getOrElse("")
+    // "c" LIKE 'ab\\%' ESCAPE '\'
+    assert(defaultSQL(StringStartsWith("c", "ab\\")) === """"c" LIKE 'ab\\%' ESCAPE '\'""")
+    // "c" LIKE '%\\ab' ESCAPE '\'
+    assert(defaultSQL(StringEndsWith("c", "\\ab")) === """"c" LIKE '%\\ab' ESCAPE '\'""")
+    // "c" LIKE '%a\\b%' ESCAPE '\'
+    assert(defaultSQL(StringContains("c", "a\\b")) === """"c" LIKE '%a\\b%' ESCAPE '\'""")
+
+    // MySQL treats backslash as an escape character inside string literals, so every backslash is
+    // doubled again: the ESCAPE clause uses `\\` and a literal backslash in the value becomes four
+    // backslashes (escapeSpecialCharsForLikePattern doubles it, then
+    // escapeStringLiteralForLikePattern doubles each of those). The wildcard escaping for
+    // `%`/`_` is unchanged from the default.
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    def mySQLSQL(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
+    // `c` LIKE 'ab\\\\%' ESCAPE '\\'
+    assert(mySQLSQL(StringStartsWith("c", "ab\\")) === """`c` LIKE 'ab\\\\%' ESCAPE '\\'""")
+    // `c` LIKE '%\\\\ab' ESCAPE '\\'
+    assert(mySQLSQL(StringEndsWith("c", "\\ab")) === """`c` LIKE '%\\\\ab' ESCAPE '\\'""")
+    // `c` LIKE '%a\\\\b%' ESCAPE '\\'
+    assert(mySQLSQL(StringContains("c", "a\\b")) === """`c` LIKE '%a\\\\b%' ESCAPE '\\'""")
+    // Wildcards stay escaped: the `\` that escapeSpecialCharsForLikePattern puts before `%`/`_` is
+    // itself doubled for MySQL's string-literal layer, so it parses back to `\%`/`\_` (literal
+    // wildcards) before the LIKE engine, matching the default dialect's semantics.
+    // `c` LIKE 'a\\%b\\_%' ESCAPE '\\'
+    assert(mySQLSQL(StringStartsWith("c", "a%b_")) === """`c` LIKE 'a\\%b\\_%' ESCAPE '\\'""")
+  }
+
+  test("SPARK-57446: escape single quotes in JDBC comment queries") {
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    assert(defaultDialect.getTableCommentQuery("t", "a'b") ===
+      "COMMENT ON TABLE t IS 'a''b'")
+    assert(defaultDialect.getSchemaCommentQuery("s", "a'b") ===
+      """COMMENT ON SCHEMA "s" IS 'a''b'""")
+
+    // MySQL overrides getTableCommentQuery with its own ALTER TABLE syntax.
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    assert(mySQLDialect.getTableCommentQuery("t", "a'b") ===
+      "ALTER TABLE t COMMENT = 'a''b'")
   }
 
   test("Dialect unregister") {
@@ -1144,8 +1265,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "SELECT TOP (123) a,b FROM test")
   }
 
-  // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-  ignore("SPARK-42534: DB2Dialect Limit query test") {
+  test("SPARK-42534: DB2Dialect Limit query test") {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
     assert(
@@ -2318,9 +2438,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
     }
     // not supported
     Seq(
-      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-      // "jdbc:db2://host:port",
-      "jdbc:derby:memory", "jdbc:h2://host:port",
+      "jdbc:db2://host:port", "jdbc:derby:memory", "jdbc:h2://host:port",
       "jdbc:sqlserver://host:port", "jdbc:postgresql://host:5432/postgres",
       "jdbc:snowflake://host:443?account=test", "jdbc:teradata://host:port").foreach { url =>
       val options = new JDBCOptions(baseParameters + ("url" -> url))
@@ -2341,8 +2459,7 @@ class JDBCSuite extends QueryTest with SharedSparkSession {
       "jdbc:mysql",
       "jdbc:postgresql",
       "jdbc:sqlserver",
-      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-      // "jdbc:db2",
+      "jdbc:db2",
       "jdbc:h2",
       "jdbc:teradata",
       "jdbc:databricks"

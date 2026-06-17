@@ -34,16 +34,15 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl, SqlGraphRegistrationContext}
 import org.apache.spark.sql.pipelines.utils.PipelineTest.cleanupMetastore
-import org.apache.spark.sql.test.SQLTestUtils
 
 abstract class PipelineTest
   extends QueryTest
   with StorageRootMixin
-  with SQLTestUtils
   with SparkErrorTestMixin
   with TargetCatalogAndDatabaseMixin
   with Logging
   with Eventually {
+  import testImplicits._
 
   protected def startPipelineAndWaitForCompletion(
        unresolvedDataflowGraph: DataflowGraph): Unit = {

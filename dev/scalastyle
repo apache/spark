@@ -30,6 +30,62 @@ ERRORS=$(echo -e "q\n" \
 
 if test ! -z "$ERRORS"; then
     echo -e "Scalastyle checks failed at following occurrences:\n$ERRORS"
+    # When running under GitHub Actions, also emit each scalastyle violation as
+    # a workflow `::error` annotation so it appears inline on the PR's "Files
+    # changed" tab. Without this, a violation cascades into ~7 red CI checks
+    # (Linters, Java 17/25 Maven build, Documentation generation, sparkr,
+    # Docker integration, TPC-DS) -- all needing catalyst to compile -- and
+    # each only surfaces a generic "exit code 1" with no file/line, forcing
+    # the user to download a full job log to find the actual violation.
+    if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+        # Strip ANSI color codes from the captured output before regex
+        # matching. Today sbt under awk's pipe is not a TTY and skips color,
+        # so the input is already plain. But if sbt color is ever forced
+        # (`-Dsbt.color=always`, custom CI shell), `\e[31m` would silently
+        # break every regex below. Cheap to harden.
+        ERRORS_PLAIN=$(printf '%s' "$ERRORS" | sed -E $'s/\x1b\\[[0-9;]*[A-Za-z]//g')
+        # Helper: emit one `::error` annotation. Centralised so the two regex
+        # branches below stay short.
+        emit_annotation() {
+            local file="$1" lineno="$2" msg="$3"
+            # Strip the GitHub Actions workspace prefix so the annotation
+            # references the path as it appears in the repo.
+            local file_rel="${file#${GITHUB_WORKSPACE:-}/}"
+            # Escape the few characters GitHub reserves in annotation values:
+            # %, \r, \n. (`,` and `:` need not be escaped in the message body,
+            # only inside parameter values, which we don't use.)
+            local msg_escaped="${msg//%/%25}"
+            msg_escaped="${msg_escaped//$'\r'/%0D}"
+            msg_escaped="${msg_escaped//$'\n'/%0A}"
+            printf '::error file=%s,line=%s,title=Scalastyle::%s\n' \
+                "$file_rel" "$lineno" "$msg_escaped"
+        }
+        printf '%s\n' "$ERRORS_PLAIN" | while IFS= read -r raw; do
+            # Two scalastyle output formats reach us:
+            #
+            # (a) scalastyle's native console writer (`Tasks.doScalastyle` when
+            #     invoked by the explicit `scalastyle` / `test:scalastyle`
+            #     tasks):
+            #         error file=<path> message=<text> line=<n> [column=<n>]
+            #     The path has no spaces, the message can; `column=<n>` is
+            #     appended for checkers that report a column (e.g.
+            #     `WhitespaceEndOfLineChecker`) and absent otherwise.
+            #
+            # (b) sbt's logger format, used when `Tasks.doScalastyle` writes
+            #     through `streams.value.log.error(...)` -- which is what the
+            #     explicit `scalastyle` / `test:scalastyle` tasks invoked by
+            #     this script do, and so this is the format we see in CI:
+            #         [error] <path>:<line>: <message>
+            #     The leading `[error] ` plus a single `:<line>:` (with no
+            #     `:<col>:` follow-up) is what tells it apart from a regular
+            #     Scala compile error of shape `[error] <path>:<line>:<col>: <msg>`.
+            if [[ "$raw" =~ ^error[[:space:]]+file=([^[:space:]]+)[[:space:]]+message=(.*)[[:space:]]+line=([0-9]+)([[:space:]]+column=[0-9]+)?$ ]]; then
+                emit_annotation "${BASH_REMATCH[1]}" "${BASH_REMATCH[3]}" "${BASH_REMATCH[2]}"
+            elif [[ "$raw" =~ ^\[error\][[:space:]]+(/[^:[:space:]]+):([0-9]+):[[:space:]]+(.+)$ ]]; then
+                emit_annotation "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+            fi
+        done
+    fi
     exit 1
 else
     echo -e "Scalastyle checks passed."

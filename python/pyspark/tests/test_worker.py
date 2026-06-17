@@ -214,8 +214,8 @@ class WorkerMemoryTest(unittest.TestCase):
             return resource.getrlimit(resource.RLIMIT_AS)
 
         actual = rdd.map(lambda _: getrlimit()).collect()
-        self.assertTrue(len(actual) == 1)
-        self.assertTrue(len(actual[0]) == 2)
+        self.assertEqual(len(actual), 1)
+        self.assertEqual(len(actual[0]), 2)
         [(soft_limit, hard_limit)] = actual
         self.assertEqual(soft_limit, 2 * 1024 * 1024 * 1024)
         self.assertEqual(hard_limit, 2 * 1024 * 1024 * 1024)
@@ -270,6 +270,20 @@ class WorkerPoolCrashTest(PySparkTestCase):
         # give things a moment to settle
         time.sleep(5)
         rdd.map(lambda x: os.getpid()).collect()
+
+
+class SimpleWorkerTests(WorkerTests):
+    """Run worker tests through the non-daemon (simple-worker) path.
+
+    Windows always uses this path; Linux/macOS use it when
+    spark.python.use.daemon=false.
+    """
+
+    @classmethod
+    def conf(cls):
+        conf = super().conf()
+        conf.set("spark.python.use.daemon", "false")
+        return conf
 
 
 if __name__ == "__main__":

@@ -36,18 +36,23 @@ private[spark] class DirectByteBufferOutputStream(capacity: Int) extends OutputS
 
   override def write(b: Int): Unit = {
     checkNotClosed()
-    ensureCapacity(buffer.position() + 1)
+    ensureCapacity(buffer.position().toLong + 1)
     buffer.put(b.toByte)
   }
 
   override def write(b: Array[Byte], off: Int, len: Int): Unit = {
     checkNotClosed()
-    ensureCapacity(buffer.position() + len)
+    ensureCapacity(buffer.position().toLong + len)
     buffer.put(b, off, len)
   }
 
-  private def ensureCapacity(minCapacity: Int): Unit = {
-    if (minCapacity > buffer.capacity()) grow(minCapacity)
+  private def ensureCapacity(minCapacity: Long): Unit = {
+    if (minCapacity > Int.MaxValue) {
+      throw SparkException.internalError(
+        s"DirectByteBufferOutputStream cannot grow beyond 2GB limit " +
+        s"(requested $minCapacity bytes)")
+    }
+    if (minCapacity > buffer.capacity()) grow(minCapacity.toInt)
   }
 
   /**
@@ -56,7 +61,7 @@ private[spark] class DirectByteBufferOutputStream(capacity: Int) extends OutputS
    */
   private def grow(minCapacity: Int): Unit = {
     val oldCapacity = buffer.capacity()
-    var newCapacity = oldCapacity << 1
+    var newCapacity = math.min(oldCapacity.toLong << 1, Int.MaxValue).toInt
     if (newCapacity < minCapacity) newCapacity = minCapacity
     val oldBuffer = buffer
     oldBuffer.flip()

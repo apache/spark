@@ -1,0 +1,54 @@
+================================================================================================
+MergeRowsExec Codegen Benchmark
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.1.166-197.305.amzn2023.x86_64
+AMD EPYC 7R13 Processor
+merge - matched update only:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+merge - matched update only wholestage off           2390           2495         150          8.8         113.9       1.0X
+merge - matched update only wholestage on             724            733          12         29.0          34.5       3.3X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.1.166-197.305.amzn2023.x86_64
+AMD EPYC 7R13 Processor
+merge - not matched insert only:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------
+merge - not matched insert only wholestage off           2317           2328          15          9.1         110.5       1.0X
+merge - not matched insert only wholestage on             722            734           8         29.1          34.4       3.2X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.1.166-197.305.amzn2023.x86_64
+AMD EPYC 7R13 Processor
+merge - matched update + not matched insert:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------
+merge - matched update + not matched insert wholestage off           2737           2743           8          7.7         130.5       1.0X
+merge - matched update + not matched insert wholestage on             861            875          11         24.4          41.0       3.2X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.1.166-197.305.amzn2023.x86_64
+AMD EPYC 7R13 Processor
+merge - matched delete:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+merge - matched delete wholestage off              1361           1361           0         15.4          64.9       1.0X
+merge - matched delete wholestage on                 34             40           5        622.3           1.6      40.4X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.1.166-197.305.amzn2023.x86_64
+AMD EPYC 7R13 Processor
+merge - conditional clauses:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+merge - conditional clauses wholestage off           4851           4852           1          4.3         231.3       1.0X
+merge - conditional clauses wholestage on             862            867           5         24.3          41.1       5.6X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.1.166-197.305.amzn2023.x86_64
+AMD EPYC 7R13 Processor
+merge - matched + not matched + not matched by source:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------------------
+merge - matched + not matched + not matched by source wholestage off           4168           4173           7          5.0         198.7       1.0X
+merge - matched + not matched + not matched by source wholestage on             651            657           4         32.2          31.0       6.4X
+
+OpenJDK 64-Bit Server VM 21.0.10+7-LTS on Linux 6.1.166-197.305.amzn2023.x86_64
+AMD EPYC 7R13 Processor
+merge - split update (delete + insert):                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+merge - split update (delete + insert) wholestage off           3438           3440           3          6.1         163.9       1.0X
+merge - split update (delete + insert) wholestage on            1934           1945           8         10.8          92.2       1.8X
+
+

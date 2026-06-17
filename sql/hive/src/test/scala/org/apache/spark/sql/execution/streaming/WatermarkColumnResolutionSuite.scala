@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Regression tests for ResolveEventTimeWatermark in HiveSessionStateBuilder.
@@ -31,7 +30,7 @@ import org.apache.spark.sql.test.SQLTestUtils
  *
  * Uses TestHiveSingleton to go through HiveSessionStateBuilder, matching production behavior.
  */
-class WatermarkColumnResolutionSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
+class WatermarkColumnResolutionSuite extends QueryTest with TestHiveSingleton {
 
   private def createTestTables(): Unit = {
     sql("CREATE TABLE IF NOT EXISTS wm_signup_details " +

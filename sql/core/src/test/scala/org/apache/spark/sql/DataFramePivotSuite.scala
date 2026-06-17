@@ -26,7 +26,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
-class DataFramePivotSuite extends QueryTest with SharedSparkSession {
+class DataFramePivotSuite extends SharedSparkSession {
   import testImplicits._
 
   test("pivot courses") {

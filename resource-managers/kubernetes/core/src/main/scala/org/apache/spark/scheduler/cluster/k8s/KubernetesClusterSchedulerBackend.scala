@@ -47,7 +47,7 @@ import org.apache.spark.util.ArrayImplicits._
 private[spark] class KubernetesClusterSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
-    kubernetesClient: KubernetesClient,
+    private[k8s] val kubernetesClient: KubernetesClient,
     executorService: ScheduledExecutorService,
     snapshotsStore: ExecutorPodsSnapshotsStore,
     podAllocator: AbstractPodsAllocator,
@@ -66,6 +66,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private val initialExecutors = SchedulerBackendUtils.getInitialTargetExecutorNumber(conf)
 
   private val minRegisteredExecutors = initialExecutors * minRegisteredRatio
+
+  private val appId: String =
+    conf.getOption("spark.app.id").getOrElse(KubernetesConf.getKubernetesAppId())
 
   private val namespace = conf.get(KUBERNETES_NAMESPACE)
 
@@ -98,13 +101,11 @@ private[spark] class KubernetesClusterSchedulerBackend(
   /**
    * Get an application ID associated with the job.
    * This returns the string value of spark.app.id if set, otherwise
-   * the locally-generated ID.
+   * a generated Kubernetes app ID.
    *
    * @return The application ID
    */
-  override def applicationId(): String = {
-    conf.getOption("spark.app.id").getOrElse(KubernetesConf.getKubernetesAppId())
-  }
+  override def applicationId(): String = appId
 
   override def start(): Unit = {
     super.start()

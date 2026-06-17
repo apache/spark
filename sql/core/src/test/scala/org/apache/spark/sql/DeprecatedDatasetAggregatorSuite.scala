@@ -22,7 +22,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 
 @deprecated("This test suite will be removed.", "3.0.0")
-class DeprecatedDatasetAggregatorSuite extends QueryTest with SharedSparkSession {
+class DeprecatedDatasetAggregatorSuite extends SharedSparkSession {
   import testImplicits._
 
   test("typed aggregation: TypedAggregator") {

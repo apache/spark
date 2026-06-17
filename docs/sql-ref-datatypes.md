@@ -54,6 +54,7 @@ Spark SQL and DataFrames support the following data types:
   - `TimestampNTZType`: Timestamp without time zone(TIMESTAMP_NTZ). It represents values comprising values of fields year, month, day,
   hour, minute, and second. All operations are performed without taking any time zone into account.
     - Note: TIMESTAMP in Spark is a user-specified alias associated with one of the TIMESTAMP_LTZ and TIMESTAMP_NTZ variations.  Users can set the default timestamp type as `TIMESTAMP_LTZ`(default value) or `TIMESTAMP_NTZ` via the configuration `spark.sql.timestampType`.
+  - `TimestampNTZNanosType(precision)` / `TimestampLTZNanosType(precision)`: Preview nanosecond-capable variants of `TIMESTAMP_NTZ` and `TIMESTAMP_LTZ` with fractional seconds precision `precision` in `[7, 9]`. Unparameterized `TIMESTAMP`, `TIMESTAMP_NTZ`, and `TIMESTAMP_LTZ` remain microsecond types. In schema-driven Dataset/DataFrame conversion, Spark maps `TimestampNTZNanosType` to `java.time.LocalDateTime` and `TimestampLTZNanosType` to `java.time.Instant`; values with more sub-micro digits than declared by `precision` are floor-truncated to that precision. Enable the preview feature with `SET spark.sql.timestampNanosTypes.enabled=true;` before using these types in schemas or SQL.
 
 * Interval types
   - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:
@@ -95,8 +96,8 @@ Spark SQL and DataFrames support the following data types:
 
 * Spatial types
   Spatial objects as defined in the [OGC Simple Feature Access](https://portal.ogc.org/files/?artifact_id=25355) specification.
-  - `GeometryType`: Represents GEOMETRY values—spatial objects in a Cartesian coordinate system. The type can be fixed to a single SRID, e.g. `geometry(4326)`, or allow mixed SRIDs with `geometry(any)`. Default SRID when not specified is 4326 (WGS 84).
-  - `GeographyType`: Represents GEOGRAPHY values—spatial objects in a geographic coordinate system (latitude/longitude). Edge interpolation is always SPHERICAL. The type can be fixed to a single SRID, e.g. `geography(4326)`, or allow mixed SRIDs with `geography(any)`. Default SRID is 4326 (WGS 84).
+  - `GeometryType`: Represents GEOMETRY values, spatial objects in a Cartesian coordinate system. The type can be fixed to a single SRID, e.g. `geometry(4326)`, or allow mixed SRIDs with `geometry(any)`. In SQL, `GEOMETRY` columns must always be declared with an explicit SRID or `ANY`.
+  - `GeographyType`: Represents GEOGRAPHY values, spatial objects in a geographic coordinate system (latitude/longitude). Edge interpolation is always SPHERICAL. The type can be fixed to a single geographic SRID, e.g. `geography(4326)`, or allow mixed SRIDs with `geography(any)`. In SQL, `GEOGRAPHY` columns must always be declared with an explicit SRID or `ANY`.
   For more details and built-in functions, see [Geospatial (Geometry/Geography) types](sql-ref-geospatial-types.html).
 
 * Complex types
@@ -143,8 +144,8 @@ from pyspark.sql.types import *
 |**TimestampNTZType**|datetime.datetime|TimestampNTZType()|
 |**DateType**|datetime.date|DateType()|
 |**DayTimeIntervalType**|datetime.timedelta|DayTimeIntervalType()|
-|**GeometryType**|Geometry|GeometryType() or GeometryType(*srid*)|
-|**GeographyType**|Geography|GeographyType() or GeographyType(*srid*)|
+|**GeometryType**|Geometry|GeometryType(*srid*)<br/>**Note:** *srid* is required and may be an `int` or the string `"ANY"`.|
+|**GeographyType**|Geography|GeographyType(*srid*)<br/>**Note:** *srid* is required and may be an `int` or the string `"ANY"`.|
 |**ArrayType**|list, tuple, or array|ArrayType(*elementType*, [*containsNull*])<br/>**Note:**The default value of *containsNull* is True.|
 |**MapType**|dict|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:**The default value of *valueContainsNull* is True.|
 |**StructType**|list or tuple|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -179,8 +180,8 @@ You can access them by doing
 |**TimeType**|java.time.LocalTime|TimeType|
 |**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
 |**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
-|**GeometryType**|org.apache.spark.sql.types.Geometry|GeometryType or GeometryType(*srid*)|
-|**GeographyType**|org.apache.spark.sql.types.Geography|GeographyType or GeographyType(*srid*)|
+|**GeometryType**|org.apache.spark.sql.types.Geometry|GeometryType(*srid*)|
+|**GeographyType**|org.apache.spark.sql.types.Geography|GeographyType(*srid*)|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
 |**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
 |**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -272,8 +273,8 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
 |**YearMonthIntervalType**|INTERVAL YEAR, INTERVAL YEAR TO MONTH, INTERVAL MONTH|
 |**DayTimeIntervalType**|INTERVAL DAY, INTERVAL DAY TO HOUR, INTERVAL DAY TO MINUTE, INTERVAL DAY TO SECOND, INTERVAL HOUR, INTERVAL HOUR TO MINUTE, INTERVAL HOUR TO SECOND, INTERVAL MINUTE, INTERVAL MINUTE TO SECOND, INTERVAL SECOND|
-|**GeometryType**|GEOMETRY or GEOMETRY(*srid*) or GEOMETRY(ANY)|
-|**GeographyType**|GEOGRAPHY or GEOGRAPHY(*srid*) or GEOGRAPHY(ANY)|
+|**GeometryType**|GEOMETRY(*srid*) or GEOMETRY(ANY)|
+|**GeographyType**|GEOGRAPHY(*srid*) or GEOGRAPHY(ANY)|
 |**ArrayType**|ARRAY\<element_type>|
 |**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...><br/> **Note:** ':' is optional.|
 |**MapType**|MAP<key_type, value_type>|

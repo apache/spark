@@ -89,12 +89,6 @@ class ResolveColumnDefaultInCommandInputQuery(val catalogManager: CatalogManager
       // defined for the n-th variable of the SET.
       s.withNewChildren(Seq(resolveColumnDefault(s.sourceQuery, expectedQuerySchema)))
 
-    // SPARK-43752: resolve column "DEFAULT" in V2 write commands.
-    case v2: V2WriteCommand if conf.enableDefaultColumns && v2.table.resolved &&
-        v2.query.containsPattern(UNRESOLVED_ATTRIBUTE) =>
-      val expectedQuerySchema = v2.table.schema
-      v2.withNewQuery(resolveColumnDefault(v2.query, expectedQuerySchema))
-
     case _ => plan
   }
 

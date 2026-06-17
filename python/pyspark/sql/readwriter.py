@@ -201,6 +201,8 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
+        if value is None:
+            return self
         self._jreader = self._jreader.option(key, to_str(value))
         return self
 
@@ -248,8 +250,9 @@ class DataFrameReader(OptionUtils):
         |100|NULL|
         +---+----+
         """
-        for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jreader = self._jreader.option(k, to_str(v))
         return self
 
     def load(
@@ -768,7 +771,7 @@ class DataFrameReader(OptionUtils):
 
     def csv(
         self,
-        path: PathOrPaths,
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         schema: Optional[Union[StructType, str]] = None,
         sep: Optional[str] = None,
         encoding: Optional[str] = None,
@@ -814,11 +817,15 @@ class DataFrameReader(OptionUtils):
         .. versionchanged:: 3.4.0
             Supports Spark Connect.
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str or list
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string, or list of strings, for input path(s),
-            or RDD of Strings storing CSV rows.
+            or RDD of Strings storing CSV rows,
+            or a DataFrame with a single string column containing CSV rows.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -896,7 +903,7 @@ class DataFrameReader(OptionUtils):
 
         if not is_remote_only() and isinstance(path, RDD):
 
-            def func(iterator):
+            def func(iterator: Iterable) -> Iterable:
                 for x in iterator:
                     if not isinstance(x, str):
                         x = str(x)
@@ -905,7 +912,8 @@ class DataFrameReader(OptionUtils):
                     yield x
 
             keyed = path.mapPartitions(func)
-            keyed._bypass_serializer = True
+            keyed._bypass_serializer = True  # type: ignore[attr-defined]
+            assert self._spark._jvm is not None
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             # see SPARK-22112
             # There aren't any jvm api for creating a dataframe from rdd storing csv.
@@ -915,19 +923,27 @@ class DataFrameReader(OptionUtils):
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )
             return self._df(self._jreader.csv(jdataset))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.csvFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
-                    "expected_type": "str or list[RDD]",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )
 
     def xml(
         self,
-        path: Union[str, List[str], "RDD[str]"],
+        path: Union[str, List[str], "RDD[str]", "DataFrame"],
         rowTag: Optional[str] = None,
         schema: Optional[Union[StructType, str]] = None,
         excludeAttribute: Optional[Union[bool, str]] = None,
@@ -955,11 +971,15 @@ class DataFrameReader(OptionUtils):
 
         .. versionadded:: 4.0.0
 
+        .. versionchanged:: 4.2.0
+            Supports DataFrame input.
+
         Parameters
         ----------
-        path : str, list or :class:`RDD`
+        path : str, list, :class:`RDD`, or :class:`DataFrame`
             string, or list of strings, for input path(s),
-            or RDD of Strings storing XML rows.
+            or RDD of Strings storing XML rows,
+            or a DataFrame with a single string column containing XML strings.
         schema : :class:`pyspark.sql.types.StructType` or str, optional
             an optional :class:`pyspark.sql.types.StructType` for the input schema
             or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
@@ -975,7 +995,7 @@ class DataFrameReader(OptionUtils):
 
         Examples
         --------
-        Write a DataFrame into a XML file and read it back.
+        Example 1: Write a DataFrame into a XML file and read it back.
 
         >>> import tempfile
         >>> with tempfile.TemporaryDirectory(prefix="xml") as d:
@@ -991,6 +1011,21 @@ class DataFrameReader(OptionUtils):
         +---+------------+
         |100|Hyukjin Kwon|
         +---+------------+
+
+        Example 2: Parse XML from a DataFrame with a single string column.
+
+        >>> xml_df = spark.createDataFrame(
+        ...     [('<person><name>Alice</name><age>25</age></person>',),
+        ...      ('<person><name>Bob</name><age>30</age></person>',)],
+        ...     schema="value STRING",
+        ... )
+        >>> spark.read.option("rowTag", "person").xml(xml_df).sort("name").show()
+        +---+-----+
+        |age| name|
+        +---+-----+
+        | 25|Alice|
+        | 30|  Bob|
+        +---+-----+
         """
         self._set_opts(
             rowTag=rowTag,
@@ -1043,12 +1078,20 @@ class DataFrameReader(OptionUtils):
                 jrdd.rdd(), self._spark._jvm.Encoders.STRING()
             )
             return self._df(self._jreader.xml(jdataset))
+
+        from pyspark.sql.dataframe import DataFrame
+
+        if isinstance(path, DataFrame):
+            assert self._spark._jvm is not None
+            return self._df(
+                self._spark._jvm.PythonSQLUtils.xmlFromDataFrame(self._jreader, path._jdf)
+            )
         else:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
                 messageParameters={
                     "arg_name": "path",
-                    "expected_type": "str or list[RDD]",
+                    "expected_type": "str, list, RDD, or DataFrame",
                     "arg_type": type(path).__name__,
                 },
             )
@@ -1393,6 +1436,8 @@ class DataFrameWriter(OptionUtils):
         +---+------------+
         """
 
+        if value is None:
+            return self
         self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
@@ -1443,8 +1488,9 @@ class DataFrameWriter(OptionUtils):
         |100|Hyukjin Kwon|
         +---+------------+
         """
-        for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+        for k, v in options.items():
+            if v is not None:
+                self._jwrite = self._jwrite.option(k, to_str(v))
         return self
 
     @overload
@@ -2418,7 +2464,7 @@ class DataFrameWriterV2:
         Specifies a provider for the underlying output data source.
         Spark's default catalog supports "parquet", "json", etc.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.using(provider)
         return self
@@ -2427,8 +2473,10 @@ class DataFrameWriterV2:
         """
         Add a write option.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
+        if value is None:
+            return self
         self._jwriter.option(key, to_str(value))
         return self
 
@@ -2436,9 +2484,9 @@ class DataFrameWriterV2:
         """
         Add write options.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
-        options = {k: to_str(v) for k, v in options.items()}
+        options = {k: to_str(v) for k, v in options.items() if v is not None}
         self._jwriter.options(options)
         return self
 
@@ -2446,7 +2494,7 @@ class DataFrameWriterV2:
         """
         Add table property.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.tableProperty(property, value)
         return self
@@ -2477,7 +2525,7 @@ class DataFrameWriterV2:
         * :py:func:`pyspark.sql.functions.hours`
         * :py:func:`pyspark.sql.functions.bucket`
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         from pyspark.sql.classic.column import _to_seq, _to_java_column
 
@@ -2502,7 +2550,7 @@ class DataFrameWriterV2:
         The new table's schema, partition layout, properties, and other configuration will be
         based on the configuration set on this writer.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.create()
 
@@ -2513,7 +2561,7 @@ class DataFrameWriterV2:
         The existing table's schema, partition layout, properties, and other configuration will be
         replaced with the contents of the data frame and the configuration set on this writer.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.replace()
 
@@ -2526,7 +2574,7 @@ class DataFrameWriterV2:
         and the configuration set on this writer.
         If the table exists, its configuration and data will be replaced.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.createOrReplace()
 
@@ -2534,7 +2582,7 @@ class DataFrameWriterV2:
         """
         Append the contents of the data frame to the output table.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.append()
 
@@ -2543,7 +2591,7 @@ class DataFrameWriterV2:
         Overwrite rows matching the given filter condition with the contents of the data frame in
         the output table.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         from pyspark.sql.classic.column import _to_java_column
 
@@ -2558,7 +2606,7 @@ class DataFrameWriterV2:
         This operation is equivalent to Hive's `INSERT OVERWRITE ... PARTITION`, which replaces
         partitions dynamically depending on the contents of the data frame.
 
-        .. versionadded: 3.1.0
+        .. versionadded:: 3.1.0
         """
         self._jwriter.overwritePartitions()
 

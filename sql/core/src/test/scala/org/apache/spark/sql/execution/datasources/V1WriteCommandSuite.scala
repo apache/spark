@@ -24,12 +24,12 @@ import org.apache.spark.sql.execution.{QueryExecution, SortExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType}
 import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.tags.SlowSQLTest
 
-trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper {
+trait V1WriteCommandSuiteBase extends QueryTest with AdaptiveSparkPlanHelper {
 
   import testImplicits._
 
@@ -126,7 +126,7 @@ trait V1WriteCommandSuiteBase extends SQLTestUtils with AdaptiveSparkPlanHelper 
 }
 
 @SlowSQLTest
-class V1WriteCommandSuite extends QueryTest with SharedSparkSession with V1WriteCommandSuiteBase {
+class V1WriteCommandSuite extends SharedSparkSession with V1WriteCommandSuiteBase {
 
   import testImplicits._
 

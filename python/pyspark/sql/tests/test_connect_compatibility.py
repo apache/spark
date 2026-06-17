@@ -100,7 +100,7 @@ class ConnectCompatibilityTestsMixin:
             connect_signature = inspect.signature(connect_methods[method])
 
             # Cannot support RDD arguments from Spark Connect
-            has_rdd_arguments = ("createDataFrame", "xml", "json", "toJSON")
+            has_rdd_arguments = ("createDataFrame", "xml", "json", "csv", "toJSON")
             if method not in has_rdd_arguments:
                 self.assertEqual(
                     classic_signature,
@@ -264,7 +264,6 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_methods = {
             "clearProgressHandlers",
             "copyFromLocalToFs",
-            "newSession",
             "registerProgressHandler",
             "removeProgressHandler",
         }

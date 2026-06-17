@@ -24,24 +24,26 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
-import org.apache.spark.sql.metricview.serde.{AssetSource, MetricView, MetricViewFactory, MetricViewValidationException, MetricViewYAMLParsingException, SQLSource}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.metricview.logical.{DimensionInputColumn, InputColumn, MeasureInputColumn, MetricViewPlaceholder}
+import org.apache.spark.sql.metricview.serde.{AssetSource, DimensionExpression, JsonUtils, MeasureExpression, MetricView, MetricViewFactory, MetricViewValidationException, MetricViewYAMLParsingException, SQLSource}
+import org.apache.spark.sql.types.{Metadata, StructType}
 
 object MetricViewPlanner {
 
   def planWrite(
       metadata: CatalogTable,
       yaml: String,
-      sqlParser: ParserInterface): MetricViewPlaceholder = {
+      sqlParser: ParserInterface): (MetricViewPlaceholder, MetricView) = {
     val (metricView, dataModelPlan) = parseYAML(yaml, sqlParser)
-    MetricViewPlaceholder(
+    val inputColumns = buildInputColumns(metricView, sqlParser)
+    val placeholder = MetricViewPlaceholder(
       metadata,
-      metricView,
+      inputColumns,
       Seq.empty,
       dataModelPlan,
       isCreate = true
     )
+    (placeholder, metricView)
   }
 
   def planRead(
@@ -50,12 +52,35 @@ object MetricViewPlanner {
       sqlParser: ParserInterface,
       expectedSchema: StructType): MetricViewPlaceholder = {
     val (metricView, dataModelPlan) = parseYAML(yaml, sqlParser)
+    val inputColumns = buildInputColumns(metricView, sqlParser)
     MetricViewPlaceholder(
       metadata,
-      metricView,
+      inputColumns,
       DataTypeUtils.toAttributes(expectedSchema),
       dataModelPlan
     )
+  }
+
+  /**
+   * Parses every column's `MeasureExpression` / `DimensionExpression` from the YAML descriptor
+   * into a typed [[InputColumn]] (with the SQL expression already parsed) so downstream
+   * resolution rules read a stable representation rather than re-parsing the YAML.
+   * Column metadata is converted once here from the canonical `ColumnMetadata` to Spark's
+   * `Metadata`, preserving the per-column annotations (e.g. dimension / measure type marker,
+   * source expression text) the resolver attaches to output attributes.
+   */
+  private def buildInputColumns(
+      metricView: MetricView,
+      sqlParser: ParserInterface): Seq[InputColumn] = {
+    metricView.select.map { col =>
+      val md = Metadata.fromJson(JsonUtils.toJson(col.getColumnMetadata))
+      col.expression match {
+        case DimensionExpression(expr) =>
+          DimensionInputColumn(col.name, sqlParser.parseExpression(expr), md)
+        case MeasureExpression(expr) =>
+          MeasureInputColumn(col.name, sqlParser.parseExpression(expr), md)
+      }
+    }
   }
 
   private def parseYAML(
@@ -64,10 +89,13 @@ object MetricViewPlanner {
     val metricView = try {
       MetricViewFactory.fromYAML(yaml)
     } catch {
+      // Both cases are user-correctable errors in the YAML body, not internal Spark bugs;
+      // surface them as `INVALID_METRIC_VIEW_YAML` AnalysisExceptions so the message is
+      // categorized as user input error rather than "please contact support".
       case e: MetricViewValidationException =>
-        throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
+        throw QueryCompilationErrors.invalidMetricViewYamlError(e.getMessage, e)
       case e: MetricViewYAMLParsingException =>
-        throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
+        throw QueryCompilationErrors.invalidMetricViewYamlError(e.getMessage, e)
     }
     val source = metricView.from match {
       case asset: AssetSource => UnresolvedRelation(sqlParser.parseMultipartIdentifier(asset.name))

@@ -27,7 +27,7 @@ import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericR
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.avro.{functions => Fns}
 import org.apache.spark.sql.avro.functions.{from_avro, to_avro}
 import org.apache.spark.sql.execution.LocalTableScanExec
@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 
-class AvroFunctionsSuite extends QueryTest with SharedSparkSession {
+class AvroFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("roundtrip in to_avro and from_avro - int and string") {

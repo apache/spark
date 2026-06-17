@@ -64,13 +64,33 @@ class SparkConnectErrorTests(ReusedConnectTestCase):
         with self.assertRaises(AnalysisException):
             cdf2.withColumn("x", cdf1.a + 1).schema
 
-        # Can find the target plan node, but fail to resolve with it
+        # Can find the target plan node, but the resolved attribute is not part of the outer
+        # operator's output (e.g. it was dropped by a projection).
         with self.assertRaisesRegex(
             AnalysisException,
-            "UNRESOLVED_COLUMN.WITH_SUGGESTION",
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
         ):
             cdf3 = cdf1.select(cdf1.a)
             cdf3.select(cdf1.b).schema
+
+        # Same pattern: the column from a different DataFrame is overwritten by `withColumn`.
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            cdf3 = cdf1.withColumn("a", F.lit(0))
+            cdf3.select(cdf1.a).schema
+
+        # SPARK-56547: `df["id"]` references the original `id`, but `df2`'s `id` was shadowed
+        # by `withColumn`. Previously surfaced a misleading
+        # `UNRESOLVED_COLUMN.WITH_SUGGESTION` error suggesting the same column name.
+        df = self.spark.range(10)
+        df2 = df.withColumn("id", F.col("id") + 1)
+        with self.assertRaisesRegex(
+            AnalysisException,
+            "CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        ):
+            df2.select(df["id"]).schema
 
         # Can not find the target plan node by plan id
         with self.assertRaisesRegex(

@@ -65,6 +65,12 @@ public interface PartitionReader<T> extends Closeable {
    * {@link org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning} and the reader
    * is initialized with the metrics returned by the previous reader that belongs to the same
    * partition. By default, this method does nothing.
+   *
+   * @deprecated Use {@link CustomTaskMetric#mergeWith(CustomTaskMetric)} instead. When a task
+   *   reads multiple partitions concurrently or sequentially, {@code DataSourceRDD} now merges
+   *   metrics from all readers via {@code mergeWith} at reporting time, removing the need to
+   *   seed each new reader with the prior reader's values.
    */
+  @Deprecated(since = "4.2.0")
   default void initMetricsValues(CustomTaskMetric[] metrics) {}
 }

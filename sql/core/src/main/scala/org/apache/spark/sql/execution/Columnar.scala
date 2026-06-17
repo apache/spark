@@ -64,7 +64,8 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[org.apache.spark.sql.execution.python.ArrowEvalPythonExec]] and
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
-case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
+case class ColumnarToRowExec(child: SparkPlan)
+    extends ColumnarToRowTransition with CodegenSupport with SafeForKWayMerge {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -267,10 +268,11 @@ private object RowToColumnConverter {
       case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LongConverter
       case DoubleType => DoubleConverter
       case StringType => StringConverter
-      case _: GeographyType => GeographyConverter
-      case _: GeometryType => GeometryConverter
+      case _: GeographyType | _: GeometryType => BinaryViewConverter
       case CalendarIntervalType => CalendarConverter
       case VariantType => VariantConverter
+      case _: TimestampNTZNanosType => TimestampNTZNanosConverter
+      case _: TimestampLTZNanosType => TimestampLTZNanosConverter
       case at: ArrayType => ArrayConverter(getConverterForType(at.elementType, at.containsNull))
       case st: StructType => new StructConverter(st.fields.map(
         (f) => getConverterForType(f.dataType, f.nullable)))
@@ -283,6 +285,8 @@ private object RowToColumnConverter {
     if (nullable) {
       dataType match {
         case CalendarIntervalType | VariantType => new StructNullableTypeConverter(core)
+        case _: AnyTimestampNanoType =>
+          new StructNullableTypeConverter(core)
         case st: StructType => new StructNullableTypeConverter(core)
         case _ => new BasicNullableTypeConverter(core)
       }
@@ -340,16 +344,9 @@ private object RowToColumnConverter {
     }
   }
 
-  private object GeographyConverter extends TypeConverter {
+  private object BinaryViewConverter extends TypeConverter {
     override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      val data = row.getGeography(column).getBytes
-      cv.appendByteArray(data, 0, data.length)
-    }
-  }
-
-  private object GeometryConverter extends TypeConverter {
-    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
-      val data = row.getGeometry(column).getBytes
+      val data = row.getBinaryView(column).getBytes
       cv.appendByteArray(data, 0, data.length)
     }
   }
@@ -370,6 +367,24 @@ private object RowToColumnConverter {
       cv.appendStruct(false)
       cv.getChild(0).appendByteArray(v.getValue, 0, v.getValue.length)
       cv.getChild(1).appendByteArray(v.getMetadata, 0, v.getMetadata.length)
+    }
+  }
+
+  private object TimestampNTZNanosConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val v = row.getTimestampNTZNanos(column)
+      cv.appendStruct(false)
+      cv.getChild(0).appendLong(v.epochMicros)
+      cv.getChild(1).appendShort(v.nanosWithinMicro)
+    }
+  }
+
+  private object TimestampLTZNanosConverter extends TypeConverter {
+    override def append(row: SpecializedGetters, column: Int, cv: WritableColumnVector): Unit = {
+      val v = row.getTimestampLTZNanos(column)
+      cv.appendStruct(false)
+      cv.getChild(0).appendLong(v.epochMicros)
+      cv.getChild(1).appendShort(v.nanosWithinMicro)
     }
   }
 

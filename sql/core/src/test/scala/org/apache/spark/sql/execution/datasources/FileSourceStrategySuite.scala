@@ -28,7 +28,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkException
 import org.apache.spark.internal.config
 import org.apache.spark.paths.SparkPath.{fromUrlString => sp}
-import org.apache.spark.sql.{execution, DataFrame, QueryTest, Row, SparkSession}
+import org.apache.spark.sql.{execution, DataFrame, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class FileSourceStrategySuite extends QueryTest with SharedSparkSession {
+class FileSourceStrategySuite extends SharedSparkSession {
   import testImplicits._
 
   protected override def sparkConf = super.sparkConf.set(config.DEFAULT_PARALLELISM.key, "1")

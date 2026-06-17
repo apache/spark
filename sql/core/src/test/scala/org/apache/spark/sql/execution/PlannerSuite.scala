@@ -23,6 +23,7 @@ import org.apache.spark.sql.{execution, DataFrame, Row}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, Final}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range, Repartition, RepartitionOperation, Union}
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -1583,6 +1584,41 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
     // Total shuffles: one for df1, one for df2, one for groupBy.
     // The groupBy reuse the output partitioning after DirectShufflePartitionID.
     checkShuffleCount(grouped, 3)
+  }
+
+  test("SPARK-55979: required input attributes are missing from PartialMerge / Final " +
+    "BaseAggregateExec.references") {
+    val scanAggBufferAttr = AttributeReference("buf", IntegerType, nullable = true)()
+    val inputAggBufferAttr = scanAggBufferAttr.withName("renamed_buf")
+
+    case class MyAggregate() extends DeclarativeAggregate {
+      override def children: Seq[Expression] = Nil
+      override def nullable: Boolean = true
+      override def dataType: DataType = IntegerType
+      override def prettyName: String = "test_agg"
+      override val aggBufferAttributes: Seq[AttributeReference] = Seq(scanAggBufferAttr)
+      override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
+        Seq(inputAggBufferAttr)
+      override val initialValues: Seq[Expression] = Seq(Literal(0))
+      override val updateExpressions: Seq[Expression] = Seq(scanAggBufferAttr)
+      override val mergeExpressions: Seq[Expression] = Seq(inputAggBufferAttr)
+      override val evaluateExpression: Expression = scanAggBufferAttr
+      override protected def withNewChildrenInternal(
+        newChildren: IndexedSeq[Expression]): Expression = copy()
+    }
+    val aggregateExpression = AggregateExpression(MyAggregate(), Final, isDistinct = false)
+    val aggregate = HashAggregateExec(
+      requiredChildDistributionExpressions = None,
+      isStreaming = false,
+      numShufflePartitions = None,
+      groupingExpressions = Nil,
+      aggregateExpressions = Seq(aggregateExpression),
+      aggregateAttributes = Seq(aggregateExpression.resultAttribute),
+      initialInputBufferOffset = 0,
+      resultExpressions = Seq(Alias(aggregateExpression, "result")()),
+      child = LocalTableScanExec(Seq(scanAggBufferAttr), Nil, None))
+
+    assert(aggregate.references.contains(inputAggBufferAttr))
   }
 }
 

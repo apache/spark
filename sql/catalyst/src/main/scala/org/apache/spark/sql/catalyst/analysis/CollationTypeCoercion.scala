@@ -288,6 +288,16 @@ object CollationTypeCoercion extends SQLConfHelper {
             None
         }
 
+      case elementAt: ElementAt =>
+        findCollationContext(elementAt.left) match {
+          case Some(MapType(_, valueType, _)) =>
+            mergeWinner(elementAt.dataType, valueType)
+          case Some(ArrayType(elementType, _)) =>
+            mergeWinner(elementAt.dataType, elementType)
+          case _ =>
+            None
+        }
+
       case struct: CreateNamedStruct =>
         val childrenContexts = struct.valExprs.map(findCollationContext)
         if (childrenContexts.isEmpty) {

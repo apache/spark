@@ -19,34 +19,111 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.concurrent.ConcurrentHashMap
 
-import scala.language.existentials
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.ArrayImplicits._
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: Option[InputPartition])
   extends Partition with Serializable
 
 /**
- * Holds the state for a reader in a task, used by the completion listener to access the most
- * recently created reader and iterator for final metrics updates and cleanup.
+ * Holds all mutable state for a single Spark task reading from a {@link DataSourceRDD}:
+ * <ul>
+ *   <li>{@code partitionIterators}: all {@link PartitionIterator}s opened so far for this task.
+ *       One iterator is appended per {@code compute()} call (one per input partition).</li>
+ *   <li>Spark input metrics ({@code recordsRead}, {@code bytesRead}): owned exclusively by this
+ *       object so that {@code setBytesRead} -- a set, not an increment -- is called from a single
+ *       owner even when multiple iterators are live concurrently.</li>
+ *   <li>{@code closedMetrics}: a pre-merged map of custom metrics from readers closed by natural
+ *       exhaustion, kept so iterator references can be released as readers finish.</li>
+ * </ul>
  *
- * When `compute()` is called multiple times for the same task (e.g., when DataSourceRDD is
- * coalesced), this state is updated on each call to track the most recent reader. The task
- * completion listener then uses this most recent reader for final cleanup and metrics reporting.
+ * <p><b>When metrics are reported:</b>
+ * <ul>
+ *   <li><i>Periodically</i>: {@link #updateMetrics} is called on every {@code next()} and
+ *       throttles updates to once per {@code UPDATE_INPUT_METRICS_INTERVAL_RECORDS} rows (input
+ *       metrics) and {@code NUM_ROWS_PER_UPDATE} rows (custom metrics).</li>
+ *   <li><i>On natural exhaustion</i>: when a reader's iterator is fully consumed, {@code hasNext}
+ *       calls {@code updateMetrics(0, force=true)} to flush both input and custom metrics
+ *       immediately, then closes the reader and drops the reference.</li>
+ *   <li><i>At task completion</i>: the task completion listener calls
+ *       {@code updateMetrics(0, force=true)} for a final flush, then closes any iterators not
+ *       yet exhausted.</li>
+ * </ul>
  *
- * @param reader The partition reader
- * @param iterator The metrics iterator wrapping the reader
+ * <p><b>Why this works across all execution modes:</b>
+ * <ul>
+ *   <li><i>One partition per task</i>: a single iterator is opened and closed; periodic + final
+ *       updates cover the full read.</li>
+ *   <li><i>Sequential coalescing ({@link CoalescedRDD})</i>: partitions are read one at a time.
+ *       Each reader is naturally exhausted before the next opens, so its final metrics are folded
+ *       into {@code closedMetrics} before its reference is released. The merged view in
+ *       {@code mergeAndUpdateCustomMetrics} therefore always includes all partitions read so
+ *       far.</li>
+ *   <li><i>Concurrent k-way merge ({@link SortedMergeCoalescedRDD})</i>: all N iterators are
+ *       opened upfront and interleaved on a single thread. All live readers' current metrics are
+ *       merged together on each update, so none are lost. When individual readers are exhausted,
+ *       their metrics are folded into {@code closedMetrics} for continued accounting.</li>
+ * </ul>
  */
-private case class ReaderState(reader: PartitionReader[_], iterator: MetricsIterator[_])
+private class TaskState(customMetrics: Map[String, SQLMetric]) {
+  val partitionIterators = new ArrayBuffer[PartitionIterator[_]]()
+
+  // Input metrics (recordsRead, bytesRead) tracked for this task.
+  private val inputMetrics = TaskContext.get().taskMetrics().inputMetrics
+  private val startingBytesRead = inputMetrics.bytesRead
+  private val getBytesRead = SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
+  private var recordsReadAtLastBytesUpdate = 0L
+  private var recordsReadAtLastCustomMetricsUpdate = 0L
+
+  // Pre-merged custom metrics snapshot of all readers closed by natural exhaustion.
+  // Maintained as a map (one entry per metric name).
+  private val closedMetrics = new HashMap[String, CustomTaskMetric]()
+
+  def updateMetrics(numRows: Int, force: Boolean = false): Unit = {
+    inputMetrics.incRecordsRead(numRows)
+    val shouldUpdateBytesRead = force ||
+      inputMetrics.recordsRead - recordsReadAtLastBytesUpdate >=
+        SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS
+    if (shouldUpdateBytesRead) {
+      recordsReadAtLastBytesUpdate = inputMetrics.recordsRead
+      inputMetrics.setBytesRead(startingBytesRead + getBytesRead())
+    }
+    val shouldUpdateCustomMetrics = force ||
+      inputMetrics.recordsRead - recordsReadAtLastCustomMetricsUpdate >=
+        CustomMetrics.NUM_ROWS_PER_UPDATE
+    if (shouldUpdateCustomMetrics) {
+      recordsReadAtLastCustomMetricsUpdate = inputMetrics.recordsRead
+      mergeAndUpdateCustomMetrics()
+    }
+  }
+
+  private def mergeAndUpdateCustomMetrics(): Unit = {
+    partitionIterators.filterInPlace { iter =>
+      if (iter.isClosed) {
+        iter.finalMetrics.foreach { m =>
+          closedMetrics.update(m.name(), closedMetrics.get(m.name()).fold(m)(_.mergeWith(m)))
+        }
+        false
+      } else true
+    }
+    val mergedMetrics = (partitionIterators.flatMap(_.currentMetricsValues) ++ closedMetrics.values)
+      .groupMapReduce(_.name())(identity)(_.mergeWith(_))
+      .values
+      .toSeq
+    if (mergedMetrics.nonEmpty) {
+      CustomMetrics.updateMetrics(mergedMetrics, customMetrics)
+    }
+  }
+}
 
 // TODO: we should have 2 RDDs: an RDD[InternalRow] for row-based scan, an `RDD[ColumnarBatch]` for
 // columnar scan.
@@ -71,10 +148,8 @@ class DataSourceRDD(
     customMetrics: Map[String, SQLMetric])
   extends RDD[InternalRow](sc, Nil) {
 
-  // Map from task attempt ID to the most recently created ReaderState for that task.
-  // When compute() is called multiple times for the same task (due to coalescing), the map entry
-  // is updated each time so the completion listener always closes the last reader.
-  @transient private lazy val taskReaderStates = new ConcurrentHashMap[Long, ReaderState]()
+  // One TaskState per task attempt.
+  @transient private lazy val taskStates = new ConcurrentHashMap[Long, TaskState]()
 
   override protected def getPartitions: Array[Partition] = {
     inputPartitions.zipWithIndex.map {
@@ -90,52 +165,39 @@ class DataSourceRDD(
   override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
     val taskAttemptId = context.taskAttemptId()
 
-    // Add completion listener only once per task attempt. When compute() is called a second time
-    // for the same task (e.g., due to coalescing), the first call will have already put a
-    // ReaderState into taskReaderStates, so containsKey returns true and we skip this block.
-    if (!taskReaderStates.containsKey(taskAttemptId)) {
+    // Ensure a TaskState exists for this task and register the completion listener on the
+    // first compute() call. computeIfAbsent is atomic; same-task calls are always on one
+    // thread, so partitionIterators.isEmpty reliably identifies the first call.
+    val taskState = taskStates.computeIfAbsent(taskAttemptId, _ => new TaskState(customMetrics))
+
+    if (taskState.partitionIterators.isEmpty) {
       context.addTaskCompletionListener[Unit] { ctx =>
-        // In case of early stopping before consuming the entire iterator,
-        // we need to do one more metric update at the end of the task.
+        // In case of early stopping, do a final metrics update and close all readers.
         try {
-          val readerState = taskReaderStates.get(ctx.taskAttemptId())
-          if (readerState != null) {
-            CustomMetrics.updateMetrics(
-              readerState.reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
-            readerState.iterator.forceUpdateMetrics()
-            readerState.reader.close()
+          val taskState = taskStates.get(ctx.taskAttemptId())
+          if (taskState != null) {
+            taskState.updateMetrics(0, force = true)
+            taskState.partitionIterators.foreach(_.close())
           }
         } finally {
-          taskReaderStates.remove(ctx.taskAttemptId())
+          taskStates.remove(ctx.taskAttemptId())
         }
       }
     }
 
     castPartition(split).inputPartition.iterator.flatMap { inputPartition =>
-      val (iter, reader) = if (columnarReads) {
+      val iter = if (columnarReads) {
         val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
-        val iter = new MetricsBatchIterator(
-          new PartitionIterator[ColumnarBatch](batchReader, customMetrics))
-        (iter, batchReader)
+        new PartitionIterator[ColumnarBatch](batchReader, _.numRows, taskState)
       } else {
         val rowReader = partitionReaderFactory.createReader(inputPartition)
-        val iter = new MetricsRowIterator(
-          new PartitionIterator[InternalRow](rowReader, customMetrics))
-        (iter, rowReader)
+        new PartitionIterator[InternalRow](rowReader, _ => 1, taskState)
       }
 
-      // Flush metrics and close the previous reader before advancing to the next one.
-      // Pass the accumulated metrics to the new reader so they carry forward correctly.
-      val prevState = taskReaderStates.get(taskAttemptId)
-      if (prevState != null) {
-        val metrics = prevState.reader.currentMetricsValues
-        CustomMetrics.updateMetrics(metrics.toImmutableArraySeq, customMetrics)
-        reader.initMetricsValues(metrics)
-        prevState.reader.close()
-      }
-
-      // Update the map so the completion listener always references the latest reader.
-      taskReaderStates.put(taskAttemptId, ReaderState(reader, iter))
+      // Track this iterator; early-stop close and final metrics-flush for iterators not yet
+      // naturally exhausted are handled by the task completion listener. This avoids closing
+      // live iterators prematurely in the concurrent k-way merge (SortedMergeCoalescedRDD).
+      taskState.partitionIterators += iter
 
       // TODO: SPARK-25083 remove the type erasure hack in data source scan
       new InterruptibleIterator(context, iter.asInstanceOf[Iterator[InternalRow]])
@@ -148,16 +210,39 @@ class DataSourceRDD(
 }
 
 private class PartitionIterator[T](
-    reader: PartitionReader[T],
-    customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
-  private[this] var valuePrepared = false
-  private[this] var hasMoreInput = true
+    private var reader: PartitionReader[T],
+    rowCount: T => Int,
+    taskState: TaskState) extends Iterator[T] {
+  private var valuePrepared = false
+  private var hasMoreInput = true
 
-  private var numRow = 0L
+  // Cached final metrics snapshot, captured just before the reader is closed on natural
+  // exhaustion. Allows mergeAndUpdateCustomMetrics() to include this reader's contribution
+  // after close() has been called and currentMetricsValues() is no longer valid.
+  private var cachedFinalMetrics: Array[CustomTaskMetric] = Array.empty
+
+  def isClosed: Boolean = reader == null
+
+  def finalMetrics: Array[CustomTaskMetric] = cachedFinalMetrics
+
+  def close(): Unit = if (reader != null) {
+    reader.close()
+    reader = null
+  }
+
+  def currentMetricsValues: Array[CustomTaskMetric] = {
+    require(!isClosed, "currentMetricsValues called on a closed PartitionIterator")
+    reader.currentMetricsValues
+  }
 
   override def hasNext: Boolean = {
     if (!valuePrepared && hasMoreInput) {
       hasMoreInput = reader.next()
+      if (!hasMoreInput) {
+        cachedFinalMetrics = reader.currentMetricsValues
+        taskState.updateMetrics(0, force = true)
+        close()
+      }
       valuePrepared = hasMoreInput
     }
     valuePrepared
@@ -167,59 +252,9 @@ private class PartitionIterator[T](
     if (!hasNext) {
       throw QueryExecutionErrors.endOfStreamError()
     }
-    if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-      CustomMetrics.updateMetrics(reader.currentMetricsValues.toImmutableArraySeq, customMetrics)
-    }
-    numRow += 1
     valuePrepared = false
-    reader.get()
-  }
-}
-
-private class MetricsHandler extends Logging with Serializable {
-  private val inputMetrics = TaskContext.get().taskMetrics().inputMetrics
-  private val startingBytesRead = inputMetrics.bytesRead
-  private val getBytesRead = SparkHadoopUtil.get.getFSBytesReadOnThreadCallback()
-
-  def updateMetrics(numRows: Int, force: Boolean = false): Unit = {
-    inputMetrics.incRecordsRead(numRows)
-    val shouldUpdateBytesRead =
-      inputMetrics.recordsRead % SparkHadoopUtil.UPDATE_INPUT_METRICS_INTERVAL_RECORDS == 0
-    if (shouldUpdateBytesRead || force) {
-      inputMetrics.setBytesRead(startingBytesRead + getBytesRead())
-    }
-  }
-}
-
-private abstract class MetricsIterator[I](iter: Iterator[I]) extends Iterator[I] {
-  protected val metricsHandler = new MetricsHandler
-
-  override def hasNext: Boolean = {
-    if (iter.hasNext) {
-      true
-    } else {
-      forceUpdateMetrics()
-      false
-    }
-  }
-
-  def forceUpdateMetrics(): Unit = metricsHandler.updateMetrics(0, force = true)
-}
-
-private class MetricsRowIterator(
-    iter: Iterator[InternalRow]) extends MetricsIterator[InternalRow](iter) {
-  override def next(): InternalRow = {
-    val item = iter.next()
-    metricsHandler.updateMetrics(1)
-    item
-  }
-}
-
-private class MetricsBatchIterator(
-    iter: Iterator[ColumnarBatch]) extends MetricsIterator[ColumnarBatch](iter) {
-  override def next(): ColumnarBatch = {
-    val batch: ColumnarBatch = iter.next()
-    metricsHandler.updateMetrics(batch.numRows)
-    batch
+    val result = reader.get()
+    taskState.updateMetrics(rowCount(result))
+    result
   }
 }

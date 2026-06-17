@@ -140,6 +140,7 @@ object FileDataSourceV2 {
         throw QueryExecutionErrors.fileNotExistError(filePath, e)
       case NonFatal(e) =>
         throw QueryExecutionErrors.cannotReadFilesError(e, filePath)
+      case other => throw other
     }
   }
 }

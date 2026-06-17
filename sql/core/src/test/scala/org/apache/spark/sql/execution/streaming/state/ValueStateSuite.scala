@@ -371,6 +371,52 @@ class ValueStateSuite extends StateVariableSuiteBase {
     }
   }
 
+  // Guards against the UnsafeRow byte-order bug where a scan boundary row with a
+  // null element-key struct encodes larger than a real entry (null-bitmap bit = 1),
+  // making seek() silently skip boundary entries. Uses a primitive Long grouping
+  // key so the element-key schema is fixed-size; variable-size schemas (e.g. String)
+  // happen to mask the bug via size-based byte differences.
+  test("SPARK-56400: TTL eviction iterator - boundary at prev+1 with fixed-size element key") {
+    tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
+      val store = provider.getStore(0)
+      val longKeyEncoder = encoderFor(Encoders.scalaLong).asInstanceOf[ExpressionEncoder[Any]]
+
+      // 1 ms TTL so expiration = batchTimestampMs + 1, hitting the prev+1 boundary
+      // exactly when we scan in the next batch with prevBatchTimestampMs = 1000.
+      val ttlConfig = TTLConfig(Duration.ofMillis(1))
+
+      val firstBatchTs = 1000L
+      val handle1 = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        longKeyEncoder, TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(firstBatchTs))
+      val state1 = handle1.getValueState[Long]("testState", Encoders.scalaLong, ttlConfig)
+        .asInstanceOf[ValueStateImplWithTTL[Long]]
+
+      Seq(10L, 20L, 30L).foreach { k =>
+        ImplicitGroupingKeyTracker.setImplicitKey(k)
+        state1.update(k)
+        ImplicitGroupingKeyTracker.removeImplicitKey()
+      }
+
+      val nextBatchTs = 2000L
+      val handle2 = new StatefulProcessorHandleImpl(store, UUID.randomUUID(),
+        longKeyEncoder, TimeMode.ProcessingTime(),
+        batchTimestampMs = Some(nextBatchTs),
+        prevBatchTimestampMs = Some(firstBatchTs))
+      val state2 = handle2.getValueState[Long]("testState", Encoders.scalaLong, ttlConfig)
+        .asInstanceOf[ValueStateImplWithTTL[Long]]
+
+      // Sanity: all three rows are present in the TTL index (full iterator, no bounds).
+      assert(state2.getTTLRows().toSeq.map(_.expirationMs).sorted ===
+        Seq(firstBatchTs + 1, firstBatchTs + 1, firstBatchTs + 1))
+
+      // The eviction iterator (bounded range scan) should find all three entries.
+      val evicted = state2.ttlEvictionIterator().toList
+      assert(evicted.size === 3,
+        s"Expected 3 evictable TTL entries at expiration = prevBatch + 1, got ${evicted.size}")
+    }
+  }
+
   test("test null or zero TTL duration throws error") {
     tryWithProviderResource(newStoreProviderWithStateVariable(true)) { provider =>
       val store = provider.getStore(0)

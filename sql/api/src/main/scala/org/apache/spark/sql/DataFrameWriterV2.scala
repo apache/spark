@@ -30,6 +30,20 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 @Experimental
 abstract class DataFrameWriterV2[T] extends CreateTableWriter[T] {
 
+  private[sql] var _withSchemaEvolution: Boolean = false
+
+  /**
+   * Enable automatic schema evolution for this write. The target table must declare the
+   * `AUTOMATIC_SCHEMA_EVOLUTION` capability.
+   *
+   * @since 4.2.0
+   */
+  @Experimental
+  def withSchemaEvolution(): this.type = {
+    this._withSchemaEvolution = true
+    this
+  }
+
   /** @inheritdoc */
   override def using(provider: String): this.type
 

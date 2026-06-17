@@ -317,6 +317,14 @@ object StateStoreErrors {
     new StreamStreamJoinInconsistentStateNullValue(
       valueIndex, numValues, joinSide, storeVersion, partitionId, configKey)
   }
+
+  def streamStreamJoinRangeScanTimestampOutOfRange(
+      timestamp: Long,
+      minTimestamp: Long,
+      maxTimestamp: Long): StreamStreamJoinInconsistentStateRangeScanTimestampOutOfRange = {
+    new StreamStreamJoinInconsistentStateRangeScanTimestampOutOfRange(
+      timestamp, minTimestamp, maxTimestamp)
+  }
 }
 
 trait ConvertableToCannotLoadStoreError {
@@ -702,3 +710,14 @@ class StreamStreamJoinInconsistentStateNullValue(
       "storeVersion" -> storeVersion.toString,
       "partitionId" -> partitionId.toString,
       "configKey" -> configKey))
+
+class StreamStreamJoinInconsistentStateRangeScanTimestampOutOfRange(
+    timestamp: Long,
+    minTimestamp: Long,
+    maxTimestamp: Long)
+  extends SparkRuntimeException(
+    errorClass = "STREAM_STREAM_JOIN_INCONSISTENT_STATE.RANGE_SCAN_TIMESTAMP_OUT_OF_RANGE",
+    messageParameters = Map(
+      "timestamp" -> timestamp.toString,
+      "minTimestamp" -> minTimestamp.toString,
+      "maxTimestamp" -> maxTimestamp.toString))

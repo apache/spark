@@ -23,7 +23,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DayTimeIntervalType => DT, YearMonthIntervalType => YM}
 import org.apache.spark.sql.types.DataTypeTestUtils._
 
-class IntervalFunctionsSuite extends QueryTest with SharedSparkSession {
+class IntervalFunctionsSuite extends SharedSparkSession {
   import testImplicits._
 
   test("SPARK-36022: Respect interval fields in extract") {

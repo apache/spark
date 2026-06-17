@@ -2032,7 +2032,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_bigint", e, k)
@@ -2044,7 +2044,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_bigint", e, lit(k))
@@ -2056,7 +2056,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(columnName: String, k: Int): Column =
     kll_merge_agg_bigint(Column(columnName), k)
@@ -2067,7 +2067,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(e: Column): Column =
     Column.fn("kll_merge_agg_bigint", e)
@@ -2078,7 +2078,7 @@ object functions {
    * sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_bigint(columnName: String): Column =
     kll_merge_agg_bigint(Column(columnName))
@@ -2089,7 +2089,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_float", e, k)
@@ -2100,7 +2100,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_float", e, lit(k))
@@ -2111,7 +2111,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(columnName: String, k: Int): Column =
     kll_merge_agg_float(Column(columnName), k)
@@ -2121,7 +2121,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(e: Column): Column =
     Column.fn("kll_merge_agg_float", e)
@@ -2131,7 +2131,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_float(columnName: String): Column =
     kll_merge_agg_float(Column(columnName))
@@ -2142,7 +2142,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column, k: Column): Column =
     Column.fn("kll_merge_agg_double", e, k)
@@ -2153,7 +2153,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column, k: Int): Column =
     Column.fn("kll_merge_agg_double", e, lit(k))
@@ -2164,7 +2164,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(columnName: String, k: Int): Column =
     kll_merge_agg_double(Column(columnName), k)
@@ -2174,7 +2174,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(e: Column): Column =
     Column.fn("kll_merge_agg_double", e)
@@ -2184,7 +2184,7 @@ object functions {
    * If k is not specified, the merged sketch adopts the k value from the first input sketch.
    *
    * @group agg_funcs
-   * @since 4.1.0
+   * @since 4.1.2
    */
   def kll_merge_agg_double(columnName: String): Column =
     kll_merge_agg_double(Column(columnName))
@@ -2530,6 +2530,63 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+
+  /**
+   * Window function: computes the differences between consecutive cumulative counter values in a
+   * time series, thereby converting the counter from the cumulative to the delta format.
+   *
+   * Gracefully handles counter resets by returning NULL. Counter resets are detected when the
+   * counter value decreases.
+   *
+   * Use the PARTITION BY clause of the window to separate independent counters. This is done by
+   * specifying all columns which uniquely identify a time series. These are typically the counter
+   * name and any attributes tied to the counter.
+   *
+   * Use the ORDER BY clause of the window to order the observations by the associated timestamp
+   * in ascending order.
+   *
+   * @param value
+   *   A cumulative counter. Must be a numeric data type. Must be non-negative.
+   *
+   * @return
+   *   The difference between the current and previous counter value within the window partition,
+   *   according to the order defined by the window's ORDER BY clause.
+   *
+   * @group window_funcs
+   * @since 4.3.0
+   */
+  def counter_diff(value: Column): Column = Column.fn("counter_diff", value)
+
+  /**
+   * Window function: computes the differences between consecutive cumulative counter values in a
+   * time series, thereby converting the counter from the cumulative to the delta format.
+   *
+   * Gracefully handles counter resets by returning NULL. Counter resets are detected when the
+   * counter value decreases, or when the start time advances between rows.
+   *
+   * Use the PARTITION BY clause of the window to separate independent counters. This is done by
+   * specifying all columns which uniquely identify a time series. These are typically the counter
+   * name and any attributes tied to the counter.
+   *
+   * Use the ORDER BY clause of the window to order the observations by the associated timestamp
+   * in ascending order.
+   *
+   * @param value
+   *   A cumulative counter. Must be a numeric data type. Must be non-negative.
+   *
+   * @param startTime
+   *   A timestamp indicating when the counter was last set to zero. Used to signal counter
+   *   resets.
+   *
+   * @return
+   *   The difference between the current and previous counter value within the window partition,
+   *   according to the order defined by the window's ORDER BY clause.
+   *
+   * @group window_funcs
+   * @since 4.3.0
+   */
+  def counter_diff(value: Column, startTime: Column): Column =
+    Column.fn("counter_diff", value, startTime)
 
   /**
    * Window function: returns the cumulative distribution of values within a window partition,
@@ -4413,6 +4470,14 @@ object functions {
   def current_schema(): Column = Column.fn("current_schema")
 
   /**
+   * Returns the current SQL path as a comma-separated list of qualified schema names.
+   *
+   * @group misc_funcs
+   * @since 4.2.0
+   */
+  def current_path(): Column = Column.fn("current_path")
+
+  /**
    * Returns the user name of current execution context.
    *
    * @group misc_funcs
@@ -5156,6 +5221,15 @@ object functions {
   def levenshtein(l: Column, r: Column): Column = Column.fn("levenshtein", l, r)
 
   /**
+   * Computes the Jaro-Winkler similarity between the two given string columns. The result is a
+   * double between 0.0 (no similarity) and 1.0 (identical).
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def jaro_winkler_similarity(l: Column, r: Column): Column =
+    Column.fn("jaro_winkler_similarity", l, r)
+
+  /**
    * Locate the position of the first occurrence of substr.
    *
    * @note
@@ -5328,6 +5402,16 @@ object functions {
     regexp_replace(e, lit(pattern), lit(replacement))
 
   /**
+   * Replace all substrings of the specified string value that match regexp with rep, starting at
+   * the specified position `pos`.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def regexp_replace(e: Column, pattern: String, replacement: String, pos: Int): Column =
+    regexp_replace(e, lit(pattern), lit(replacement), lit(pos))
+
+  /**
    * Replace all substrings of the specified string value that match regexp with rep.
    *
    * @group string_funcs
@@ -5335,6 +5419,16 @@ object functions {
    */
   def regexp_replace(e: Column, pattern: Column, replacement: Column): Column =
     Column.fn("regexp_replace", e, pattern, replacement)
+
+  /**
+   * Replace all substrings of the specified string value that match regexp with rep, starting at
+   * the specified position `pos`.
+   *
+   * @group string_funcs
+   * @since 4.3.0
+   */
+  def regexp_replace(e: Column, pattern: Column, replacement: Column, pos: Column): Column =
+    Column.fn("regexp_replace", e, pattern, replacement, pos)
 
   /**
    * Returns the substring that matches the regular expression `regexp` within the string `str`.
@@ -7632,7 +7726,9 @@ object functions {
   def dayofyear(e: Column): Column = Column.fn("dayofyear", e)
 
   /**
-   * Extracts the hours as an integer from a given date/time/timestamp/string.
+   * Extracts the hours as an integer from a given date/time/timestamp/string. The input may also
+   * be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -7705,7 +7801,9 @@ object functions {
   def last_day(e: Column): Column = Column.fn("last_day", e)
 
   /**
-   * Extracts the minutes as an integer from a given date/time/timestamp/string.
+   * Extracts the minutes as an integer from a given date/time/timestamp/string. The input may
+   * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a date
    * @group datetime_funcs
@@ -7811,7 +7909,9 @@ object functions {
     Column.fn("next_day", date, dayOfWeek)
 
   /**
-   * Extracts the seconds as an integer from a given date/time/timestamp/string.
+   * Extracts the seconds as an integer from a given date/time/timestamp/string. The input may
+   * also be a nanosecond-precision timestamp `TIMESTAMP_NTZ(p)` or `TIMESTAMP_LTZ(p)` (`p` in
+   * `[7, 9]`, since 4.3.0), in which case the sub-microsecond digits are ignored.
    * @return
    *   An integer, or null if the input was a string that could not be cast to a timestamp
    * @group datetime_funcs
@@ -8477,6 +8577,40 @@ object functions {
    */
   def timestamp_add(unit: String, quantity: Column, ts: Column): Column =
     Column.internalFn("timestampadd", lit(unit), quantity, ts)
+
+  /**
+   * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
+   * aligned to the default origin (1970-01-01 00:00:00). For `TIMESTAMP_NTZ`, bucketing is
+   * performed in UTC. For `TIMESTAMP`, year-month interval buckets and calendar-day components of
+   * day-time interval buckets align to the session time zone.
+   *
+   * @param bucketSize
+   *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
+   * @param ts
+   *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_bucket(bucketSize: Column, ts: Column): Column =
+    Column.fn("time_bucket", bucketSize, ts)
+
+  /**
+   * Returns the start of the fixed-size bucket of `bucketSize` that contains `ts`, with buckets
+   * aligned to `origin`. For `TIMESTAMP_NTZ`, bucketing is performed in UTC. For `TIMESTAMP`,
+   * year-month interval buckets and calendar-day components of day-time interval buckets align to
+   * the session time zone.
+   *
+   * @param bucketSize
+   *   A day-time or year-month interval defining the bucket size. Must be positive and foldable.
+   * @param ts
+   *   A TIMESTAMP or TIMESTAMP_NTZ value to bucket.
+   * @param origin
+   *   Alignment anchor. Must be the same type as `ts` and must be foldable.
+   * @group datetime_funcs
+   * @since 4.2.0
+   */
+  def time_bucket(bucketSize: Column, ts: Column, origin: Column): Column =
+    Column.fn("time_bucket", bucketSize, ts, origin)
 
   /**
    * Returns the difference between two times, measured in specified units. Throws a
@@ -9542,6 +9676,17 @@ object functions {
    * @since 4.0.0
    */
   def is_variant_null(v: Column): Column = Column.fn("is_variant_null", v)
+
+  /**
+   * Check if a variant value is valid. Returns true if the variant is valid, false if it is
+   * malformed, and NULL if the input is NULL.
+   *
+   * @param v
+   *   a variant column.
+   * @group variant_funcs
+   * @since 4.2.0
+   */
+  def is_valid_variant(v: Column): Column = Column.fn("is_valid_variant", v)
 
   /**
    * Extracts a sub-variant from `v` according to `path` string, and then cast the sub-variant to
@@ -11114,6 +11259,24 @@ object functions {
     Column.fn("st_asbinary", geo)
 
   /**
+   * Returns the input GEOGRAPHY or GEOMETRY value in WKB format using the specified endianness.
+   *
+   * @group st_funcs
+   * @since 4.2.0
+   */
+  def st_asbinary(geo: Column, endianness: Column): Column =
+    Column.fn("st_asbinary", geo, endianness)
+
+  /**
+   * Returns the input GEOGRAPHY or GEOMETRY value in WKB format using the specified endianness.
+   *
+   * @group st_funcs
+   * @since 4.2.0
+   */
+  def st_asbinary(geo: Column, endianness: String): Column =
+    Column.fn("st_asbinary", geo, lit(endianness))
+
+  /**
    * Parses the WKB description of a geography and returns the corresponding GEOGRAPHY value.
    *
    * @group st_funcs
@@ -11752,6 +11915,78 @@ object functions {
    * @since 3.4.0
    */
   def unwrap_udt(column: Column): Column = Column.internalFn("unwrap_udt", column)
+
+  // ---------------------- Vector Functions ----------------------
+
+  /**
+   * Returns the cosine similarity between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_cosine_similarity(left: Column, right: Column): Column =
+    Column.fn("vector_cosine_similarity", left, right)
+
+  /**
+   * Returns the inner product (dot product) between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_inner_product(left: Column, right: Column): Column =
+    Column.fn("vector_inner_product", left, right)
+
+  /**
+   * Returns the Euclidean (L2) distance between two float vectors.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_l2_distance(left: Column, right: Column): Column =
+    Column.fn("vector_l2_distance", left, right)
+
+  /**
+   * Returns the Lp norm of a float vector. Degree defaults to 2.0 if unspecified.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_norm(vector: Column, degree: Column): Column =
+    Column.fn("vector_norm", vector, degree)
+
+  /**
+   * Returns the Lp norm of a float vector using degree 2.0 (Euclidean norm).
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_norm(vector: Column): Column =
+    Column.fn("vector_norm", vector)
+
+  /**
+   * Normalizes a float vector to unit length. Degree defaults to 2.0 if unspecified.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_normalize(vector: Column, degree: Column): Column =
+    Column.fn("vector_normalize", vector, degree)
+
+  /**
+   * Normalizes a float vector to unit length using degree 2.0 (Euclidean norm).
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_normalize(vector: Column): Column =
+    Column.fn("vector_normalize", vector)
+
+  /**
+   * Aggregate function: returns the element-wise mean of float vectors in a group.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_avg(col: Column): Column = Column.fn("vector_avg", col)
+
+  /**
+   * Aggregate function: returns the element-wise sum of float vectors in a group.
+   * @group vector_funcs
+   * @since 4.3.0
+   */
+  def vector_sum(col: Column): Column = Column.fn("vector_sum", col)
 
   // scalastyle:off
   // TODO(SPARK-45970): Use @static annotation so Java can access to those

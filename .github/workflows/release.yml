@@ -74,7 +74,7 @@ name: Release Apache Spark
 
 on:
   schedule:
-    - cron: '0 7 * * *'
+    - cron: '0 7 */2 * *'
   workflow_dispatch:
     inputs:
       branch:
@@ -310,13 +310,13 @@ jobs:
           fi
       - name: Upload logs
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: build-logs
           path: logs.zip
       - name: Upload output
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: build-output
           path: output.zip

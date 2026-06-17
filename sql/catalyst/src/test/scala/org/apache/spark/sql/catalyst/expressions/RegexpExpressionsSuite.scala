@@ -361,6 +361,17 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val nonNullExpr = RegExpReplace(Literal("100-200"), Literal("(\\d+)"), Literal("num"))
     checkEvaluation(nonNullExpr, "num-num", row1)
 
+    // A replacement that references a non-existent group makes the replace fail.
+    checkErrorInExpression[SparkRuntimeException](
+      expr,
+      create_row("100-200", "(\\d+)", "$2"),
+      "INVALID_REGEXP_REPLACE",
+      Map(
+        "source" -> "100-200",
+        "pattern" -> "(\\d+)",
+        "replacement" -> "$2",
+        "position" -> "1"))
+
     // Test escaping of arguments
     GenerateUnsafeProjection.generate(
       RegExpReplace(Literal("\"quote"), Literal("\"quote"), Literal("\"quote")) :: Nil)
