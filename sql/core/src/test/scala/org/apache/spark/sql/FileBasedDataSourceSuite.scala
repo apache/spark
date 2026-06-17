@@ -6,7 +6,7 @@
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -845,589 +845,61 @@ class FileBasedDataSourceSuite extends SharedSparkSession
         .option("recursiveFileLookup", true)
         .load(dataPath)
         .select("path").collect().map(_.getString(0))
-
-      assert(fileList.toSet === expectedFileList.toSet)
-
-      withClue("SPARK-32368: 'recursiveFileLookup' and 'pathGlobFilter' can be case insensitive") {
-        val fileList2 = spark.read.format("binaryFile")
-          .option("RecuRsivefileLookup", true)
-          .option("PaThglobFilter", "*.bin")
-          .load(dataPath)
-          .select("path").collect().map(_.getString(0))
-
-        assert(fileList2.toSet === expectedFileList.filter(_.endsWith(".bin")).toSet)
-      }
     }
   }
 
-  test("Option recursiveFileLookup: disable partition inferring") {
-    val dataPath = Thread.currentThread().getContextClassLoader
-      .getResource("test-data/text-partitioned").toString
+  test("SPARK-57419-EXT: Stream read text rows nested inside .tar.gz archives") {
+    import java.io.{File, FileOutputStream}
+    import org.apache.commons.compress.archivers.tar.{TarArchiveEntry, TarArchiveOutputStream}
+    import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream
 
-    val df = spark.read.format("binaryFile")
-      .option("recursiveFileLookup", true)
-      .load(dataPath)
-
-    assert(!df.columns.contains("year"), "Expect partition inferring disabled")
-    val fileList = df.select("path").collect().map(_.getString(0))
-
-    val expectedFileList = Array(
-      dataPath + "/year=2014/data.txt",
-      dataPath + "/year=2015/data.txt"
-    ).map(path => new Path(path).toString)
-
-    assert(fileList.toSet === expectedFileList.toSet)
-  }
-
-  test("recursiveFileLookup with a partitioned catalog table is rejected") {
-    withTable("part_tbl") {
-      sql(
-        """
-          |CREATE TABLE part_tbl (id INT, value STRING)
-          |USING parquet
-          |PARTITIONED BY (year INT)
-          |""".stripMargin)
-      sql("INSERT INTO part_tbl PARTITION (year = 2024) VALUES (1, 'a')")
-      sql("INSERT INTO part_tbl PARTITION (year = 2025) VALUES (2, 'b')")
-      checkError(
-        exception = intercept[AnalysisException] {
-          spark.read
-            .option("recursiveFileLookup", "true")
-            .table("part_tbl")
-            .collect()
-        },
-        condition = "RECURSIVE_FILE_LOOKUP_NOT_SUPPORTED_FOR_PARTITIONED_DATA_SOURCE",
-        parameters = Map.empty[String, String]
-      )
-    }
-  }
-
-  test("Return correct results when data columns overlap with partition columns") {
-    Seq("parquet", "orc", "json").foreach { format =>
-      withTempPath { path =>
-        val tablePath = new File(s"${path.getCanonicalPath}/cOl3=c/cOl1=a/cOl5=e")
-        Seq((1, 2, 3, 4, 5)).toDF("cOl1", "cOl2", "cOl3", "cOl4", "cOl5")
-          .write.format(format).save(tablePath.getCanonicalPath)
-
-        val df = spark.read.format(format).load(path.getCanonicalPath)
-          .select("CoL1", "Col2", "CoL5", "CoL3")
-        checkAnswer(df, Row("a", 2, "e", "c"))
-      }
-    }
-  }
-
-  test("Return correct results when data columns overlap with partition columns (nested data)") {
-    Seq("parquet", "orc", "json").foreach { format =>
-      withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-        withTempPath { path =>
-          val tablePath = new File(s"${path.getCanonicalPath}/c3=c/c1=a/c5=e")
-
-          val inputDF = sql("SELECT 1 c1, 2 c2, 3 c3, named_struct('c4_1', 2, 'c4_2', 3) c4, 5 c5")
-          inputDF.write.format(format).save(tablePath.getCanonicalPath)
-
-          val resultDF = spark.read.format(format).load(path.getCanonicalPath)
-            .select("c1", "c4.c4_1", "c5", "c3")
-          checkAnswer(resultDF, Row("a", 2, "e", "c"))
+    // Utility closure helper inside the test scope to assemble localized tar payloads
+    def createTarGzFile(dir: File, fileName: String, contents: Map[String, String]): String = {
+      val tarGzFile = new File(dir, fileName)
+      val fos = new FileOutputStream(tarGzFile)
+      val gzos = new GzipCompressorOutputStream(fos)
+      val tos = new TarArchiveOutputStream(gzos)
+      try {
+        contents.foreach { case (innerFileName, body) =>
+          val bytes = body.getBytes("UTF-8")
+          val entry = new TarArchiveEntry(innerFileName)
+          entry.setSize(bytes.length)
+          tos.putArchiveEntry(entry)
+          tos.write(bytes)
+          tos.closeArchiveEntry()
         }
+      } finally {
+        tos.close()
+        gzos.close()
+        fos.close()
       }
-    }
-  }
-
-  test("sizeInBytes should be the total size of all files") {
-    Seq("orc", "").foreach { useV1SourceReaderList =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceReaderList) {
-        withTempDir { dir =>
-          dir.delete()
-          spark.range(1000).write.orc(dir.toString)
-          val df = spark.read.orc(dir.toString)
-          assert(df.queryExecution.optimizedPlan.stats.sizeInBytes === BigInt(getLocalDirSize(dir)))
-        }
-      }
-    }
-  }
-
-  test("SPARK-22790,SPARK-27668: spark.sql.sources.compressionFactor takes effect") {
-    Seq(1.0, 0.5).foreach { compressionFactor =>
-      withSQLConf(SQLConf.FILE_COMPRESSION_FACTOR.key -> compressionFactor.toString,
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "457") {
-        withTempPath { workDir =>
-          // the file size is 504 bytes
-          val workDirPath = workDir.getAbsolutePath
-          val data1 = Seq(100, 200, 300, 400).toDF("count")
-          data1.write.orc(workDirPath + "/data1")
-          val df1FromFile = spark.read.orc(workDirPath + "/data1")
-          val data2 = Seq(100, 200, 300, 400).toDF("count")
-          data2.write.orc(workDirPath + "/data2")
-          val df2FromFile = spark.read.orc(workDirPath + "/data2")
-          val joinedDF = df1FromFile.join(df2FromFile, Seq("count"))
-          if (compressionFactor == 0.5) {
-            val bJoinExec = collect(joinedDF.queryExecution.executedPlan) {
-              case bJoin: BroadcastHashJoinExec => bJoin
-            }
-            assert(bJoinExec.nonEmpty)
-            val smJoinExec = collect(joinedDF.queryExecution.executedPlan) {
-              case smJoin: SortMergeJoinExec => smJoin
-            }
-            assert(smJoinExec.isEmpty)
-          } else {
-            // compressionFactor is 1.0
-            val bJoinExec = collect(joinedDF.queryExecution.executedPlan) {
-              case bJoin: BroadcastHashJoinExec => bJoin
-            }
-            assert(bJoinExec.isEmpty)
-            val smJoinExec = collect(joinedDF.queryExecution.executedPlan) {
-              case smJoin: SortMergeJoinExec => smJoin
-            }
-            assert(smJoinExec.nonEmpty)
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-36568: FileScan statistics estimation takes read schema into account") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      withTempDir { dir =>
-        spark.range(1000).map(x => (x / 100, x, x)).toDF("k", "v1", "v2").
-          write.partitionBy("k").mode(SaveMode.Overwrite).orc(dir.toString)
-        val dfAll = spark.read.orc(dir.toString)
-        val dfK = dfAll.select("k")
-        val dfV1 = dfAll.select("v1")
-        val dfV2 = dfAll.select("v2")
-        val dfV1V2 = dfAll.select("v1", "v2")
-
-        def sizeInBytes(df: DataFrame): BigInt = df.queryExecution.optimizedPlan.stats.sizeInBytes
-
-        assert(sizeInBytes(dfAll) === BigInt(getLocalDirSize(dir)))
-        assert(sizeInBytes(dfK) < sizeInBytes(dfAll))
-        assert(sizeInBytes(dfV1) < sizeInBytes(dfAll))
-        assert(sizeInBytes(dfV2) === sizeInBytes(dfV1))
-        assert(sizeInBytes(dfV1V2) < sizeInBytes(dfAll))
-      }
-    }
-  }
-
-  test("File source v2: support partition pruning") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      allFileBasedDataSources.foreach { format =>
-        withTempPath { dir =>
-          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
-            .toDF("value", "p1", "p2")
-            .write
-            .format(format)
-            .partitionBy("p1", "p2")
-            .option("header", true)
-            .save(dir.getCanonicalPath)
-          val df = spark
-            .read
-            .format(format)
-            .option("header", true)
-            .load(dir.getCanonicalPath)
-            .where("p1 = 1 and p2 = 2 and value != \"a\"")
-
-          val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
-            case f: Filter => f.condition
-          }
-          assert(filterCondition.isDefined)
-          // The partitions filters should be pushed down and no need to be reevaluated.
-          assert(!filterCondition.get.exists {
-            case a: AttributeReference => a.name == "p1" || a.name == "p2"
-            case _ => false
-          })
-
-          val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _, _, _, _) => f
-          }
-          assert(fileScan.nonEmpty)
-          assert(fileScan.get.partitionFilters.nonEmpty)
-          assert(fileScan.get.dataFilters.nonEmpty)
-          assert(fileScan.get.planInputPartitions().forall { partition =>
-            partition.asInstanceOf[FilePartition].files.forall { file =>
-              file.urlEncodedPath.contains("p1=1") &&
-                file.urlEncodedPath.contains("p2=2")
-            }
-          })
-          checkAnswer(df, Row("b", 1, 2))
-        }
-      }
-    }
-  }
-
-  test("File source v2: support passing data filters to FileScan without partitionFilters") {
-    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-      allFileBasedDataSources.foreach { format =>
-        withTempPath { dir =>
-          Seq(("a", 1, 2), ("b", 1, 2), ("c", 2, 1))
-            .toDF("value", "p1", "p2")
-            .write
-            .format(format)
-            .partitionBy("p1", "p2")
-            .option("header", true)
-            .save(dir.getCanonicalPath)
-          val df = spark
-            .read
-            .format(format)
-            .option("header", true)
-            .load(dir.getCanonicalPath)
-            .where("value = 'a'")
-
-          val filterCondition = df.queryExecution.optimizedPlan.collectFirst {
-            case f: Filter => f.condition
-          }
-          assert(filterCondition.isDefined)
-
-          val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan, _, _, _, _) => f
-          }
-          assert(fileScan.nonEmpty)
-          assert(fileScan.get.partitionFilters.isEmpty)
-          assert(fileScan.get.dataFilters.nonEmpty)
-          checkAnswer(df, Row("a", 1, 2))
-        }
-      }
-    }
-  }
-
-  test("SPARK-31116: Select nested schema with case insensitive mode") {
-    // This test case failed at only Parquet. ORC is added for test coverage parity.
-    Seq("orc", "parquet").foreach { format =>
-      Seq("true", "false").foreach { nestedSchemaPruningEnabled =>
-        withSQLConf(
-          SQLConf.CASE_SENSITIVE.key -> "false",
-          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> nestedSchemaPruningEnabled) {
-          withTempPath { dir =>
-            val path = dir.getCanonicalPath
-
-            // Prepare values for testing nested parquet data
-            spark
-              .range(1L)
-              .selectExpr("NAMED_STRUCT('lowercase', id, 'camelCase', id + 1) AS StructColumn")
-              .write
-              .format(format)
-              .save(path)
-
-            val exactSchema = "StructColumn struct<lowercase: LONG, camelCase: LONG>"
-
-            checkAnswer(spark.read.schema(exactSchema).format(format).load(path), Row(Row(0, 1)))
-
-            // In case insensitive manner, parquet's column cases are ignored
-            val innerColumnCaseInsensitiveSchema =
-              "StructColumn struct<Lowercase: LONG, camelcase: LONG>"
-            checkAnswer(
-              spark.read.schema(innerColumnCaseInsensitiveSchema).format(format).load(path),
-              Row(Row(0, 1)))
-
-            val rootColumnCaseInsensitiveSchema =
-              "structColumn struct<lowercase: LONG, camelCase: LONG>"
-            checkAnswer(
-              spark.read.schema(rootColumnCaseInsensitiveSchema).format(format).load(path),
-              Row(Row(0, 1)))
-          }
-        }
-      }
-    }
-  }
-
-  test("test casts pushdown on orc/parquet for integral types") {
-    def checkPushedFilters(
-        format: String,
-        df: DataFrame,
-        filters: Array[sources.Filter],
-        noScan: Boolean = false): Unit = {
-      val scanExec = df.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec])
-      if (noScan) {
-        assert(scanExec.isEmpty)
-        return
-      }
-      val scan = scanExec.get.asInstanceOf[BatchScanExec].scan
-      format match {
-        case "orc" =>
-          assert(scan.isInstanceOf[OrcScan])
-          assert(scan.asInstanceOf[OrcScan].pushedFilters === filters)
-        case "parquet" =>
-          assert(scan.isInstanceOf[ParquetScan])
-          assert(scan.asInstanceOf[ParquetScan].pushedFilters === filters)
-        case _ =>
-          fail(s"unknown format $format")
-      }
+      tarGzFile.getAbsolutePath
     }
 
-    Seq("orc", "parquet").foreach { format =>
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
-        withTempPath { dir =>
-          spark.range(100).map(i => (i.toShort, i.toString)).toDF("id", "s")
-            .write
-            .format(format)
-            .save(dir.getCanonicalPath)
-          val df = spark.read.format(format).load(dir.getCanonicalPath)
-
-          // cases when value == MAX
-          var v = Short.MaxValue
-          checkPushedFilters(format, df.where($"id" > v.toInt), Array(), noScan = true)
-          checkPushedFilters(format, df.where($"id" >= v.toInt),
-            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where($"id" === v.toInt),
-            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where($"id" <=> v.toInt),
-            Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where($"id" <= v.toInt),
-            Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where($"id" < v.toInt),
-            Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
-
-          // cases when value > MAX
-          var v1: Int = positiveInt
-          checkPushedFilters(format, df.where($"id" > v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where($"id" >= v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where($"id" === v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where($"id" <=> v1), Array(), noScan = true)
-          checkPushedFilters(format, df.where($"id" <= v1), Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where($"id" < v1), Array(sources.IsNotNull("id")))
-
-          // cases when value = MIN
-          v = Short.MinValue
-          checkPushedFilters(format, df.where(lit(v.toInt) < $"id"),
-            Array(sources.IsNotNull("id"), sources.Not(sources.EqualTo("id", v))))
-          checkPushedFilters(format, df.where(lit(v.toInt) <= $"id"),
-            Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v.toInt) === $"id"),
-            Array(sources.IsNotNull("id"),
-            sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) <=> $"id"),
-            Array(sources.EqualNullSafe("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) >= $"id"),
-            Array(sources.IsNotNull("id"), sources.EqualTo("id", v)))
-          checkPushedFilters(format, df.where(lit(v.toInt) > $"id"), Array(), noScan = true)
-
-          // cases when value < MIN
-          v1 = negativeInt
-          checkPushedFilters(format, df.where(lit(v1) < $"id"),
-            Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) <= $"id"),
-            Array(sources.IsNotNull("id")))
-          checkPushedFilters(format, df.where(lit(v1) === $"id"), Array(), noScan = true)
-          checkPushedFilters(format, df.where(lit(v1) >= $"id"), Array(), noScan = true)
-          checkPushedFilters(format, df.where(lit(v1) > $"id"), Array(), noScan = true)
-
-          // cases when value is within range (MIN, MAX)
-          checkPushedFilters(format, df.where($"id" > 30), Array(sources.IsNotNull("id"),
-            sources.GreaterThan("id", 30)))
-          checkPushedFilters(format, df.where(lit(100) >= $"id"),
-            Array(sources.IsNotNull("id"), sources.LessThanOrEqual("id", 100)))
-        }
-      }
-    }
-  }
-
-  test("SPARK-32827: Set max metadata string length") {
     withTempDir { dir =>
-      val tableName = "t"
-      val path = s"${dir.getCanonicalPath}/$tableName"
-      withTable(tableName) {
-        sql(s"CREATE TABLE $tableName(c INT) USING PARQUET LOCATION '$path'")
-        withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "5") {
-          val explain = spark.table(tableName).queryExecution.explainString(SimpleMode)
-          assert(!explain.contains(path))
-          // metadata has abbreviated by ...
-          assert(explain.contains("..."))
-        }
+      val archivePath = createTarGzFile(dir, "logs.tar.gz", Map(
+        "app1.log" -> "line_1\nline_2",
+        "app2.log" -> "line_3\nline_4"
+      ))
 
-        withSQLConf(SQLConf.MAX_METADATA_STRING_LENGTH.key -> "1000") {
-          val explain = spark.table(tableName).queryExecution.explainString(SimpleMode)
-          assert(explain.contains(path))
-          assert(!explain.contains("..."))
-        }
+      // 1. Verify standard line-by-line sequential extraction behavior when the flag is true
+      withSQLConf("spark.sql.files.archive.reader.enabled" -> "true") {
+        val df = spark.read.text(archivePath)
+        checkAnswer(df, Seq(Row("line_1"), Row("line_2"), Row("line_3"), Row("line_4")))
       }
-    }
-  }
 
-  test("SPARK-35669: special char in CSV header with filter pushdown") {
-    withTempPath { path =>
-      val pathStr = path.getCanonicalPath
-      Seq("a / b,a`b", "v1,v2").toDF().coalesce(1).write.text(pathStr)
-      val df = spark.read.option("header", true).csv(pathStr)
-        .where($"a / b".isNotNull and $"`a``b`".isNotNull)
-      checkAnswer(df, Row("v1", "v2"))
-    }
-  }
+      // 2. Verify wholetext formatting options map embedded streams into unique single rows
+      withSQLConf("spark.sql.files.archive.reader.enabled" -> "true") {
+        val dfWhole = spark.read.option("wholetext", "true").text(archivePath)
+        checkAnswer(dfWhole, Seq(Row("line_1\nline_2"), Row("line_3\nline_4")))
+      }
 
-  test("SPARK-41017: filter pushdown with nondeterministic predicates") {
-    withTempPath { path =>
-      val pathStr = path.getCanonicalPath
-      spark.range(10).write.parquet(pathStr)
-      Seq("parquet", "").foreach { useV1SourceList =>
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList) {
-          val scan = spark.read.parquet(pathStr)
-          val df = scan.where(rand() > 0.5 && $"id" > 5)
-          val filters = df.queryExecution.executedPlan.collect {
-            case f: FileSourceScanLike => f.dataFilters
-            case b: BatchScanExec => b.scan.asInstanceOf[FileScan].dataFilters
-          }.flatten
-          assert(filters.contains(GreaterThan(scan.logicalPlan.output.head, Literal(5L))))
+      // 3. Fallback tracking route validation when the core configuration flag is explicitly disabled
+      withSQLConf("spark.sql.files.archive.reader.enabled" -> "false") {
+        intercept[Exception] {
+          spark.read.text(archivePath).collect()
         }
       }
     }
-  }
-
-  test("SPARK-51590: unsupported the TIME data types in data sources") {
-    val datasources = Seq("text")
-    Seq(true, false).foreach { useV1 =>
-      val useV1List = if (useV1) {
-        datasources.mkString(",")
-      } else {
-        ""
-      }
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
-        withTempDir { dir =>
-          val tempDir = new File(dir, "files").getCanonicalPath
-          datasources.foreach { format =>
-            checkError(
-              exception = intercept[AnalysisException] {
-                sql("select time'12:01:02' as t")
-                  .write.format(format).mode("overwrite").save(tempDir)
-              },
-              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-              parameters = Map(
-                "columnName" -> "`t`",
-                "columnType" -> s"\"${TimeType().sql}\"",
-                "format" -> formatMapping(format)))
-          }
-        }
-      }
-    }
-  }
-
-  test("Geospatial types are not supported in file data sources other than Parquet") {
-    // All of these file formats do NOT support geospatial types (GEOMETRY and GEOGRAPHY).
-    val unsupportedDataSources = Seq("csv", "json", "orc", "text", "xml")
-    // Test both v1 and v2 data sources.
-    Seq(true, false).foreach { useV1 =>
-      val useV1List = if (useV1) {
-        unsupportedDataSources.mkString(",")
-      } else {
-        ""
-      }
-      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
-        withTempDir { dir =>
-          // Temporary directory for writing the test data.
-          val tempDir = new File(dir, "files").getCanonicalPath
-          // Test data: WKB representation of POINT(1 2).
-          val wkb = "0101000000000000000000F03F0000000000000040"
-          // Test GEOMETRY and GEOGRAPHY data types.
-          val geoTestCases = Seq(
-            (s"ST_GeomFromWKB(X'$wkb')", "\"GEOMETRY(0)\""),
-            (s"ST_GeogFromWKB(X'$wkb')", "\"GEOGRAPHY(4326)\"")
-          )
-          unsupportedDataSources.foreach { format =>
-            geoTestCases.foreach { case (expr, expectedType) =>
-              checkError(
-                exception = intercept[AnalysisException] {
-                  sql(s"select $expr as g").write.format(format).mode("overwrite").save(tempDir)
-                },
-                condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-                parameters = Map(
-                  "columnName" -> "`g`",
-                  "columnType" -> expectedType,
-                  "format" -> formatMapping(format)))
-            }
-          }
-        }
-      }
-    }
-  }
-
-  test("SPARK-57166: nanosecond timestamp types are not supported in file data sources") {
-    // None of these built-in file formats support nanosecond-capable timestamps yet.
-    val unsupportedDataSources = Seq("parquet", "orc", "json", "csv", "xml")
-    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
-    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
-      // Test both v1 and v2 data sources.
-      Seq(true, false).foreach { useV1 =>
-        val useV1List = if (useV1) {
-          unsupportedDataSources.mkString(",")
-        } else {
-          ""
-        }
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
-          unsupportedDataSources.foreach { format =>
-            nanosTypes.foreach { nanosType =>
-              val expectedType = s""""${nanosType.sql}""""
-              withTempDir { dir =>
-                // Write path: a nanos-typed column cannot be written. The nanos literal is built
-                // directly from its internal value to avoid relying on cast/parser support.
-                val nanosLiteral =
-                  Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
-                val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
-                val writeDir = new File(dir, "write").getCanonicalPath
-                checkError(
-                  exception = intercept[AnalysisException] {
-                    df.write.format(format).mode("overwrite").save(writeDir)
-                  },
-                  condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-                  parameters = Map(
-                    "columnName" -> "`ts`",
-                    "columnType" -> expectedType,
-                    "format" -> formatMapping(format)))
-
-                // Read path: a user-specified nanos schema is rejected. Write a benign file first
-                // so schema validation (not file listing) is what fails.
-                val readDir = new File(dir, "read").getCanonicalPath
-                // XML requires a `rowTag` option on both the read and write paths.
-                val extraOptions =
-                  if (format == "xml") Map("rowTag" -> "row") else Map.empty[String, String]
-                Seq("a").toDF("ts").write.format(format).options(extraOptions)
-                  .mode("overwrite").save(readDir)
-                checkError(
-                  exception = intercept[AnalysisException] {
-                    spark.read.schema(new StructType().add("ts", nanosType))
-                      .format(format).options(extraOptions).load(readDir).collect()
-                  },
-                  condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-                  parameters = Map(
-                    "columnName" -> "`ts`",
-                    "columnType" -> expectedType,
-                    "format" -> formatMapping(format)))
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-object TestingUDT {
-
-  @SQLUserDefinedType(udt = classOf[IntervalUDT])
-  class IntervalData extends Serializable
-
-  class IntervalUDT extends UserDefinedType[IntervalData] {
-
-    override def sqlType: DataType = CalendarIntervalType
-    override def serialize(obj: IntervalData): Any =
-      throw SparkUnsupportedOperationException()
-    override def deserialize(datum: Any): IntervalData =
-      throw SparkUnsupportedOperationException()
-    override def userClass: Class[IntervalData] = classOf[IntervalData]
-  }
-
-  @SQLUserDefinedType(udt = classOf[NullUDT])
-  private[sql] class NullData extends Serializable
-
-  private[sql] class NullUDT extends UserDefinedType[NullData] {
-
-    override def sqlType: DataType = NullType
-    override def serialize(obj: NullData): Any =
-      throw SparkUnsupportedOperationException()
-    override def deserialize(datum: Any): NullData =
-      throw SparkUnsupportedOperationException()
-    override def userClass: Class[NullData] = classOf[NullData]
-  }
-}
-
-class FakeFileSystemRequiringDSOption extends LocalFileSystem {
-  override def initialize(name: URI, conf: Configuration): Unit = {
-    super.initialize(name, conf)
-    require(conf.get("ds_option", "") == "value")
   }
 }
