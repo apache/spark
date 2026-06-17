@@ -311,6 +311,36 @@ trait SparkDateTimeUtils {
   }
 
   /**
+   * Converts a `TIMESTAMP_LTZ(p)` nanosecond value into the `TIMESTAMP_NTZ(precision)` wall-clock
+   * value observed in the time zone `zoneId`. The LTZ value denotes an absolute instant; rendering
+   * it as a local date-time at `zoneId` yields the NTZ representation. Time-zone offsets shift only
+   * whole seconds, so the sub-microsecond `nanosWithinMicro` component is preserved before being
+   * floored to the target `precision` (same flooring as same-family narrowing casts).
+   */
+  def timestampLTZNanosToNTZNanos(
+      v: TimestampNanosVal,
+      zoneId: ZoneId,
+      precision: Int): TimestampNanosVal = {
+    val localDateTime = timestampNanosToInstant(v).atZone(zoneId).toLocalDateTime
+    localDateTimeToTimestampNanos(localDateTime, precision)
+  }
+
+  /**
+   * Converts a `TIMESTAMP_NTZ(q)` nanosecond value into the `TIMESTAMP_LTZ(precision)` instant
+   * obtained by interpreting its wall-clock local date-time in the time zone `zoneId`. This is the
+   * reverse of [[timestampLTZNanosToNTZNanos]]; the sub-microsecond `nanosWithinMicro` component is
+   * preserved across the (whole-second) offset shift before being floored to the target
+   * `precision`.
+   */
+  def timestampNTZNanosToLTZNanos(
+      v: TimestampNanosVal,
+      zoneId: ZoneId,
+      precision: Int): TimestampNanosVal = {
+    val instant = timestampNanosToLocalDateTime(v).atZone(zoneId).toInstant
+    instantToTimestampNanos(instant, precision)
+  }
+
+  /**
    * Converts the local date to the number of days since 1970-01-01.
    */
   def localDateToDays(localDate: LocalDate): Int = MathUtils.toIntExact(localDate.toEpochDay)
