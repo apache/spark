@@ -1829,8 +1829,7 @@ case class TimestampAddInterval(
       }
     case CalendarIntervalType =>
       val i = interval.asInstanceOf[CalendarInterval]
-      timestampAddInterval(
-        start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneIdInEval)
+      timestampAddInterval(start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
