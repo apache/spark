@@ -39,6 +39,7 @@ license: |
 - Since Spark 4.2, `NATURAL JOIN` honors the `spark.sql.caseSensitive` configuration when determining the common columns to join on. This can change which columns are used as join keys, and therefore the query result, when column names differ only in case.
 - Since Spark 4.2, when a SQL UDF has a parameter whose name matches a parameterless built-in function (`current_user`, `current_date`, `current_time`, `current_timestamp`, `user`, `session_user`, `grouping__id`), a bare reference to that name in the function body resolves to the built-in function instead of the parameter, matching the documented name resolution rules. Rename the parameter to avoid the collision, or set `spark.sql.legacy.allowUdfParameterToShadowParameterlessFunction` to `true` to restore the previous behavior.
 - Since Spark 4.2, `SET CATALOG <name>` resolves a bare name as a session variable first, using the variable's value as the catalog name when such a variable exists. Quote the catalog name to force it to be interpreted literally.
+- Since Spark 4.2, when an error occurs while collecting observed metrics, `Observation.get` raises the underlying exception (for example, `SparkRuntimeException` in Scala or `PySparkException` in Python) instead of silently returning an empty result. Add error handling if your code relied on receiving an empty result on failure.
 
 ## Upgrading from Spark SQL 4.0 to 4.1
 
