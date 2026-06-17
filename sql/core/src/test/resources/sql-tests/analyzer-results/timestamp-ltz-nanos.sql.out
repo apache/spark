@@ -601,3 +601,49 @@ SELECT TIMESTAMP_LTZ '1960-01-02 03:04:05.123456789 UTC' +
 -- !query analysis
 Project [cast(1960-01-01 19:04:05.123456789 + INTERVAL '0 00:00:00.000001' DAY TO SECOND as timestamp_ltz(9)) AS TIMESTAMP_LTZ '1960-01-01 19:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"make_interval(0, 1, 0, 2, 0, 0, 0)\"",
+    "inputType" : "\"INTERVAL\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INTERVAL DAY TO SECOND\"",
+    "sqlExpr" : "\"TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 93,
+    "fragment" : "TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0)"
+  } ]
+}
+
+
+-- !query
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TIMESTAMP_LTZ(9)\"",
+    "right" : "\"INTERVAL MONTH\"",
+    "sqlExpr" : "\"(TIMESTAMP_LTZ '2020-01-01 19:04:05.123456789' + INTERVAL '1' MONTH)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 77,
+    "fragment" : "TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH"
+  } ]
+}

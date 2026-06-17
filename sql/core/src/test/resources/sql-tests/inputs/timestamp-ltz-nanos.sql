@@ -168,3 +168,8 @@ SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' -
   INTERVAL '1 00:04:00.000321' DAY TO SECOND;
 SELECT TIMESTAMP_LTZ '1960-01-02 03:04:05.123456789 UTC' +
   INTERVAL '0 00:00:00.000001' DAY TO SECOND;
+-- SPARK-57501: nanos timestamps support only ANSI day-time intervals. A (legacy) calendar interval
+-- is rejected by TimestampAddInterval's type check, and a year-month interval has no supported
+-- operator overload.
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0);
+SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;

@@ -144,3 +144,8 @@ SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND;
 SELECT TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND;
+-- SPARK-57501: nanos timestamps support only ANSI day-time intervals. A (legacy) calendar interval
+-- is rejected by TimestampAddInterval's type check, and a year-month interval has no supported
+-- operator overload.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH;
