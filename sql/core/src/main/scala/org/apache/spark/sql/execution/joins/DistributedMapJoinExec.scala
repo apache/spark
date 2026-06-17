@@ -29,7 +29,7 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shard.ShardSetRef
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, BindReferences, Expression, GenericInternalRow, JoinedRow, Predicate, PredicateHelper, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeSet, BindReferences, Expression, GenericInternalRow, JoinedRow, Predicate, PredicateHelper, SortOrder, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, InnerLike, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
@@ -116,6 +116,8 @@ case class DistributedMapJoinExec(
   }
 
   override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
+
+  override def outputOrdering: Seq[SortOrder] = Nil
 
   override def inputRDDs(): Seq[RDD[InternalRow]] =
     throw QueryExecutionErrors.executeCodePathUnsupportedError("DistributedMapJoin")
@@ -402,6 +404,8 @@ case class DistributedMapJoinExec(
 
     private val bloom = streamedBloomFilter(setId)
     private val probeUr: UnsafeRow = new UnsafeRow(streamedPlan.schema.length)
+    @volatile private var cancelled = false
+
     private val bufferedMap = {
       val mm = TaskContext.get().taskMemoryManager()
       val maxBatchSize = conf.distributedMapJoinMaxBatchSize
@@ -413,7 +417,24 @@ case class DistributedMapJoinExec(
           streamedBoundKeys.length,
           probeUr,
           maxBatchSize)
-      TaskContext.get().addTaskCompletionListener[Unit](_ => map.free())
+      TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+        cancelled = true
+        if (currentReader != null) {
+          currentReader.close()
+          currentReader = null
+        }
+        var item = lookupQueue.poll()
+        while (item != null) {
+          item match {
+            case LookupSuccess(batch, buffer) =>
+              batch.release()
+              buffer.release()
+            case _ =>
+          }
+          item = lookupQueue.poll()
+        }
+        map.free()
+      }
       map
     }
 
@@ -523,7 +544,14 @@ case class DistributedMapJoinExec(
     private def flushLookup[T <: PBatch](iter: util.Iterator[T]): Unit = {
       val manager = SparkEnv.get.shardManager
       implicit val ec: ExecutionContextExecutorService = manager.lookupEc
-      while (iter.hasNext) {
+      while (iter.hasNext && !cancelled) {
+        while (numInFlight >= maxInFlightNum && !cancelled) {
+          pollLookup(lookupQueue.poll(200, util.concurrent.TimeUnit.MILLISECONDS))
+          if (currentBatchIter != null) {
+            iterateLookup()
+          }
+        }
+        if (cancelled) return
         val batch = iter.next()
         iter.remove()
         val future =
@@ -531,9 +559,18 @@ case class DistributedMapJoinExec(
 
         future.onComplete {
           case scala.util.Success(buffer) =>
-            lookupQueue.put(LookupSuccess(batch, buffer))
+            if (cancelled) {
+              batch.release()
+              buffer.release()
+            } else {
+              lookupQueue.put(LookupSuccess(batch, buffer))
+            }
           case scala.util.Failure(cause) =>
-            lookupQueue.put(LookupFailure(batch, cause))
+            if (!cancelled) {
+              lookupQueue.put(LookupFailure(batch, cause))
+            } else {
+              batch.release()
+            }
         }
 
         numInFlight += 1

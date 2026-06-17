@@ -290,20 +290,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         }
 
         def createDistributedMapJoin(onlyLookingAtHint: Boolean) = {
-          val buildSide = getDistributedMapJoinBuildSide(
-            left, right, joinType, hint, onlyLookingAtHint, conf)
-          checkDistributedMapJoinBuildSide(onlyLookingAtHint, buildSide, joinType, hint)
-          buildSide.map {
-            buildSide =>
-              Seq(joins.DistributedMapJoinExec(
-                leftKeys,
-                rightKeys,
-                joinType,
-                buildSide,
-                nonEquiCond,
-                planLater(left),
-                planLater(right),
-                hint))
+          if (hashJoinSupport) {
+            val buildSide = getDistributedMapJoinBuildSide(
+              left, right, joinType, hint, onlyLookingAtHint, conf)
+            checkDistributedMapJoinBuildSide(onlyLookingAtHint, buildSide, joinType, hint)
+            buildSide.map {
+              buildSide =>
+                Seq(joins.DistributedMapJoinExec(
+                  leftKeys,
+                  rightKeys,
+                  joinType,
+                  buildSide,
+                  nonEquiCond,
+                  planLater(left),
+                  planLater(right),
+                  hint))
+            }
+          } else {
+            None
           }
         }
 

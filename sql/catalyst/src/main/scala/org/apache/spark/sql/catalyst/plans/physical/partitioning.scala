@@ -298,6 +298,7 @@ case object SinglePartition extends Partitioning {
 
   override def satisfies0(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
+    case _: ShardDistribution => false
     case _ => true
   }
 

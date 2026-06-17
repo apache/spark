@@ -17,12 +17,14 @@
 
 package org.apache.spark.shard
 
+import scala.concurrent.duration.FiniteDuration
+
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{EXECUTOR_ID, SHARD_ID, SHARD_MANAGER_ID, SHARD_SET_ID}
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.rpc.{RpcEndpointRef, RpcTimeout}
 import org.apache.spark.shard.ShardManagerMessages._
 
 /**
@@ -66,11 +68,12 @@ private[spark] class ShardManagerMaster(
     masterEndpoint.askSync[Boolean](UpdateShardInfo(shardManagerId, setId, id))
   }
 
-  def installReplicaSet(setId: Long, shardId: Int): Unit = {
-    // non-blocking
-    masterEndpoint.ask[Boolean](InstallReplicaSet(setId, shardId))
+  def installReplicaSet(setId: Long, shardId: Int, timeout: FiniteDuration): Unit = {
+    val rpcTimeout = new RpcTimeout(timeout,
+      "spark.sql.execution.distributedMapJoin.exchangeTimeout")
+    masterEndpoint.askSync[Boolean](InstallReplicaSet(setId, shardId), rpcTimeout)
     logInfo(log"Install replica set of shard" +
-      log" (${MDC(SHARD_SET_ID, setId)}, ${MDC(SHARD_ID, shardId)}) requested")
+      log" (${MDC(SHARD_SET_ID, setId)}, ${MDC(SHARD_ID, shardId)}) completed")
   }
 
   def getLocations(setId: Long, shardId: Int, refresh: Boolean = false): Seq[ShardManagerId] = {
@@ -79,6 +82,11 @@ private[spark] class ShardManagerMaster(
       shardLocationsCache.invalidate(key)
     }
     shardLocationsCache.get(key)
+  }
+
+  def removeShardSet(setId: Long): Unit = {
+    masterEndpoint.ask[Boolean](RemoveShardSet(setId))
+    logInfo(log"Removal of shard set ${MDC(SHARD_SET_ID, setId)} requested")
   }
 
   def removeExecutor(execId: String): Unit = {

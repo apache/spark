@@ -21,11 +21,11 @@ import java.util.{HashMap => JHashMap}
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
+import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{EXECUTOR_ID, SHARD_ID, SHARD_MANAGER_ID, SHARD_SET_ID}
 import org.apache.spark.rpc.{IsolatedThreadSafeRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
@@ -72,11 +72,20 @@ private[spark] class ShardManagerMasterEndpoint(
       context.reply(true)
 
     case InstallReplicaSet(setId, shardId) =>
-      installReplicaToWorkers(setId, shardId)
-      context.reply(true)
+      installReplicaToWorkers(setId, shardId).onComplete {
+        case scala.util.Success(_) => context.reply(true)
+        case scala.util.Failure(e) =>
+          logWarning(log"Replica installation failed for" +
+            log" (${MDC(SHARD_SET_ID, setId)}, ${MDC(SHARD_ID, shardId)})", e)
+          context.reply(true)
+      }
 
     case GetLocations(setId, shardId) =>
       context.reply(getLocations(setId, shardId))
+
+    case RemoveShardSet(setId) =>
+      removeShardSet(setId)
+      context.reply(true)
 
     case RemoveExecutor(execId) =>
       removeExecutor(execId)
@@ -156,10 +165,10 @@ private[spark] class ShardManagerMasterEndpoint(
    * and hosts that don't already hold this shard. Score is
    * execLoad*10 + hostLoad*5 + sameHostPenalty(100000) + jitter.
    */
-  private def installReplicaToWorkers(setId: Long, shardId: Int): Unit = {
+  private def installReplicaToWorkers(setId: Long, shardId: Int): Future[Unit] = {
     shardSetInfo
       .get(setId)
-      .foreach { setInfo =>
+      .map { setInfo =>
         val targetReplica = setInfo.replicaCount
         val currentHolders = getLocations(setId, shardId)
 
@@ -196,8 +205,9 @@ private[spark] class ShardManagerMasterEndpoint(
         }
 
         val currentExecIds = currentHolders.map(_.executorId).toSet
-        val candidates =
-          shardManagerInfo.keys.filterNot(smi => currentExecIds.contains(smi.executorId))
+        val candidates = shardManagerInfo.keys
+          .filterNot(smi => currentExecIds.contains(smi.executorId))
+          .filterNot(smi => !isLocal && smi.executorId == SparkContext.DRIVER_IDENTIFIER)
 
         var remaining = need
         while (remaining > 0) {
@@ -214,12 +224,23 @@ private[spark] class ShardManagerMasterEndpoint(
           }
         }
 
-        chosen.foreach { smi =>
-          shardManagerInfo.get(smi).foreach { sm =>
+        val futures = chosen.flatMap { smi =>
+          shardManagerInfo.get(smi).map { sm =>
             sm.managerEndpoint.ask[Boolean](InstallReplica(setId, shardId))
           }
         }
+        Future.sequence(futures).map(_ => ())
       }
+      .getOrElse(Future.successful(()))
+  }
+
+  private def removeShardSet(setId: Long): Unit = {
+    shardSetInfo.remove(setId)
+    shardSetLocations.remove(setId)
+    shardManagerInfo.values.foreach { info =>
+      info.shards.remove(setId)
+    }
+    logInfo(log"Removed shard set ${MDC(SHARD_SET_ID, setId)} metadata")
   }
 
   private def removeExecutor(execId: String): Unit = {

@@ -19,10 +19,11 @@ package org.apache.spark.network.netty
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network.{ShardLookupService, TransportContext}
 import org.apache.spark.network.buffer.ManagedBuffer
-import org.apache.spark.network.client.ManagedRpcResponseCallback
+import org.apache.spark.network.client.{ManagedRpcResponseCallback, TransportClientBootstrap}
+import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shard.ShardLookupListener
 import org.apache.spark.rpc.RpcEndpointRef
@@ -32,6 +33,7 @@ import org.apache.spark.util.Utils
 
 private[spark] class NettyShardLookupService(
     conf: SparkConf,
+    securityManager: SecurityManager,
     bindAddress: String,
     val hostName: String,
     _port: Int,
@@ -40,6 +42,7 @@ private[spark] class NettyShardLookupService(
     extends ShardLookupService {
 
   private val serializer = new JavaSerializer(conf)
+  private val authEnabled = securityManager.isAuthenticationEnabled()
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
   private[this] var rpcHandler: NettyShardRpcServer = _
@@ -65,23 +68,28 @@ private[spark] class NettyShardLookupService(
     cloned.setIfMissing("spark.network.waitForReachable", "false")
     cloned.setIfMissing("spark.network.sharedByteBufAllocators.enabled", "true")
     cloned.setIfMissing("spark.network.io.preferDirectBufs", "true")
-    transportConf = SparkTransportConf.fromSparkConf(cloned, "shard", numCores)
+    transportConf = SparkTransportConf.fromSparkConf(
+      cloned, "shard", numCores,
+      sslOptions = Some(securityManager.getRpcSSLOptions()))
+    var serverBootstrap: Option[TransportServerBootstrap] = None
+    var clientBootstrap: Option[TransportClientBootstrap] = None
+    if (authEnabled) {
+      serverBootstrap = Some(new AuthServerBootstrap(transportConf, securityManager))
+      clientBootstrap = Some(new AuthClientBootstrap(transportConf, conf.getAppId, securityManager))
+    }
     transportContext = new TransportContext(transportConf, rpcHandler)
-    clientFactory = transportContext.createClientFactory()
-    server = createNonAuthServer()
+    clientFactory = transportContext.createClientFactory(clientBootstrap.toSeq.asJava)
+    server = createServer(serverBootstrap.toList)
     appId = conf.getAppId
     logger.info(s"Server created on $hostName $bindAddress:${server.getPort}")
   }
 
   override def port: Int = server.getPort
 
-  private def createNonAuthServer(): TransportServer = {
+  private def createServer(bootstraps: List[TransportServerBootstrap]): TransportServer = {
     def startService(port: Int): (TransportServer, Int) = {
       val server =
-        transportContext.createServer(
-          bindAddress,
-          port,
-          List.empty[TransportServerBootstrap].asJava)
+        transportContext.createServer(bindAddress, port, bootstraps.asJava)
       (server, server.getPort)
     }
 
@@ -108,6 +116,7 @@ private[spark] class NettyShardLookupService(
       })
   } catch {
     case e: Exception =>
+      reqMsg.release()
       listener.onBatchFetchFailure(e)
   }
 

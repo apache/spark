@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.Adler32
 
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService, Future}
+import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 import scala.util.Random
@@ -136,8 +137,8 @@ private[spark] class ShardManager(
     installReplica(setId, id)
   }
 
-  def installReplicaSet(setId: Long, id: Int): Unit = {
-    master.installReplicaSet(setId, id)
+  def installReplicaSet(setId: Long, id: Int, timeout: FiniteDuration): Unit = {
+    master.installReplicaSet(setId, id, timeout)
   }
 
   def installReplica(setId: Long, id: Int): Unit = {
@@ -323,6 +324,8 @@ private[spark] class ShardManager(
   def unpersist(setId: Long, blocking: Boolean): Unit = {
     logDebug(log"Unpersisting shard-set ${MDC(SHARD_SET_ID, setId)}")
     SparkEnv.get.blockManager.master.removeShardSet(setId, blocking)
+    master.removeShardSet(setId)
+    invokeCleanupCallbacks(setId)
   }
 
   def stop(): Unit = {

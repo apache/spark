@@ -36,6 +36,8 @@ private[spark] object ShardManagerMessages {
 
   case class GetLocations(setId: Long, shardId: Int) extends ToShardManagerMasterEndpoint
 
+  case class RemoveShardSet(setId: Long) extends ToShardManagerMasterEndpoint
+
   case class RemoveExecutor(execId: String) extends ToShardManagerMasterEndpoint
 
   case object StopShardManagerMaster extends ToShardManagerMasterEndpoint

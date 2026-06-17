@@ -7591,6 +7591,7 @@ object SQLConf {
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
+      .checkValue(_ > 0, "must be positive")
       .createWithDefault(8)
 
   val DISTRIBUTED_MAP_JOIN_MAX_BATCH_SIZE =
@@ -7599,6 +7600,7 @@ object SQLConf {
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
+      .checkValue(_ > 0, "must be positive")
       .createWithDefault(1024)
 
   val DISTRIBUTED_MAP_JOIN_BLOOM_FILTER_CAPACITY =

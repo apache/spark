@@ -19,9 +19,8 @@ package org.apache.spark.network.shard;
 
 import java.io.Closeable;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.util.TransportConf;
@@ -32,7 +31,7 @@ import org.apache.spark.network.util.TransportConf;
  * key lookups to build-side executors.
  */
 public abstract class ShardStoreClient implements Closeable {
-  protected final Logger logger = LoggerFactory.getLogger(this.getClass());
+  protected final SparkLogger logger = SparkLoggerFactory.getLogger(this.getClass());
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
   protected TransportConf transportConf;

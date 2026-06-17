@@ -604,6 +604,7 @@ object SparkEnv extends Logging {
       val lookupService =
         ShardLookupServiceFactory.create(
           conf,
+          securityManager,
           bindAddress,
           advertiseAddress,
           0,

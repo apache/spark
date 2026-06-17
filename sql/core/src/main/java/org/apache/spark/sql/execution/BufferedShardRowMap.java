@@ -26,9 +26,8 @@ import java.util.NoSuchElementException;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import org.apache.spark.internal.SparkLogger;
+import org.apache.spark.internal.SparkLoggerFactory;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -50,7 +49,7 @@ import org.apache.spark.unsafe.memory.MemoryBlock;
  */
 public final class BufferedShardRowMap extends MemoryConsumer {
 
-  private static final Logger logger = LoggerFactory.getLogger(BufferedShardRowMap.class);
+  private static final SparkLogger logger = SparkLoggerFactory.getLogger(BufferedShardRowMap.class);
 
   private final TaskMemoryManager taskMemoryManager;
 

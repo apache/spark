@@ -22,6 +22,7 @@ import java.util.UUID
 import java.util.concurrent.{Future => JFuture, TimeUnit}
 
 import scala.concurrent.{ExecutionContext, Promise, TimeoutException}
+import scala.concurrent.duration.Duration
 
 import org.apache.spark.{shard, SparkEnv, SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
@@ -102,6 +103,7 @@ case class ShardExchangeExec(
   override lazy val relationFuture: JFuture[shard.ShardSetRef] =
     SQLExecution
       .withThreadLocalCaptured[shard.ShardSetRef](session, ShardExchangeExec.executionContext) {
+        var setId = -1L
         try {
           sparkContext.setJobGroup(
             runId.toString,
@@ -112,7 +114,7 @@ case class ShardExchangeExec(
               s"ensureExecutors timed out or SC stopped;" +
                 s" active executors may be < target, continue build")
           }
-          val setId = sparkContext.env.shardManager.newShardSet(numShards, replicaCount)
+          setId = sparkContext.env.shardManager.newShardSet(numShards, replicaCount)
           val shuffled = ShuffleExchangeExec(
             HashPartitioning(buildBoundKeys, numShards),
             child,
@@ -127,6 +129,7 @@ case class ShardExchangeExec(
               .getOrElse(Array.empty[Byte])
             (exprBytes, schemaBytes)
           }
+          val replicaTimeout = Duration(timeout, TimeUnit.SECONDS)
           val shardIds =
             sharded
               .mapPartitionsWithIndexInternal { case (shardId, rowIter) =>
@@ -150,7 +153,7 @@ case class ShardExchangeExec(
                 val sm = SparkEnv.get.shardManager
                 sm.installShard(relation, setId, shardId, filterBytes)(bfOutput =>
                   bf.writeTo(bfOutput))
-                sm.installReplicaSet(setId, shardId)
+                sm.installReplicaSet(setId, shardId, replicaTimeout)
 
                 Iterator.single(shardId)
               }
@@ -177,6 +180,13 @@ case class ShardExchangeExec(
         } catch {
           case e: Throwable =>
             promise.tryFailure(e)
+            if (setId >= 0) {
+              try {
+                sparkContext.env.shardManager.unpersist(setId, blocking = false)
+              } catch {
+                case scala.util.control.NonFatal(_) =>
+              }
+            }
             throw e
         }
       }

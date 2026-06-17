@@ -17,7 +17,7 @@
 
 package org.apache.spark.network
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.CLASS_NAME
 import org.apache.spark.network.netty.NettyShardLookupService
@@ -41,6 +41,7 @@ private[spark] object ShardLookupServiceFactory extends Logging {
 
   def create(
       conf: SparkConf,
+      securityManager: SecurityManager,
       bindAddress: String,
       advertiseAddress: String,
       port: Int,
@@ -48,23 +49,23 @@ private[spark] object ShardLookupServiceFactory extends Logging {
       masterEndpoint: RpcEndpointRef): ShardLookupService = {
     val className = conf.get(SHARD_LOOKUP_SERVICE_CLASS_KEY, DEFAULT_CLASS)
     if (className == DEFAULT_CLASS) {
-      new NettyShardLookupService(conf, bindAddress, advertiseAddress, port,
+      new NettyShardLookupService(conf, securityManager, bindAddress, advertiseAddress, port,
         numCores, masterEndpoint)
     } else {
       try {
         logInfo(log"Creating custom ShardLookupService: ${MDC(CLASS_NAME, className)}")
         Utils.classForName(className)
           .getDeclaredConstructor(
-            classOf[SparkConf], classOf[String], classOf[String],
+            classOf[SparkConf], classOf[SecurityManager], classOf[String], classOf[String],
             classOf[Int], classOf[Int], classOf[RpcEndpointRef])
-          .newInstance(conf, bindAddress, advertiseAddress,
+          .newInstance(conf, securityManager, bindAddress, advertiseAddress,
             port.asInstanceOf[AnyRef], numCores.asInstanceOf[AnyRef],
             masterEndpoint)
           .asInstanceOf[ShardLookupService]
       } catch {
         case e: Exception =>
           logWarning(log"Failed to create ${MDC(CLASS_NAME, className)}, falling back to Netty", e)
-          new NettyShardLookupService(conf, bindAddress, advertiseAddress, port,
+          new NettyShardLookupService(conf, securityManager, bindAddress, advertiseAddress, port,
             numCores, masterEndpoint)
       }
     }
