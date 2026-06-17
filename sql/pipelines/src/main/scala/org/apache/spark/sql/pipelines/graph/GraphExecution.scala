@@ -261,12 +261,32 @@ object GraphExecution extends Logging {
   }
 
   /**
-   * Analyze the exception thrown by flow execution and figure out if we should retry the execution,
-   * or we need to reanalyze the flow entirely to resolve issues like schema changes.
+   * Represents that the `FlowExecution` should be stopped because a streaming flow's set of
+   * sources changed since the last run. This is unrecoverable without a full refresh, so the flow
+   * must not be retried regardless of the remaining retry budget.
+   */
+  private case class StreamingSourcesChanged(
+      cause: Throwable,
+      flowDisplayName: String
+  ) extends FlowExecutionStopReason {
+    override lazy val runTerminationReason: RunTerminationReason = {
+      QueryExecutionFailure(flowDisplayName, maxRetries = 0, Option(cause))
+    }
+    override lazy val failureMessage: String = {
+      s"Flow '$flowDisplayName' had streaming sources added or removed. It will not be " +
+      s"retried. Please perform a full refresh to rebuild it against the current sources."
+    }
+  }
+
+  /**
+   * Analyze the exception thrown by flow execution and decide whether to retry the execution or
+   * stop it. The result is either RetryFlowExecution or StopFlowExecution; this function does not
+   * reanalyze the flow itself.
    * This should be the narrow waist for all exception analysis in flow execution.
-   * TODO: currently it only handles schema change and max retries, we should aim to extend this to
-   *  include other non-retryable exception as well so we can have a single SoT for all these error
-   *  matching logic.
+   * Currently it handles max retries and streaming source changes; other non-retryable errors are
+   * still routed through the retry path.
+   * TODO: extend this to include other non-retryable exceptions as well so we can have a single
+   *  SoT for all these error matching logic.
    * @param ex Exception to analyze.
    * @param flowDisplayName The user facing flow name with the error.
    * @param currentNumTries Number of times the flow has been tried.
@@ -278,8 +298,12 @@ object GraphExecution extends Logging {
       currentNumTries: => Int,
       maxAllowedRetries: => Int
   ): FlowExecutionAction = {
-    val flowExecutionNonRetryableReasonOpt = if (currentNumTries > maxAllowedRetries) {
-      Some(MaxRetryExceeded(ex, flowDisplayName, maxAllowedRetries))
+    val error = ex
+    val flowExecutionNonRetryableReasonOpt = if (PipelinesErrors.streamingSourcesChanged(error)) {
+      // Source-set changes need a full refresh, so they are never retried.
+      Some(StreamingSourcesChanged(error, flowDisplayName))
+    } else if (currentNumTries > maxAllowedRetries) {
+      Some(MaxRetryExceeded(error, flowDisplayName, maxAllowedRetries))
     } else {
       None
     }
