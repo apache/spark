@@ -1789,7 +1789,9 @@ case class TimestampAddInterval(
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(AnyTimestampFamilyType, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
+    Seq(
+      TypeCollection(AnyTimestampType, AnyTimestampNanoType),
+      TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
   override def dataType: DataType = start.dataType
 
@@ -3672,7 +3674,7 @@ case class SubtractTimestamps(
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampFamilyType, AnyTimestampFamilyType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, AnyTimestampType)
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
 

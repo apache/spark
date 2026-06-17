@@ -87,11 +87,6 @@ private[sql] object AnyTimestampNanoTypeExpression {
     e.dataType.isInstanceOf[AnyTimestampNanoType]
 }
 
-private[sql] object AnyTimestampFamilyTypeExpression {
-  def unapply(e: Expression): Boolean =
-    AnyTimestampTypeExpression.unapply(e) || AnyTimestampNanoTypeExpression.unapply(e)
-}
-
 private[sql] object DecimalExpression {
   def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
     case t: DecimalType => Some((t.precision, t.scale))

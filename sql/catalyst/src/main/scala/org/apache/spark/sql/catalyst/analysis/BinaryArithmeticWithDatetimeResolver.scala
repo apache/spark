@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.expressions.{
 }
 import org.apache.spark.sql.types.{
   AnsiIntervalType,
-  AnyTimestampFamilyTypeExpression,
+  AnyTimestampTypeExpression,
   CalendarIntervalType,
   DatetimeType,
   DateType,
@@ -136,8 +136,8 @@ object BinaryArithmeticWithDatetimeResolver {
           Cast(DatetimeSub(l, r,
             TimestampAddInterval(l, UnaryMinus(r, context.evalMode == EvalMode.ANSI))), l.dataType)
         case _
-          if AnyTimestampFamilyTypeExpression.unapply(l) ||
-            AnyTimestampFamilyTypeExpression.unapply(r) =>
+          if AnyTimestampTypeExpression.unapply(l) ||
+            AnyTimestampTypeExpression.unapply(r) =>
           SubtractTimestamps(l, r)
         case (_, DateType) => SubtractDates(l, r)
         case (DateType, dt) if dt != StringType => DateSub(l, r)
