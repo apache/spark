@@ -933,8 +933,8 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           }
           val data = Seq(
             new TimestampNanosVal(0L, 0.toShort),
-            new TimestampNanosVal(1_000_000L, 900.toShort),
-            new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort))
+            new TimestampNanosVal(1000000L, 900.toShort),
+            new TimestampNanosVal(1234567890L, nanosWithinMicro.toShort))
           val inputDf = data
             .map(v => spark.range(1).select(Column(Literal.create(v, nanosType)).as("ts")))
             .reduce(_.union(_))
@@ -971,7 +971,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
         }
         Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
           nanosType =>
-            val value = new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort)
+            val value = new TimestampNanosVal(1234567890L, nanosWithinMicro.toShort)
             val inputDf = spark.range(1).select(Column(Literal.create(value, nanosType)).as("ts"))
             val expected = inputDf.collect()
             withTempPath { dir =>
@@ -1004,7 +1004,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
         }
         Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
           nanosType =>
-            val value = new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort)
+            val value = new TimestampNanosVal(1234567890L, nanosWithinMicro.toShort)
             val inputDf = spark.range(1).select(Column(Literal.create(value, nanosType)).as("ts"))
             withTempPath { dir =>
               val path = dir.getCanonicalPath

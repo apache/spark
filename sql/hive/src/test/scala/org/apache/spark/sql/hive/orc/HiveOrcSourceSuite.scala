@@ -391,7 +391,7 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
           case 8 => 120
           case _ => 123
         }
-        val value = new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort)
+        val value = new TimestampNanosVal(1234567890L, nanosWithinMicro.toShort)
         // Documented range ends [0001-01-01T00:00:00, 9999-12-31T23:59:59.999999999] (UTC for LTZ).
         val minLdt = LocalDateTime.of(1, 1, 1, 0, 0, 0, 0)
         val maxLdt = LocalDateTime.of(9999, 12, 31, 23, 59, 59, 999999999)
