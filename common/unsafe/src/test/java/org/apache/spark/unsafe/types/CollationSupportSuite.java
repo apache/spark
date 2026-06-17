@@ -3647,6 +3647,15 @@ public class CollationSupportSuite {
     assertStringTrimRight(UTF8_LCASE, "𝔸", "a", "𝔸");
     assertStringTrimRight(UNICODE, "𝔸", "a", "𝔸");
     assertStringTrimRight(UNICODE_CI, "𝔸", "a", "");
+    // RTRIM-modifier collations (ICU path): trailing spaces are ignored while matching but must
+    // be re-appended afterwards. When the number of trailing spaces equals the number of
+    // supplementary code points, a Java-char-index vs code-point-count comparison previously
+    // dropped the preserved spaces.
+    assertStringTrimRight("UNICODE_RTRIM", "x ", "x", " ");
+    assertStringTrimRight("UNICODE_RTRIM", "   ", "x", "   ");
+    assertStringTrimRight("UNICODE_RTRIM", "𝔸 ", "𝔸", " ");
+    assertStringTrimRight("UNICODE_RTRIM", "𝔸  ", "𝔸", "  ");
+    assertStringTrimRight("UNICODE_RTRIM", "𝔸𝔸  ", "𝔸", "  ");
   }
 
   /**
