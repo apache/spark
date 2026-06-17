@@ -337,20 +337,6 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Adds a full interval to a nanosecond-precision timestamp value while preserving
-   * the `nanosWithinMicro` remainder.
-   */
-  def timestampNanosAddInterval(
-      start: TimestampNanosVal,
-      months: Int,
-      days: Int,
-      microseconds: Long,
-      zoneId: ZoneId): TimestampNanosVal = {
-    val epochMicros = timestampAddInterval(start.epochMicros, months, days, microseconds, zoneId)
-    TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
-  }
-
-  /**
    * Adds a full interval (months, days, microseconds) to a timestamp without time zone
    * represented as a local time in microsecond precision, which is independent of time zone.
    * @return A timestamp without time zone value, expressed in range
