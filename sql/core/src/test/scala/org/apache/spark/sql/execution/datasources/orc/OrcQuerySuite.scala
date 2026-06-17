@@ -954,6 +954,71 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-57455: nanos timestamps survive a time-zone change across ORC write/read") {
+    // The NTZ wall clock stays zone-independent and the LTZ instant is preserved even when the
+    // writer's and reader's JVM default time zones differ: NTZ goes through an ORC TIMESTAMP
+    // (which preserves the local wall-clock fields) via the default-zone valueOf/toLocalDateTime
+    // on both ends, and LTZ goes through an ORC TIMESTAMP_INSTANT (instant-preserving) via
+    // epoch-based conversions, so neither depends on the default zone matching across the round
+    // trip.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { precision =>
+        val nanosWithinMicro = precision match {
+          case 7 => 100
+          case 8 => 120
+          case _ => 123
+        }
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val value = new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort)
+            val inputDf = spark.range(1).select(Column(Literal.create(value, nanosType)).as("ts"))
+            val expected = inputDf.collect()
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+                inputDf.write.mode("overwrite").orc(path)
+              }
+              Seq(true, false).foreach { vectorized =>
+                withSQLConf(SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+                  DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.UTC) {
+                    checkAnswer(
+                      spark.read.schema(new StructType().add("ts", nanosType)).orc(path),
+                      expected)
+                  }
+                }
+              }
+            }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57455: nanos timestamp type is inferred from ORC without an explicit schema") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { precision =>
+        val nanosWithinMicro = precision match {
+          case 7 => 100
+          case 8 => 120
+          case _ => 123
+        }
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val value = new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort)
+            val inputDf = spark.range(1).select(Column(Literal.create(value, nanosType)).as("ts"))
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              inputDf.write.mode("overwrite").orc(path)
+              // Read without supplying a schema: the nanos type is recovered from the
+              // spark.sql.catalyst.type attribute stored in the ORC type description.
+              val readBack = spark.read.orc(path)
+              assert(readBack.schema("ts").dataType === nanosType)
+              checkAnswer(readBack, inputDf)
+            }
+        }
+      }
+    }
+  }
+
   // SPARK-39519: Ignore this case because it requires more than 4g heap memory to ensure test
   // stability when use Java 11. Should test it manually when upgrading `hive-storage-api`
   ignore("SPARK-39387: BytesColumnVector should not throw RuntimeException due to overflow") {
