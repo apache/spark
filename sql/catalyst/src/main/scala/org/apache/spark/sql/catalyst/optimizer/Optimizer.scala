@@ -894,9 +894,9 @@ object RemoveNoopUnion extends Rule[LogicalPlan] {
     _.containsAllPatterns(DISTINCT_LIKE, UNION)) {
     case d @ Distinct(u: Union) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
-    case d @ Deduplicate(_, u: Union) =>
+    case d @ Deduplicate(_, u: Union, _) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
-    case d @ DeduplicateWithinWatermark(_, u: Union) =>
+    case d @ DeduplicateWithinWatermark(_, u: Union, _) =>
       d.withNewChildren(Seq(simplifyUnion(u)))
   }
 }
@@ -1858,12 +1858,12 @@ object CombineUnions extends Rule[LogicalPlan] {
     case SequentialOrSimpleUnion(u) => flattenUnion(u, false)
     case Distinct(SequentialOrSimpleUnion(u)) => Distinct(flattenUnion(u, true))
     // Only handle distinct-like 'Deduplicate', where the keys == output
-    case Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u))
+    case d @ Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u), _)
         if AttributeSet(keys) == u.outputSet =>
-      Deduplicate(keys, flattenUnion(u, true))
-    case DeduplicateWithinWatermark(keys: Seq[Attribute], SequentialOrSimpleUnion(u))
+      d.copy(child = flattenUnion(u, true))
+    case d @ DeduplicateWithinWatermark(keys: Seq[Attribute], SequentialOrSimpleUnion(u), _)
       if AttributeSet(keys) == u.outputSet =>
-      DeduplicateWithinWatermark(keys, flattenUnion(u, true))
+      d.copy(child = flattenUnion(u, true))
   }
 
   private def flattenUnion(union: UnionBase, flattenDistinct: Boolean): UnionBase = {
@@ -1894,7 +1894,7 @@ object CombineUnions extends Rule[LogicalPlan] {
         case Distinct(SequentialOrSimpleUnion(u)) if flattenDistinct && canMerge(u) =>
           stack.pushAll(u.children.reverse)
         // Only handle distinct-like 'Deduplicate', where the keys == output
-        case Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u))
+        case Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u), _)
             if flattenDistinct && canMerge(u) && AttributeSet(keys) == u.outputSet =>
           stack.pushAll(u.children.reverse)
         case SequentialOrSimpleUnion(u) if canMerge(u) =>
@@ -1907,7 +1907,7 @@ object CombineUnions extends Rule[LogicalPlan] {
               canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
         case project @ Project(
-            projectList, Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u)))
+            projectList, Deduplicate(keys: Seq[Attribute], SequentialOrSimpleUnion(u), _))
             if projectList.forall(_.deterministic) && flattenDistinct && canMerge(u) &&
               AttributeSet(keys) == u.outputSet && canPushProjectionThroughUnion(project) =>
           stack.pushAll(pushProjectionThroughUnion(projectList, u).reverse)
@@ -2709,7 +2709,7 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  */
 object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUpWithNewOutput {
-    case d @ Deduplicate(keys, child) if !child.isStreaming =>
+    case d @ Deduplicate(keys, child, _) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
       val generatedAliasesMap = new mutable.HashMap[Attribute, Alias]();
       val aggCols = child.output.map { attr =>
