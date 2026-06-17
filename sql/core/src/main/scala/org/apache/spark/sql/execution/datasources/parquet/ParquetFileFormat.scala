@@ -150,6 +150,9 @@ class ParquetFileFormat
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       sqlConf.legacyParquetNanosAsLong)
     hadoopConf.setBoolean(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key,
+      sqlConf.timestampNanosTypesEnabled)
+    hadoopConf.setBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
       sqlConf.parquetReaderRespectUnknownTypeAnnotation)
   }
@@ -416,9 +419,6 @@ class ParquetFileFormat
     case g: GeometryType => GeometryType.isSridSupported(g.srid)
     case g: GeographyType => GeographyType.isSridSupported(g.srid)
 
-    // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: AnyTimestampNanoType => false
-
     case _: AtomicType | _: NullType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -458,6 +458,7 @@ object ParquetFileFormat extends Logging {
       sqlConf.isParquetINT96AsTimestamp,
       inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled,
       nanosAsLong = sqlConf.legacyParquetNanosAsLong,
+      timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled,
       respectUnknownTypeAnnotation =
         sqlConf.parquetReaderRespectUnknownTypeAnnotation)
 
@@ -565,6 +566,7 @@ object ParquetFileFormat extends Logging {
     val assumeInt96IsTimestamp = sqlConf.isParquetINT96AsTimestamp
     val inferTimestampNTZ = sqlConf.parquetInferTimestampNTZEnabled
     val nanosAsLong = sqlConf.legacyParquetNanosAsLong
+    val timestampNanosTypesEnabled = sqlConf.timestampNanosTypesEnabled
     val respectUnknownTypeAnnotation =
       sqlConf.parquetReaderRespectUnknownTypeAnnotation
 
@@ -576,6 +578,7 @@ object ParquetFileFormat extends Logging {
         assumeInt96IsTimestamp = assumeInt96IsTimestamp,
         inferTimestampNTZ = inferTimestampNTZ,
         nanosAsLong = nanosAsLong,
+        timestampNanosTypesEnabled = timestampNanosTypesEnabled,
         respectUnknownTypeAnnotation = respectUnknownTypeAnnotation)
 
       readParquetFootersInParallel(conf, files, ignoreCorruptFiles, ignoreMissingFiles)

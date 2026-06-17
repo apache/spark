@@ -162,6 +162,9 @@ case class ParquetScan(
       SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key,
       conf.legacyParquetNanosAsLong)
     hadoopConf.setBoolean(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key,
+      conf.timestampNanosTypesEnabled)
+    hadoopConf.setBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
       conf.parquetReaderRespectUnknownTypeAnnotation)
 
