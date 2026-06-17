@@ -186,11 +186,12 @@ private[sql] trait ColumnNodeToExpressionConverter extends (ColumnNode => Expres
             case ColumnNodeExpression(node) => apply(node)
           }
           transformed match {
-            // A window function (e.g. an AggregateWindowFunction) is also an AggregateFunction,
-            // but it must not be wrapped in an AggregateExpression: it is used directly as the
-            // child of a WindowExpression. Wrapping it would later fail analysis with
+            // A window function (e.g. an AggregateWindowFunction) is also an AggregateFunction, but
+            // it must not be wrapped in an AggregateExpression: it is used directly as the child of
+            // a WindowExpression. Wrapping it would later fail analysis with
             // WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE.
-            case f: AggregateFunction if !f.isInstanceOf[WindowFunction] => f.toAggregateExpression()
+            case f: AggregateFunction if !f.isInstanceOf[WindowFunction] =>
+              f.toAggregateExpression()
             case _ => transformed
           }
 
