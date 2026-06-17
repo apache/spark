@@ -2980,16 +2980,6 @@ package object config {
         "The value only can be one or more of 'stdout, stderr'.")
       .createWithDefault(Seq("stdout", "stderr"))
 
-  private[spark] val YARN_AM_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
-    ConfigBuilder("spark.yarn.am.limitActiveProcessorCount.enabled")
-      .doc("Whether to add -XX:ActiveProcessorCount=<spark.yarn.am.cores> to the YARN " +
-        "Application Master JVM options in client mode. In cluster mode, use " +
-        "`spark.driver.limitActiveProcessorCount.enabled` instead.")
-      .version("4.2.0")
-      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-      .booleanConf
-      .createWithDefault(false)
-
   private[spark] val DRIVER_LIMIT_ACTIVE_PROCESSOR_COUNT_ENABLED =
     ConfigBuilder("spark.driver.limitActiveProcessorCount.enabled")
       .doc("Whether to add -XX:ActiveProcessorCount=<spark.driver.cores> to the driver JVM " +
