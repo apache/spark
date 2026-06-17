@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.spark.sql.{AnalysisException, Column, Row}
 import org.apache.spark.sql.TestingUDT.{IntervalData, IntervalUDT}
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.datasources.orc.OrcSuite
@@ -369,6 +370,56 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
                   checkAnswer(readBack, df)
                 }
             }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57455: Hive ORC serde nanos round-trip; NTZ time-zone independent") {
+    // Force spark.sql.orc.impl=hive so the Hive serde write/read conversion is exercised
+    // (HiveInspectors.wrapperFor on write, the hive OrcFileFormat unwrappers on read) rather
+    // than the native datasource that the other nanos tests use.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      foreachNanosPrecision { precision =>
+        val nanosWithinMicro = precision match {
+          case 7 => 100
+          case 8 => 120
+          case _ => 123
+        }
+        val value = new TimestampNanosVal(1_234_567_890L, nanosWithinMicro.toShort)
+
+        // Same-zone round trip through the Hive serde path for both nanos types.
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            val input = spark.range(1).select(Column(Literal.create(value, nanosType)).as("ts"))
+            withTempDir { dir =>
+              val path = new File(dir, "nanos").getCanonicalPath
+              input.write.format("orc").mode("overwrite").save(path)
+              checkAnswer(
+                spark.read.schema(new StructType().add("ts", nanosType)).format("orc").load(path),
+                input)
+            }
+        }
+
+        // The NTZ wall clock stays zone-independent across a JVM default time-zone change. Hive
+        // ORC stores zone-naive wall-clock fields, so the instant-based LTZ type is not
+        // zone-stable through the Hive serde path -- the same caveat as the legacy TimestampType
+        // -- so LTZ is only round-tripped within a single zone above.
+        val ntzType = TimestampNTZNanosType(precision)
+        val ntzInput = spark.range(1).select(Column(Literal.create(value, ntzType)).as("ts"))
+        val ntzExpected = ntzInput.collect()
+        withTempDir { dir =>
+          val path = new File(dir, "ntz-tz").getCanonicalPath
+          DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+            ntzInput.write.format("orc").mode("overwrite").save(path)
+          }
+          DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.UTC) {
+            checkAnswer(
+              spark.read.schema(new StructType().add("ts", ntzType)).format("orc").load(path),
+              ntzExpected)
           }
         }
       }
