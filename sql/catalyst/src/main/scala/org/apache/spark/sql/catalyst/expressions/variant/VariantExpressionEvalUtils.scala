@@ -78,10 +78,10 @@ object VariantExpressionEvalUtils {
   /** Throws `INVALID_VARIANT_PATH` on a malformed path or on the empty (root `$`) path. */
   def parseVariantDeletePath(pathValue: String): Array[VariantPathSegment] = {
     val parsed = VariantPathParser.parse(pathValue).getOrElse {
-      throw QueryExecutionErrors.invalidVariantPath(pathValue, toSqlId("variant_delete"))
+      throw QueryExecutionErrors.invalidVariantPath(pathValue, "variant_delete")
     }
     if (parsed.isEmpty) {
-      throw QueryExecutionErrors.invalidVariantPath(pathValue, toSqlId("variant_delete"))
+      throw QueryExecutionErrors.invalidVariantPath(pathValue, "variant_delete")
     }
     parsed
   }
