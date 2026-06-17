@@ -59,10 +59,10 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
     with AutoCdcGraphExecutionTestMixin {
 
   // Distinct keys in the generated event stream.
-  private val numDistinctKeys: Int = 3
+  private val numDistinctKeys: Int = 5
   // Upper bound on unique events (one per sequence) generated per key, before intentionally
   // duplicating some events.
-  private val maxUniqueEventsPerKey: Int = 25
+  private val maxUniqueEventsPerKey: Int = 80
   // Probability an event is a delete; (1 - this) is the upsert probability.
   private val deleteEventProbability: Double = 0.20
   // Probability an event is immediately re-emitted with the same sequence and payload.
@@ -70,7 +70,18 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
   // Probability an optional payload column is non-null; (1 - this) is the null probability.
   private val nonNullProbability: Double = 0.75
   // Number of microbatches the out-of-order pipeline splits the shuffled events across.
-  private val numOutOfOrderBatches: Int = 4
+  private val numOutOfOrderBatches: Int = 8
+
+  // System property used to pin the test seed for reproduction. If unset, the suite generates a
+  // fresh seed on each run and reports it in the failure message so a failing seed can be replayed
+  // by setting this property. Mirrors the convention used by `RandomDataGenerator` and other Spark
+  // suites that expose tunables via `spark.sql.test.<feature>` system properties.
+  private val seedSystemProperty: String =
+    "spark.sql.test.autocdc.scd1OutOfOrderConvergenceSeed"
+
+  private def resolveTestSeed(): Long = {
+    Option(System.getProperty(seedSystemProperty)).map(_.toLong).getOrElse(Random.nextLong())
+  }
 
   private val keyColumn: String = "key"
   private val nameColumn: String = "name"
@@ -162,7 +173,7 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
     val shuffledEventStream = rand.shuffle(sortedEventStream)
 
     withClue(
-      s"\nseed=$seed\n" +
+      s"\nseed=$seed (rerun with -D$seedSystemProperty=$seed to reproduce)\n" +
       s"events (${sortedEventStream.size} total, sorted by sequence):\n" +
       sortedEventStream.map(r => s"  $r").mkString("\n") + "\n"
     ) {
@@ -190,8 +201,7 @@ class AutoCdcScd1OutOfOrderConvergenceSuite
     }
   }
 
-  gridTest("SCD1 merge converges across micro-batch shuffling for randomly generated " +
-    "CDC events, seed")(Seq(1L, 2L, 3L)) { seed =>
-    runConvergenceTest(seed)
+  test("SCD1 merge converges across micro-batch shuffling for randomly generated CDC events") {
+    runConvergenceTest(resolveTestSeed())
   }
 }
