@@ -41,8 +41,44 @@ private[spark] object Tests {
 
   val INJECT_SHUFFLE_FETCH_FAILURES =
     ConfigBuilder("spark.testing.injectShuffleFetchFailures")
-      .doc("Injecting fetch failures for shuffle stages by providing an invalid BlockManager " +
-        "location for the first stage attempt. Testing only flag!")
+      .doc("Corrupt the registered MapStatus of the first successful attempt of partition 0 " +
+        "of every shuffle map stage, to induce downstream FetchFailed and stage retry. The " +
+        "timing of the corruption is governed by INJECT_SHUFFLE_FETCH_FAILURES_" +
+        "DOWNSTREAM_DELAY and INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY (deferred " +
+        "until N consumer task successes). Testing only.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY =
+    ConfigBuilder("spark.testing.injectShuffleFetchFailuresDownstreamDelay")
+      .doc("Used with INJECT_SHUFFLE_FETCH_FAILURES. Defer the producer's partition-0 " +
+        "corruption until N ShuffleMapStage consumer task successes have been observed. " +
+        "Default 1; set to 0 to corrupt at registration. Testing only.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "Downstream-success delay must be non-negative")
+      .createWithDefault(1)
+
+  val INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY =
+    ConfigBuilder("spark.testing.injectShuffleFetchFailuresResultStageDelay")
+      .doc("Used with INJECT_SHUFFLE_FETCH_FAILURES. Counterpart to " +
+        "INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY for ResultStage consumers. With the " +
+        "default 0, when a ResultStage is the consumer of a pending corruption it is corrupted " +
+        "before the result tasks dispatch, so the result stage has no completed tasks when " +
+        "INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE fires (the rollback would " +
+        "otherwise abort the result stage, since OSS Spark does not support rolling result " +
+        "stages back). Set to N > 0 to defer until N result-stage tasks have succeeded - this " +
+        "is the only way to actually exercise the result-stage abort path. Testing only.")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "Result-stage-success delay must be non-negative")
+      .createWithDefault(0)
+
+  val INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE =
+    ConfigBuilder("spark.testing.injectShuffleForceChecksumMismatchOnRecompute")
+      .doc("Used with INJECT_SHUFFLE_FETCH_FAILURES. Flag the recompute as checksum " +
+        "mismatched, forcing downstream `rollbackSucceedingStages`. Testing only.")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
