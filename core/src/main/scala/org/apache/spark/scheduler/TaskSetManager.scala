@@ -814,10 +814,6 @@ private[spark] class TaskSetManager(
     // SPARK-37300: when the task was already finished state, just ignore it,
     // so that there won't cause successful and tasksSuccessful wrong result.
     if (info.finished) {
-      // For ShuffleMapTasks, detect speculation duplicate push even on late-arriving results.
-      // This task already finished (likely an earlier attempt succeeded), but a speculative
-      // duplicate result arrived late. Check if it has a different mapId for the same partition.
-      detectStalePushIfShuffleTask(tid, info.index, result)
       if (dropTaskInfoAccumulablesOnTaskCompletion) {
         // SPARK-46383: Clear out the accumulables for a completed task to reduce accumulable
         // lifetime.
