@@ -394,7 +394,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     )
   }
 
-  test("SPARK-57502: Min/Max accept nanosecond-precision timestamp types and preserve them") {
+  test("SPARK-57103: Min/Max accept nanosecond-precision timestamp types and preserve them") {
     // Min/Max gate only on orderability (TypeUtils.checkForOrderingExpr), and the nanosecond
     // timestamp types are orderable AtomicTypes (SPARK-57103), so the analysis gate passes and the
     // result type preserves the input precision (dataType = child.dataType). No inputTypes / type

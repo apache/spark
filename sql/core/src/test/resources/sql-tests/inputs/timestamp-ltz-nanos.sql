@@ -174,7 +174,7 @@ SELECT TIMESTAMP_LTZ '1960-01-02 03:04:05.123456789 UTC' +
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0);
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;
 
--- SPARK-57502: MAX / MIN over nanosecond-precision TIMESTAMP_LTZ. The aggregate preserves the
+-- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_LTZ. The aggregate preserves the
 -- nanosecond type and orders by the sub-microsecond remainder; NULLs are ignored. Values are
 -- rendered in the session time zone (America/Los_Angeles).
 SELECT max(c), min(c) FROM VALUES

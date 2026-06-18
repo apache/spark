@@ -252,7 +252,7 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
   // through `findWiderDateTimeType`, which has no nanos arm yet, so they are out of scope here
   // (SPARK-57454); every column below is strictly same-precision.
 
-  test("SPARK-57502: max/min over nanosecond-precision timestamps preserve the input type") {
+  test("SPARK-57103: max/min over nanosecond-precision timestamps preserve the input type") {
     Seq(7, 8, 9).foreach { p =>
       val schema = new StructType()
         .add("ntz", TimestampNTZNanosType(p))
@@ -284,7 +284,7 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
-  test("SPARK-57502: max/min over nanos order by the sub-microsecond remainder") {
+  test("SPARK-57103: max/min over nanos order by the sub-microsecond remainder") {
     // Two values share the same epochMicros and differ only within the microsecond, so a correct
     // result must use the full `TimestampNanosVal` comparison and never truncate to micros.
     // Run on both the codegen (`CodeGenerator.genComp` AnyTimestampNanoType arm) and the
@@ -319,7 +319,7 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
-  test("SPARK-57502: max/min over all-NULL or empty nanos input return NULL") {
+  test("SPARK-57103: max/min over all-NULL or empty nanos input return NULL") {
     Seq(7, 8, 9).foreach { p =>
       val ntz = spark.createDataFrame(
         spark.sparkContext.parallelize(Seq(Row(null), Row(null))),
@@ -335,7 +335,7 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
-  test("SPARK-57502: group by a nanosecond key with per-group max/min") {
+  test("SPARK-57103: group by a nanosecond key with per-group max/min") {
     // The grouping keys k1/k2 share their epochMicros but differ within the microsecond, so
     // hashing/grouping (SPARK-57103) must distinguish sub-microsecond keys; the per-group max/min
     // then order by the remainder.
@@ -362,7 +362,7 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     assert(res.schema("k").dataType === TimestampNTZNanosType(9))
   }
 
-  test("SPARK-57502: min_by/max_by and greatest/least over same-precision nanos") {
+  test("SPARK-57103: min_by/max_by and greatest/least over same-precision nanos") {
     val df = spark.createDataFrame(
       spark.sparkContext.parallelize(Seq(
         Row("early", LocalDateTime.parse("2020-01-01T00:00:00.000000001")),
@@ -382,7 +382,7 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
         LocalDateTime.parse("2020-01-01T00:00:00.000000001")))
   }
 
-  test("SPARK-57502: max/min over nanos agree with the micros path when sub-micro digits are 0") {
+  test("SPARK-57103: max/min over nanos agree with the micros path when sub-micro digits are 0") {
     Seq(7, 8, 9).foreach { p =>
       val ldts = Seq(
         "2020-01-01T00:00:01.100000000",
