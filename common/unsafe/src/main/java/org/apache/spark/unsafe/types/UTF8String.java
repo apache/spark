@@ -723,7 +723,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   /**
    * Returns the code point starting from the byte at position `byteIndex`.
-   * If byte index is invalid, throws exception.
+   * If byte index is invalid, throws exception. If the sequence is truncated (the leader byte
+   * declares more bytes than remain), the missing continuation bytes are treated as 0.
    */
   public int codePointFrom(int byteIndex) {
     Objects.checkIndex(byteIndex, numBytes);
@@ -733,16 +734,26 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       case 1 ->
         b & 0x7F;
       case 2 ->
-        ((b & 0x1F) << 6) | (getByte(byteIndex + 1) & 0x3F);
+        ((b & 0x1F) << 6) | continuationByte(byteIndex + 1);
       case 3 ->
-        ((b & 0x0F) << 12) | ((getByte(byteIndex + 1) & 0x3F) << 6) |
-        (getByte(byteIndex + 2) & 0x3F);
+        ((b & 0x0F) << 12) | (continuationByte(byteIndex + 1) << 6) |
+        continuationByte(byteIndex + 2);
       case 4 ->
-        ((b & 0x07) << 18) | ((getByte(byteIndex + 1) & 0x3F) << 12) |
-        ((getByte(byteIndex + 2) & 0x3F) << 6) | (getByte(byteIndex + 3) & 0x3F);
+        ((b & 0x07) << 18) | (continuationByte(byteIndex + 1) << 12) |
+        (continuationByte(byteIndex + 2) << 6) | continuationByte(byteIndex + 3);
       default ->
         throw new IllegalStateException("Error in UTF-8 code point");
     };
+  }
+
+  /**
+   * Returns the low 6 bits of the UTF-8 continuation byte at `byteIndex`, or 0 when `byteIndex`
+   * is past the end of the string. The bounds check stops a truncated trailing multi-byte
+   * sequence (a leader byte whose declared width exceeds the bytes that remain) from reading
+   * past the end of the backing memory.
+   */
+  private int continuationByte(int byteIndex) {
+    return byteIndex < numBytes ? getByte(byteIndex) & 0x3F : 0;
   }
 
   public boolean matchAt(final UTF8String s, int pos) {
@@ -941,7 +952,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
    */
   public UTF8String copyUTF8String(int start, int end) {
-    int len = end - start + 1;
+    // Clamp to the bytes that actually remain so an out-of-range `end` (for example, derived
+    // from a truncated trailing multi-byte sequence) can't copy past the end of the backing
+    // memory.
+    int len = Math.min(end - start + 1, numBytes - start);
     byte[] newBytes = new byte[len];
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
     return UTF8String.fromBytes(newBytes);
@@ -1134,7 +1148,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
           stringCharPos[numChars - 1],
           stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
       if (trimString.find(searchChar, 0) >= 0) {
-        trimEnd -= stringCharLen[numChars - 1];
+        // Advance by the bytes the character actually occupies. A truncated trailing leader is
+        // shorter than the width its leader byte declares, so use the (clamped) search char.
+        trimEnd -= searchChar.numBytes;
       } else {
         break;
       }
