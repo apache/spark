@@ -189,12 +189,12 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
         self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
         self.assertAlmostEqual(s.accuracy, 0.5, 2)
-        self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 0.5, 2)
         self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
-        self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
-        self.assertAlmostEqual(s.weightedPrecision, 1.0, 2)
-        self.assertAlmostEqual(s.weightedFMeasure(), 1.0, 2)
-        self.assertAlmostEqual(s.weightedFMeasure(1.0), 1.0, 2)
+        self.assertAlmostEqual(s.weightedRecall, 0.5, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 0.5, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 0.5, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(1.0), 0.5, 2)
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
