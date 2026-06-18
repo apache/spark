@@ -30,6 +30,7 @@ import org.apache.parquet.schema.Type.Repetition._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.VariantMetadata
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.{EdgeInterpolationAlgorithm => SparkEdgeInterpolationAlgorithm}
@@ -341,8 +342,7 @@ class ParquetToSparkSchemaConverter(
           case time: TimeLogicalTypeAnnotation
             if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
             TimeType(TimeType.MICROS_PRECISION)
-          case _ =>
-            illegalType()
+          case _ => illegalType()
         }
 
       case INT96 =>
@@ -655,8 +655,15 @@ class SparkToParquetSchemaConverter(
       field: StructField,
       repetition: Type.Repetition,
       inShredded: Boolean): Type = {
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetTypeOps(field.dataType).map(_.convertToParquetType(field.name, repetition, inShredded))
+      .getOrElse(convertFieldDefault(field, repetition, inShredded))
+  }
 
-    field.dataType match {
+  private def convertFieldDefault(
+      field: StructField,
+      repetition: Type.Repetition,
+      inShredded: Boolean): Type = field.dataType match {
       // ===================
       // Simple atomic types
       // ===================
@@ -936,7 +943,6 @@ class SparkToParquetSchemaConverter(
       case _ =>
         throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
     }
-  }
 }
 
 private[sql] object ParquetSchemaConverter {
