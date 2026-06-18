@@ -215,15 +215,41 @@ trait SparkDateTimeUtils {
    * The input is the already-extracted `nanosWithinMicro` component (`0..999`), so truncation is
    * independent of the epoch sign of the original timestamp value.
    *
-   * Precisions outside `[7, 9]` are passed through unchanged because the surrounding timestamp
-   * nanos types validate the bound.
+   * `precision` is expected to originate from a validated `TimestampNTZNanosType` /
+   * `TimestampLTZNanosType` (which can only be constructed with `p` in [7, 9]), so it is not a
+   * user-reachable input here. An out-of-range value therefore indicates an internal caller bug
+   * and raises an internal error rather than silently retaining all sub-microsecond digits.
    */
-  private def truncateNanosWithinMicroToPrecision(nanosWithinMicro: Int, precision: Int): Int = {
+  private[sql] def truncateNanosWithinMicroToPrecision(
+      nanosWithinMicro: Int,
+      precision: Int): Int = {
     precision match {
       case 7 => (nanosWithinMicro / 100) * 100
       case 8 => (nanosWithinMicro / 10) * 10
-      case _ => nanosWithinMicro
+      case 9 => nanosWithinMicro
+      case _ =>
+        throw SparkException.internalError(
+          s"Fractional second precision $precision is out of range " +
+            s"[${TimestampNTZNanosType.MIN_PRECISION}, ${TimestampNTZNanosType.MAX_PRECISION}].")
     }
+  }
+
+  /**
+   * Floors a `TimestampNanosVal` to the given timestamp precision `p` in [7, 9] by truncating its
+   * sub-microsecond `nanosWithinMicro` component (see [[truncateNanosWithinMicroToPrecision]]).
+   * `epochMicros` is left untouched, so this only ever drops trailing sub-microsecond digits.
+   *
+   * Used by the same-family cross-precision nanosecond cast paths (`TIMESTAMP_NTZ(p1) ->
+   * TIMESTAMP_NTZ(p2)` and `TIMESTAMP_LTZ(q1) -> TIMESTAMP_LTZ(q2)`): widening (`p2 >= p1`) is
+   * lossless and returns the input unchanged, while narrowing (`p2 < p1`) floors toward `-inf` to
+   * the target precision step.
+   */
+  def truncateTimestampNanosToPrecision(
+      v: TimestampNanosVal,
+      precision: Int): TimestampNanosVal = {
+    val truncated = truncateNanosWithinMicroToPrecision(v.nanosWithinMicro.toInt, precision)
+    if (truncated == v.nanosWithinMicro) v
+    else TimestampNanosVal.fromParts(v.epochMicros, truncated.toShort)
   }
 
   /**
@@ -541,6 +567,35 @@ trait SparkDateTimeUtils {
   def stringToDateAnsi(s: UTF8String, context: QueryContext = null): Int = {
     stringToDate(s).getOrElse {
       throw ExecutionErrors.invalidInputInCastToDatetimeError(s, DateType, context)
+    }
+  }
+
+  /**
+   * Returns the number of fractional-second digits in a timestamp/time string, i.e. the count of
+   * decimal digits immediately following the first `.` (0 if there is no fractional part). In a
+   * well-formed timestamp/time string the only `.` is the one that introduces the seconds
+   * fraction, so this is sufficient to derive the precision `p` of a typed literal per the ANSI
+   * SQL rule (the precision of a timestamp literal is the number of digits in its
+   * `<seconds fraction>`). Digits beyond the fractional run (e.g. a trailing time zone) are not
+   * counted.
+   *
+   * This is intentionally a lightweight pre-parse digit counter: it does not validate that `s` is
+   * a well-formed timestamp. Callers use the returned count only to choose a parse path (the
+   * digit count routes between the microsecond path, the nanosecond path, and the ">9 digits"
+   * error); each of those paths then re-parses and validates the whole string, so a malformed
+   * input such as `"abcd.1234"` is still rejected downstream by the chosen parser. Consequently
+   * the result is meaningful only for strings that are otherwise valid timestamp/time literals.
+   */
+  def fractionalSecondsDigits(s: String): Int = {
+    val dot = s.indexOf('.')
+    if (dot < 0) {
+      0
+    } else {
+      var i = dot + 1
+      while (i < s.length && s.charAt(i) >= '0' && s.charAt(i) <= '9') {
+        i += 1
+      }
+      i - (dot + 1)
     }
   }
 

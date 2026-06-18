@@ -75,13 +75,12 @@ object AggUtils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val useHash = Aggregate.supportsHashAggregate(
+    val useHash = child.conf.useHashAggregation && Aggregate.supportsHashAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes), groupingExpressions)
 
     val forceObjHashAggregate = forceApplyObjectHashAggregate(child.conf)
-    val forceSortAggregate = forceApplySortAggregate(child.conf)
 
-    if (useHash && !forceSortAggregate && !forceObjHashAggregate) {
+    if (useHash && !forceObjHashAggregate) {
       HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         isStreaming = isStreaming,
@@ -97,7 +96,7 @@ object AggUtils {
       val useObjectHash = Aggregate.supportsObjectHashAggregate(
         aggregateExpressions, groupingExpressions)
 
-      if (forceObjHashAggregate || (objectHashEnabled && useObjectHash && !forceSortAggregate)) {
+      if (forceObjHashAggregate || (objectHashEnabled && useObjectHash)) {
         ObjectHashAggregateExec(
           requiredChildDistributionExpressions = requiredChildDistributionExpressions,
           isStreaming = isStreaming,
@@ -582,15 +581,6 @@ object AggUtils {
 
       case None => partialAggregate
     }
-  }
-
-  /**
-   * Returns whether a sort aggregate should be force applied.
-   * The config key is hard-coded because it's testing only and should not be exposed.
-   */
-  private def forceApplySortAggregate(conf: SQLConf): Boolean = {
-    Utils.isTesting &&
-      conf.getConfString("spark.sql.test.forceApplySortAggregate", "false") == "true"
   }
 
   /**

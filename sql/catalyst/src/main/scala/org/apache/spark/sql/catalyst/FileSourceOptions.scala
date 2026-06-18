@@ -45,6 +45,14 @@ class FileSourceOptions(
 
   val ignoreMissingFiles: Boolean = parameters.get(IGNORE_MISSING_FILES).map(_.toBoolean)
     .getOrElse(SQLConf.get.ignoreMissingFiles)
+
+  /**
+   * Whether the data source may read tar archives (.tar/.tar.gz/.tgz) by streaming their entries.
+   * Gated by [[SQLConf.ARCHIVE_FORMAT_READER_ENABLED]] and resolved at construction (on the driver,
+   * where SQLConf is instantiated) so the value is stable once the options are serialized to
+   * executors. Only the CSV data source currently honors this.
+   */
+  val archiveFormatEnabled: Boolean = SQLConf.get.getConf(SQLConf.ARCHIVE_FORMAT_READER_ENABLED)
 }
 
 object FileSourceOptions {

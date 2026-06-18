@@ -116,9 +116,6 @@ class SQLLastAttemptMetricPlanShapesSuite
 
     def isAQE: Boolean = SQLConf.get.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)
 
-    def hasStageRetries: Boolean = spark.sparkContext.conf
-      .getOption(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key).contains("true")
-
     def hasAQEReplans: Boolean = AQETestHelper.isForcedCancellationEnabled
   }
 
@@ -132,10 +129,10 @@ class SQLLastAttemptMetricPlanShapesSuite
   )(testTags: Tag*): Unit = {
     for {
       useAQE <- BOOLEAN_DOMAIN
-      stageRetries <- BOOLEAN_DOMAIN
+      failureMode <- FailureMode.all
       aqeReplans <- if (useAQE) BOOLEAN_DOMAIN else Seq(false)
     } test(s"$label - " +
-        s"useAQE=$useAQE, stageRetries=$stageRetries, aqeReplans=$aqeReplans",
+        s"useAQE=$useAQE, failureMode=$failureMode, aqeReplans=$aqeReplans",
         testTags: _*) {
 
       // There is some special handling for df.cache() / df.persist() / df.localCheckpoint() tests.
@@ -147,13 +144,12 @@ class SQLLastAttemptMetricPlanShapesSuite
         withSQLConf(extraSQLConfs.toSeq: _*) {
           val aqeRetryMetrics = if (aqeReplans) Seq(testSLAMetric) else Seq.empty
           AQETestHelper.withForcedCancellation(aqeRetryMetrics: _*) {
-            withSparkContextConf(
-                config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> stageRetries.toString) {
+            withSparkContextConf(failureMode.sparkContextConfs: _*) {
               val resultDf = spark.sql(sqlQuery)
               val _ = resultDf.collect()
 
               // normal value of the metrics shall not work with retries or replans
-              if (!stageRetries && !aqeReplans) {
+              if (!failureMode.causesStageRetries && !aqeReplans) {
                 metricValueCheck(Some(testSLAMetric.value))
               }
               // test LastRDDValue
@@ -487,4 +483,27 @@ object SQLLastAttemptMetricPlanShapesSuite {
   val LARGE_CARDINALITY: Int = 111
 
   val TABLE_NAME: String = "test_table"
+
+  sealed trait FailureMode {
+    def sparkContextConfs: Seq[(String, String)]
+    def causesStageRetries: Boolean
+  }
+  object FailureMode {
+    case object NoFailure extends FailureMode {
+      val sparkContextConfs: Seq[(String, String)] = Seq.empty
+      val causesStageRetries: Boolean = false
+    }
+    case object FetchFailure extends FailureMode {
+      val sparkContextConfs: Seq[(String, String)] =
+        Seq(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true")
+      val causesStageRetries: Boolean = true
+    }
+    case object ChecksumMismatch extends FailureMode {
+      val sparkContextConfs: Seq[(String, String)] = Seq(
+        config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true",
+        config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE.key -> "true")
+      val causesStageRetries: Boolean = true
+    }
+    val all: Seq[FailureMode] = Seq(NoFailure, FetchFailure, ChecksumMismatch)
+  }
 }

@@ -1336,9 +1336,10 @@ class FileBasedDataSourceSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-57166: nanosecond timestamp types are not supported in file data sources") {
-    // None of these built-in file formats support nanosecond-capable timestamps yet.
-    val unsupportedDataSources = Seq("parquet", "orc", "json", "csv", "xml")
+  test("SPARK-57166: nanosecond timestamp types are not supported in non-Parquet file sources") {
+    // These built-in file formats do not support nanosecond-capable timestamps. Parquet support is
+    // covered separately in ParquetTimestampNanosSuite.
+    val unsupportedDataSources = Seq("orc", "json", "csv", "xml")
     val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       // Test both v1 and v2 data sources.

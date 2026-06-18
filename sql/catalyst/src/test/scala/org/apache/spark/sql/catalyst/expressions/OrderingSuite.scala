@@ -183,9 +183,10 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
     GenerateOrdering.generate(Array.fill(5000)(sortOrder).toImmutableArraySeq)
   }
 
-  // SPARK-57103: ordering for nanosecond timestamp types. Not driven by the generic
-  // `atomicTypes` loop above because `RandomDataGenerator` does not yet support the new
-  // types (tracked separately in SPARK-57034); we hand-roll edge cases here instead.
+  // SPARK-57103: ordering for nanosecond timestamp types. The generic `atomicTypes` loop above
+  // now covers these types (SPARK-57034 added `RandomDataGenerator` support and SPARK-57259 added
+  // them to `DataTypeTestUtils`), but we still hand-roll the edge cases below (Long boundaries,
+  // tie-breakers, null ordering) that random generation is unlikely to hit.
   private def compareNanos(
       dataType: AtomicType,
       a: TimestampNanosVal,
