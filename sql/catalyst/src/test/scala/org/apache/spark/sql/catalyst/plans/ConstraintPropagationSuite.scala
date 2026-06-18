@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, DoubleType, IntegerType, LongType, StringType}
 
@@ -479,24 +480,63 @@ class ConstraintPropagationSuite extends PlanTest {
     }, s"Expected b >= 5 in inferred constraints; got: $inferred")
   }
 
-  test("non-deterministic predicate is not inferred after attr=literal substitution") {
+  test("infer constraints by substituting attr=literal bindings into EqualTo expressions") {
     val tr = LocalRelation($"k".int, $"v".int)
     val a = resolveColumn(tr, "k")
     val b = resolveColumn(tr, "v")
 
-    // b >= a.k + Rand(); after substituting a.k=5 the result is non-deterministic
-    val randExpr = Add(a, Cast(Rand(0L), IntegerType))
     val constraints = ExpressionSet(Seq(
       EqualTo(a, Literal(5)),
-      GreaterThanOrEqual(b, randExpr)))
+      EqualTo(b, Add(a, Literal(1)))))
 
     val helper = new ConstraintHelper {}
     val inferred = helper.inferAdditionalConstraints(constraints)
 
-    // Must not emit b >= (5 + Rand())
-    assert(!inferred.exists {
+    // b = a + 1 with a = 5 should infer b = 5 + 1 (foldable to 6)
+    assert(inferred.exists {
+      case EqualTo(attr: Attribute, rhs) if attr.semanticEquals(b) =>
+        rhs.foldable && rhs.eval(null) == 6
+      case _ => false
+    }, s"Expected b = 6 in inferred constraints; got: $inferred")
+  }
+
+  test("non-deterministic constraints inferred from literal substitution are filtered out") {
+    val tr = LocalRelation($"k".int, $"v".int)
+    val a = resolveColumn(tr, "k")
+    val b = resolveColumn(tr, "v")
+
+    // b >= a.k + Rand(); after substituting a.k=5 the result is non-deterministic.
+    // inferAdditionalConstraints may emit it, but the plan-level constraints filter must drop it.
+    val randExpr = Add(a, Cast(Rand(0L), IntegerType))
+    val condition = EqualTo(a, Literal(5)) && GreaterThanOrEqual(b, randExpr)
+    val plan = Filter(condition, tr.analyze)
+
+    assert(!plan.analyze.constraints.exists {
       case GreaterThanOrEqual(attr: Attribute, _) => attr.semanticEquals(b)
       case _ => false
-    }, s"Should not infer non-deterministic constraint; got: $inferred")
+    }, s"Should not keep non-deterministic constraint in plan constraints; " +
+      s"got: ${plan.analyze.constraints}")
+  }
+
+  test("do not infer constraints by substituting non-binary-stable collated attributes") {
+    // a is UTF8_LCASE (case-insensitive). a = 'hello' only tells us a is case-insensitively
+    // equal to 'hello'; it could still be 'HELLO'. Substituting a with 'hello' into a
+    // UTF8_BINARY comparison like b >= a would infer b >= 'hello', which is wrong.
+    val a = AttributeReference("a", StringType(CollationFactory.UTF8_LCASE_COLLATION_ID))()
+    val b = AttributeReference("b", StringType)()
+    val hello = Literal("hello")
+
+    val constraints = ExpressionSet(Seq(
+      EqualTo(a, hello),
+      GreaterThanOrEqual(b, a)))
+
+    val helper = new ConstraintHelper {}
+    val inferred = helper.inferAdditionalConstraints(constraints)
+
+    assert(!inferred.exists {
+      case GreaterThanOrEqual(attr: Attribute, lit: Literal) =>
+        attr.semanticEquals(b) && lit.semanticEquals(hello)
+      case _ => false
+    }, s"Should not infer b >= 'hello' for non-binary-stable collation; got: $inferred")
   }
 }

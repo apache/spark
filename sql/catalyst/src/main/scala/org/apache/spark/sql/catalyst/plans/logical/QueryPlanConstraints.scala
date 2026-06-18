@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils.isBinaryStable
 
 
 trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
@@ -56,9 +57,9 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 trait ConstraintHelper {
 
   /**
-   * Infers an additional set of constraints from a given set of equality constraints.
-   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
-   * additional constraint of the form `b = 5`.
+   * Infers an additional set of constraints from a given set of equality and inequality
+   * constraints. For example, (`a = 5`, `a = b`) returns `b = 5`, and (`a = 5`, `b >= a`)
+   * returns `b >= 5`.
    */
   def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
     var inferredConstraints = ExpressionSet()
@@ -71,31 +72,15 @@ trait ConstraintHelper {
         val candidateConstraints = predicates - eq - EqualNullSafe(l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
+      case eq @ EqualTo(l: Attribute, r: Literal) if isBinaryStable(l.dataType) =>
+        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
+      case eq @ EqualTo(l: Literal, r: Attribute) if isBinaryStable(r.dataType) =>
+        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
       case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
         inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), r, l)
       case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
         inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), l, r)
       case _ => // No inference
-    }
-
-    // Second pass: substitute (attr = literal) bindings into range/inequality predicates.
-    // When a.pt = '20260610' and b.pt >= f(a.pt) are both in the constraint set,
-    // substituting yields b.pt >= f('20260610'), which ConstantFolding then reduces to a
-    // literal comparison that can be pushed into the right-side scan as a partition filter.
-    val attrToLiteral: Map[Attribute, Literal] = predicates.collect {
-      case EqualTo(a: Attribute, l: Literal) => a -> l
-      case EqualTo(l: Literal, a: Attribute) => a -> l
-    }.toMap
-
-    if (attrToLiteral.nonEmpty) {
-      predicates.foreach {
-        case _: EqualTo => // already handled above
-        case pred if pred.deterministic && pred.references.exists(attrToLiteral.contains) =>
-          inferredConstraints += pred.transform {
-            case a: Attribute if attrToLiteral.contains(a) => attrToLiteral(a)
-          }
-        case _ =>
-      }
     }
 
     inferredConstraints -- constraints

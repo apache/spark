@@ -34,6 +34,11 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         PushPredicateThroughJoin,
         PushPredicateThroughNonJoin,
         InferFiltersFromConstraints,
+        // The improved constraint inference may produce additional cast-literal equalities
+        // (e.g. `cast(a as bigint) = 1L`) that are implied by simpler attribute-literal
+        // equalities (e.g. `a = 1`). Include `UnwrapCastInBinaryComparison` so these redundant
+        // inferred predicates are collapsed and deduplicated in the test plans.
+        UnwrapCastInBinaryComparison,
         CombineFilters,
         ConstantFolding,
         SimplifyBinaryComparison,
@@ -277,7 +282,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val originalLeft = testRelation1.subquery("left")
     val originalRight = testRelation2.where($"b" === 1L).subquery("right")
 
-    val left = testRelation1.where(IsNotNull($"a") && $"a".cast(LongType) === 1L)
+    val left = testRelation1.where(IsNotNull($"a") && ($"a" === 1))
       .subquery("left")
     val right = testRelation2.where(IsNotNull($"b") && $"b" === 1L).subquery("right")
 
@@ -291,8 +296,9 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       testConstraintsAfterJoin(
         originalLeft,
         originalRight,
-        testRelation1.where(IsNotNull($"a")).subquery("left"),
-        right,
+        testRelation1.where(IsNotNull($"a") && ($"a" === 1)).subquery("left"),
+        testRelation2.where(IsNotNull($"b") && ($"b" === 1L) &&
+          ($"b".attr.cast(IntegerType) === 1)).subquery("right"),
         Inner,
         condition)
     }
@@ -309,7 +315,13 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
 
     Seq(Some("left.a".attr.cast(LongType) === "right.b".attr),
       Some("right.b".attr === "left.a".attr.cast(LongType))).foreach { condition =>
-      testConstraintsAfterJoin(originalLeft, originalRight, left, right, Inner, condition)
+      testConstraintsAfterJoin(
+        originalLeft,
+        originalRight,
+        left,
+        testRelation2.where(IsNotNull($"b") && ($"b" === 1L)).subquery("right"),
+        Inner,
+        condition)
     }
 
     Seq(Some("left.a".attr === "right.b".attr.cast(IntegerType)),
@@ -431,8 +443,10 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery)
 
     // The optimized right side must carry the inferred range filters.
+    var joinFound = false
     optimized.foreach {
       case Join(_, rightChild, `joinType`, _, _) =>
+        joinFound = true
         val rightFilters = rightChild.collect { case Filter(cond, _) => cond }
         val allConds = rightFilters.flatMap(splitConjunctivePredicates)
         // b.v >= 5 and b.v <= 15 (or their canonicalized equivalents) must appear
@@ -446,6 +460,7 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
         }, s"Expected b.v <= 15 in right filter; found: $allConds")
       case _ =>
     }
+    assert(joinFound, "Expected a Join node in the optimized plan")
   }
 
 }
