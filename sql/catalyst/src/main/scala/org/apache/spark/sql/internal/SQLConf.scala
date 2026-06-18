@@ -2794,17 +2794,17 @@ object SQLConf {
       "are always listed, names ending in '._COPYING_' are always skipped, and '_'-prefixed " +
       "names containing '=' (partition directories) are always kept. This configuration is " +
       "effective only when using file-based sources such as Parquet, JSON and ORC. It can be " +
-      "overridden per read by the 'ignoredPathSegmentRegex' data source option. A regex that never " +
-      "matches (e.g. '(?!)') disables generic hidden-file filtering; note that directories it " +
-      "surfaces also participate in partition discovery, so a hidden directory next to " +
-      "partition directories causes a conflicting directory structures error unless " +
+      "overridden per read by the 'ignoredPathSegmentRegex' data source option. An empty string " +
+      "disables generic hidden-file filtering (an empty regex matches nothing); note that " +
+      "directories it surfaces also participate in partition discovery, so a hidden directory " +
+      "next to partition directories causes a conflicting directory structures error unless " +
       "'spark.sql.files.ignoreInvalidPartitionPaths' is enabled.")
-    .version("5.0.0")
+    .version("4.3.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .stringConf
-    .checkValue(v => v.nonEmpty && Try(Pattern.compile(v)).isSuccess,
-      "The value of spark.sql.files.ignoredPathSegmentRegex must be a non-empty valid Java regular " +
-      "expression. Use '(?!)' to disable hidden-file filtering.")
+    .checkValue(v => v.isEmpty || Try(Pattern.compile(v)).isSuccess,
+      "The value of spark.sql.files.ignoredPathSegmentRegex must be empty (to disable " +
+      "hidden-file filtering) or a valid Java regular expression.")
     .createWithDefault(HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX)
 
   val IGNORE_INVALID_PARTITION_PATHS = buildConf("spark.sql.files.ignoreInvalidPartitionPaths")

@@ -108,7 +108,7 @@ takes precedence over the configuration when both are set.
 Regardless of the regex, three rules always apply: names starting with `_metadata` or `_common_metadata` (Parquet summary files) are always listed, names ending in
 `._COPYING_` (in-flight copies) are always skipped, and `_`-prefixed names containing `=` (partition directories) are always kept.
 
-A regex that never matches, such as `(?!)`, disables the generic hidden-file filtering and surfaces hidden files, including Spark-internal marker files such as
+An empty string disables the generic hidden-file filtering (an empty regex matches nothing) and surfaces hidden files, including Spark-internal marker files such as
 `_SUCCESS` and files under `_temporary` directories (the three rules above still apply). Note the difference from `pathGlobFilter`: `pathGlobFilter` is an
 include-style glob applied to leaf file names only, while `ignoredPathSegmentRegex` is an exclude-style regex applied to every directory and file name component; the two
 can be combined, e.g. using `pathGlobFilter` to narrow the results of a relaxed `ignoredPathSegmentRegex`.

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.regex.Pattern
-
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
@@ -126,7 +124,8 @@ class InMemoryFileIndex(
     // The file status cache is keyed by path only, so cached entries must always hold the
     // default-filtered listing. Bypass the cache when a non-default ignoredPathSegmentRegex is in
     // effect, to neither serve nor store listings produced with a different filter.
-    val useFileStatusCache = ignoredPathSegmentRegex == HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX
+    val useFileStatusCache =
+      ignoredPathSegmentRegex == HadoopFSUtils.DEFAULT_IGNORED_PATH_SEGMENT_REGEX
     for (path <- paths) {
       val cachedFiles = if (useFileStatusCache) fileStatusCache.getLeafFiles(path) else None
       cachedFiles match {
@@ -165,7 +164,7 @@ object InMemoryFileIndex extends Logging {
       sparkSession.sessionState.conf.useListFilesFileSystemList.split(",").map(_.trim)
     val fileSourceOptions = new FileSourceOptions(CaseInsensitiveMap(parameters))
     val ignoreMissingFiles = fileSourceOptions.ignoreMissingFiles
-    val ignoredPathSegmentRegex = Pattern.compile(fileSourceOptions.ignoredPathSegmentRegex)
+    val ignoredPathSegmentRegex = fileSourceOptions.ignoredPathSegmentRegexPattern
     val useListFiles = try {
       val scheme = paths.head.getFileSystem(hadoopConf).getScheme
       paths.size == 1 && fileSystemList.contains(scheme)
@@ -176,14 +175,14 @@ object InMemoryFileIndex extends Logging {
       HadoopFSUtils.listFiles(
         path = paths.head,
         hadoopConf = hadoopConf,
-        filter = new PathFilterWrapper(filter, ignoredPathSegmentRegex),
+        filter = new PathFilterWrapper(filter),
         ignoredPathSegmentRegex = ignoredPathSegmentRegex)
     } else {
       HadoopFSUtils.parallelListLeafFiles(
         sc = sparkSession.sparkContext,
         paths = paths,
         hadoopConf = hadoopConf,
-        filter = new PathFilterWrapper(filter, ignoredPathSegmentRegex),
+        filter = new PathFilterWrapper(filter),
         ignoreMissingFiles = ignoreMissingFiles,
         ignoredPathSegmentRegex = ignoredPathSegmentRegex,
         ignoreLocality = sparkSession.sessionState.conf.ignoreDataLocality,
@@ -194,11 +193,10 @@ object InMemoryFileIndex extends Logging {
 
 }
 
-private class PathFilterWrapper(
-    val filter: PathFilter,
-    val ignoredPathSegmentRegex: Pattern) extends PathFilter with Serializable {
-  override def accept(path: Path): Boolean = {
-    (filter == null || filter.accept(path)) &&
-      !HadoopFSUtils.shouldFilterOutPathName(path.getName, ignoredPathSegmentRegex)
-  }
+// Delegates to the input-path filter only (with a null guard). The hidden-file filtering is owned
+// by HadoopFSUtils.listFiles / parallelListLeafFiles via their `ignoredPathSegmentRegex` argument,
+// which already evaluates the regex against every directory and file name, so re-applying it here
+// would be redundant.
+private class PathFilterWrapper(val filter: PathFilter) extends PathFilter with Serializable {
+  override def accept(path: Path): Boolean = filter == null || filter.accept(path)
 }

@@ -17,7 +17,6 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import java.util
-import java.util.regex.Pattern
 
 import scala.jdk.CollectionConverters._
 
@@ -59,7 +58,7 @@ abstract class FileTable(
     } else {
       // This is a non-streaming file based datasource.
       val ignoredPathSegmentRegex =
-        Pattern.compile(new FileSourceOptions(caseSensitiveMap).ignoredPathSegmentRegex)
+        new FileSourceOptions(caseSensitiveMap).ignoredPathSegmentRegexPattern
       val rootPathsSpecified = DataSource.checkAndGlobPathIfNecessary(paths, hadoopConf,
         checkEmptyGlobPath = true, checkFilesExist = true, enableGlobbing = globPaths,
         ignoredPathSegmentRegex = ignoredPathSegmentRegex)

@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{COUNT, PERCENT, TOTAL}
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.{expressions, InternalRow}
+import org.apache.spark.sql.catalyst.{expressions, FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -85,11 +85,8 @@ abstract class PartitioningAwareFileIndex(
       .getOrElse(sparkSession.sessionState.conf.ignoredPathSegmentRegex)
   }
 
-  private lazy val ignoredPathSegmentRegexPattern: Pattern = {
-    require(ignoredPathSegmentRegex.nonEmpty, "The 'ignoredPathSegmentRegex' option must be a non-empty " +
-      "regular expression. Use '(?!)' to disable hidden-file filtering.")
-    Pattern.compile(ignoredPathSegmentRegex)
-  }
+  private lazy val ignoredPathSegmentRegexPattern: Pattern =
+    FileSourceOptions.compileIgnoredPathSegmentRegex(ignoredPathSegmentRegex)
 
   override def listFiles(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {

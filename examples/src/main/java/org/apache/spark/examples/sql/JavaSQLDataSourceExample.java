@@ -157,9 +157,9 @@ public class JavaSQLDataSourceExample {
     // +-------------+
     // $example off:recursive_file_lookup$
     // $example on:ignored_path_segment_regex$
-    // "(?!)" surfaces files that are hidden by default (e.g. names starting with "_" or ".")
+    // An empty regex surfaces files hidden by default (e.g. names starting with "_" or ".")
     Dataset<Row> surfacedDF = spark.read().format("parquet")
-            .option("ignoredPathSegmentRegex", "(?!)")
+            .option("ignoredPathSegmentRegex", "")
             .load("examples/src/main/resources/dir1");
     surfacedDF.show();
     // $example off:ignored_path_segment_regex$

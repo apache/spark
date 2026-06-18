@@ -591,7 +591,7 @@ case class DataSource(
       checkFilesExist: Boolean): Seq[Path] = {
     val allPaths = caseInsensitiveOptions.get("path") ++ paths
     val ignoredPathSegmentRegex =
-      Pattern.compile(new FileSourceOptions(caseInsensitiveOptions).ignoredPathSegmentRegex)
+      new FileSourceOptions(caseInsensitiveOptions).ignoredPathSegmentRegexPattern
     DataSource.checkAndGlobPathIfNecessary(allPaths.toSeq, newHadoopConfiguration(),
       checkEmptyGlobPath, checkFilesExist, enableGlobbing = globPaths,
       ignoredPathSegmentRegex = ignoredPathSegmentRegex)
@@ -802,7 +802,8 @@ object DataSource extends Logging {
       checkFilesExist: Boolean,
       numThreads: Integer = 40,
       enableGlobbing: Boolean,
-      ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern): Seq[Path] = {
+      ignoredPathSegmentRegex: Pattern = HadoopFSUtils.defaultIgnoredPathSegmentRegexPattern)
+      : Seq[Path] = {
     val qualifiedPaths = pathStrings.map { pathString =>
       val path = new Path(pathString)
       val fs = path.getFileSystem(hadoopConf)
