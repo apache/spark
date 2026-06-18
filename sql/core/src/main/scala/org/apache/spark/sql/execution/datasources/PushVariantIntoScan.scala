@@ -41,26 +41,18 @@ case class VariantMetadata(
     // `[*]` is not supported.
     path: String,
     failOnError: Boolean,
-    timeZoneId: String,
-    // When set, this struct field is a synthetic cast-error companion paired with the data field
-    // of the given NAME in the same variant struct. The companion is populated by the reader
-    // with the offending value when the paired data field's strict cast raises
-    // INVALID_VARIANT_CAST. We pair by NAME (not struct ordinal) because later pruning or
-    // reordering of struct fields preserves names but may shift positions.
-    castErrorFor: Option[String] = None) {
+    timeZoneId: String) {
   // Produce a metadata contain one key-value pair. The key is the special `METADATA_KEY`.
-  // The value contains key-value pairs for `path`, `failOnError`, `timeZoneId`, and -- for
-  // companion fields only -- `castErrorFor`.
-  def toMetadata: Metadata = {
-    val inner = new MetadataBuilder()
-      .putString(VariantMetadata.PATH_KEY, path)
-      .putBoolean(VariantMetadata.FAIL_ON_ERROR_KEY, failOnError)
-      .putString(VariantMetadata.TIME_ZONE_ID_KEY, timeZoneId)
-    castErrorFor.foreach { name =>
-      inner.putString(VariantMetadata.CAST_ERROR_FOR_KEY, name)
-    }
-    new MetadataBuilder().putMetadata(VariantMetadata.METADATA_KEY, inner.build()).build()
-  }
+  // The value contains three key-value pairs for `path`, `failOnError`, and `timeZoneId`.
+  def toMetadata: Metadata =
+    new MetadataBuilder().putMetadata(
+      VariantMetadata.METADATA_KEY,
+      new MetadataBuilder()
+        .putString(VariantMetadata.PATH_KEY, path)
+        .putBoolean(VariantMetadata.FAIL_ON_ERROR_KEY, failOnError)
+        .putString(VariantMetadata.TIME_ZONE_ID_KEY, timeZoneId)
+        .build()
+    ).build()
 
   def parsedPath(): Array[VariantPathSegment] = {
     VariantPathParser.parse(path).getOrElse {
@@ -75,31 +67,6 @@ object VariantMetadata {
   val PATH_KEY = "path"
   val FAIL_ON_ERROR_KEY = "failOnError"
   val TIME_ZONE_ID_KEY = "timeZoneId"
-  // Optional metadata key marking a struct field as a synthetic cast-error companion. When
-  // present, the value is the NAME of the paired data field in the same variant struct. We tag
-  // in metadata (rather than by a field-name convention or sentinel path) so the marker can't
-  // collide with a user-supplied variant path, and so scan-layer schema rewrites that rename
-  // fields by ordinal preserve the marker.
-  //
-  // Example: with two strict-cast requested fields (b::int and obj.b::double) and one
-  // non-strict-cast requested field (try_cast(c as long)), the rewritten variant struct looks
-  // like:
-  // scalastyle:off line.size.limit
-  // struct<
-  //   "0": int    metadata = { path: "$.b",     failOnError: true,  ... },                  // data slot for b::int
-  //   "1": double metadata = { path: "$.obj.b", failOnError: true,  ... },                  // data slot for obj.b::double
-  //   "2": long   metadata = { path: "$.c",     failOnError: false, ... },                  // data slot for try_cast(c as long), no companion
-  //   "3": string metadata = { path: "$", castErrorFor: "0", ... },                         // companion paired with data field named "0"
-  //   "4": string metadata = { path: "$", castErrorFor: "1", ... }                          // companion paired with data field named "1"
-  // >
-  // scalastyle:on line.size.limit
-  val CAST_ERROR_FOR_KEY = "castErrorFor"
-
-  // Build the metadata for a synthetic cast-error companion. `dataFieldName` is the NAME of the
-  // paired data field in the same variant struct.
-  def castErrorCompanionMetadata(dataFieldName: String): Metadata =
-    VariantMetadata("$", failOnError = false, timeZoneId = "UTC",
-      castErrorFor = Some(dataFieldName)).toMetadata
 
   def isVariantStruct(s: StructType): Boolean =
     s.fields.length > 0 && s.fields.forall(_.metadata.contains(METADATA_KEY))
@@ -112,17 +79,10 @@ object VariantMetadata {
   // Parse the `VariantMetadata` from a metadata produced by `toMetadata`.
   def fromMetadata(metadata: Metadata): VariantMetadata = {
     val value = metadata.getMetadata(METADATA_KEY)
-    val castErrorFor =
-      if (value.contains(CAST_ERROR_FOR_KEY)) {
-        Some(value.getString(CAST_ERROR_FOR_KEY))
-      } else {
-        None
-      }
     VariantMetadata(
       value.getString(PATH_KEY),
       value.getBoolean(FAIL_ON_ERROR_KEY),
-      value.getString(TIME_ZONE_ID_KEY),
-      castErrorFor
+      value.getString(TIME_ZONE_ID_KEY)
     )
   }
 }
@@ -173,15 +133,6 @@ class VariantInRelation {
   // Final value: the ordinal of a requested field in the final struct of requested fields.
   val mapping = new HashMap[ExprId, HashMap[Seq[Int], HashMap[RequestedVariantField, Int]]]
 
-  lazy val deferCastErrorEnabled: Boolean =
-    SQLConf.get.getConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR)
-
-  // Cast to variant/string never triggers an invalid cast error, so there is no need to wrap.
-  def shouldWrapCastError(field: RequestedVariantField): Boolean = field.targetType match {
-    case _: VariantType | _: StringType => false
-    case _ => field.path.failOnError && deferCastErrorEnabled
-  }
-
   // Extract the SQL-struct path where the leaf is a variant.
   object StructPathToVariant {
     def unapply(expr: Expression): Option[HashMap[RequestedVariantField, Int]] = expr match {
@@ -222,8 +173,7 @@ class VariantInRelation {
       case _: VariantType =>
         mapping.get(attrId).flatMap(_.get(path)) match {
           case Some(fields) =>
-            val sorted = fields.toArray.sortBy(_._2)
-            var dataFields = sorted.map { case (field, ordinal) =>
+            var requestedFields = fields.toArray.sortBy(_._2).map { case (field, ordinal) =>
               StructField(ordinal.toString, field.targetType, metadata = field.path.toMetadata)
             }
             // Avoid producing an empty struct of requested fields. This is intended to simplify the
@@ -231,30 +181,13 @@ class VariantInRelation {
             // if the variant is not used, or only used in `IsNotNull/IsNull` expressions. The value
             // of the placeholder field doesn't matter, even if the scan source accidentally
             // contains such a field.
-            if (dataFields.isEmpty) {
+            if (requestedFields.isEmpty) {
               val placeholder = VariantMetadata("$.__placeholder_field__",
                 failOnError = false, timeZoneId = "UTC")
-              dataFields = Array(StructField("0", BooleanType,
+              requestedFields = Array(StructField("0", BooleanType,
                 metadata = placeholder.toMetadata))
             }
-            if (deferCastErrorEnabled) {
-              // Append a companion field for each strict cast. The reader populates it with the
-              // offending value on failure; the rewrite consumes both slots through
-              // `UnwrapVariantCastError(error, value)`. The companion's `castErrorFor` metadata
-              // stores the data field's NAME so the pairing survives later field renaming.
-              val companionDataNames = sorted.collect {
-                case (field, ordinal) if shouldWrapCastError(field) => ordinal.toString
-              }
-              val numData = dataFields.length
-              val companionFields = companionDataNames.zipWithIndex.map {
-                case (dataFieldName, idx) =>
-                  StructField((numData + idx).toString, StringType,
-                    metadata = VariantMetadata.castErrorCompanionMetadata(dataFieldName))
-              }
-              StructType(dataFields ++ companionFields)
-            } else {
-              StructType(dataFields)
-            }
+            StructType(requestedFields)
           case _ => dataType
         }
       case s: StructType if !VariantMetadata.isVariantStruct(s) =>
@@ -303,30 +236,6 @@ class VariantInRelation {
     case _ => expr.children.foreach(collectRequestedFields)
   }
 
-  // Build the access expression for a requested field. For fields that need cast-error deferral,
-  // wrap with `UnwrapVariantCastError` over the paired companion slot; otherwise return the bare
-  // `GetStructField`.
-  private def accessRequestedField(
-      fields: HashMap[RequestedVariantField, Int],
-      field: RequestedVariantField,
-      v: Expression): Expression = {
-    val ordinal = fields(field)
-    val value = GetStructField(v, ordinal)
-    if (shouldWrapCastError(field)) {
-      // Locate the companion: the companion's `castErrorFor` equals the data field's name.
-      val variantStruct = v.dataType.asInstanceOf[StructType]
-      val dataFieldName = variantStruct.fields(ordinal).name
-      val companionOrdinal = variantStruct.fields.indexWhere { f =>
-        VariantMetadata.fromMetadata(f.metadata).castErrorFor.contains(dataFieldName)
-      }
-      assert(companionOrdinal >= 0,
-        s"missing cast-error companion for data field $dataFieldName in ${variantStruct.sql}")
-      UnwrapVariantCastError(GetStructField(v, companionOrdinal), value)
-    } else {
-      value
-    }
-  }
-
   def rewriteExpr(
       expr: Expression,
       attributeMap: Map[ExprId, AttributeReference]): Expression = {
@@ -339,13 +248,13 @@ class VariantInRelation {
       case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _) if path.foldable =>
         // Rewrite the attribute in advance, rather than depending on the last branch to rewrite it.
         // Ww need to avoid the `v@StructPathToVariant(fields)` branch to rewrite the child again.
-        accessRequestedField(fields, RequestedVariantField(g), rewriteAttribute(v))
+        GetStructField(rewriteAttribute(v), fields(RequestedVariantField(g)))
       case c@Cast(v@StructPathToVariant(fields), _, _, _) =>
-        accessRequestedField(fields, RequestedVariantField(c), rewriteAttribute(v))
+        GetStructField(rewriteAttribute(v), fields(RequestedVariantField(c)))
       case i@IsNotNull(StructPath(_, _)) => rewriteAttribute(i)
       case i@IsNull(StructPath(_, _)) => rewriteAttribute(i)
       case v@StructPathToVariant(fields) =>
-        accessRequestedField(fields, RequestedVariantField.fullVariant, rewriteAttribute(v))
+        GetStructField(rewriteAttribute(v), fields(RequestedVariantField.fullVariant))
       case a: Attribute => attributeMap.getOrElse(a.exprId, a)
     }
   }

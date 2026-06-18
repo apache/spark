@@ -65,12 +65,13 @@ case class ParquetScan(
   }
 
   private def rewriteVariantPushdownSchema(schema: StructType): StructType = {
-    // Field names follow the defer-cast-error contract: companion metadata refers to
-    // the paired data field by its group-local name.
+    // Group extractions by column name and build extracted schemas
     val variantSchemaMap: Map[Seq[String], StructType] = pushedVariantExtractions
       .groupBy(e => e.columnName().toSeq)
       .map { case (colName, extractions) =>
+        // Build struct schema with ordinal-named fields for each extraction
         var fields = extractions.zipWithIndex.map { case (extraction, idx) =>
+          // Attach VariantMetadata so Parquet reader knows this is a variant extraction
           StructField(idx.toString, extraction.expectedDataType(), nullable = true,
             extraction.metadata())
         }

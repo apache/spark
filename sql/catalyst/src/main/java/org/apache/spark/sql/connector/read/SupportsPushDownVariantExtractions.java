@@ -39,31 +39,6 @@ import org.apache.spark.annotation.Experimental;
 public interface SupportsPushDownVariantExtractions extends ScanBuilder {
 
   /**
-   * Returns whether this scan supports deferring strict variant cast errors.
-   * <p>
-   * When this returns false, Spark will not push down variant extractions if cast-error deferral
-   * is enabled.
-   * <p>
-   * Returning true opts the scan into receiving synthetic cast-error companion extractions.
-   * Companion extractions are marked by a {@code castErrorFor} metadata key. Within each
-   * {@link VariantExtraction#columnName()} group, the scan output field for the i-th pushed
-   * extraction MUST be named {@code Integer.toString(i)}. A companion extraction's
-   * {@code castErrorFor} value names its paired data field in that same output struct.
-   * <p>
-   * Implementations may still reject individual extractions via
-   * {@link #pushVariantExtractions(VariantExtraction[])}. However, for any data extraction that has
-   * a cast-error companion, accepting the data extraction requires accepting its companion
-   * extraction as well. Accepting only one side of the pair is invalid because Spark rewrites the
-   * consumed expression as a combined value/companion access.
-   * <p>
-   * A scan that supports this must preserve the companion metadata and populate the companion
-   * field with the offending value when the paired strict cast fails, or null otherwise.
-   *
-   * @return true if this scan supports deferring strict variant cast errors
-   */
-  default boolean supportsDeferCastError() { return false; }
-
-  /**
    * Pushes down variant field extractions to the data source.
    * <p>
    * Each element in the input array represents one field extraction operation from a variant

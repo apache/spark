@@ -103,8 +103,6 @@ case class ParquetScanBuilder(
   }
 
   // SupportsPushDownVariantExtractions API implementation
-  override def supportsDeferCastError(): Boolean = true
-
   override def pushVariantExtractions(extractions: Array[VariantExtraction]): Array[Boolean] = {
     // Parquet supports variant pushdown for all variant extractions
     pushedVariantExtractions = extractions
