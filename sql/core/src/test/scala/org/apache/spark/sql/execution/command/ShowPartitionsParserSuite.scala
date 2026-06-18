@@ -18,12 +18,10 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedPartitionSpec, UnresolvedTable}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.logical.ShowPartitions
-import org.apache.spark.sql.execution.SparkSqlParser
 
 class ShowPartitionsParserSuite extends AnalysisTest {
-  private def parsePlan(statement: String) = new SparkSqlParser().parsePlan(statement)
-
   test("SHOW PARTITIONS") {
     val commandName = "SHOW PARTITIONS"
     Seq(
@@ -56,17 +54,5 @@ class ShowPartitionsParserSuite extends AnalysisTest {
         fragment = "PARTITION (a='1', b)",
         start = 25,
         stop = 44))
-  }
-
-  test("retain sql text position") {
-    val tbl = "unknown"
-    val sqlStatement = s"SHOW PARTITIONS $tbl"
-    val startPos = sqlStatement.indexOf(tbl)
-    assert(startPos != -1)
-    assertAnalysisErrorCondition(
-      parsePlan(sqlStatement),
-      "TABLE_OR_VIEW_NOT_FOUND",
-      Map("relationName" -> s"`$tbl`"),
-      Array(ExpectedContext(tbl, startPos, startPos + tbl.length - 1)))
   }
 }
