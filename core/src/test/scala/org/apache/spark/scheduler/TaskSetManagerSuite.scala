@@ -2996,6 +2996,57 @@ class TaskSetManagerSuite
       s"Expected staleMapIndexes to contain mapIndex 0, got $staleMapIndexes")
   }
 
+  test("SPARK-33235: late-arriving result for finished task marks stale partitionId") {
+    // This tests the info.finished branch (path A) of handleSuccessfulTask, where a
+    // duplicate task result arrives after the task is already marked finished. Unlike
+    // the killed-by-other-attempt path (tested in SPARK-57491), this path handles
+    // late-arriving results that are not explicitly killed.
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    sc.conf.set(config.SPECULATION_ENABLED, false)
+
+    val taskSet = FakeTask.createShuffleMapTaskSet(2, 0, 0,
+      Seq(TaskLocation("host1", "exec1")),
+      Seq(TaskLocation("host2", "exec2")))
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+
+    // Register shuffle in MapOutputTrackerMaster so detectStalePushIfShuffleTask can find it
+    val mapOutputTrackerMaster = sched.mapOutputTracker
+    val shuffleId = taskSet.shuffleId.get
+    mapOutputTrackerMaster.registerShuffle(shuffleId, 2, 2)
+
+    // Offer resources and start both tasks
+    val task0 = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)._1.get
+    val task1 = manager.resourceOffer("exec2", "host2", PROCESS_LOCAL)._1.get
+    assert(task0.index === 0)
+    assert(task1.index === 1)
+
+    // Advance clock so tasks have been running long enough
+    clock.advance(1)
+
+    // Complete task 0 successfully with a MapStatus
+    val mapStatus0 = MapStatus(BlockManagerId("exec1", "host1", 1000), Array(1L, 1L), mapTaskId = 0)
+    val result0 = createMapStatusTaskResult(mapStatus0, accumUpdatesByTask(0))
+    manager.handleSuccessfulTask(task0.taskId, result0)
+    assert(sched.endedTasks(task0.index) === Success)
+
+    // Now a duplicate result arrives for task 0 (same attempt, late arrival).
+    // handleSuccessfulTask will see info.finished=true and call detectStalePushIfShuffleTask.
+    val dupMapStatus = MapStatus(
+      BlockManagerId("exec1", "host1", 1000), Array(1L, 1L), mapTaskId = 0)
+    val dupResult = createMapStatusTaskResult(dupMapStatus, accumUpdatesByTask(0))
+    manager.handleSuccessfulTask(task0.taskId, dupResult)
+
+    // Verify that partition 0 is tracked as stale even on the finished-task path
+    val staleMapIndexes = mapOutputTrackerMaster.getStaleMapIndexes(shuffleId)
+    assert(staleMapIndexes.contains(0),
+      s"Expected staleMapIndexes to contain mapIndex 0 on finished-task path, got $staleMapIndexes")
+  }
+
   private def createMapStatusTaskResult(
       mapStatus: MapStatus,
       accumUpdates: Seq[AccumulatorV2[_, _]],

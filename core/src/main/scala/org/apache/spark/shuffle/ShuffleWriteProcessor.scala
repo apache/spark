@@ -21,7 +21,7 @@ import org.apache.spark.{ShuffleDependency, SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{NUM_MERGER_LOCATIONS, SHUFFLE_ID, STAGE_ID}
 import org.apache.spark.scheduler.MapStatus
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.util.PostStatusUpdateListener
 
 /**
  * The interface for customizing shuffle write process. The driver create a ShuffleWriteProcessor
@@ -81,14 +81,18 @@ private[spark] class ShuffleWriteProcessor extends Serializable with Logging {
               logDebug(s"Starting pushing blocks for the task ${context.taskAttemptId()}")
               val dataFile = resolver.getDataFile(dep.shuffleId, mapId)
               val blockPusher = new ShuffleBlockPusher(SparkEnv.get.conf)
-              // Register a completion listener to defer push until the task succeeds.
-              // This prevents killed/failed tasks from wasting cluster resources on push.
+              // Register a post-status-update listener to defer push until after the task
+              // result has been sent to the driver. This ensures the driver processes the
+              // task result (and can mark stale partitions from speculative duplicates)
+              // before any push data reaches the merger, avoiding stale data being merged
+              // without detection.
+              //
               // The listener callback runs on the Task thread and only does a lightweight
               // submitTask; actual push I/O runs on BLOCK_PUSHER_POOL threads.
-              context.addTaskCompletionListener(new TaskCompletionListener {
-                override def onTaskCompletion(context: TaskContext): Unit = {
+              context.addPostStatusUpdateListener(new PostStatusUpdateListener {
+                override def onStatusUpdateSent(context: TaskContext): Unit = {
                   if (!context.isInterrupted() && !context.isFailed()) {
-                    logDebug(s"Task ${context.taskAttemptId()} completed successfully, " +
+                    logDebug(s"Task ${context.taskAttemptId()} status update sent, " +
                       s"proceeding with shuffle block push for shuffle ${dep.shuffleId}")
                     blockPusher.initiateBlockPush(
                       dataFile, writer.getPartitionLengths(), dep, mapIndex)
