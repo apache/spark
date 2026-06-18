@@ -644,3 +644,51 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH"
   } ]
 }
+
+
+-- !query
+SELECT unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query schema
+struct<unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss):bigint>
+-- !query output
+1577885075
+
+
+-- !query
+SELECT to_unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query schema
+struct<to_unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss):bigint>
+-- !query output
+1577885075
+
+
+-- !query
+SELECT unix_timestamp('2020-01-01 13:24:35.999999999' :: timestamp_ntz(7))
+-- !query schema
+struct<unix_timestamp(CAST(2020-01-01 13:24:35.999999999 AS TIMESTAMP_NTZ(7)), yyyy-MM-dd HH:mm:ss):bigint>
+-- !query output
+1577885075
+
+
+-- !query
+SELECT to_unix_timestamp('2020-01-01 13:24:35.000000001' :: timestamp_ntz(9))
+-- !query schema
+struct<to_unix_timestamp(CAST(2020-01-01 13:24:35.000000001 AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss):bigint>
+-- !query output
+1577885075
+
+
+-- !query
+SELECT unix_timestamp(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000')
+-- !query schema
+struct<unix_timestamp(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000', yyyy-MM-dd HH:mm:ss):bigint>
+-- !query output
+0
+
+
+-- !query
+SELECT unix_timestamp(NULL :: timestamp_ntz(9)), to_unix_timestamp(NULL :: timestamp_ntz(9))
+-- !query schema
+struct<unix_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss):bigint,to_unix_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss):bigint>
+-- !query output
+NULL	NULL
