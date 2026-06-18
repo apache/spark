@@ -310,7 +310,7 @@ private class PushBasedFetchHelper(
    * @param shuffleBlockId ShuffleMergedBlockId to be checked
    * @param address BlockManagerId of push-based shuffle service
    * @param chunkBitmaps Chunks bitmap from push-based shuffle service site
-   * @return true if the merged block is clean (no stale data), false if stale data detected
+   * @return false if any stale-marked mapIndex is present in this block (forcing fallback), true otherwise
    */
   private[this] def checkStaleMapIdInMergedBlock(
       shuffleBlockId: ShuffleMergedBlockId,

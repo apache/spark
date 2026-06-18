@@ -1718,7 +1718,7 @@ private[spark] object MapOutputTracker extends Logging {
   /**
    * Serialize a set of stale (duplicate) mapIds into a compact byte array.
    * Uses DataOutputStream for a simple, efficient binary format:
-   * [int: count][long: mapId1][long: mapId2]...
+   * [int: count][int: mapId1][int: mapId2]...
    * This is intentionally lightweight compared to serializeOutputStatuses because
    * staleMapIds is typically small (only non-empty during speculation retries).
    */
@@ -1738,7 +1738,7 @@ private[spark] object MapOutputTracker extends Logging {
   }
 
   /**
-   * Deserialize a byte array produced by [[serializeStaleMapIds]] back into a HashSet of Long.
+   * Deserialize a byte array produced by [[serializeStaleMapIds]] back into a HashSet of Int.
    */
   def deserializeStaleMapIds(bytes: Array[Byte]): java.util.HashSet[Int] = {
     val dupMapIdIn = new DataInputStream(new ByteArrayInputStream(bytes))
