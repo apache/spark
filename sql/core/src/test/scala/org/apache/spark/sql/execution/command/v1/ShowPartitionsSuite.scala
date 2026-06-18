@@ -268,4 +268,30 @@ class ShowPartitionsSuite extends ShowPartitionsSuiteBase with CommandSuiteBase 
         Row("""{"partitions":[{"part":"__HIVE_DEFAULT_PARTITION__"}]}"""))
     }
   }
+
+  test("partition value containing '/' AS JSON") {
+    withTable("slash_part") {
+      sql(s"CREATE TABLE slash_part (col1 INT, p STRING) $defaultUsing PARTITIONED BY (p)")
+      sql("INSERT INTO TABLE slash_part PARTITION (p = 'a/b') SELECT 0")
+      checkAnswer(
+        sql("SHOW PARTITIONS slash_part AS JSON"),
+        Row("""{"partitions":[{"p":"a%2Fb"}]}"""))
+      // Filtering by the escaped spec also works and returns the same encoded value.
+      checkAnswer(
+        sql("SHOW PARTITIONS slash_part PARTITION (p = 'a/b') AS JSON"),
+        Row("""{"partitions":[{"p":"a%2Fb"}]}"""))
+    }
+  }
+
+  test("partition value containing '=' AS JSON") {
+    // '=' is encoded as '%3D'; splitting on the first '=' in each segment is still
+    // correct because a column name never contains an unencoded '='.
+    withTable("eq_part") {
+      sql(s"CREATE TABLE eq_part (col1 INT, p STRING) $defaultUsing PARTITIONED BY (p)")
+      sql("INSERT INTO TABLE eq_part PARTITION (p = 'a=b') SELECT 0")
+      checkAnswer(
+        sql("SHOW PARTITIONS eq_part AS JSON"),
+        Row("""{"partitions":[{"p":"a%3Db"}]}"""))
+    }
+  }
 }
