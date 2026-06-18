@@ -86,15 +86,14 @@ class SeriesStringOpsAdvMixin:
                 lambda x: x.str.findall("wh.*", flags=re.IGNORECASE), self.pser, ignore_null=True
             )
 
-        pser = pd.Series(["abc-123 def-456", "no match"])
+        pser = pd.Series(["abc-123 def-456", "no match", None])
         pattern = "([a-z]+)-([0-9]+)"
-        expected = pser.str.findall(pattern).map(lambda matches: [list(match) for match in matches])
-        actual = (
-            ps.from_pandas(pser)
-            .str.findall(pattern)
-            .to_pandas()
-            .map(lambda matches: [list(match) for match in matches])
-        )
+
+        def normalize_matches(matches):  # type: ignore[no-untyped-def]
+            return [list(match) for match in matches] if isinstance(matches, list) else matches
+
+        expected = pser.str.findall(pattern).map(normalize_matches)
+        actual = ps.from_pandas(pser).str.findall(pattern).to_pandas().map(normalize_matches)
         self.assert_eq(actual, expected)
 
     def test_string_index(self):
