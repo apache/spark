@@ -340,5 +340,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows10.length === 2)
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
+
+    // SPARK-57364: verify MONTH truncation pushes down correctly (not as 'IW')
+    val df11 = sql(s"SELECT name FROM $tbl WHERE trunc(date1, 'MONTH') = date'2022-05-01'")
+    checkFilterPushed(df11)
+    val rows11 = df11.collect()
+    assert(rows11.length === 2)
+    assert(rows11(0).getString(0) === "amy")
+    assert(rows11(1).getString(0) === "alex")
   }
 }
