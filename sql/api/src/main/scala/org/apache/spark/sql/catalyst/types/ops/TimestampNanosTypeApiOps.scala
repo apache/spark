@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types.ops
+package org.apache.spark.sql.catalyst.types.ops
 
 import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 
@@ -124,12 +124,14 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
  * @param t
  *   The TimestampLTZNanosType with precision information
  * @param zoneId
- *   The time zone LTZ values are rendered in (LTZ is zone-aware). `TypeApiOps.apply` threads in
- *   the session zone: the cast's resolved zone for CAST, or the session-local time zone config
- *   for zone-less render callers (Row JSON via formatExternal).
+ *   The time zone LTZ values are rendered in (LTZ is zone-aware). Passed by-name and forced only
+ *   when the formatter is first built, so non-rendering callers never evaluate it. The factories
+ *   thread it in: `TypeApiOps.apply` passes the cast's resolved zone (CAST) or the session-local
+ *   time zone (zone-less callers such as Row JSON); the catalyst `TimestampLTZNanosTypeOps`
+ *   passes the session-local time zone for the server-side `TypeOps` path.
  * @since 4.3.0
  */
-class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: ZoneId)
+class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: => ZoneId)
     extends TimestampNanosTypeApiOps {
   override def dataType: TimestampLTZNanosType = t
   override protected def sqlTypeName: String = "TIMESTAMP_LTZ"

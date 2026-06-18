@@ -30,7 +30,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.arrow.{ArrowFieldWriter, TimeWriter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, TimeType}
-import org.apache.spark.sql.types.ops.TimeTypeApiOps
 
 /**
  * Server-side (catalyst) operations for TimeType.
