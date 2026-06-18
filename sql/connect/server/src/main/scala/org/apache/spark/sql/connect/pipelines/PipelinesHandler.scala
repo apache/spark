@@ -22,6 +22,7 @@ import scala.util.Using
 
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkException
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{ExecutePlanResponse, PipelineCommandResult, Relation, ResolvedIdentifier}
 import org.apache.spark.connect.proto.PipelineCommand.DefineFlow.AutoCdcFlowDetails
@@ -563,10 +564,24 @@ private[connect] object PipelinesHandler extends Logging {
 
       // Rethrow any exceptions that caused the pipeline run to fail so that the exception is
       // propagated back to the SC client / CLI.
-      runFailureEvent.foreach { event =>
-        throw event.error.get
-      }
+      runFailureEvent.foreach(throwRunFailure)
     }
+  }
+
+  /**
+   * Rethrows the failure behind a terminal run-failure event so it reaches the Spark Connect
+   * client. Most failures carry the underlying cause (e.g. a flow's QueryExecutionFailure), but
+   * some termination reasons (UnexpectedRunFailure, FailureStoppingFlow) have none. When the cause
+   * is absent, throw a PIPELINE_RUN_FAILED error built from the event message rather than calling
+   * Option.get, which would throw a NoSuchElementException and hide the real failure. Using
+   * PIPELINE_RUN_FAILED instead of INTERNAL_ERROR avoids mislabeling operational failures as bugs.
+   */
+  private[connect] def throwRunFailure(failureEvent: PipelineEvent): Nothing = {
+    throw failureEvent.error.getOrElse(
+      new SparkException(
+        errorClass = "PIPELINE_RUN_FAILED",
+        messageParameters = Map("message" -> failureEvent.message),
+        cause = null))
   }
 
   /**
