@@ -705,7 +705,7 @@ object SparkConnectClient {
   private val DEFAULT_USER_AGENT: String = "_SPARK_CONNECT_SCALA"
 
   private val AUTH_TOKEN_META_DATA_KEY: Metadata.Key[String] =
-    Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
+    Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
 
   // for internal tests
   private[sql] def apply(channel: ManagedChannel): SparkConnectClient = {

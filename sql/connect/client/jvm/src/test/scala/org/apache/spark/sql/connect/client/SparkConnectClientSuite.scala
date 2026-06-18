@@ -18,13 +18,13 @@ package org.apache.spark.sql.connect.client
 
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.{Base64, UUID}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{Executor, TimeUnit}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => PAny, StringValue}
-import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
+import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.concurrent.Eventually
@@ -823,6 +823,28 @@ class SparkConnectClientSuite extends ConnectFunSuite {
       // No BINARY_BYTE_MARSHALLER header.
       assert(!headerInterceptor.headers.exists(_.containsKey(key)))
     }
+  }
+
+  test("SPARK-57336: access token is sent in the standard Authorization header") {
+    val token = "test-token-12345"
+    val creds = new SparkConnectClient.AccessTokenCallCredentials(token)
+
+    var captured: Option[Metadata] = None
+    var failure: Option[Status] = None
+    val applier = new CallCredentials.MetadataApplier {
+      override def apply(headers: Metadata): Unit = captured = Some(headers)
+      override def fail(status: Status): Unit = failure = Some(status)
+    }
+    val sameThreadExecutor = new Executor {
+      override def execute(command: Runnable): Unit = command.run()
+    }
+
+    creds.applyRequestMetadata(null, sameThreadExecutor, applier)
+
+    val authorizationKey = Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
+    assert(failure.isEmpty, s"unexpected failure: ${failure.orNull}")
+    assert(captured.isDefined)
+    assert(captured.get.get(authorizationKey) === s"Bearer $token")
   }
 }
 
