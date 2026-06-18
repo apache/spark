@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.expressions.Literal
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -213,13 +214,13 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
   }
 
   override def reducer(
-      thisParams: ReducibleParameters,
+      thisParams: Array[Literal[_]],
       otherFunc: ReducibleFunction[_, _],
-      otherParams: ReducibleParameters): Reducer[Int, Int] = {
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
 
     if (otherFunc == BucketFunction) {
-      val thisNumBuckets = thisParams.getInt(0)
-      val otherNumBuckets = otherParams.getInt(0)
+      val thisNumBuckets = thisParams(0).value().asInstanceOf[Int]
+      val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
 
       val gcd = this.gcd(thisNumBuckets, otherNumBuckets)
       if (gcd > 1 && gcd != thisNumBuckets) {
@@ -240,7 +241,7 @@ case class BucketReducer(divisor: Int) extends Reducer[Int, Int] {
 
 /**
  * A bucket function that only overrides the deprecated `reducer(int, func, int)` method,
- * not the new `reducer(ReducibleParameters, func, ReducibleParameters)` method.
+ * not the new `reducer(Literal[], func, Literal[])` method.
  *
  * Used to verify that the default implementation of the new method correctly falls back
  * to the deprecated int-based API, so legacy implementations continue to work.
@@ -260,6 +261,45 @@ object LegacyBucketFunction extends ScalarFunction[Int] with ReducibleFunction[I
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
     if (otherFunc == LegacyBucketFunction) {
+      val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+      if (gcd > 1 && gcd != thisNumBuckets) {
+        return BucketReducer(gcd)
+      }
+    }
+    null
+  }
+}
+
+/**
+ * A bucket function that implements BOTH reducer overloads: the deprecated `reducer(int, ..., int)`
+ * always returns null (not reducible via the old API), while the new `reducer(Literal[], ...)`
+ * returns a GCD-based reducer. Used to verify that the dispatch falls back to the generalized
+ * overload when the deprecated one returns null (not only when it throws).
+ */
+object DualApiBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "dual_bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+
+  // Deprecated API: intentionally signals "not reducible" via null (not via an exception).
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = null
+
+  // New API: a real GCD-based reducer.
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
+    if (otherFunc == DualApiBucketFunction) {
+      val thisNumBuckets = thisParams(0).value().asInstanceOf[Int]
+      val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
       val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
       if (gcd > 1 && gcd != thisNumBuckets) {
         return BucketReducer(gcd)
@@ -328,13 +368,13 @@ object TruncateFunction
   }
 
   override def reducer(
-      thisParams: ReducibleParameters,
+      thisParams: Array[Literal[_]],
       otherFunc: ReducibleFunction[_, _],
-      otherParams: ReducibleParameters): Reducer[UTF8String, UTF8String] = {
+      otherParams: Array[Literal[_]]): Reducer[UTF8String, UTF8String] = {
 
     if (otherFunc == TruncateFunction) {
-      val thisWidth = thisParams.getInt(0)
-      val otherWidth = otherParams.getInt(0)
+      val thisWidth = thisParams(0).value().asInstanceOf[Int]
+      val otherWidth = otherParams(0).value().asInstanceOf[Int]
       val smallerWidth = math.min(thisWidth, otherWidth)
 
       if (smallerWidth != thisWidth) {
@@ -378,12 +418,12 @@ object IntegerTruncateFunction
   }
 
   override def reducer(
-      thisParams: ReducibleParameters,
+      thisParams: Array[Literal[_]],
       otherFunc: ReducibleFunction[_, _],
-      otherParams: ReducibleParameters): Reducer[Int, Int] = {
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
     if (otherFunc == IntegerTruncateFunction) {
-      val thisWidth = thisParams.getInt(0)
-      val otherWidth = otherParams.getInt(0)
+      val thisWidth = thisParams(0).value().asInstanceOf[Int]
+      val otherWidth = otherParams(0).value().asInstanceOf[Int]
       val common = lcm(thisWidth, otherWidth)
       // Only the finer side reduces; if `common == thisWidth` this side is already the common grid.
       if (common != thisWidth) {

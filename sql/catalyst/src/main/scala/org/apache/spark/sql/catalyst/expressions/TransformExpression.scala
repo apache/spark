@@ -22,11 +22,12 @@ import scala.util.Try
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.FUNCTION_NAME
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ReducibleParameters, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.connector.expressions.{Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /**
  * Represents a partition transform expression, for instance, `bucket`, `days`, `years`, etc.
@@ -126,21 +127,30 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
   }
 
   /**
-   * Extract all literal parameters from a transform expression.
-   * Returns ReducibleParameters containing the literal values in order.
+   * Extract all literal parameters from a transform expression as V2 [[V2Literal]]s, preserving
+   * each value's internal representation and its `DataType`. Connectors interpret the value via
+   * the accompanying `DataType` rather than relying on a pre-converted JVM type.
    *
    * Examples:
-   *   bucket(4, col)        => ReducibleParameters([4])
-   *   truncate(col, 3)      => ReducibleParameters([3])
-   *   days(col)             => ReducibleParameters([])  (no literals)
+   *   bucket(4, col)        => [Literal(4, IntegerType)]
+   *   truncate(col, 3)      => [Literal(3, IntegerType)]
+   *   days(col)             => []  (no literals)
    */
-  private def extractParameters(expr: TransformExpression): ReducibleParameters = {
-    import scala.jdk.CollectionConverters._
-    val values = expr.literalChildren.map {
-      case Literal(value, dt) => CatalystTypeConverters.convertToScala(value, dt)
-    }
-    new ReducibleParameters(values.asJava)
-  }
+  private def extractParameters(expr: TransformExpression): Array[V2Literal[_]] =
+    expr.literalChildren.map(l => LiteralValue(l.value, l.dataType): V2Literal[_]).toArray
+
+  /**
+   * Whether this transform and `other` share the same argument layout: equal arity, and at each
+   * position a literal slot aligns with a literal slot (and a non-literal with a non-literal).
+   * Literal *values* may differ -- that is what a [[Reducer]] reconciles.
+   */
+  private def sameArgumentLayout(other: TransformExpression): Boolean =
+    children.length == other.children.length &&
+      children.zip(other.children).forall {
+        case (_: Literal, _: Literal) => true
+        case (_: Literal, _) | (_, _: Literal) => false
+        case _ => true
+      }
 
   /**
    * Return a Reducer for a reducible function on another reducible function
@@ -151,44 +161,49 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
       thisExpr: TransformExpression,
       otherFunction: ReducibleFunction[_, _],
       otherExpr: TransformExpression): Option[Reducer[_, _]] = {
+    if (!thisExpr.sameArgumentLayout(otherExpr)) {
+      return None
+    }
+
     val thisParams = extractParameters(thisExpr)
     val otherParams = extractParameters(otherExpr)
     val thisName = thisExpr.function.canonicalName()
 
-    def isSingleInt(p: ReducibleParameters): Boolean = {
-      p.count() == 1 && p.get(0).isInstanceOf[Int]
+    // Gate on DataType, not the boxed runtime class (DateType/YearMonthInterval box to Int).
+    def isSingleInt(p: Array[V2Literal[_]]): Boolean = {
+      p.length == 1 && p(0).dataType == IntegerType
     }
 
-    // Both thrown exceptions and `null` returns collapse to None; any failure
-    // to compute a reducer falls back to a shuffle (no SPJ).
-    def tryReduce[R](call: => R): Try[Option[R]] = {
-      val attempt = Try(Option(call))
-      attempt.failed.foreach {
-        case e: UnsupportedOperationException =>
-          logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} threw " +
-            log"UnsupportedOperationException; treating as not reducible. Override " +
-            log"reducer(ReducibleParameters, ReducibleFunction, ReducibleParameters) " +
-            log"to enable SPJ.")
-        case _ =>
+    // Run a reducer overload; a thrown exception or a null both become None. warnOnUoe logs a hint
+    // when the function implements no usable reducer overload.
+    def attempt[R](call: => R, warnOnUoe: Boolean): Option[R] = {
+      val t = Try(Option(call))
+      if (warnOnUoe) {
+        t.failed.foreach {
+          case _: UnsupportedOperationException =>
+            logWarning(log"V2 function ${MDC(FUNCTION_NAME, thisName)} threw " +
+              log"UnsupportedOperationException; treating as not reducible. Override " +
+              log"reducer(Literal[], ReducibleFunction, Literal[]) to enable SPJ.")
+          case _ =>
+        }
       }
-
-      attempt
+      t.toOption.flatten
     }
 
-    val res: Try[Option[Reducer[_, _]]] =
-      if (thisParams.isEmpty && otherParams.isEmpty) {
-        tryReduce(thisFunction.reducer(otherFunction))
-      } else if (isSingleInt(thisParams) && isSingleInt(otherParams)) {
-        // Try deprecated int-API first for legacy connectors (e.g. Iceberg 1.10);
-        // the first attempt is silent because we have a fallback. Only the fallback warns.
-        Try(Option(thisFunction.reducer(
-            thisParams.getInt(0), otherFunction, otherParams.getInt(0))))
-          .orElse(tryReduce(thisFunction.reducer(thisParams, otherFunction, otherParams)))
-      } else {
-        // Parameterized functions (bucket, truncate, etc.)
-        tryReduce(thisFunction.reducer(thisParams, otherFunction, otherParams))
-      }
-    res.toOption.flatten
+    if (thisParams.isEmpty && otherParams.isEmpty) {
+      attempt(thisFunction.reducer(otherFunction), warnOnUoe = true)
+    } else if (isSingleInt(thisParams) && isSingleInt(otherParams)) {
+      // Try the deprecated int API first (legacy connectors); fall back to the generalized overload
+      // when it is absent or returns null. Option.orElse fires on None, covering both.
+      attempt(thisFunction.reducer(
+          thisParams(0).value().asInstanceOf[Int], otherFunction,
+          otherParams(0).value().asInstanceOf[Int]), warnOnUoe = false)
+        .orElse(
+          attempt(thisFunction.reducer(thisParams, otherFunction, otherParams), warnOnUoe = true))
+    } else {
+      // Parameterized functions (bucket, truncate, etc.)
+      attempt(thisFunction.reducer(thisParams, otherFunction, otherParams), warnOnUoe = true)
+    }
   }
 
   override def dataType: DataType = function.resultType()

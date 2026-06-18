@@ -17,6 +17,7 @@
 package org.apache.spark.sql.connector.catalog.functions;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Literal;
 
 /**
  * Base class for user-defined functions that can be 'reduced' on another function.
@@ -65,34 +66,28 @@ public interface ReducibleFunction<I, O> {
    *
    * If this function is 'reducible' on another function, return the {@link Reducer}.
    * <p>
-   * This method supports functions with any number of parameters of any type.
+   * Each parameter is a {@link Literal} carrying both its value and data type, so this method
+   * supports functions with any number of parameters of any type. {@link Literal#value()} is
+   * Spark's internal representation (e.g. {@code UTF8String} for strings, {@code Decimal} for
+   * decimals); use {@link Literal#dataType()} to interpret it.
    * <p>
    * Examples:
    * <ul>
-   *     <li>bucket(4, x) and bucket(2, x):
-   *         <br>thisParams = [4], otherParams = [2]
-   *         <br>Extract with: thisParams.getInt(0), otherParams.getInt(0)
-   *     </li>
-   *     <li>truncate(x, 3) and truncate(x, 5):
-   *         <br>thisParams = [3], otherParams = [5]
-   *         <br>Extract with: thisParams.getInt(0), otherParams.getInt(0)
-   *     </li>
-   *     <li>hypothetical range_bucket(x, 0L, 100L, 4):
-   *         <br>thisParams = [0L, 100L, 4]
-   *         <br>Extract with: thisParams.getLong(0), thisParams.getLong(1), thisParams.getInt(2)
-   *     </li>
+   *     <li>bucket(4, x) and bucket(2, x): thisParams = [4], otherParams = [2]</li>
+   *     <li>truncate(x, 3) and truncate(x, 5): thisParams = [3], otherParams = [5]</li>
+   *     <li>hypothetical range_bucket(x, 0L, 100L, 4): thisParams = [0L, 100L, 4]</li>
    * </ul>
    *
-   * @param thisParams parameters for this function
+   * @param thisParams literal parameters for this function
    * @param otherFunction the other parameterized function
-   * @param otherParams parameters for the other function
+   * @param otherParams literal parameters for the other function
    * @return a reduction function if reducible, null otherwise
    * @since 5.0.0
    */
   default Reducer<I, O> reducer(
-          ReducibleParameters thisParams,
+          Literal<?>[] thisParams,
           ReducibleFunction<?, ?> otherFunction,
-          ReducibleParameters otherParams) {
+          Literal<?>[] otherParams) {
     throw new UnsupportedOperationException();
   }
 
@@ -115,7 +110,7 @@ public interface ReducibleFunction<I, O> {
    * @param otherNumBuckets parameter for the other function
    * @return a reduction function if it is reducible, null if not
    * @deprecated as of 5.0.0. Please override
-   *     {@link #reducer(ReducibleParameters, ReducibleFunction, ReducibleParameters)} instead.
+   *     {@link #reducer(Literal[], ReducibleFunction, Literal[])} instead.
    *     The new overload supports transforms with any number of parameters of any type
    *     (e.g. truncate width, multi-arg range buckets), not just a single int.
    */
@@ -142,6 +137,6 @@ public interface ReducibleFunction<I, O> {
    * @return a reduction function if it is reducible, null if not.
    */
   default Reducer<I, O> reducer(ReducibleFunction<?, ?> otherFunction) {
-    return reducer(ReducibleParameters.EMPTY, otherFunction, ReducibleParameters.EMPTY);
+    return reducer(new Literal<?>[0], otherFunction, new Literal<?>[0]);
   }
 }
