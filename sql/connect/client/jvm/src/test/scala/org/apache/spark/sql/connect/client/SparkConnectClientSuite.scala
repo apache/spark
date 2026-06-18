@@ -25,7 +25,7 @@ import scala.concurrent.duration.FiniteDuration
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any => PAny, StringValue}
-import io.grpc.{CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
+import io.grpc.{CallCredentials, CallOptions, Channel, ClientCall, ClientInterceptor, Metadata, MethodDescriptor, Server, ServerCall, ServerCallHandler, ServerInterceptor, Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
 import org.scalatest.concurrent.Eventually
@@ -81,6 +81,34 @@ class SparkConnectClientSuite extends ConnectFunSuite {
   test("Placeholder test: Create SparkConnectClient") {
     client = SparkConnectClient.builder().userId("abc123").build()
     assert(client.userId == "abc123")
+  }
+
+  test("access token call credentials use Authorization metadata") {
+    val credentials = new SparkConnectClient.AccessTokenCallCredentials("deadbeef")
+    val executor = new java.util.concurrent.Executor {
+      override def execute(command: Runnable): Unit = command.run()
+    }
+    var appliedHeaders: Metadata = null
+    var failedStatus: Status = null
+
+    credentials.applyRequestMetadata(
+      null,
+      executor,
+      new CallCredentials.MetadataApplier {
+        override def apply(headers: Metadata): Unit = {
+          appliedHeaders = headers
+        }
+
+        override def fail(status: Status): Unit = {
+          failedStatus = status
+        }
+      })
+
+    val authorizationKey = Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER)
+    val authenticationKey = Metadata.Key.of("Authentication", Metadata.ASCII_STRING_MARSHALLER)
+    assert(failedStatus == null)
+    assert(appliedHeaders.get(authorizationKey) == "Bearer deadbeef")
+    assert(appliedHeaders.get(authenticationKey) == null)
   }
 
   // Use 0 to start the server at a random port
