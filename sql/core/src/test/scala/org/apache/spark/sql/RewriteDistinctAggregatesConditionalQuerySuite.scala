@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-class RewriteCountDistinctConditionalQuerySuite extends QueryTest with SharedSparkSession {
+class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with SharedSparkSession {
 
   private def checkRewriteAndResult(
       conditionalSql: String,
@@ -194,10 +194,15 @@ class RewriteCountDistinctConditionalQuerySuite extends QueryTest with SharedSpa
           "cast(id * 100 as int) as col2")
         .createOrReplaceTempView("t")
 
+      // Two conditional distinct counts on the same base column trigger canonicalization,
+      // so the optimized plan must contain FILTER clauses.
       val planStr = withSQLConf(
         SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
         val df = spark.sql(
-          "SELECT key, COUNT(DISTINCT IF(col1 > 10, col2, NULL)) FROM t GROUP BY key")
+          """SELECT key,
+            |  COUNT(DISTINCT IF(col1 > 10, col2, NULL)) as cnt1,
+            |  COUNT(DISTINCT IF(col1 > 5, col2, NULL)) as cnt2
+            |FROM t GROUP BY key""".stripMargin)
         df.queryExecution.optimizedPlan.toString
       }
 
