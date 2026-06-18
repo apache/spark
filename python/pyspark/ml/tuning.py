@@ -744,8 +744,6 @@ class CrossValidator(
         super(CrossValidator, self).__init__()
         self._setDefault(numFolds=3, parallelism=1, collectSubModels=False, foldCol="")
         kwargs = self._input_kwargs
-        if kwargs.get("seed") is None:
-            kwargs["seed"] = zlib.crc32(b"CrossValidator")
         self._set(**kwargs)
 
     @keyword_only
