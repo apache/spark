@@ -90,10 +90,14 @@ class SeriesStringOpsAdvMixin:
         pattern = "([a-z]+)-([0-9]+)"
 
         def normalize_matches(matches):  # type: ignore[no-untyped-def]
-            return [list(match) for match in matches] if isinstance(matches, list) else matches
+            if isinstance(matches, (list, np.ndarray)):
+                return [list(match) for match in matches]
+            return matches
 
         expected = pser.str.findall(pattern).map(normalize_matches)
-        actual = ps.from_pandas(pser).str.findall(pattern).to_pandas().map(normalize_matches)
+        actual = ps.from_pandas(pser).str.findall(pattern).to_pandas()
+        self.assertIsNone(actual.iloc[-1])
+        actual = actual.map(normalize_matches)
         self.assert_eq(actual, expected)
 
     def test_string_index(self):
