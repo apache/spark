@@ -26,6 +26,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException,
   SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -45,6 +46,31 @@ class CsvFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.select(from_csv($"value", lit(schema), Map[String, String]().asJava)),
       Row(Row(1)) :: Nil)
+  }
+
+  test("SPARK-57164: from_csv with a nanos timestamp DDL schema string") {
+    val df = Seq("2020-01-01T00:00:00.123456789").toDF("value")
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            val parsed = df.select(
+              from_csv($"value", lit(s"c $spelling"), Map.empty[String, String].asJava).as("v"))
+            // The schema string resolves to the nanos type ...
+            assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
+            // ... but the CSV datasource does not support nanosecond timestamps yet, so the
+            // value converter rejects it at execution.
+            checkError(
+              exception = intercept[SparkUnsupportedOperationException](parsed.collect()),
+              condition = "UNSUPPORTED_DATATYPE",
+              parameters = Map("typeName" -> toSQLType(expected)))
+        }
+      }
+    }
   }
 
   test("from_csv with non struct schema") {

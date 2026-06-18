@@ -20,7 +20,7 @@ import java.io.{ByteArrayOutputStream, OutputStream}
 import java.lang.invoke.{MethodHandles, MethodType}
 import java.math.{BigDecimal => JBigDecimal, BigInteger => JBigInteger}
 import java.nio.channels.Channels
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 import java.util.{Map => JMap, Objects}
 
 import scala.jdk.CollectionConverters._
@@ -398,12 +398,6 @@ object ArrowSerializer {
           override def set(index: Int, value: LocalDateTime): Unit =
             vector.setSafe(index, SparkDateTimeUtils.localDateTimeToMicros(value))
         }
-      case (LocalTimeEncoder, v: TimeNanoVector) =>
-        new FieldSerializer[LocalTime, TimeNanoVector](v) {
-          override def set(index: Int, value: LocalTime): Unit =
-            vector.setSafe(index, SparkDateTimeUtils.localTimeToNanos(value))
-        }
-
       case (OptionEncoder(value), v) =>
         new Serializer {
           private[this] val delegate: Serializer = serializerFor(value, v)

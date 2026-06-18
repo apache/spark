@@ -738,6 +738,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
     simple.withMetadata("id", builder.build())
   }
 
+  test("zip") {
+    left.select("id").zip(left.select("a"))
+  }
+
   test("zipWithIndex") {
     simple.zipWithIndex()
   }
@@ -2753,6 +2757,10 @@ class PlanGenerationTestSuite extends ConnectFunSuite with Logging {
 
   functionTest("is_valid_variant") {
     fn.is_valid_variant(fn.parse_json(fn.col("g")))
+  }
+
+  functionTest("variant_delete") {
+    fn.variant_delete(fn.parse_json(fn.col("g")), "$.a", "$.b")
   }
 
   functionTest("variant_get") {

@@ -45,8 +45,10 @@ case class JsonTable(
       options.asScala.toMap,
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
+    // The DSv2 reader calls `readFile` directly and cannot read archives, so refuse to infer a
+    // schema for archive inputs (supportsArchiveScan = false) rather than mis-reading raw bytes.
     JsonDataSource(parsedOptions).inferSchema(
-      sparkSession, files, parsedOptions)
+      sparkSession, files, parsedOptions, supportsArchiveScan = false)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
@@ -60,7 +62,7 @@ case class JsonTable(
     case _: GeometryType | _: GeographyType => false
 
     // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => false
+    case _: AnyTimestampNanoType => false
 
     case _: AtomicType => true
 

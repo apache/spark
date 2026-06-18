@@ -29,7 +29,7 @@ import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentExcep
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{Decimal, DoubleExactNumeric, TimestampNTZType, TimestampType}
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 /**
  * Helper functions for converting between internal and external date and time representations.
@@ -148,6 +148,19 @@ object DateTimeUtils extends SparkDateTimeUtils {
     Decimal(getMicroseconds(micros, zoneId), 8, 6)
   }
 
+  /**
+   * Returns the seconds part and its fractional part with nanoseconds, of a nanosecond-precision
+   * timestamp. The integral seconds and the six microsecond fraction digits come from the
+   * wall-clock fields of `epochMicros` in the given zone; `nanosWithinMicro` contributes the
+   * three sub-microsecond digits. The scale is fixed at the maximum nanosecond precision (9):
+   * digits below the value's type precision are always zero because values are floored to the
+   * type precision at the type boundary.
+   */
+  def getSecondsWithFractionNanos(ts: TimestampNanosVal, zoneId: ZoneId): Decimal = {
+    val nanosOfMinute =
+      getMicroseconds(ts.epochMicros, zoneId) * NANOS_PER_MICROS + ts.nanosWithinMicro
+    Decimal(nanosOfMinute, 11, 9)
+  }
 
   /**
    * Returns the second value with fraction from a given TIME (TimeType) value.
@@ -290,6 +303,18 @@ object DateTimeUtils extends SparkDateTimeUtils {
       .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
+  }
+
+  /**
+   * Adds a day-time interval to a nanosecond-precision timestamp value while preserving
+   * the `nanosWithinMicro` remainder.
+   */
+  def timestampNanosAddDayTime(
+      start: TimestampNanosVal,
+      dayTime: Long,
+      zoneId: ZoneId): TimestampNanosVal = {
+    val epochMicros = timestampAddDayTime(start.epochMicros, dayTime, zoneId)
+    TimestampNanosVal.fromParts(epochMicros, start.nanosWithinMicro)
   }
 
   /**
@@ -510,7 +535,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val offsetMicros = originalOffsetSec * MICROS_PER_SECOND
     try {
       val local = Math.addExact(micros, offsetMicros)
-      val truncatedLocal = local - Math.floorMod(local, unitMicros)
+      val truncatedLocal = Math.subtractExact(local, Math.floorMod(local, unitMicros))
       val candidate = Math.subtractExact(truncatedLocal, offsetMicros)
       if (!rules.isFixedOffset) {
         val candidateSec = Math.floorDiv(candidate, MICROS_PER_SECOND)
@@ -537,9 +562,9 @@ object DateTimeUtils extends SparkDateTimeUtils {
     level match {
       case TRUNC_TO_MICROSECOND => micros
       case TRUNC_TO_MILLISECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_MILLIS)
+        Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_MILLIS))
       case TRUNC_TO_SECOND =>
-        micros - Math.floorMod(micros, MICROS_PER_SECOND)
+        Math.subtractExact(micros, Math.floorMod(micros, MICROS_PER_SECOND))
       case TRUNC_TO_MINUTE =>
         truncToUnitFast(micros, zoneId, MICROS_PER_MINUTE, ChronoUnit.MINUTES)
       case TRUNC_TO_HOUR =>

@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.function.Function;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -711,9 +712,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * If `byteIndex` of the first byte in the code point is known, use `codePointFrom` instead.
    */
   public int getChar(int charIndex) {
-    if (charIndex < 0 || charIndex >= numChars()) {
-      throw new IndexOutOfBoundsException();
-    }
+    Objects.checkIndex(charIndex, numChars());
     int charCount = 0, byteCount = 0;
     while (charCount < charIndex) {
       byteCount += numBytesForFirstByte(getByte(byteCount));
@@ -727,9 +726,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * If byte index is invalid, throws exception.
    */
   public int codePointFrom(int byteIndex) {
-    if (byteIndex < 0 || byteIndex >= numBytes) {
-      throw new IndexOutOfBoundsException();
-    }
+    Objects.checkIndex(byteIndex, numBytes);
     byte b = getByte(byteIndex);
     int numBytes = numBytesForFirstByte(b);
     return switch (numBytes) {

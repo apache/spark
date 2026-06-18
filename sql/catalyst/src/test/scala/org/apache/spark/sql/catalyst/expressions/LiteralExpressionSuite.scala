@@ -27,8 +27,9 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, ScalaReflection}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, ScalaReflection}
 import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
+import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.localTime
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -131,6 +132,124 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
             assert(sampled.contains(edge), s"expected edge value $edge for $dt")
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-57317: create literals from external nanosecond timestamp values") {
+    val instant = Instant.parse("2020-12-31T23:59:59.123456789Z")
+    val ldt = LocalDateTime.parse("2020-12-31T23:59:59.123456789")
+    TimestampNanosTestUtils.foreachNanosPrecision { precision =>
+      val ltzType = TimestampLTZNanosType(precision)
+      val ntzType = TimestampNTZNanosType(precision)
+      val ltzVal = DateTimeUtils.instantToTimestampNanos(instant, precision)
+      val ntzVal = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision)
+
+      // Scalar external values (java.time.Instant / LocalDateTime) must be converted to the
+      // internal TimestampNanosVal, not kept as epoch micros (a Long) by the schema-less path.
+      val ltzLit = Literal.create(instant, ltzType)
+      assert(ltzLit.dataType === ltzType)
+      assert(ltzLit.value === ltzVal)
+      val ntzLit = Literal.create(ldt, ntzType)
+      assert(ntzLit.dataType === ntzType)
+      assert(ntzLit.value === ntzVal)
+
+      // Arrays of external nanosecond timestamp values are converted element-wise.
+      val arrayLit = Literal.create(Seq(instant), ArrayType(ltzType))
+      val array = arrayLit.value.asInstanceOf[ArrayData]
+      assert(array.numElements() === 1)
+      assert(array.get(0, ltzType) === ltzVal)
+
+      // Structs containing nanosecond timestamp fields are converted field-wise.
+      val structType = new StructType().add("c", ntzType)
+      val structLit = Literal.create(Row(ldt), structType)
+      assert(structLit.value.asInstanceOf[InternalRow].get(0, ntzType) === ntzVal)
+
+      // Values already in Catalyst internal form and nulls keep using the schema-less path.
+      assert(Literal.create(ltzVal, ltzType).value === ltzVal)
+      assert(Literal.create(null, ltzType).value === null)
+    }
+  }
+
+  test("SPARK-57339: format nanosecond-precision timestamp literals in toString and sql") {
+    // UTC session timezone keeps LTZ and NTZ formatted strings identical for the same wall-clock.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val ldt = LocalDateTime.of(2020, 1, 1, 13, 24, 35, 123456789)
+      val instant = ldt.toInstant(ZoneOffset.UTC)
+
+      TimestampNanosTestUtils.foreachNanosPrecision { precision =>
+        val ltzType = TimestampLTZNanosType(precision)
+        val ntzType = TimestampNTZNanosType(precision)
+        val ltzVal = DateTimeUtils.instantToTimestampNanos(instant, precision)
+        val ntzVal = DateTimeUtils.localDateTimeToTimestampNanos(ldt, precision)
+        val ltzLit = Literal(ltzVal, ltzType)
+        val ntzLit = Literal(ntzVal, ntzType)
+
+        // ".123456789" truncated to `precision` fractional digits (trailing zeros stripped by
+        // the FractionTimestampFormatter, but "123456789" has none for p in [7,9]).
+        val frac = ".123456789".substring(0, 1 + precision)
+        val expected = s"2020-01-01 13:24:35$frac"
+
+        assert(ltzLit.toString === expected, s"LTZ toString at precision $precision")
+        assert(ntzLit.toString === expected, s"NTZ toString at precision $precision")
+        assert(ltzLit.sql === s"TIMESTAMP_LTZ '$expected'",
+          s"LTZ sql at precision $precision")
+        assert(ntzLit.sql === s"TIMESTAMP_NTZ '$expected'",
+          s"NTZ sql at precision $precision")
+
+        // Round-trip: parsing the sql output must reproduce the same literal value.
+        checkEvaluation(Literal.fromSQL(ltzLit.sql), ltzVal)
+        checkEvaluation(Literal.fromSQL(ntzLit.sql), ntzVal)
+
+        // Trailing-zero edge: nanosWithinMicro=0 means the formatter strips sub-micro digits.
+        // sql must still emit exactly `precision` fractional digits so the round-trip is correct.
+        val zeroNanosLdt = LocalDateTime.of(2020, 1, 1, 13, 24, 35, 123456000)
+        val zeroNanosInstant = zeroNanosLdt.toInstant(ZoneOffset.UTC)
+        val zeroNtzVal = DateTimeUtils.localDateTimeToTimestampNanos(zeroNanosLdt, precision)
+        val zeroLtzVal = DateTimeUtils.instantToTimestampNanos(zeroNanosInstant, precision)
+        val zeroNtzLit = Literal(zeroNtzVal, ntzType)
+        val zeroLtzLit = Literal(zeroLtzVal, ltzType)
+
+        assert(zeroNtzLit.sql.startsWith("TIMESTAMP_NTZ '"),
+          s"NTZ zero-nanos sql prefix at precision $precision")
+        assert(zeroLtzLit.sql.startsWith("TIMESTAMP_LTZ '"),
+          s"LTZ zero-nanos sql prefix at precision $precision")
+
+        val ntzFrac = zeroNtzLit.sql.dropWhile(_ != '.').takeWhile(_ != '\'')
+        val ltzFrac = zeroLtzLit.sql.dropWhile(_ != '.').takeWhile(_ != '\'')
+        assert(ntzFrac.length == precision + 1,
+          s"NTZ zero-nanos sql must have exactly $precision fractional digits, got: $ntzFrac")
+        assert(ltzFrac.length == precision + 1,
+          s"LTZ zero-nanos sql must have exactly $precision fractional digits, got: $ltzFrac")
+
+        // toString strips trailing zeros (display-only, no padding) - same for all precisions.
+        assert(zeroNtzLit.toString === "2020-01-01 13:24:35.123456",
+          s"NTZ zero-nanos toString at precision $precision (display strips trailing zeros)")
+        assert(zeroLtzLit.toString === "2020-01-01 13:24:35.123456",
+          s"LTZ zero-nanos toString at precision $precision (display strips trailing zeros)")
+
+        checkEvaluation(Literal.fromSQL(zeroNtzLit.sql), zeroNtzVal)
+        checkEvaluation(Literal.fromSQL(zeroLtzLit.sql), zeroLtzVal)
+
+        // Whole-second edge: no fractional part at all. padToNanosPrecision must insert
+        // "." + zeros so the SQL literal carries exactly `precision` fractional digits.
+        val wholeLdt = LocalDateTime.of(2020, 1, 1, 13, 24, 35, 0)
+        val wholeInstant = wholeLdt.toInstant(ZoneOffset.UTC)
+        val wholeNtzVal = DateTimeUtils.localDateTimeToTimestampNanos(wholeLdt, precision)
+        val wholeLtzVal = DateTimeUtils.instantToTimestampNanos(wholeInstant, precision)
+        val wholeNtzLit = Literal(wholeNtzVal, ntzType)
+        val wholeLtzLit = Literal(wholeLtzVal, ltzType)
+
+        assert(wholeNtzLit.toString === "2020-01-01 13:24:35",
+          s"NTZ whole-second toString at precision $precision")
+        assert(wholeLtzLit.toString === "2020-01-01 13:24:35",
+          s"LTZ whole-second toString at precision $precision")
+        assert(wholeNtzLit.sql === s"TIMESTAMP_NTZ '2020-01-01 13:24:35.${"0" * precision}'",
+          s"NTZ whole-second sql at precision $precision")
+        assert(wholeLtzLit.sql === s"TIMESTAMP_LTZ '2020-01-01 13:24:35.${"0" * precision}'",
+          s"LTZ whole-second sql at precision $precision")
+        checkEvaluation(Literal.fromSQL(wholeNtzLit.sql), wholeNtzVal)
+        checkEvaluation(Literal.fromSQL(wholeLtzLit.sql), wholeLtzVal)
       }
     }
   }

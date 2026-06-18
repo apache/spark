@@ -60,6 +60,7 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       nanosAsLong = nanosAsLong)
   }
 
+  // scalastyle:off argcount
   protected def testParquetToCatalyst(
       testName: String,
       sqlSchema: StructType,
@@ -70,13 +71,16 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       inferTimestampNTZ: Boolean = true,
       sparkReadSchema: Option[StructType] = None,
       expectedParquetColumn: Option[ParquetColumn] = None,
-      nanosAsLong: Boolean = false): Unit = {
+      nanosAsLong: Boolean = false,
+      timestampNanosTypesEnabled: Boolean = false): Unit = {
+    // scalastyle:on argcount
     val converter = new ParquetToSparkSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
       caseSensitive = caseSensitive,
       inferTimestampNTZ = inferTimestampNTZ,
-      nanosAsLong = nanosAsLong)
+      nanosAsLong = nanosAsLong,
+      timestampNanosTypesEnabled = timestampNanosTypesEnabled)
 
     test(s"sql <= parquet: $testName") {
       val actualParquetColumn = converter.convertParquetColumn(
@@ -126,7 +130,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       outputTimestampType: SQLConf.ParquetOutputTimestampType.Value =
         SQLConf.ParquetOutputTimestampType.INT96,
       expectedParquetColumn: Option[ParquetColumn] = None,
-      nanosAsLong: Boolean = false): Unit = {
+      nanosAsLong: Boolean = false,
+      timestampNanosTypesEnabled: Boolean = false): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -142,7 +147,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSparkSession {
       binaryAsString,
       int96AsTimestamp,
       expectedParquetColumn = expectedParquetColumn,
-      nanosAsLong = nanosAsLong)
+      nanosAsLong = nanosAsLong,
+      timestampNanosTypesEnabled = timestampNanosTypesEnabled)
   }
 
   protected def compareParquetColumn(actual: ParquetColumn, expected: ParquetColumn): Unit = {
@@ -1111,13 +1117,15 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
   test("SPARK-40819: parquet file with TIMESTAMP(NANOS, true) (with default nanosAsLong=false)") {
     val testDataPath = testFile("test-data/timestamp-nanos.parquet")
-    checkError(
-      exception = intercept[AnalysisException] {
-        spark.read.parquet(testDataPath).collect()
-      },
-      condition = "PARQUET_TYPE_ILLEGAL",
-      parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
-    )
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          spark.read.parquet(testDataPath).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIMESTAMP(NANOS,true))")
+      )
+    }
   }
 
   test("SPARK-47261: parquet file with unsupported type") {
@@ -2629,6 +2637,53 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       int96AsTimestamp = int96AsTimestamp,
       inferTimestampNTZ = true)
   }
+
+  // The nanosecond timestamp types are written as INT64 with the TIMESTAMP(NANOS) annotation
+  // and, with `spark.sql.timestampNanosTypes.enabled`, read back at the canonical precision 9.
+  testSchema(
+    "SPARK-57102: TimestampNTZNanos written and read as INT64 with TIMESTAMP(NANOS,false)",
+    StructType(Seq(StructField("f1", TimestampNTZNanosType(9)))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP(NANOS,false));
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false,
+    timestampNanosTypesEnabled = true)
+
+  testSchema(
+    "SPARK-57102: TimestampLTZNanos written and read as INT64 with TIMESTAMP(NANOS,true)",
+    StructType(Seq(StructField("f1", TimestampLTZNanosType(9)))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP(NANOS,true));
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    writeLegacyParquetFormat = false,
+    timestampNanosTypesEnabled = true)
+
+  testCatalystToParquet(
+    "SPARK-57102: TimestampNTZNanos(7) is written as INT64 with TIMESTAMP(NANOS,false)",
+    StructType(Seq(StructField("f1", TimestampNTZNanosType(7)))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP(NANOS,false));
+      |}
+    """.stripMargin,
+    writeLegacyParquetFormat = false)
+
+  testParquetToCatalyst(
+    "SPARK-57102: legacy nanosAsLong takes precedence over the nanos timestamp types",
+    StructType(Seq(StructField("f1", LongType))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP(NANOS,true));
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = true,
+    nanosAsLong = true,
+    timestampNanosTypesEnabled = true)
 
   testCatalystToParquet(
     "TimestampNTZ Spark to Parquet conversion for complex types",

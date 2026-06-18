@@ -492,7 +492,8 @@ case class SampleExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (withReplacement) {
+    val numOutputRows = longMetric("numOutputRows")
+    val sampled = if (withReplacement) {
       // Disable gap sampling since the gap sampling method buffers two rows internally,
       // requiring us to copy the row, which is more expensive than the random number generator.
       new PartitionwiseSampledRDD[InternalRow, InternalRow](
@@ -502,6 +503,12 @@ case class SampleExec(
         resolvedSeed)
     } else {
       child.execute().randomSampleWithRange(lowerBound, upperBound, resolvedSeed)
+    }
+    sampled.mapPartitionsInternal { iter =>
+      iter.map { row =>
+        numOutputRows += 1
+        row
+      }
     }
   }
 

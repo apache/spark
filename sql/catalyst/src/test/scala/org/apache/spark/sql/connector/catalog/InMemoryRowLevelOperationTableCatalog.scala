@@ -35,11 +35,29 @@ class InMemoryRowLevelOperationTableCatalog
   // All transactions in order (committed and aborted), allowing per-statement
   // validation in SQL scripting tests.
   val observedTransactions: ArrayBuffer[Txn] = new ArrayBuffer[Txn]()
+  // Test-only knob. When true, the next transaction created by `beginTransaction` will reject
+  // register-scans calls (`registerScans` returns false unconditionally). Reset after consumed.
+  var nextTxnRejectRegisteredScansAttempt: Boolean = false
+
+  // Each `loadTable` returns a fresh snapshot pinned at the current table version (id is
+  // preserved). This is the "pin at table loading" semantics that lets version-aware
+  // `Table.equals` catch staleness: a cached relation holds a copy frozen at V1; a later load
+  // returns a copy at V2, and the two compare unequal so cache substitution fails before
+  // `Transaction.registerScans` is consulted.
+  override def loadTable(ident: Identifier): Table = {
+    liveTable(ident) match {
+      case rlot: InMemoryRowLevelOperationTable => rlot.copy()
+      case other => other
+    }
+  }
 
   override def beginTransaction(info: TransactionInfo): Transaction = {
     assert(transaction == null || transaction.currentState != Active)
-    this.transaction = new Txn(new TxnTableCatalog(this))
-    transaction
+    val txn = new Txn(new TxnTableCatalog(this))
+    txn.rejectRegisteredScansAttempt = nextTxnRejectRegisteredScansAttempt
+    nextTxnRejectRegisteredScansAttempt = false
+    this.transaction = txn
+    txn
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {

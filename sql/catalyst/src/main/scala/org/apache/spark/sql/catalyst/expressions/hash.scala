@@ -546,7 +546,7 @@ abstract class HashExpression[E] extends Expression {
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
     case LongType | _: TimeType => genHashLong(input, result)
     case TimestampType | TimestampNTZType => genHashTimestamp(input, result)
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+    case _: AnyTimestampNanoType =>
       genHashTimestampNanos(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)

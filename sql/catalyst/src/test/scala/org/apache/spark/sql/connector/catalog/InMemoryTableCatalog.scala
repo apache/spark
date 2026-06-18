@@ -71,6 +71,14 @@ class BasicInMemoryTableCatalog extends TableCatalog {
     }
   }
 
+  // Returns the underlying live instance without copying. Used by tests that need to mutate
+  // state in a way that's observable to subsequent `loadTable` callers, and by wrappers that
+  // need to propagate writes to the live state.
+  def liveTable(ident: Identifier): Table = {
+    Option(tables.get(ident)).getOrElse(
+      throw new NoSuchTableException(ident.asMultipartIdentifier))
+  }
+
   // load table for writes
   override def loadTable(
       ident: Identifier,

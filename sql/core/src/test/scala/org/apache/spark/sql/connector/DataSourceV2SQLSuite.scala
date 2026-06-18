@@ -2020,6 +2020,30 @@ class DataSourceV2SQLSuiteV1Filter
     }
   }
 
+  test("SPARK-57360: generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForCreate(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
+  }
+
+  test("SPARK-57360: REPLACE TABLE - generation expression cannot reference temporary variables") {
+    val tblName = "my_tab"
+    withSessionVariable("my_var") {
+      sql("DECLARE OR REPLACE VARIABLE my_var INT DEFAULT 1")
+      checkUnsupportedGenerationExpressionForReplace(
+        tblName,
+        "a + my_var",
+        "generation expression cannot reference temporary variables"
+      )
+    }
+  }
+
   test("SPARK-44313: generation expression validation passes when there is a char/varchar column") {
     val tblName = "my_tab"
     // InMemoryTableCatalog.capabilities() = {SUPPORTS_CREATE_TABLE_WITH_GENERATED_COLUMNS}
@@ -3920,6 +3944,29 @@ class DataSourceV2SQLSuiteV1Filter
       checkAnswer(
         spark.table(s"$t"),
         Seq(Row(1L, "a"), Row(2L, "b"), Row(4L, "d"), Row(5L, "e"), Row(6L, "f")))
+    }
+  }
+
+  test("Session variable in INSERT REPLACE WHERE") {
+    val t = "testcat.tbl"
+    withTable(t) {
+      spark.sql(s"CREATE TABLE $t (id bigint, data string) USING foo PARTITIONED BY (id)")
+      spark.sql(s"INSERT INTO TABLE $t VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      spark.sql("DECLARE OR REPLACE VARIABLE replacement_id BIGINT DEFAULT 2")
+      try {
+        spark.sql(
+          s"""
+             |INSERT INTO $t
+             |  REPLACE WHERE id = replacement_id
+             |  VALUES (2, 'bb')
+             |""".stripMargin)
+
+        checkAnswer(
+          spark.table(t),
+          Seq(Row(1L, "a"), Row(2L, "bb"), Row(3L, "c")))
+      } finally {
+        spark.sql("DROP TEMPORARY VARIABLE IF EXISTS replacement_id")
+      }
     }
   }
 

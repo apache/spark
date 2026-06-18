@@ -285,6 +285,40 @@ class MiscFunctionsSuite extends SharedSparkSession {
     assert(df.selectExpr("random(1)").collect() != null)
     assert(df.select(random(lit(1))).collect() != null)
   }
+
+  test("vector functions") {
+    import org.apache.spark.sql.types.{ArrayType, FloatType, StructField, StructType}
+    val schema = StructType(Seq(
+      StructField("a", ArrayType(FloatType)),
+      StructField("b", ArrayType(FloatType))))
+    val df = spark.createDataFrame(
+      java.util.Arrays.asList(Row(Array(1.0f, 2.0f, 3.0f), Array(4.0f, 5.0f, 6.0f))), schema)
+
+    // Similarity/distance
+    val cos = df.select(vector_cosine_similarity($"a", $"b")).first().getFloat(0)
+    assert(math.abs(cos - 0.9746319f) < 0.0001f)
+    val dot = df.select(vector_inner_product($"a", $"b")).first().getFloat(0)
+    assert(math.abs(dot - 32.0f) < 0.01f)
+    val l2 = df.select(vector_l2_distance($"a", $"b")).first().getFloat(0)
+    assert(math.abs(l2 - 5.196152f) < 0.001f)
+
+    // Norm/normalize
+    val schema2 = StructType(Seq(StructField("v", ArrayType(FloatType))))
+    val df2 = spark.createDataFrame(
+      java.util.Arrays.asList(Row(Array(3.0f, 4.0f))), schema2)
+    val norm = df2.select(vector_norm($"v", lit(2.0f))).first().getFloat(0)
+    assert(math.abs(norm - 5.0f) < 0.01f)
+
+    // Aggregate
+    val df3 = spark.createDataFrame(
+      java.util.Arrays.asList(Row(Array(1.0f, 2.0f)), Row(Array(3.0f, 4.0f))), schema2)
+    val avg = df3.select(vector_avg($"v")).first().getSeq[Float](0)
+    assert(math.abs(avg(0) - 2.0f) < 0.01f)
+    assert(math.abs(avg(1) - 3.0f) < 0.01f)
+    val sum = df3.select(vector_sum($"v")).first().getSeq[Float](0)
+    assert(math.abs(sum(0) - 4.0f) < 0.01f)
+    assert(math.abs(sum(1) - 6.0f) < 0.01f)
+  }
 }
 
 object ReflectClass {

@@ -160,6 +160,21 @@ private[sql] object AnyTimestampType extends AbstractDataType with Serializable 
   override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
 }
 
+/**
+ * A nanosecond-precision timestamp type (`TIMESTAMP_LTZ(p)` / `TIMESTAMP_NTZ(p)`, `p` in [7, 9]).
+ */
+private[sql] abstract class AnyTimestampNanoType extends DatetimeType
+
+private[sql] object AnyTimestampNanoType extends AbstractDataType with Serializable {
+  override private[sql] def defaultConcreteType: DataType = TimestampNTZNanosType()
+
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[AnyTimestampNanoType]
+
+  override private[sql] def simpleString =
+    "(timestamp_ltz(p) or timestamp_ntz(p) with p in [7, 9])"
+}
+
 private[sql] abstract class DatetimeType extends AtomicType
 
 /**

@@ -22,6 +22,7 @@ import org.scalatest.GivenWhenThen
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
@@ -1694,6 +1695,107 @@ abstract class DynamicPartitionPruningDataSourceSuiteBase
 abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDataSourceSuiteBase {
 
   import testImplicits._
+
+  test("DPP with a checkpointed filtering side and an expression partition key") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withTable("events") {
+        Seq((1, "hour1", "a"), (2, "hour1", "b"), (3, "hour2", "a"))
+          .toDF("id", "hour", "category")
+          .write
+          .partitionBy("hour", "category")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        val sampledKeys = Seq(("hour1", "a"))
+          .toDF("hour", "category")
+          .select(concat_ws("||", $"hour", $"category").as("hc_key"))
+          .localCheckpoint(eager = true)
+
+        assert(sampledKeys.queryExecution.optimizedPlan.exists {
+          case r: LogicalRDD => r.isCheckpointedInput
+          case _ => false
+        })
+
+        val events = spark.table("events").as("events")
+        val sampled = sampledKeys.as("sampled")
+        val df = events
+          .join(broadcast(sampled),
+            concat_ws("||", $"events.hour", $"events.category") === $"sampled.hc_key")
+          .select($"events.id")
+
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
+
+  test("DPP with a local filtering side and an expression partition key") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withTable("events") {
+        Seq((1, "hour1", "a"), (2, "hour1", "b"), (3, "hour2", "a"))
+          .toDF("id", "hour", "category")
+          .write
+          .partitionBy("hour", "category")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        val sampledKeys = Seq(("hour1", "a"))
+          .toDF("hour", "category")
+          .select(concat_ws("||", $"hour", $"category").as("hc_key"))
+
+        assert(sampledKeys.queryExecution.optimizedPlan.exists(_.isInstanceOf[LocalRelation]))
+
+        val events = spark.table("events").as("events")
+        val sampled = sampledKeys.as("sampled")
+        val df = events
+          .join(broadcast(sampled),
+            concat_ws("||", $"events.hour", $"events.category") === $"sampled.hc_key")
+          .select($"events.id")
+
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
+
+  test("DPP does not treat a non-checkpointed LogicalRDD as a selective filtering side") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withTable("events") {
+        Seq((1, "hour1", "a"), (2, "hour1", "b"))
+          .toDF("id", "hour", "category")
+          .write
+          .partitionBy("hour", "category")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        val originalKeys = Seq("hour1||a").toDF("hc_key")
+        val keys: DataFrame = LogicalRDD.fromDataset(
+          rdd = originalKeys.queryExecution.toRdd,
+          originDataset = originalKeys,
+          isStreaming = false)
+        assert(keys.queryExecution.optimizedPlan.exists {
+          case r: LogicalRDD => !r.isCheckpointedInput
+          case _ => false
+        })
+
+        val events = spark.table("events").as("events")
+        val sampled = keys.as("sampled")
+        val df = events
+          .join(broadcast(sampled),
+            concat_ws("||", $"events.hour", $"events.category") === $"sampled.hc_key")
+          .select($"events.id")
+
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
 
   /**
    * Check the static scan metrics with and without DPP
