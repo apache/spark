@@ -109,7 +109,7 @@ class StringSubstitutor(
                   buf.replace(prefixPos, suffixPos + suffixLen, value)
                   val changeInLength = value.length - (suffixPos + suffixLen - prefixPos)
                   val newLength = length + changeInLength
-                  substitute(buf, prefixPos + value.length, length, priorVariables)
+                  substitute(buf, prefixPos + value.length, newLength, priorVariables)
                   return true
                 case None =>
                   if (enableUndefinedVariableException) {
