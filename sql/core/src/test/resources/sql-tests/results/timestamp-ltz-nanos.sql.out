@@ -806,3 +806,51 @@ SELECT unix_timestamp(NULL :: timestamp_ltz(9)), to_unix_timestamp(NULL :: times
 struct<unix_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss):bigint,to_unix_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss):bigint>
 -- !query output
 NULL	NULL
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query schema
+struct<unix_nanos(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):decimal(21,0)>
+-- !query output
+1577885075123456789
+
+
+-- !query
+SELECT unix_nanos('2020-01-01 13:24:35.123456789 UTC' :: timestamp_ltz(7))
+-- !query schema
+struct<unix_nanos(CAST(2020-01-01 13:24:35.123456789 UTC AS TIMESTAMP_LTZ(7))):decimal(21,0)>
+-- !query output
+1577885075123456700
+
+
+-- !query
+SELECT unix_nanos('2020-01-01 13:24:35.123456789 UTC' :: timestamp_ltz(8))
+-- !query schema
+struct<unix_nanos(CAST(2020-01-01 13:24:35.123456789 UTC AS TIMESTAMP_LTZ(8))):decimal(21,0)>
+-- !query output
+1577885075123456780
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_LTZ '9999-12-31 23:59:59.999999999 UTC')
+-- !query schema
+struct<unix_nanos(TIMESTAMP_LTZ '9999-12-31 15:59:59.999999999'):decimal(21,0)>
+-- !query output
+253402300799999999999
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001 UTC')
+-- !query schema
+struct<unix_nanos(TIMESTAMP_LTZ '1959-12-31 16:00:00.000000001'):decimal(21,0)>
+-- !query output
+-315619199999999999
+
+
+-- !query
+SELECT unix_nanos(NULL :: timestamp_ltz(9))
+-- !query schema
+struct<unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9))):decimal(21,0)>
+-- !query output
+NULL

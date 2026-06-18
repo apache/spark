@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.math.BigInteger
 import java.text.ParseException
 import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeParseException
@@ -851,6 +852,57 @@ case class UnixMicros(child: Expression) extends TimestampToLongBase {
   override def prettyName: String = "unix_micros"
 
   override protected def withNewChildInternal(newChild: Expression): UnixMicros =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.contains.tab
+@ExpressionDescription(
+  usage = "_FUNC_(timestamp) - Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC.",
+  examples = """
+    Examples:
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(TIMESTAMP_NTZ '2008-12-25 15:30:00.123456789');
+       1230219000123456789
+  """,
+  group = "datetime_funcs",
+  since = "4.3.0")
+// scalastyle:on line.contains.tab
+case class UnixNanos(child: Expression)
+  extends UnaryExpression with ExpectsInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  // Accepts only the nanosecond-precision timestamp types TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p)
+  // (p in [7, 9]); the microsecond timestamp types are intentionally not supported here.
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampNanoType)
+
+  // epochMicros * 1000 overflows a 64-bit BIGINT across the full [0001..9999] calendar range, so
+  // the result is a lossless DECIMAL with enough precision to hold every value (~2.5e20 max).
+  override def dataType: DataType = DecimalType(21, 0)
+
+  override def nullSafeEval(input: Any): Any = {
+    val v = input.asInstanceOf[TimestampNanosVal]
+    val nanos = BigInteger.valueOf(v.epochMicros)
+      .multiply(BigInteger.valueOf(NANOS_PER_MICROS))
+      .add(BigInteger.valueOf(v.nanosWithinMicro.toLong))
+    Decimal.apply(new java.math.BigDecimal(nanos), 21, 0)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val bi = ctx.freshName("nanos")
+      s"""
+         |java.math.BigInteger $bi = java.math.BigInteger.valueOf($c.epochMicros)
+         |  .multiply(java.math.BigInteger.valueOf(${NANOS_PER_MICROS}L))
+         |  .add(java.math.BigInteger.valueOf($c.nanosWithinMicro));
+         |${ev.value} = Decimal.apply(new java.math.BigDecimal($bi), 21, 0);
+         |""".stripMargin
+    })
+  }
+
+  override def prettyName: String = "unix_nanos"
+
+  override protected def withNewChildInternal(newChild: Expression): UnixNanos =
     copy(child = newChild)
 }
 
