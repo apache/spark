@@ -213,18 +213,27 @@ object OrcUtils extends Logging {
         case _ => false
       }
 
-    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
-      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
+    // Recurse into struct/array/map so timestamp mismatches nested inside containers are caught
+    // too, not just top-level and struct fields.
+    def checkTypeCompatibility(orcType: DataType, dataType: DataType): Unit =
+      (orcType, dataType) match {
         case (TimestampType, TimestampNTZType) =>
           throw QueryExecutionErrors.cannotConvertOrcTimestampToTimestampNTZError()
         case (TimestampNTZType, TimestampType) =>
           throw QueryExecutionErrors.cannotConvertOrcTimestampNTZToTimestampLTZError()
-        case (t1: StructType, t2: StructType) => checkTimestampCompatibility(t1, t2)
-        case (orcType, dataType)
-            if isOrcTimestamp(orcType) && isOrcTimestamp(dataType) &&
-              !timestampReadCompatible(orcType, dataType) =>
-          throw QueryExecutionErrors.cannotCastOrcTimestampError(orcType, dataType)
+        case (o, d) if isOrcTimestamp(o) && isOrcTimestamp(d) && !timestampReadCompatible(o, d) =>
+          throw QueryExecutionErrors.cannotCastOrcTimestampError(o, d)
+        case (o: StructType, d: StructType) => checkTimestampCompatibility(o, d)
+        case (ArrayType(o, _), ArrayType(d, _)) => checkTypeCompatibility(o, d)
+        case (MapType(ok, ov, _), MapType(dk, dv, _)) =>
+          checkTypeCompatibility(ok, dk)
+          checkTypeCompatibility(ov, dv)
         case _ =>
+      }
+
+    def checkTimestampCompatibility(orcCatalystSchema: StructType, dataSchema: StructType): Unit = {
+      orcCatalystSchema.fields.map(_.dataType).zip(dataSchema.fields.map(_.dataType)).foreach {
+        case (orcType, dataType) => checkTypeCompatibility(orcType, dataType)
       }
     }
 

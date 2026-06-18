@@ -487,20 +487,18 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
         case oi: HiveDecimalObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) =>
             row.update(ordinal, HiveShim.toCatalystDecimal(oi, value))
+        case oi: TimestampObjectInspector
+            if attr.dataType.isInstanceOf[TimestampLTZNanosType] ||
+              attr.dataType.isInstanceOf[TimestampNTZNanosType] =>
+          // Nanos timestamps need the target Catalyst type to produce TimestampNanosVal; reuse
+          // the data-type-aware unwrapper instead of duplicating the conversion here.
+          val unwrapper = unwrapperFor(oi, attr.dataType)
+          (value: Any, row: InternalRow, ordinal: Int) => row.update(ordinal, unwrapper(value))
         case oi: TimestampObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) =>
-            attr.dataType match {
-              case t: TimestampLTZNanosType =>
-                row.update(ordinal, DateTimeUtils.instantToTimestampNanos(
-                  oi.getPrimitiveJavaObject(value).toInstant, t.precision))
-              case t: TimestampNTZNanosType =>
-                row.update(ordinal, DateTimeUtils.localDateTimeToTimestampNanos(
-                  oi.getPrimitiveJavaObject(value).toLocalDateTime, t.precision))
-              case _ =>
-                row.setLong(
-                  ordinal,
-                  DateTimeUtils.fromJavaTimestamp(oi.getPrimitiveJavaObject(value)))
-            }
+            row.setLong(
+              ordinal,
+              DateTimeUtils.fromJavaTimestamp(oi.getPrimitiveJavaObject(value)))
         case oi: DateObjectInspector =>
           (value: Any, row: InternalRow, ordinal: Int) =>
             row.setInt(ordinal, DateTimeUtils.fromJavaDate(oi.getPrimitiveJavaObject(value)))
