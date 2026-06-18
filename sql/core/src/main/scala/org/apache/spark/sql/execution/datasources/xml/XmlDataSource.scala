@@ -60,22 +60,36 @@ abstract class XmlDataSource extends Serializable with Logging {
       schema: StructType): Iterator[InternalRow]
 
   /**
+   * Parse a single already-open [[InputStream]] -- one decompressed archive entry -- into 0 or more
+   * [[InternalRow]] instances, the same way this mode reads a standalone file: line by line for
+   * [[TextInputXmlDataSource]], as one whole document for [[MultiLineXmlDataSource]]. Used only by
+   * [[readArchive]]; the stream is not closed here.
+   */
+  protected def readStream(
+      in: InputStream,
+      parser: StaxXmlParser,
+      schema: StructType): Iterator[InternalRow]
+
+  /**
    * Streams a tar archive (`.tar`/`.tar.gz`/`.tgz`) entry by entry through the XML parser without
    * unpacking it to disk. The whole archive is a single split (see `XmlFileFormat.isSplitable`);
-   * each entry's bytes are parsed exactly like a standalone XML file. Single-line and multi-line
-   * parse an entry's bytes differently (mirroring [[readFile]]), so each data source overrides it.
+   * each entry's bytes are parsed exactly like a standalone XML file via [[readStream]], which each
+   * mode overrides (single-line splits into lines, multi-line parses the whole entry). Each entry
+   * is parsed with its own parser -- matching the per-file parser of a non-archive read.
    *
    * Kept separate from [[readFile]] (rather than dispatched inside it) because only the V1
    * `XmlFileFormat` read path supports archives; XML has no DSv2 reader.
    *
-   * @param parser builds a fresh XML parser for each entry, so every entry is parsed with its own
-   *               parser instance -- matching the per-file parser of a non-archive read.
+   * @param parser builds a fresh XML parser for each entry.
    */
   def readArchive(
       conf: Configuration,
       file: PartitionedFile,
       parser: () => StaxXmlParser,
-      schema: StructType): Iterator[InternalRow]
+      schema: StructType): Iterator[InternalRow] =
+    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
+      readStream(in, parser(), schema)
+    }
 
   /**
    * Infers the schema from `inputPaths` files.
@@ -231,28 +245,25 @@ object TextInputXmlDataSource extends XmlDataSource {
   }
 
   /**
-   * Mirrors [[readFile]] for archive entries: split each entry into lines and run each line through
-   * a [[FailureSafeParser]], so a single-line archive entry gets the same per-record corrupt-record
+   * Mirrors [[readFile]] for an archive entry: split it into lines and run each line through a
+   * [[FailureSafeParser]], so a single-line archive entry gets the same per-record corrupt-record
    * handling as a non-archive single-line read. (Whole-stream parsing, as the multi-line override
    * uses, would bypass that handling for single-line input.)
    */
-  override def readArchive(
-      conf: Configuration,
-      file: PartitionedFile,
-      parser: () => StaxXmlParser,
-      schema: StructType): Iterator[InternalRow] =
-    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
-      val entryParser = parser()
-      val lines = ArchiveReader.lineIterator(in, None).map { line =>
-        new String(line.getBytes, 0, line.getLength, entryParser.options.charset)
-      }
-      val safeParser = new FailureSafeParser[String](
-        input => entryParser.parse(input),
-        entryParser.options.parseMode,
-        schema,
-        entryParser.options.columnNameOfCorruptRecord)
-      lines.flatMap(safeParser.parse)
+  override protected def readStream(
+      in: InputStream,
+      parser: StaxXmlParser,
+      schema: StructType): Iterator[InternalRow] = {
+    val lines = ArchiveReader.lineIterator(in, None).map { line =>
+      new String(line.getBytes, 0, line.getLength, parser.options.charset)
     }
+    val safeParser = new FailureSafeParser[String](
+      input => parser.parse(input),
+      parser.options.parseMode,
+      schema,
+      parser.options.columnNameOfCorruptRecord)
+    lines.flatMap(safeParser.parse)
+  }
 
   override def infer(
       sparkSession: SparkSession,
@@ -320,29 +331,25 @@ object MultiLineXmlDataSource extends XmlDataSource {
   }
 
   /**
-   * Parses each archive entry as a single XML document, mirroring [[readFile]]: the optimized
-   * parser re-reads its input (to echo the corrupt-record text on a parse failure), which a
-   * single-use entry stream cannot do, so the entry's bytes are buffered and re-opened over; the
-   * legacy parser reads the entry stream directly. Buffering one whole entry in memory is an
-   * intended trade-off here -- the optimized parser requires a re-readable input, so a single very
-   * large XML document packed in an archive is materialized in full (a non-archive read streams
-   * from and re-opens the file instead). Entries are still read one at a time, so archive size
-   * itself stays bounded.
+   * Parses an archive entry as a single XML document, mirroring [[readFile]]: the optimized parser
+   * re-reads its input (to echo the corrupt-record text on a parse failure), which a single-use
+   * entry stream cannot do, so the entry's bytes are buffered and re-opened over; the legacy parser
+   * reads the entry stream directly. Buffering one whole entry in memory is an intended trade-off
+   * here -- the optimized parser requires a re-readable input, so a single very large XML document
+   * packed in an archive is materialized in full (a non-archive read streams from and re-opens the
+   * file instead). Entries are still read one at a time, so archive size itself stays bounded.
    */
-  override def readArchive(
-      conf: Configuration,
-      file: PartitionedFile,
-      parser: () => StaxXmlParser,
-      schema: StructType): Iterator[InternalRow] =
-    ArchiveReader(file.toPath).readEntries(conf) { (_, in) =>
-      val entryParser = parser()
-      if (entryParser.options.useLegacyXMLParser) {
-        entryParser.parseStream(in, schema)
-      } else {
-        val bytes = in.readAllBytes()
-        entryParser.parseStreamOptimized(() => new ByteArrayInputStream(bytes), schema)
-      }
+  override protected def readStream(
+      in: InputStream,
+      parser: StaxXmlParser,
+      schema: StructType): Iterator[InternalRow] = {
+    if (parser.options.useLegacyXMLParser) {
+      parser.parseStream(in, schema)
+    } else {
+      val bytes = in.readAllBytes()
+      parser.parseStreamOptimized(() => new ByteArrayInputStream(bytes), schema)
     }
+  }
 
   override def infer(
       sparkSession: SparkSession,
