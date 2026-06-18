@@ -1657,6 +1657,7 @@ object Unidoc {
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/kafka010")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/types/variant")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/ui/flamegraph")))
+      .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/udf/worker")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/collection")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/io")))
       .map(_.filterNot(_.getCanonicalPath.contains("org/apache/spark/util/kvstore")))
