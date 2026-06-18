@@ -2703,12 +2703,13 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
   }
 
   test("metric values are stable across stage retries") {
-    // The join in the MERGE plan introduces a shuffle (with broadcast disabled), and the
-    // DAGScheduler corrupts the first attempt of every upstream shuffle map stage. Note:
-    // the current fetch-failure injection does not retry the MergeRowsExec/writer stage,
-    // so this test passes equally well with plain SQLMetric — it only exercises the
-    // SLAM-aware read path. Follow-up #55738 will add infra to actually retry the writer
-    // stage and exercise the SLAM behavior end-to-end for MERGE.
+    // INJECT_SHUFFLE_FETCH_FAILURES corrupts the partition-0 task of the first successful
+    // attempt of every shuffle map stage, so a downstream stage FetchFails and the producer
+    // re-runs. For the metadata variants of MERGE - where the writer's
+    // `RequiresDistributionAndOrdering` forces a re-shuffle between MergeRowsExec and the
+    // writer - MergeRowsExec sits in a non-leaf shuffle map stage and therefore re-runs with
+    // the same metric instances, double-counting the per-row increments. SQLLastAttemptMetric
+    // reports only the last attempt, so `MergeSummary` is still correct.
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -2720,9 +2721,9 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         val sourceDF = Seq(1, 2, 10).toDF("pk")
         sourceDF.createOrReplaceTempView("source")
 
-        withSparkContextConf(
+        val mergeExec = withSparkContextConf(
             config.Tests.INJECT_SHUFFLE_FETCH_FAILURES.key -> "true") {
-          sql(
+          findMergeExec {
             s"""MERGE INTO $tableNameAsString t
                |USING source s
                |ON t.pk = s.pk
@@ -2730,7 +2731,8 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
                | UPDATE SET salary = salary + 100
                |WHEN NOT MATCHED THEN
                | INSERT (pk, salary, dep) VALUES (s.pk, 999, 'unknown')
-               |""".stripMargin)
+               |""".stripMargin
+          }
         }
 
         val mergeSummary = getMergeSummary()
@@ -2742,6 +2744,19 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         assert(mergeSummary.numTargetRowsMatchedDeleted === 0L)
         assert(mergeSummary.numTargetRowsNotMatchedBySourceUpdated === 0L)
         assert(mergeSummary.numTargetRowsNotMatchedBySourceDeleted === 0L)
+
+        // For metadata variants, MergeRowsExec lives in a non-leaf shuffle map stage that the
+        // fetch-failure injection forces to re-run, so the raw per-MergeRowsExec accumulator
+        // (`metric.value`) overcounts. SLAM-aware `MergeSummary` (asserted above) is correct.
+        if (!noMetadata) {
+          val rawUpdated = mergeExec.metrics("numTargetRowsUpdated").value
+          assert(rawUpdated > 2L,
+            s"Expected MergeRowsExec.numTargetRowsUpdated to overcount under fetch-failure " +
+              s"injection (got $rawUpdated)")
+          val rawMatchedUpdated = mergeExec.metrics("numTargetRowsMatchedUpdated").value
+          assert(rawMatchedUpdated > 2L,
+            s"Expected numTargetRowsMatchedUpdated to overcount (got $rawMatchedUpdated)")
+        }
 
         checkAnswer(
           sql(s"SELECT pk, salary FROM $tableNameAsString ORDER BY pk"),

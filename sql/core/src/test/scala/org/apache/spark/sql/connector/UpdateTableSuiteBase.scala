@@ -342,12 +342,12 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
   }
 
   test("metric values are stable across stage retries") {
-    // Force a shuffle in the UPDATE plan via an IN-subquery (with broadcast disabled), then
-    // have the DAGScheduler corrupt the first attempt of every upstream shuffle map stage.
-    // Note: the current fetch-failure injection does not retry the writer stage, so this
-    // test passes equally well with plain SQLMetric — it only exercises the SLAM-aware
-    // read path. Follow-up #55738 will add infra to actually retry the writer stage and
-    // exercise the SLAM behavior end-to-end for UPDATE.
+    // INJECT_SHUFFLE_FETCH_FAILURES corrupts the partition-0 task of the first successful
+    // attempt of every shuffle map stage, so a downstream stage FetchFails and the producer
+    // re-runs. UPDATE writer-side metrics live on the result stage (`metric.add(N)` at
+    // end-of-task in WritingSparkTask), and ResultStage.findMissingPartitions only re-runs
+    // partitions that haven't successfully completed, so the writer accumulator single-counts;
+    // this test is regression coverage that retries don't break the SLAM-aware `UpdateSummary`.
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       withTempView("source") {
         createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",

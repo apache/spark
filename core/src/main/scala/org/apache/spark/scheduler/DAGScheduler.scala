@@ -179,13 +179,18 @@ private[spark] class DAGScheduler(
 
   private[spark] val jobIdToQueryExecutionId = new ConcurrentHashMap[Int, java.lang.Long]()
 
-  // The maps below back the test-only INJECT_SHUFFLE_FETCH_FAILURES machinery. They are always
-  // allocated rather than gated on `Utils.isTesting`: that helper reads the mutable
-  // `spark.testing` system property, so it can return a different value when this DAGScheduler is
-  // constructed than at the later use-sites. A construction-time `else null` would then be
-  // dereferenced by a use-site that re-checks `Utils.isTesting` and sees `true`, throwing an NPE
-  // that crashes the event loop. The maps are only ever populated inside the config-gated test
-  // paths, so in production they stay empty and carry no behavioral cost beyond an empty map.
+  // The maps below back the test-only INJECT_SHUFFLE_FETCH_FAILURES machinery, keyed by the
+  // globally-unique (never-reused) shuffleId. They are always allocated rather than gated on
+  // `Utils.isTesting`: that helper reads the mutable `spark.testing` system property, so it can
+  // return a different value when this DAGScheduler is constructed than at the later use-sites.
+  // A construction-time `else null` would then be dereferenced by a use-site that re-checks
+  // `Utils.isTesting` and sees `true`, throwing an NPE that crashes the event loop. The maps are
+  // only ever populated inside the config-gated test paths, so in production they stay empty and
+  // carry no behavioral cost beyond an empty map. They are not evicted per-stage: under AQE each
+  // Exchange is materialized as its own map-stage job whose stage is removed before the consuming
+  // stage runs, so evicting on stage removal would drop a pending corruption before its consumer
+  // is ever submitted. The only correct eviction point is shuffle unregistration, which is
+  // GC-driven; the residual state is one small entry per shuffleId, bounded by a test's lifetime.
 
   // For INJECT_SHUFFLE_FETCH_FAILURES: per-shuffleId, the stage attempt whose partition-0 task
   // we corrupted. Read to (a) avoid re-corrupting that partition on recompute, and (b) decide
@@ -975,11 +980,6 @@ private[spark] class DAGScheduler(
                 }
                 for ((k, v) <- shuffleIdToMapStage.find(_._2 == stage)) {
                   shuffleIdToMapStage.remove(k)
-                  if (Utils.isTesting) {
-                    injectShuffleFetchFailuresCorruptedAttempt.remove(k)
-                    injectShuffleFetchFailuresPendingDelayedCorruption.remove(k)
-                    injectShuffleFetchFailuresDownstreamSuccessCount.remove(k)
-                  }
                 }
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
