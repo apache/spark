@@ -64,12 +64,13 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
         val withSharedJsonPaths = p match {
           case project: Project
               if conf.getJsonObjectSharedParsingEnabled &&
-                !conf.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE) =>
+                !conf.getConf(SQLConf.COLLAPSE_PROJECT_ALWAYS_INLINE) &&
+                project.projectList.exists(_.exists(_.isInstanceOf[GetJsonObject])) =>
             shareGetJsonObjects(project)
           case _ => p
         }
         withSharedJsonPaths.transformExpressionsWithPruning(
-          _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, GET_JSON_OBJECT, JSON_TO_STRUCT)
+          _.containsAnyPattern(CREATE_NAMED_STRUCT, EXTRACT_VALUE, JSON_TO_STRUCT)
           )(jsonOptimization)
       } else {
         p
