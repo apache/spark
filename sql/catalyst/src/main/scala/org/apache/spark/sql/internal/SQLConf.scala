@@ -3840,6 +3840,7 @@ object SQLConf {
         "replaces repeated simple top-level get_json_object expressions over the same input " +
         "with one shared parse.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
 
