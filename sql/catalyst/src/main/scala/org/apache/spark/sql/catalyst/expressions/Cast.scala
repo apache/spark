@@ -1609,6 +1609,14 @@ case class Cast(
         code"$evPrim = ${NumberConverter.getClass.getName.stripSuffix("$")}.toBinary($c);"
   }
 
+  // Registers the session `zoneId` as a codegen reference object and returns a handle to it.
+  // Kept as a method (rather than a pre-`match` val) so the reference is only added for the arms
+  // that actually need the session time zone, not for zone-independent casts.
+  private[this] def zoneIdValue(ctx: CodegenContext): GlobalValue = {
+    val zoneIdClass = classOf[ZoneId]
+    JavaCode.global(ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName), zoneIdClass)
+  }
+
   private[this] def castToDateCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = {
@@ -1633,16 +1641,14 @@ case class Cast(
           }
 
       case TimestampType =>
-        val zidClass = classOf[ZoneId]
-        val zid = JavaCode.global(ctx.addReferenceObj("zoneId", zoneId, zidClass.getName), zidClass)
+        val zid = zoneIdValue(ctx)
         (c, evPrim, evNull) =>
           code"""$evPrim = $dateTimeUtilsCls.microsToDays($c, $zid);"""
       case TimestampNTZType =>
         (c, evPrim, evNull) =>
           code"$evPrim = $dateTimeUtilsCls.microsToDays($c, java.time.ZoneOffset.UTC);"
       case _: TimestampLTZNanosType =>
-        val zidClass = classOf[ZoneId]
-        val zid = JavaCode.global(ctx.addReferenceObj("zoneId", zoneId, zidClass.getName), zidClass)
+        val zid = zoneIdValue(ctx)
         (c, evPrim, evNull) =>
           code"$evPrim = $dateTimeUtilsCls.microsToDays($c.epochMicros, $zid);"
       case _: TimestampNTZNanosType =>
@@ -1819,10 +1825,7 @@ case class Cast(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case _: StringType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       val longOpt = ctx.freshVariable("longOpt", classOf[Option[Long]])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
@@ -1845,26 +1848,17 @@ case class Cast(
     case _: IntegralType =>
       (c, evPrim, evNull) => code"$evPrim = ${longToTimeStampCode(c)};"
     case DateType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"""$evPrim = $dateTimeUtilsCls.daysToMicros($c, $zid);"""
     case TimestampNTZType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, $zid, java.time.ZoneOffset.UTC);"
     case _: TimestampLTZNanosType =>
       (c, evPrim, evNull) => code"$evPrim = $c.epochMicros;"
     case _: TimestampNTZNanosType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c.epochMicros, $zid, java.time.ZoneOffset.UTC);"
     case DecimalType() =>
@@ -1924,19 +1918,13 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.daysToMicros($c, java.time.ZoneOffset.UTC);"
     case TimestampType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c, java.time.ZoneOffset.UTC, $zid);"
     case _: TimestampNTZNanosType =>
       (c, evPrim, evNull) => code"$evPrim = $c.epochMicros;"
     case _: TimestampLTZNanosType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.convertTz($c.epochMicros, java.time.ZoneOffset.UTC, $zid);"
   }
@@ -1946,10 +1934,7 @@ case class Cast(
       precision: Int,
       ctx: CodegenContext): CastFunction = from match {
     case _: StringType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       val tsOpt = ctx.freshVariable("tsOpt", classOf[Option[TimestampNanosVal]])
       (c, evPrim, evNull) =>
         if (ansiEnabled) {
@@ -1973,10 +1958,7 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
     case TimestampNTZType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts(" +
           code"$dateTimeUtilsCls.convertTz($c, $zid, java.time.ZoneOffset.UTC), (short) 0);"
@@ -1984,17 +1966,11 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.truncateTimestampNanosToPrecision($c, $precision);"
     case _: TimestampNTZNanosType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.timestampNTZNanosToLTZNanos($c, $zid, $precision);"
     case DateType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts(" +
           code"$dateTimeUtilsCls.daysToMicros($c, $zid), (short) 0);"
@@ -2028,10 +2004,7 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts($c, (short) 0);"
     case TimestampType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = TimestampNanosVal.fromParts(" +
           code"$dateTimeUtilsCls.convertTz($c, java.time.ZoneOffset.UTC, $zid), (short) 0);"
@@ -2039,10 +2012,7 @@ case class Cast(
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.truncateTimestampNanosToPrecision($c, $precision);"
     case _: TimestampLTZNanosType =>
-      val zoneIdClass = classOf[ZoneId]
-      val zid = JavaCode.global(
-        ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
-        zoneIdClass)
+      val zid = zoneIdValue(ctx)
       (c, evPrim, evNull) =>
         code"$evPrim = $dateTimeUtilsCls.timestampLTZNanosToNTZNanos($c, $zid, $precision);"
     case DateType =>
