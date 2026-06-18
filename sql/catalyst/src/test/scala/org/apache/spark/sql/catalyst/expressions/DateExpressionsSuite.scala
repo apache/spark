@@ -1069,8 +1069,6 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision timestamps") {
     import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
-    // The format is ignored for the timestamp-argument form; the result is always whole-second
-    // BIGINT, so the sub-second digits never affect it.
     val fmt = Literal("yyyy-MM-dd HH:mm:ss")
 
     // A post-epoch value with non-zero sub-second digits: 2008-12-25 15:30:00.123456789 ->
@@ -1087,6 +1085,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         UnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
       checkEvaluation(
         ToUnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+    }
+
+    // The format is ignored for the timestamp-argument form: a deliberately invalid format still
+    // yields the same whole-second result, since the timestamp branch never consults the format.
+    val badFmt = Literal("not-a-format")
+    foreachNanosPrecision { p =>
+      checkEvaluation(
+        UnixTimestamp(Literal.create(ntz, TimestampNTZNanosType(p)), badFmt, UTC_OPT),
+        1230219000L)
+      checkEvaluation(
+        ToUnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), badFmt, UTC_OPT),
+        1230219000L)
     }
 
     // Pre-epoch sub-second value: 1969-12-31 23:59:59.5 has epochMicros -500000, which divides to
