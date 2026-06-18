@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference}
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -1501,6 +1501,50 @@ class JDBCSuite extends SharedSparkSession {
       assert(getJdbcType(oracleDialect, TimestampType) == "TIMESTAMP")
     }
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
+  }
+
+  test("Oracle TRUNC pushdown should map Spark format strings to Oracle format") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val dateRef = FieldReference("d")
+
+    // LiteralValue for StringType must use UTF8String (Spark's internal string type)
+    // to match what V2ExpressionBuilder produces in the real pushdown path.
+    import org.apache.spark.unsafe.types.UTF8String
+    def truncExpr(fmt: String): GeneralScalarExpression = new GeneralScalarExpression("TRUNC",
+      Array[V2Expression](dateRef, LiteralValue(UTF8String.fromString(fmt), StringType)))
+
+    val monthSql = oracleDialect.compileExpression(truncExpr("MONTH")).get
+    assert(monthSql.contains("'MM'"),
+      s"trunc(d, 'MONTH') should produce Oracle 'MM', got: $monthSql")
+    assert(!monthSql.contains("'IW'"),
+      s"trunc(d, 'MONTH') should NOT produce 'IW', got: $monthSql")
+
+    val weekSql = oracleDialect.compileExpression(truncExpr("WEEK")).get
+    assert(weekSql.contains("'IW'"),
+      s"trunc(d, 'WEEK') should produce Oracle 'IW', got: $weekSql")
+
+    val yearSql = oracleDialect.compileExpression(truncExpr("YEAR")).get
+    assert(yearSql.contains("'YYYY'"),
+      s"trunc(d, 'YEAR') should produce Oracle 'YYYY', got: $yearSql")
+
+    val quarterSql = oracleDialect.compileExpression(truncExpr("QUARTER")).get
+    assert(quarterSql.contains("'Q'"),
+      s"trunc(d, 'QUARTER') should produce Oracle 'Q', got: $quarterSql")
+
+    // Case-insensitive: lowercase formats must also map correctly
+    val weekLowerSql = oracleDialect.compileExpression(truncExpr("week")).get
+    assert(weekLowerSql.contains("'IW'"),
+      s"trunc(d, 'week') (lowercase) should produce Oracle 'IW', got: $weekLowerSql")
+
+    // Unmapped formats should NOT be pushed down (compileExpression returns None)
+    assert(oracleDialect.compileExpression(truncExpr("DAY")).isEmpty,
+      "Unmapped format 'DAY' should not be pushed down (compileExpression should return None)")
+
+    // Alias formats (MM, MON, YYYY, YY) should also map correctly
+    val mmSql = oracleDialect.compileExpression(truncExpr("MM")).get
+    assert(mmSql.contains("'MM'"), s"trunc(d, 'MM') should produce Oracle 'MM', got: $mmSql")
+    val yySql = oracleDialect.compileExpression(truncExpr("YY")).get
+    assert(yySql.contains("'YYYY'"), s"trunc(d, 'YY') should produce Oracle 'YYYY', got: $yySql")
   }
 
   private def assertEmptyQuery(sqlString: String): Unit = {
