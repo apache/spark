@@ -26,10 +26,12 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
 /**
- * End-to-end tests for the `hour`, `minute` and `second` functions over the nanosecond-precision
- * timestamp types `TIMESTAMP_NTZ(p)` / `TIMESTAMP_LTZ(p)` (`p` in `[7, 9]`), part of the
- * nanosecond timestamp preview (SPARK-56822). Each test exercises both the SQL path
- * (`selectExpr`) and the Scala `Column` API (`functions.hour` / `minute` / `second`).
+ * End-to-end tests over the nanosecond-precision timestamp types `TIMESTAMP_NTZ(p)` /
+ * `TIMESTAMP_LTZ(p)` (`p` in `[7, 9]`), part of the nanosecond timestamp preview (SPARK-56822).
+ * Covers the datetime functions (`hour`/`minute`/`second`, `EXTRACT`/`date_part`, the date-field
+ * functions) and the `MIN`/`MAX` aggregates (plus `min_by`/`max_by`/`greatest`/`least`). Most
+ * tests use the SQL path (`selectExpr`); several also cross-check the Scala `Column` API. The two
+ * subclasses run every test with ANSI mode on and off.
  */
 abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
 
