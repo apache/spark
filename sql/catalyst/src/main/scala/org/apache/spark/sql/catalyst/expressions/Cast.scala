@@ -455,8 +455,9 @@ object Cast extends QueryErrorsBase {
     // sub-microsecond digits, and cross-family casts additionally reinterpret the value against the
     // session time zone; both stay explicit-only rather than silent store assignments while the
     // nanos types are unreleased. This covers same-family narrowing (nanos -> micro), cross-family
-    // nanos <-> nanos, and the mixed micro/nanos pairs at the precision-6 boundary. Only the
-    // all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair stays store-assignable via the catch-all below.
+    // nanos <-> nanos, and the mixed micro/nanos pairs at the precision-6 boundary; everything
+    // matched here is explicit-only. The all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair and micros ->
+    // nanos same-family widening stay store-assignable via the catch-all below.
     case (_: AnyTimestampNanoType, t) if AnyTimestampType.acceptsType(t) => false
     case (TimestampType, _: TimestampNTZNanosType) => false
     case (TimestampNTZType, _: TimestampLTZNanosType) => false

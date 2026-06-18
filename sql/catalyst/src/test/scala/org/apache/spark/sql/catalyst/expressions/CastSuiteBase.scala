@@ -822,6 +822,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // The conversion depends on the session time zone in both directions.
       assert(Cast.needsTimeZone(ltz, ntz))
       assert(Cast.needsTimeZone(ntz, ltz))
+      // Reinterpreting a non-null instant/local date-time never yields null, so the cast is
+      // null-safe in both directions (mirroring the micro TIMESTAMP <-> TIMESTAMP_NTZ pair).
+      assert(!Cast.forceNullable(ltz, ntz))
+      assert(!Cast.forceNullable(ntz, ltz))
     }
   }
 
@@ -842,6 +846,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         assert(!Cast.canUpCast(from, to))
         assert(!Cast.canANSIStoreAssign(from, to))
         assert(Cast.needsTimeZone(from, to))
+        // Null-safe like the micro TIMESTAMP <-> TIMESTAMP_NTZ pair.
+        assert(!Cast.forceNullable(from, to))
       }
     }
     // Sanity: the all-micro TIMESTAMP <-> TIMESTAMP_NTZ pair (precision 6 <-> 6) stays a silent
@@ -1543,6 +1549,49 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
             cast(Literal.create(src, TimestampLTZNanosType(p)), TimestampNTZNanosType(p), zid),
             TimestampLTZNanosType(p), zid),
           src)
+      }
+    }
+  }
+
+  test("cross-family nanos cast: DST gap and overlap resolve like the micro cast") {
+    // The cross-family nanos casts reuse the same java.time resolver as the micro
+    // TIMESTAMP <-> TIMESTAMP_NTZ casts (NTZ -> LTZ interprets the wall clock via
+    // LocalDateTime.atZone; LTZ -> NTZ renders the instant via Instant.atZone). Exercise the LA
+    // spring-forward gap (02:30 does not exist -> java.time shifts forward) and the fall-back
+    // overlap (01:30 occurs twice -> earlier offset), asserting the nanos result matches the
+    // corresponding micro cast on the epoch-micros part. The existing zone tests above use
+    // non-transition instants, so this is the only place DST resolution is observable.
+    val la = Option(LA.getId)
+    Seq(
+      LocalDateTime.of(2020, 3, 8, 2, 30, 0, 123456789),   // inside the PST -> PDT gap
+      LocalDateTime.of(2020, 11, 1, 1, 30, 0, 123456789))  // inside the PDT -> PST overlap
+    .foreach { ldt =>
+      // NTZ stores the wall-clock fields as epoch-micros-at-UTC, exactly like micro TIMESTAMP_NTZ.
+      val ntzMicros = localDateTimeToNanosVal(ldt).epochMicros
+      // The expected LTZ instant is whatever the micro TIMESTAMP_NTZ -> TIMESTAMP cast produces;
+      // for the gap this is the forward-shifted instant, for the overlap the earlier offset.
+      val microLtz = evaluateWithoutCodegen(
+        cast(Literal.create(ntzMicros, TimestampNTZType), TimestampType, la)).asInstanceOf[Long]
+      // The reverse micro TIMESTAMP -> TIMESTAMP_NTZ of that instant (for the gap, the wall clock
+      // is the shifted 03:30, not the original 02:30).
+      val microNtz = evaluateWithoutCodegen(
+        cast(Literal.create(microLtz, TimestampType), TimestampNTZType, la)).asInstanceOf[Long]
+      for {
+        p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION
+        q <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION
+      } {
+        // NTZ(q) -> LTZ(p): the epoch-micros part resolves DST exactly like the micro cast.
+        val ntzToLtzSrc = floorNanosToPrecision(789, q)
+        checkEvaluation(
+          cast(Literal.create(nanosVal(ntzMicros, ntzToLtzSrc), TimestampNTZNanosType(q)),
+            TimestampLTZNanosType(p), la),
+          nanosVal(microLtz, floorNanosToPrecision(ntzToLtzSrc, p)))
+        // LTZ(p) -> NTZ(q): rendering the resolved instant matches the micro cast too.
+        val ltzToNtzSrc = floorNanosToPrecision(789, p)
+        checkEvaluation(
+          cast(Literal.create(nanosVal(microLtz, ltzToNtzSrc), TimestampLTZNanosType(p)),
+            TimestampNTZNanosType(q), la),
+          nanosVal(microNtz, floorNanosToPrecision(ltzToNtzSrc, q)))
       }
     }
   }
