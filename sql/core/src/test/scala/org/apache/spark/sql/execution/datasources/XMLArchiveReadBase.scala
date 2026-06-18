@@ -132,4 +132,24 @@ trait XMLArchiveReadBase extends ArchiveReadSuiteBase {
       }
     }
   }
+
+  test("XML: a malformed record in an archive entry matches a directory read (both modes)") {
+    // Permissive mode (the default): a malformed record parses to nulls with its raw text echoed
+    // into `_corrupt_record`. The single-line archive path wires its own FailureSafeParser in
+    // `readStream`, and the multi-line path buffers the entry's bytes to echo the corrupt record --
+    // so assert the corrupt-record column matches a directory read of the same files in both the
+    // single-line and whole-document modes.
+    val corruptSchema = s"$readSchema, _corrupt_record STRING"
+    // Single-line: a good record, then a malformed one on the next line.
+    assertArchiveMatchesDir(
+      Seq(entryName(0) -> xmlBytes(
+        "<row><id>1</id><name>Alice</name></row>\n<row><id>2</id><name>\n")),
+      extraOptions = Map("multiLine" -> "false"),
+      schema = corruptSchema)
+    // multiLine: the whole entry is one malformed document (unclosed element).
+    assertArchiveMatchesDir(
+      Seq(entryName(0) -> xmlBytes("<row><id>1</id><name>Alice</name>")),
+      extraOptions = Map("multiLine" -> "true"),
+      schema = corruptSchema)
+  }
 }
