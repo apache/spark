@@ -20,10 +20,11 @@ package org.apache.spark.sql
 import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, Lag, Literal, NonFoldableLiteral}
+import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, AttributeReference, Expression, If, IsNotNull, Lag, Literal, NonFoldableLiteral, RowNumber}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
 import org.apache.spark.sql.catalyst.plans.logical.{Window => LogicalWindow}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.window.WindowExec
@@ -878,6 +879,28 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
         "inputExpr" -> "\"(- nonfoldableliteral())\""
       )
     )
+  }
+
+  test("SPARK-57505: a window function expression wrapped into a Column works with over()") {
+    val df = Seq((1, "a"), (2, "a"), (3, "b")).toDF("value", "key")
+    val window = Window.partitionBy($"key").orderBy($"value")
+    // Wrapping a catalyst window function expression directly with Column(expr) used to box the
+    // AggregateWindowFunction (RowNumber is one) in an AggregateExpression, which then failed
+    // analysis with WINDOW_FUNCTION_WITHOUT_OVER_CLAUSE. It must now behave like by-name
+    // row_number().
+    checkAnswer(
+      df.select($"value", Column(RowNumber()).over(window).as("rn")),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 1)))
+  }
+
+  test("SPARK-57505: a custom AggregateWindowFunction wrapped into a Column works with over()") {
+    val df = Seq((1, "a"), (2, "a"), (3, "b")).toDF("value", "key")
+    val window = Window.partitionBy($"key").orderBy($"value")
+    // Mirrors plugging in a user-defined AggregateWindowFunction through the Column API:
+    //   Column(MyWindowFunction(inputColumn.expr)).over(window)
+    checkAnswer(
+      df.select($"value", Column(NonNullRunningCount($"value".expr)).over(window).as("cnt")),
+      Seq(Row(1, 1), Row(2, 2), Row(3, 1)))
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
@@ -1807,4 +1830,26 @@ class DataFrameWindowFunctionsSuite extends SharedSparkSession
       }
     }
   }
+}
+
+/**
+ * A minimal user-defined window function, it counts the non-null values of `child` from the start
+ * of the window frame up to and including the current row.
+ */
+case class NonNullRunningCount(child: Expression)
+  extends AggregateWindowFunction with UnaryLike[Expression] {
+
+  private lazy val count = AttributeReference("count", IntegerType, nullable = false)()
+
+  override lazy val aggBufferAttributes: Seq[AttributeReference] = count :: Nil
+  override lazy val initialValues: Seq[Expression] = Literal(0) :: Nil
+  override lazy val updateExpressions: Seq[Expression] =
+    If(IsNotNull(child), Add(count, Literal(1)), count) :: Nil
+  override lazy val evaluateExpression: Expression = count
+
+  override def nullable: Boolean = false
+  override def prettyName: String = "non_null_running_count"
+
+  override protected def withNewChildInternal(newChild: Expression): NonNullRunningCount =
+    copy(child = newChild)
 }
