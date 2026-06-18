@@ -151,9 +151,9 @@ object ArrowDeserializers {
           }
         }
       case (ScalaEnumEncoder(parent, _), v: FieldVector) =>
-        val mirror = scala.reflect.runtime.currentMirror
-        val module = mirror.classSymbol(parent).module.asModule
-        val enumeration = mirror.reflectModule(module).instance.asInstanceOf[Enumeration]
+        // Scala runtime reflection is not thread-safe (scala/bug#6240). Synchronize to
+        // prevent races that surface as "... is not a module" under concurrent access.
+        val enumeration = resolveEnum(parent)
         new LeafFieldDeserializer[Enumeration#Value](encoder, v, timeZoneId) {
           override def value(i: Int): Enumeration#Value = {
             enumeration.withName(reader.getString(i))
@@ -440,11 +440,49 @@ object ArrowDeserializers {
   /**
    * Resolve the companion object for a scala class. In our particular case the class we pass in
    * is a Scala collection. We use the companion to create a builder for that collection.
+   *
+   * Scala runtime reflection is not thread-safe (scala/bug#6240): concurrent calls to
+   * `classSymbol(...).companion` can race, leaving the companion as `NoSymbol` so that
+   * `.asModule` throws `ScalaReflectionException: <none> is not a module`. We serialize the
+   * reflection through this object's monitor (see [[resolveCompanionFromMirror]]) to prevent it.
    */
-  private[arrow] def resolveCompanion[T](tag: ClassTag[_]): T = {
-    val mirror = scala.reflect.runtime.currentMirror
-    val module = mirror.classSymbol(tag.runtimeClass).companion.asModule
-    mirror.reflectModule(module).instance.asInstanceOf[T]
+  private[arrow] def resolveCompanion[T](tag: ClassTag[_]): T =
+    resolveCompanionFromMirror(scala.reflect.runtime.currentMirror, tag.runtimeClass)
+      .asInstanceOf[T]
+
+  /**
+   * Synchronized reflection to resolve a companion object. The mirror is passed in rather than
+   * read from `currentMirror` so that the concurrency regression test can drive this exact
+   * (synchronized) method against a deliberately cold mirror, where the race would otherwise
+   * surface. Production always passes `currentMirror`.
+   */
+  private[arrow] def resolveCompanionFromMirror(
+      mirror: scala.reflect.runtime.universe.Mirror,
+      cls: Class[_]): Any = synchronized {
+    val module = mirror.classSymbol(cls).companion.asModule
+    mirror.reflectModule(module).instance
+  }
+
+  /**
+   * Resolve a Scala Enumeration parent class to its module instance. Reads `currentMirror` and
+   * delegates to [[resolveEnumFromMirror]], mirroring the [[resolveCompanion]] /
+   * [[resolveCompanionFromMirror]] split.
+   */
+  private def resolveEnum(parent: Class[_]): Enumeration =
+    resolveEnumFromMirror(scala.reflect.runtime.currentMirror, parent).asInstanceOf[Enumeration]
+
+  /**
+   * Synchronized reflection to resolve a Scala Enumeration's module instance. As with
+   * [[resolveCompanionFromMirror]], the mirror is passed in rather than read from `currentMirror`
+   * so the concurrency regression test can drive this exact (synchronized) method against a
+   * deliberately cold mirror. Synchronized on the same monitor as [[resolveCompanionFromMirror]]
+   * for the same thread-safety reasons. Production always passes `currentMirror`.
+   */
+  private[arrow] def resolveEnumFromMirror(
+      mirror: scala.reflect.runtime.universe.Mirror,
+      parent: Class[_]): Any = synchronized {
+    val module = mirror.classSymbol(parent).module.asModule
+    mirror.reflectModule(module).instance
   }
 
   /**
