@@ -239,6 +239,54 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
         Row(null, null, null, null))
     }
   }
+
+  test("SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision timestamps") {
+    // unix_timestamp returns whole-second BIGINT and applies no zone shift to a timestamp
+    // argument, so the sub-second digits are dropped and the nanos result equals the
+    // microsecond-timestamp result.
+    val ntzStr = "2020-01-01T13:24:35.123456789"
+    val ltzStr = "2020-01-01T21:24:35.987654321Z"
+    Seq(7, 8, 9).foreach { p =>
+      val ntzNano = ntzNanos(ntzStr, p)
+      val ntzMicro = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(LocalDateTime.parse(ntzStr)))),
+        new StructType().add("c", TimestampNTZType))
+      checkAnswer(
+        ntzNano.select(unix_timestamp(col("c")), to_unix_timestamp(col("c"))),
+        ntzMicro.select(unix_timestamp(col("c")), to_unix_timestamp(col("c"))))
+      // 2020-01-01 13:24:35 read as the wall-clock instant -> 1577885075 epoch seconds.
+      checkAnswer(
+        ntzNano.select(unix_timestamp(col("c")), to_unix_timestamp(col("c"))),
+        Row(1577885075L, 1577885075L))
+
+      val ltzNano = ltzNanos(ltzStr, p)
+      val ltzMicro = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(Instant.parse(ltzStr)))),
+        new StructType().add("c", TimestampType))
+      checkAnswer(
+        ltzNano.select(unix_timestamp(col("c")), to_unix_timestamp(col("c"))),
+        ltzMicro.select(unix_timestamp(col("c")), to_unix_timestamp(col("c"))))
+      // 2020-01-01 21:24:35 UTC -> 1577913875 epoch seconds.
+      checkAnswer(
+        ltzNano.select(unix_timestamp(col("c")), to_unix_timestamp(col("c"))),
+        Row(1577913875L, 1577913875L))
+    }
+  }
+
+  test("SPARK-57528: unix_timestamp / to_unix_timestamp over NULL nanosecond timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val ntz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      val ltz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampLTZNanosType(p)))
+      checkAnswer(
+        ntz.select(unix_timestamp(col("c")), to_unix_timestamp(col("c"))), Row(null, null))
+      checkAnswer(
+        ltz.select(unix_timestamp(col("c")), to_unix_timestamp(col("c"))), Row(null, null))
+    }
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.

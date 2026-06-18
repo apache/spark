@@ -1067,6 +1067,51 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ToUnixTimestamp(Literal("2015-07-24"), Literal("\""), UTC_OPT) :: Nil)
   }
 
+  test("SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision timestamps") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+    val fmt = Literal("yyyy-MM-dd HH:mm:ss")
+
+    // A post-epoch value with non-zero sub-second digits: 2008-12-25 15:30:00.123456789 ->
+    // 1230219000. unix_timestamp does not apply a zone shift, so the NTZ wall-clock value and the
+    // LTZ instant at the same UTC reading produce the same whole-second result.
+    val ntz = localDateTimeToNanosVal(timestampNTZ(2008, 12, 25, 15, 30, 0, 123456789))
+    val ltz = instantToNanosVal(Instant.parse("2008-12-25T15:30:00.123456789Z"))
+    foreachNanosPrecision { p =>
+      checkEvaluation(
+        UnixTimestamp(Literal.create(ntz, TimestampNTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+      checkEvaluation(
+        ToUnixTimestamp(Literal.create(ntz, TimestampNTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+      checkEvaluation(
+        UnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+      checkEvaluation(
+        ToUnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+    }
+
+    // The format is ignored for the timestamp-argument form: a deliberately invalid format still
+    // yields the same whole-second result, since the timestamp branch never consults the format.
+    val badFmt = Literal("not-a-format")
+    foreachNanosPrecision { p =>
+      checkEvaluation(
+        UnixTimestamp(Literal.create(ntz, TimestampNTZNanosType(p)), badFmt, UTC_OPT),
+        1230219000L)
+      checkEvaluation(
+        ToUnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), badFmt, UTC_OPT),
+        1230219000L)
+    }
+
+    // Pre-epoch sub-second value: 1969-12-31 23:59:59.5 has epochMicros -500000, which divides to
+    // 0 (truncation toward zero), matching the existing microsecond-timestamp behavior.
+    val preEpoch = localDateTimeToNanosVal(timestampNTZ(1969, 12, 31, 23, 59, 59, 500000000))
+    checkEvaluation(
+      UnixTimestamp(Literal.create(preEpoch, TimestampNTZNanosType(9)), fmt, UTC_OPT), 0L)
+
+    // NULL input.
+    checkEvaluation(
+      UnixTimestamp(Literal.create(null, TimestampNTZNanosType(9)), fmt, UTC_OPT), null)
+    checkEvaluation(
+      ToUnixTimestamp(Literal.create(null, TimestampLTZNanosType(9)), fmt, UTC_OPT), null)
+  }
+
   test("datediff") {
     checkEvaluation(
       DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)

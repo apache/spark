@@ -1429,6 +1429,8 @@ abstract class ToTimestamp
           daysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
         case TimestampType | TimestampNTZType =>
           t.asInstanceOf[Long] / downScaleFactor
+        case _: AnyTimestampNanoType =>
+          t.asInstanceOf[TimestampNanosVal].epochMicros / downScaleFactor
         case _: StringType =>
           val fmt = right.eval(input)
           if (fmt == null) {
@@ -1521,6 +1523,15 @@ abstract class ToTimestamp
           if (!${ev.isNull}) {
             ${ev.value} = ${eval1.value} / $downScaleFactor;
           }""")
+      case _: AnyTimestampNanoType =>
+        val eval1 = left.genCode(ctx)
+        ev.copy(code = code"""
+          ${eval1.code}
+          boolean ${ev.isNull} = ${eval1.isNull};
+          $javaType ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
+          if (!${ev.isNull}) {
+            ${ev.value} = ${eval1.value}.epochMicros / $downScaleFactor;
+          }""")
       case DateType =>
         val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
@@ -1538,6 +1549,19 @@ abstract class ToTimestamp
 
 abstract class UnixTime extends ToTimestamp {
   override val downScaleFactor: Long = MICROS_PER_SECOND
+
+  // In addition to the input types accepted by the base `ToTimestamp`, the timestamp-argument
+  // form of `unix_timestamp` / `to_unix_timestamp` also accepts the nanosecond-precision
+  // timestamp types. The result stays whole-second BIGINT, so the sub-second digits are dropped.
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(
+      TypeCollection(
+        StringTypeWithCollation(supportsTrimCollation = true),
+        DateType,
+        TimestampType,
+        TimestampNTZType,
+        AnyTimestampNanoType),
+      StringTypeWithCollation(supportsTrimCollation = true))
 }
 
 /**
