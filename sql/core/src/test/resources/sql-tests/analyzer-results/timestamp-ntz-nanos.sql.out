@@ -507,3 +507,70 @@ SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ntz(9), string>
 SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND
+-- !query analysis
+Project [cast(2020-01-02 03:04:05.123456789 + INTERVAL '2 00:03:00.000456' DAY TO SECOND as timestamp_ntz(9)) AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND
+-- !query analysis
+Project [cast(2020-01-02 03:04:05.123456789 - INTERVAL '1 00:04:00.000321' DAY TO SECOND as timestamp_ntz(9)) AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND
+-- !query analysis
+Project [cast(1960-01-02 03:04:05.123456789 + INTERVAL '0 00:00:00.000001' DAY TO SECOND as timestamp_ntz(9)) AS TIMESTAMP_NTZ '1960-01-02 03:04:05.123456789' + INTERVAL '0 00:00:00.000001' DAY TO SECOND#x]
++- OneRowRelation
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"make_interval(0, 1, 0, 2, 0, 0, 0)\"",
+    "inputType" : "\"INTERVAL\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"INTERVAL DAY TO SECOND\"",
+    "sqlExpr" : "\"TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 89,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0)"
+  } ]
+}
+
+
+-- !query
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.BINARY_OP_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "left" : "\"TIMESTAMP_NTZ(9)\"",
+    "right" : "\"INTERVAL MONTH\"",
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 73,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH"
+  } ]
+}
