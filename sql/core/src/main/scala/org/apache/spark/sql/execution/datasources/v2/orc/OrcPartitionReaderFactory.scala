@@ -129,7 +129,7 @@ case class OrcPartitionReaderFactory(
       return buildColumnarReaderWithAggregates(file, conf)
     }
     val filePath = file.toPath
-    lazy val (reader, readerOptions) = createORCReader(filePath, conf)
+    val (reader, readerOptions) = createORCReader(filePath, conf)
     val orcSchema = Utils.tryWithResource(reader)(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
@@ -172,10 +172,14 @@ case class OrcPartitionReaderFactory(
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val reader = OrcFile.createReader(filePath, readerOptions)
-
-    pushDownPredicates(reader.getSchema, conf)
-
-    (reader, readerOptions)
+    try {
+      pushDownPredicates(reader.getSchema, conf)
+      (reader, readerOptions)
+    } catch {
+      case e: Throwable =>
+        reader.close()
+        throw e
+    }
   }
 
   /**
