@@ -428,7 +428,7 @@ public class YarnShuffleService extends AuxiliaryService {
           logger.info("Disabling metadata persistence for application {}", appId);
         }
       } catch (IOException ioe) {
-        logger.warn("Unable to parse application data for service: " + payload);
+        logger.warn("Unable to parse the application data for application {}", appId);
         metaInfo = null;
       }
       if (isAuthenticationEnabled()) {
