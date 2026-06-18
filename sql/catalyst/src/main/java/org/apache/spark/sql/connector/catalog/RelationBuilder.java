@@ -44,7 +44,7 @@ abstract class RelationBuilder<B extends RelationBuilder<B>> {
   }
 
   public B withSchema(StructType schema) {
-    this.columns = CatalogV2Util.structTypeToV2Columns(schema);
+    this.columns = CatalogV2Util.structTypeToV2Columns(schema, true /* keep IDs */);
     return self();
   }
 

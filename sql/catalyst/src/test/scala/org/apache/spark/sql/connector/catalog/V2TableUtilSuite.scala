@@ -550,6 +550,134 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.head == "`person`.`attrs`.`value` type has changed from INT to BIGINT")
   }
 
+  // ---------------------------------------------------------------------------
+  // Field ID change error messages
+  // ---------------------------------------------------------------------------
+
+  test("validateCapturedColumns - top-level column ID changed") {
+    val originCols = Array(
+      colWithId("id", LongType, nullable = false, id = "1"),
+      colWithId("name", StringType, nullable = true, id = "2"))
+    val currentCols = Array(
+      colWithId("id", LongType, nullable = false, id = "99"),  // ID changed
+      colWithId("name", StringType, nullable = true, id = "2"))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`id` field ID has changed from 1 to 99")
+  }
+
+  test("validateCapturedColumns - nested struct field ID changed") {
+    val originStruct = StructType(Seq(
+      StructField("name", StringType).withId("10"),
+      StructField("age", IntegerType).withId("11")))
+    val originCols = Array(col("person", originStruct, nullable = true))
+
+    val currentStruct = StructType(Seq(
+      StructField("name", StringType).withId("10"),
+      StructField("age", IntegerType).withId("99")))  // age ID changed
+    val currentCols = Array(col("person", currentStruct, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`person`.`age` field ID has changed from 11 to 99")
+  }
+
+  test("validateCapturedColumns - doubly-nested struct field ID changed") {
+    val originInner = StructType(Seq(StructField("age", IntegerType).withId("11")))
+    val originOuter = StructType(Seq(StructField("info", originInner).withId("10")))
+    val originCols = Array(col("person", originOuter, nullable = true))
+
+    val currentInner = StructType(Seq(StructField("age", IntegerType).withId("99")))  // changed
+    val currentOuter = StructType(Seq(StructField("info", currentInner).withId("10")))
+    val currentCols = Array(col("person", currentOuter, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`person`.`info`.`age` field ID has changed from 11 to 99")
+  }
+
+  test("validateCapturedColumns - multiple nested struct field IDs changed") {
+    val originStruct = StructType(Seq(
+      StructField("name", StringType).withId("10"),
+      StructField("age", IntegerType).withId("11"),
+      StructField("score", DoubleType).withId("12")))
+    val originCols = Array(col("person", originStruct, nullable = true))
+
+    val currentStruct = StructType(Seq(
+      StructField("name", StringType).withId("10"),
+      StructField("age", IntegerType).withId("98"),    // changed
+      StructField("score", DoubleType).withId("99")))  // changed
+    val currentCols = Array(col("person", currentStruct, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 2)
+    assert(errors.exists(_ == "`person`.`age` field ID has changed from 11 to 98"))
+    assert(errors.exists(_ == "`person`.`score` field ID has changed from 12 to 99"))
+  }
+
+  test("validateCapturedColumns - nested field ID changed in array element struct") {
+    val originElem = StructType(Seq(
+      StructField("name", StringType).withId("10"),
+      StructField("price", IntegerType).withId("11")))
+    val originCols = Array(col("items", ArrayType(originElem), nullable = true))
+
+    val currentElem = StructType(Seq(
+      StructField("name", StringType).withId("10"),
+      StructField("price", IntegerType).withId("99")))  // price ID changed
+    val currentCols = Array(col("items", ArrayType(currentElem), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`items`.`element`.`price` field ID has changed from 11 to 99")
+  }
+
+  test("validateCapturedColumns - nested field ID changed in map value struct") {
+    val originValue = StructType(Seq(
+      StructField("count", IntegerType).withId("10"),
+      StructField("label", StringType).withId("11")))
+    val originCols = Array(col("props", MapType(StringType, originValue), nullable = true))
+
+    val currentValue = StructType(Seq(
+      StructField("count", IntegerType).withId("10"),
+      StructField("label", StringType).withId("99")))  // label ID changed
+    val currentCols = Array(col("props", MapType(StringType, currentValue), nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = validateCapturedColumns(table, originCols)
+    assert(errors.size == 1)
+    assert(errors.head == "`props`.`value`.`label` field ID has changed from 11 to 99")
+  }
+
+  test("validateCapturedColumns - field ID unchanged produces no error") {
+    val struct = StructType(Seq(
+      StructField("name", StringType).withId("10"),
+      StructField("age", IntegerType).withId("11")))
+    val cols = Array(col("person", struct, nullable = true))
+    val table = TestTableWithMetadataSupport("test", cols)
+
+    val errors = validateCapturedColumns(table, cols)
+    assert(errors.isEmpty)
+  }
+
+  test("validateCapturedColumns - field ID check disabled") {
+    val originStruct = StructType(Seq(StructField("age", IntegerType).withId("11")))
+    val originCols = Array(col("person", originStruct, nullable = true))
+
+    val currentStruct = StructType(Seq(StructField("age", IntegerType).withId("99")))
+    val currentCols = Array(col("person", currentStruct, nullable = true))
+    val table = TestTableWithMetadataSupport("test", currentCols)
+
+    val errors = V2TableUtil.validateCapturedColumns(
+      table, originCols.toImmutableArraySeq, checkIds = false)
+    assert(errors.isEmpty, "Disabled field ID check should not report ID changes")
+  }
+
   test("validateCapturedColumns - ALLOW_NEW_TOP_LEVEL_FIELDS allows top-level additions") {
     val originCols = Array(
       col("id", LongType, nullable = false),
@@ -630,23 +758,6 @@ class V2TableUtilSuite extends SparkFunSuite {
     assert(errors.head.contains("`metadata`.`value`.`timestamp` BIGINT has been added"))
   }
 
-  test("validateColumnIds - multiple errors") {
-    val originalCols = Seq(
-      colWithId("salary", IntegerType, nullable = true, id = "id-1"),
-      colWithId("bonus", IntegerType, nullable = true, id = "id-2"))
-    val currentCols = Array(
-      colWithId("salary", IntegerType, nullable = true, id = "id-100"),
-      colWithId("bonus", IntegerType, nullable = true, id = "id-200"))
-    val table = TestTableWithMetadataSupport("test", currentCols)
-
-    val errors = V2TableUtil.validateColumnIds(
-      table = table,
-      originalCapturedCols = originalCols)
-    assert(errors == Seq(
-      "`salary` column ID has changed from id-1 to id-100",
-      "`bonus` column ID has changed from id-2 to id-200"))
-  }
-
   // simple table without metadata column support
   private case class TestTable(
       override val name: String,
@@ -688,7 +799,11 @@ class V2TableUtilSuite extends SparkFunSuite {
       table: Table,
       originCols: Array[Column],
       mode: SchemaValidationMode = PROHIBIT_CHANGES): Seq[String] = {
-    V2TableUtil.validateCapturedColumns(table, originCols.toImmutableArraySeq, mode)
+    V2TableUtil.validateCapturedColumns(
+      table,
+      originCols.toImmutableArraySeq,
+      mode,
+      checkIds = true)
   }
 
   private def col(name: String, dataType: DataType, nullable: Boolean): Column = {
