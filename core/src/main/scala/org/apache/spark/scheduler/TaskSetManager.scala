@@ -962,11 +962,12 @@ private[spark] class TaskSetManager(
           // This method is only called for late-arriving or killed attempts, meaning the
           // partition already has a successful attempt registered. Any MapStatus arriving
           // here is from a stale (redundant) attempt that also pushed data.
-          // Mark its mapId as stale so reducers can detect it in merged block chunks.
-          shuffleStatus.markStalePushedMap(partitionId)
+          // Mark its mapIndex (== partitionId, NOT MapStatus.mapId) as stale so
+          // reducers can detect it in merged block chunks.
+          shuffleStatus.markStalePushedPartition(partitionId)
           logInfo(s"[StalePush] Late/killed attempt tid=$tid " +
-            s"for partition=$partitionId (index=$index), mapId=${mapStatus.mapId}. " +
-            s"Marked as stale push.")
+            s"for partition=$partitionId (index=$index), attemptMapId=${mapStatus.mapId}. " +
+            s"Marked mapIndex $partitionId as stale push.")
         }
       case _ => // not a shuffle map task result, ignore
     }
@@ -1401,7 +1402,7 @@ private[spark] class TaskSetManager(
    *
    */
   private def computeValidLocalityLevels(): Array[TaskLocality.TaskLocality] = {
-    import TaskLocality.{PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY}
+    import TaskLocality.{ANY, NODE_LOCAL, NO_PREF, PROCESS_LOCAL, RACK_LOCAL}
     val levels = new ArrayBuffer[TaskLocality.TaskLocality]
     if (!pendingTasks.forExecutor.isEmpty &&
         pendingTasks.forExecutor.keySet.exists(sched.isExecutorAlive(_))) {

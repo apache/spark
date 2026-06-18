@@ -305,24 +305,26 @@ private class PushBasedFetchHelper(
    * When speculation is enabled, multiple attempts for the same map output may both push data
    * to the merger. The merger may include data from both attempts in the same merged block,
    * but the driver only tracks one as the canonical MapStatus. We detect this by checking
-   * if any stale mapId appears in the server-side chunkBitmaps.
+   * if any stale pushed map index appears in the server-side chunkBitmaps.
    *
    * @param shuffleBlockId ShuffleMergedBlockId to be checked
    * @param address BlockManagerId of push-based shuffle service
    * @param chunkBitmaps Chunks bitmap from push-based shuffle service site
-   * @return false if any stale-marked mapIndex is present in this block (forcing fallback), true otherwise
+   * @return false if any stale-marked mapIndex is present in this block (forcing fallback),
+   *         true otherwise
    */
   private[this] def checkStaleMapIdInMergedBlock(
       shuffleBlockId: ShuffleMergedBlockId,
       address: BlockManagerId,
       chunkBitmaps: Seq[RoaringBitmap]): Boolean = {
-    val staleMapIds = mapOutputTracker.getStaleMapIds(shuffleBlockId.shuffleId)
-    if (staleMapIds.isEmpty) return true
+    val staleMapIndexes =
+      mapOutputTracker.getStaleMapIndexes(shuffleBlockId.shuffleId)
+    if (staleMapIndexes.isEmpty) return true
     val mergedBlockBitmap = new RoaringBitmap()
     chunkBitmaps.foreach(mergedBlockBitmap.or)
-    val hasStale = staleMapIds.exists(id => mergedBlockBitmap.contains(id))
+    val hasStale = staleMapIndexes.exists(id => mergedBlockBitmap.contains(id))
     if (hasStale) {
-      logWarning(s"Found stale mapIds in merged block $shuffleBlockId from" +
+      logWarning(s"Found stale pushed map indexes in merged block $shuffleBlockId from" +
         s" ${address.host}:${address.port}, falling back to fetch the original blocks")
     }
     !hasStale

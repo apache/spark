@@ -2921,7 +2921,7 @@ class TaskSetManagerSuite
         s"\nCaptured logs:\n${logs.mkString("\n")}")
   }
 
-    test("SPARK-57491: late-arriving speculative ShuffleMapTask marks stale partitionId") {
+  test("SPARK-57491: late-arriving speculative ShuffleMapTask marks stale partitionId") {
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
     sc.conf.set(config.SPECULATION_MULTIPLIER, 0.0)
@@ -2979,8 +2979,8 @@ class TaskSetManagerSuite
     val result0 = createMapStatusTaskResult(mapStatus0, accumUpdatesByTask(0))
     manager.handleSuccessfulTask(task0.taskId, result0)
 
-    // Verify no stale mapIds yet (stale is only marked when late result arrives)
-    assert(mapOutputTrackerMaster.getStaleMapIds(shuffleId).isEmpty)
+    // Verify no stale pushed map indexes yet (stale is only marked when late result arrives)
+    assert(mapOutputTrackerMaster.getStaleMapIndexes(shuffleId).isEmpty)
 
     // Now the speculative attempt's result arrives late. Since task 0 already succeeded,
     // handleSuccessfulTask will see successful(0)=true and killedByOtherAttempt contains
@@ -2991,9 +2991,9 @@ class TaskSetManagerSuite
     manager.handleSuccessfulTask(specTask.taskId, specResult)
 
     // Verify that partition 0 is now tracked as stale
-    val staleMapIds = mapOutputTrackerMaster.getStaleMapIds(shuffleId)
-    assert(staleMapIds.contains(0),
-      s"Expected staleMapIds to contain partition 0, got $staleMapIds")
+    val staleMapIndexes = mapOutputTrackerMaster.getStaleMapIndexes(shuffleId)
+    assert(staleMapIndexes.contains(0),
+      s"Expected staleMapIndexes to contain mapIndex 0, got $staleMapIndexes")
   }
 
   private def createMapStatusTaskResult(

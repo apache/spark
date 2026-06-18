@@ -637,7 +637,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
       val fetchedBytes = mapWorkerTracker.trackerEndpoint
-        .askSync[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(20))
+        .askSync[(Array[Byte], Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(20))
       assert(masterTracker.getNumAvailableMergeResults(20) == 1)
       assert(masterTracker.getNumAvailableOutputs(20) == 100)
 
@@ -1167,7 +1167,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("SPARK-57491: staleMapIds propagated from driver to worker via getStatuses") {
+  test("SPARK-57491: staleMapIndexes propagated from driver to worker via getStatuses") {
     val rpcEnv = createRpcEnv("test")
     val masterTracker = newTrackerMaster()
     try {
@@ -1180,26 +1180,26 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       masterTracker.registerMapOutput(0, 1,
         MapStatus(BlockManagerId("exec-2", "hostB", 1000), Array(300L, 400L), 1))
       val shuffleStatus = masterTracker.shuffleStatuses(0)
-      shuffleStatus.markStalePushedMap(1)
+      shuffleStatus.markStalePushedPartition(1)
 
-      // Serialize statuses including staleMapIds (simulates what driver sends to executors)
+      // Serialize statuses including staleMapIndexes (simulates what driver sends to executors)
       val (mapBytes, mergeBytes, staleBytes) =
         shuffleStatus.serializedMapAndMergeStatus(
           masterTracker.broadcastManager, isLocal = true, minBroadcastSize = Int.MaxValue, conf)
 
-      // Simulate worker side: deserialize and verify staleMapIds are received
-      val deserializedStale = MapOutputTracker.deserializeStaleMapIds(staleBytes)
+      // Simulate worker side: deserialize and verify staleMapIndexes are received
+      val deserializedStale = MapOutputTracker.deserializeStaleMapIndexes(staleBytes)
       assert(deserializedStale.contains(1))
 
       // Also verify via MapOutputTrackerWorker (the path used by real executors)
       val workerTracker = new MapOutputTrackerWorker(conf)
       // Manually populate what the worker would get from a getStatuses fetch
-      workerTracker.staleMapIds.put(0, {
+      workerTracker.staleMapIndexes.put(0, {
         val s = new JHashSet[Int]()
         s.addAll(deserializedStale)
         s
       })
-      assert(workerTracker.getStaleMapIds(0).contains(1))
+      assert(workerTracker.getStaleMapIndexes(0).contains(1))
     } finally {
       masterTracker.stop()
       rpcEnv.shutdown()
