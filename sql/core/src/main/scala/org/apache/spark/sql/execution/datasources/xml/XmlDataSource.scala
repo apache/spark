@@ -323,7 +323,11 @@ object MultiLineXmlDataSource extends XmlDataSource {
    * Parses each archive entry as a single XML document, mirroring [[readFile]]: the optimized
    * parser re-reads its input (to echo the corrupt-record text on a parse failure), which a
    * single-use entry stream cannot do, so the entry's bytes are buffered and re-opened over; the
-   * legacy parser reads the entry stream directly.
+   * legacy parser reads the entry stream directly. Buffering one whole entry in memory is an
+   * intended trade-off here -- the optimized parser requires a re-readable input, so a single very
+   * large XML document packed in an archive is materialized in full (a non-archive read streams
+   * from and re-opens the file instead). Entries are still read one at a time, so archive size
+   * itself stays bounded.
    */
   override def readArchive(
       conf: Configuration,
