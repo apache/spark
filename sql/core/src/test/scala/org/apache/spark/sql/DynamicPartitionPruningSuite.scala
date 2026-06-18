@@ -1766,6 +1766,40 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     }
   }
 
+  test("SPARK-54593: a materialized filtering side is not injected as a standalone DPP subquery " +
+    "without an estimated pruning benefit") {
+    // Broadcast joins are disabled, so the DPP filter cannot reuse a broadcast exchange. A
+    // materialized filtering side carries no selective predicate, so its pruning benefit cannot be
+    // estimated; it must therefore not be injected as an always-applied standalone subquery (which
+    // would re-execute the filtering side and prune nothing for a non-selective side).
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTable("events") {
+        Seq((1, "hour1", "a"), (2, "hour1", "b"), (3, "hour2", "a"))
+          .toDF("id", "hour", "category")
+          .write
+          .partitionBy("hour", "category")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        // A materialized filtering side that covers every partition: it offers no pruning benefit.
+        val sampledKeys = Seq("hour1||a", "hour1||b", "hour2||a").toDF("hc_key")
+        assert(sampledKeys.queryExecution.optimizedPlan.exists(_.isInstanceOf[LocalRelation]))
+
+        val events = spark.table("events").as("events")
+        val sampled = sampledKeys.as("sampled")
+        val df = events
+          .join(sampled, concat_ws("||", $"events.hour", $"events.category") === $"sampled.hc_key")
+          .select($"events.id")
+
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
+        checkAnswer(df, Row(1) :: Row(2) :: Row(3) :: Nil)
+      }
+    }
+  }
+
   test("DPP does not treat a non-checkpointed LogicalRDD as a selective filtering side") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {

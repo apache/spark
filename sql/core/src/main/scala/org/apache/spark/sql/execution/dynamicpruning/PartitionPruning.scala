@@ -110,8 +110,14 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
     require(filteringKeys.size == 1, "DPP Filters should only have a single broadcasting key " +
       "since there are no usage for multiple broadcasting keys at the moment.")
     val indices = Seq(joinKeys.indexOf(filteringKeys.head))
-    lazy val hasBenefit = pruningHasBenefit(
-      pruningKey, partScan, filteringKeys.head, filteringPlan)
+    // A filtering side that is eligible only because it is already materialized (a LocalRelation
+    // or a checkpoint-derived LogicalRDD) carries no selective predicate. pruningHasBenefit's
+    // fallback filtering ratio is justified only "when CBO stats are missing, but there is a
+    // predicate that is likely to be selective", which does not hold here, so it would assume a
+    // benefit that may not exist. Without an estimated benefit such a side is only injected when it
+    // can reuse a broadcast (onlyInBroadcast), never as a standalone always-applied subquery.
+    lazy val hasBenefit = hasSelectivePredicate(filteringPlan) &&
+      pruningHasBenefit(pruningKey, partScan, filteringKeys.head, filteringPlan)
     if (reuseEnabled || hasBenefit) {
       // insert a DynamicPruning wrapper to identify the subquery during query planning
       Filter(
