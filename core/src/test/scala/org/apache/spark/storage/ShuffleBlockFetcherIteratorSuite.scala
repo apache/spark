@@ -59,6 +59,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite {
     mapOutputTracker = mock(classOf[MapOutputTracker])
     when(mapOutputTracker.getMapSizesForMergeResult(any(), any(), any()))
       .thenReturn(Seq.empty.iterator)
+    when(mapOutputTracker.getStaleMapIndexes(any())).thenReturn(mutable.Set.empty[Int])
   }
 
   private def doReturn(value: Any) = org.mockito.Mockito.doReturn(value, Seq.empty: _*)
