@@ -516,7 +516,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "objectType" : "",
     "objectName" : "",
     "startIndex" : 8,
-    "stopIndex" : 24,
+    "stopIndex" : 25,
     "fragment" : "schema_of_json(42)"
   } ]
 }
