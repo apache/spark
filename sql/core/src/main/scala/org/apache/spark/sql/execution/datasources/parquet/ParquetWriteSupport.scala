@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, STUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.Variant
@@ -204,6 +205,19 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
   // `inShredded` indicates whether the current traversal is nested within a shredded Variant
   // schema. This affects how timestamp values are written.
   private def makeWriter(dataType: DataType, inShredded: Boolean): ValueWriter = {
+    // Types Framework: framework FIRST, original match as fallback.
+    // The recursive callback passes makeWriter (framework-first) so that sub-fields of
+    // struct-backed types also go through the framework, consistent with schema conversion.
+    // NOTE: recordConsumer is null during init() when makeWriter is first called -
+    // it's set later in prepareForWrite(). The existing code works because closures
+    // over `this.recordConsumer` (a var field) capture the var reference, not its value.
+    // We wrap in a lambda to achieve the same lazy evaluation for the ops method.
+    ParquetTypeOps(dataType)
+      .map(_.makeWriter(() => recordConsumer, makeWriter(_, inShredded)))
+      .getOrElse(makeWriterDefault(dataType, inShredded))
+  }
+
+  private def makeWriterDefault(dataType: DataType, inShredded: Boolean): ValueWriter =
     dataType match {
       case NullType => // No values of NullType should ever be written, as all values are null.
         (_: SpecializedGetters, _: Int) => throw SparkUnsupportedOperationException()
@@ -358,7 +372,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
 
       case _ => throw SparkException.internalError(s"Unsupported data type $dataType.")
     }
-  }
 
   private def makeDecimalWriter(precision: Int, scale: Int): ValueWriter = {
     assert(
