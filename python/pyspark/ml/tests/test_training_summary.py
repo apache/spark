@@ -190,7 +190,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
         self.assertAlmostEqual(s.accuracy, 0.5, 2)
         self.assertAlmostEqual(s.weightedTruePositiveRate, 0.5, 2)
-        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.5, 2)
         self.assertAlmostEqual(s.weightedRecall, 0.5, 2)
         self.assertAlmostEqual(s.weightedPrecision, 0.5, 2)
         self.assertAlmostEqual(s.weightedFMeasure(), 0.5, 2)
