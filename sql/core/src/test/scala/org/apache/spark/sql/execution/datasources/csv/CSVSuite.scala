@@ -3606,8 +3606,8 @@ abstract class CSVSuite
         exception = e,
         condition = "MALFORMED_CSV_RECORD",
         sqlState = Some("KD000"),
-        parameters = Map("badRecord" -> ".*"),
-        matchPVals = true)
+        parameters = Map("badRecord" -> "a,b,c"),
+        matchPVals = false)
     }
   }
 

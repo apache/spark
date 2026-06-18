@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.csv
 import com.univocity.parsers.common.{AbstractParser, TextParsingException}
 import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
 
-import org.apache.spark.{SparkIllegalArgumentException, SparkRuntimeException}
+import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys.{CSV_HEADER_COLUMN_NAME, CSV_HEADER_COLUMN_NAMES, CSV_HEADER_LENGTH, CSV_SCHEMA_FIELD_NAME, CSV_SCHEMA_FIELD_NAMES, CSV_SOURCE, NUM_COLUMNS}
 import org.apache.spark.sql.internal.SQLConf
@@ -136,9 +136,9 @@ class CSVHeaderChecker(
         // scalastyle:off line.size.limit
         case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
         // scalastyle:on line.size.limit
-          throw malformedCsvHeaderRecord(e, Option(e.getParsedContent).getOrElse(""))
+          throw UnivocityParser.malformedCsvRecord(e, Option(e.getParsedContent).getOrElse(""))
         case e: ArrayIndexOutOfBoundsException =>
-          throw malformedCsvHeaderRecord(e, "")
+          throw UnivocityParser.malformedCsvRecord(e, "")
       }
       checkHeaderColumnNames(firstRecord)
     }
@@ -161,9 +161,9 @@ class CSVHeaderChecker(
           // scalastyle:off line.size.limit
           case e: TextParsingException if e.getCause.isInstanceOf[ArrayIndexOutOfBoundsException] =>
           // scalastyle:on line.size.limit
-            throw malformedCsvHeaderRecord(e, header)
+            throw UnivocityParser.malformedCsvRecord(e, header)
           case e: ArrayIndexOutOfBoundsException =>
-            throw malformedCsvHeaderRecord(e, header)
+            throw UnivocityParser.malformedCsvRecord(e, header)
         }
         checkHeaderColumnNames(tokens)
       }
@@ -171,17 +171,4 @@ class CSVHeaderChecker(
     setHeaderForSingleVariantColumn.foreach(f => f(headerColumnNames))
   }
 
-  // scalastyle:off line.size.limit
-  private def malformedCsvHeaderRecord(cause: Throwable, badRecord: String): SparkRuntimeException = {
-  // scalastyle:on line.size.limit
-    val boundedRecord = if (badRecord.length > CSVOptions.MAX_ERROR_CONTENT_LENGTH) {
-      badRecord.take(CSVOptions.MAX_ERROR_CONTENT_LENGTH) + "..."
-    } else {
-      badRecord
-    }
-    new SparkRuntimeException(
-      errorClass = "MALFORMED_CSV_RECORD",
-      messageParameters = Map("badRecord" -> boundedRecord),
-      cause = cause)
-  }
 }
