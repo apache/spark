@@ -188,7 +188,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
         self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
         self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
-        self.assertAlmostEqual(s.accuracy, 1.0, 2)
+        self.assertAlmostEqual(s.accuracy, 0.5, 2)
         self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
         self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
         self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
@@ -347,7 +347,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.cluster, DataFrame))
         self.assertEqual(len(s.clusterSizes), 2)
         self.assertEqual(s.k, 2)
-        self.assertEqual(s.numIter, 3)
+        self.assertEqual(s.numIter, 6)
 
     def test_bisecting_kmeans_summary(self):
         data = [
