@@ -394,6 +394,20 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     )
   }
 
+  test("SPARK-57502: Min/Max accept nanosecond-precision timestamp types and preserve them") {
+    // Min/Max gate only on orderability (TypeUtils.checkForOrderingExpr), and the nanosecond
+    // timestamp types are orderable AtomicTypes (SPARK-57103), so the analysis gate passes and the
+    // result type preserves the input precision (dataType = child.dataType). No inputTypes / type
+    // matcher is involved, so no production change to Min/Max is needed.
+    Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(7)).foreach { dt =>
+      val a = AttributeReference("c", dt)()
+      assert(Max(a).checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      assert(Min(a).checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+      assert(Max(a).dataType == dt)
+      assert(Min(a).dataType == dt)
+    }
+  }
+
   test("check types for aggregates") {
     // We use AggregateFunction directly at here because the error will be thrown from it
     // instead of from AggregateExpression, which is the wrapper of an AggregateFunction.

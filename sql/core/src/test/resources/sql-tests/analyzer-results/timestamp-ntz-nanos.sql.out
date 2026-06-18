@@ -574,3 +574,27 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '1' MONTH"
   } ]
 }
+
+
+-- !query
+SELECT max(c), min(c) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (CAST(NULL AS timestamp_ntz(9))) AS t(c)
+-- !query analysis
+Aggregate [max(c#x) AS max(c)#x, min(c#x) AS min(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT c, count(*) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
+  GROUP BY c ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [c#x, count(1) AS count(1)#xL]
+   +- SubqueryAlias t
+      +- LocalRelation [c#x]

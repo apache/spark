@@ -239,6 +239,166 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
         Row(null, null, null, null))
     }
   }
+
+  // ===== MIN / MAX aggregates over nanosecond-precision timestamps (SPARK-56822) =====
+  // `Min`/`Max` are type-agnostic `DeclarativeAggregate`s gated only on orderability
+  // (`TypeUtils.checkForOrderingExpr`); the nanosecond timestamp types became orderable in
+  // SPARK-57103, so MIN/MAX (and `min_by`/`max_by`/`greatest`/`least`, which ride the same gate)
+  // work without any change to the aggregates themselves. These end-to-end tests lock that in,
+  // mirroring the TimeType precedent (SPARK-52626 group-by, SPARK-52660 codegen split). The result
+  // type preserves the input precision (`dataType = child.dataType`). Mixed-precision inputs route
+  // through `findWiderDateTimeType`, which has no nanos arm yet, so they are out of scope here
+  // (SPARK-57454); every column below is strictly same-precision.
+
+  test("SPARK-57502: max/min over nanosecond-precision timestamps preserve the input type") {
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+      val data = Seq(
+        Row(LocalDateTime.parse("2020-01-01T00:00:01.100000000"),
+          Instant.parse("2020-01-01T00:00:01.100000000Z")),
+        Row(LocalDateTime.parse("2020-01-01T00:00:02.200000000"),
+          Instant.parse("2020-01-01T00:00:02.200000000Z")),
+        Row(LocalDateTime.parse("2020-01-01T00:00:00.300000000"),
+          Instant.parse("2020-01-01T00:00:00.300000000Z")),
+        Row(null, null))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      val sqlRes = df.selectExpr("max(ntz)", "min(ntz)", "max(ltz)", "min(ltz)")
+      val colRes = df.select(
+        max(col("ntz")), min(col("ntz")), max(col("ltz")), min(col("ltz")))
+      // The SQL and the Scala Column API agree.
+      checkAnswer(sqlRes, colRes)
+      // Absolute values (NTZ collects to LocalDateTime, LTZ to Instant; SPARK-57033).
+      checkAnswer(sqlRes, Row(
+        LocalDateTime.parse("2020-01-01T00:00:02.200000000"),
+        LocalDateTime.parse("2020-01-01T00:00:00.300000000"),
+        Instant.parse("2020-01-01T00:00:02.200000000Z"),
+        Instant.parse("2020-01-01T00:00:00.300000000Z")))
+      // The result keeps both the family (NTZ/LTZ) and the precision of the input.
+      assert(sqlRes.schema.map(_.dataType) === Seq(
+        TimestampNTZNanosType(p), TimestampNTZNanosType(p),
+        TimestampLTZNanosType(p), TimestampLTZNanosType(p)))
+    }
+  }
+
+  test("SPARK-57502: max/min over nanos order by the sub-microsecond remainder") {
+    // Two values share the same epochMicros and differ only within the microsecond, so a correct
+    // result must use the full `TimestampNanosVal` comparison and never truncate to micros.
+    // Run on both the codegen (`CodeGenerator.genComp` AnyTimestampNanoType arm) and the
+    // interpreted (`Ordering[TimestampNanosVal]`) paths.
+    Seq(
+      Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY"),
+      Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN")
+    ).foreach { conf =>
+      withSQLConf(conf: _*) {
+        val ntz = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(
+            Row(LocalDateTime.parse("2020-01-01T00:00:00.000000001")),
+            Row(LocalDateTime.parse("2020-01-01T00:00:00.000000999")),
+            Row(null))),
+          new StructType().add("c", TimestampNTZNanosType(9)))
+        checkAnswer(ntz.selectExpr("max(c)", "min(c)"),
+          Row(LocalDateTime.parse("2020-01-01T00:00:00.000000999"),
+            LocalDateTime.parse("2020-01-01T00:00:00.000000001")))
+
+        val ltz = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(
+            Row(Instant.parse("2020-01-01T00:00:00.000000001Z")),
+            Row(Instant.parse("2020-01-01T00:00:00.000000999Z")),
+            Row(null))),
+          new StructType().add("c", TimestampLTZNanosType(9)))
+        checkAnswer(ltz.selectExpr("max(c)", "min(c)"),
+          Row(Instant.parse("2020-01-01T00:00:00.000000999Z"),
+            Instant.parse("2020-01-01T00:00:00.000000001Z")))
+      }
+    }
+  }
+
+  test("SPARK-57502: max/min over all-NULL or empty nanos input return NULL") {
+    Seq(7, 8, 9).foreach { p =>
+      val ntz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null), Row(null))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      checkAnswer(ntz.selectExpr("max(c)", "min(c)"), Row(null, null))
+      // Global aggregate over zero rows still produces one all-NULL row.
+      checkAnswer(ntz.filter(lit(false)).selectExpr("max(c)", "min(c)"), Row(null, null))
+
+      val ltz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null), Row(null))),
+        new StructType().add("c", TimestampLTZNanosType(p)))
+      checkAnswer(ltz.selectExpr("max(c)", "min(c)"), Row(null, null))
+    }
+  }
+
+  test("SPARK-57502: group by a nanosecond key with per-group max/min") {
+    // The grouping keys k1/k2 share their epochMicros but differ within the microsecond, so
+    // hashing/grouping (SPARK-57103) must distinguish sub-microsecond keys; the per-group max/min
+    // then order by the remainder.
+    val schema = new StructType()
+      .add("k", TimestampNTZNanosType(9))
+      .add("v", TimestampLTZNanosType(9))
+    val k1 = "2020-01-01T00:00:00.000000001"
+    val k2 = "2020-01-01T00:00:00.000000002"
+    val data = Seq(
+      Row(LocalDateTime.parse(k1), Instant.parse("2020-01-01T10:00:00.000000111Z")),
+      Row(LocalDateTime.parse(k1), Instant.parse("2020-01-01T10:00:00.000000999Z")),
+      Row(LocalDateTime.parse(k2), Instant.parse("2020-01-01T10:00:00.000000500Z")))
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+    val res = df.groupBy("k").agg(max("v").as("mx"), min("v").as("mn")).orderBy("k")
+    checkAnswer(res, Seq(
+      Row(LocalDateTime.parse(k1),
+        Instant.parse("2020-01-01T10:00:00.000000999Z"),
+        Instant.parse("2020-01-01T10:00:00.000000111Z")),
+      Row(LocalDateTime.parse(k2),
+        Instant.parse("2020-01-01T10:00:00.000000500Z"),
+        Instant.parse("2020-01-01T10:00:00.000000500Z"))))
+    // The two sub-microsecond-distinct keys do not collapse into one group.
+    assert(res.count() === 2)
+    assert(res.schema("k").dataType === TimestampNTZNanosType(9))
+  }
+
+  test("SPARK-57502: min_by/max_by and greatest/least over same-precision nanos") {
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row("early", LocalDateTime.parse("2020-01-01T00:00:00.000000001")),
+        Row("late", LocalDateTime.parse("2020-01-01T00:00:00.000000999")))),
+      new StructType().add("label", StringType).add("ts", TimestampNTZNanosType(9)))
+    checkAnswer(df.selectExpr("max_by(label, ts)", "min_by(label, ts)"), Row("late", "early"))
+
+    val df2 = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(
+        LocalDateTime.parse("2020-01-01T00:00:00.000000001"),
+        LocalDateTime.parse("2020-01-01T00:00:00.000000999")))),
+      new StructType()
+        .add("a", TimestampNTZNanosType(9))
+        .add("b", TimestampNTZNanosType(9)))
+    checkAnswer(df2.selectExpr("greatest(a, b)", "least(a, b)"),
+      Row(LocalDateTime.parse("2020-01-01T00:00:00.000000999"),
+        LocalDateTime.parse("2020-01-01T00:00:00.000000001")))
+  }
+
+  test("SPARK-57502: max/min over nanos agree with the micros path when sub-micro digits are 0") {
+    Seq(7, 8, 9).foreach { p =>
+      val ldts = Seq(
+        "2020-01-01T00:00:01.100000000",
+        "2020-01-01T00:00:02.200000000",
+        "2020-01-01T00:00:00.300000000")
+      val nanos = spark.createDataFrame(
+        spark.sparkContext.parallelize(ldts.map(s => Row(LocalDateTime.parse(s)))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      val micro = spark.createDataFrame(
+        spark.sparkContext.parallelize(ldts.map(s => Row(LocalDateTime.parse(s)))),
+        new StructType().add("c", TimestampNTZType))
+      // Compare via the string rendering so the differing result types (nanos vs micros) do not
+      // matter; the sub-microsecond digits are all zero, so the values agree.
+      checkAnswer(
+        nanos.selectExpr("cast(max(c) as string)", "cast(min(c) as string)"),
+        micro.selectExpr("cast(max(c) as string)", "cast(min(c) as string)"))
+    }
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.

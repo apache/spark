@@ -726,3 +726,27 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "fragment" : "TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH"
   } ]
 }
+
+
+-- !query
+SELECT max(c), min(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+-- !query schema
+struct<max(c):timestamp_ltz(9),min(c):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999	2019-12-31 16:00:00.000000001
+
+
+-- !query
+SELECT c, count(*) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+  GROUP BY c ORDER BY c
+-- !query schema
+struct<c:timestamp_ltz(9),count(1):bigint>
+-- !query output
+2019-12-31 16:00:00.000000001	2
+2019-12-31 16:00:00.000000999	1
