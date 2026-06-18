@@ -1118,6 +1118,27 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq(Array(-0.0d), Array(-0.0d), Array(0.0d), Array(0.0d), Array(9.0d)).toDF("a")
         .select(Column.internalFn("pandas_mode", col("a"), lit(true))),
       Row(Seq(Seq(0.0d))))
+
+    // Struct complex type: same recursive NormalizeFloatingNumbers path as the array case
+    // above, but a different shape. -0.0/0.0 collapse to 4 occurrences, outvoting 9.0's 3.
+    checkAnswer(
+      sql("SELECT mode(named_struct('a', v)) FROM " +
+        "VALUES (-0.0D), (-0.0D), (0.0D), (0.0D), (9.0D), (9.0D), (9.0D) AS t(v)"),
+      Row(Row(0.0d)))
+
+    // NaN with differing bit patterns nested in a complex type. The normalization lambda
+    // canonicalizes the NaN bits so the two patterns collapse to 4 occurrences, outvoting
+    // 9.0's 3. Without normalization each pattern forms its own group of 2 and 9.0 (3) wins,
+    // so the expected NaN result genuinely distinguishes fixed from buggy behavior.
+    val nan1 = java.lang.Double.longBitsToDouble(0x7ff8000000000000L)
+    val nan2 = java.lang.Double.longBitsToDouble(0x7ff8000000000001L)
+    assert(nan1.isNaN && nan2.isNaN &&
+      java.lang.Double.doubleToRawLongBits(nan1) !=
+        java.lang.Double.doubleToRawLongBits(nan2))
+    checkAnswer(
+      Seq(nan1, nan1, nan2, nan2, 9.0d, 9.0d, 9.0d).toDF("v")
+        .select(struct(col("v")).as("s")).select(expr("mode(s)")),
+      Row(Row(Double.NaN)))
   }
 
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
