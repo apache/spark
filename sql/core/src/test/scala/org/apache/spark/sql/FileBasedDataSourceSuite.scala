@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.nio.file.{Files, StandardOpenOption}
+import java.time.{LocalDateTime, ZoneOffset}
 
 import scala.collection.mutable
 
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterTha
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
@@ -1336,10 +1338,9 @@ class FileBasedDataSourceSuite extends SharedSparkSession
     }
   }
 
-  test("SPARK-57166: nanosecond timestamp types are not supported in non-Parquet file sources") {
-    // These built-in file formats do not support nanosecond-capable timestamps. Parquet support is
-    // covered separately in ParquetTimestampNanosSuite.
-    val unsupportedDataSources = Seq("orc", "json", "csv", "xml")
+  test("SPARK-57166: nanosecond timestamp types are not supported in selected file data sources") {
+    // Parquet and ORC support nanosecond-capable timestamps, while these formats still reject them.
+    val unsupportedDataSources = Seq("json", "csv", "xml")
     val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       // Test both v1 and v2 data sources.
@@ -1389,6 +1390,39 @@ class FileBasedDataSourceSuite extends SharedSparkSession
                     "columnType" -> expectedType,
                     "format" -> formatMapping(format)))
               }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57166: ORC supports nanosecond timestamp types in v1 and v2") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // Validate both v1 and v2 ORC paths.
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "orc" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          foreachNanosPrecision { precision =>
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  // Build the row from an external java.time value; the column schema carries the
+                  // precision and truncates the sub-microsecond digits, matching the ORC suites.
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val value: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+                  }
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(Row(value))),
+                    new StructType().add("ts", nanosType))
+                  val path = new File(dir, s"orc_nanos_${nanosType.typeName}").getCanonicalPath
+                  df.write.format("orc").mode("overwrite").save(path)
+                  val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                    .format("orc").load(path)
+                  checkAnswer(readBack, df)
+                }
             }
           }
         }
