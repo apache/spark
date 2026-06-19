@@ -168,41 +168,81 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
 
       import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
       val catalogManager = df.sparkSession.sessionState.catalogManager
+
+      def createTableAsSelectCommand(
+          catalog: TableCatalog, ident: Identifier, ignoreIfExists: Boolean): LogicalPlan = {
+        val tableSpec = UnresolvedTableSpec(
+          properties = Map.empty,
+          provider = Some(source),
+          optionExpression = OptionList(Seq.empty),
+          location = extraOptions.get("path"),
+          comment = extraOptions.get(TableCatalog.PROP_COMMENT),
+          collation = extraOptions.get(TableCatalog.PROP_COLLATION),
+          serde = None,
+          external = false,
+          constraints = Seq.empty)
+        CreateTableAsSelect(
+          UnresolvedIdentifier(
+            catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
+          partitioningAsV2,
+          df.queryExecution.analyzed,
+          tableSpec,
+          finalOptions,
+          ignoreIfExists = ignoreIfExists)
+      }
+
+      def appendOrOverwriteCommand(
+          table: Table,
+          catalog: Option[CatalogPlugin],
+          ident: Option[Identifier]): LogicalPlan = {
+        checkPartitioningMatchesV2Table(table)
+        val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
+        if (curmode == SaveMode.Append) {
+          AppendData.byName(relation, df.logicalPlan, finalOptions, _withSchemaEvolution)
+        } else {
+          // Truncate the table. TableCapabilityCheck will throw a nice exception if this
+          // isn't supported
+          OverwriteByExpression.byName(
+            relation, df.logicalPlan, Literal(true), finalOptions, _withSchemaEvolution)
+        }
+      }
+
       curmode match {
         case SaveMode.Append | SaveMode.Overwrite =>
-          val (table, catalog, ident) = provider match {
-            case supportsExtract: SupportsCatalogOptions =>
+          provider match {
+            case supportsExtract: SupportsCatalogOptions
+                if supportsExtract.useCatalogResolution(dsOptions) =>
               val ident = supportsExtract.extractIdentifier(dsOptions)
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
-
-              (catalog.loadTable(ident), Some(catalog), Some(ident))
+              val tableOpt =
+                try Some(catalog.loadTable(ident))
+                catch {
+                  // The table does not exist: create it from the query (create-on-write,
+                  // consistent with saveAsTable) unless the provider asks to fail.
+                  case _: NoSuchTableException
+                      if !supportsExtract.failWriteIfTableDoesNotExist(dsOptions) => None
+                }
+              tableOpt match {
+                case Some(table) => appendOrOverwriteCommand(table, Some(catalog), Some(ident))
+                case None => createTableAsSelectCommand(catalog, ident, ignoreIfExists = false)
+              }
             case _: TableProvider =>
               val t = getTable
               if (t.supports(BATCH_WRITE)) {
-                (t, None, None)
+                appendOrOverwriteCommand(t, None, None)
               } else {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
                 // fall back to saving as though it's a V1 source.
-                return saveToV1SourceCommand(path)
+                saveToV1SourceCommand(path)
               }
-          }
-
-          val relation = DataSourceV2Relation.create(table, catalog, ident, dsOptions)
-          checkPartitioningMatchesV2Table(table)
-          if (curmode == SaveMode.Append) {
-            AppendData.byName(relation, df.logicalPlan, finalOptions, _withSchemaEvolution)
-          } else {
-            // Truncate the table. TableCapabilityCheck will throw a nice exception if this
-            // isn't supported
-            OverwriteByExpression.byName(
-              relation, df.logicalPlan, Literal(true), finalOptions, _withSchemaEvolution)
           }
 
         case createMode =>
           provider match {
-            case supportsExtract: SupportsCatalogOptions =>
+            case supportsExtract: SupportsCatalogOptions
+                if supportsExtract.useCatalogResolution(dsOptions) =>
               if (_withSchemaEvolution) {
                 throw QueryCompilationErrors.schemaEvolutionNotSupportedForCreateTableWriteError()
               }
@@ -210,24 +250,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
               val catalog = CatalogV2Util.getTableProviderCatalog(
                 supportsExtract, catalogManager, dsOptions)
 
-              val tableSpec = UnresolvedTableSpec(
-                properties = Map.empty,
-                provider = Some(source),
-                optionExpression = OptionList(Seq.empty),
-                location = extraOptions.get("path"),
-                comment = extraOptions.get(TableCatalog.PROP_COMMENT),
-                collation = extraOptions.get(TableCatalog.PROP_COLLATION),
-                serde = None,
-                external = false,
-                constraints = Seq.empty)
-              CreateTableAsSelect(
-                UnresolvedIdentifier(
-                  catalog.name +: ident.namespace.toImmutableArraySeq :+ ident.name),
-                partitioningAsV2,
-                df.queryExecution.analyzed,
-                tableSpec,
-                finalOptions,
-                ignoreIfExists = createMode == SaveMode.Ignore)
+              createTableAsSelectCommand(
+                catalog, ident, ignoreIfExists = createMode == SaveMode.Ignore)
             case _: TableProvider =>
               if (getTable.supports(BATCH_WRITE)) {
                 throw QueryCompilationErrors.writeWithSaveModeUnsupportedBySourceError(

@@ -47,6 +47,8 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
 
   private val catalogName = "testcat"
   private val format = classOf[CatalogSupportingInMemoryTableProvider].getName
+  private val optOutFormat = classOf[CatalogResolutionOptOutProvider].getName
+  private val createOnWriteFormat = classOf[CreateOnWriteProvider].getName
 
   private def catalog(name: String): TableCatalog = {
     spark.sessionState.catalogManager.catalog(name).asInstanceOf[TableCatalog]
@@ -370,6 +372,55 @@ class SupportsCatalogOptionsSuite extends SharedSparkSession with BeforeAndAfter
       .contains("Cannot specify both version and timestamp when time travelling the table."))
   }
 
+  test("useCatalogResolution=false: read is resolved via the TableProvider path, not the catalog") {
+    // The provider opts out of catalog resolution, so load() goes through getTable instead of
+    // extractIdentifier/extractCatalog. The resulting relation therefore has no catalog/identifier.
+    val df = spark.read.format(optOutFormat).option("name", "t1").load()
+    val relation = df.logicalPlan.collectFirst {
+      case r: DataSourceV2Relation => r
+    }.getOrElse(fail("Expected a DataSourceV2Relation"))
+    assert(relation.catalog.isEmpty && relation.identifier.isEmpty,
+      "Opting out of catalog resolution should bypass the catalog")
+  }
+
+  test("useCatalogResolution=false: a user-specified schema is allowed (no catalog check)") {
+    // The schema check only fires on the catalog-resolution path; opting out skips it.
+    val df = spark.read.format(optOutFormat).option("name", "t1").schema("i int, j int").load()
+    assert(df.schema.fieldNames === Array("i", "j"))
+  }
+
+  test("failWriteIfTableDoesNotExist=false: append creates a missing table (create-on-write)") {
+    val df = spark.range(10)
+    // t1 does not exist yet; append should create it from the query instead of failing.
+    df.write.format(createOnWriteFormat).option("name", "t1").option("catalog", catalogName)
+      .mode(SaveMode.Append).save()
+    assert(catalog(catalogName).tableExists("t1"), "append should have created the table")
+    checkAnswer(load("t1", Some(catalogName)), df.toDF())
+  }
+
+  test("failWriteIfTableDoesNotExist=false: overwrite creates a missing table (create-on-write)") {
+    val df = spark.range(10, 20)
+    df.write.format(createOnWriteFormat).option("name", "t1").option("catalog", catalogName)
+      .mode(SaveMode.Overwrite).save()
+    assert(catalog(catalogName).tableExists("t1"), "overwrite should have created the table")
+    checkAnswer(load("t1", Some(catalogName)), df.toDF())
+  }
+
+  test("failWriteIfTableDoesNotExist=false: append to an existing table still appends") {
+    sql(s"create table $catalogName.t1 (id bigint) using $createOnWriteFormat")
+    spark.range(10).write.format(createOnWriteFormat).option("name", "t1")
+      .option("catalog", catalogName).mode(SaveMode.Append).save()
+    checkAnswer(load("t1", Some(catalogName)), spark.range(10).toDF())
+  }
+
+  test("append to a missing table fails by default (failWriteIfTableDoesNotExist=true)") {
+    // The default provider keeps the prior behavior: append/overwrite to a missing table fails.
+    intercept[NoSuchTableException] {
+      spark.range(10).write.format(format).option("name", "t1").option("catalog", catalogName)
+        .mode(SaveMode.Append).save()
+    }
+  }
+
   private def checkV2Identifiers(
       plan: LogicalPlan,
       identifier: String = "t1",
@@ -442,4 +493,14 @@ class CatalogSupportingInMemoryTableProvider
       Optional.empty[String]
     }
   }
+}
+
+/** Opts out of catalog resolution, so load/save fall back to the plain TableProvider path. */
+class CatalogResolutionOptOutProvider extends CatalogSupportingInMemoryTableProvider {
+  override def useCatalogResolution(options: CaseInsensitiveStringMap): Boolean = false
+}
+
+/** Opts out of failing on a missing table, enabling create-on-write for save(). */
+class CreateOnWriteProvider extends CatalogSupportingInMemoryTableProvider {
+  override def failWriteIfTableDoesNotExist(options: CaseInsensitiveStringMap): Boolean = false
 }

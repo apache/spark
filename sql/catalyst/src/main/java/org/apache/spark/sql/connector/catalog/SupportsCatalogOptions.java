@@ -56,6 +56,31 @@ public interface SupportsCatalogOptions extends TableProvider {
   }
 
   /**
+   * Whether this interface should be used for table existence checks or creation.
+   * A source may override it to dynamically enable the behavior provided by
+   * SupportsCatalogOptions as they migrate from regular file-based data source behavior.
+   *
+   * @param options the user-specified options that can identify a table, e.g. file path, Kafka
+   *                topic name, etc. It's an immutable case-insensitive string-to-string map.
+   */
+  default boolean useCatalogResolution(CaseInsensitiveStringMap options) {
+    return true;
+  }
+
+  /**
+   * Whether a {@code DataFrameWriter.save()} should fail when the table does not exist. When this
+   * returns {@code false}, Spark instead creates the table from the written query (as
+   * {@code DataFrameWriter.saveAsTable} already does), preserving create-on-write semantics for
+   * file-based {@code save(path)} calls.
+   *
+   * @param options the user-specified options that can identify a table, e.g. file path, Kafka
+   *                topic name, etc. It's an immutable case-insensitive string-to-string map.
+   */
+  default boolean failWriteIfTableDoesNotExist(CaseInsensitiveStringMap options) {
+    return true;
+  }
+
+  /**
    * Extracts the timestamp string for time travel from the given options.
    */
   default Optional<String> extractTimeTravelTimestamp(CaseInsensitiveStringMap options) {
