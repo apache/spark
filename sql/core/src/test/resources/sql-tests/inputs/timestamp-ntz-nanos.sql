@@ -185,3 +185,16 @@ SELECT max_by(v, k), min_by(v, k) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500', 2),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000007', CAST(NULL AS INT)) AS t(v, k);
+
+-- SPARK-57527: unix_nanos over nanosecond-precision values returns DECIMAL(21, 0) nanoseconds since
+-- the epoch; NTZ applies no zone shift, so the wall-clock value is read as the epoch instant. The
+-- sub-microsecond digits are kept, truncated to the type's precision.
+SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT unix_nanos('2020-01-01 13:24:35.123456789' :: timestamp_ntz(7));
+SELECT unix_nanos('2020-01-01 13:24:35.123456789' :: timestamp_ntz(8));
+-- Far-future value: epochMicros * 1000 overflows a 64-bit BIGINT, exercising the DECIMAL path.
+SELECT unix_nanos(TIMESTAMP_NTZ '9999-12-31 23:59:59.999999999');
+-- Pre-epoch value exercises the negative-epoch path.
+SELECT unix_nanos(TIMESTAMP_NTZ '1960-01-01 00:00:00.000000001');
+-- NULL nanosecond timestamp.
+SELECT unix_nanos(NULL :: timestamp_ntz(9));

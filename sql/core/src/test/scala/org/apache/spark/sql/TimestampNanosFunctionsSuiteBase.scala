@@ -532,6 +532,38 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
         Seq(Row("g1", "g1-hi", "g1-lo"), Row("g2", "g2-only", "g2-only")))
     }
   }
+
+  test("SPARK-57527: unix_nanos over nanosecond-precision timestamps") {
+    // unix_nanos returns DECIMAL(21, 0) nanoseconds since the epoch and applies no zone shift to a
+    // timestamp argument. The chosen fractions have zeros beyond the 7th digit, so truncating to
+    // precision p in {7, 8, 9} leaves the sub-microsecond part unchanged and the result is the same
+    // for every p. Both the Scala Column API and the SQL path are exercised.
+    val ntzStr = "2020-01-01T13:24:35.123456700"
+    val ltzStr = "2020-01-01T21:24:35.987654300Z"
+    // 2020-01-01 13:24:35.123456 -> 1577885075123456 micros, + 700 ns = 1577885075123456700.
+    val ntzExpected = Row(new java.math.BigDecimal("1577885075123456700"))
+    // 2020-01-01 21:24:35.987654 UTC -> 1577913875987654 micros, + 300 ns = 1577913875987654300.
+    val ltzExpected = Row(new java.math.BigDecimal("1577913875987654300"))
+    Seq(7, 8, 9).foreach { p =>
+      checkAnswer(ntzNanos(ntzStr, p).select(unix_nanos(col("c"))), ntzExpected)
+      checkAnswer(ntzNanos(ntzStr, p).selectExpr("unix_nanos(c)"), ntzExpected)
+      checkAnswer(ltzNanos(ltzStr, p).select(unix_nanos(col("c"))), ltzExpected)
+      checkAnswer(ltzNanos(ltzStr, p).selectExpr("unix_nanos(c)"), ltzExpected)
+    }
+  }
+
+  test("SPARK-57527: unix_nanos over NULL nanosecond timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val ntz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampNTZNanosType(p)))
+      val ltz = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null))),
+        new StructType().add("c", TimestampLTZNanosType(p)))
+      checkAnswer(ntz.select(unix_nanos(col("c"))), Row(null))
+      checkAnswer(ltz.select(unix_nanos(col("c"))), Row(null))
+    }
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.
