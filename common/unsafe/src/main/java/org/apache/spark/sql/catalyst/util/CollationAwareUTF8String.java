@@ -1519,7 +1519,7 @@ public class CollationAwareUTF8String {
     if (charIndex == src.length()) {
       return srcString;
     }
-    if (lastNonSpacePosition == srcString.numChars()) {
+    if (lastNonSpacePosition == src.length()) {
       return UTF8String.fromString(src.substring(0, charIndex));
     }
     return UTF8String.fromString(
