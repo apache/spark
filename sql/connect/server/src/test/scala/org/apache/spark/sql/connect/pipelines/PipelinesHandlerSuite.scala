@@ -21,14 +21,14 @@ import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.pipelines.common.RunState
 import org.apache.spark.sql.pipelines.graph.{FailureStoppingFlow, UnexpectedRunFailure}
-import org.apache.spark.sql.pipelines.logging.{
-  ConstructPipelineEvent, EventLevel, PipelineEventOrigin, RunProgress}
+import org.apache.spark.sql.pipelines.logging.{ConstructPipelineEvent, EventLevel, PipelineEventOrigin, RunProgress}
 
 class PipelinesHandlerSuite extends SparkFunSuite {
 
   private def runFailedEvent(message: String, error: Option[Throwable]) =
     ConstructPipelineEvent(
-      origin = PipelineEventOrigin(datasetName = None, flowName = None, sourceCodeLocation = None),
+      origin =
+        PipelineEventOrigin(datasetName = None, flowName = None, sourceCodeLocation = None),
       // throwRunFailure only reads message and exception; the remaining fields are filled with
       // valid placeholder values to construct the event.
       level = EventLevel.INFO,

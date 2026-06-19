@@ -571,10 +571,11 @@ private[connect] object PipelinesHandler extends Logging {
   /**
    * Rethrows the failure behind a terminal run-failure event so it reaches the Spark Connect
    * client. Most failures carry the underlying cause (e.g. a flow's QueryExecutionFailure), but
-   * some termination reasons (UnexpectedRunFailure, FailureStoppingFlow) have none. When the cause
-   * is absent, throw a PIPELINE_RUN_FAILED error built from the event message rather than calling
-   * Option.get, which would throw a NoSuchElementException and hide the real failure. Using
-   * PIPELINE_RUN_FAILED instead of INTERNAL_ERROR avoids mislabeling operational failures as bugs.
+   * some termination reasons (UnexpectedRunFailure, FailureStoppingFlow) have none. When the
+   * cause is absent, throw a PIPELINE_RUN_FAILED error built from the event message rather than
+   * calling Option.get, which would throw a NoSuchElementException and hide the real failure.
+   * Using PIPELINE_RUN_FAILED instead of INTERNAL_ERROR avoids mislabeling operational failures
+   * as bugs.
    */
   private[connect] def throwRunFailure(failureEvent: PipelineEvent): Nothing = {
     throw failureEvent.error.getOrElse(
