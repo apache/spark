@@ -112,19 +112,25 @@ object PushDownUtils extends Logging {
           }
         }
 
-        val rejectedFilters = r.pushPredicates(translatedFilters.toArray).map { predicate =>
-          DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
-        }
+        val postScanPredicates = r.pushPredicates(translatedFilters.toArray)
 
-        val remainingFilters = (rejectedFilters ++ untranslatableExprs).toSeq
-        val postScanFilters =
+        val finalPostScanFilters =
           if (!partitionFields.exists(_.nonEmpty) || !r.supportsIterativePushdown) {
-            remainingFilters
+            rebuildExpressions(postScanPredicates.toSeq, translatedFilterToExpr) ++
+              untranslatableExprs
           } else {
-            pushPartitionPredicates(r, partitionFields.get, remainingFilters)
+            // Second pass: only filters that were not already pushed down (partially or fully)
+            // in the first pass (not in pushedPredicates) are eligible to be pushed down again.
+            // This avoids pushing the same filter down twice.
+            val (pushedPostScanFilters, notPushedPostScanFilters) =
+              postScanPredicates.toSeq.partition(r.pushedPredicates().toSet.contains)
+            val candidates = rebuildExpressions(notPushedPostScanFilters, translatedFilterToExpr) ++
+              untranslatableExprs
+            pushPartitionPredicates(r, partitionFields.get, candidates) ++
+              rebuildExpressions(pushedPostScanFilters, translatedFilterToExpr)
           }
 
-        val orderedPostScanFilters = prioritizeFilters(postScanFilters,
+        val orderedPostScanFilters = prioritizeFilters(finalPostScanFilters,
           ExpressionSet(untranslatableExprs))
         (Right(r.pushedPredicates.toImmutableArraySeq), orderedPostScanFilters)
       case r: SupportsPushDownCatalystFilters =>
@@ -135,11 +141,26 @@ object PushDownUtils extends Logging {
   }
 
   /**
+   * Rebuilds the Catalyst [[Expression]]s for a sequence of data source [[Predicate]]s, using the
+   * mapping from translated data source predicates to their original Catalyst expressions.
+   */
+  private def rebuildExpressions(
+      predicates: Seq[Predicate],
+      translatedFilterToExpr: mutable.HashMap[Predicate, Expression]): Seq[Expression] = {
+    predicates.map { predicate =>
+      DataSourceV2Strategy.rebuildExpressionFromFilter(predicate, translatedFilterToExpr)
+    }
+  }
+
+  /**
    * Pushes runtime filters to a [[SupportsRuntimeV2Filtering]] scan. Translatable filters are
    * pushed first, followed by [[PartitionPredicate]] if the scan supports iterative filtering.
    * Only runtime filters whose translated form was not already accepted by the data source in
    * the first pass are used to derive PartitionPredicates in the second pass, avoiding duplicate
    * pushdown.
+   *
+   * Note: Do not call multiple times for the same `scan` instance;
+   * [[SupportsRuntimeV2Filtering.filter]] is mutating.
    *
    * @return true if any filters were pushed to the data source
    */
@@ -195,14 +216,11 @@ object PushDownUtils extends Logging {
    * preserved the original partitioning and pads with `None` to preserve key alignment with the
    * pre-filter partition set.
    *
-   * Must be called at execute time: runtime filters carry [[DynamicPruningExpression]] and
-   * scalar-subquery references whose values are only resolved after their broadcast/subquery
-   * side completes. The mutating [[pushRuntimeFilters]] call must run at most once per scan
-   * instance; callers are responsible for caching the result.
-   *
-   * Precondition: when `outputPartitioning` is a [[KeyedPartitioning]], every element of
-   * `originalPartitions` (and every partition re-planned by the data source) must implement
-   * [[HasPartitionKey]].
+   * Notes:
+   *  - Do not call multiple times for the same `scan` instance;
+   *    [[SupportsRuntimeV2Filtering.filter]] is mutating.
+   *  - When `outputPartitioning` is a [[KeyedPartitioning]], every split from
+   *    `planInputPartitions()` used on this path must implement [[HasPartitionKey]].
    *
    * @param scan                the V2 scan to push filters into
    * @param runtimeFilters      runtime filters to translate and push

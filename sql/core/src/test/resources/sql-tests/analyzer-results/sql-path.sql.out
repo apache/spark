@@ -78,6 +78,32 @@ Project [current_path() AS current_path()#x]
 
 
 -- !query
+USE spark_catalog.default
+-- !query analysis
+SetCatalogAndNamespace
++- ResolvedNamespace V2SessionCatalog(spark_catalog), [default]
+
+
+-- !query
+SET PATH = SYSTEM_PATH, CURRENT_SCHEMA
+-- !query analysis
+SetPathCommand [SystemPath, CurrentSchema]
+
+
+-- !query
+SELECT current_path()
+-- !query analysis
+Project [current_path() AS current_path()#x]
++- OneRowRelation
+
+
+-- !query
+SET PATH = DEFAULT_PATH
+-- !query analysis
+SetPathCommand [DefaultPath]
+
+
+-- !query
 SET PATH = spark_catalog.default, system.builtin
 -- !query analysis
 SetPathCommand [SchemaInPath(List(spark_catalog, default)), SchemaInPath(List(system, builtin))]

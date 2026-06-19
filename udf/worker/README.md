@@ -33,21 +33,25 @@ provisioning service or daemon).
 
 ```
 udf/worker/
-├── proto/
+├── proto/                        -- protobuf message classes only (protobuf-java)
 │     worker_spec.proto           -- UDFWorkerSpecification protobuf
-│     udf_protocol.proto          -- UDF execution protocol (Init, UdfPayload, ...)
+│     udf_message.proto           -- UDF execution protocol messages (Init, UdfPayload, ...)
+│     udf_service.proto           -- UdfWorker gRPC service (Execute, Manage)
 │     common.proto                -- shared enums (UDFWorkerDataFormat, etc.)
 │
-└── core/                         -- abstract interfaces
-      WorkerDispatcher.scala      -- creates sessions, manages worker lifecycle
-      WorkerSession.scala         -- per-UDF init/process/cancel/close
-      WorkerConnection.scala      -- transport channel abstraction
-      WorkerSecurityScope.scala   -- security boundary for worker pooling
-      │
-      └── direct/                 -- "direct" creation: local OS processes
-            DirectWorkerDispatcher.scala  -- spawns processes, env lifecycle
-            DirectWorkerProcess.scala     -- OS process + connection + UDS socket
-            DirectWorkerSession.scala     -- session backed by a direct process
+├── core/                         -- abstract interfaces
+│     WorkerDispatcher.scala      -- creates sessions, manages worker lifecycle
+│     WorkerSession.scala         -- per-UDF init/process/cancel/close
+│     WorkerConnection.scala      -- transport channel abstraction
+│     WorkerSecurityScope.scala   -- security boundary for worker pooling
+│     │
+│     └── direct/                 -- "direct" creation: local OS processes
+│           DirectWorkerDispatcher.scala  -- spawns processes, env lifecycle
+│           DirectWorkerProcess.scala     -- OS process + connection + UDS socket
+│           DirectWorkerSession.scala     -- session backed by a direct process
+│
+└── grpc/                         -- gRPC transport (gRPC runtime confined here)
+      (generated)                 -- UdfWorkerGrpc service stubs from proto/udf_service.proto
 ```
 
 The `core/` package defines abstract interfaces that are independent of how
@@ -55,6 +59,11 @@ workers are created. The `core/direct/` sub-package implements "direct"
 worker creation where Spark spawns local OS processes. Future packages
 (e.g., `core/indirect/`) can implement alternative creation modes such as
 obtaining workers from a provisioning service or daemon.
+
+The `grpc/` module owns the gRPC service-stub generation (from
+`proto/`'s `udf_service.proto`) and the gRPC runtime dependencies. Keeping
+gRPC here means `proto/`, `core/`, and their consumers (`core`, `catalyst`,
+`sql/core`) carry no gRPC dependency on their classpath.
 
 ## Wire protocol
 
@@ -66,8 +75,9 @@ Engine -> Worker:  Init -> PayloadChunk* -> (DataRequest)* -> Finish (Cancel)?
 Worker -> Engine:          InitResponse  -> (DataResponse)* -> (ErrorResponse)? -> (FinishResponse | CancelResponse)
 ```
 
-See `udf/worker/proto/src/main/protobuf/udf_protocol.proto` for the complete
-protocol definition, ordering invariants, and error contract.
+See `udf/worker/proto/src/main/protobuf/udf_message.proto` for the complete
+message definitions, ordering invariants, and error contract, and
+`udf_service.proto` for the gRPC service.
 
 ### Direct worker creation
 
@@ -157,19 +167,19 @@ dispatcher.close()
 
 SBT:
 ```
-build/sbt "udf-worker-proto/compile" "udf-worker-core/compile"
+build/sbt "udf-worker-proto/compile" "udf-worker-core/compile" "udf-worker-grpc/compile"
 ```
 
 Maven:
 ```
-build/mvn compile -pl udf/worker/proto,udf/worker/core -am
+build/mvn compile -pl udf/worker/proto,udf/worker/core,udf/worker/grpc -am
 ```
 
 ## Test
 
 SBT:
 ```
-build/sbt "udf-worker-core/test"
+build/sbt "udf-worker-core/test" "udf-worker-grpc/test"
 ```
 
 ## Current status

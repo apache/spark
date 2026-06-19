@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.analysis.MultiAlias
+import org.apache.spark.sql.catalyst.analysis.{MultiAlias, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
@@ -112,6 +112,10 @@ trait AliasHelper {
   }
 
   protected def trimAliases(e: Expression): Expression = e match {
+    // SPARK-48091: Do not descend into unresolved function calls. Aliases inside them
+    // (e.g., UnresolvedFunction("struct", Seq(Alias(x, "data")))) carry semantic information
+    // that ResolveFunctions -> CreateStruct.apply consumes to produce field names.
+    case u: UnresolvedFunction => u
     // The children of `CreateNamedStruct` may use `Alias` to carry metadata and we should not
     // trim them.
     case c: CreateNamedStruct => c.mapChildren {

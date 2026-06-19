@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.WidenStatefulOpNullability
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
@@ -767,11 +768,16 @@ case class StateStoreRestoreExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
+  private val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(keyExpressions.toStructType)
+  private val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateValueSchema)
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      0, keyExpressions.toStructType, 0, stateManager.getStateValueSchema))
+      0, stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -781,9 +787,9 @@ case class StateStoreRestoreExec(
 
     child.execute().mapPartitionsWithReadStateStore(
       getStateInfo,
-      keyExpressions.toStructType,
-      stateManager.getStateValueSchema,
-      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
+      stateKeySchema,
+      stateValueSchema,
+      NoPrefixKeyStateEncoderSpec(stateKeySchema),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
       val hasInput = iter.hasNext
@@ -805,7 +811,8 @@ case class StateStoreRestoreExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -838,13 +845,18 @@ case class StateStoreSaveExec(
   private[sql] val stateManager = StreamingAggregationStateManager.createStateManager(
     keyExpressions, child.output, stateFormatVersion)
 
+  private val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(keyExpressions.toStructType)
+  private val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateValueSchema)
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration,
       batchId: Long,
       stateSchemaVersion: Int): List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keySchemaId = 0, keyExpressions.toStructType, valueSchemaId = 0,
-      stateManager.getStateValueSchema))
+      keySchemaId = 0, stateKeySchema, valueSchemaId = 0,
+      stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo,
       hadoopConf, newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -856,9 +868,9 @@ case class StateStoreSaveExec(
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
-      keyExpressions.toStructType,
-      stateManager.getStateValueSchema,
-      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
+      stateKeySchema,
+      stateValueSchema,
+      NoPrefixKeyStateEncoderSpec(stateKeySchema),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
         val numOutputRows = longMetric("numOutputRows")
@@ -1000,7 +1012,8 @@ case class StateStoreSaveExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -1054,12 +1067,17 @@ case class SessionWindowStateStoreRestoreExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
+  private val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateKeySchema)
+  private val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateValueSchema)
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME,
-      keySchemaId = 0, stateManager.getStateKeySchema, valueSchemaId = 0,
-      stateManager.getStateValueSchema))
+      keySchemaId = 0, stateKeySchema, valueSchemaId = 0,
+      stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -1069,9 +1087,9 @@ case class SessionWindowStateStoreRestoreExec(
 
     child.execute().mapPartitionsWithReadStateStore(
       getStateInfo,
-      stateManager.getStateKeySchema,
-      stateManager.getStateValueSchema,
-      PrefixKeyScanStateEncoderSpec(stateManager.getStateKeySchema,
+      stateKeySchema,
+      stateValueSchema,
+      PrefixKeyScanStateEncoderSpec(stateKeySchema,
         stateManager.getNumColsForPrefixKey),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
@@ -1099,7 +1117,8 @@ case class SessionWindowStateStoreRestoreExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -1147,11 +1166,16 @@ case class SessionWindowStateStoreSaveExec(
   private val stateManager = StreamingSessionWindowStateManager.createStateManager(
     keyWithoutSessionExpressions, sessionExpression, child.output, stateFormatVersion)
 
+  private val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateKeySchema)
+  private val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(stateManager.getStateValueSchema)
+
   override def validateAndMaybeEvolveStateSchema(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-      stateManager.getStateKeySchema, 0, stateManager.getStateValueSchema))
+      stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion))
   }
@@ -1165,9 +1189,9 @@ case class SessionWindowStateStoreSaveExec(
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
-      stateManager.getStateKeySchema,
-      stateManager.getStateValueSchema,
-      PrefixKeyScanStateEncoderSpec(stateManager.getStateKeySchema,
+      stateKeySchema,
+      stateValueSchema,
+      PrefixKeyScanStateEncoderSpec(stateKeySchema,
         stateManager.getNumColsForPrefixKey),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
@@ -1251,7 +1275,8 @@ case class SessionWindowStateStoreSaveExec(
     }
   }
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -1355,14 +1380,19 @@ abstract class BaseStreamingDeduplicateExec
   protected val schemaForValueRow: StructType
   protected val extraOptionOnStateStore: Map[String, String]
 
+  protected lazy val stateKeySchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(keyExpressions.toStructType)
+  protected lazy val stateValueSchema: StructType =
+    WidenStatefulOpNullability.widenStateSchema(schemaForValueRow)
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
     child.execute().mapPartitionsWithStateStore(
       getStateInfo,
-      keyExpressions.toStructType,
-      schemaForValueRow,
-      NoPrefixKeyStateEncoderSpec(keyExpressions.toStructType),
+      stateKeySchema,
+      stateValueSchema,
+      NoPrefixKeyStateEncoderSpec(stateKeySchema),
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
       extraOptions = extraOptionOnStateStore) { (store, iter) =>
@@ -1422,7 +1452,8 @@ abstract class BaseStreamingDeduplicateExec
 
   protected def evictDupInfoFromState(store: StateStore): Unit
 
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] =
+    WidenStatefulOpNullability.widenOutputForStatefulOp(child.output)
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
@@ -1476,7 +1507,7 @@ case class StreamingDeduplicateExec(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-      keyExpressions.toStructType, 0, schemaForValueRow))
+      stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,
       extraOptions = extraOptionOnStateStore))
@@ -1562,7 +1593,7 @@ case class StreamingDeduplicateWithinWatermarkExec(
       hadoopConf: Configuration, batchId: Long, stateSchemaVersion: Int):
     List[StateSchemaValidationResult] = {
     val newStateSchema = List(StateStoreColFamilySchema(StateStore.DEFAULT_COL_FAMILY_NAME, 0,
-      keyExpressions.toStructType, 0, schemaForValueRow))
+      stateKeySchema, 0, stateValueSchema))
     List(StateSchemaCompatibilityChecker.validateAndMaybeEvolveStateSchema(getStateInfo, hadoopConf,
       newStateSchema, session.sessionState, stateSchemaVersion,
       extraOptions = extraOptionOnStateStore))

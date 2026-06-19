@@ -169,8 +169,8 @@ class TaskContextTests(PySparkTestCase):
             .map(lambda x: BarrierTaskContext.get().getTaskInfos())
             .collect()
         )
-        self.assertTrue(len(taskInfos) == 4)
-        self.assertTrue(len(taskInfos[0]) == 4)
+        self.assertEqual(len(taskInfos), 4)
+        self.assertEqual(len(taskInfos[0]), 4)
 
     def test_context_get(self):
         """

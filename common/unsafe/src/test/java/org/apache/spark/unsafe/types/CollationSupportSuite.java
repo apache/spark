@@ -3647,6 +3647,32 @@ public class CollationSupportSuite {
     assertStringTrimRight(UTF8_LCASE, "𝔸", "a", "𝔸");
     assertStringTrimRight(UNICODE, "𝔸", "a", "𝔸");
     assertStringTrimRight(UNICODE_CI, "𝔸", "a", "");
+    // RTRIM-modifier collations ignore trailing spaces while matching the trim characters, then
+    // re-append them. The behaviour must agree across the UTF8_BINARY (binaryTrimRight),
+    // UTF8_LCASE (lowercaseTrimRight), and ICU (trimRight) paths. The supplementary-character
+    // cases below (trailing-space count == supplementary code-point count) regressed on the ICU
+    // path before SPARK-57506, which compared a Java-char index against a code-point count.
+    assertStringTrimRight("UTF8_BINARY_RTRIM", "x ", "x", " ");
+    assertStringTrimRight("UTF8_LCASE_RTRIM", "x ", "x", " ");
+    assertStringTrimRight("UNICODE_RTRIM", "x ", "x", " ");
+    assertStringTrimRight("UTF8_BINARY_RTRIM", "   ", "x", "   ");
+    assertStringTrimRight("UTF8_LCASE_RTRIM", "   ", "x", "   ");
+    assertStringTrimRight("UNICODE_RTRIM", "   ", "x", "   ");
+    assertStringTrimRight("UTF8_BINARY_RTRIM", "𝔸 ", "𝔸", " ");
+    assertStringTrimRight("UTF8_LCASE_RTRIM", "𝔸 ", "𝔸", " ");
+    assertStringTrimRight("UNICODE_RTRIM", "𝔸 ", "𝔸", " ");
+    assertStringTrimRight("UTF8_BINARY_RTRIM", "𝔸  ", "𝔸", "  ");
+    assertStringTrimRight("UTF8_LCASE_RTRIM", "𝔸  ", "𝔸", "  ");
+    assertStringTrimRight("UNICODE_RTRIM", "𝔸  ", "𝔸", "  ");
+    assertStringTrimRight("UTF8_BINARY_RTRIM", "𝔸𝔸  ", "𝔸", "  ");
+    assertStringTrimRight("UTF8_LCASE_RTRIM", "𝔸𝔸  ", "𝔸", "  ");
+    assertStringTrimRight("UNICODE_RTRIM", "𝔸𝔸  ", "𝔸", "  ");
+    // Case-folding interacts with space preservation per path: only UTF8_LCASE folds B to b, so
+    // only it trims the trailing 'B' and re-appends the space; binary and (case-sensitive) ICU
+    // leave the input unchanged. This exercises the lcase space-preservation branch on its own.
+    assertStringTrimRight("UTF8_BINARY_RTRIM", "xB ", "b", "xB ");
+    assertStringTrimRight("UTF8_LCASE_RTRIM", "xB ", "b", "x ");
+    assertStringTrimRight("UNICODE_RTRIM", "xB ", "b", "xB ");
   }
 
   /**

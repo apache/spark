@@ -407,7 +407,7 @@ class GroupByTestsMixin:
                 expect = pdf.groupby("a")["b"].unique().sort_index()
                 self.assert_eq(len(actual), len(expect))
                 for act, exp in zip(actual, expect):
-                    self.assertTrue(sorted(act) == sorted(exp))
+                    self.assertEqual(sorted(act), sorted(exp))
 
     def test_diff(self):
         pdf = pd.DataFrame(

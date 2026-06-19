@@ -179,6 +179,40 @@ private[spark] class DAGScheduler(
 
   private[spark] val jobIdToQueryExecutionId = new ConcurrentHashMap[Int, java.lang.Long]()
 
+  // For INJECT_SHUFFLE_FETCH_FAILURES: per-shuffleId, the stage attempt whose partition-0 task
+  // we corrupted. Read to (a) avoid re-corrupting that partition on recompute, and (b) decide
+  // when to fire INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE - the recompute is the
+  // task whose stageAttemptId is not the recorded one.
+  private val injectShuffleFetchFailuresCorruptedAttempt: ConcurrentHashMap[Int, Int] =
+    if (Utils.isTesting) new ConcurrentHashMap[Int, Int]() else null
+
+  // For INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY > 0: shuffles whose mapper-0 corruption
+  // has been deferred until enough downstream consumer tasks succeed. The value is the mapId
+  // we will eventually swap to an invalid BlockManagerId and the producing task's original
+  // location - we keep that location's host/port so the consumer's locality-preferred host
+  // is still a real one (only the executorId is INVALID_EXECUTOR_ID).
+  private val injectShuffleFetchFailuresPendingDelayedCorruption
+    : ConcurrentHashMap[Int, (Long, BlockManagerId)] =
+    if (Utils.isTesting) new ConcurrentHashMap[Int, (Long, BlockManagerId)]() else null
+
+  // For INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY: per-shuffle counter of consumer
+  // task-success events observed so far.
+  private val injectShuffleFetchFailuresDownstreamSuccessCount: ConcurrentHashMap[Int, Int] =
+    if (Utils.isTesting) new ConcurrentHashMap[Int, Int]() else null
+
+  // Build the bogus BlockManagerId used by INJECT_SHUFFLE_FETCH_FAILURES to mark a corrupted
+  // MapStatus: keeps the original host/port/topology so the consumer's locality preference
+  // resolves to a real host; only the executorId is INVALID_EXECUTOR_ID, so any fetch from
+  // this location fails with FetchFailed.
+  private def injectShuffleFetchFailuresInvalidBlockManagerId(
+      currentLocation: BlockManagerId): BlockManagerId = {
+    BlockManagerId(
+      BlockManagerId.INVALID_EXECUTOR_ID,
+      currentLocation.host,
+      currentLocation.port,
+      currentLocation.topologyInfo)
+  }
+
   // Job groups that are cancelled with `cancelFutureJobs` as true, with at most
   // `NUM_CANCELLED_JOB_GROUPS_TO_TRACK` stored. On a new job submission, if its job group is in
   // this set, the job will be immediately cancelled.
@@ -933,6 +967,11 @@ private[spark] class DAGScheduler(
                 }
                 for ((k, v) <- shuffleIdToMapStage.find(_._2 == stage)) {
                   shuffleIdToMapStage.remove(k)
+                  if (Utils.isTesting) {
+                    injectShuffleFetchFailuresCorruptedAttempt.remove(k)
+                    injectShuffleFetchFailuresPendingDelayedCorruption.remove(k)
+                    injectShuffleFetchFailuresDownstreamSuccessCount.remove(k)
+                  }
                 }
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
@@ -1618,6 +1657,127 @@ private[spark] class DAGScheduler(
     }
   }
 
+  /**
+   * Returns true when this just-completed shuffle map task should have its output corrupted by
+   * the test-only fetch-failure injection. We corrupt only the partition-0 task, and only on
+   * the stage attempt that first successfully completes partition 0 - latched into
+   * injectShuffleFetchFailuresCorruptedAttempt. Recomputes (later attempts) of that partition
+   * are left clean so the consumer can make progress on its retry. The latch is per-shuffle,
+   * so non-leaf stages whose earlier attempts failed on fetch from upstream are still
+   * corrupted on their first successful attempt.
+   */
+  private def shouldCorruptShuffleOutputForTest(shuffleId: Int, task: Task[_]): Boolean = {
+    if (task.partitionId != 0) return false
+    val recorded = injectShuffleFetchFailuresCorruptedAttempt.computeIfAbsent(
+      shuffleId, _ => task.stageAttemptId)
+    recorded == task.stageAttemptId
+  }
+
+  /**
+   * Apply the test-only fetch-failure injection to this just-completed map task: with
+   * DOWNSTREAM_DELAY > 0 record the (mapId, original location) so
+   * maybeApplyDelayedCorruptionForTest can corrupt it later, otherwise update the MapStatus
+   * location to an invalid block manager id inline.
+   */
+  private def corruptShuffleOutputForTest(shuffleId: Int, status: MapStatus): Unit = {
+    val downstreamDelay =
+      sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY)
+    if (downstreamDelay > 0) {
+      injectShuffleFetchFailuresPendingDelayedCorruption.put(
+        shuffleId, (status.mapId, status.location))
+    } else {
+      status.updateLocation(injectShuffleFetchFailuresInvalidBlockManagerId(status.location))
+    }
+  }
+
+  /**
+   * For INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE: returns true when this shuffle map
+   * task is the recompute of a partition whose previous successful attempt was the one corrupted
+   * by INJECT_SHUFFLE_FETCH_FAILURES. Forcing the mismatch on the recompute drives the rollback
+   * path - downstream ShuffleMapStages get cleaned up and re-run fully, downstream ResultStages
+   * are aborted.
+   */
+  private def isForcedChecksumMismatchForTest(shuffleId: Int, task: Task[_]): Boolean = {
+    if (!sc.conf.get(config.Tests.INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE)) return false
+    if (task.partitionId != 0) return false
+    val recorded =
+      injectShuffleFetchFailuresCorruptedAttempt.getOrDefault(shuffleId, -1)
+    recorded >= 0 && recorded != task.stageAttemptId
+  }
+
+  /**
+   * Apply the deferred mapper-0 corruption (configured via
+   * INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY for ShuffleMapStage consumers and
+   * INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY for ResultStage consumers) when enough
+   * consumer tasks have succeeded. Walks the just-completed stage's direct shuffle parents,
+   * increments the per-shuffle consumer-success counter, and corrupts the registered MapStatus
+   * when the counter reaches the configured delay.
+   */
+  private def maybeApplyDelayedCorruptionForTest(stage: Stage): Unit = {
+    if (!sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES)) return
+    if (injectShuffleFetchFailuresPendingDelayedCorruption.isEmpty) return
+    val isResultStage = stage.isInstanceOf[ResultStage]
+    val delay = if (isResultStage) {
+      sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY)
+    } else {
+      sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_DOWNSTREAM_DELAY)
+    }
+    if (delay <= 0) return  // delay == 0 was already handled at submission time
+
+    val parentShuffleIds = stage.parents.collect {
+      case sms: ShuffleMapStage => sms.shuffleDep.shuffleId
+    }
+    parentShuffleIds.foreach { shuffleId =>
+      if (injectShuffleFetchFailuresPendingDelayedCorruption.containsKey(shuffleId)) {
+        val newCount = injectShuffleFetchFailuresDownstreamSuccessCount.merge(shuffleId, 1, _ + _)
+        if (newCount >= delay) {
+          val (mapId, originalLocation) =
+            injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
+          mapOutputTracker.updateMapOutput(
+            shuffleId, mapId, injectShuffleFetchFailuresInvalidBlockManagerId(originalLocation))
+          // Bump the epoch so any executor that already fetched this shuffle's statuses
+          // re-fetches them; updateMapOutput on its own only invalidates the driver-side
+          // serialized cache.
+          mapOutputTracker.incrementEpoch()
+          logInfo(s"Test injection: corrupted mapper-0 of shuffle $shuffleId after " +
+            s"$newCount downstream consumer successes")
+        }
+      }
+    }
+  }
+
+  /**
+   * For INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY = 0: when a ResultStage is about to
+   * dispatch tasks, fire any pending mapper-0 corruption for its direct shuffle parents
+   * BEFORE result tasks start. This keeps the result stage at zero finished tasks when
+   * INJECT_SHUFFLE_FORCE_CHECKSUM_MISMATCH_ON_RECOMPUTE later triggers `rollbackSucceedingStages`,
+   * so the rollback path does not abort a partially-finished result stage.
+   */
+  private def maybePreemptiveCorruptionForResultStage(stage: Stage): Unit = {
+    if (!stage.isInstanceOf[ResultStage]) return
+    if (!sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES)) return
+    if (sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES_RESULT_STAGE_DELAY) > 0) return
+    if (injectShuffleFetchFailuresPendingDelayedCorruption.isEmpty) return
+
+    val parentShuffleIds = stage.parents.collect {
+      case sms: ShuffleMapStage => sms.shuffleDep.shuffleId
+    }
+    parentShuffleIds.foreach { shuffleId =>
+      if (injectShuffleFetchFailuresPendingDelayedCorruption.containsKey(shuffleId)) {
+        val (mapId, originalLocation) =
+          injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
+        mapOutputTracker.updateMapOutput(
+          shuffleId, mapId, injectShuffleFetchFailuresInvalidBlockManagerId(originalLocation))
+        // Bump the epoch so any executor that already fetched this shuffle's statuses
+        // re-fetches them; updateMapOutput on its own only invalidates the driver-side
+        // serialized cache.
+        mapOutputTracker.incrementEpoch()
+        logInfo(s"Test injection: corrupted mapper-0 of shuffle $shuffleId before result-stage " +
+          s"submission")
+      }
+    }
+  }
+
   private def configureShufflePushMergerLocations(stage: ShuffleMapStage): Unit = {
     if (stage.shuffleDep.getMergerLocs.nonEmpty) return
     val mergerLocs = sc.schedulerBackend.getShufflePushMergerLocations(
@@ -1634,6 +1794,10 @@ private[spark] class DAGScheduler(
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int): Unit = {
     logDebug("submitMissingTasks(" + stage + ")")
+
+    if (Utils.isTesting) {
+      maybePreemptiveCorruptionForResultStage(stage)
+    }
 
     // For statically indeterminate stages being retried, we trigger rollback BEFORE task
     // submission. This is more efficient than deferring to task completion because:
@@ -2271,6 +2435,10 @@ private[spark] class DAGScheduler(
           taskScheduler.notifyPartitionCompletion(stageId, task.partitionId)
         }
 
+        if (Utils.isTesting && !ignoreOldTaskAttempts) {
+          maybeApplyDelayedCorruptionForTest(stage)
+        }
+
         task match {
           case rt: ResultTask[_, _] =>
             // Cast to ResultStage here because it's part of the ResultTask
@@ -2342,21 +2510,15 @@ private[spark] class DAGScheduler(
                 // The epoch of the task is acceptable (i.e., the task was launched after the most
                 // recent failure we're aware of for the executor), so mark the task's output as
                 // available.
-                // For testing purposes, inject fetch failures controlled from the driver-side by
-                // supplying an invalid location.
                 if (Utils.isTesting &&
                     sc.conf.get(config.Tests.INJECT_SHUFFLE_FETCH_FAILURES) &&
-                    task.stageAttemptId == 0) {
-                  val currentLocation = status.location
-                  val invalidLocation = BlockManagerId(
-                    execId = BlockManagerId.INVALID_EXECUTOR_ID,
-                    host = currentLocation.host,
-                    port = currentLocation.port,
-                    topologyInfo = currentLocation.topologyInfo)
-                  status.updateLocation(invalidLocation)
+                    shouldCorruptShuffleOutputForTest(shuffleStage.shuffleDep.shuffleId, task)) {
+                  corruptShuffleOutputForTest(shuffleStage.shuffleDep.shuffleId, status)
                 }
                 val isChecksumMismatched = mapOutputTracker.registerMapOutput(
-                  shuffleStage.shuffleDep.shuffleId, smt.partitionId, status)
+                    shuffleStage.shuffleDep.shuffleId, smt.partitionId, status) ||
+                  (Utils.isTesting &&
+                    isForcedChecksumMismatchForTest(shuffleStage.shuffleDep.shuffleId, task))
                 if (isChecksumMismatched) {
                   shuffleStage.isChecksumMismatched = isChecksumMismatched
                   // Runtime detection of nondeterministic output via checksum mismatch.

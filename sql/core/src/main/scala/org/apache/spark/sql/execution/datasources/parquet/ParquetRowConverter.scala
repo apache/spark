@@ -35,15 +35,16 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.{PhysicalByteType, PhysicalShortType}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeUtils, GenericArrayData, ResolveDefaultColumns, STUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CaseInsensitiveMap, DateTimeConstants, DateTimeUtils, GenericArrayData, ResolveDefaultColumns, STUtils}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, TimestampNanosVal, UTF8String, VariantVal}
 import org.apache.spark.util.collection.Utils
 
 /**
@@ -306,6 +307,20 @@ private[parquet] class ParquetRowConverter(
       parquetType: Type,
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
+    // Types Framework: framework FIRST, original match as fallback.
+    // Passes all ParquetRowConverter constructor params to the extended newConverter overload
+    // so struct-backed types can create recursive converters.
+    ParquetTypeOps(catalystType)
+      .map(_.newConverter(
+        parquetType, updater, schemaConverter, convertTz,
+        datetimeRebaseSpec, int96RebaseSpec))
+      .getOrElse(newConverterDefault(parquetType, catalystType, updater))
+  }
+
+  private def newConverterDefault(
+      parquetType: Type,
+      catalystType: DataType,
+      updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
     def isUnsignedIntTypeMatched(bitWidth: Int): Boolean = {
       parquetType.getLogicalTypeAnnotation match {
@@ -415,8 +430,8 @@ private[parquet] class ParquetRowConverter(
       case geom: GeometryType =>
         new ParquetGeometryConverter(geom.srid, updater)
 
-      case _: GeographyType =>
-        new ParquetGeographyConverter(updater)
+      case geog: GeographyType =>
+        new ParquetGeographyConverter(geog.srid, updater)
 
       // As long as the parquet type is INT64 timestamp, whether logical annotation
       // `isAdjustedToUTC` is false or true, it will be read as Spark's TimestampLTZ type
@@ -483,6 +498,17 @@ private[parquet] class ParquetRowConverter(
             this.updater.setLong(micros)
           }
         }
+
+      // The TIMESTAMP(NANOS) parquet type postdates Spark's switch to the proleptic Gregorian
+      // calendar, so no legacy hybrid-calendar writer could have produced it. Nanos values are
+      // always proleptic Gregorian and are exempt from datetime rebasing
+      // (`spark.sql.parquet.datetimeRebaseModeInRead` only covers DATE, TIMESTAMP_MILLIS and
+      // TIMESTAMP_MICROS).
+      case t: TimestampLTZNanosType if isNanosTimestamp(parquetType) =>
+        makeNanosTimestampConverter(updater, t.precision)
+
+      case t: TimestampNTZNanosType if isNanosTimestamp(parquetType) =>
+        makeNanosTimestampConverter(updater, t.precision)
 
       // Allow upcasting INT32 date to timestampNTZ.
       case TimestampNTZType if parquetType.asPrimitiveType().getPrimitiveTypeName == INT32 &&
@@ -587,6 +613,40 @@ private[parquet] class ParquetRowConverter(
   private def canReadAsTimestampNTZ(parquetType: Type): Boolean =
     parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation]
 
+  // A Parquet INT64 column annotated as TIMESTAMP(NANOS), read into one of the
+  // nanosecond-precision Spark timestamp types.
+  private def isNanosTimestamp(parquetType: Type): Boolean =
+    parquetType.getLogicalTypeAnnotation match {
+      case ts: TimestampLogicalTypeAnnotation => ts.getUnit == TimeUnit.NANOS
+      case _ => false
+    }
+
+  /**
+   * Builds a converter for a Parquet INT64 `TIMESTAMP(NANOS)` column read into a
+   * nanosecond-precision Spark type ([[TimestampNTZNanosType]] / [[TimestampLTZNanosType]]). The
+   * int64 epoch-nanoseconds value is split into the `(epochMicros, nanosWithinMicro)` pair with
+   * floor semantics (so pre-epoch values keep `nanosWithinMicro` in `[0, 999]`), then the
+   * sub-microsecond digits are truncated to `precision`. The truncation mirrors
+   * [[DateTimeUtils.instantToTimestampNanos]] / [[DateTimeUtils.localDateTimeToTimestampNanos]];
+   * it matters when an explicit read schema (e.g. `TIMESTAMP_NTZ(7)`) is applied to a foreign
+   * full-precision file - otherwise the stored value would carry digits below `precision`,
+   * violating the invariant the rest of the stack maintains. NANOS is exempt from datetime
+   * rebasing (see the call site).
+   */
+  private def makeNanosTimestampConverter(
+      updater: ParentContainerUpdater,
+      precision: Int): ParquetPrimitiveConverter =
+    new ParquetPrimitiveConverter(updater) {
+      override def addLong(value: Long): Unit = {
+        val epochMicros = Math.floorDiv(value, DateTimeConstants.NANOS_PER_MICROS)
+        val rawNanosWithinMicro =
+          Math.floorMod(value, DateTimeConstants.NANOS_PER_MICROS).toInt
+        val nanosWithinMicro =
+          DateTimeUtils.truncateNanosWithinMicroToPrecision(rawNanosWithinMicro, precision)
+        this.updater.set(TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort))
+      }
+    }
+
   /**
    * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
    */
@@ -619,12 +679,12 @@ private[parquet] class ParquetRowConverter(
   }
 
   /**
-   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   * Parquet converter for geometries. A dictionary is used to minimize WKB decoding cost.
    */
   private final class ParquetGeometryConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
 
-    private var expandedDictionary: Array[GeometryVal] = null
+    private var expandedDictionary: Array[BinaryView] = null
 
     override def hasDictionarySupport: Boolean = true
 
@@ -655,18 +715,18 @@ private[parquet] class ParquetRowConverter(
   }
 
   /**
-   * Parquet converter for strings. A dictionary is used to minimize string decoding cost.
+   * Parquet converter for geographies. A dictionary is used to minimize WKB decoding cost.
    */
-  private final class ParquetGeographyConverter(updater: ParentContainerUpdater)
+  private final class ParquetGeographyConverter(srid: Int, updater: ParentContainerUpdater)
       extends ParquetPrimitiveConverter(updater) {
 
-    private var expandedDictionary: Array[GeographyVal] = null
+    private var expandedDictionary: Array[BinaryView] = null
 
     override def hasDictionarySupport: Boolean = true
 
     override def setDictionary(dictionary: Dictionary): Unit = {
       this.expandedDictionary = Array.tabulate(dictionary.getMaxId + 1) { i =>
-        STUtils.stGeogFromWKB(dictionary.decodeToBinary(i).getBytesUnsafe)
+        STUtils.stGeogFromWKB(dictionary.decodeToBinary(i).getBytesUnsafe, srid)
       }
     }
 
@@ -678,15 +738,15 @@ private[parquet] class ParquetRowConverter(
       val buffer = value.toByteBuffer
       val numBytes = buffer.remaining()
 
-      val geometry = if (buffer.hasArray) {
+      val geography = if (buffer.hasArray) {
         val array = buffer.array()
         val offset = buffer.arrayOffset() + buffer.position()
-        STUtils.stGeogFromWKB(array.slice(offset, offset + numBytes))
+        STUtils.stGeogFromWKB(array.slice(offset, offset + numBytes), srid)
       } else {
-        STUtils.stGeogFromWKB(value.getBytesUnsafe)
+        STUtils.stGeogFromWKB(value.getBytesUnsafe, srid)
       }
 
-      updater.set(geometry)
+      updater.set(geography)
     }
   }
 

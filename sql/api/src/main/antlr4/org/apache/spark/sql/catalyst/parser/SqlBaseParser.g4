@@ -78,7 +78,7 @@ options { tokenVocab = SqlBaseLexer; }
            la == ANTI || la == JOIN || la == UNION || la == EXCEPT ||
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
-           la == AGGREGATE || la == WINDOW || la == LATERAL;
+           la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
   }
 }
 
@@ -364,9 +364,9 @@ statement
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         (statement|setResetStatement)                                  #explain
     | SHOW TABLES ((FROM | IN) identifierReference)?
-        (LIKE? pattern=stringLit)?                                        #showTables
+        (LIKE? pattern=stringLit)? (AS JSON)?                            #showTables
     | SHOW TABLE EXTENDED ((FROM | IN) ns=identifierReference)?
-        LIKE pattern=stringLit partitionSpec?                             #showTableExtended
+        LIKE pattern=stringLit partitionSpec? (AS JSON)?                  #showTableExtended
     | SHOW TBLPROPERTIES table=identifierReference
         (LEFT_PAREN key=propertyKeyOrStringLit RIGHT_PAREN)?           #showTblProperties
     | SHOW COLUMNS (FROM | IN) table=identifierReference
@@ -1029,6 +1029,20 @@ unpivotAlias
     : AS? errorCapturingIdentifier
     ;
 
+binByClause
+    : BIN BY LEFT_PAREN
+        RANGE rangeStart=multipartIdentifier TO rangeEnd=multipartIdentifier
+        BIN WIDTH binWidth=expression
+        (ALIGN TO origin=expression)?
+        DISTRIBUTE UNIFORM LEFT_PAREN
+          distributeCol+=multipartIdentifier
+          (COMMA distributeCol+=multipartIdentifier)* RIGHT_PAREN
+        (BIN_START AS binStartAlias=errorCapturingIdentifier)?
+        (BIN_END AS binEndAlias=errorCapturingIdentifier)?
+        (BIN_DISTRIBUTE_RATIO AS binRatioAlias=errorCapturingIdentifier)?
+      RIGHT_PAREN (AS? tblAlias=errorCapturingIdentifier)?
+    ;
+
 lateralView
     : LATERAL VIEW (OUTER)? qualifiedName LEFT_PAREN (expression (COMMA expression)*)? RIGHT_PAREN tblName=identifier (AS? colName+=identifier (COMMA colName+=identifier)*)?
     ;
@@ -1050,6 +1064,7 @@ relationExtension
     : joinRelation
     | pivotClause
     | unpivotClause
+    | binByClause
     ;
 
 joinRelation
@@ -1483,7 +1498,10 @@ nonTrivialPrimitiveType
     | INTERVAL
         (fromYearMonth=(YEAR | MONTH) (TO to=MONTH)? |
          fromDayTime=(DAY | HOUR | MINUTE | SECOND) (TO to=(HOUR | MINUTE | SECOND))?)?
-    | TIMESTAMP (withLocalTimeZone | withoutTimeZone)?
+    | TIMESTAMP (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
+        (withLocalTimeZone | withoutTimeZone)?
+    | TIMESTAMP_LTZ (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
+    | TIMESTAMP_NTZ (LEFT_PAREN precision=integerValue RIGHT_PAREN)?
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
@@ -1498,7 +1516,6 @@ trivialPrimitiveType
     | FLOAT | REAL
     | DOUBLE
     | DATE
-    | TIMESTAMP_LTZ | TIMESTAMP_NTZ
     | BINARY
     | VOID
     | VARIANT
@@ -1904,6 +1921,7 @@ operatorPipeRightSide
     // messages in the event that both are present (this is not allowed).
     | pivotClause unpivotClause?
     | unpivotClause pivotClause?
+    | binByClause
     | sample
     | joinRelation
     | operator=(UNION | EXCEPT | SETMINUS | INTERSECT) setQuantifier? right=queryPrimary
@@ -1935,6 +1953,7 @@ ansiNonReserved
     : ADD
     | AFTER
     | AGGREGATE
+    | ALIGN
     | ALTER
     | ALWAYS
     | ANALYZE
@@ -1951,6 +1970,10 @@ ansiNonReserved
     | BERNOULLI
     | BETWEEN
     | BIGINT
+    | BIN
+    | BIN_DISTRIBUTE_RATIO
+    | BIN_END
+    | BIN_START
     | BINARY
     | BINARY_HEX
     | BINDING
@@ -2252,6 +2275,7 @@ ansiNonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNIFORM
     | UNLOCK
     | UNPIVOT
     | UNSET
@@ -2272,6 +2296,7 @@ ansiNonReserved
     | WEEKS
     | WHILE
     | WATERMARK
+    | WIDTH
     | WINDOW
     | WITHOUT
     | YEAR
@@ -2313,6 +2338,7 @@ nonReserved
     : ADD
     | AFTER
     | AGGREGATE
+    | ALIGN
     | ALL
     | ALTER
     | ALWAYS
@@ -2333,6 +2359,10 @@ nonReserved
     | BERNOULLI
     | BETWEEN
     | BIGINT
+    | BIN
+    | BIN_DISTRIBUTE_RATIO
+    | BIN_END
+    | BIN_START
     | BINARY
     | BINARY_HEX
     | BINDING
@@ -2688,6 +2718,7 @@ nonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNIFORM
     | UNIQUE
     | UNKNOWN
     | UNLOCK
@@ -2713,6 +2744,7 @@ nonReserved
     | WHILE
     | WHEN
     | WHERE
+    | WIDTH
     | WINDOW
     | WITH
     | WITHIN

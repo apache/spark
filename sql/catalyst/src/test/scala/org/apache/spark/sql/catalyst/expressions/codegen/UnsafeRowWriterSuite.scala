@@ -56,10 +56,10 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     rowWriter.resetRowWriter()
     rowWriter.setNullAt(0)
     assert(rowWriter.getRow.isNullAt(0))
-    assert(rowWriter.getRow.getGeography(0) === null)
-    val geography = GeographyVal.fromBytes(Array[Byte](1, 2, 3))
+    assert(rowWriter.getRow.getBinaryView(0) === null)
+    val geography = BinaryView.fromBytes(Array[Byte](1, 2, 3))
     rowWriter.write(1, geography)
-    assert(rowWriter.getRow.getGeography(1).getBytes sameElements geography.getBytes)
+    assert(rowWriter.getRow.getBinaryView(1).getBytes sameElements geography.getBytes)
   }
 
   test("write and get geometry through UnsafeRowWriter") {
@@ -67,10 +67,10 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     rowWriter.resetRowWriter()
     rowWriter.setNullAt(0)
     assert(rowWriter.getRow.isNullAt(0))
-    assert(rowWriter.getRow.getGeometry(0) === null)
-    val geometry = GeometryVal.fromBytes(Array[Byte](1, 2, 3))
+    assert(rowWriter.getRow.getBinaryView(0) === null)
+    val geometry = BinaryView.fromBytes(Array[Byte](1, 2, 3))
     rowWriter.write(1, geometry)
-    assert(rowWriter.getRow.getGeometry(1).getBytes sameElements geometry.getBytes)
+    assert(rowWriter.getRow.getBinaryView(1).getBytes sameElements geometry.getBytes)
   }
 
   test("write and get calendar intervals through UnsafeRowWriter") {

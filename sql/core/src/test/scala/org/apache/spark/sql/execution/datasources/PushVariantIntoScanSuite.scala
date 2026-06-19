@@ -31,6 +31,30 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
   override def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.PUSH_VARIANT_INTO_SCAN.key, "true")
 
+  // Whether the reader-deferral tests should exercise the V2 read path. Subclasses override.
+  protected def useV2: Boolean
+
+  // Write a parquet dataset via V1, then expose it as the temp view `T`. The view's read path is
+  // V2 when `useV2`, V1 otherwise. Use this for tests that need to actually execute a scan and
+  // compare V1 vs V2 behavior.
+  protected def withVariantParquetData(schema: String, inserts: String*)(body: => Unit): Unit = {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      // External (LOCATION) table, so `withTable` only drops the catalog entry - the parquet
+      // files at `path` survive for the subsequent V2 read.
+      withTable("temp_variant_setup") {
+        sql(s"create table temp_variant_setup ($schema) using PARQUET location '$path'")
+        inserts.foreach(values => sql(s"insert into temp_variant_setup values $values"))
+      }
+      val sourceListConf: Seq[(String, String)] =
+        if (useV2) Seq(SQLConf.USE_V1_SOURCE_LIST.key -> "") else Nil
+      withSQLConf(sourceListConf: _*) {
+        spark.read.parquet(path).createOrReplaceTempView("T")
+        try body finally spark.catalog.dropTempView("T")
+      }
+    }
+  }
+
   protected def localTimeZone = spark.sessionState.conf.sessionLocalTimeZone
 
   // Return a `StructField` with the expected `VariantMetadata`.
@@ -49,12 +73,216 @@ trait PushVariantIntoScanSuiteBase extends SharedSparkSession {
     }
   }
 
+  // Returns true iff `t` or any of its causes is an INVALID_VARIANT_CAST error. The failure may
+  // surface directly or be wrapped in a task failure.
+  protected def hasCastCondition(t: Throwable): Boolean = t match {
+    case null => false
+    case s: org.apache.spark.SparkThrowable if s.getCondition == "INVALID_VARIANT_CAST" => true
+    case _ => hasCastCondition(t.getCause)
+  }
+
+  test(s"Strict cast wraps with cast-error-deferred error") {
+    withTable("T") {
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+        sql("create table T (v variant) using parquet")
+        sql("select cast(v as int) as a, try_variant_get(v, '$.b', 'string') as b from T")
+          .queryExecution.optimizedPlan match {
+          case Project(projectList, l: LogicalRelation) =>
+            val output = l.output
+            val v = output(0)
+            // Strict cast should be wrapped with `UnwrapVariantCastError` over the sibling
+            // companion field whose `castErrorFor` metadata names the data field.
+            projectList(0) match {
+              case Alias(UnwrapVariantCastError(
+                  GetStructField(_, errOrd, _), GetStructField(_, 0, _)), "a") =>
+                assert(errOrd == 2, s"Expected companion ordinal 2, got $errOrd")
+              case other => fail(s"Unexpected projection 0: $other")
+            }
+            // try_variant_get is non-strict and should NOT be wrapped.
+            projectList(1) match {
+              case Alias(GetStructField(_, 1, _), "b") =>
+              case other => fail(s"Unexpected projection 1: $other")
+            }
+            val expected = StructType(Array(
+              field(0, IntegerType, "$", failOnError = true),
+              field(1, StringType, "$.b", failOnError = false),
+              StructField("2", StringType,
+                metadata = VariantMetadata.castErrorCompanionMetadata("0"))
+            ))
+            assert(v.dataType == expected, s"Got ${v.dataType}")
+          case other => fail(s"Unexpected plan: $other")
+        }
+      }
+    }
+  }
+
+  test(s"Cast-error companion is skipped for full-variant access") {
+    withTable("T") {
+      withSQLConf(
+        SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+        sql("create table T (v variant) using parquet")
+        // Selecting `v` alone produces only the full-variant request. cast-to-variant never
+        // fails, so no cast-error companion should be emitted.
+        sql("select v from T").queryExecution.optimizedPlan match {
+          case Project(_, l: LogicalRelation) =>
+            val v = l.output(0)
+            val expected = StructType(Array(
+              field(0, VariantType, "$", timeZone = "UTC")
+            ))
+            assert(v.dataType == expected, s"Got ${v.dataType}")
+          case other => fail(s"Unexpected plan: $other")
+        }
+      }
+    }
+  }
+
+  test(s"Reader defers strict-cast errors when cast-error companion is present") {
+    // Row 0: number 1 (LONG in variant) -> cast(v as int) succeeds.
+    // Row 1: string -> cast(v as int) would raise INVALID_VARIANT_CAST. With the deferral, the
+    //                  surrounding `if(schema_of_variant(v) = 'BIGINT', cast(v as int), null)`
+    //                  short-circuits to null before the error is observed.
+    withVariantParquetData("v variant",
+        "(parse_json('1'))",
+        "(parse_json('\"hello\"'))") {
+      val query =
+        "select if(schema_of_variant(v) = 'BIGINT', cast(v as int), null) as a from T"
+
+      // Without the deferral, the strict cast pushed into the scan raises at the failing row
+      // even though the `if` would have filtered it out.
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "false") {
+        val ex = intercept[Exception](sql(query).collect())
+        assert(hasCastCondition(ex), s"Expected INVALID_VARIANT_CAST, got $ex")
+      }
+
+      // With the deferral, the strict cast emits a cast-error companion and the `if`
+      // short-circuits before the failing row is consumed.
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+        val rows = sql(query).collect()
+        val values = rows.map(r => if (r.isNullAt(0)) null else r.getInt(0).asInstanceOf[Any])
+          .toSet
+        assert(values == Set(1, null), s"Got ${values.mkString(",")}")
+      }
+    }
+  }
+
+  test(s"Reader defers strict-cast errors for struct target") {
+    // Row 0: object with int field -> cast(v as struct<x int>) succeeds.
+    // Row 1: scalar -> cast(v as struct<x int>) would raise (wrong kind).
+    withVariantParquetData("v variant",
+        "(parse_json('{\"x\": 1}'))",
+        "(parse_json('\"hello\"'))") {
+      val query =
+        "select if(schema_of_variant(v) like 'OBJECT<%>', cast(v as struct<x: int>), null) as a " +
+          "from T"
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+        val rows = sql(query).collect()
+        val xs = rows.map { r =>
+          if (r.isNullAt(0)) null else r.getStruct(0).getInt(0).asInstanceOf[Any]
+        }.toSet
+        assert(xs == Set(1, null), s"Got ${xs.mkString(",")}")
+      }
+    }
+  }
+
+  test(s"Reader defers strict-cast errors for array target") {
+    // Row 0: array of ints -> cast(v as array<int>) succeeds.
+    // Row 1: scalar -> cast(v as array<int>) wrong-kind failure.
+    withVariantParquetData("v variant",
+        "(parse_json('[1, 2, 3]'))",
+        "(parse_json('\"hello\"'))") {
+      val query =
+        "select if(schema_of_variant(v) like 'ARRAY<%>', cast(v as array<int>), null) as a " +
+          "from T"
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+        val rows = sql(query).collect()
+        val arrs = rows.map { r =>
+          if (r.isNullAt(0)) null else r.getList[Int](0).toArray.toSeq
+        }.toSet
+        assert(arrs == Set(Seq(1, 2, 3), null), s"Got ${arrs.mkString(",")}")
+      }
+    }
+  }
+
+  test(s"Reader surfaces deferred error for array target with inner-element failure") {
+    // Row 0: heterogeneous array; cast(v as array<int>) fails on the inner string element.
+    // With deferred errors enabled, the failure must surface when the row is consumed by the
+    // outer expression -- i.e., the element-level companion buffer was correctly aggregated to
+    // the outer row.
+    withVariantParquetData("v variant",
+        "(parse_json('[1, \"abc\"]'))") {
+      withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+        val ex = intercept[Exception](sql("select cast(v as array<int>) from T").collect())
+        assert(hasCastCondition(ex), s"Expected INVALID_VARIANT_CAST, got $ex")
+      }
+    }
+  }
+
+  test(s"Reader surfaces deferred error for struct target with field cast failure") {
+    // Force the writer to shred `x` as int. The inner string `"abc"` lands in the unshredded
+    // `value` part, and `cast(v as struct<x: int>)` reads the int via the shredded path, which
+    // exercises `SparkShreddingUtils.getFieldsToExtract` / `assembleVariantStruct` with the new
+    // companion-field pairing.
+    withSQLConf(
+      SQLConf.VARIANT_WRITE_SHREDDING_ENABLED.key -> "true",
+      SQLConf.VARIANT_FORCE_SHREDDING_SCHEMA_FOR_TEST.key -> "x int") {
+      withVariantParquetData("v variant",
+          "(parse_json('{\"x\": \"abc\"}'))") {
+        withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+          val ex =
+            intercept[Exception](sql("select cast(v as struct<x: int>) from T").collect())
+          assert(hasCastCondition(ex), s"Expected INVALID_VARIANT_CAST, got $ex")
+        }
+      }
+    }
+  }
+
+  test(s"Reader defers strict-cast errors through AND/OR short-circuit") {
+    // Row 0: number 1 (LONG in variant) -> cast(v as int) succeeds.
+    // Row 1: string -> cast(v as int) would raise INVALID_VARIANT_CAST.
+    //
+    // The strict cast is a child of an `AND`/`OR` that is projected as a boolean value. The
+    // `AND`/`OR` must be evaluated lazily/left-to-right with short-circuit: when the left operand
+    // already decides the result (false for `AND`, true for `OR`) the right operand (the wrapped
+    // cast) is not consumed, so the deferred cast error on the string row must not surface.
+    withVariantParquetData("v variant",
+        "(parse_json('1'))",
+        "(parse_json('\"hello\"'))") {
+      // For each case: the projected expression, and the expected (sorted) values with deferral on.
+      // - AND: row 0 = 'BIGINT'='BIGINT' (true) AND 1 > 5 (false) -> false;
+      //        row 1 = 'STRING'='BIGINT' (false) -> false (cast deferred, never consumed).
+      // - OR:  row 0 = 'BIGINT'='STRING' (false) OR 1 > 5 (false) -> false;
+      //        row 1 = 'STRING'='STRING' (true) -> true (cast deferred, never consumed).
+      val cases = Seq(
+        "schema_of_variant(v) = 'BIGINT' and cast(v as int) > 5" -> Seq(false, false),
+        "schema_of_variant(v) = 'STRING' or cast(v as int) > 5" -> Seq(false, true))
+
+      for ((expr, expected) <- cases) {
+        val query = s"select $expr as a from T"
+
+        // Without the deferral, the strict cast pushed into the scan raises at the failing row even
+        // though the `AND`/`OR` would have short-circuited past it.
+        withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "false") {
+          val ex = intercept[Exception](sql(query).collect())
+          assert(hasCastCondition(ex), s"[$expr] Expected INVALID_VARIANT_CAST, got $ex")
+        }
+
+        // With the deferral, the short-circuit happens before the failing row is consumed.
+        // Read order is not guaranteed, so compare the sorted values.
+        withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR.key -> "true") {
+          val values = sql(query).collect().map(_.getBoolean(0)).sorted.toSeq
+          assert(values == expected, s"[$expr] Got ${values.mkString(",")}")
+        }
+      }
+    }
+  }
 }
 
 // V1 DataSource tests with parameterized reader type
 abstract class PushVariantIntoScanV1SuiteBase extends PushVariantIntoScanSuiteBase {
   protected def vectorizedReaderEnabled: Boolean
   protected def readerName: String
+
+  override protected def useV2: Boolean = false
 
   override def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key,
@@ -237,6 +465,8 @@ class PushVariantIntoScanVectorizedSuite extends PushVariantIntoScanV1SuiteBase 
 abstract class PushVariantIntoScanV2SuiteBase extends QueryTest with PushVariantIntoScanSuiteBase {
   protected def vectorizedReaderEnabled: Boolean
   protected def readerName: String
+
+  override protected def useV2: Boolean = true
 
   override def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key,

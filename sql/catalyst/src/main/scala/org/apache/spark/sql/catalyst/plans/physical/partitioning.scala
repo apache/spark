@@ -81,12 +81,17 @@ case object AllTuples extends Distribution {
  *
  * @param requireAllClusterKeys When true, `Partitioning` which satisfies this distribution,
  *                              must match all `clustering` expressions in the same ordering.
+ * @param allowNullKeySpreading When true, the default partitioning may spread rows whose
+ *                              clustering keys contain NULL values. This is a permission for
+ *                              consumers that do not require NULL-key co-location; ordinary
+ *                              [[HashPartitioning]] can still satisfy this distribution.
  */
 case class ClusteredDistribution(
     clustering: Seq[Expression],
     requireAllClusterKeys: Boolean = SQLConf.get.getConf(
       SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_DISTRIBUTION),
-    requiredNumPartitions: Option[Int] = None) extends Distribution {
+    requiredNumPartitions: Option[Int] = None,
+    allowNullKeySpreading: Boolean = false) extends Distribution {
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
@@ -97,7 +102,11 @@ case class ClusteredDistribution(
     assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
       s"This ClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
         s"the actual number of partitions is $numPartitions.")
-    HashPartitioning(clustering, numPartitions)
+    if (allowNullKeySpreading) {
+      NullAwareHashPartitioning(clustering, numPartitions)
+    } else {
+      HashPartitioning(clustering, numPartitions)
+    }
   }
 
   /**
@@ -282,7 +291,7 @@ trait HashPartitioningLike extends Expression with Partitioning with Unevaluable
           expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
             case (l, r) => l.semanticEquals(r)
           }
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
           if (requireAllClusterKeys) {
             // Checks `HashPartitioning` is partitioned on exactly same clustering keys of
             // `ClusteredDistribution`.
@@ -324,6 +333,45 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     newChildren: IndexedSeq[Expression]): HashPartitioning = copy(expressions = newChildren)
 }
 
+/**
+ * Represents a hash partitioning for equi-join inputs where rows with a NULL join key do not need
+ * to be co-located. Non-NULL join keys preserve the same partitioning contract as
+ * [[HashPartitioning]], while rows with any NULL join key may be spread across partitions. As a
+ * result, this partitioning intentionally does not satisfy a strict [[ClusteredDistribution]].
+ */
+case class NullAwareHashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+  extends HashPartitioningLike {
+
+  override def satisfies0(required: Distribution): Boolean = {
+    (required match {
+      case UnspecifiedDistribution => true
+      case AllTuples => numPartitions == 1
+      case _ => false
+    }) || {
+      // Stateful operators require strict NULL-key co-location and therefore cannot consume
+      // null-aware hash partitioning as a compatible clustered layout.
+      required match {
+        case c @ ClusteredDistribution(
+            requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
+            if allowNullKeySpreading =>
+          if (requireAllClusterKeys) {
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        case _ => false
+      }
+    }
+  }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    NullAwareHashShuffleSpec(this, distribution)
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): NullAwareHashPartitioning =
+    copy(expressions = newChildren)
+}
+
 case class CoalescedBoundary(startReducerIndex: Int, endReducerIndex: Int)
 
 /**
@@ -342,6 +390,47 @@ case class CoalescedHashPartitioning(from: HashPartitioning, partitions: Seq[Coa
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): CoalescedHashPartitioning =
+    copy(from = from.copy(expressions = newChildren))
+}
+
+/**
+ * Represents a null-aware hash partitioning whose reducer ranges have been coalesced into fewer
+ * partitions. It preserves the same relaxed NULL-key co-location contract as
+ * [[NullAwareHashPartitioning]].
+ */
+case class CoalescedNullAwareHashPartitioning(
+    from: NullAwareHashPartitioning,
+    partitions: Seq[CoalescedBoundary]) extends HashPartitioningLike {
+
+  override def expressions: Seq[Expression] = from.expressions
+
+  override def satisfies0(required: Distribution): Boolean = {
+    (required match {
+      case UnspecifiedDistribution => true
+      case AllTuples => numPartitions == 1
+      case _ => false
+    }) || {
+      required match {
+        case c @ ClusteredDistribution(
+            requiredClustering, requireAllClusterKeys, _, allowNullKeySpreading)
+            if allowNullKeySpreading =>
+          if (requireAllClusterKeys) {
+            c.areAllClusterKeysMatched(expressions)
+          } else {
+            expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+          }
+        case _ => false
+      }
+    }
+  }
+
+  override def createShuffleSpec(distribution: ClusteredDistribution): ShuffleSpec =
+    CoalescedHashShuffleSpec(from.createShuffleSpec(distribution), partitions)
+
+  override val numPartitions: Int = partitions.length
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): CoalescedNullAwareHashPartitioning =
     copy(from = from.copy(expressions = newChildren))
 }
 
@@ -482,20 +571,20 @@ case class KeyedPartitioning(
 
   def groupedSatisfies(required: Distribution): Boolean = {
     required match {
-      case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+      case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
         if (requireAllClusterKeys) {
           // Checks whether this partitioning is partitioned on exactly same clustering keys of
           // `ClusteredDistribution`.
           c.areAllClusterKeysMatched(expressions)
         } else {
           // We'll need to find leaf attributes from the partition expressions first.
-          lazy val attributes = expressions.flatMap(_.collectLeaves())
+          lazy val attributes = AttributeSet.fromAttributeSets(expressions.map(_.references))
 
           if (SQLConf.get.v2BucketingAllowKeysSubsetOfPartitionKeys) {
             // check that operation keys (required clustering keys)
             // overlap with partition keys (KeyedPartitioning attributes)
             requiredClustering.exists(x => attributes.exists(_.semanticEquals(x))) &&
-              expressions.forall(_.collectLeaves().size == 1)
+              expressions.forall(_.references.size == 1)
           } else if (isNarrowed && !isGrouped) {
             // A narrowed, non-grouped partitioning carries the same skew risk as using a subset of
             // partition keys for a join: GroupPartitionsExec will merge partitions that held
@@ -657,7 +746,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
           //   `RangePartitioning(a, b, c)` satisfies `OrderedDistribution(a, b)`.
           val minSize = Seq(requiredOrdering.size, ordering.size).min
           requiredOrdering.take(minSize) == ordering.take(minSize)
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
           val expressions = ordering.map(_.child)
           if (requireAllClusterKeys) {
             // Checks `RangePartitioning` is partitioned on exactly same clustering keys of
@@ -707,21 +796,44 @@ case class PartitioningCollection(partitionings: Seq[Partitioning])
 
   checkKeyedPartitioningInvariant()
 
+  /**
+   * First [[KeyedPartitioning]] reachable from this collection through direct members or nested
+   * collections, if any. Since every collection validates the invariant on construction, this
+   * single representative stands for all [[KeyedPartitioning]]s in the subtree: they all share
+   * its `partitionKeys` reference and expression arity. The invariant check forces this lazy val
+   * during construction, so it is only recomputed after deserialization.
+   */
+  @transient private[physical] lazy val firstKeyedPartitioning: Option[KeyedPartitioning] =
+    partitionings.view.map {
+      case k: KeyedPartitioning => Some(k)
+      case pc: PartitioningCollection => pc.firstKeyedPartitioning
+      case _ => None
+    }.collectFirst { case Some(k) => k }
+
+  /**
+   * Nested collections already enforced the invariant on their own construction, so comparing one
+   * representative per direct member against [[firstKeyedPartitioning]] validates the whole
+   * subtree without walking it. Keeping this check O(partitionings.size) matters: join
+   * `outputPartitioning` builds these collections afresh on every call, and plans chaining many
+   * same-key joins nest them linearly deep.
+   */
   private def checkKeyedPartitioningInvariant(): Unit = {
-    var first: KeyedPartitioning = null
-    foreach {
-      case k: KeyedPartitioning =>
-        if (first == null) {
-          first = k
-        } else {
-          require(k.expressions.length == first.expressions.length,
+    firstKeyedPartitioning.foreach { first =>
+      partitionings.foreach { p =>
+        val representative = p match {
+          case k: KeyedPartitioning => k
+          case pc: PartitioningCollection => pc.firstKeyedPartitioning.orNull
+          case _ => null
+        }
+        if (representative != null && (representative ne first)) {
+          require(representative.expressions.length == first.expressions.length,
             "All KeyedPartitionings in a PartitioningCollection must have matching expression " +
               "arity")
-          require(k.partitionKeys eq first.partitionKeys,
+          require(representative.partitionKeys eq first.partitionKeys,
             "All KeyedPartitionings in a PartitioningCollection must share the same " +
               "partitionKeys reference")
         }
-      case _ =>
+      }
     }
   }
 
@@ -779,7 +891,24 @@ object PartitioningCollection {
         } else {
           k
         }
-      case pc: PartitioningCollection => new PartitioningCollection(pc.partitionings.map(intern))
+      case pc: PartitioningCollection =>
+        pc.firstKeyedPartitioning match {
+          // No KeyedPartitioning anywhere in this subtree: nothing to intern. Returning the
+          // collection as-is keeps repeated outputPartitioning computations over deeply nested
+          // collections (e.g. chains of same-key joins) O(1) per level.
+          case None => pc
+          case Some(representative) if canonicalKeys == null =>
+            canonicalKeys = representative.partitionKeys
+            pc
+          // The collection's own invariant guarantees all its KeyedPartitionings share the
+          // representative's `partitionKeys` reference, so reference-equality of the
+          // representative's keys means the whole subtree is already interned.
+          case Some(representative) if representative.partitionKeys eq canonicalKeys => pc
+          case Some(representative) =>
+            require(representative.partitionKeys == canonicalKeys,
+              "All KeyedPartitionings in a PartitioningCollection must have equal partitionKeys")
+            new PartitioningCollection(pc.partitionings.map(intern))
+        }
       case other => other
     }
     new PartitioningCollection(partitionings.map(intern))
@@ -838,7 +967,7 @@ case class ShufflePartitionIdPassThrough(
     super.satisfies0(required) || {
       required match {
         // TODO(SPARK-53428): Support Direct Passthrough Partitioning in the Streaming Joins
-        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _) =>
+        case c @ ClusteredDistribution(requiredClustering, requireAllClusterKeys, _, _) =>
           val partitioningExpressions = expr.child :: Nil
           if (requireAllClusterKeys) {
             c.areAllClusterKeysMatched(partitioningExpressions)
@@ -919,6 +1048,25 @@ case class RangeShuffleSpec(
   }
 }
 
+private object HashShuffleSpecCompatibility {
+  def isCompatible(
+      leftDistribution: ClusteredDistribution,
+      leftNumPartitions: Int,
+      leftExpressions: Seq[Expression],
+      leftHashKeyPositions: Seq[mutable.BitSet],
+      rightDistribution: ClusteredDistribution,
+      rightNumPartitions: Int,
+      rightExpressions: Seq[Expression],
+      rightHashKeyPositions: Seq[mutable.BitSet]): Boolean = {
+    leftDistribution.clustering.length == rightDistribution.clustering.length &&
+    leftNumPartitions == rightNumPartitions &&
+    leftExpressions.length == rightExpressions.length &&
+    leftHashKeyPositions.zip(rightHashKeyPositions).forall { case (left, right) =>
+      left.intersect(right).nonEmpty
+    }
+  }
+}
+
 case class HashShuffleSpec(
     partitioning: HashPartitioning,
     distribution: ClusteredDistribution) extends ShuffleSpec {
@@ -951,14 +1099,26 @@ case class HashShuffleSpec(
       //  3. both partitioning have the same number of expressions
       //  4. each pair of partitioning expression from both sides has overlapping positions in their
       //     corresponding distributions.
-      distribution.clustering.length == otherDistribution.clustering.length &&
-      partitioning.numPartitions == otherPartitioning.numPartitions &&
-      partitioning.expressions.length == otherPartitioning.expressions.length && {
-        val otherHashKeyPositions = otherHashSpec.hashKeyPositions
-        hashKeyPositions.zip(otherHashKeyPositions).forall { case (left, right) =>
-          left.intersect(right).nonEmpty
-        }
-      }
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherHashSpec.hashKeyPositions)
+    case otherNullAwareSpec @ NullAwareHashShuffleSpec(otherPartitioning, otherDistribution)
+        if distribution.allowNullKeySpreading && otherDistribution.allowNullKeySpreading =>
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherNullAwareSpec.hashKeyPositions)
     case ShuffleSpecCollection(specs) =>
       specs.exists(isCompatibleWith)
     case _ =>
@@ -979,7 +1139,73 @@ case class HashShuffleSpec(
 
   override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
     val exprs = hashKeyPositions.map(v => clustering(v.head))
-    HashPartitioning(exprs, partitioning.numPartitions)
+    if (distribution.allowNullKeySpreading) {
+      NullAwareHashPartitioning(exprs, partitioning.numPartitions)
+    } else {
+      HashPartitioning(exprs, partitioning.numPartitions)
+    }
+  }
+
+  override def numPartitions: Int = partitioning.numPartitions
+}
+
+/**
+ * Shuffle specification for [[NullAwareHashPartitioning]]. It is compatible only with shuffle
+ * layouts whose distributions explicitly allow NULL-key spreading.
+ */
+case class NullAwareHashShuffleSpec(
+    partitioning: NullAwareHashPartitioning,
+    distribution: ClusteredDistribution) extends ShuffleSpec {
+
+  lazy val hashKeyPositions: Seq[mutable.BitSet] = {
+    val distKeyToPos = mutable.Map.empty[Expression, mutable.BitSet]
+    distribution.clustering.zipWithIndex.foreach { case (distKey, distKeyPos) =>
+      distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
+    }
+    partitioning.expressions.map(k => distKeyToPos.getOrElse(k.canonicalized, mutable.BitSet.empty))
+  }
+
+  override def isCompatibleWith(other: ShuffleSpec): Boolean = other match {
+    case SinglePartitionShuffleSpec =>
+      partitioning.numPartitions == 1
+    case otherSpec @ NullAwareHashShuffleSpec(otherPartitioning, otherDistribution) =>
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherSpec.hashKeyPositions)
+    case otherHashSpec @ HashShuffleSpec(otherPartitioning, otherDistribution)
+        if distribution.allowNullKeySpreading && otherDistribution.allowNullKeySpreading =>
+      HashShuffleSpecCompatibility.isCompatible(
+        distribution,
+        partitioning.numPartitions,
+        partitioning.expressions,
+        hashKeyPositions,
+        otherDistribution,
+        otherPartitioning.numPartitions,
+        otherPartitioning.expressions,
+        otherHashSpec.hashKeyPositions)
+    case ShuffleSpecCollection(specs) =>
+      specs.exists(isCompatibleWith)
+    case _ =>
+      false
+  }
+
+  override def canCreatePartitioning: Boolean = {
+    if (SQLConf.get.getConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION)) {
+      distribution.areAllClusterKeysMatched(partitioning.expressions)
+    } else {
+      true
+    }
+  }
+
+  override def createPartitioning(clustering: Seq[Expression]): Partitioning = {
+    val exprs = hashKeyPositions.map(v => clustering(v.head))
+    NullAwareHashPartitioning(exprs, partitioning.numPartitions)
   }
 
   override def numPartitions: Int = partitioning.numPartitions
@@ -1032,9 +1258,9 @@ case class KeyedShuffleSpec(
       distKeyToPos.getOrElseUpdate(distKey.canonicalized, mutable.BitSet.empty).add(distKeyPos)
     }
     partitioning.expressions.map { e =>
-      val leaves = e.collectLeaves()
-      assert(leaves.size == 1, s"Expected exactly one child from $e, but found ${leaves.size}")
-      distKeyToPos.getOrElse(leaves.head.canonicalized, mutable.BitSet.empty)
+      val refs = e.references
+      assert(refs.size == 1, s"Expected exactly one child from $e, but found ${refs.size}")
+      distKeyToPos.getOrElse(refs.head.canonicalized, mutable.BitSet.empty)
     }
   }
 

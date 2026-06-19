@@ -29,10 +29,10 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData, STUtils}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
-import org.apache.spark.unsafe.types.{GeographyVal, GeometryVal, UTF8String, VariantVal}
+import org.apache.spark.unsafe.types.{BinaryView, UTF8String, VariantVal}
 
 object EvaluatePython {
 
@@ -48,7 +48,7 @@ object EvaluatePython {
 
   private def needConversionInPythonDefault(dt: DataType): Boolean = dt match {
     case DateType | TimestampType | TimestampNTZType | VariantType | _: DayTimeIntervalType
-         | _: TimeType | _: GeometryType | _: GeographyType => true
+         | _: GeometryType | _: GeographyType => true
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
@@ -97,9 +97,9 @@ object EvaluatePython {
 
       case (s: UTF8String, _: StringType) => s.toString
 
-      case (g: GeometryVal, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
+      case (g: BinaryView, gt: GeometryType) => STUtils.deserializeGeom(g, gt)
 
-      case (g: GeographyVal, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
+      case (g: BinaryView, gt: GeographyType) => STUtils.deserializeGeog(g, gt)
 
       case (bytes: Array[Byte], BinaryType) =>
         if (binaryAsBytes) {
@@ -170,7 +170,7 @@ object EvaluatePython {
       case c: Int => c
     }
 
-    case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType => (obj: Any) =>
+    case TimestampType | TimestampNTZType | _: DayTimeIntervalType => (obj: Any) =>
       nullSafeConvert(obj) {
         case c: Long => c
         // Py4J serializes values between MIN_INT and MAX_INT as Ints, not Longs
@@ -245,7 +245,8 @@ object EvaluatePython {
         val geographySrid = s.get("srid").asInstanceOf[Int]
         g.assertSridAllowedForType(geographySrid)
         STUtils.stGeogFromWKB(
-          s.get("wkb").asInstanceOf[Array[Byte]])
+          s.get("wkb").asInstanceOf[Array[Byte]],
+          geographySrid)
     }
 
     case g: GeometryType => (obj: Any) => nullSafeConvert(obj) {

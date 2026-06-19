@@ -38,7 +38,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SQLExecution, UnaryExecNode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
-import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLLastAttemptMetric, SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.SchemaValidationMode.PROHIBIT_CHANGES
 import org.apache.spark.util.ArrayImplicits._
@@ -512,20 +512,31 @@ trait RowLevelWriteExec extends V2ExistingTableWriteExec {
     rowLevelCommand match {
       case UPDATE =>
         Map(
-          "numUpdatedRows" -> SQLMetrics.createMetric(sparkContext, "number of updated rows"),
-          "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows"))
+          "numUpdatedRows" ->
+            SQLLastAttemptMetrics.createMetric(sparkContext, "number of updated rows"),
+          "numCopiedRows" ->
+            SQLLastAttemptMetrics.createMetric(sparkContext, "number of copied rows"))
       case DELETE =>
         Map(
-          "numDeletedRows" -> SQLMetrics.createMetric(sparkContext, "number of deleted rows"),
-          "numCopiedRows" -> SQLMetrics.createMetric(sparkContext, "number of copied rows"))
+          "numDeletedRows" ->
+            SQLLastAttemptMetrics.createMetric(sparkContext, "number of deleted rows"),
+          "numCopiedRows" ->
+            SQLLastAttemptMetrics.createMetric(sparkContext, "number of copied rows"))
       case _ => Map.empty
     })
 
   /**
-   * Returns the value of the named metric, or -1 if the metric is not found.
+   * Returns the value of the named metric, or -1 if the metric is not found. For
+   * [[SQLLastAttemptMetric]] values, prefers the last-attempt value so the result is stable across
+   * stage retries; falls back to the regular accumulator value if the last-attempt value is
+   * unavailable (e.g. the accumulator bailed out).
    */
   protected def getMetricValue(metrics: Map[String, SQLMetric], name: String): Long = {
-    metrics.get(name).map(_.value).getOrElse(-1L)
+    metrics.get(name).map {
+      case slam: SQLLastAttemptMetric =>
+        slam.lastAttemptValueForHighestRDDId().getOrElse(slam.value)
+      case m => m.value
+    }.getOrElse(-1L)
   }
 
   override protected def getWriteSummary(): Option[WriteSummary] = {

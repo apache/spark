@@ -42,6 +42,8 @@ private[spark] class BasicExecutorFeatureStep(
 
   // Consider moving some of these fields to KubernetesConf or KubernetesExecutorSpecificConf
   private val executorContainerImage = kubernetesConf.image
+  private val allowPrivilegeEscalation =
+    kubernetesConf.get(KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION)
   private val blockManagerPort = kubernetesConf
     .sparkConf
     .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
@@ -238,6 +240,9 @@ private[spark] class BasicExecutorFeatureStep(
       .addAllToEnv(executorEnv.asJava)
       .addAllToPorts(requiredPorts.asJava)
       .addToArgs("executor")
+      .editOrNewSecurityContext()
+        .withAllowPrivilegeEscalation(allowPrivilegeEscalation)
+        .endSecurityContext()
       .build()
     val executorContainerWithConfVolume = if (disableConfigMap) {
       executorContainer

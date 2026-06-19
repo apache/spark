@@ -62,8 +62,9 @@ case class ParseJson(child: Expression, failOnError: Boolean = true)
     Seq(
       child,
       Literal(SQLConf.get.getConf(SQLConf.VARIANT_ALLOW_DUPLICATE_KEYS), BooleanType),
-      Literal(failOnError, BooleanType)),
-    inputTypes :+ BooleanType :+ BooleanType,
+      Literal(failOnError, BooleanType),
+      Literal(SQLConf.get.getConf(SQLConf.VARIANT_VALIDATE_UNICODE_IN_JSON_PARSING), BooleanType)),
+    inputTypes :+ BooleanType :+ BooleanType :+ BooleanType,
     returnNullable = !failOnError)
 
   override def inputTypes: Seq[AbstractDataType] =
@@ -661,6 +662,148 @@ object VariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(true)
 // scalastyle:on line.size.limit
 object TryVariantGetExpressionBuilder extends VariantGetExpressionBuilderBase(false)
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(v, path1[, path2, ...]) - Removes fields or array elements from a variant at " +
+    "the given JSONPath locations. Multiple paths are applied left to right. Returns NULL if " +
+    "`v` is NULL; NULL paths are skipped.",
+  arguments = """
+    Arguments:
+      * v - A variant value to mutate.
+      * path1, path2, ... - One or more string expressions, each evaluating to a JSONPath
+          identifying a deletion target. A valid path should start with `$` and is followed by
+          one or more segments like `[123]`, `.name`, `['name']`, or `["name"]`. The root path
+          `$` is not allowed.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}'), NULL, '$.a', '$.c');
+       {"b":2,"items":[1,2,3]}
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}'), '$.missing');
+       {"a":1,"b":2,"c":3,"items":[1,2,3]}
+      > SELECT _FUNC_(parse_json('{"a": 1, "b": 2, "c": 3, "items": [1, 2, 3]}'), '$.items[0]', '$.items[0]');
+       {"a":1,"b":2,"c":3,"items":[3]}
+      > SELECT _FUNC_(NULL, '$.a');
+       NULL
+  """,
+  since = "5.0.0",
+  group = "variant_funcs"
+)
+// scalastyle:on line.size.limit
+case class VariantDelete(children: Seq[Expression])
+    extends Expression
+    with ExpectsInputTypes {
+
+  override def dataType: DataType = VariantType
+
+  override def nullable: Boolean = children.headOption.forall(_.nullable)
+
+  override def inputTypes: Seq[AbstractDataType] = {
+    // First argument is the variant; subsequent arguments are JSONPath strings.
+    VariantType +: Seq.fill(math.max(children.length - 1, 0))(
+      StringTypeWithCollation(supportsTrimCollation = true))
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.length < 2) {
+      // `wrongNumArgsError` already quotes the function name via `toSQLId`, so pass the raw name.
+      throw QueryCompilationErrors.wrongNumArgsError(
+        prettyName, Seq("> 1"), children.length)
+    }
+    super.checkInputDataTypes()
+  }
+
+  private def variantChild: Expression = children.head
+  private def pathChildren: Seq[Expression] = children.tail
+
+  @transient private lazy val pathArgs: Seq[VariantDelete.DeletePathArg] =
+    pathChildren.flatMap(VariantDelete.toPathArg)
+
+  override def eval(input: InternalRow): Any = {
+    val inputVariant = variantChild.eval(input).asInstanceOf[VariantVal]
+    if (inputVariant == null) return null
+    var current = inputVariant
+    val args = pathArgs
+    var i = 0
+    while (i < args.length) {
+      args(i) match {
+        case parsed: VariantDelete.ParsedDeletePath =>
+          current = VariantExpressionEvalUtils.deleteAtPath(current, parsed.javaSegments)
+        case VariantDelete.DynamicDeletePath(expr) =>
+          val pathVal = expr.eval(input).asInstanceOf[UTF8String]
+          if (pathVal != null) {
+            current = VariantExpressionEvalUtils.deleteAtPath(current, pathVal)
+          }
+      }
+      i += 1
+    }
+    current
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = VariantExpressionEvalUtils.getClass.getName.stripSuffix("$")
+    val variantValType = CodeGenerator.javaType(VariantType)
+    val childCode = variantChild.genCode(ctx)
+    val current = ctx.freshName("vdCurrent")
+
+    val perPath = pathArgs.map {
+      case parsed: VariantDelete.ParsedDeletePath =>
+        val parsedArg = ctx.addReferenceObj("vdParsed", parsed)
+        s"$current = $cls.deleteAtPath($current, $parsedArg.javaSegments());"
+      case VariantDelete.DynamicDeletePath(expr) =>
+        val pCode = expr.genCode(ctx)
+        s"""
+           |${pCode.code}
+           |if (!${pCode.isNull}) {
+           |  $current = $cls.deleteAtPath($current, ${pCode.value});
+           |}
+         """.stripMargin
+    }.mkString("\n")
+
+    val code = code"""
+      ${childCode.code}
+      boolean ${ev.isNull} = ${childCode.isNull};
+      $variantValType ${ev.value} = ${CodeGenerator.defaultValue(VariantType)};
+      if (!${ev.isNull}) {
+        $variantValType $current = ${childCode.value};
+        $perPath
+        ${ev.value} = $current;
+      }
+    """
+    ev.copy(code = code)
+  }
+
+  override def prettyName: String = "variant_delete"
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): VariantDelete = copy(children = newChildren)
+}
+
+object VariantDelete {
+  sealed trait DeletePathArg
+  case class ParsedDeletePath(segments: Array[VariantPathSegment]) extends DeletePathArg {
+    // `VariantBuilder.PathSegment` is not `Serializable`, so the cached Java form is
+    // `@transient` and re-initialized once per executor task after deserialization.
+    @transient lazy val javaSegments: Array[VariantBuilder.PathSegment] =
+      VariantExpressionEvalUtils.toJavaSegments(segments)
+  }
+  case class DynamicDeletePath(expr: Expression) extends DeletePathArg
+
+  private[variant] def toPathArg(child: Expression): Option[DeletePathArg] = {
+    if (child.foldable) {
+      val v = child.eval()
+      if (v == null) {
+        None
+      } else {
+        Some(ParsedDeletePath(
+          VariantExpressionEvalUtils.parseVariantDeletePath(v.asInstanceOf[UTF8String].toString)))
+      }
+    } else {
+      Some(DynamicDeletePath(child))
+    }
+  }
+}
+
 case class VariantExplode(child: Expression) extends UnaryExpression with Generator
   with ExpectsInputTypes {
   override def inputTypes: Seq[AbstractDataType] = Seq(VariantType)
@@ -983,4 +1126,64 @@ case class IsValidVariant(child: Expression) extends UnaryExpression
 
   override protected def withNewChildInternal(newChild: Expression): IsValidVariant =
     copy(child = newChild)
+}
+
+/**
+ * Internal expression. It surfaces a deferred cast error produced by `PushVariantIntoScan` for a
+ * strict variant cast. Semantically equivalent to
+ *
+ *   if(castError IS NOT NULL, raise_error('INVALID_VARIANT_CAST', ...), value)
+ *
+ * but kept as a single named expression so downstream consumers can easily recognize it.
+ */
+case class UnwrapVariantCastError(castError: Expression, value: Expression)
+    extends BinaryExpression
+    with ExpectsInputTypes
+    with QueryErrorsBase {
+  override def left: Expression = castError
+  override def right: Expression = value
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, AnyDataType)
+
+  override def dataType: DataType = value.dataType
+
+  override def nullable: Boolean = true
+
+  override def eval(input: InternalRow): Any = {
+    val err = castError.eval(input)
+    if (err != null) {
+      throw QueryExecutionErrors.invalidVariantCast(err.asInstanceOf[UTF8String].toString, dataType)
+    }
+    value.eval(input)
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dataTypeRef = ctx.addReferenceObj("dataType", dataType, classOf[DataType].getName)
+    val cls = UnwrapVariantCastError.getClass.getName.stripSuffix("$")
+    val errEval = castError.genCode(ctx)
+    val valEval = value.genCode(ctx)
+    val javaType = CodeGenerator.javaType(dataType)
+    val code = code"""
+      ${errEval.code}
+      if (!${errEval.isNull}) {
+        $cls.throwInvalidVariantCast(${errEval.value}, $dataTypeRef);
+      }
+      ${valEval.code}
+      boolean ${ev.isNull} = ${valEval.isNull};
+      $javaType ${ev.value} = ${valEval.value};
+    """
+    ev.copy(code = code)
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): UnwrapVariantCastError =
+    copy(castError = newLeft, value = newRight)
+}
+
+object UnwrapVariantCastError {
+  // Indirection so codegen can throw via a method call; a literal `throw` of a `Throwable`-typed
+  // expression trips Java's checked-exception check.
+  def throwInvalidVariantCast(error: UTF8String, dataType: DataType): Unit = {
+    throw QueryExecutionErrors.invalidVariantCast(error.toString, dataType)
+  }
 }

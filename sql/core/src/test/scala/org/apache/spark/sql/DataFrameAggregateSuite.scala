@@ -659,6 +659,51 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.selectExpr("sort_array(collect_set(b) RESPECT NULLS)"), Seq(Row(Seq(null, 2))))
   }
 
+  test("SPARK-57298: collect_set normalizes NaN and -0.0 for floating-point types") {
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Double.NaN)))
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (float('NaN')), (float('NaN')) AS t(v)"),
+      Row(Seq(Float.NaN)))
+
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (-0.0D), (0.0D) AS t(v)"),
+      Row(Seq(0.0d)))
+    checkAnswer(
+      sql("SELECT collect_set(v) FROM VALUES (float(-0.0)), (float(0.0)) AS t(v)"),
+      Row(Seq(0.0f)))
+
+    val df = Seq(Double.NaN, Double.NaN, 0.0d, -0.0d, 1.0d).toDF("v").repartition(3)
+    checkAnswer(df.selectExpr("sort_array(collect_set(v))"), Row(Seq(0.0d, 1.0d, Double.NaN)))
+  }
+
+  test("SPARK-57298: collect_set normalizes NaN and -0.0 nested in complex types") {
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM VALUES (-0.0D), (0.0D) AS t(v)"),
+      Row(Seq(Row(0.0d))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM VALUES (array(-0.0D)), (array(0.0D)) AS t(a)"),
+      Row(Seq(Seq(0.0d))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM VALUES (array(float(-0.0))), (array(float(0.0))) AS t(a)"),
+      Row(Seq(Seq(0.0f))))
+
+    // Nested NaN already deduplicates today, included as a guardrail against regressions.
+    checkAnswer(
+      sql("SELECT collect_set(named_struct('a', v)) FROM " +
+        "VALUES (double('NaN')), (double('NaN')) AS t(v)"),
+      Row(Seq(Row(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(double('NaN'))), (array(double('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Double.NaN))))
+    checkAnswer(
+      sql("SELECT collect_set(a) FROM " +
+        "VALUES (array(float('NaN'))), (array(float('NaN'))) AS t(a)"),
+      Row(Seq(Seq(Float.NaN))))
+  }
+
   test("collect functions structs") {
     val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
       .toDF("a", "x", "y")
@@ -3315,14 +3360,17 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df: => DataFrame,
       expected: Int): Unit = {
     val configurations = Seq(
-      Seq.empty[(String, String)], // hash aggregate is used by default
+      Seq(SQLConf.USE_HASH_AGG.key -> "true"),
       Seq(SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN",
         "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 10"),
       Seq("spark.sql.test.forceApplyObjectHashAggregate" -> "true"),
       Seq(
         "spark.sql.test.forceApplyObjectHashAggregate" -> "true",
         SQLConf.OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD.key -> "1"),
-      Seq("spark.sql.test.forceApplySortAggregate" -> "true")
+      Seq(SQLConf.USE_HASH_AGG.key -> "false"),
+      Seq(
+        SQLConf.USE_HASH_AGG.key -> "false",
+        SQLConf.USE_OBJECT_HASH_AGG.key -> "false")
     )
 
     // Make tests faster
@@ -4822,11 +4870,10 @@ class DataFrameAggregateSuite extends SharedSparkSession
 
   // Numerical-equivalence property (sql-core layer).
   //
-  // Sweeps the (p, p', s, n) lattice where the widened-cast peel fires,
-  // asserting that SUM(CAST(x AS DECIMAL(p', s))) on an on-vs-off SQLConf
-  // pair returns bit-equal java.math.BigDecimal (same unscaled value AND
-  // same scale). Domain is restricted to the non-overflow regime so the
-  // peeled LONG accumulator cannot wrap.
+  // Sweeps the (p, p', s, n) lattice where the widened-cast SUM peel fires
+  // and asserts that the optimized result matches an external java.math.BigDecimal
+  // reference computed in pure Scala. Domain is restricted to the non-overflow
+  // regime so the peeled LONG accumulator cannot wrap.
   //
   // Non-overflow bound: with |unscaled(x)| < 10^p, p <= 8, n <= 1000,
   // worst-case accumulator is 1000 * (10^8 - 1) < 10^12 << 2^63.
@@ -4913,29 +4960,26 @@ class DataFrameAggregateSuite extends SharedSparkSession
   // identical to the existing fast path on AVG(x) directly. Both arms in
   // Optimizer.DecimalAggregates produce
   //   Cast(Divide(Avg(UnscaledValue(<inner>)), Lit(10^s, Double)),
-  //        DecimalType.bounded(<outerP>, s + 4))
+  //        DecimalType(<outerP>, s + 4))
   // and the peel arm makes <inner> equal to the user's column, so the
   // Double-divide dividends are bit-identical between the two paths; only
   // the outer Cast target precision differs (pPrime+4 vs p+4), a widening
   // precision Cast that preserves numerical value. We therefore assert
   // BigDecimal.compareTo == 0 (value equality across differing precisions).
   //
-  // Domain: inner p in [1, 7] (the AVG strict-subset guard
-  // `AVG_PEEL_MAX_INNER_PRECISION = 7`), pPrime in [8, 11] (the band where
-  // the existing `Average(DecimalExpression)` arm would intercept on the
-  // outer Cast type if not for our prepended arm), s in [0, p],
-  // n <= 1000 rows. The inner DataFrame schema is constructed as
-  // DecimalType(p, s) explicitly (NOT via tuple-inference, which would
-  // infer DecimalType.SYSTEM_DEFAULT and silently route through a DIFFERENT
-  // rule arm than intended -- the failure mode this PBT must lock down).
+  // Domain: pPrime in [p+1, 11] -- the band where pPrime + 4 <= MAX_DOUBLE_DIGITS
+  // so the new arm fires and the existing un-widened arm would also have
+  // matched the outer Cast (allowing comparison against AVG(x) as oracle).
+  // The inner DataFrame schema is constructed as DecimalType(p, s) explicitly
+  // (NOT via tuple-inference, which would infer DecimalType.SYSTEM_DEFAULT and
+  // silently route through a DIFFERENT rule arm than intended).
   private case class AvgDomain(p: Int, pPrime: Int, s: Int)
 
   private val avgDomainGen: Gen[AvgDomain] = (for {
-    p <- Gen.choose(1, 7)
-    pPrime <- Gen.choose(8, 11)
+    p <- Gen.choose(1, 10)
+    pPrime <- Gen.choose(p + 1, 11)
     s <- Gen.choose(0, p)
   } yield AvgDomain(p, pPrime, s))
-    .retryUntil(d => d.p < d.pPrime)
 
   private def avgInputDf(unscaledLongs: Seq[Long], d: AvgDomain) = {
     val rows = unscaledLongs.map(u => Row(java.math.BigDecimal.valueOf(u, d.s)))
@@ -4972,7 +5016,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
       val peeled = avgCastResult(xs, d)
       val direct = avgDirectResult(xs, d)
       // BigDecimal.compareTo ignores trailing-zero precision differences:
-      // peeled has output DecimalType.bounded(pPrime+4, s+4), direct has
+      // peeled has output DecimalType(pPrime+4, s+4), direct has
       // DecimalType(p+4, s+4). Both wrap the same Double-divide bit pattern
       // so the underlying value is identical.
       assert(peeled.compareTo(direct) == 0,
@@ -4982,17 +5026,13 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
-  // Wider-pPrime regime shape witness: (p=4, p'=20, s=2). The equivalence
-  // PBT above only covers pPrime in [8, 11] (where the existing AVG arm
-  // would otherwise intercept and provide a comparable oracle). For pPrime
-  // outside that band the new arm still fires (only constrained by inner
-  // p <= 7), but the comparison oracle "AVG(x) directly" is no longer
-  // available because the existing arm targets a narrower output type.
-  // This witness asserts non-null result and the expected widened output
-  // schema, locking the rule's shape contract without claiming an
-  // unreachable oracle.
-  test("SPARK-56627: AVG(CAST(dec(4,2) AS dec(20,2))) peels and yields " +
-      "widened output schema (wider-pPrime regime shape witness)") {
+  // Wider-pPrime regime: when pPrime + 4 > MAX_DOUBLE_DIGITS the AVG peel arm
+  // is intentionally NOT fired so the un-rewritten Decimal-exact path is
+  // preserved. Witness: (p=4, p'=20, s=2) -- pPrime + 4 = 24 > 15. Asserts
+  // non-null result and the expected widened output schema; rule shape is
+  // covered by the catalyst-layer suite.
+  test("SPARK-56627: AVG(CAST(dec(4,2) AS dec(20,2))) yields " +
+      "widened output schema (Decimal-exact path preserved)") {
     val rows = Seq(123L, -456L, 789L, 0L)
       .map(u => Row(java.math.BigDecimal.valueOf(u, 2)))
     val schema = StructType(StructField("x", DecimalType(4, 2)) :: Nil)
@@ -5001,10 +5041,9 @@ class DataFrameAggregateSuite extends SharedSparkSession
     val row = df.collect()(0)
     assert(!row.isNullAt(0), s"expected non-null AVG, got null; df schema = ${df.schema}")
     val outType = df.schema("a").dataType.asInstanceOf[DecimalType]
-    // Widened-arm output Cast target = DecimalType.bounded(pPrime + 4, s + 4)
-    // = DecimalType.bounded(24, 6).
+    // Un-rewritten Average.dataType = bounded(pPrime + 4, s + 4) = (24, 6).
     assert(outType.precision == 24 && outType.scale == 6,
-      s"expected DecimalType(24, 6) from widened-arm peel, got $outType")
+      s"expected DecimalType(24, 6) from un-rewritten AVG, got $outType")
   }
 }
 

@@ -17,11 +17,16 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.concurrent.TrieMap
+
 import org.scalatest.GivenWhenThen
 
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
+import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.connector.catalog.{InMemoryTableCatalog, InMemoryTableWithV2FilterCatalog}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
@@ -1695,6 +1700,241 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
 
   import testImplicits._
 
+  test("DPP with a checkpointed filtering side and an expression partition key") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withTable("events") {
+        Seq((1, "hour1", "a"), (2, "hour1", "b"), (3, "hour2", "a"))
+          .toDF("id", "hour", "category")
+          .write
+          .partitionBy("hour", "category")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        val sampledKeys = Seq(("hour1", "a"))
+          .toDF("hour", "category")
+          .select(concat_ws("||", $"hour", $"category").as("hc_key"))
+          .localCheckpoint(eager = true)
+
+        assert(sampledKeys.queryExecution.optimizedPlan.exists {
+          case r: LogicalRDD => r.isCheckpointedInput
+          case _ => false
+        })
+
+        val events = spark.table("events").as("events")
+        val sampled = sampledKeys.as("sampled")
+        val df = events
+          .join(broadcast(sampled),
+            concat_ws("||", $"events.hour", $"events.category") === $"sampled.hc_key")
+          .select($"events.id")
+
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
+
+  test("DPP with a local filtering side and an expression partition key") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withTable("events") {
+        Seq((1, "hour1", "a"), (2, "hour1", "b"), (3, "hour2", "a"))
+          .toDF("id", "hour", "category")
+          .write
+          .partitionBy("hour", "category")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        val sampledKeys = Seq(("hour1", "a"))
+          .toDF("hour", "category")
+          .select(concat_ws("||", $"hour", $"category").as("hc_key"))
+
+        assert(sampledKeys.queryExecution.optimizedPlan.exists(_.isInstanceOf[LocalRelation]))
+
+        val events = spark.table("events").as("events")
+        val sampled = sampledKeys.as("sampled")
+        val df = events
+          .join(broadcast(sampled),
+            concat_ws("||", $"events.hour", $"events.category") === $"sampled.hc_key")
+          .select($"events.id")
+
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = true)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
+
+  test("DPP does not treat a non-checkpointed LogicalRDD as a selective filtering side") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withTable("events") {
+        Seq((1, "hour1", "a"), (2, "hour1", "b"))
+          .toDF("id", "hour", "category")
+          .write
+          .partitionBy("hour", "category")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        val originalKeys = Seq("hour1||a").toDF("hc_key")
+        val keys: DataFrame = LogicalRDD.fromDataset(
+          rdd = originalKeys.queryExecution.toRdd,
+          originDataset = originalKeys,
+          isStreaming = false)
+        assert(keys.queryExecution.optimizedPlan.exists {
+          case r: LogicalRDD => !r.isCheckpointedInput
+          case _ => false
+        })
+
+        val events = spark.table("events").as("events")
+        val sampled = keys.as("sampled")
+        val df = events
+          .join(broadcast(sampled),
+            concat_ws("||", $"events.hour", $"events.category") === $"sampled.hc_key")
+          .select($"events.id")
+
+        checkPartitionPruningPredicate(df, withSubquery = false, withBroadcast = false)
+        checkAnswer(df, Row(1))
+      }
+    }
+  }
+
+  test("DPP requires every leaf of a materialized filtering side to be materialized") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
+      withTable("events") {
+        Seq((1, "hour1", "a"), (2, "hour1", "b"), (3, "hour2", "a"))
+          .toDF("id", "hour", "category")
+          .write
+          .partitionBy("hour", "category")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        val checkpointedKeys = Seq("hour1||a").toDF("hc_key").localCheckpoint(eager = true)
+        val originalKeys = Seq("hour2||a").toDF("hc_key")
+        val nonCheckpointedKeys: DataFrame = LogicalRDD.fromDataset(
+          rdd = originalKeys.queryExecution.toRdd,
+          originDataset = originalKeys,
+          isStreaming = false)
+        val mixedKeys = checkpointedKeys.union(nonCheckpointedKeys)
+
+        val events = spark.table("events").as("events")
+        def joinWith(keys: DataFrame): DataFrame = events
+          .join(broadcast(keys.as("sampled")),
+            concat_ws("||", $"events.hour", $"events.category") === $"sampled.hc_key")
+          .select($"events.id")
+
+        val mixedJoin = joinWith(mixedKeys)
+        checkPartitionPruningPredicate(mixedJoin, withSubquery = false, withBroadcast = false)
+        checkAnswer(mixedJoin, Row(1) :: Row(3) :: Nil)
+
+        val fullyMaterializedJoin = joinWith(
+          checkpointedKeys.union(nonCheckpointedKeys.localCheckpoint(eager = true)))
+        checkPartitionPruningPredicate(
+          fullyMaterializedJoin, withSubquery = false, withBroadcast = true)
+        checkAnswer(fullyMaterializedJoin, Row(1) :: Row(3) :: Nil)
+      }
+    }
+  }
+
+  test("DPP materialized-input eligibility requires a repeatable plan") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "1000",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+        SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false",
+        SQLConf.CONSTRAINT_PROPAGATION_ENABLED.key -> "false") {
+      withTable("events") {
+        val counterId = getClass.getName
+        spark.range(1, 11)
+          .select($"id".cast("int").as("p"), $"id".as("v"))
+          .write
+          .partitionBy("p")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("events")
+
+        def activeDppSubqueries(df: DataFrame): Seq[InSubqueryExec] = {
+          collectDynamicPruningExpressions(df.queryExecution.executedPlan)
+            .collect { case in: InSubqueryExec => in }
+        }
+
+        def checkStandaloneDpp(keys: DataFrame): Unit = {
+          val df = spark.table("events").join(keys, Seq("p")).select("p")
+          DppMaterializedInputTestState.reset(counterId)
+          assert(df.collect().toSeq === Seq(Row(1)))
+          assert(activeDppSubqueries(df).exists {
+            case InSubqueryExec(_, _: SubqueryExec, _, _, _, _) => true
+            case _ => false
+          }, s"Should execute standalone DPP for a repeatable materialized plan:\n" +
+            df.queryExecution)
+        }
+
+        def checkNoDpp(keys: DataFrame): Unit = {
+          val df = spark.table("events").join(keys, Seq("p")).select("p")
+          DppMaterializedInputTestState.reset(counterId)
+          assert(df.collect().toSeq === Seq(Row(1)))
+          assert(activeDppSubqueries(df).isEmpty,
+            s"Shouldn't trigger DPP for a non-repeatable materialized plan:\n" +
+              df.queryExecution)
+        }
+
+        checkStandaloneDpp(Seq(1).toDF("p"))
+        checkStandaloneDpp(Seq(1).toDF("p").localCheckpoint(eager = true))
+
+        val checkpointed = Seq(1).toDS().localCheckpoint(eager = true)
+        val mappedKeys = checkpointed.mapPartitions { values =>
+          val key = DppMaterializedInputTestState.next(counterId)
+          values.map(_ => key)
+        }.toDF("p")
+        checkNoDpp(mappedKeys)
+
+        withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "true") {
+          val broadcastJoin =
+            spark.table("events").join(broadcast(mappedKeys), Seq("p")).select("p")
+          DppMaterializedInputTestState.reset(counterId)
+          assert(broadcastJoin.collect().toSeq === Seq(Row(1)))
+          assert(activeDppSubqueries(broadcastJoin).isEmpty,
+            s"Shouldn't trigger DPP for a non-repeatable broadcast plan:\n" +
+              broadcastJoin.queryExecution)
+
+          val target = spark.table("events").hint("merge")
+            .join(mappedKeys.hint("merge"), Seq("p"))
+            .select($"p", lit("target").as("branch"))
+          val decoy = Seq(-1).toDF("p")
+            .join(broadcast(mappedKeys), Seq("p"))
+            .select($"p", lit("decoy").as("branch"))
+          val withSiblingBroadcast = target.union(decoy)
+
+          DppMaterializedInputTestState.reset(counterId)
+          val rows = withSiblingBroadcast.collect().toSeq
+          assert(rows.size === 1)
+          assert(rows.head.getString(1) === "target")
+          assert(activeDppSubqueries(withSiblingBroadcast).isEmpty,
+            s"A sibling broadcast shouldn't make a non-repeatable plan eligible for DPP:\n" +
+              withSiblingBroadcast.queryExecution)
+        }
+
+        withTempView("changing_keys") {
+          spark.sparkContext.parallelize(Seq(1), 1).mapPartitions { values =>
+            val key = DppMaterializedInputTestState.next(counterId)
+            values.map(_ => key)
+          }.toDF("p").createOrReplaceTempView("changing_keys")
+
+          val scalarSubqueryKeys = sql(
+            """SELECT CAST((SELECT max(p) FROM changing_keys) AS INT) AS p
+              |FROM VALUES (1) AS outer(dummy)""".stripMargin)
+          checkNoDpp(scalarSubqueryKeys)
+        }
+      }
+    }
+  }
+
   /**
    * Check the static scan metrics with and without DPP
    */
@@ -1853,3 +2093,11 @@ class DynamicPartitionPruningV2FilterSuiteAEOff
 class DynamicPartitionPruningV2FilterSuiteAEOn
     extends DynamicPartitionPruningV2FilterSuite
   with EnableAdaptiveExecutionSuite
+
+private object DppMaterializedInputTestState {
+  private val counters = TrieMap.empty[String, AtomicInteger]
+
+  def reset(id: String): Unit = counters.getOrElseUpdate(id, new AtomicInteger()).set(0)
+
+  def next(id: String): Int = counters.getOrElseUpdate(id, new AtomicInteger()).incrementAndGet()
+}

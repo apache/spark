@@ -21,20 +21,21 @@ import java.util
 import java.util.Collections
 
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
-import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableInfo, TypeChangeResetsColIdTableCatalog}
+import org.apache.spark.sql.connector.catalog.{CachingInMemoryTableCatalog, Column, ColumnDefaultValue, ComposedColumnIdTableCatalog, DefaultValue, GenerationExpression, Identifier, InMemoryTableCatalog, MixedColumnIdTableCatalog, NullColumnIdInMemoryTableCatalog, NullTableIdAndNullColumnIdInMemoryTableCatalog, NullTableIdInMemoryTableCatalog, SupportsV1OverwriteWithSaveAsTable, TableCatalog, TableInfo, TypeChangeResetsColIdTableCatalog}
 import org.apache.spark.sql.connector.catalog.BasicInMemoryTableCatalog
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, UpdateColumnDefaultValue}
 import org.apache.spark.sql.connector.catalog.TableChange
 import org.apache.spark.sql.connector.catalog.TableWritePrivilege
 import org.apache.spark.sql.connector.catalog.TruncatableTable
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, GeneralScalarExpression, LiteralValue, Transform}
-import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, Cast => V2Cast, Extract, FieldReference, GeneralScalarExpression, LiteralValue, Transform}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate => V2Predicate}
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
 import org.apache.spark.sql.execution.ExplainUtils.stripAQEPlan
 import org.apache.spark.sql.execution.datasources.v2.{AlterTableExec, CreateTableExec, DataSourceV2Relation, ReplaceTableExec}
@@ -45,7 +46,11 @@ import org.apache.spark.sql.util.QueryExecutionListener
 import org.apache.spark.unsafe.types.UTF8String
 
 class DataSourceV2DataFrameSuite
-  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false) {
+  extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = false)
+  with DSv2TempViewWithStoredPlanTests
+  with DSv2RepeatedTableAccessTests
+  with DSv2IncrementallyConstructedQueryTests
+  with DSv2CacheTableReadTests {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   import testImplicits._
 
@@ -54,12 +59,18 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
     .set("spark.sql.catalog.testcat.copyOnLoad", "true")
     .set("spark.sql.catalog.testcat2", classOf[InMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.cachingcat",
+      classOf[CachingInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.cachingcat.copyOnLoad", "true")
     .set("spark.sql.catalog.nullidcat",
       classOf[NullTableIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullidcat.copyOnLoad", "true")
     .set("spark.sql.catalog.nullcolidcat",
       classOf[NullColumnIdInMemoryTableCatalog].getName)
     .set("spark.sql.catalog.nullcolidcat.copyOnLoad", "true")
+    .set("spark.sql.catalog.nullbothidscat",
+      classOf[NullTableIdAndNullColumnIdInMemoryTableCatalog].getName)
+    .set("spark.sql.catalog.nullbothidscat.copyOnLoad", "true")
     .set("spark.sql.catalog.resetidcat",
       classOf[TypeChangeResetsColIdTableCatalog].getName)
     .set("spark.sql.catalog.resetidcat.copyOnLoad", "true")
@@ -69,8 +80,10 @@ class DataSourceV2DataFrameSuite
     .set("spark.sql.catalog.composedidcat",
       classOf[ComposedColumnIdTableCatalog].getName)
     .set("spark.sql.catalog.composedidcat.copyOnLoad", "true")
+    .set(SQLConf.TIME_TYPE_ENABLED.key, "true")
 
   after {
+    catalog("cachingcat").asInstanceOf[CachingInMemoryTableCatalog].clearCache()
     spark.sessionState.catalogManager.reset()
   }
 
@@ -80,6 +93,36 @@ class DataSourceV2DataFrameSuite
   protected def catalog(name: String): InMemoryTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog(name)
     catalog.asInstanceOf[InMemoryTableCatalog]
+  }
+
+  // DSv2ExternalMutationTestBase implementations for classic mode
+  override protected def testPrefix: String = ""
+  override protected def isConnect: Boolean = false
+
+  override protected def withTestSession(fn: SparkSession => Unit): Unit = fn(spark)
+
+  override protected def checkRows(df: => DataFrame, expected: Seq[Row]): Unit =
+    checkAnswer(df, expected)
+
+  override protected def getTableCatalog[C <: TableCatalog: ClassTag](
+      session: SparkSession,
+      catalogName: String): C = {
+    val c = catalog(catalogName)
+    val ct = implicitly[ClassTag[C]]
+    require(
+      ct.runtimeClass.isInstance(c),
+      s"Expected ${ct.runtimeClass.getName} but got ${c.getClass.getName}")
+    c.asInstanceOf[C]
+  }
+
+  override protected def withTestTableAndViews(
+      session: SparkSession,
+      table: String,
+      views: Seq[String] = Seq.empty)(fn: => Unit): Unit = {
+    withTable(table) {
+      try { fn }
+      finally { views.foreach(v => session.sql(s"DROP VIEW IF EXISTS $v")) }
+    }
   }
 
   override def verifyTable(tableName: String, expected: DataFrame): Unit = {
@@ -1110,6 +1153,445 @@ class DataSourceV2DataFrameSuite
           "defaultValue" -> "c1"
         )
       )
+    }
+  }
+
+  test("create/replace table with generated columns should have V2 Expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (a + 1),
+             |  c INT GENERATED ALWAYS AS (a * 2)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression(
+            "a + 1",
+            new GeneralScalarExpression(
+              "+",
+              Array(FieldReference("a"), LiteralValue(1, IntegerType)))),
+          new GenerationExpression(
+            "a * 2",
+            new GeneralScalarExpression(
+              "*",
+              Array(FieldReference("a"), LiteralValue(2, IntegerType))))))
+
+      val replaceExec = executeAndKeepPhysicalPlan[ReplaceTableExec] {
+        sql(
+          s"""REPLACE TABLE $tableName (
+             |  x INT,
+             |  y INT GENERATED ALWAYS AS (x - 10)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        replaceExec.columns,
+        Array(
+          null, // x has no generation expression
+          new GenerationExpression(
+            "x - 10",
+            new GeneralScalarExpression(
+              "-",
+              Array(FieldReference("x"), LiteralValue(10, IntegerType))))))
+    }
+  }
+
+  test("create table with generated columns using functions should have V2 Expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT,
+             |  c INT GENERATED ALWAYS AS (a + b)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          null, // b has no generation expression
+          new GenerationExpression(
+            "a + b",
+            new GeneralScalarExpression(
+              "+",
+              Array(FieldReference("a"), FieldReference("b"))))))
+    }
+  }
+
+  test("generated column with CONCAT referencing multiple columns should have FieldReference") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  first_name STRING,
+             |  last_name STRING,
+             |  full_name STRING GENERATED ALWAYS AS (CONCAT(first_name, ' ', last_name))
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // first_name has no generation expression
+          null, // last_name has no generation expression
+          new GenerationExpression(
+            "CONCAT(first_name, ' ', last_name)",
+            new GeneralScalarExpression(
+              "CONCAT",
+              Array(
+                FieldReference("first_name"),
+                LiteralValue(UTF8String.fromString(" "), StringType),
+                FieldReference("last_name"))))))
+    }
+  }
+
+  test("generated column with UPPER referencing another column should have FieldReference") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  name STRING,
+             |  upper_name STRING GENERATED ALWAYS AS (UPPER(name))
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // name has no generation expression
+          new GenerationExpression(
+            "UPPER(name)",
+            new GeneralScalarExpression(
+              "UPPER",
+              Array(FieldReference("name"))))))
+    }
+  }
+
+  test("generated column with YEAR extraction should have FieldReference") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  event_date DATE,
+             |  event_year INT GENERATED ALWAYS AS (YEAR(event_date))
+             |) USING foo""".stripMargin)
+      }
+
+      // Verify structure directly since Extract class doesn't implement equals()
+      assert(createExec.columns.length == 2)
+      assert(createExec.columns(0).columnGenerationExpression() == null)
+
+      val genExpr = createExec.columns(1).columnGenerationExpression()
+      assert(genExpr != null)
+      assert(genExpr.getSql == "YEAR(event_date)")
+
+      val v2Expr = genExpr.getExpression
+      assert(v2Expr.isInstanceOf[Extract], s"Expected Extract but got ${v2Expr.getClass}")
+
+      val extractExpr = v2Expr.asInstanceOf[Extract]
+      assert(extractExpr.field() == "YEAR")
+
+      val sourceExpr = extractExpr.source()
+      assert(sourceExpr.isInstanceOf[FieldReference],
+        s"Expected FieldReference but got ${sourceExpr.getClass}")
+
+      val fieldRef = sourceExpr.asInstanceOf[FieldReference]
+      assert(fieldRef.fieldNames.toSeq == Seq("event_date"),
+        s"Expected field 'event_date' but got ${fieldRef.fieldNames.mkString(".")}")
+    }
+  }
+
+  test("generated column with nested expression referencing multiple columns") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      // Expression: (a + b) * c should produce nested GeneralScalarExpression with FieldReferences
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT,
+             |  c INT,
+             |  result INT GENERATED ALWAYS AS ((a + b) * c)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          null, // b has no generation expression
+          null, // c has no generation expression
+          new GenerationExpression(
+            "(a + b) * c",
+            new GeneralScalarExpression(
+              "*",
+              Array(
+                new GeneralScalarExpression(
+                  "+",
+                  Array(FieldReference("a"), FieldReference("b"))),
+                FieldReference("c"))))))
+    }
+  }
+
+  test("generated column with COALESCE referencing multiple columns") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  primary_value INT,
+             |  fallback_value INT,
+             |  effective_value INT GENERATED ALWAYS AS (COALESCE(primary_value, fallback_value, 0))
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // primary_value has no generation expression
+          null, // fallback_value has no generation expression
+          new GenerationExpression(
+            "COALESCE(primary_value, fallback_value, 0)",
+            new GeneralScalarExpression(
+              "COALESCE",
+              Array(
+                FieldReference("primary_value"),
+                FieldReference("fallback_value"),
+                LiteralValue(0, IntegerType))))))
+    }
+  }
+
+  test("generated column with CAST should have V2 Cast expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b BIGINT GENERATED ALWAYS AS (CAST(a AS BIGINT))
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression(
+            "CAST(a AS BIGINT)",
+            new V2Cast(FieldReference("a"), IntegerType, LongType))))
+    }
+  }
+
+  test("generated column with comparison should have V2 Predicate expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b BOOLEAN GENERATED ALWAYS AS (a > 5)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression(
+            "a > 5",
+            new V2Predicate(
+              ">",
+              Array(FieldReference("a"), LiteralValue(5, IntegerType))))))
+    }
+  }
+
+  test("generated column with CASE WHEN should have V2 expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (CASE WHEN a > 0 THEN 1 ELSE 0 END)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression(
+            "CASE WHEN a > 0 THEN 1 ELSE 0 END",
+            new GeneralScalarExpression(
+              "CASE_WHEN",
+              Array(
+                new V2Predicate(">", Array(FieldReference("a"), LiteralValue(0, IntegerType))),
+                LiteralValue(1, IntegerType),
+                LiteralValue(0, IntegerType))))))
+    }
+  }
+
+  test("generated column with a literal should have V2 Literal expression") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b INT GENERATED ALWAYS AS (1)
+             |) USING foo""".stripMargin)
+      }
+
+      checkGenerationExpressions(
+        createExec.columns,
+        Array(
+          null, // a has no generation expression
+          new GenerationExpression("1", LiteralValue(1, IntegerType))))
+    }
+  }
+
+  test("generated column with a non-translatable expression preserves SQL but has null V2 expr") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      // `factorial` is a built-in, deterministic function, so the generated column is valid, but
+      // V2ExpressionBuilder has no mapping for it. The V2 expression is therefore null while the
+      // original SQL text is still preserved.
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  a INT,
+             |  b BIGINT GENERATED ALWAYS AS (factorial(a))
+             |) USING foo""".stripMargin)
+      }
+
+      assert(createExec.columns.length == 2)
+      assert(createExec.columns(0).columnGenerationExpression() == null)
+
+      val genExpr = createExec.columns(1).columnGenerationExpression()
+      assert(genExpr != null)
+      assert(genExpr.getSql == "factorial(a)")
+      assert(genExpr.getExpression == null,
+        s"Expected null V2 expression but got ${genExpr.getExpression}")
+    }
+  }
+
+  test("generation expression with special column name should fail") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      // When the column name matches a special SQL keyword like CURRENT_DATE,
+      // the generation expression CURRENT_DATE is resolved as a reference to itself
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""CREATE TABLE $tableName (
+               |  current_date DATE GENERATED ALWAYS AS (CURRENT_DATE)
+               |) USING foo""".stripMargin)
+        },
+        condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+        parameters = Map(
+          "fieldName" -> "current_date",
+          "expressionStr" -> "CURRENT_DATE",
+          "reason" -> "generation expression cannot reference itself"))
+    }
+  }
+
+  test("generation expression with current_timestamp and different column name should work") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withTable(tableName) {
+      // When the column name is different, CURRENT_TIMESTAMP is resolved as the function.
+      val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+        sql(
+          s"""CREATE TABLE $tableName (
+             |  c1 TIMESTAMP GENERATED ALWAYS AS (CURRENT_TIMESTAMP)
+             |) USING foo""".stripMargin)
+      }
+
+      assert(createExec.columns.length == 1)
+      val genExpr = createExec.columns(0).columnGenerationExpression()
+      assert(genExpr != null)
+      // The SQL form is preserved so the connector can re-evaluate it.
+      assert(genExpr.getSql == "CURRENT_TIMESTAMP")
+      // The V2 expression is built from the analyzed (pre-optimization) child, so CURRENT_TIMESTAMP
+      // is not frozen into a definition-time literal. Since CURRENT_TIMESTAMP has no V2
+      // representation yet, the V2 expression is null and the connector falls back to the SQL form.
+      assert(genExpr.getExpression == null)
+    }
+  }
+
+  // enforceReservedKeywords is only effective when ANSI is enabled, but with the conf off it is
+  // disabled in both ANSI modes, so the column-priority behavior should hold regardless of ANSI.
+  Seq("true", "false").foreach { ansiEnabled =>
+    test("generation expression resolves a reserved keyword to the column when " +
+      s"enforceReservedKeywords is disabled (ansi=$ansiEnabled)") {
+      val tableName = "testcat.ns1.ns2.tbl"
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled,
+          SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "false") {
+        withTable(tableName) {
+          // With reserved keyword enforcement off (the default), the unquoted `current_date` in the
+          // generation expression binds to the same-named column rather than the CURRENT_DATE
+          // function, so it is passed to the connector as a field reference.
+          val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+            sql(
+              s"""CREATE TABLE $tableName (
+                 |  `current_date` DATE,
+                 |  c2 DATE GENERATED ALWAYS AS (current_date)
+                 |) USING foo""".stripMargin)
+          }
+          val genExpr = createExec.columns.find(_.name == "c2").get.columnGenerationExpression()
+          assert(genExpr != null)
+          assert(genExpr.getSql == "current_date")
+          // The column reference is representable in V2 as a field reference, proving the column
+          // takes priority over the CURRENT_DATE function.
+          genExpr.getExpression match {
+            case ref: FieldReference => assert(ref.fieldNames().toSeq == Seq("current_date"))
+            case other => fail(s"Expected a FieldReference to current_date but got: $other")
+          }
+        }
+      }
+    }
+  }
+
+  // Unlike the disabled case above, this behavior is not parameterized over ANSI: reserved keyword
+  // enforcement (enforceReservedKeywords = ansiEnabled && ENFORCE_RESERVED_KEYWORDS) can only be on
+  // when ANSI is enabled. With ANSI disabled the conf is a no-op.
+  test("generation expression resolves a reserved keyword to the function when " +
+    "enforceReservedKeywords is enabled") {
+    val tableName = "testcat.ns1.ns2.tbl"
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
+      withTable(tableName) {
+        // With reserved keyword enforcement on, the unquoted `current_date` in the generation
+        // expression binds to the built-in CURRENT_DATE function rather than the same-named
+        // column. This matches the SQL standard.
+        val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
+          sql(
+            s"""CREATE TABLE $tableName (
+               |  `current_date` DATE,
+               |  c2 DATE GENERATED ALWAYS AS (current_date)
+               |) USING foo""".stripMargin)
+        }
+        val genExpr = createExec.columns.find(_.name == "c2").get.columnGenerationExpression()
+        assert(genExpr != null)
+        assert(genExpr.getSql == "current_date")
+        // CURRENT_DATE has no V2 representation, so the connector falls back to the SQL form. A
+        // non-null field reference here would mean the column incorrectly took priority.
+        assert(genExpr.getExpression == null)
+      }
     }
   }
 
@@ -2520,29 +3002,6 @@ class DataSourceV2DataFrameSuite
     }
   }
 
-  test("temp view with stored plan after session drop and re-add column same type") {
-    val t = "testcat.ns1.ns2.tbl"
-    withTable(t) {
-      sql(s"CREATE TABLE $t (id INT, salary INT) USING foo")
-      sql(s"INSERT INTO $t VALUES (1, 100), (10, 1000)")
-
-      // create two temp views with salary filters
-      spark.table(t).filter("salary < 999").createOrReplaceTempView("v")
-      spark.table(t).filter("salary IS NULL").createOrReplaceTempView("v_null")
-      checkAnswer(spark.table("v"), Seq(Row(1, 100)))
-      checkAnswer(spark.table("v_null"), Seq.empty)
-
-      // drop and re-add column with same name and type
-      sql(s"ALTER TABLE $t DROP COLUMN salary")
-      sql(s"ALTER TABLE $t ADD COLUMN salary INT")
-
-      // salary values are now null, so the salary < 999 filter returns nothing
-      checkAnswer(spark.table("v"), Seq.empty)
-      // IS NULL filter now matches all rows
-      checkAnswer(spark.table("v_null"), Seq(Row(1, null), Row(10, null)))
-    }
-  }
-
   // Column ID tests: Write operations
   //
   // [[writeTo().append()]] eagerly executes the command during the
@@ -2616,7 +3075,8 @@ class DataSourceV2DataFrameSuite
 
   // Column ID tests: Null column ID connector
 
-  // When a connector does not support column IDs, validation is skipped.
+  // When a connector does not support column IDs, validation is skipped, but version
+  // tracking still detects the schema change and refreshes the table reference.
   test("connector with null column IDs: drop+re-add column not detected") {
     val t = "nullcolidcat.ns1.ns2.tbl"
     val ident = Identifier.of(Array("ns1", "ns2"), "tbl")
@@ -2632,8 +3092,9 @@ class DataSourceV2DataFrameSuite
       sql(s"ALTER TABLE $t DROP COLUMN salary")
       sql(s"ALTER TABLE $t ADD COLUMN salary INT")
 
-      // succeeds because column ID validation is skipped when IDs are null
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because IDs are null. The table version changed, so
+      // [[V2TableRefreshUtil]] reloads it and the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2681,8 +3142,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() == null, "salary should have a null ID after re-add")
 
-      // succeeds because current column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because current ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2711,8 +3173,9 @@ class DataSourceV2DataFrameSuite
         .find(_.name() == "salary").get
       assert(newSalaryCol.id() != null, "salary should have a non-null ID after re-add")
 
-      // succeeds because original column ID is null, so validation is skipped
-      checkAnswer(df, Seq(Row(1, 100)))
+      // No column ID error because original ID is null. The table is refreshed via
+      // version tracking, so the re-added salary column has null values.
+      checkAnswer(df, Seq(Row(1, null)))
     }
   }
 
@@ -2723,6 +3186,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // add top-level column to underlying table
@@ -2730,6 +3194,7 @@ class DataSourceV2DataFrameSuite
 
       // accessing temp view should succeed as top-level column additions are allowed
       // view captures original columns
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert data to verify view still works correctly
@@ -2745,6 +3210,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "address"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // add nested column to underlying table
@@ -2769,6 +3235,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data", "age"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // drop column from underlying table
@@ -2793,6 +3260,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view using DataFrame API
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "address"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // drop nested column from underlying table
@@ -2817,6 +3285,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // change nullability constraint using ALTER TABLE
@@ -2858,6 +3327,7 @@ class DataSourceV2DataFrameSuite
       assert(originalTableId != newTableId)
 
       // accessing temp view should work despite table ID change (returns empty data)
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert new data and verify view reflects it
@@ -2873,6 +3343,7 @@ class DataSourceV2DataFrameSuite
       sql(s"CREATE TABLE $t (id bigint, data STRING, extra INT) USING foo")
 
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data", "extra"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // alter table
@@ -2883,6 +3354,7 @@ class DataSourceV2DataFrameSuite
 
       // recreate view with updated schema
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // now it should work with new schema
@@ -2913,6 +3385,7 @@ class DataSourceV2DataFrameSuite
 
       // accessing temp view should succeed as top-level column additions are allowed
 
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
     }
   }
@@ -2925,6 +3398,7 @@ class DataSourceV2DataFrameSuite
 
         // create temp view using SQL that should capture plan
         sql(s"CREATE OR REPLACE TEMPORARY VIEW v AS SELECT * FROM $t")
+        assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
         checkAnswer(spark.table("v"), Seq.empty)
 
         // verify that view stores analyzed plan
@@ -2935,6 +3409,7 @@ class DataSourceV2DataFrameSuite
         sql(s"ALTER TABLE $t ADD COLUMN age int")
 
         // accessing temp view should succeed as top-level column additions are allowed
+        assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
         checkAnswer(spark.table("v"), Seq.empty)
 
         // insert data to verify view still works correctly
@@ -2951,6 +3426,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "name"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // change VARCHAR(10) to VARCHAR(20)
@@ -2975,6 +3451,7 @@ class DataSourceV2DataFrameSuite
 
       // create temp view
       spark.table(t).createOrReplaceTempView("v")
+      assert(spark.table("v").schema.fieldNames.toSeq == Seq("id", "data"))
       checkAnswer(spark.table("v"), Seq.empty)
 
       // insert data into underlying table (no schema change)
@@ -3077,6 +3554,7 @@ class DataSourceV2DataFrameSuite
 
       // verify external changes are reflected correctly when table is queried
       assertNotCached(spark.table(t))
+      assert(spark.table(t).schema.fieldNames.toSeq == Seq("id", "value", "category"))
       checkAnswer(spark.table(t), Seq.empty)
     }
   }
@@ -3550,6 +4028,30 @@ class DataSourceV2DataFrameSuite
         },
         condition = "UNSUPPORTED_SCHEMA_EVOLUTION.V1_TABLE",
         parameters = Map.empty)
+    }
+  }
+
+  private def checkGenerationExpressions(
+      columns: Array[Column],
+      expectedGenerationExprs: Array[GenerationExpression]): Unit = {
+    assert(columns.length == expectedGenerationExprs.length)
+
+    columns.zip(expectedGenerationExprs).foreach {
+      case (column, expectedGenExpr) =>
+        assert(
+          compareGenerationExpression(column.columnGenerationExpression(), expectedGenExpr),
+          s"Generation expression mismatch for column '${column.toString}': " +
+            s"expected $expectedGenExpr but found ${column.columnGenerationExpression}")
+    }
+  }
+
+  private def compareGenerationExpression(
+      left: GenerationExpression,
+      right: GenerationExpression): Boolean = {
+    (left, right) match {
+      case (null, null) => true
+      case (null, _) | (_, null) => false
+      case _ => left.getSql == right.getSql && left.getExpression == right.getExpression
     }
   }
 }

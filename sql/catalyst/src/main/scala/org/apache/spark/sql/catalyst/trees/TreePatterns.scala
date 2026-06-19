@@ -29,7 +29,12 @@ object TreePattern extends Enumeration  {
   val ALIAS: Value = Value
   val ANALYSIS_AWARE_EXPRESSION: Value = Value
   val AND: Value = Value
+  val ARRAYS_OVERLAP: Value = Value
   val ARRAYS_ZIP: Value = Value
+  val ARRAY_DISTINCT: Value = Value
+  val ARRAY_EXCEPT: Value = Value
+  val ARRAY_INTERSECT: Value = Value
+  val ARRAY_UNION: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val AVERAGE: Value = Value
   val BINARY_ARITHMETIC: Value = Value
@@ -48,10 +53,12 @@ object TreePattern extends Enumeration  {
   val DYNAMIC_PRUNING_SUBQUERY: Value = Value
   val EXISTS_SUBQUERY = Value
   val EXPRESSION_WITH_RANDOM_SEED: Value = Value
+  val EXTERNAL_UDF: Value = Value
   val EXTRACT_VALUE: Value = Value
   val FUNCTION_TABLE_RELATION_ARGUMENT_EXPRESSION: Value = Value
   val GENERATOR: Value = Value
   val GROUPING_ANALYTICS: Value = Value
+  val GET_JSON_OBJECT: Value = Value
   val HIGH_ORDER_FUNCTION: Value = Value
   val IF: Value = Value
   val IN: Value = Value
@@ -70,7 +77,9 @@ object TreePattern extends Enumeration  {
   val MAP_FROM_ARRAYS: Value = Value
   val MAP_FROM_ENTRIES: Value = Value
   val MAP_OBJECTS: Value = Value
+  val MAX: Value = Value
   val MEASURE: Value = Value
+  val MIN: Value = Value
   val MULTI_ALIAS: Value = Value
   val NEW_INSTANCE: Value = Value
   val NOT: Value = Value
@@ -130,6 +139,7 @@ object TreePattern extends Enumeration  {
   val AGGREGATE: Value = Value
   val APPEND_COLUMNS: Value = Value
   val AS_OF_JOIN: Value = Value
+  val BIN_BY: Value = Value
   val COLLECT_METRICS: Value = Value
   val COMMAND: Value = Value
   val CTE: Value = Value
@@ -182,10 +192,13 @@ object TreePattern extends Enumeration  {
   val WINDOW: Value = Value
   val WINDOW_GROUP_LIMIT: Value = Value
   val WITH_WINDOW_DEFINITION: Value = Value
+  val ZIP: Value = Value
 
   // Unresolved Plan patterns (Alphabetically ordered)
   val NAMED_STREAMING_RELATION: Value = Value
   val PLAN_WITH_UNRESOLVED_IDENTIFIER: Value = Value
+  val UNRESOLVED_BIN_BY: Value = Value
+  val UNRESOLVED_DEDUPLICATE: Value = Value
   val UNRESOLVED_EVENT_TIME_WATERMARK: Value = Value
   val UNRESOLVED_HAVING: Value = Value
   val UNRESOLVED_HINT: Value = Value

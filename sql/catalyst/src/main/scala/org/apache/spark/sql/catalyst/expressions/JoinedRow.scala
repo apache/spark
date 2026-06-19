@@ -114,17 +114,22 @@ class JoinedRow extends InternalRow {
   override def getBinary(i: Int): Array[Byte] =
     if (i < row1.numFields) row1.getBinary(i) else row2.getBinary(i - row1.numFields)
 
-  override def getGeography(i: Int): GeographyVal =
-    if (i < row1.numFields) row1.getGeography(i) else row2.getGeography(i - row1.numFields)
-
-  override def getGeometry(i: Int): GeometryVal =
-    if (i < row1.numFields) row1.getGeometry(i) else row2.getGeometry(i - row1.numFields)
+  override def getBinaryView(i: Int): BinaryView =
+    if (i < row1.numFields) row1.getBinaryView(i) else row2.getBinaryView(i - row1.numFields)
 
   override def getArray(i: Int): ArrayData =
     if (i < row1.numFields) row1.getArray(i) else row2.getArray(i - row1.numFields)
 
   override def getInterval(i: Int): CalendarInterval =
     if (i < row1.numFields) row1.getInterval(i) else row2.getInterval(i - row1.numFields)
+
+  override def getTimestampNTZNanos(i: Int): TimestampNanosVal =
+    if (i < row1.numFields) row1.getTimestampNTZNanos(i)
+    else row2.getTimestampNTZNanos(i - row1.numFields)
+
+  override def getTimestampLTZNanos(i: Int): TimestampNanosVal =
+    if (i < row1.numFields) row1.getTimestampLTZNanos(i)
+    else row2.getTimestampLTZNanos(i - row1.numFields)
 
   override def getVariant(i: Int): VariantVal =
     if (i < row1.numFields) row1.getVariant(i) else row2.getVariant(i - row1.numFields)

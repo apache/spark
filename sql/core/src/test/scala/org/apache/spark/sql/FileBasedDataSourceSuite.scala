@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.nio.file.{Files, StandardOpenOption}
+import java.time.{LocalDateTime, ZoneOffset}
 
 import scala.collection.mutable
 
@@ -33,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GreaterTha
 import org.apache.spark.sql.catalyst.expressions.IntegralLiteralTestUtils.{negativeInt, positiveInt}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.{FileSourceScanLike, SimpleMode}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.FilePartition
@@ -44,6 +46,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 class FileBasedDataSourceSuite extends SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -1328,6 +1331,98 @@ class FileBasedDataSourceSuite extends SharedSparkSession
                   "columnName" -> "`g`",
                   "columnType" -> expectedType,
                   "format" -> formatMapping(format)))
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57166: nanosecond timestamp types are not supported in selected file data sources") {
+    // Parquet and ORC support nanosecond-capable timestamps, while these formats still reject them.
+    val unsupportedDataSources = Seq("json", "csv", "xml")
+    val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // Test both v1 and v2 data sources.
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) {
+          unsupportedDataSources.mkString(",")
+        } else {
+          ""
+        }
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          unsupportedDataSources.foreach { format =>
+            nanosTypes.foreach { nanosType =>
+              val expectedType = s""""${nanosType.sql}""""
+              withTempDir { dir =>
+                // Write path: a nanos-typed column cannot be written. The nanos literal is built
+                // directly from its internal value to avoid relying on cast/parser support.
+                val nanosLiteral =
+                  Literal.create(new TimestampNanosVal(0L, 0.toShort), nanosType)
+                val df = spark.range(1).select(Column(nanosLiteral).as("ts"))
+                val writeDir = new File(dir, "write").getCanonicalPath
+                checkError(
+                  exception = intercept[AnalysisException] {
+                    df.write.format(format).mode("overwrite").save(writeDir)
+                  },
+                  condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+                  parameters = Map(
+                    "columnName" -> "`ts`",
+                    "columnType" -> expectedType,
+                    "format" -> formatMapping(format)))
+
+                // Read path: a user-specified nanos schema is rejected. Write a benign file first
+                // so schema validation (not file listing) is what fails.
+                val readDir = new File(dir, "read").getCanonicalPath
+                // XML requires a `rowTag` option on both the read and write paths.
+                val extraOptions =
+                  if (format == "xml") Map("rowTag" -> "row") else Map.empty[String, String]
+                Seq("a").toDF("ts").write.format(format).options(extraOptions)
+                  .mode("overwrite").save(readDir)
+                checkError(
+                  exception = intercept[AnalysisException] {
+                    spark.read.schema(new StructType().add("ts", nanosType))
+                      .format(format).options(extraOptions).load(readDir).collect()
+                  },
+                  condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+                  parameters = Map(
+                    "columnName" -> "`ts`",
+                    "columnType" -> expectedType,
+                    "format" -> formatMapping(format)))
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57166: ORC supports nanosecond timestamp types in v1 and v2") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      // Validate both v1 and v2 ORC paths.
+      Seq(true, false).foreach { useV1 =>
+        val useV1List = if (useV1) "orc" else ""
+        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+          foreachNanosPrecision { precision =>
+            Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+              nanosType =>
+                withTempDir { dir =>
+                  // Build the row from an external java.time value; the column schema carries the
+                  // precision and truncates the sub-microsecond digits, matching the ORC suites.
+                  val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+                  val value: Any = nanosType match {
+                    case _: TimestampNTZNanosType => wallClock
+                    case _: TimestampLTZNanosType => wallClock.toInstant(ZoneOffset.UTC)
+                  }
+                  val df = spark.createDataFrame(
+                    spark.sparkContext.parallelize(Seq(Row(value))),
+                    new StructType().add("ts", nanosType))
+                  val path = new File(dir, s"orc_nanos_${nanosType.typeName}").getCanonicalPath
+                  df.write.format("orc").mode("overwrite").save(path)
+                  val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                    .format("orc").load(path)
+                  checkAnswer(readBack, df)
+                }
             }
           }
         }

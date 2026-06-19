@@ -24,11 +24,13 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, FileSourceConstantMetadataStructField, FileSourceGeneratedMetadataStructField, Literal}
+import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.classic.{DataFrame, Dataset}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.functions.{col, lit, when}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /** Verifies the ability for a FileFormat to define custom metadata types */
@@ -333,6 +335,59 @@ class FileSourceCustomMetadataStructSuite extends SharedSparkSession {
           Row(0, 102L, 0, "000", 1L),
           Row(1, 111L, 1, "111", 0L),
           Row(1, 112L, 1, "111", 1L)))
+    }
+  }
+
+  test("[SPARK-56931] complex constant metadata fields (array<struct>, struct) on row path") {
+    withTempData("parquet", FILE_SCHEMA) { (_, f0, f1) =>
+      val permElement = StructType(Seq(
+        StructField("email", StringType),
+        StructField("role", StringType)))
+      val locationStruct = StructType(Seq(
+        StructField("country", StringType),
+        StructField("city", StringType)))
+      val complexFields = Seq(
+        FileSourceConstantMetadataStructField("perms", ArrayType(permElement, containsNull = true)),
+        FileSourceConstantMetadataStructField("location", locationStruct))
+      val format = new TestFileFormat(complexFields)
+
+      // Build per-file values in catalyst form.
+      def perms(email: String, role: String): InternalRow =
+        InternalRow(UTF8String.fromString(email), UTF8String.fromString(role))
+      def loc(country: String, city: String): InternalRow =
+        InternalRow(UTF8String.fromString(country), UTF8String.fromString(city))
+
+      val files = Seq(
+        FileStatusWithMetadata(f0, Map(
+          "perms" -> new GenericArrayData(Array[Any](perms("a@x", "r"), perms("b@x", "w"))),
+          "location" -> loc("US", "SFO"))),
+        FileStatusWithMetadata(f1, Map(
+          "perms" -> new GenericArrayData(Array[Any](perms("c@x", "r"), perms("d@x", "o"))),
+          "location" -> loc("CA", "YYZ"))))
+      val df = createDF(format, files)
+
+      // Force the row materialization path (Batched=false) so we exercise the
+      // updateMetadataInternalRow -> getFileConstantMetadataColumnValue -> Literal.create
+      // change end-to-end. The query touches a subset of each subfield to also exercise
+      // the metadata-schema pruning preservation rule.
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        // Query only the non-first sub-fields of each complex column. A buggy implementation
+        // that pruned the kept sub-attribute's inner schema down to only the queried fields
+        // would surface here: the extractor still produces `InternalRow("US", "SFO")` /
+        // `InternalRow(email, role)`, and reading the kept field at the pruned (now zero)
+        // ordinal would yield the index-0 value instead of the index-1 value.
+        checkAnswer(
+          df.selectExpr(
+            "fileNum",
+            "_metadata.perms[1].role AS second_role",
+            "_metadata.location.city AS city",
+            "size(_metadata.perms) AS perms_count"),
+          Seq(
+            Row(0, "w", "SFO", 2),
+            Row(0, "w", "SFO", 2),
+            Row(1, "o", "YYZ", 2),
+            Row(1, "o", "YYZ", 2)))
+      }
     }
   }
 

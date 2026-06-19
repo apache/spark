@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ColumnVectorUtilsSuite extends SparkFunSuite {
@@ -132,6 +132,24 @@ class ColumnVectorUtilsSuite extends SparkFunSuite {
     ColumnVectorUtils.populate(vector, InternalRow(interval), 0)
     (0 until 10).foreach { i =>
       assert(vector.getInterval(i) === interval)
+    }
+  }
+
+  testConstantColumnVector("fill TimestampNTZNanosType", 10,
+    TimestampNTZNanosType(9)) { vector =>
+    val v = TimestampNanosVal.fromParts(1_234_567L, 999.toShort)
+    ColumnVectorUtils.populate(vector, InternalRow(v), 0)
+    (0 until 10).foreach { i =>
+      assert(vector.getTimestampNTZNanos(i) === v)
+    }
+  }
+
+  testConstantColumnVector("fill TimestampLTZNanosType", 10,
+    TimestampLTZNanosType(9)) { vector =>
+    val v = TimestampNanosVal.fromParts(-999L, 42.toShort)
+    ColumnVectorUtils.populate(vector, InternalRow(v), 0)
+    (0 until 10).foreach { i =>
+      assert(vector.getTimestampLTZNanos(i) === v)
     }
   }
 

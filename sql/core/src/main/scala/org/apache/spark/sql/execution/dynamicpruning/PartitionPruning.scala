@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.SupportsRuntimeV2Filtering
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.ExtractV2Scan
@@ -198,12 +199,44 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
   }
 
 
+  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = plan.exists {
+    case f: Filter => isLikelySelective(f.condition)
+    case _ => false
+  }
+
   /**
-   * Search a filtering predicate in a given logical plan
+   * Returns whether a plan can be evaluated repeatedly from materialized inputs and produce the
+   * same rows.
+   *
+   * LocalRelation rows are already locally available. A checkpoint-derived LogicalRDD establishes
+   * an explicit checkpoint boundary and can be used as a broadcast build side for DPP without
+   * evaluating the computation upstream of that boundary again.
+   *
+   * InMemoryRelation is intentionally excluded because cache() and persist() are lazy: its
+   * presence does not guarantee the cached data has been materialized, and missing or evicted
+   * blocks may require evaluating the upstream computation again.
+   *
+   * The supported operators are intentionally narrow. DPP is optional, and logical-plan
+   * determinism does not cover user functions stored outside Catalyst expressions.
    */
-  private def hasSelectivePredicate(plan: LogicalPlan): Boolean = {
-    plan.exists {
-      case f: Filter => isLikelySelective(f.condition)
+  private def isRepeatableMaterializedPlan(plan: LogicalPlan): Boolean = {
+    def isRepeatableExpression(expression: Expression): Boolean = {
+      expression.deterministic && !SubqueryExpression.hasSubquery(expression) &&
+        !expression.exists {
+          case _: NonSQLExpression | _: UserDefinedExpression | _: UserDefinedGenerator => true
+          case _ => false
+        }
+    }
+
+    plan match {
+      case _: LocalRelation => true
+      case r: LogicalRDD => r.isCheckpointedInput
+      case Project(projectList, child) if projectList.forall(isRepeatableExpression) =>
+        isRepeatableMaterializedPlan(child)
+      case Filter(condition, child) if isRepeatableExpression(condition) =>
+        isRepeatableMaterializedPlan(child)
+      case u: Union => u.children.forall(isRepeatableMaterializedPlan)
+      case SubqueryAlias(_, child) => isRepeatableMaterializedPlan(child)
       case _ => false
     }
   }
@@ -212,10 +245,10 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * To be able to prune partitions on a join key, the filtering side needs to
    * meet the following requirements:
    *   (1) it can not be a stream
-   *   (2) it needs to contain a selective predicate used for filtering
+   *   (2) it needs to contain a selective predicate or have a repeatable materialized input
    */
   private def hasPartitionPruningFilter(plan: LogicalPlan): Boolean = {
-    !plan.isStreaming && hasSelectivePredicate(plan)
+    !plan.isStreaming && (hasSelectivePredicate(plan) || isRepeatableMaterializedPlan(plan))
   }
 
   private def prune(plan: LogicalPlan): LogicalPlan = {
