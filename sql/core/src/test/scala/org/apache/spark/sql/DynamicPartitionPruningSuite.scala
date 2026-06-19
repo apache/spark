@@ -1800,6 +1800,45 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     }
   }
 
+  test("SPARK-54593: a materialized filtering side keeps statistics-backed standalone DPP") {
+    // A checkpoint-derived LogicalRDD has no Filter but can retain column statistics. When those
+    // statistics establish a pruning benefit, DPP must still be injected as a standalone subquery
+    // when no broadcast can be reused -- the materialized-input handling gates only the
+    // no-statistics fallback ratio, not the statistics-based benefit.
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      // The fallback ratio offers no benefit, so DPP can only come from the statistics-based ratio.
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0",
+      // No broadcast can be reused, so an injected filter must be a standalone subquery.
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+      SQLConf.CBO_ENABLED.key -> "true") {
+      withTable("dim_one") {
+        // A dimension with a single distinct store_id, with column statistics computed.
+        spark.range(20).selectExpr("1 AS store_id")
+          .write.format(tableFormat).saveAsTable("dim_one")
+        sql("ANALYZE TABLE dim_one COMPUTE STATISTICS FOR COLUMNS store_id")
+
+        // Checkpoint a projection of it: a LogicalRDD with no Filter that retains the NDV (= 1).
+        val keys = spark.table("dim_one").select("store_id").localCheckpoint(eager = true)
+        val keysPlan = keys.queryExecution.optimizedPlan
+        assert(keysPlan.exists {
+          case r: LogicalRDD => r.isCheckpointedInput
+          case _ => false
+        })
+        assert(keysPlan.stats.attributeStats.values.exists(_.distinctCount.contains(BigInt(1))),
+          s"checkpointed side should retain the NDV statistic:\n$keysPlan")
+
+        // fact_stats is partitioned by store_id (NDV > 1) and has column statistics, so the
+        // statistics-based ratio establishes a pruning benefit for this materialized side.
+        val df = spark.table("fact_stats").join(keys, "store_id").select("date_id")
+
+        checkPartitionPruningPredicate(df, withSubquery = true, withBroadcast = false)
+      }
+    }
+  }
+
   test("DPP does not treat a non-checkpointed LogicalRDD as a selective filtering side") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {
