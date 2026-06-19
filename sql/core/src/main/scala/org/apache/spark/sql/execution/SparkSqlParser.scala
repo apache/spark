@@ -1481,12 +1481,13 @@ class SparkSqlAstBuilder extends AstBuilder {
   }
 
   /**
-   * A command for users to list the partition names of a table. If partition spec is specified,
-   * only partitions that match the spec are returned. Otherwise all partitions are returned.
+   * Overrides `SHOW PARTITIONS` parsing to intercept the `AS JSON` variant.
    *
-   * Without `AS JSON`, this creates a [[ShowPartitions]] logical plan (one row per partition).
-   * With `AS JSON`, this creates a [[ShowPartitionsJsonCommand]] that returns a single JSON
-   * document.
+   * When `AS JSON` is absent, parsing is delegated to the superclass
+   * ([[AstBuilder#visitShowPartitions]]), which produces a [[ShowPartitions]] logical plan
+   *
+   * When `AS JSON` is present, this method produces a [[ShowPartitionsJsonCommand]] directly —
+   * a runnable command that returns partition metadata as a single-row JSON document.
    *
    * The syntax of using this command in SQL is:
    * {{{
@@ -1494,17 +1495,12 @@ class SparkSqlAstBuilder extends AstBuilder {
    * }}}
    */
   override def visitShowPartitions(ctx: ShowPartitionsContext): LogicalPlan = withOrigin(ctx) {
-    val asJson = ctx.JSON != null
-    val relation = createUnresolvedTable(
-      ctx.identifierReference, if (asJson) "SHOW PARTITIONS AS JSON" else "SHOW PARTITIONS")
+    if (ctx.JSON == null) return super.visitShowPartitions(ctx)
+    val relation = createUnresolvedTable(ctx.identifierReference, "SHOW PARTITIONS AS JSON")
     val partitionKeys = Option(ctx.partitionSpec).map { specCtx =>
       UnresolvedPartitionSpec(visitNonOptionalPartitionSpec(specCtx), None)
     }
-    if (asJson) {
-      ShowPartitionsJsonCommand(relation, partitionKeys.map(_.spec))
-    } else {
-      ShowPartitions(relation, partitionKeys)
-    }
+    ShowPartitionsJsonCommand(relation, partitionKeys.map(_.spec))
   }
 
   override def visitShowProcedures(ctx: ShowProceduresContext): LogicalPlan = withOrigin(ctx) {
