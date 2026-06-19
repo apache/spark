@@ -165,7 +165,13 @@ public class ParquetVectorUpdaterFactory {
           return new LongUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
           return new LongToDecimalUpdater(descriptor, (DecimalType) sparkType);
-        } else if (sparkType instanceof TimeType) {
+        } else if (sparkType instanceof TimeType &&
+          isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit.NANOS)) {
+          // TIME(NANOS) is stored as nanoseconds since midnight, matching the internal
+          // representation, so no unit conversion is needed.
+          return new LongUpdater();
+        } else if (sparkType instanceof TimeType &&
+          isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
           return new LongAsNanosUpdater();
         }
       }

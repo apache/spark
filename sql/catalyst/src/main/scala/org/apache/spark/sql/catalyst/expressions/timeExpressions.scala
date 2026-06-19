@@ -467,7 +467,7 @@ object SecondExpressionBuilder extends ExpressionBuilder {
   """,
   arguments = """
     Arguments:
-      * precision - An optional integer literal in the range [0..6], indicating how many
+      * precision - An optional integer literal in the range [0..9], indicating how many
                     fractional digits of seconds to include. If omitted, the default is 6.
   """,
   examples = """
@@ -531,12 +531,12 @@ case class CurrentTime(
     precisionValue match {
       case n: Number =>
         val p = n.intValue()
-        if (p < TimeType.MIN_PRECISION || p > TimeType.MICROS_PRECISION) {
+        if (p < TimeType.MIN_PRECISION || p > TimeType.MAX_PRECISION) {
           return DataTypeMismatch(
             errorSubClass = "VALUE_OUT_OF_RANGE",
             messageParameters = Map(
               "exprName" -> toSQLId("precision"),
-              "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MICROS_PRECISION}]",
+              "valueRange" -> s"[${TimeType.MIN_PRECISION}, ${TimeType.MAX_PRECISION}]",
               "currentValue" -> toSQLValue(p, IntegerType)
             )
           )

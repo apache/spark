@@ -169,7 +169,7 @@ trait SparkDateTimeUtils {
    * @param nanos
    *   The original time in nanoseconds.
    * @param p
-   *   The fractional second precision (range 0 to 6).
+   *   The fractional second precision (range 0 to 9).
    * @return
    *   The truncated nanosecond value, preserving only `p` fractional digits.
    */
@@ -1080,8 +1080,10 @@ trait SparkDateTimeUtils {
         return None
       }
 
-      // Unpack the segments.
-      var (hr, min, sec, ms) = (segments(3), segments(4), segments(5), segments(6))
+      // Unpack the segments. `segments(6)` holds microseconds and `segments(9)` holds the
+      // sub-microsecond nanosecond remainder (digits 7-9), in [0, 999].
+      var (hr, min, sec, ms, subMicroNanos) =
+        (segments(3), segments(4), segments(5), segments(6), segments(9))
 
       // Handle AM/PM conversion in separate cases.
       if (!hasSuffix) {
@@ -1108,7 +1110,8 @@ trait SparkDateTimeUtils {
         }
       }
 
-      val localTime = LocalTime.of(hr, min, sec, MICROSECONDS.toNanos(ms).toInt)
+      val nanoOfSecond = (MICROSECONDS.toNanos(ms) + subMicroNanos).toInt
+      val localTime = LocalTime.of(hr, min, sec, nanoOfSecond)
       Some(localTimeToNanos(localTime))
     } catch {
       case NonFatal(_) => None

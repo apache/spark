@@ -1927,6 +1927,53 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("Read TimeType for the logical TIME(NANOS) type") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,false));
+        |}""".stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          // Internal storage is nanoseconds since midnight; TIME(NANOS) writes it unchanged.
+          record.add(0, localTime(23, 59, 59, 123456, 789))
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            new StructType().add("time_nanos", TimeType(TimeType.NANOS_PRECISION))
+          }
+          val lt = LocalTime.of(23, 59, 59, 123456789)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("TimeType nanosecond round-trip through Parquet") {
+    withAllParquetReaders {
+      Seq(7, 8, 9).foreach { p =>
+        withTempPath { path =>
+          val df = spark.sql(
+            s"SELECT CAST(TIME '23:59:59.123456789' AS TIME($p)) AS t")
+          df.write.parquet(path.getCanonicalPath)
+          val readBack = spark.read.parquet(path.getCanonicalPath)
+          assert(readBack.schema.head.dataType === TimeType(p))
+          checkAnswer(readBack, df)
+        }
+      }
+    }
+  }
   // Deterministic INT32 sample shared by the INT32 widening tests below. Mixes sign,
   // zero, and MIN/MAX boundaries to catch sign-extension and precision regressions.
   private def widenSampleAt(i: Int): Int = i % 5 match {
