@@ -8167,12 +8167,12 @@
       },
       "SET_OPERATION_ON_MAP_TYPE" : {
         "message" : [
-          "Cannot have MAP type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have MAP type columns in a set operation (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_OPERATION_ON_VARIANT_TYPE" : {
         "message" : [
-          "Cannot have VARIANT type columns in DataFrame which calls set operations (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
+          "Cannot have VARIANT type columns in a set operation (INTERSECT, EXCEPT, etc.), but the type of column <colName> is <dataType>."
         ]
       },
       "SET_PATH_WHEN_DISABLED" : {
