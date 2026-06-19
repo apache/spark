@@ -854,3 +854,35 @@ SELECT unix_nanos(NULL :: timestamp_ltz(9))
 struct<unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9))):decimal(21,0)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT timestamp_nanos(1230219000123456789)
+-- !query schema
+struct<timestamp_nanos(1230219000123456789):timestamp_ltz(9)>
+-- !query output
+2008-12-25 07:30:00.123456789
+
+
+-- !query
+SELECT timestamp_nanos(-1)
+-- !query schema
+struct<timestamp_nanos(-1):timestamp_ltz(9)>
+-- !query output
+1969-12-31 15:59:59.999999999
+
+
+-- !query
+SELECT timestamp_nanos(253402300799999999999BD)
+-- !query schema
+struct<timestamp_nanos(253402300799999999999):timestamp_ltz(9)>
+-- !query output
+9999-12-31 15:59:59.999999999
+
+
+-- !query
+SELECT timestamp_nanos(CAST(NULL AS BIGINT))
+-- !query schema
+struct<timestamp_nanos(CAST(NULL AS BIGINT)):timestamp_ltz(9)>
+-- !query output
+NULL

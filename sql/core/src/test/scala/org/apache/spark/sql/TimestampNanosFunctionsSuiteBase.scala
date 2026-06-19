@@ -481,6 +481,41 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       checkAnswer(ltz.select(unix_nanos(col("c"))), Row(null))
     }
   }
+
+  test("SPARK-57526: timestamp_nanos builds nanosecond-precision TIMESTAMP_LTZ values") {
+    // 1230219000123456789 ns since the epoch -> 2008-12-25 15:30:00.123456789 UTC. The result is a
+    // TIMESTAMP_LTZ(9); collecting it yields the absolute Instant regardless of the session zone.
+    val nanos = 1230219000123456789L
+    val instant = Instant.parse("2008-12-25T15:30:00.123456789Z")
+    val sqlRes = spark.sql(s"SELECT timestamp_nanos($nanos)")
+    val colRes = spark.range(1).select(timestamp_nanos(lit(nanos)))
+    // The SQL and Scala Column API agree, return the expected instant, and keep the LTZ(9) type.
+    checkAnswer(sqlRes, colRes)
+    checkAnswer(sqlRes, Row(instant))
+    assert(sqlRes.schema.head.dataType === TimestampLTZNanosType(9))
+
+    // A BIGINT argument is implicitly cast to DECIMAL, so the integral literal works directly.
+    checkAnswer(spark.sql(s"SELECT timestamp_nanos(${nanos}L)"), Row(instant))
+
+    // DECIMAL input reaches the full [0001, 9999] calendar range, beyond a 64-bit BIGINT of nanos.
+    Seq(
+      Instant.parse("9999-12-31T23:59:59.999999999Z"),
+      Instant.parse("0001-01-01T00:00:00.000000001Z")
+    ).foreach { i =>
+      val n = BigInt(i.getEpochSecond) * 1000000000L + i.getNano
+      checkAnswer(
+        spark.range(1).select(timestamp_nanos(lit(BigDecimal(n).bigDecimal))),
+        Row(i))
+    }
+  }
+
+  test("SPARK-57526: timestamp_nanos over NULL input") {
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(null))),
+      new StructType().add("n", LongType))
+    checkAnswer(df.select(timestamp_nanos(col("n"))), Row(null))
+    checkAnswer(df.selectExpr("timestamp_nanos(n)"), Row(null))
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.

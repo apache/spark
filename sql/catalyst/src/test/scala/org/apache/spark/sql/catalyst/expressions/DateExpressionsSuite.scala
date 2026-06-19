@@ -1743,6 +1743,46 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57526: timestamp_nanos builds a TIMESTAMP_LTZ(9) from nanoseconds") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+
+    // The child is a DECIMAL after analysis (ImplicitCastInputTypes coerces integral arguments);
+    // build the post-coercion literal directly. A wide DECIMAL(38, 0) holds every input below.
+    def tsNanos(n: BigInt): NanosToTimestamp =
+      NanosToTimestamp(Literal.create(Decimal(BigDecimal(n), 38, 0), DecimalType(38, 0)))
+
+    assert(tsNanos(0).dataType === TimestampLTZNanosType(9))
+
+    // The JIRA example: 1230219000123456789 ns -> 1230219000123456 micros + 789 ns.
+    checkEvaluation(tsNanos(BigInt("1230219000123456789")), nanosVal(1230219000123456L, 789))
+
+    // Pre-epoch / negative inputs use floor semantics, so nanosWithinMicro stays in [0, 999]:
+    // -1 ns floors to epochMicros = -1 with a 999 ns remainder.
+    checkEvaluation(tsNanos(BigInt(-1)), nanosVal(-1L, 999))
+    checkEvaluation(tsNanos(BigInt(-1000)), nanosVal(-1L, 0))
+    checkEvaluation(tsNanos(BigInt(-1500)), nanosVal(-2L, 500))
+
+    // NULL input.
+    checkEvaluation(
+      NanosToTimestamp(Literal.create(null, DecimalType(38, 0))), null)
+
+    // Full [0001, 9999] range: a DECIMAL nanosecond count far beyond a 64-bit BIGINT decodes
+    // losslessly back to the original value (proving the function spans the whole calendar range).
+    Seq(
+      localDateTimeToNanosVal(timestampNTZ(9999, 12, 31, 23, 59, 59, 999999999)),
+      localDateTimeToNanosVal(timestampNTZ(1, 1, 1, 0, 0, 0, 1))
+    ).foreach { v =>
+      val n = BigInt(v.epochMicros) * NANOS_PER_MICROS + v.nanosWithinMicro.toInt
+      checkEvaluation(tsNanos(n), v)
+      // Round-trips with the inverse unix_nanos for the same full-range values.
+      checkEvaluation(UnixNanos(tsNanos(n)), Decimal(BigDecimal(n), 21, 0))
+    }
+
+    // Out-of-range input: epochMicros overflows a 64-bit long, so longValueExact throws.
+    checkExceptionInExpression[ArithmeticException](
+      tsNanos(BigInt("10000000000000000000000000")), "out of long range")
+  }
+
   test("TIMESTAMP_SECONDS") {
     def testIntegralFunc(value: Number): Unit = {
       checkEvaluation(

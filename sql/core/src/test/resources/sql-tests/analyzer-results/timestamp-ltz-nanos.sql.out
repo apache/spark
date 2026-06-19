@@ -762,3 +762,31 @@ SELECT unix_nanos(NULL :: timestamp_ltz(9))
 -- !query analysis
 Project [unix_nanos(cast(null as timestamp_ltz(9))) AS unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(1230219000123456789)
+-- !query analysis
+Project [timestamp_nanos(cast(1230219000123456789 as decimal(20,0))) AS timestamp_nanos(1230219000123456789)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(-1)
+-- !query analysis
+Project [timestamp_nanos(cast(-1 as decimal(10,0))) AS timestamp_nanos(-1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(253402300799999999999BD)
+-- !query analysis
+Project [timestamp_nanos(253402300799999999999) AS timestamp_nanos(253402300799999999999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(CAST(NULL AS BIGINT))
+-- !query analysis
+Project [timestamp_nanos(cast(cast(null as bigint) as decimal(20,0))) AS timestamp_nanos(CAST(NULL AS BIGINT))#x]
++- OneRowRelation

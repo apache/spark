@@ -215,3 +215,13 @@ SELECT unix_nanos(TIMESTAMP_LTZ '9999-12-31 23:59:59.999999999 UTC');
 SELECT unix_nanos(TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001 UTC');
 -- NULL nanosecond timestamp.
 SELECT unix_nanos(NULL :: timestamp_ltz(9));
+
+-- SPARK-57526: timestamp_nanos builds a TIMESTAMP_LTZ(9) from a nanosecond count since the epoch.
+-- Integral arguments are implicitly cast to DECIMAL; the LTZ result renders in the session zone.
+SELECT timestamp_nanos(1230219000123456789);
+-- Negative input floors toward the past, so the sub-microsecond remainder stays in [0, 999].
+SELECT timestamp_nanos(-1);
+-- DECIMAL input reaches beyond a 64-bit BIGINT, up to year 9999 (nanos ~ 2.5e20).
+SELECT timestamp_nanos(253402300799999999999BD);
+-- NULL input.
+SELECT timestamp_nanos(CAST(NULL AS BIGINT));

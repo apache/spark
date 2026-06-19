@@ -759,6 +759,66 @@ case class MicrosToTimestamp(child: Expression)
     copy(child = newChild)
 }
 
+// scalastyle:off line.size.limit line.contains.tab
+@ExpressionDescription(
+  usage = "_FUNC_(nanoseconds) - Creates timestamp with the local time zone and nanosecond precision (TIMESTAMP_LTZ(9)) from the number of nanoseconds since UTC epoch.",
+  examples = """
+    Examples:
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_(1230219000123456789);
+       2008-12-25 07:30:00.123456789
+  """,
+  group = "datetime_funcs",
+  since = "4.3.0")
+// scalastyle:on line.size.limit line.contains.tab
+case class NanosToTimestamp(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  // A nanosecond count needs DECIMAL to span the full [0001, 9999] calendar range: nanos for year
+  // 9999 (~2.5e20) overflows a 64-bit BIGINT, the same reason the inverse `unix_nanos` returns
+  // DECIMAL(21, 0). ImplicitCastInputTypes coerces integral arguments to their natural decimal, so
+  // an ordinary BIGINT argument still works while DECIMAL literals reach the whole range.
+  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType)
+
+  override def dataType: DataType = TimestampLTZNanosType(9)
+
+  // Maps the integer nanosecond count to the (epochMicros, nanosWithinMicro) pair with floor
+  // semantics, so the sub-microsecond remainder is always in [0, 999] (matching the negative-input
+  // behavior of `floorDiv`/`floorMod`). `longValueExact` throws when `epochMicros` overflows 64
+  // bits, i.e. the input is outside the representable timestamp range.
+  override def nullSafeEval(input: Any): Any = {
+    val n = input.asInstanceOf[Decimal].toJavaBigDecimal
+      .setScale(0, java.math.RoundingMode.FLOOR).toBigInteger
+    val thousand = BigInteger.valueOf(NANOS_PER_MICROS)
+    val rem = n.mod(thousand)
+    val micros = n.subtract(rem).divide(thousand).longValueExact()
+    TimestampNanosVal.fromParts(micros, rem.shortValueExact())
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c => {
+      val n = ctx.freshName("nanos")
+      val thousand = ctx.freshName("thousand")
+      val rem = ctx.freshName("rem")
+      s"""
+         |java.math.BigInteger $n = $c.toJavaBigDecimal()
+         |  .setScale(0, java.math.RoundingMode.FLOOR).toBigInteger();
+         |java.math.BigInteger $thousand = java.math.BigInteger.valueOf(${NANOS_PER_MICROS}L);
+         |java.math.BigInteger $rem = $n.mod($thousand);
+         |${ev.value} = org.apache.spark.unsafe.types.TimestampNanosVal.fromParts(
+         |  $n.subtract($rem).divide($thousand).longValueExact(), $rem.shortValueExact());
+         |""".stripMargin
+    })
+  }
+
+  override def prettyName: String = "timestamp_nanos"
+
+  override protected def withNewChildInternal(newChild: Expression): NanosToTimestamp =
+    copy(child = newChild)
+}
+
 abstract class TimestampToLongBase extends UnaryExpression
   with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true

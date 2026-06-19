@@ -774,6 +774,7 @@ object FunctionRegistry {
     expression[SecondsToTimestamp]("timestamp_seconds"),
     expression[MillisToTimestamp]("timestamp_millis"),
     expression[MicrosToTimestamp]("timestamp_micros"),
+    expression[NanosToTimestamp]("timestamp_nanos"),
     expression[UnixSeconds]("unix_seconds"),
     expression[UnixMillis]("unix_millis"),
     expression[UnixMicros]("unix_micros"),
