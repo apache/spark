@@ -99,6 +99,16 @@ class TimedeltaOpsTestsMixin:
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx - pidx, psidx - psidx)
 
+        # DayTimeIntervalType cannot represent nanoseconds, so nanosecond operands are
+        # capped at microseconds rather than matching pandas' nanosecond result.
+        pser_ns = pd.Series(np.array([3, 5, 8], dtype="timedelta64[ns]"))
+        pser_s = pd.Series(np.array([3, 5, 8], dtype="timedelta64[s]"))
+        psser_ns, psser_s = ps.from_pandas(pser_ns), ps.from_pandas(pser_s)
+        self.assertEqual((psser_ns - psser_ns)._to_pandas().dtype, np.dtype("timedelta64[us]"))
+        self.assertEqual(
+            (psser_s - pd.Timedelta(1, unit="ns"))._to_pandas().dtype, np.dtype("timedelta64[us]")
+        )
+
         # object-backed interval columns carry no numpy resolution; must not fail.
         pser_obj = pd.Series([timedelta(days=1), timedelta(seconds=2)], dtype=object)
         psser_obj = ps.from_pandas(pser_obj)
