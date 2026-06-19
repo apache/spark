@@ -267,7 +267,7 @@ Examples:
     $0 -r docker.io/myrepo -t v5.0.0 build
     $0 -r docker.io/myrepo -t v5.0.0 push
 
-  - Build and push Java17-based image with tag "v5.0.0" to docker.io/myrepo
+  - Build and push Java21-based image with tag "v5.0.0" to docker.io/myrepo
     $0 -r docker.io/myrepo -t v5.0.0 -b java_image_tag=21 build
     $0 -r docker.io/myrepo -t v5.0.0 push
 
