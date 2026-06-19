@@ -1209,9 +1209,9 @@ class Analyzer(
                 // neither exists.
                 try {
                   Some(mc.loadTableOrView(ident) match {
-                    case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] =>
+                    case t: MetadataTable if t.getRelationInfo.isInstanceOf[ViewInfo] =>
                       ResolvedPersistentView(
-                        catalog, ident, t.getTableInfo.asInstanceOf[ViewInfo])
+                        catalog, ident, t.getRelationInfo.asInstanceOf[ViewInfo])
                     case table =>
                       ResolvedTable.create(catalog.asTableCatalog, ident, table)
                   })

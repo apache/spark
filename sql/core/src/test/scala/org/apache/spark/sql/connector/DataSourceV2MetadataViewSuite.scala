@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, MetadataTable, Table, TableCatalog, TableChange, TableInfo, TableSummary, TableViewCatalog, V1Table, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{Identifier, MetadataTable, RelationInfo, Table, TableCatalog, TableChange, TableInfo, TableSummary, TableViewCatalog, V1Table, ViewCatalog, ViewInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -409,7 +409,7 @@ class TestingTableViewCatalog extends TableViewCatalog {
   // distinguishes views from tables. Mixed-catalog: shared identifier namespace per the
   // TableViewCatalog contract.
   private val createdViews =
-    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), TableInfo]()
+    new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), RelationInfo]()
 
   // Canned read-only view fixtures, exposed only via the perf path (loadTableOrView). loadView
   // does not need to expose them because the resolver routes TableViewCatalog reads through
@@ -473,8 +473,8 @@ class TestingTableViewCatalog extends TableViewCatalog {
     new MetadataTable(info, ident.toString)
   }
 
-  /** Test-only accessor: returns the stored TableInfo (table or view) for the identifier. */
-  def getStoredInfo(namespace: Array[String], name: String): TableInfo = {
+  /** Test-only accessor: returns the stored RelationInfo (table or view) for the identifier. */
+  def getStoredInfo(namespace: Array[String], name: String): RelationInfo = {
     Option(createdViews.get((namespace.toSeq, name))).getOrElse {
       throw new NoSuchTableException(Identifier.of(namespace, name))
     }

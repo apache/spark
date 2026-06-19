@@ -294,7 +294,7 @@ class RelationResolution(
             // `table` is `tableOrView` filtered to tables only -- used for cache lookup since
             // we don't share-cache views.
             val table: Option[Table] = tableOrView.filter {
-              case t: MetadataTable if t.getTableInfo.isInstanceOf[ViewInfo] => false
+              case t: MetadataTable if t.getRelationInfo.isInstanceOf[ViewInfo] => false
               case _ => true
             }
 

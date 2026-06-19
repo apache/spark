@@ -28,19 +28,21 @@ import org.apache.spark.annotation.Evolving;
  * by {@link ViewCatalog#createView} / {@link ViewCatalog#replaceView}. Carries the
  * view-specific fields that cannot be represented as string table properties: the query text,
  * captured creation-time resolution context, captured SQL configs, schema-binding mode, and
- * query output column names. Schema and user TBLPROPERTIES are inherited from {@link TableInfo}
+ * query output column names. Schema and user TBLPROPERTIES are inherited from {@link RelationInfo}
  * via the typed builder.
  * <p>
- * {@code ViewInfo} extends {@link TableInfo} so that a {@link TableViewCatalog} can opt into the
- * single-RPC perf path by returning a {@link MetadataTable} wrapping a {@code ViewInfo}
- * from {@link TableViewCatalog#loadTableOrView} for a view identifier. Pure {@link ViewCatalog}
- * implementations never see {@code TableInfo}; the typed setters on {@link Builder} cover
- * everything they need to construct a {@code ViewInfo}.
+ * {@code ViewInfo} and {@link TableInfo} are sibling subclasses of {@link RelationInfo}: a view is
+ * not a table, so it does not inherit the table-only surface (partitioning, constraints, provider,
+ * location). A {@link TableViewCatalog} can still opt into the single-RPC perf path by returning a
+ * {@link MetadataTable} wrapping a {@code ViewInfo} from {@link TableViewCatalog#loadTableOrView}
+ * for a view identifier -- {@code MetadataTable} carries a {@link RelationInfo}, which a
+ * {@code ViewInfo} is. The typed setters on {@link Builder} cover everything a pure
+ * {@link ViewCatalog} implementation needs to construct a {@code ViewInfo}.
  *
  * @since 4.2.0
  */
 @Evolving
-public class ViewInfo extends TableInfo {
+public class ViewInfo extends RelationInfo {
 
   private final String queryText;
   private final String currentCatalog;

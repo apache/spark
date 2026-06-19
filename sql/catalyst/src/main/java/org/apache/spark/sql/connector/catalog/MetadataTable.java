@@ -39,17 +39,18 @@ import org.apache.spark.sql.connector.expressions.Transform;
  * from {@link TableViewCatalog#loadTableOrView(Identifier)} as the single-RPC perf opt-in
  * for a view.
  * Downstream consumers distinguish the two by checking
- * {@code getTableInfo() instanceof ViewInfo}.
+ * {@code getRelationInfo() instanceof ViewInfo}.
  *
  * @since 4.2.0
  */
 @Evolving
 public class MetadataTable implements Table {
-  private final TableInfo info;
+  private final RelationInfo info;
   private final String name;
 
   /**
-   * @param info metadata for the table or view. Pass a {@link ViewInfo} for a view.
+   * @param info metadata for the table or view: a {@link TableInfo} for a data-source table or a
+   *             {@link ViewInfo} for a view.
    * @param name human-readable name for this table, returned by {@link #name()} and surfaced
    *             in places that read it (e.g. {@code BatchScan} plan-tree labels and
    *             partition-management error messages). {@code DESCRIBE TABLE EXTENDED} does
@@ -60,12 +61,12 @@ public class MetadataTable implements Table {
    *             {@code ident.toString()}, matching the quoted multi-part form used elsewhere
    *             for v2 identifiers.
    */
-  public MetadataTable(TableInfo info, String name) {
+  public MetadataTable(RelationInfo info, String name) {
     this.info = Objects.requireNonNull(info, "info should not be null");
     this.name = Objects.requireNonNull(name, "name should not be null");
   }
 
-  public TableInfo getTableInfo() {
+  public RelationInfo getRelationInfo() {
     return info;
   }
 
@@ -81,12 +82,14 @@ public class MetadataTable implements Table {
 
   @Override
   public Transform[] partitioning() {
-    return info.partitions();
+    // Partitioning is a table-only concept; a view wrapped as a MetadataTable has none.
+    return info instanceof TableInfo tableInfo ? tableInfo.partitions() : new Transform[0];
   }
 
   @Override
   public Constraint[] constraints() {
-    return info.constraints();
+    // Constraints are a table-only concept; a view wrapped as a MetadataTable has none.
+    return info instanceof TableInfo tableInfo ? tableInfo.constraints() : new Constraint[0];
   }
 
   @Override

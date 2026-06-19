@@ -125,7 +125,7 @@ public interface TableViewCatalog extends TableCatalog, ViewCatalog {
    * <p>
    * For a table, returns the table's {@link Table}. For a view, returns a
    * {@link MetadataTable} wrapping a {@link ViewInfo}; callers discriminate via
-   * {@code getTableInfo() instanceof ViewInfo}. This lets the resolver answer in a single RPC
+   * {@code getRelationInfo() instanceof ViewInfo}. This lets the resolver answer in a single RPC
    * instead of falling back from {@link TableCatalog#loadTable} to {@link ViewCatalog#loadView}.
    *
    * @param ident the identifier
@@ -174,7 +174,7 @@ public interface TableViewCatalog extends TableCatalog, ViewCatalog {
   @Override
   default Table loadTable(Identifier ident) throws NoSuchTableException {
     Table t = loadTableOrView(ident);
-    if (t instanceof MetadataTable mot && mot.getTableInfo() instanceof ViewInfo) {
+    if (t instanceof MetadataTable mot && mot.getRelationInfo() instanceof ViewInfo) {
       throw new NoSuchTableException(ident);
     }
     return t;
@@ -196,7 +196,7 @@ public interface TableViewCatalog extends TableCatalog, ViewCatalog {
     } catch (NoSuchTableException e) {
       throw new NoSuchViewException(ident);
     }
-    if (t instanceof MetadataTable mot && mot.getTableInfo() instanceof ViewInfo vi) {
+    if (t instanceof MetadataTable mot && mot.getRelationInfo() instanceof ViewInfo vi) {
       return vi;
     }
     throw new NoSuchViewException(ident);
@@ -212,7 +212,7 @@ public interface TableViewCatalog extends TableCatalog, ViewCatalog {
   default boolean tableExists(Identifier ident) {
     try {
       Table t = loadTableOrView(ident);
-      return !(t instanceof MetadataTable mot && mot.getTableInfo() instanceof ViewInfo);
+      return !(t instanceof MetadataTable mot && mot.getRelationInfo() instanceof ViewInfo);
     } catch (NoSuchTableException e) {
       return false;
     }
@@ -228,7 +228,7 @@ public interface TableViewCatalog extends TableCatalog, ViewCatalog {
   default boolean viewExists(Identifier ident) {
     try {
       Table t = loadTableOrView(ident);
-      return t instanceof MetadataTable mot && mot.getTableInfo() instanceof ViewInfo;
+      return t instanceof MetadataTable mot && mot.getRelationInfo() instanceof ViewInfo;
     } catch (NoSuchTableException e) {
       return false;
     }

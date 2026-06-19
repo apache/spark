@@ -37,7 +37,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces {
 
   private val store =
-    new ConcurrentHashMap[(Seq[String], String), TableInfo]()
+    new ConcurrentHashMap[(Seq[String], String), RelationInfo]()
   private val namespaces =
     new ConcurrentHashMap[Seq[String], util.Map[String, String]]()
 
@@ -219,7 +219,7 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
   // Test-only accessors --------------------------------------------------------------
 
   /** Returns the stored entry (table or view) for the identifier, or throws if missing. */
-  def getStoredInfo(namespace: Array[String], name: String): TableInfo = {
+  def getStoredInfo(namespace: Array[String], name: String): RelationInfo = {
     Option(store.get((namespace.toSeq, name))).getOrElse {
       throw new NoSuchTableException(Identifier.of(namespace, name))
     }

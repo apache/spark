@@ -113,9 +113,9 @@ private[sql] object V1Table {
   def toCatalogTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      t: MetadataTable): CatalogTable = t.getTableInfo match {
+      t: MetadataTable): CatalogTable = t.getRelationInfo match {
     case viewInfo: ViewInfo => toCatalogTable(catalog, ident, viewInfo)
-    case tableInfo => toCatalogTable(catalog, ident, tableInfo)
+    case tableInfo: TableInfo => toCatalogTable(catalog, ident, tableInfo)
   }
 
   private def toCatalogTable(
