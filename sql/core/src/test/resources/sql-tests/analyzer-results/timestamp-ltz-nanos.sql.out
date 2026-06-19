@@ -720,3 +720,15 @@ SELECT unix_timestamp(NULL :: timestamp_ltz(9)), to_unix_timestamp(NULL :: times
 -- !query analysis
 Project [unix_timestamp(cast(null as timestamp_ltz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss)#xL, to_unix_timestamp(cast(null as timestamp_ltz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS to_unix_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss)#xL]
 +- OneRowRelation
+
+
+-- !query
+SELECT max_by(v, k), min_by(v, k) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000007 UTC', CAST(NULL AS INT)) AS t(v, k)
+-- !query analysis
+Aggregate [max_by(v#x, k#x) AS max_by(v, k)#x, min_by(v#x, k#x) AS min_by(v, k)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x, k#x]
