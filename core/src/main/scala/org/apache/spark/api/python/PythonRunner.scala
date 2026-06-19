@@ -328,6 +328,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     envVars.put("PYTHON_UDF_BATCH_SIZE", batchSizeForPythonUDF.toString)
 
     envVars.put("SPARK_JOB_ARTIFACT_UUID", jobArtifactUUID.getOrElse("default"))
+    // Lets the worker scope the `SparkFiles.get` local-mode fallback to local mode only,
+    // mirroring `org.apache.spark.SparkFiles.get`. See SPARK-53478.
+    envVars.put("SPARK_LOCAL_MODE", Utils.isLocalMaster(conf).toString)
     envVars.put("SPARK_PYTHON_RUNTIME", "PYTHON_WORKER")
 
     val (worker: PythonWorker, handle: Option[ProcessHandle]) = env.createPythonWorker(

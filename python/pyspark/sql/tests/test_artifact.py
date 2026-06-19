@@ -75,6 +75,28 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
         # file from different session.
         self.check_add_file(self.spark.newSession())
 
+    def test_spark_files_get_with_sc_add_file(self):
+        # SPARK-53478: SparkFiles.get should resolve files added through
+        # SparkContext.addFile in local mode, even when a session-specific
+        # artifact directory is active.
+        from pyspark.core.files import SparkFiles
+
+        with tempfile.TemporaryDirectory(prefix="test_spark_files_get_with_sc_add_file") as d:
+            file_path = os.path.join(d, "my_sc_file.txt")
+            with open(file_path, "w") as f:
+                f.write("Hello from SparkContext.addFile")
+
+            self.spark.sparkContext.addFile(file_path)
+
+            @udf("string")
+            def func(x):
+                with open(SparkFiles.get("my_sc_file.txt"), "r") as my_file:
+                    return my_file.read().strip()
+
+            self.spark.range(1).select(
+                assert_true(func("id") == lit("Hello from SparkContext.addFile"))
+            ).show()
+
     def test_add_archive(self):
         self.check_add_archive(self.spark)
 
