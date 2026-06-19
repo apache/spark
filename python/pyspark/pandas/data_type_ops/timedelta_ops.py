@@ -86,7 +86,9 @@ class TimedeltaOps(DataTypeOps):
                 dtype = obj.dtype
                 if isinstance(dtype, np.dtype) and np.issubdtype(dtype, np.timedelta64):
                     return np.datetime_data(dtype)[0]
-            # timedelta scalars and object-backed interval columns map to microseconds.
+            elif isinstance(obj, pd.Timedelta):
+                return obj.unit
+            # datetime.timedelta scalars and object-backed interval columns map to microseconds.
             return "us"
 
         promoted = np.promote_types(

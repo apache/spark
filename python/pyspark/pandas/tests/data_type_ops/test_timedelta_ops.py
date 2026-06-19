@@ -89,6 +89,12 @@ class TimedeltaOpsTestsMixin:
             self.assert_eq(pser1 - timedelta(seconds=1), psser1 - timedelta(seconds=1))
             self.assert_eq(timedelta(seconds=1) - pser1, timedelta(seconds=1) - psser1)
 
+            # pd.Timedelta is a datetime.timedelta subclass that carries its own resolution.
+            for unit in ["s", "ms"]:
+                scalar = pd.Timedelta(1, unit=unit)
+                self.assert_eq(pser1 - scalar, psser1 - scalar)
+                self.assert_eq(scalar - pser1, scalar - psser1)
+
         pidx = pd.Index(np.array([3, 5, 8], dtype="timedelta64[s]"))
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx - pidx, psidx - psidx)
