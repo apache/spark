@@ -1029,7 +1029,29 @@ struct<instr(utf8_binary, collate(AaAA, utf8_lcase)):int,instr(utf8_lcase, colla
 -- !query
 select instr(utf8_binary, utf8_lcase, 1) from t1
 -- !query schema
-struct<instr(utf8_binary, utf8_lcase, 1, 1):int>
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INDETERMINATE_COLLATION_IN_EXPRESSION",
+  "sqlState" : "42P22",
+  "messageParameters" : {
+    "expr" : "\"instr(utf8_binary, utf8_lcase, 1, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "instr(utf8_binary, utf8_lcase, 1)"
+  } ]
+}
+
+
+-- !query
+select instr(utf8_lcase, 'a', 1) from t1
+-- !query schema
+struct<instr(utf8_lcase, 'a' collate UTF8_LCASE, 1, 1):int>
 -- !query output
 0
 0
@@ -1045,7 +1067,7 @@ struct<instr(utf8_binary, utf8_lcase, 1, 1):int>
 1
 1
 1
-1
+21
 
 
 -- !query

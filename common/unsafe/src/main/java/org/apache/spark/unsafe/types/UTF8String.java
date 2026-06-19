@@ -1250,15 +1250,15 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Finds the {@code occurrence}-th occurrence of {@code pattern} in this string,
    * starting the search at the specified position.
    * When {@code start} is positive, the search proceeds forward from the
-   * {@code start}-th character (1‑based). When {@code start} is negative, the
+   * {@code start}-th character (1-based). When {@code start} is negative, the
    * search proceeds backward from the {@code |start|}-th character from the end.
    * Overlapping matches are supported (e.g. "aa" in "aaa" returns 0, 1, 2 for
    * occurrence 1, 2, 3 respectively).
    *
    * @param pattern    the substring to search for
-   * @param start      1‑based start position; if negative, search direction is reversed
+   * @param start      1-based start position; if negative, search direction is reversed
    * @param occurrence which occurrence to return (must be >= 1)
-   * @return 0‑based character index of the match, or -1 if not found
+   * @return 0-based character index of the match, or -1 if not found
    */
   public int indexOf(UTF8String pattern, int start, int occurrence) {
     assert occurrence > 0;

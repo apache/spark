@@ -4548,7 +4548,7 @@
       },
       "OCCURRENCE" : {
         "message" : [
-          "expects a positive value for `occurrence`, but got <actual>."
+          "expects a positive integer, but got <actual>."
         ]
       },
       "PATTERN" : {

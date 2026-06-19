@@ -1746,10 +1746,8 @@ case class StringInstrWithOccurrence(
     str: Expression,
     sub: Expression,
     start: Expression,
-    occurrence: Expression,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    occurrence: Expression)
   extends QuaternaryExpression with ImplicitCastInputTypes {
-  override def nullable: Boolean = true
   override def nullIntolerant: Boolean = true
   final lazy val collationId: Int = first.dataType.asInstanceOf[StringType].collationId
 
@@ -1769,8 +1767,7 @@ case class StringInstrWithOccurrence(
   override def nullSafeEval(string: Any, sub: Any, start: Any, occurrence: Any): Any = {
     val occ = occurrence.asInstanceOf[Int]
     if (occ <= 0) {
-      if (failOnError) throw QueryExecutionErrors.invalidOccurrenceError(prettyName, occ)
-      else return null
+      throw QueryExecutionErrors.invalidOccurrenceError(prettyName, occ)
     }
     CollationSupport.StringInstrWithOccurrence.exec(string.asInstanceOf[UTF8String],
       sub.asInstanceOf[UTF8String], start.asInstanceOf[Int], occ, collationId) + 1
@@ -1782,15 +1779,9 @@ case class StringInstrWithOccurrence(
     nullSafeCodeGen(ctx, ev, (string, substring, start, occurrence) => {
       val eval = CollationSupport.StringInstrWithOccurrence
         .genCode(string, substring, start, occurrence, collationId) + " + 1"
-      val errorOrNullCode = if (failOnError) {
-        s"""throw QueryExecutionErrors.invalidOccurrenceError("$prettyName", $occurrence);"""
-      } else {
-        s"${ev.isNull} = true;"
-      }
       s"""
-        ${ev.isNull} = false;
         if ($occurrence <= 0) {
-          $errorOrNullCode
+          throw QueryExecutionErrors.invalidOccurrenceError("$prettyName", $occurrence);
         } else {
           ${ev.value} = $eval;
         }

@@ -493,27 +493,18 @@ class StringFunctionsSuite extends SharedSparkSession {
       df.selectExpr("instr(a, '', -1, 2)"),
       Row(1))
 
-    // Test return null when ANSI disabled and occurrence <= 0
-    withSQLConf("spark.sql.ansi.enabled" -> "false") {
-      checkAnswer(
-        df.select(instr($"a", $"c", -1, -1)),
-        Row(null))
-    }
-
-    // Test throw exception when ANSI enabled and occurrence <= 0
-    withSQLConf("spark.sql.ansi.enabled" -> "true") {
-      checkError(
-        exception = intercept[SparkRuntimeException] {
-          spark.sql("SELECT instr('abc', 'b', 1, 0)").collect()
-        },
-        condition = "INVALID_PARAMETER_VALUE.OCCURRENCE",
-        parameters = Map(
-          "functionName" -> toSQLId("instr"),
-          "parameter" -> toSQLId("occurrence"),
-          "actual" -> "0"
-        )
+    // Test throw exception when occurrence <= 0
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        spark.sql("SELECT instr('abc', 'b', 1, 0)").collect()
+      },
+      condition = "INVALID_PARAMETER_VALUE.OCCURRENCE",
+      parameters = Map(
+        "functionName" -> toSQLId("instr"),
+        "parameter" -> toSQLId("occurrence"),
+        "actual" -> "0"
       )
-    }
+    )
   }
 
   test("string substring_index function") {
