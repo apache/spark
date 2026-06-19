@@ -223,6 +223,8 @@ SELECT timestamp_nanos(1230219000123456789);
 SELECT timestamp_nanos(-1);
 -- DECIMAL input reaches beyond a 64-bit BIGINT, up to year 9999 (nanos ~ 2.5e20).
 SELECT timestamp_nanos(253402300799999999999BD);
+-- Out-of-range input: epochMicros overflows a 64-bit long, so the conversion fails at runtime.
+SELECT timestamp_nanos(10000000000000000000000000BD);
 -- DOUBLE is rejected at analysis: only integral and DECIMAL nanosecond counts are accepted.
 SELECT timestamp_nanos(1.0D);
 -- NULL input.

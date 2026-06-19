@@ -881,6 +881,21 @@ struct<timestamp_nanos(253402300799999999999):timestamp_ltz(9)>
 
 
 -- !query
+SELECT timestamp_nanos(10000000000000000000000000BD)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "create a TIMESTAMP_LTZ(9) from 10000000000000000000000000 nanoseconds since the epoch"
+  }
+}
+
+
+-- !query
 SELECT timestamp_nanos(1.0D)
 -- !query schema
 struct<>

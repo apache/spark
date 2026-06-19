@@ -786,6 +786,13 @@ Project [timestamp_nanos(253402300799999999999) AS timestamp_nanos(2534023007999
 
 
 -- !query
+SELECT timestamp_nanos(10000000000000000000000000BD)
+-- !query analysis
+Project [timestamp_nanos(10000000000000000000000000) AS timestamp_nanos(10000000000000000000000000)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT timestamp_nanos(1.0D)
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException

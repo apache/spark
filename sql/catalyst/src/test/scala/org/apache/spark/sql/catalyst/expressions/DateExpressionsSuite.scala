@@ -1765,7 +1765,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // FLOAT/DOUBLE/STRING are rejected at analysis: a fractional or string nanosecond count is not
     // meaningful, and the implicit DECIMAL coercion would silently overflow for realistic values.
     Seq(Literal(1.0f), Literal(1.0d), Literal("1")).foreach { lit =>
-      assert(NanosToTimestamp(lit).checkInputDataTypes().isFailure)
+      val mismatch = NanosToTimestamp(lit).checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+      assert(mismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
     }
 
     // Pre-epoch / negative inputs use floor semantics, so nanosWithinMicro stays in [0, 999]:
@@ -1790,9 +1791,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(UnixNanos(tsNanos(n)), Decimal(BigDecimal(n), 21, 0))
     }
 
-    // Out-of-range input: epochMicros overflows a 64-bit long, so longValueExact throws.
-    checkExceptionInExpression[ArithmeticException](
-      tsNanos(BigInt("10000000000000000000000000")), "out of long range")
+    // Out-of-range input: epochMicros overflows a 64-bit long, surfaced as DATETIME_OVERFLOW.
+    checkErrorInExpression[SparkArithmeticException](
+      tsNanos(BigInt("10000000000000000000000000")),
+      condition = "DATETIME_OVERFLOW",
+      parameters = Map("operation" ->
+        "create a TIMESTAMP_LTZ(9) from 10000000000000000000000000 nanoseconds since the epoch"))
   }
 
   test("TIMESTAMP_SECONDS") {

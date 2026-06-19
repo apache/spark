@@ -789,8 +789,9 @@ case class NanosToTimestamp(child: Expression)
 
   // Maps the integer nanosecond count to the (epochMicros, nanosWithinMicro) pair with floor
   // semantics, so the sub-microsecond remainder is always in [0, 999] (matching the negative-input
-  // behavior of `floorDiv`/`floorMod`). `longValueExact` throws when `epochMicros` overflows 64
-  // bits, i.e. the input is outside the representable timestamp range.
+  // behavior of `floorDiv`/`floorMod`). When `epochMicros` overflows 64 bits -- i.e. the input is
+  // outside the representable timestamp range -- `longValueExact` throws, which is surfaced as a
+  // DATETIME_OVERFLOW error.
   override def nullSafeEval(input: Any): Any = {
     val n = child.dataType match {
       case _: DecimalType =>
@@ -801,7 +802,11 @@ case class NanosToTimestamp(child: Expression)
     }
     val thousand = BigInteger.valueOf(NANOS_PER_MICROS)
     val rem = n.mod(thousand)
-    val micros = n.subtract(rem).divide(thousand).longValueExact()
+    val micros = try {
+      n.subtract(rem).divide(thousand).longValueExact()
+    } catch {
+      case _: ArithmeticException => throw QueryExecutionErrors.timestampNanosOverflowError(n)
+    }
     TimestampNanosVal.fromParts(micros, rem.shortValueExact())
   }
 
@@ -810,18 +815,26 @@ case class NanosToTimestamp(child: Expression)
       val n = ctx.freshName("nanos")
       val thousand = ctx.freshName("thousand")
       val rem = ctx.freshName("rem")
+      val micros = ctx.freshName("micros")
       val toBigInteger = child.dataType match {
         case _: DecimalType =>
           s"$c.toJavaBigDecimal().setScale(0, java.math.RoundingMode.FLOOR).toBigInteger()"
         case _: IntegralType =>
           s"java.math.BigInteger.valueOf((long) $c)"
       }
+      val errors = QueryExecutionErrors.getClass.getName.stripSuffix("$")
       s"""
          |java.math.BigInteger $n = $toBigInteger;
          |java.math.BigInteger $thousand = java.math.BigInteger.valueOf(${NANOS_PER_MICROS}L);
          |java.math.BigInteger $rem = $n.mod($thousand);
+         |long $micros;
+         |try {
+         |  $micros = $n.subtract($rem).divide($thousand).longValueExact();
+         |} catch (java.lang.ArithmeticException e) {
+         |  throw $errors.timestampNanosOverflowError($n);
+         |}
          |${ev.value} = org.apache.spark.unsafe.types.TimestampNanosVal.fromParts(
-         |  $n.subtract($rem).divide($thousand).longValueExact(), $rem.shortValueExact());
+         |  $micros, $rem.shortValueExact());
          |""".stripMargin
     })
   }
