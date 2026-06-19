@@ -121,8 +121,13 @@ private[hive] class SparkGetTablesOperation(
       tableName: String,
       tableType: String,
       comment: Option[String]): Unit = {
+    val tableCat: AnyRef = if (isCatalogMetadataEnabled) {
+      catalogManager.currentCatalog.name()
+    } else {
+      ""
+    }
     val rowData = Array[AnyRef](
-      "",
+      tableCat,
       dbName,
       tableName,
       tableType,
