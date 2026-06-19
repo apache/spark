@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-ARG java_image_name=azul/zulu-openjdk
+ARG java_image_name=eclipse-temurin
 ARG java_image_tag=25-jre
 
 FROM ${java_image_name}:${java_image_tag}

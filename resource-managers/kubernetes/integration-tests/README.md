@@ -13,8 +13,8 @@ directory:
 
     ./dev/dev-run-integration-tests.sh
 
-To run tests with a specific Java version instead of Java 21, use `--java-image-tag` to specify the 
-[base image](https://hub.docker.com/r/azul/zulu-openjdk/tags) accordingly.
+To run tests with a specific Java version instead of Java 25, use `--java-image-tag` to specify the
+[base image](https://hub.docker.com/_/eclipse-temurin/tags) accordingly.
 
     ./dev/dev-run-integration-tests.sh --java-image-tag 17-jre
 
@@ -205,7 +205,7 @@ to the wrapper scripts and using the wrapper scripts will simply set these appro
   <tr>
     <td><code>spark.kubernetes.test.javaImageTag</code></td>
     <td>
-      A specific Azul Zulu OpenJDK base image tag to use, when set uses it instead of 21.
+      A specific Eclipse Temurin OpenJDK base image tag to use, when set uses it instead of 25.
     </td>
     <td><code>N/A</code></td>
   </tr>
