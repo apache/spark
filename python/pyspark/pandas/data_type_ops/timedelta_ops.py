@@ -74,14 +74,14 @@ class TimedeltaOps(DataTypeOps):
             return col.astype(self.dtype)
 
     def _with_inferred_unit(
-        self, result: SeriesOrIndex, left: IndexOpsLike, right: Any
+        self, result: SeriesOrIndex, left: IndexOpsLike, right: Union[IndexOpsMixin, timedelta]
     ) -> SeriesOrIndex:
         # pandas 3.0.0+ promotes timedelta arithmetic to the finer resolution of the
         # operands; before that timedelta64 is always nanoseconds.
         if LooseVersion(pd.__version__) < "3.0.0":
             return result
 
-        def unit_of(obj: Any) -> str:
+        def unit_of(obj: Union[IndexOpsMixin, timedelta]) -> str:
             if isinstance(obj, IndexOpsMixin):
                 dtype = obj.dtype
                 if isinstance(dtype, np.dtype) and np.issubdtype(dtype, np.timedelta64):
