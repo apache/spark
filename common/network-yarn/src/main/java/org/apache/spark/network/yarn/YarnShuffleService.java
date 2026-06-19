@@ -433,7 +433,8 @@ public class YarnShuffleService extends AuxiliaryService {
             MDC.of(LogKeys.APP_ID, appId));
         }
       } catch (IOException ioe) {
-        logger.warn("Unable to parse application data for service: " + payload);
+        logger.warn("Unable to parse the application data for application {}",
+          MDC.of(LogKeys.APP_ID, appId));
         metaInfo = null;
       }
       if (isAuthenticationEnabled()) {

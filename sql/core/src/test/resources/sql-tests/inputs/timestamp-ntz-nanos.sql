@@ -164,3 +164,15 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'),
   (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001') AS t(c)
   GROUP BY c ORDER BY c;
+
+-- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
+-- whole-second BIGINT; the sub-second digits are dropped and NTZ applies no zone shift, so the
+-- wall-clock value is read as the epoch instant.
+SELECT unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT to_unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789');
+SELECT unix_timestamp('2020-01-01 13:24:35.999999999' :: timestamp_ntz(7));
+SELECT to_unix_timestamp('2020-01-01 13:24:35.000000001' :: timestamp_ntz(9));
+-- Pre-epoch value exercises the negative-epoch path (truncation toward zero).
+SELECT unix_timestamp(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000');
+-- NULL nanosecond timestamp.
+SELECT unix_timestamp(NULL :: timestamp_ntz(9)), to_unix_timestamp(NULL :: timestamp_ntz(9));

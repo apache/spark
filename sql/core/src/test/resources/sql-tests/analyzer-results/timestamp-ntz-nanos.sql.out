@@ -598,3 +598,45 @@ Sort [c#x ASC NULLS FIRST], true
 +- Aggregate [c#x], [c#x, count(1) AS count(1)#xL]
    +- SubqueryAlias t
       +- LocalRelation [c#x]
+
+
+-- !query
+SELECT unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [unix_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT to_unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
+-- !query analysis
+Project [to_unix_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS to_unix_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_timestamp('2020-01-01 13:24:35.999999999' :: timestamp_ntz(7))
+-- !query analysis
+Project [unix_timestamp(cast(2020-01-01 13:24:35.999999999 as timestamp_ntz(7)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(CAST(2020-01-01 13:24:35.999999999 AS TIMESTAMP_NTZ(7)), yyyy-MM-dd HH:mm:ss)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT to_unix_timestamp('2020-01-01 13:24:35.000000001' :: timestamp_ntz(9))
+-- !query analysis
+Project [to_unix_timestamp(cast(2020-01-01 13:24:35.000000001 as timestamp_ntz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS to_unix_timestamp(CAST(2020-01-01 13:24:35.000000001 AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_timestamp(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000')
+-- !query analysis
+Project [unix_timestamp(1969-12-31 23:59:59.5, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(TIMESTAMP_NTZ '1969-12-31 23:59:59.500000000', yyyy-MM-dd HH:mm:ss)#xL]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_timestamp(NULL :: timestamp_ntz(9)), to_unix_timestamp(NULL :: timestamp_ntz(9))
+-- !query analysis
+Project [unix_timestamp(cast(null as timestamp_ntz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss)#xL, to_unix_timestamp(cast(null as timestamp_ntz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS to_unix_timestamp(CAST(NULL AS TIMESTAMP_NTZ(9)), yyyy-MM-dd HH:mm:ss)#xL]
++- OneRowRelation

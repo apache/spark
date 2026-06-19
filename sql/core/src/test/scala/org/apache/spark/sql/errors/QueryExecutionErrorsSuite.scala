@@ -20,6 +20,7 @@ package org.apache.spark.sql.errors
 import java.io.{File, IOException}
 import java.net.{URI, URL}
 import java.sql.{Connection, DatabaseMetaData, Driver, DriverManager, PreparedStatement, ResultSet, ResultSetMetaData}
+import java.time.LocalDateTime
 import java.util.{Locale, Properties, ServiceConfigurationError}
 
 import scala.jdk.CollectionConverters._
@@ -54,7 +55,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.streaming.StreamingQueryException
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DataType, DecimalType, IntegerType, LongType, MetadataBuilder, StructField, StructType, TimestampNTZNanosType}
 import org.apache.spark.sql.vectorized.ColumnarArray
 import org.apache.spark.unsafe.array.ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH
 import org.apache.spark.util.ThreadUtils
@@ -318,6 +319,53 @@ class QueryExecutionErrorsSuite
           parameters = Map("orcType" -> "\"TIMESTAMP\"",
             "toType" -> "\"TIMESTAMP_NTZ\""),
           sqlState = "0A000")
+      }
+    }
+  }
+
+  test("UNSUPPORTED_FEATURE - SPARK-57455: can't read nanos timestamp as micros timestamp") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row(LocalDateTime.of(1970, 1, 1, 0, 0, 0, 1)))),
+          new StructType().add("ts", TimestampNTZNanosType(9)))
+        df.write.orc(file.getCanonicalPath)
+        withAllNativeOrcReaders {
+          val ex = intercept[SparkException] {
+            spark.read.schema("ts timestamp_ntz").orc(file.getCanonicalPath).collect()
+          }
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
+          checkError(
+            exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+            condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+            parameters = Map("orcType" -> "\"TIMESTAMP_NTZ(9)\"",
+              "toType" -> "\"TIMESTAMP_NTZ\""),
+            sqlState = "0A000")
+        }
+      }
+    }
+  }
+
+  test("UNSUPPORTED_FEATURE - SPARK-57455: nanos timestamp mismatch nested in array is caught") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      withTempPath { file =>
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(
+            Seq(Row(Seq(LocalDateTime.of(1970, 1, 1, 0, 0, 0, 1))))),
+          new StructType().add("ts", ArrayType(TimestampNTZNanosType(9))))
+        df.write.orc(file.getCanonicalPath)
+        withAllNativeOrcReaders {
+          val ex = intercept[SparkException] {
+            spark.read.schema("ts array<timestamp_ntz>").orc(file.getCanonicalPath).collect()
+          }
+          assert(ex.getCondition.startsWith("FAILED_READ_FILE"))
+          checkError(
+            exception = ex.getCause.asInstanceOf[SparkUnsupportedOperationException],
+            condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+            parameters = Map("orcType" -> "\"TIMESTAMP_NTZ(9)\"",
+              "toType" -> "\"TIMESTAMP_NTZ\""),
+            sqlState = "0A000")
+        }
       }
     }
   }

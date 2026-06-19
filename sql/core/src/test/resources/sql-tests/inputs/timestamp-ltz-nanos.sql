@@ -188,3 +188,17 @@ SELECT c, count(*) FROM VALUES
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
   (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
   GROUP BY c ORDER BY c;
+
+-- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
+-- whole-second BIGINT; the sub-second digits are dropped. A literal without an explicit zone is
+-- read in the session time zone (America/Los_Angeles, UTC-08:00); an explicit-zone literal fixes
+-- the instant directly.
+SELECT unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789');
+SELECT to_unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789');
+SELECT unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC');
+SELECT to_unix_timestamp('2020-01-01 13:24:35.000000001 UTC' :: timestamp_ltz(9));
+SELECT unix_timestamp('2020-01-01 13:24:35.999999999' :: timestamp_ltz(7));
+-- Pre-epoch value exercises the negative-epoch path (truncation toward zero).
+SELECT unix_timestamp(TIMESTAMP_LTZ '1969-12-31 23:59:59.500000000 UTC');
+-- NULL nanosecond timestamp.
+SELECT unix_timestamp(NULL :: timestamp_ltz(9)), to_unix_timestamp(NULL :: timestamp_ltz(9));
