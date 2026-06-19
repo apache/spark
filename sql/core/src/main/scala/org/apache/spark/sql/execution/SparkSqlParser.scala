@@ -1484,9 +1484,9 @@ class SparkSqlAstBuilder extends AstBuilder {
    * Overrides `SHOW PARTITIONS` parsing to intercept the `AS JSON` variant.
    *
    * When `AS JSON` is absent, parsing is delegated to the superclass
-   * ([[AstBuilder#visitShowPartitions]]), which produces a [[ShowPartitions]] logical plan
+   * ([[AstBuilder#visitShowPartitions]]), which produces a [[ShowPartitions]] logical plan.
    *
-   * When `AS JSON` is present, this method produces a [[ShowPartitionsJsonCommand]] directly —
+   * When `AS JSON` is present, this method produces a [[ShowPartitionsJsonCommand]] directly -
    * a runnable command that returns partition metadata as a single-row JSON document.
    *
    * The syntax of using this command in SQL is:
