@@ -164,6 +164,41 @@ select timestamp_ltz'1960-01-01 00:00:00.123456789'::timestamp_ltz(9)::timestamp
 select cast(null as timestamp_ntz(9))::timestamp_ntz(7);
 select cast(null as timestamp_ltz(8))::timestamp_ltz(9);
 
+-- Cross-family cast between nanosecond TIMESTAMP_LTZ(p) and TIMESTAMP_NTZ(q).
+-- The conversion reinterprets the value against the session time zone, so SQL-layer coverage stays
+-- zone-independent (type resolution, lossless same-zone round-trips, null propagation); the
+-- zone-aware value semantics (flooring, pre-epoch, zone shifts) are covered in CastSuite* unit tests.
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7));
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(9));
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(8));
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(9));
+-- Same-zone round-trips are lossless at equal precision and re-floored when narrowing in between.
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(9)::timestamp_ltz(9);
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(9)::timestamp_ntz(9);
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(7)::timestamp_ltz(7);
+select timestamp_ntz'1960-01-01 00:00:00.123456789'::timestamp_ltz(7)::timestamp_ntz(7);
+-- Null propagation in both directions.
+select cast(null as timestamp_ltz(9))::timestamp_ntz(7);
+select cast(null as timestamp_ntz(8))::timestamp_ltz(9);
+
+-- Boundary at precision 6: TIMESTAMP_LTZ(6) is TIMESTAMP and TIMESTAMP_NTZ(6) is TIMESTAMP_NTZ, so
+-- these cross-family casts mix the micro family member with the other family's nanos member.
+select typeof(timestamp'2020-01-01 00:00:00.123456'::timestamp_ntz(9));
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456'::timestamp_ltz(9));
+select typeof(timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(6));
+select typeof(timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(6));
+-- Same-zone round-trips: micro(6) -> nanos -> micro(6) is lossless; nanos -> micro(6) -> nanos
+-- drops the sub-microsecond digits.
+select timestamp'2020-01-01 00:00:00.123456'::timestamp_ntz(9)::timestamp;
+select timestamp_ntz'2020-01-01 00:00:00.123456'::timestamp_ltz(9)::timestamp_ntz;
+select timestamp_ltz'2020-01-01 00:00:00.123456789'::timestamp_ntz(6)::timestamp_ltz;
+select timestamp_ntz'2020-01-01 00:00:00.123456789'::timestamp_ltz(6)::timestamp_ntz;
+-- Null propagation across the micro boundary in all four directions.
+select cast(null as timestamp)::timestamp_ntz(9);
+select cast(null as timestamp_ntz)::timestamp_ltz(9);
+select cast(null as timestamp_ntz(9))::timestamp;
+select cast(null as timestamp_ltz(9))::timestamp_ntz;
+
 select cast(cast('inf' as double) as timestamp);
 select cast(cast('inf' as float) as timestamp);
 
