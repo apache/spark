@@ -897,10 +897,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           sample.lowerBound,
           sample.upperBound,
           sample.withReplacement,
-          // TODO(SPARK-56573): The * 1000 limits the seed to only 1000 distinct values.
-          //   Kept here for consistency with SampleExec.resolvedSeed; will be fixed
-          //   across all call sites in SPARK-56573.
-          sample.seed.getOrElse((math.random() * 1000).toLong),
+          sample.seed.getOrElse(Utils.random.nextLong()),
           sampleMethod = sample.sampleMethod)
         val pushed = PushDownUtils.pushTableSample(sHolder.builder, tableSample)
         if (pushed) {

@@ -37,7 +37,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.ThreadUtils
+import org.apache.spark.util.{ThreadUtils, Utils}
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
 
 /** Physical plan for Project. */
@@ -482,7 +482,7 @@ case class SampleExec(
     seed: Option[Long],
     child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
-  val resolvedSeed: Long = seed.getOrElse((math.random() * 1000).toLong)
+  val resolvedSeed: Long = seed.getOrElse(Utils.random.nextLong())
 
   override def output: Seq[Attribute] = child.output
 
