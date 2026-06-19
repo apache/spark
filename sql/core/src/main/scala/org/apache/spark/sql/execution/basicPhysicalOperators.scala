@@ -316,12 +316,22 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // (e.g. decoding a decimal column for rows a cheaper earlier predicate would reject), so we
     // fall back to `generatePredicateCode`.
     //
+    // A *leaf* common subexpression -- a bare column referenced more than once -- does not count.
+    // `c BETWEEN lo AND hi` lowers to `c >= lo AND c <= hi`, so any `BETWEEN` (or a column used in
+    // several conjuncts) makes that column a common subexpression, but caching a column load saves
+    // nothing: the non-CSE path already loads each column lazily into a variable on demand. Taking
+    // the CSE path for it would only add the eager prologue that decodes every referenced column up
+    // front. Require a *non-leaf* common subexpression so filters like TPC-DS q28
+    // (`ss_quantity BETWEEN ... AND (ss_list_price BETWEEN ... OR ...)`, whose only repeats are the
+    // bare columns) keep the lazy, short-circuiting path.
+    //
     // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
     // turned off independently of subexpression elimination elsewhere.
     val (prologueCode, predicateCode) =
       if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
           otherPreds.nonEmpty &&
-          otherPredsEquivalentExpressions.getCommonSubexpressions.nonEmpty) {
+          otherPredsEquivalentExpressions.getCommonSubexpressions
+            .exists(!_.isInstanceOf[LeafExpression])) {
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
         // fails when otherPreds reference the same input columns that CSE already
