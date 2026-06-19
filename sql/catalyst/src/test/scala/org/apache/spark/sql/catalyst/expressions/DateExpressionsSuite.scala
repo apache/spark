@@ -1733,6 +1733,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(UnixNanos(Literal.create(null, TimestampLTZNanosType(9))), null)
   }
 
+  test("SPARK-57527: unix_nanos rejects non-nanosecond input types") {
+    // unix_nanos accepts only the nanosecond-precision timestamp types; the microsecond
+    // TimestampType / TimestampNTZType (and other types) fail analysis with a type mismatch.
+    Seq(TimestampType, TimestampNTZType, DateType, LongType).foreach { dt =>
+      val mismatch = UnixNanos(Literal.create(null, dt))
+        .checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+      assert(mismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+    }
+  }
+
   test("TIMESTAMP_SECONDS") {
     def testIntegralFunc(value: Number): Unit = {
       checkEvaluation(

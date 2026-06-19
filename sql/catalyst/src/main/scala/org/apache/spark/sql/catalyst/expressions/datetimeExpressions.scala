@@ -873,7 +873,7 @@ case class UnixNanos(child: Expression)
   override def nullIntolerant: Boolean = true
 
   // Accepts only the nanosecond-precision timestamp types TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p)
-  // (p in [7, 9]); the microsecond timestamp types are intentionally not supported here.
+  // (p in [7, 9]); support for the microsecond timestamp types is deferred to a follow-up.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampNanoType)
 
   // epochMicros * 1000 overflows a 64-bit BIGINT across the full [0001..9999] calendar range, so
