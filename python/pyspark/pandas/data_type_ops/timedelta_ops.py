@@ -76,11 +76,8 @@ class TimedeltaOps(DataTypeOps):
     def _with_inferred_unit(
         self, result: SeriesOrIndex, left: IndexOpsLike, right: Any
     ) -> SeriesOrIndex:
-        # Before pandas 3.0.0, timedelta64 is always nanosecond resolution, so there is no
-        # unit to infer. From pandas 3.0.0, arithmetic between timedeltas promotes to the
-        # finer resolution of the operands. The computed Spark column is always a
-        # DayTimeIntervalType (microsecond), so the result field would otherwise be reported
-        # as timedelta64[us]; here we override its dtype to match pandas.
+        # pandas 3.0.0+ promotes timedelta arithmetic to the finer resolution of the
+        # operands; before that timedelta64 is always nanoseconds.
         if LooseVersion(pd.__version__) < "3.0.0":
             return result
 
@@ -89,17 +86,14 @@ class TimedeltaOps(DataTypeOps):
                 dtype = obj.dtype
                 if isinstance(dtype, np.dtype) and np.issubdtype(dtype, np.timedelta64):
                     return np.datetime_data(dtype)[0]
-            # Fall back to microseconds for datetime.timedelta scalars and for object-backed
-            # interval columns, which carry no numpy timedelta64 resolution. This matches the
-            # microsecond resolution of the underlying DayTimeIntervalType.
+            # timedelta scalars and object-backed interval columns map to microseconds.
             return "us"
 
         promoted = np.promote_types(
-            np.dtype("timedelta64[%s]" % unit_of(left)),
-            np.dtype("timedelta64[%s]" % unit_of(right)),
+            np.dtype(f"timedelta64[{unit_of(left)}]"),
+            np.dtype(f"timedelta64[{unit_of(right)}]"),
         )
-        # Spark's DayTimeIntervalType stores microseconds and cannot represent finer
-        # resolutions, so cap nanosecond promotion at microseconds.
+        # DayTimeIntervalType stores microseconds and cannot represent finer resolutions.
         if np.datetime_data(promoted)[0] == "ns":
             promoted = np.dtype("timedelta64[us]")
 

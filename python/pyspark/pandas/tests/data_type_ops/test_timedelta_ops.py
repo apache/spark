@@ -76,31 +76,24 @@ class TimedeltaOpsTestsMixin:
         self.assert_eq(pdf["that"] - pdf["this"], psdf["that"] - psdf["this"])
 
     def test_sub_unit(self):
-        # Before pandas 3.0.0, timedelta64 is always nanosecond resolution, so there is no
-        # unit to infer. From pandas 3.0.0, the result of subtracting timedeltas takes the
-        # finer resolution of the operands; pandas-on-Spark should follow that instead of
-        # always reporting microseconds (SPARK-55299).
+        # pandas 3.0.0+ takes the finer resolution of the operands instead of always
+        # microseconds (SPARK-55299); before that timedelta64 is always nanoseconds.
         if LooseVersion(pd.__version__) < "3.0.0":
             return
 
         for left_unit, right_unit in [("s", "s"), ("ms", "ms"), ("us", "us"), ("s", "ms")]:
-            pser1 = pd.Series(np.array([3, 5, 8], dtype="timedelta64[%s]" % left_unit))
-            pser2 = pd.Series(np.array([1, 2, 3], dtype="timedelta64[%s]" % right_unit))
+            pser1 = pd.Series(np.array([3, 5, 8], dtype=f"timedelta64[{left_unit}]"))
+            pser2 = pd.Series(np.array([1, 2, 3], dtype=f"timedelta64[{right_unit}]"))
             psser1, psser2 = ps.from_pandas(pser1), ps.from_pandas(pser2)
             self.assert_eq(pser1 - pser2, psser1 - psser2)
-
-            # datetime.timedelta scalars have microsecond resolution.
             self.assert_eq(pser1 - timedelta(seconds=1), psser1 - timedelta(seconds=1))
             self.assert_eq(timedelta(seconds=1) - pser1, timedelta(seconds=1) - psser1)
 
-        # The same unit inference applies to TimedeltaIndex subtraction.
         pidx = pd.Index(np.array([3, 5, 8], dtype="timedelta64[s]"))
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx - pidx, psidx - psidx)
 
-        # Object-backed interval columns carry no numpy timedelta64 resolution, so unit
-        # inference must not fail trying to read one. pandas-on-Spark materializes the
-        # DayTimeIntervalType as microseconds, so compare against the numpy-backed values.
+        # object-backed interval columns carry no numpy resolution; must not fail.
         pser_obj = pd.Series([timedelta(days=1), timedelta(seconds=2)], dtype=object)
         psser_obj = ps.from_pandas(pser_obj)
         expected = pser_obj.astype("timedelta64[us]")
