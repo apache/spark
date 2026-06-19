@@ -861,6 +861,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val IN_MEMORY_DISTINCT_PARTITION_TRACKING =
+    buildConf("spark.sql.inMemoryColumnarStorage.distinctPartitionTracking")
+      .internal()
+      .doc("When true, a cached relation is considered fully materialized only once the set of " +
+        "DISTINCT materialized partitions covers every partition, rather than once a raw " +
+        "task-completion count reaches the partition count; clearCache also resets that " +
+        "bookkeeping. This prevents concurrent first-touch of a cold cache under AQE (where a " +
+        "cached source referenced several times has each reference launch its own build job) " +
+        "from letting duplicate partition completions mark the cache loaded with rowCount 0, " +
+        "which would make AQE wrongly propagate an empty relation and silently drop rows. When " +
+        "false, restores the prior raw task-completion-count behavior.")
+      .version("5.0.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED =
     buildConf("spark.sql.inMemoryTableScanStatistics.enable")
       .internal()
