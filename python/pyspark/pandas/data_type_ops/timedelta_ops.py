@@ -16,7 +16,7 @@
 #
 
 from datetime import timedelta
-from typing import Any, Union, cast
+from typing import Any, Union
 
 import numpy as np
 import pandas as pd
@@ -86,9 +86,12 @@ class TimedeltaOps(DataTypeOps):
 
         def unit_of(obj: Any) -> str:
             if isinstance(obj, IndexOpsMixin):
-                # Timedelta-typed operands always carry a numpy timedelta64 dtype.
-                return np.datetime_data(cast(np.dtype, obj.dtype))[0]
-            # datetime.timedelta scalars have microsecond resolution.
+                dtype = obj.dtype
+                if isinstance(dtype, np.dtype) and np.issubdtype(dtype, np.timedelta64):
+                    return np.datetime_data(dtype)[0]
+            # Fall back to microseconds for datetime.timedelta scalars and for object-backed
+            # interval columns, which carry no numpy timedelta64 resolution. This matches the
+            # microsecond resolution of the underlying DayTimeIntervalType.
             return "us"
 
         promoted = np.promote_types(

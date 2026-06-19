@@ -98,6 +98,15 @@ class TimedeltaOpsTestsMixin:
         psidx = ps.from_pandas(pidx)
         self.assert_eq(pidx - pidx, psidx - psidx)
 
+        # Object-backed interval columns carry no numpy timedelta64 resolution, so unit
+        # inference must not fail trying to read one. pandas-on-Spark materializes the
+        # DayTimeIntervalType as microseconds, so compare against the numpy-backed values.
+        pser_obj = pd.Series([timedelta(days=1), timedelta(seconds=2)], dtype=object)
+        psser_obj = ps.from_pandas(pser_obj)
+        expected = pser_obj.astype("timedelta64[us]")
+        self.assert_eq(expected - timedelta(0), psser_obj - timedelta(0))
+        self.assert_eq(expected - expected, psser_obj - psser_obj)
+
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.psser * "x")
         self.assertRaises(TypeError, lambda: self.psser * 1)
