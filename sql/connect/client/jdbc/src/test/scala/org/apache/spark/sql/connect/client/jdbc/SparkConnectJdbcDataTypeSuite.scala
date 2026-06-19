@@ -955,4 +955,22 @@ class SparkConnectJdbcDataTypeSuite extends ConnectFunSuite with RemoteSparkSess
       assert(metaData.getColumnDisplaySize(1) === Int.MaxValue)
     }
   }
+
+  test("get complex types with null") {
+    Seq(
+      "cast(null as array<int>)",
+      "cast(null as map<string, int>)",
+      "cast(null as struct<a: int>)").foreach { expr =>
+      withExecuteQuery(s"SELECT $expr") { rs =>
+        assert(rs.next())
+        assert(rs.getObject(1) === null)
+        assert(rs.wasNull)
+        assert(rs.getString(1) === null)
+        assert(rs.wasNull)
+        assert(rs.getArray(1) === null)
+        assert(rs.wasNull)
+        assert(!rs.next())
+      }
+    }
+  }
 }
