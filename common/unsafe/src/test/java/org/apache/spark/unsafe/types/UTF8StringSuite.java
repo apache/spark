@@ -325,6 +325,30 @@ public class UTF8StringSuite {
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.reverse());
     assertEquals(fromString("者行孙"), fromString("孙行者").reverse());
     assertEquals(fromString("者行孙 olleh"), fromString("hello 孙行者").reverse());
+    // Malformed UTF-8: a truncated trailing multi-byte sequence must be reversed as orphan
+    // bytes without reading past the end of the string. The backing arrays carry an extra
+    // trailing byte so a regression that over-reads would produce a deterministically wrong
+    // result rather than reading uninitialized memory.
+    // 'A' followed by an incomplete 2-byte leader (0xCE).
+    byte[] truncated2 = new byte[]{0x41, (byte) 0xCE, 0x42};
+    assertEquals(
+      fromBytes(new byte[]{(byte) 0xCE, 0x41}),
+      fromBytes(truncated2, 0, 2).reverse());
+    // 'A' followed by an incomplete 3-byte leader (0xE4 0xB8).
+    byte[] truncated3 = new byte[]{0x41, (byte) 0xE4, (byte) 0xB8, 0x42};
+    assertEquals(
+      fromBytes(new byte[]{(byte) 0xE4, (byte) 0xB8, 0x41}),
+      fromBytes(truncated3, 0, 3).reverse());
+    // 'A' followed by an incomplete 4-byte leader (0xF0 0x90).
+    byte[] truncated4 = new byte[]{0x41, (byte) 0xF0, (byte) 0x90, 0x42};
+    assertEquals(
+      fromBytes(new byte[]{(byte) 0xF0, (byte) 0x90, 0x41}),
+      fromBytes(truncated4, 0, 3).reverse());
+    // A complete 3-byte character (U+4E16) followed by an incomplete 2-byte leader (0xCE).
+    byte[] truncatedMid = new byte[]{(byte) 0xE4, (byte) 0xB8, (byte) 0x96, (byte) 0xCE, 0x42};
+    assertEquals(
+      fromBytes(new byte[]{(byte) 0xCE, (byte) 0xE4, (byte) 0xB8, (byte) 0x96}),
+      fromBytes(truncatedMid, 0, 4).reverse());
   }
 
   @Test
