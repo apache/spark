@@ -352,7 +352,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       maybeFirstLine: Option[String],
       parsedOptions: CSVOptions): StructType = {
     val csvParser = new CsvParser(parsedOptions.asParserSettings)
-    maybeFirstLine.map(csvParser.parseLine(_)) match {
+    maybeFirstLine.map(UnivocityParser.parseLine(csvParser, _)) match {
       case Some(firstRow) if firstRow != null =>
         val caseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
         val header = CSVUtils.makeSafeHeader(firstRow, caseSensitive, parsedOptions)
@@ -362,9 +362,6 @@ object TextInputCSVDataSource extends CSVDataSource {
           val linesWithoutHeader =
             CSVUtils.filterHeaderLine(filteredLines, maybeFirstLine.get, parsedOptions)
           val parser = new CsvParser(parsedOptions.asParserSettings)
-          // Route data rows through UnivocityParser.parseLine so a too-many-columns row surfaces as
-          // MALFORMED_CSV_RECORD, not a raw ArrayIndexOutOfBoundsException (SPARK-57195). The
-          // first-line parse above stays raw to keep SPARK-28431's bounded TextParsingException.
           linesWithoutHeader.map(UnivocityParser.parseLine(parser, _))
         }
         SQLExecution.withSQLConfPropagated(csv.sparkSession) {
