@@ -650,6 +650,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT max(c), min(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+-- !query analysis
+Aggregate [max(c#x) AS max(c)#x, min(c#x) AS min(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT c, count(*) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+  GROUP BY c ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Aggregate [c#x], [c#x, count(1) AS count(1)#xL]
+   +- SubqueryAlias t
+      +- LocalRelation [c#x]
+
+
+-- !query
 SELECT unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
 Project [unix_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss)#xL]

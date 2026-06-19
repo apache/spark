@@ -174,6 +174,21 @@ SELECT TIMESTAMP_LTZ '1960-01-02 03:04:05.123456789 UTC' +
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0);
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;
 
+-- SPARK-57103: MAX / MIN over nanosecond-precision TIMESTAMP_LTZ. The aggregate preserves the
+-- nanosecond type and orders by the sub-microsecond remainder; NULLs are ignored. Values are
+-- rendered in the session time zone (America/Los_Angeles).
+SELECT max(c), min(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c);
+-- GROUP BY a nanosecond key: two keys that share epochMicros but differ within the microsecond
+-- must not collapse into one group.
+SELECT c, count(*) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+  GROUP BY c ORDER BY c;
+
 -- SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision values. The result is
 -- whole-second BIGINT; the sub-second digits are dropped. A literal without an explicit zone is
 -- read in the session time zone (America/Los_Angeles, UTC-08:00); an explicit-zone literal fixes

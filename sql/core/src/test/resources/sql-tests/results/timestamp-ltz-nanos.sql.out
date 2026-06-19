@@ -729,6 +729,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT max(c), min(c) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (CAST(NULL AS timestamp_ltz(9))) AS t(c)
+-- !query schema
+struct<max(c):timestamp_ltz(9),min(c):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999	2019-12-31 16:00:00.000000001
+
+
+-- !query
+SELECT c, count(*) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC'),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC') AS t(c)
+  GROUP BY c ORDER BY c
+-- !query schema
+struct<c:timestamp_ltz(9),count(1):bigint>
+-- !query output
+2019-12-31 16:00:00.000000001	2
+2019-12-31 16:00:00.000000999	1
+
+
+-- !query
 SELECT unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')
 -- !query schema
 struct<unix_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss):bigint>
