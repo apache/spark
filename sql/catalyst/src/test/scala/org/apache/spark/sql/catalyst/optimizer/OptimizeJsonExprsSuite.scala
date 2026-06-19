@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
 import org.apache.spark.sql.internal.SQLConf
@@ -30,16 +30,38 @@ import org.apache.spark.sql.types._
 class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
 
   private var jsonExpressionOptimizeEnabled: Boolean = _
+  private var getJsonObjectSharedParsingEnabled: Boolean = _
   protected override def beforeAll(): Unit = {
     jsonExpressionOptimizeEnabled = SQLConf.get.jsonExpressionOptimization
+    getJsonObjectSharedParsingEnabled = SQLConf.get.getJsonObjectSharedParsingEnabled
+    SQLConf.get.setConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED, true)
   }
 
   protected override def afterAll(): Unit = {
     SQLConf.get.setConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION, jsonExpressionOptimizeEnabled)
+    SQLConf.get.setConf(
+      SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED, getJsonObjectSharedParsingEnabled)
   }
 
   object Optimizer extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Json optimization", FixedPoint(10), OptimizeCsvJsonExprs) :: Nil
+  }
+
+  object OptimizerWithCollapseProject extends RuleExecutor[LogicalPlan] {
+    val batches = Batch(
+      "Json optimization with project collapse",
+      FixedPoint(10),
+      CollapseProject,
+      OptimizeCsvJsonExprs) :: Nil
+  }
+
+  object OptimizerWithColumnPruning extends RuleExecutor[LogicalPlan] {
+    val batches = Batch(
+      "Json optimization with column pruning",
+      FixedPoint(10),
+      ColumnPruning,
+      CollapseProject,
+      OptimizeCsvJsonExprs) :: Nil
   }
 
   val schema = StructType.fromDDL("a int, b int")
@@ -173,6 +195,130 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val expected2 = testRelation2
       .select(GetStructField(JsonToStructs(prunedSchema2, options, $"json"), 0)).analyze
     comparePlans(optimized2, expected2)
+  }
+
+  test("SPARK-47670: share simple top-level get_json_object paths") {
+    val query = testRelation2.select(
+      Cast(GetJsonObject($"json", Literal("$.b")), LongType).as("b"),
+      GetJsonObject($"json", Literal("$['a']")).as("a"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    optimized match {
+      case Project(projectList, Project(innerProjectList, _: LocalRelation)) =>
+        val sharedAlias = innerProjectList.collectFirst {
+          case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+        }.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+        val shared = sharedAlias.child.asInstanceOf[MultiGetJsonObject]
+        assert(shared.fieldNames == Seq("b", "a"))
+        assert(shared.fallbackPaths == Seq("$.b", "$['a']"))
+
+        val sharedAttr = sharedAlias.toAttribute
+        val extractedFields = projectList.flatMap(_.collect {
+          case getStructField: GetStructField
+              if getStructField.child.semanticEquals(sharedAttr) => getStructField
+        })
+        assert(extractedFields.map(_.ordinal) == Seq(0, 1))
+
+      case _ =>
+        fail(s"Expected shared JSON paths below the project, but found:\n$optimized")
+    }
+  }
+
+  test("SPARK-47670: shared get_json_object parsing is disabled by default") {
+    assert(!new SQLConf().getJsonObjectSharedParsingEnabled)
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal("$.a")).as("a"),
+      GetJsonObject($"json", Literal("$.b")).as("b"))
+
+    withSQLConf(SQLConf.GET_JSON_OBJECT_SHARED_PARSING_ENABLED.key -> "false") {
+      comparePlans(Optimizer.execute(query.analyze), query.analyze)
+    }
+  }
+
+  test("SPARK-47670: do not fail optimization for unparseable get_json_object paths") {
+    val oversizedIndex = "$[" + "9" * 100 + "]"
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal(oversizedIndex)).as("value"))
+
+    comparePlans(Optimizer.execute(query.analyze), query.analyze)
+  }
+
+  test("SPARK-47670: do not combine nested get_json_object paths") {
+    val nested = GetJsonObject($"json", Literal("$.a.b"))
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal("$.a")).as("a"),
+      nested.as("nested"),
+      GetJsonObject($"json", Literal("$.c")).as("c"))
+    val optimized = Optimizer.execute(query.analyze)
+
+    val shared = optimized.collect {
+      case Project(projectList, _) => projectList.collectFirst {
+        case alias @ Alias(_: MultiGetJsonObject, "_shared_json_paths") => alias
+      }
+    }.flatten.headOption.getOrElse(fail(s"Missing shared JSON paths in plan:\n$optimized"))
+    assert(shared.child.asInstanceOf[MultiGetJsonObject].fieldNames == Seq("a", "c"))
+    assert(optimized.expressions.exists(_.exists {
+      case GetJsonObject(_, Literal(path, StringType)) => path.toString == "$.a.b"
+      case _ => false
+    }))
+  }
+
+  test("SPARK-47670: shared get_json_object paths survive project collapsing") {
+    val query = testRelation2.select(
+      GetJsonObject($"json", Literal("$.a")).as("a"),
+      GetJsonObject($"json", Literal("$.b")).as("b"))
+
+    val optimized = OptimizerWithCollapseProject.execute(query.analyze)
+
+    assert(optimized.exists { plan =>
+      plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+    })
+    assert(optimized.collect { case _: Project => true }.length == 2)
+  }
+
+  test("SPARK-47670: do not share get_json_object paths that are guarded or pruned") {
+    val guardedQuery = testRelation2.select(
+      If(
+        IsNull($"json"),
+        Literal(null, StringType),
+        GetJsonObject($"json", Literal("$.a"))).as("a"),
+      GetJsonObject($"json", Literal("$.b")).as("b"))
+    assert(!Optimizer.execute(guardedQuery.analyze).exists { plan =>
+      plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+    })
+
+    val lowerProject = testRelation2.select(
+      GetJsonObject($"json", Literal("$.a")).as("a"),
+      GetJsonObject($"json", Literal("$.b")).as("b"))
+    val prunedQuery = lowerProject.select(lowerProject.output.head)
+    assert(!OptimizerWithColumnPruning.execute(prunedQuery.analyze).exists { plan =>
+      plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+    })
+  }
+
+  test("SPARK-47670: do not share separately projected from_json fields") {
+    val schema = StructType.fromDDL("a int, b struct<x: int>")
+    val fromJson = JsonToStructs(schema, Map.empty, $"json")
+    val query = testRelation2.select(
+      GetStructField(fromJson, 0).as("a"),
+      GetStructField(fromJson, 1).as("b"))
+
+    val optimized = Optimizer.execute(query.analyze)
+    val parsedSchemas = optimized.expressions.flatMap(_.collect {
+      case jsonToStructs: JsonToStructs => jsonToStructs.schema
+    })
+    assert(parsedSchemas == Seq(
+      StructType.fromDDL("a int"),
+      StructType.fromDDL("b struct<x: int>")))
+  }
+
+  test("SPARK-47670: do not share get_json_object below right-first arithmetic") {
+    val query = testRelation2.select(
+      Pmod(Cast(GetJsonObject($"json", Literal("$.a")), IntegerType), Literal(0)).as("a"),
+      GetJsonObject($"json", Literal("$.b")).as("b"))
+    assert(!Optimizer.execute(query.analyze).exists { plan =>
+      plan.expressions.exists(_.exists(_.isInstanceOf[MultiGetJsonObject]))
+    })
   }
 
   test("SPARK-32958: prune unnecessary columns from GetArrayStructFields + from_json") {
