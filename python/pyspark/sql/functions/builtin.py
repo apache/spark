@@ -11602,7 +11602,7 @@ def to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
 
 @_try_remote_functions
 def try_to_date(col: "ColumnOrName", format: Optional[str] = None) -> Column:
-    """This is a special version of `try_to_date` that performs the same operation, but returns a
+    """This is a special version of `to_date` that performs the same operation, but returns a
     NULL value instead of raising an error if date cannot be created.
 
     .. _datetime pattern: https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
