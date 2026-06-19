@@ -1160,7 +1160,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int i = 0; // position in byte
     while (i < numBytes) {
-      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes);
+      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes - i);
       int targetOffset = Math.max(result.length - i - len, 0);
       copyMemory(this.base, this.offset + i, result,
         BYTE_ARRAY_OFFSET + targetOffset, len);
