@@ -720,3 +720,45 @@ SELECT unix_timestamp(NULL :: timestamp_ltz(9)), to_unix_timestamp(NULL :: times
 -- !query analysis
 Project [unix_timestamp(cast(null as timestamp_ltz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS unix_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss)#xL, to_unix_timestamp(cast(null as timestamp_ltz(9)), yyyy-MM-dd HH:mm:ss, Some(America/Los_Angeles), true) AS to_unix_timestamp(CAST(NULL AS TIMESTAMP_LTZ(9)), yyyy-MM-dd HH:mm:ss)#xL]
 +- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
+-- !query analysis
+Project [unix_nanos(2020-01-01 05:24:35.123456789) AS unix_nanos(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos('2020-01-01 13:24:35.123456789 UTC' :: timestamp_ltz(7))
+-- !query analysis
+Project [unix_nanos(cast(2020-01-01 13:24:35.123456789 UTC as timestamp_ltz(7))) AS unix_nanos(CAST(2020-01-01 13:24:35.123456789 UTC AS TIMESTAMP_LTZ(7)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos('2020-01-01 13:24:35.123456789 UTC' :: timestamp_ltz(8))
+-- !query analysis
+Project [unix_nanos(cast(2020-01-01 13:24:35.123456789 UTC as timestamp_ltz(8))) AS unix_nanos(CAST(2020-01-01 13:24:35.123456789 UTC AS TIMESTAMP_LTZ(8)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_LTZ '9999-12-31 23:59:59.999999999 UTC')
+-- !query analysis
+Project [unix_nanos(9999-12-31 15:59:59.999999999) AS unix_nanos(TIMESTAMP_LTZ '9999-12-31 15:59:59.999999999')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos(TIMESTAMP_LTZ '1960-01-01 00:00:00.000000001 UTC')
+-- !query analysis
+Project [unix_nanos(1959-12-31 16:00:00.000000001) AS unix_nanos(TIMESTAMP_LTZ '1959-12-31 16:00:00.000000001')#x]
++- OneRowRelation
+
+
+-- !query
+SELECT unix_nanos(NULL :: timestamp_ltz(9))
+-- !query analysis
+Project [unix_nanos(cast(null as timestamp_ltz(9))) AS unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation

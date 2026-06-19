@@ -8200,6 +8200,16 @@ object functions {
   def unix_micros(e: Column): Column = Column.fn("unix_micros", e)
 
   /**
+   * Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC for a nanosecond-precision
+   * timestamp (`TIMESTAMP_LTZ(p)` / `TIMESTAMP_NTZ(p)`, `p` in `[7, 9]`). The result is a
+   * lossless `DECIMAL(21, 0)`.
+   *
+   * @group datetime_funcs
+   * @since 4.3.0
+   */
+  def unix_nanos(e: Column): Column = Column.fn("unix_nanos", e)
+
+  /**
    * Returns the number of milliseconds since 1970-01-01 00:00:00 UTC. Truncates higher levels of
    * precision.
    *
