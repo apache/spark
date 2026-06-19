@@ -3636,8 +3636,8 @@ abstract class CSVSuite
         exception = cause.asInstanceOf[SparkRuntimeException],
         condition = "MALFORMED_CSV_RECORD",
         sqlState = Some("KD000"),
-        parameters = Map("badRecord" -> ".*"),
-        matchPVals = true)
+        parameters = Map("badRecord" -> "a,b,c"),
+        matchPVals = false)
     }
   }
 

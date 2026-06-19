@@ -170,5 +170,4 @@ class CSVHeaderChecker(
     }
     setHeaderForSingleVariantColumn.foreach(f => f(headerColumnNames))
   }
-
 }
