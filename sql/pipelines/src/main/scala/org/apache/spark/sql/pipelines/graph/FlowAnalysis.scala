@@ -22,8 +22,11 @@ import scala.util.Try
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.classic.{DataFrame, DataFrameReader, Dataset, DataStreamReader, SparkSession}
+import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{ExternalDatasetIdentifier, InternalDatasetIdentifier}
 
 
@@ -131,34 +134,50 @@ object FlowAnalysis {
 
     // SPARK-57352: Detect inputs that were resolved directly by the user (e.g., via
     // spark.table()) rather than through the pipeline's UnresolvedRelation path above.
-    // Scan the resolved plan for table relations that match known pipeline inputs and
-    // record them as external inputs so the DAG scheduler orders them correctly.
-    resolvedPlan.foreach {
-      case r: org.apache.spark.sql.catalyst.analysis.UnresolvedRelation =>
-        // Already handled above
-      case node =>
-        val tableIdOpt = node match {
-          case r: org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation =>
-            r.identifier.map(id => TableIdentifier(id.name(),
-              Option(id.namespace()).filter(_.nonEmpty).map(_.last)))
-          case r: org.apache.spark.sql.catalyst.catalog.HiveTableRelation =>
+    // Scan the resolved plan (including subquery expressions) for table relations whose
+    // fully-qualified identifier matches a known pipeline input. Record them in
+    // requestedInputs so the DAG scheduler orders execution correctly.
+    def scanForResolvedInputs(plan: LogicalPlan): Unit = {
+      plan.foreach { node =>
+        val tableIdOpt: Option[TableIdentifier] = node match {
+          case r: DataSourceV2Relation =>
+            r.identifier.map { id =>
+              val ns = Option(id.namespace()).getOrElse(Array.empty[String])
+              TableIdentifier(
+                table = id.name(),
+                database = if (ns.nonEmpty) Some(ns.last) else None,
+                catalog = if (ns.length > 1) Some(ns.head) else None)
+            }
+          case r: HiveTableRelation =>
             Some(r.tableMeta.identifier)
-          case r: org.apache.spark.sql.execution.datasources.LogicalRelation =>
+          case r: LogicalRelation =>
             r.catalogTable.map(_.identifier)
           case _ => None
         }
         tableIdOpt.foreach { tableId =>
-          // Match by table name, allowing for different catalog/database qualifications
-          val matchesInput = context.allInputs.exists(input =>
-            input.table == tableId.table
-          )
-          if (matchesInput &&
-              !context.batchInputs.exists(_.input.identifier.table == tableId.table) &&
-              !context.streamingInputs.exists(_.input.identifier.table == tableId.table)) {
-            context.externalInputs += tableId
+          // Fully-qualified match: require table name AND database (when both specified)
+          val matchedInputId = context.allInputs.find { inputId =>
+            inputId.table == tableId.table &&
+              (tableId.database.isEmpty || inputId.database.isEmpty ||
+                inputId.database == tableId.database)
+          }
+          matchedInputId.foreach { inputId =>
+            if (!context.requestedInputs.contains(inputId) &&
+                !context.batchInputs.exists(_.input.identifier == inputId) &&
+                !context.streamingInputs.exists(_.input.identifier == inputId)) {
+              context.requestedInputs += inputId
+            }
           }
         }
+        // Descend into subquery expressions for parity with transformWithSubqueries
+        node.expressions.foreach(_.foreach {
+          case s: org.apache.spark.sql.catalyst.expressions.SubqueryExpression =>
+            scanForResolvedInputs(s.plan)
+          case _ =>
+        })
+      }
     }
+    scanForResolvedInputs(resolvedPlan)
 
     result
   }

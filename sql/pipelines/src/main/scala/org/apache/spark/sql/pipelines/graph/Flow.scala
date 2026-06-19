@@ -112,10 +112,11 @@ case class FlowFunctionResult(
   /**
    * Returns the names of all of the [[Input]]s used when resolving this [[Flow]]. If the
    * flow failed to resolve, we return the all the datasets that were requested when evaluating the
-   * flow.
+   * flow. Also includes requestedInputs for resolved table references detected post-analysis
+   * (SPARK-57352).
    */
   def inputs: Set[TableIdentifier] = {
-    (batchInputs ++ streamingInputs).map(_.input.identifier)
+    (batchInputs ++ streamingInputs).map(_.input.identifier) ++ requestedInputs
   }
 
   /** Returns errors that occurred when attempting to analyze this [[Flow]]. */
