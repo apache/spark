@@ -28,6 +28,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   /**
+   * The maximum size in bytes used to bound an estimated size. Operators such as joins multiply
+   * their children's sizes, so the estimate can grow without limit when a plan repeatedly combines
+   * its own output (e.g. a sequence of self-joins). Left unbounded, the backing `BigInt` keeps
+   * growing until its arithmetic overflows (SPARK-52163). We cap the estimate at `Long.MaxValue`
+   * (8 EiB), which is far larger than any physical dataset.
+   */
+  private val MAX_SIZE_IN_BYTES: BigInt = BigInt(Long.MaxValue)
+
+  /**
    * A default, commonly used estimation for unary nodes. We assume the input row number is the
    * same as the output row number, and compute sizes based on the column types.
    */
@@ -45,7 +54,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     }
 
     // Don't propagate rowCount and attributeStats, since they are not estimated here.
-    Statistics(sizeInBytes = sizeInBytes)
+    Statistics(sizeInBytes = sizeInBytes.min(MAX_SIZE_IN_BYTES))
   }
 
   /**
@@ -55,7 +64,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
     case _: LogicalPlan =>
-      Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product)
+      val sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product
+      Statistics(sizeInBytes = sizeInBytes.min(MAX_SIZE_IN_BYTES))
   }
 
   override def visitAggregate(p: Aggregate): Statistics = {
@@ -74,7 +84,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitExpand(p: Expand): Statistics = {
     val sizeInBytes = visitUnaryNode(p).sizeInBytes * p.projections.length
-    Statistics(sizeInBytes = sizeInBytes)
+    Statistics(sizeInBytes = sizeInBytes.min(MAX_SIZE_IN_BYTES))
   }
 
   override def visitFilter(p: Filter): Statistics = visitUnaryNode(p)

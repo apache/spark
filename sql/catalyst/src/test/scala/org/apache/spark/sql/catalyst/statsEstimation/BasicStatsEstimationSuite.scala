@@ -193,6 +193,30 @@ test("range with invalid long value") {
   checkStats(range, rangeStats, rangeStats)
 }
 
+  test("SPARK-52163: cap estimated size in bytes to avoid BigInt overflow") {
+    val hugeAttr = attr("id")
+    // A leaf node whose estimated size is already at the maximum representable physical size.
+    val hugePlan = StatsTestPlan(
+      outputList = Seq(hugeAttr),
+      attributeStats = AttributeMap(Seq(hugeAttr -> colStat)),
+      rowCount = BigInt(Long.MaxValue),
+      size = Some(BigInt(Long.MaxValue)))
+
+    // A cartesian join multiplies children's sizes, so without a cap the size would explode and
+    // eventually overflow the backing BigInt when compounded across repeated self-joins. The
+    // estimate must stay bounded and the cartesian product itself must be capped.
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "false") {
+      var node: LogicalPlan = hugePlan
+      (1 to 30).foreach { _ =>
+        val joined = node.join(node, Inner, None)
+        joined.invalidateStatsCache()
+        assert(joined.stats.sizeInBytes === BigInt(Long.MaxValue))
+        node = joined.select(hugeAttr)
+        assert(node.stats.sizeInBytes <= BigInt(Long.MaxValue))
+      }
+    }
+  }
+
   test("windows") {
     val windows = plan.window(Seq(min(attribute).as("sum_attr")), Seq(attribute), Nil)
     val windowsStats = Statistics(sizeInBytes = plan.size.get * (4 + 4 + 8) / (4 + 8))
