@@ -309,6 +309,25 @@ object DualApiBucketFunction extends ScalarFunction[Int] with ReducibleFunction[
   }
 }
 
+/**
+ * A function with a complex (ArrayType) literal parameter. Its generalized reducer returns a valid
+ * reducer unconditionally, so a test can prove the dispatch refuses to invoke it for a non-scalar
+ * literal param (rather than the call happening to fail on a cast).
+ */
+object ArrayParamFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(ArrayType(IntegerType), LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "array_param"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int = input.getInt(1)
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = BucketReducer(1)
+}
+
 object UnboundStringSelfFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = StringSelfFunction
   override def description(): String = name()

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCo
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.{DataType, IntegerType}
+import org.apache.spark.sql.types.{AtomicType, DataType, IntegerType}
 
 /**
  * Represents a partition transform expression, for instance, `bucket`, `days`, `years`, etc.
@@ -127,17 +127,17 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
   }
 
   /**
-   * Extract all literal parameters from a transform expression as V2 [[V2Literal]]s, preserving
-   * each value's internal representation and its `DataType`. Connectors interpret the value via
-   * the accompanying `DataType` rather than relying on a pre-converted JVM type.
+   * Extract all literal parameters of this transform as V2 [[V2Literal]]s, preserving each value's
+   * internal representation and its `DataType`. Connectors interpret the value via the accompanying
+   * `DataType` rather than relying on a pre-converted JVM type.
    *
    * Examples:
    *   bucket(4, col)        => [Literal(4, IntegerType)]
    *   truncate(col, 3)      => [Literal(3, IntegerType)]
    *   days(col)             => []  (no literals)
    */
-  private def extractParameters(expr: TransformExpression): Array[V2Literal[_]] =
-    expr.literalChildren.map(l => LiteralValue(l.value, l.dataType): V2Literal[_]).toArray
+  private def extractParameters: Array[V2Literal[_]] =
+    literalChildren.map(l => LiteralValue(l.value, l.dataType): V2Literal[_]).toArray
 
   /**
    * Whether this transform and `other` share the same argument layout: equal arity, and at each
@@ -153,6 +153,14 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
       }
 
   /**
+   * Whether every literal parameter is a scalar (an [[AtomicType]]). Reducer parameters are scalar
+   * literals; this never forwards a complex Catalyst container (ArrayData / MapData / InternalRow)
+   * across the public reducer boundary -- such a transform is simply treated as not reducible.
+   */
+  private def scalarLiteralParams: Boolean =
+    literalChildren.forall(_.dataType.isInstanceOf[AtomicType])
+
+  /**
    * Return a Reducer for a reducible function on another reducible function
    * Handles both parameterized (bucket, truncate) and non-parameterized (days, hours) functions.
    */
@@ -161,12 +169,13 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
       thisExpr: TransformExpression,
       otherFunction: ReducibleFunction[_, _],
       otherExpr: TransformExpression): Option[Reducer[_, _]] = {
-    if (!thisExpr.sameArgumentLayout(otherExpr)) {
+    if (!thisExpr.sameArgumentLayout(otherExpr) ||
+        !thisExpr.scalarLiteralParams || !otherExpr.scalarLiteralParams) {
       return None
     }
 
-    val thisParams = extractParameters(thisExpr)
-    val otherParams = extractParameters(otherExpr)
+    val thisParams = thisExpr.extractParameters
+    val otherParams = otherExpr.extractParameters
     val thisName = thisExpr.function.canonicalName()
 
     // Gate on DataType, not the boxed runtime class (DateType/YearMonthInterval box to Int).

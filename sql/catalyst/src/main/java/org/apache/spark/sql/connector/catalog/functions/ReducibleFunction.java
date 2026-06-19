@@ -66,10 +66,11 @@ public interface ReducibleFunction<I, O> {
    *
    * If this function is 'reducible' on another function, return the {@link Reducer}.
    * <p>
-   * Each parameter is a {@link Literal} carrying both its value and data type, so this method
-   * supports functions with any number of parameters of any type. {@link Literal#value()} is
-   * Spark's internal representation (e.g. {@code UTF8String} for strings, {@code Decimal} for
-   * decimals); use {@link Literal#dataType()} to interpret it.
+   * Each parameter is a scalar {@link Literal} carrying both its value and data type. Parameters
+   * are always scalar literals (e.g. bucket numBuckets, truncate width); complex types (array, map,
+   * struct) are not passed here. {@link Literal#value()} is Spark's internal representation (e.g.
+   * {@code UTF8String} for strings, {@code Decimal} for decimals); use {@link Literal#dataType()}
+   * to interpret it.
    * <p>
    * Examples:
    * <ul>

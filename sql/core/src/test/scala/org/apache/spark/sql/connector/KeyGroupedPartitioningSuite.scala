@@ -4515,4 +4515,18 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     assert(red.isDefined, "generalized reducer must be reached when deprecated returns null")
     assert(red.get.asInstanceOf[Reducer[Integer, Integer]].reduce(3) == 1)
   }
+
+  test("SPARK-50593: a complex (non-scalar) literal param is not reducible") {
+    // Reducer parameters must be scalar literals. ArrayParamFunction's generalized reducer returns
+    // a reducer unconditionally, so reaching it at all is the leak; the scalar guard must refuse
+    // the ArrayType literal param first. Different array values keep isSameFunction false, forcing
+    // the reducer path where the guard applies.
+    val l = TransformExpression(ArrayParamFunction,
+      Seq(Literal.create(Array(1, 2, 3), ArrayType(IntegerType)), attr("id")))
+    val r = TransformExpression(ArrayParamFunction,
+      Seq(Literal.create(Array(4, 5, 6), ArrayType(IntegerType)), attr("store_id")))
+    assert(!l.isSameFunction(r))
+    assert(!l.isCompatible(r), "a complex literal param must not be reducible")
+    assert(l.reducers(r).isEmpty && r.reducers(l).isEmpty)
+  }
 }
