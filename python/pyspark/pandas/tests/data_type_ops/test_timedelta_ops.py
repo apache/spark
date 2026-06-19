@@ -17,10 +17,12 @@
 
 from datetime import timedelta
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 import pyspark.pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.data_type_ops.testing_utils import OpsTestBase
 
@@ -72,6 +74,29 @@ class TimedeltaOpsTestsMixin:
 
         pdf, psdf = self.timedelta_pdf, self.timedelta_psdf
         self.assert_eq(pdf["that"] - pdf["this"], psdf["that"] - psdf["this"])
+
+    def test_sub_unit(self):
+        # Before pandas 3.0.0, timedelta64 is always nanosecond resolution, so there is no
+        # unit to infer. From pandas 3.0.0, the result of subtracting timedeltas takes the
+        # finer resolution of the operands; pandas-on-Spark should follow that instead of
+        # always reporting microseconds (SPARK-55299).
+        if LooseVersion(pd.__version__) < "3.0.0":
+            return
+
+        for left_unit, right_unit in [("s", "s"), ("ms", "ms"), ("us", "us"), ("s", "ms")]:
+            pser1 = pd.Series(np.array([3, 5, 8], dtype="timedelta64[%s]" % left_unit))
+            pser2 = pd.Series(np.array([1, 2, 3], dtype="timedelta64[%s]" % right_unit))
+            psser1, psser2 = ps.from_pandas(pser1), ps.from_pandas(pser2)
+            self.assert_eq(pser1 - pser2, psser1 - psser2)
+
+            # datetime.timedelta scalars have microsecond resolution.
+            self.assert_eq(pser1 - timedelta(seconds=1), psser1 - timedelta(seconds=1))
+            self.assert_eq(timedelta(seconds=1) - pser1, timedelta(seconds=1) - psser1)
+
+        # The same unit inference applies to TimedeltaIndex subtraction.
+        pidx = pd.Index(np.array([3, 5, 8], dtype="timedelta64[s]"))
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx - pidx, psidx - psidx)
 
     def test_mul(self):
         self.assertRaises(TypeError, lambda: self.psser * "x")
