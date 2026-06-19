@@ -773,14 +773,17 @@ case class MicrosToTimestamp(child: Expression)
   since = "4.3.0")
 // scalastyle:on line.size.limit line.contains.tab
 case class NanosToTimestamp(child: Expression)
-  extends UnaryExpression with ImplicitCastInputTypes {
+  extends UnaryExpression with ExpectsInputTypes {
   override def nullIntolerant: Boolean = true
 
-  // A nanosecond count needs DECIMAL to span the full [0001, 9999] calendar range: nanos for year
-  // 9999 (~2.5e20) overflows a 64-bit BIGINT, the same reason the inverse `unix_nanos` returns
-  // DECIMAL(21, 0). ImplicitCastInputTypes coerces integral arguments to their natural decimal, so
-  // an ordinary BIGINT argument still works while DECIMAL literals reach the whole range.
-  override def inputTypes: Seq[AbstractDataType] = Seq(DecimalType)
+  // Accepts an integral or DECIMAL nanosecond count only. DECIMAL is required to span the full
+  // [0001, 9999] calendar range: nanos for year 9999 (~2.5e20) overflow a 64-bit BIGINT, the same
+  // reason the inverse `unix_nanos` returns DECIMAL(21, 0); an integral argument is widened to
+  // BigInteger directly. FLOAT/DOUBLE/STRING are intentionally rejected at analysis rather than
+  // implicitly coerced: a fractional or string nanosecond count is not meaningful, and the implicit
+  // DECIMAL coercion (FLOAT -> DECIMAL(14, 7), DOUBLE -> DECIMAL(30, 15)) would silently overflow
+  // for realistic magnitudes.
+  override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(IntegralType, DecimalType))
 
   override def dataType: DataType = TimestampLTZNanosType(9)
 
@@ -789,8 +792,13 @@ case class NanosToTimestamp(child: Expression)
   // behavior of `floorDiv`/`floorMod`). `longValueExact` throws when `epochMicros` overflows 64
   // bits, i.e. the input is outside the representable timestamp range.
   override def nullSafeEval(input: Any): Any = {
-    val n = input.asInstanceOf[Decimal].toJavaBigDecimal
-      .setScale(0, java.math.RoundingMode.FLOOR).toBigInteger
+    val n = child.dataType match {
+      case _: DecimalType =>
+        input.asInstanceOf[Decimal].toJavaBigDecimal
+          .setScale(0, java.math.RoundingMode.FLOOR).toBigInteger
+      case _: IntegralType =>
+        BigInteger.valueOf(input.asInstanceOf[Number].longValue())
+    }
     val thousand = BigInteger.valueOf(NANOS_PER_MICROS)
     val rem = n.mod(thousand)
     val micros = n.subtract(rem).divide(thousand).longValueExact()
@@ -802,9 +810,14 @@ case class NanosToTimestamp(child: Expression)
       val n = ctx.freshName("nanos")
       val thousand = ctx.freshName("thousand")
       val rem = ctx.freshName("rem")
+      val toBigInteger = child.dataType match {
+        case _: DecimalType =>
+          s"$c.toJavaBigDecimal().setScale(0, java.math.RoundingMode.FLOOR).toBigInteger()"
+        case _: IntegralType =>
+          s"java.math.BigInteger.valueOf((long) $c)"
+      }
       s"""
-         |java.math.BigInteger $n = $c.toJavaBigDecimal()
-         |  .setScale(0, java.math.RoundingMode.FLOOR).toBigInteger();
+         |java.math.BigInteger $n = $toBigInteger;
          |java.math.BigInteger $thousand = java.math.BigInteger.valueOf(${NANOS_PER_MICROS}L);
          |java.math.BigInteger $rem = $n.mod($thousand);
          |${ev.value} = org.apache.spark.unsafe.types.TimestampNanosVal.fromParts(

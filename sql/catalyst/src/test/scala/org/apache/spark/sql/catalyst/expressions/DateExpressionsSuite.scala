@@ -1746,8 +1746,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-57526: timestamp_nanos builds a TIMESTAMP_LTZ(9) from nanoseconds") {
     import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
 
-    // The child is a DECIMAL after analysis (ImplicitCastInputTypes coerces integral arguments);
-    // build the post-coercion literal directly. A wide DECIMAL(38, 0) holds every input below.
+    // DECIMAL input is accepted as-is; a wide DECIMAL(38, 0) holds every input below.
     def tsNanos(n: BigInt): NanosToTimestamp =
       NanosToTimestamp(Literal.create(Decimal(BigDecimal(n), 38, 0), DecimalType(38, 0)))
 
@@ -1755,6 +1754,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // The JIRA example: 1230219000123456789 ns -> 1230219000123456 micros + 789 ns.
     checkEvaluation(tsNanos(BigInt("1230219000123456789")), nanosVal(1230219000123456L, 789))
+
+    // An integral argument is accepted directly (widened to BigInteger), exercising the
+    // IntegralType eval/codegen path rather than the DECIMAL one.
+    checkEvaluation(
+      NanosToTimestamp(Literal(1230219000123456789L)), nanosVal(1230219000123456L, 789))
+    checkEvaluation(NanosToTimestamp(Literal(-1L)), nanosVal(-1L, 999))
+    checkEvaluation(NanosToTimestamp(Literal(1000)), nanosVal(1L, 0))
+
+    // FLOAT/DOUBLE/STRING are rejected at analysis: a fractional or string nanosecond count is not
+    // meaningful, and the implicit DECIMAL coercion would silently overflow for realistic values.
+    Seq(Literal(1.0f), Literal(1.0d), Literal("1")).foreach { lit =>
+      assert(NanosToTimestamp(lit).checkInputDataTypes().isFailure)
+    }
 
     // Pre-epoch / negative inputs use floor semantics, so nanosWithinMicro stays in [0, 999]:
     // -1 ns floors to epochMicros = -1 with a 999 ns remainder.

@@ -881,6 +881,32 @@ struct<timestamp_nanos(253402300799999999999):timestamp_ltz(9)>
 
 
 -- !query
+SELECT timestamp_nanos(1.0D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"INTEGRAL\" or \"DECIMAL\")",
+    "sqlExpr" : "\"timestamp_nanos(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp_nanos(1.0D)"
+  } ]
+}
+
+
+-- !query
 SELECT timestamp_nanos(CAST(NULL AS BIGINT))
 -- !query schema
 struct<timestamp_nanos(CAST(NULL AS BIGINT)):timestamp_ltz(9)>
