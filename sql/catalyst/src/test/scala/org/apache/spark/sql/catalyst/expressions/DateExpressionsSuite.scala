@@ -1067,6 +1067,51 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ToUnixTimestamp(Literal("2015-07-24"), Literal("\""), UTC_OPT) :: Nil)
   }
 
+  test("SPARK-57528: unix_timestamp / to_unix_timestamp over nanosecond-precision timestamps") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+    val fmt = Literal("yyyy-MM-dd HH:mm:ss")
+
+    // A post-epoch value with non-zero sub-second digits: 2008-12-25 15:30:00.123456789 ->
+    // 1230219000. unix_timestamp does not apply a zone shift, so the NTZ wall-clock value and the
+    // LTZ instant at the same UTC reading produce the same whole-second result.
+    val ntz = localDateTimeToNanosVal(timestampNTZ(2008, 12, 25, 15, 30, 0, 123456789))
+    val ltz = instantToNanosVal(Instant.parse("2008-12-25T15:30:00.123456789Z"))
+    foreachNanosPrecision { p =>
+      checkEvaluation(
+        UnixTimestamp(Literal.create(ntz, TimestampNTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+      checkEvaluation(
+        ToUnixTimestamp(Literal.create(ntz, TimestampNTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+      checkEvaluation(
+        UnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+      checkEvaluation(
+        ToUnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), fmt, UTC_OPT), 1230219000L)
+    }
+
+    // The format is ignored for the timestamp-argument form: a deliberately invalid format still
+    // yields the same whole-second result, since the timestamp branch never consults the format.
+    val badFmt = Literal("not-a-format")
+    foreachNanosPrecision { p =>
+      checkEvaluation(
+        UnixTimestamp(Literal.create(ntz, TimestampNTZNanosType(p)), badFmt, UTC_OPT),
+        1230219000L)
+      checkEvaluation(
+        ToUnixTimestamp(Literal.create(ltz, TimestampLTZNanosType(p)), badFmt, UTC_OPT),
+        1230219000L)
+    }
+
+    // Pre-epoch sub-second value: 1969-12-31 23:59:59.5 has epochMicros -500000, which divides to
+    // 0 (truncation toward zero), matching the existing microsecond-timestamp behavior.
+    val preEpoch = localDateTimeToNanosVal(timestampNTZ(1969, 12, 31, 23, 59, 59, 500000000))
+    checkEvaluation(
+      UnixTimestamp(Literal.create(preEpoch, TimestampNTZNanosType(9)), fmt, UTC_OPT), 0L)
+
+    // NULL input.
+    checkEvaluation(
+      UnixTimestamp(Literal.create(null, TimestampNTZNanosType(9)), fmt, UTC_OPT), null)
+    checkEvaluation(
+      ToUnixTimestamp(Literal.create(null, TimestampLTZNanosType(9)), fmt, UTC_OPT), null)
+  }
+
   test("datediff") {
     checkEvaluation(
       DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)
@@ -1270,6 +1315,35 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         secFrac(timestamp.copy(year = Literal(10))),
         Decimal(10.123456, 16, 6))
     }
+  }
+
+  test("SPARK-57340: extract the seconds part with fraction from nanosecond timestamps") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+    // NTZ extracts the wall-clock fields and is zone-independent: the expression evaluates in
+    // UTC regardless of the session time zone.
+    val ntzValue = localDateTimeToNanosVal(timestampNTZ(2020, 1, 1, 13, 24, 35, 123456789))
+    outstandingTimezonesIds.foreach { timezone =>
+      checkEvaluation(
+        SecondWithFractionNanos(
+          Literal.create(ntzValue, TimestampNTZNanosType(9)), Some(timezone)),
+        Decimal(35123456789L, 11, 9))
+    }
+    // LTZ extracts in the session time zone. The second field (including the nanosecond
+    // fraction) is invariant under whole-minute zone offsets, such as Asia/Kolkata (+05:30).
+    val ltzValue = instantToNanosVal(Instant.parse("2020-01-01T21:24:35.987654321Z"))
+    def ltzExpr(timezone: String): SecondWithFractionNanos =
+      SecondWithFractionNanos(Literal.create(ltzValue, TimestampLTZNanosType(9)), Some(timezone))
+    checkEvaluation(ltzExpr("America/Los_Angeles"), Decimal(35987654321L, 11, 9))
+    checkEvaluation(ltzExpr("Asia/Kolkata"), Decimal(35987654321L, 11, 9))
+    // Pre-epoch values exercise the negative-epoch path; the wall-clock fields stay positive.
+    val preEpoch = localDateTimeToNanosVal(timestampNTZ(1960, 1, 1, 5, 6, 7, 123456789))
+    checkEvaluation(
+      SecondWithFractionNanos(Literal.create(preEpoch, TimestampNTZNanosType(9)), Some("UTC")),
+      Decimal(7123456789L, 11, 9))
+    // NULL input.
+    checkEvaluation(
+      SecondWithFractionNanos(Literal.create(null, TimestampNTZNanosType(9)), Some("UTC")),
+      null)
   }
 
   test("SPARK-34903: timestamps difference") {
@@ -1865,6 +1939,77 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
       }
     }
+  }
+
+  test("SPARK-57501: add/subtract ANSI day-time interval on nanos timestamps") {
+    val interval = Duration.ofDays(2).plusMinutes(3).plus(456, ChronoUnit.MICROS)
+    val minusInterval = Duration.ofDays(-1).minusMinutes(4).minus(321, ChronoUnit.MICROS)
+
+    val ntzType = TimestampNTZNanosType(9)
+    val ntzStart = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-02T03:04:05.123456789"), precision = 9)
+    val ntzExpectedAdd = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-04T03:07:05.123912789"), precision = 9)
+    val ntzExpectedSub = DateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.parse("2020-01-01T03:00:05.123135789"), precision = 9)
+
+    checkEvaluation(
+      TimestampAddInterval(Literal.create(ntzStart, ntzType), Literal(interval), Some("UTC")),
+      ntzExpectedAdd)
+    checkEvaluation(
+      TimestampAddInterval(
+        Literal.create(ntzStart, ntzType),
+        UnaryMinus(Literal(interval)),
+        Some("UTC")),
+      DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("2019-12-31T03:01:05.123000789"), precision = 9))
+    checkEvaluation(
+      TimestampAddInterval(Literal.create(ntzStart, ntzType), Literal(minusInterval), Some("UTC")),
+      ntzExpectedSub)
+    assert(ntzExpectedAdd.nanosWithinMicro == ntzStart.nanosWithinMicro)
+    assert(ntzExpectedSub.nanosWithinMicro == ntzStart.nanosWithinMicro)
+
+    val ltzType = TimestampLTZNanosType(9)
+    val ltzStart = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-02T03:04:05.123456789Z"), precision = 9)
+    val ltzExpectedAdd = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-04T03:07:05.123912789Z"), precision = 9)
+    val ltzExpectedSub = DateTimeUtils.instantToTimestampNanos(
+      Instant.parse("2020-01-01T03:00:05.123135789Z"), precision = 9)
+
+    checkEvaluation(
+      TimestampAddInterval(Literal.create(ltzStart, ltzType), Literal(interval), Some("UTC")),
+      ltzExpectedAdd)
+    checkEvaluation(
+      TimestampAddInterval(
+        Literal.create(ltzStart, ltzType),
+        UnaryMinus(Literal(interval)),
+        Some("UTC")),
+      DateTimeUtils.instantToTimestampNanos(
+        Instant.parse("2019-12-31T03:01:05.123000789Z"), precision = 9))
+    checkEvaluation(
+      TimestampAddInterval(Literal.create(ltzStart, ltzType), Literal(minusInterval), Some("UTC")),
+      ltzExpectedSub)
+    assert(ltzExpectedAdd.nanosWithinMicro == ltzStart.nanosWithinMicro)
+    assert(ltzExpectedSub.nanosWithinMicro == ltzStart.nanosWithinMicro)
+
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (ts: Expression, dt: Expression) => TimestampAddInterval(ts, dt, Some("UTC")),
+      ntzType, DayTimeIntervalType())
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (ts: Expression, dt: Expression) => TimestampAddInterval(ts, dt, Some("UTC")),
+      ltzType, DayTimeIntervalType())
+
+    val calendarInterval = Literal(new CalendarInterval(1, 2, 3L))
+    val ntzCalendar = TimestampAddInterval(
+      Literal.create(ntzStart, ntzType), calendarInterval, Some("UTC"))
+    val ntzMismatch = ntzCalendar.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(ntzMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
+
+    val ltzCalendar = TimestampAddInterval(
+      Literal.create(ltzStart, ltzType), calendarInterval, Some("UTC"))
+    val ltzMismatch = ltzCalendar.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+    assert(ltzMismatch.errorSubClass == "UNEXPECTED_INPUT_TYPE")
   }
 
   test("SPARK-37552: convert a timestamp_ntz to another time zone") {

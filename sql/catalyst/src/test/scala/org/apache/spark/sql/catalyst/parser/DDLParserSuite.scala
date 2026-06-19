@@ -19,17 +19,18 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.{Add, And, EqualTo, GreaterThan, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.connector.catalog.IdentityColumnSpec
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, ClusterByTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.bucket
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampType}
+import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, StringType, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampType}
 import org.apache.spark.storage.StorageLevelMapper
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -88,6 +89,48 @@ class DDLParserSuite extends AnalysisTest {
       exception = parseException(sql),
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "':'", "hint" -> ""))
+  }
+
+  test("SPARK-57164: nanos timestamp types in CREATE TABLE / ALTER TABLE columns") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            // CREATE TABLE column.
+            val created = parsePlan(s"CREATE TABLE t (c $spelling) USING parquet")
+            assert(created.asInstanceOf[CreateTable].columns.head.dataType === expected)
+            // ALTER TABLE ... ADD COLUMNS.
+            val added = parsePlan(s"ALTER TABLE t ADD COLUMNS (c $spelling)")
+            assert(added.asInstanceOf[AddColumns].columnsToAdd.head.dataType === expected)
+            // ALTER TABLE ... ALTER COLUMN ... TYPE.
+            val altered = parsePlan(s"ALTER TABLE t ALTER COLUMN c TYPE $spelling")
+            assert(altered.asInstanceOf[AlterColumns].specs.head.newDataType === Some(expected))
+        }
+      }
+      // A column DEFAULT declared with a nanos type and a nanos typed-literal default.
+      val withDefault = parsePlan(
+        "CREATE TABLE t (c TIMESTAMP_NTZ(9) " +
+          "DEFAULT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') USING parquet")
+      val colDef = withDefault.asInstanceOf[CreateTable].columns.head
+      assert(colDef.dataType === TimestampNTZNanosType(9))
+      assert(colDef.defaultValue.isDefined)
+    }
+    // With the preview flag off, a nanos column type is rejected.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          parsePlan("CREATE TABLE t (c TIMESTAMP_NTZ(9)) USING parquet")
+        },
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = Map(
+          "featureName" -> "Nanosecond-precision timestamp types",
+          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+          "configValue" -> "true"))
+    }
   }
 
   test("create/replace table - with IF NOT EXISTS") {

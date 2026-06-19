@@ -1127,6 +1127,51 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       date(2019, 11, 3, 12, 0, 0, 123000, LA))
   }
 
+  test("SPARK-57501: timestamp nanos add day-time interval preserves nanosWithinMicro") {
+    def nanos(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+      TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+
+    // The epoch-micros part follows the micro `timestampAddDayTime` (including the transition from
+    // Pacific Standard to Pacific Daylight Time) while the sub-microsecond remainder is carried
+    // through unchanged.
+    assert(timestampNanosAddDayTime(
+      nanos(date(2019, 3, 9, 12, 0, 0, 123000, LA), 789), MICROS_PER_DAY, LA) ===
+      nanos(date(2019, 3, 10, 12, 0, 0, 123000, LA), 789))
+
+    outstandingZoneIds.foreach { zid =>
+      // The sub-microsecond remainder is preserved for the boundary values 0, 1 and 999.
+      Seq(0, 1, 999).foreach { rem =>
+        // Zero interval is a no-op on both the epoch-micros and the remainder.
+        assert(timestampNanosAddDayTime(
+          nanos(date(2021, 3, 18, 19, 44, 1, 100000, zid), rem), 0, zid) ===
+          nanos(date(2021, 3, 18, 19, 44, 1, 100000, zid), rem))
+        // Subtracting whole days shifts only the epoch-micros part.
+        assert(timestampNanosAddDayTime(
+          nanos(date(2021, 1, 19, 0, 0, 0, 0, zid), rem), -18 * MICROS_PER_DAY, zid) ===
+          nanos(date(2021, 1, 1, 0, 0, 0, 0, zid), rem))
+        // A +1 microsecond carry from the day-time interval only moves epochMicros
+        // (123456 -> 123457), never the remainder.
+        assert(timestampNanosAddDayTime(
+          nanos(date(2019, 5, 9, 12, 0, 0, 123456, zid), rem), 2 * MICROS_PER_DAY + 1, zid) ===
+          nanos(date(2019, 5, 11, 12, 0, 0, 123457, zid), rem))
+        // Pre-epoch (negative epochMicros) value.
+        assert(timestampNanosAddDayTime(
+          nanos(date(1960, 1, 2, 3, 4, 5, 123456, zid), rem), MICROS_PER_DAY, zid) ===
+          nanos(date(1960, 1, 3, 3, 4, 5, 123456, zid), rem))
+      }
+    }
+
+    // Consistency with the micro helper: epochMicros matches `timestampAddDayTime` exactly and the
+    // remainder is independent of the interval amount.
+    outstandingZoneIds.foreach { zid =>
+      val start = nanos(date(2020, 1, 2, 3, 4, 5, 123456, zid), 789)
+      val dayTime = 3 * MICROS_PER_HOUR + 7
+      val result = timestampNanosAddDayTime(start, dayTime, zid)
+      assert(result.epochMicros === timestampAddDayTime(start.epochMicros, dayTime, zid))
+      assert(result.nanosWithinMicro === start.nanosWithinMicro)
+    }
+  }
+
   test("SPARK-34903: subtract timestamps") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       Seq(

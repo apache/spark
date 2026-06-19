@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampL
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
-import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TypeApiOps}
 import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 /**
@@ -38,8 +37,7 @@ import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
  *
  * Verifies that TimestampNTZNanosType and TimestampLTZNanosType route physical representation,
  * literals, row accessors, mutable values, codegen class selection, conversions, and encoders
- * through TypeOps/TypeApiOps. The Types Framework is the sole integration path for these types, so
- * the suite runs with spark.sql.types.framework.enabled = true (the default under tests).
+ * through TypeOps/TypeApiOps. The Types Framework is the sole integration path for these types.
  */
 class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
 
@@ -217,6 +215,22 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-57285: catalyst LTZ ops renders in the session-local time zone (not a fixed UTC)") {
+    // The server-side TimestampLTZNanosTypeOps defaults its render zone to the session-local time
+    // zone (passed by-name, forced lazily at first render). Use a non-UTC zone so a regression back
+    // to a fixed UTC zone would change the rendered wall clock and fail here.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      precisions.foreach { p =>
+        val ops = TimestampLTZNanosTypeOps(TimestampLTZNanosType(p))
+        val v = DateTimeUtils.instantToTimestampNanos(nanosLdt.toInstant(ZoneOffset.UTC), p)
+        val frac = expectedFraction(p)
+        // 2020-01-01 00:00 UTC is 2019-12-31 16:00 in America/Los_Angeles (UTC-8 in January).
+        assert(ops.format(v) === s"2019-12-31 16:00:00.$frac", s"LTZ session-zone format for p=$p")
+        assert(ops.toSQLValue(v) === s"TIMESTAMP_LTZ '2019-12-31 16:00:00.$frac'")
+      }
+    }
+  }
+
   test("SPARK-57285: NTZ formatExternal renders LocalDateTime at the column precision") {
     precisions.foreach { p =>
       val ops = TypeApiOps(TimestampNTZNanosType(p)).get
@@ -265,30 +279,5 @@ class TimestampNanosTypeOpsSuite extends SparkFunSuite with SQLHelper {
     checkOptionRoundtrip(
       OptionEncoder(InstantNanosEncoder(9)),
       Seq(Some(Instant.parse("2019-02-26T16:56:00.123456789Z")), None))
-  }
-
-  test("framework disabled leaves the nanos types unsupported (no legacy fallback)") {
-    withSQLConf(SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
-      allCases.foreach { case (dt, _, _) =>
-        assert(TypeOps(dt).isEmpty, s"TypeOps should be empty for $dt when disabled")
-        assert(TypeApiOps(dt).isEmpty, s"TypeApiOps should be empty for $dt when disabled")
-      }
-    }
-  }
-
-  test("the nanos types flag only takes effect when the Types Framework is enabled") {
-    // Setting the flag must always succeed (a checkValue consulting SQLConf.get would recurse
-    // into the session conf's own construction); the framework requirement is enforced in the
-    // effective getter instead.
-    withSQLConf(
-        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
-        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "false") {
-      assert(!SQLConf.get.timestampNanosTypesEnabled)
-    }
-    withSQLConf(
-        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
-        SQLConf.TYPES_FRAMEWORK_ENABLED.key -> "true") {
-      assert(SQLConf.get.timestampNanosTypesEnabled)
-    }
   }
 }

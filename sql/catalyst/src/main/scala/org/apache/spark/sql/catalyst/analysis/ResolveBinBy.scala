@@ -39,6 +39,8 @@ object ResolveBinBy extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
       _.containsPattern(UNRESOLVED_BIN_BY), ruleId) {
+    case _: UnresolvedBinBy if !SQLConf.get.getConf(SQLConf.BIN_BY_ENABLED) =>
+      throw QueryCompilationErrors.binByDisabledError()
     case b: UnresolvedBinBy if !readyToResolve(b) => b
     case b: UnresolvedBinBy => resolve(b)
   }

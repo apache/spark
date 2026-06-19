@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types.ops
+package org.apache.spark.sql.catalyst.types.ops
 
 import java.time.{Instant, LocalDateTime, ZoneId, ZoneOffset}
 
@@ -42,6 +42,13 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * resolved session zone, while zone-less callers (Row JSON via formatExternal) accept the
  * default, the session-local time zone config.
  *
+ * External-value rendering (SPARK-57386): both consumers go through the single-arg
+ * [[formatExternal]] each subclass overrides - Row JSON (Row.json / Row.prettyJson) calls it
+ * directly, and the Hive result path (HiveResult.toHiveString) calls the two-arg overload whose
+ * default delegates to it (`nested` does not affect timestamp formatting). So both render the
+ * external value at the column precision rather than truncating to microseconds via the legacy
+ * path.
+ *
  * Dataset encoders are wired here to the precision-aware leaves added by SPARK-57033
  * (LocalDateTimeNanosEncoder / InstantNanosEncoder), so that turning on the Types Framework
  * matches the legacy RowEncoder.encoderForDataTypeDefault behavior rather than regressing it.
@@ -58,18 +65,14 @@ abstract class TimestampNanosTypeApiOps extends TypeApiOps with DataTypeErrorsBa
 
   // ==================== String Formatting ====================
 
-  // Row JSON (Row.json / Row.prettyJson) holds the external Row value (java.time.Instant for LTZ,
-  // java.time.LocalDateTime for NTZ); each subclass overrides the single-arg formatExternal to
-  // render it through the same formatter as its zone-aware cast-to-string, so Row JSON shows the
-  // nanosecond value rather than silently truncating to microseconds via the legacy path.
-
-  // The Hive result path (HiveResult.toHiveString) renders nanosecond timestamps through its own
-  // zone-aware default formatter, so return None here to fall through to it rather than to the
-  // subclass single-arg rendering. This is a temporary split until nanos external rendering is
-  // unified across the zone-less (Row JSON) and zone-aware (Hive) paths.
-  override def formatExternal(value: Any, nested: Boolean): Option[String] = None
-
   override def toSQLValue(v: Any): String = s"$sqlTypeName '${format(v)}'"
+
+  // ==================== Thrift Mapping ====================
+
+  // Over the Thrift / JDBC server the nanosecond timestamp value is sent as a string column
+  // (RowSetUtils renders it via HiveResult.toHiveString at the column precision), so map the
+  // column to STRING_TYPE for consistency, mirroring the reference TimeType ops.
+  override def thriftTypeName: Option[String] = Some("STRING_TYPE")
 
   // ==================== Row Encoding ====================
 
@@ -121,12 +124,14 @@ class TimestampNTZNanosTypeApiOps(val t: TimestampNTZNanosType) extends Timestam
  * @param t
  *   The TimestampLTZNanosType with precision information
  * @param zoneId
- *   The time zone LTZ values are rendered in (LTZ is zone-aware). `TypeApiOps.apply` threads in
- *   the session zone: the cast's resolved zone for CAST, or the session-local time zone config
- *   for zone-less render callers (Row JSON via formatExternal).
+ *   The time zone LTZ values are rendered in (LTZ is zone-aware). Passed by-name and forced only
+ *   when the formatter is first built, so non-rendering callers never evaluate it. The factories
+ *   thread it in: `TypeApiOps.apply` passes the cast's resolved zone (CAST) or the session-local
+ *   time zone (zone-less callers such as Row JSON); the catalyst `TimestampLTZNanosTypeOps`
+ *   passes the session-local time zone for the server-side `TypeOps` path.
  * @since 4.3.0
  */
-class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: ZoneId)
+class TimestampLTZNanosTypeApiOps(val t: TimestampLTZNanosType, zoneId: => ZoneId)
     extends TimestampNanosTypeApiOps {
   override def dataType: TimestampLTZNanosType = t
   override protected def sqlTypeName: String = "TIMESTAMP_LTZ"

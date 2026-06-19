@@ -17,32 +17,55 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class BinBySuite extends QueryTest with SharedSparkSession {
 
+  private def createMetricsView(): Unit = {
+    spark.sql(
+      """SELECT TIMESTAMP '2024-01-01 00:00:00' AS ts_start,
+        |       TIMESTAMP '2024-01-01 01:00:00' AS ts_end,
+        |       CAST(1 AS DOUBLE) AS value""".stripMargin).createOrReplaceTempView("metrics")
+  }
+
+  private val binByQuery =
+    """SELECT * FROM metrics BIN BY (
+      |  RANGE ts_start TO ts_end
+      |  BIN WIDTH INTERVAL '5' MINUTE
+      |  DISTRIBUTE UNIFORM (value)
+      |)""".stripMargin
+
   test("BIN BY analyzes but physical execution is not yet implemented") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      withTempView("metrics") {
+        createMetricsView()
+        val df = spark.sql(binByQuery)
+
+        // Analysis is fully functional when the operator is enabled.
+        df.queryExecution.assertAnalyzed()
+
+        // Physical execution is stubbed until the follow-up PR; planning surfaces a clean
+        // UNSUPPORTED_FEATURE error rather than an internal error.
+        checkError(
+          exception = intercept[SparkUnsupportedOperationException] {
+            df.collect()
+          },
+          condition = "UNSUPPORTED_FEATURE.BIN_BY",
+          parameters = Map.empty[String, String])
+      }
+    }
+  }
+
+  test("BIN BY is gated off by default") {
     withTempView("metrics") {
-      spark.sql(
-        """SELECT TIMESTAMP '2024-01-01 00:00:00' AS ts_start,
-          |       TIMESTAMP '2024-01-01 01:00:00' AS ts_end,
-          |       CAST(1 AS DOUBLE) AS value""".stripMargin).createOrReplaceTempView("metrics")
-      val df = spark.sql(
-        """SELECT * FROM metrics BIN BY (
-          |  RANGE ts_start TO ts_end
-          |  BIN WIDTH INTERVAL '5' MINUTE
-          |  DISTRIBUTE UNIFORM (value)
-          |)""".stripMargin)
-
-      // Analysis is fully functional in this PR.
-      df.queryExecution.assertAnalyzed()
-
-      // Physical execution is stubbed until the follow-up PR; planning surfaces a clean
-      // UNSUPPORTED_FEATURE error rather than an internal error.
+      createMetricsView()
+      // Gated off, the operator is rejected at analysis with the same UNSUPPORTED_FEATURE.BIN_BY
+      // condition the execution stub raises when enabled.
       checkError(
-        exception = intercept[SparkUnsupportedOperationException] {
-          df.collect()
+        exception = intercept[SparkThrowable] {
+          spark.sql(binByQuery).queryExecution.assertAnalyzed()
         },
         condition = "UNSUPPORTED_FEATURE.BIN_BY",
         parameters = Map.empty[String, String])

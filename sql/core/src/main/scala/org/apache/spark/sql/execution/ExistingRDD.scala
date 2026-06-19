@@ -105,7 +105,8 @@ case class LogicalRDD(
     // originStats and originConstraints are intentionally placed to "second" parameter list,
     // to prevent catalyst rules to mistakenly transform and rewrite them. Do not change this.
     originStats: Option[Statistics] = None,
-    originConstraints: Option[ExpressionSet] = None)
+    originConstraints: Option[ExpressionSet] = None,
+    fromCheckpoint: Boolean = false)
   extends LeafNode
   with StreamSourceAwareLogicalPlan
   with MultiInstanceRelation {
@@ -113,7 +114,7 @@ case class LogicalRDD(
   import LogicalRDD._
 
   override protected final def otherCopyArgs: Seq[AnyRef] =
-    session :: originStats :: originConstraints :: Nil
+    session :: originStats :: originConstraints :: Boolean.box(fromCheckpoint) :: Nil
 
   override def newInstance(): LogicalRDD.this.type = {
     val rewrite = Utils.toMap(output, output.map(_.newInstance()))
@@ -141,7 +142,7 @@ case class LogicalRDD(
       rewrittenOrdering,
       isStreaming,
       stream
-    )(session, rewrittenStatistics, rewrittenConstraints).asInstanceOf[this.type]
+    )(session, rewrittenStatistics, rewrittenConstraints, fromCheckpoint).asInstanceOf[this.type]
   }
 
   override protected def stringArgs: Iterator[Any] = Iterator(output, isStreaming)
@@ -156,6 +157,8 @@ case class LogicalRDD(
     }
   }
 
+  private[sql] def isCheckpointedInput: Boolean = fromCheckpoint
+
   override lazy val constraints: ExpressionSet = originConstraints.getOrElse(ExpressionSet())
     // Subqueries can have non-deterministic results even when they only contain deterministic
     // expressions (e.g. consider a LIMIT 1 subquery without an ORDER BY). Propagating predicates
@@ -166,7 +169,7 @@ case class LogicalRDD(
     .filterNot(SubqueryExpression.hasSubquery)
 
   override def withStream(stream: SparkDataStream): LogicalRDD = {
-    copy(stream = Some(stream))(session, originStats, originConstraints)
+    copy(stream = Some(stream))(session, originStats, originConstraints, fromCheckpoint)
   }
 
   override def getStream: Option[SparkDataStream] = stream
@@ -181,7 +184,8 @@ object LogicalRDD extends Logging {
   private[sql] def fromDataset(
       rdd: RDD[InternalRow],
       originDataset: Dataset[_],
-      isStreaming: Boolean): LogicalRDD = {
+      isStreaming: Boolean,
+      fromCheckpoint: Boolean = false): LogicalRDD = {
     // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
     // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
     // joins.
@@ -206,7 +210,7 @@ object LogicalRDD extends Logging {
       executedPlan.outputOrdering,
       isStreaming,
       None
-    )(originDataset.sparkSession, stats, constraints)
+    )(originDataset.sparkSession, stats, constraints, fromCheckpoint)
   }
 
   private[sql] def buildOutputAssocForRewrite(

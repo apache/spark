@@ -45,3 +45,4 @@ This page gives an overview of all public Spark SQL API.
     protobuf
     datasource
     stateful_processor
+    legacy

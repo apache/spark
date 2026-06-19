@@ -15,11 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector
+package org.apache.spark.sql.execution.datasources
 
 /**
- * Composite trait that includes all nested struct/array schema evolution tests.
+ * Reads of JSON files packed in tar archives (`.tar`/`.tar.gz`/`.tgz`): the shared archive tests
+ * from [[ArchiveReadSuiteBase]] plus the JSON-specific ones from [[JSONArchiveReadBase]], run over
+ * tar containers via [[TarArchiveReadBase]].
  */
-trait MergeIntoSchemaEvolutionNestedTests
-  extends MergeIntoSchemaEvolutionTypeWideningAndExtraFieldTests
-  with MergeIntoSchemaEvolutionMissingFieldAndNullStructTests
+class JSONTarArchiveReadSuite
+  extends ArchiveReadSuiteBase
+  with JSONArchiveReadBase
+  with TarArchiveReadBase

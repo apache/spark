@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.types.ops
 
-import java.time.{Instant, LocalDateTime, ZoneOffset}
+import java.time.{Instant, LocalDateTime}
 
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableTi
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalTimestampLTZNanosType, PhysicalTimestampNTZNanosType}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ObjectType, TimestampLTZNanosType, TimestampNTZNanosType}
-import org.apache.spark.sql.types.ops.{TimestampLTZNanosTypeApiOps, TimestampNTZNanosTypeApiOps}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
@@ -130,11 +130,14 @@ case class TimestampNTZNanosTypeOps(override val t: TimestampNTZNanosType)
  *   The TimestampLTZNanosType with precision information
  * @since 4.3.0
  */
-// Server-side TypeOps is used only for physical type, literals, row accessors, and serde - never
-// for rendering (cast-to-string flows through TypeApiOps.apply). So the rendering zone is unused
-// here; pass UTC rather than reading the session config on every construction.
+// LTZ is zone-aware, so the inherited renderer needs a zone. The server-side TypeOps has none of
+// its own (rendering normally flows through TypeApiOps.apply, which threads the cast's resolved
+// zone), so default to the session-local time zone. It is passed by-name and the parent builds
+// its formatter lazily, so the config is read only if a value is actually rendered through this
+// server-side ops - never on the physical-type / literal / row-accessor / serde paths.
 case class TimestampLTZNanosTypeOps(override val t: TimestampLTZNanosType)
-  extends TimestampLTZNanosTypeApiOps(t, ZoneOffset.UTC) with TimestampNanosTypeOps {
+  extends TimestampLTZNanosTypeApiOps(t, DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+  with TimestampNanosTypeOps {
 
   override def getPhysicalType: PhysicalDataType = PhysicalTimestampLTZNanosType
 

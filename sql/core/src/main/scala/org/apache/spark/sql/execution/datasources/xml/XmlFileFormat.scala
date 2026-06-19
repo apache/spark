@@ -51,6 +51,10 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       path: Path): Boolean = {
     val xmlOptions = getXmlOptions(sparkSession, options)
+    if (xmlOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(path)) {
+      // A tar archive is read as one sequential stream (entry by entry), so it is never split.
+      return false
+    }
     XmlDataSource(xmlOptions).isSplitable && super.isSplitable(sparkSession, options, path)
   }
 
@@ -116,14 +120,25 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     }
 
     (file: PartitionedFile) => {
-      val parser = new StaxXmlParser(
+      def parser() = new StaxXmlParser(
         actualRequiredSchema,
         xmlOptions)
-      XmlDataSource(xmlOptions).readFile(
-        broadcastedHadoopConf.value.value,
-        file,
-        parser,
-        requiredSchema)
+      // A tar archive (always a single split, see `isSplitable`) is streamed entry by entry when
+      // archive reads are enabled; otherwise the file is parsed directly. XML has no DSv2 reader,
+      // so this dispatch lives here rather than inside the shared `readFile`.
+      if (xmlOptions.archiveFormatEnabled && ArchiveReader.isArchivePath(file.toPath)) {
+        XmlDataSource(xmlOptions).readArchive(
+          broadcastedHadoopConf.value.value,
+          file,
+          () => parser(),
+          requiredSchema)
+      } else {
+        XmlDataSource(xmlOptions).readFile(
+          broadcastedHadoopConf.value.value,
+          file,
+          parser(),
+          requiredSchema)
+      }
     }
   }
 
@@ -135,7 +150,7 @@ case class XmlFileFormat() extends TextBasedFileFormat with DataSourceRegister {
     case _: GeometryType | _: GeographyType => false
 
     // Nanosecond-capable timestamps are not yet supported by this datasource.
-    case _: TimestampNTZNanosType | _: TimestampLTZNanosType => false
+    case _: AnyTimestampNanoType => false
 
     case _: AtomicType => true
 

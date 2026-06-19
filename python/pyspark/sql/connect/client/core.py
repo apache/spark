@@ -2633,3 +2633,32 @@ class SparkConnectClient(object):
         # Ensure the session ID is correctly set from the response
         new_client._session_id = response.new_session_id
         return new_client
+
+    def newSession(self) -> "SparkConnectClient":
+        """
+        Create a new client against the same endpoint with a fresh, independent server-side
+        session that does NOT inherit any state from this client's session. Unlike
+        :meth:`clone`, no state (SQL configurations, temporary views, registered functions,
+        catalog state) is copied over, and no server round-trip is made: the new client is
+        built from a copy of this client's connection configuration with the session ID
+        cleared, so a fresh session ID is generated and the server lazily creates an empty
+        isolated session for it.
+
+        Returns
+        -------
+        SparkConnectClient
+            A new SparkConnectClient instance bound to a fresh, empty session.
+        """
+        # Reuse the same connection configuration (endpoint, channel options, metadata,
+        # user) but drop the session ID so the constructor generates a fresh UUID.
+        new_connection = copy.deepcopy(self._builder)
+        new_connection._params.pop(ChannelBuilder.PARAM_SESSION_ID, None)
+        # Only server-side session state is left behind: client-side behavior such as
+        # registered session hooks and RPC deadlines carries over, as in clone().
+        return SparkConnectClient(
+            connection=new_connection,
+            user_id=self._user_id,
+            use_reattachable_execute=self._use_reattachable_execute,
+            session_hooks=self._session_hooks,
+            rpc_deadlines=self._rpc_deadlines,
+        )

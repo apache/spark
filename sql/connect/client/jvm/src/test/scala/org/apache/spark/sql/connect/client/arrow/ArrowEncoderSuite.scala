@@ -16,15 +16,20 @@
  */
 package org.apache.spark.sql.connect.client.arrow
 
+import java.io.File
 import java.math.BigInteger
+import java.net.URLClassLoader
 import java.time.{Duration, Period, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util
 import java.util.{Collections, Objects}
+import java.util.concurrent.{ConcurrentLinkedQueue, CyclicBarrier}
 
 import scala.beans.BeanProperty
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.reflect.classTag
+import scala.reflect.runtime.{universe => ru}
 
 import org.apache.arrow.memory.{BufferAllocator, RootAllocator}
 import org.apache.arrow.vector.VarBinaryVector
@@ -1159,6 +1164,76 @@ class ArrowEncoderSuite extends ConnectFunSuite {
         ArrowSerializer.serializerFor(StringEncoder, new VarBinaryVector("bytes", allocator))
       }
     }
+  }
+
+  // SPARK-57371: ArrowDeserializers resolves Scala collection companions and Enumeration modules
+  // via runtime reflection, which is not thread-safe (scala/bug#6240): a concurrent
+  // `mirror.classSymbol(cls).companion/.module.asModule` can observe the symbol as `NoSymbol` and
+  // throw `ScalaReflectionException: <none> is not a module`. ArrowDeserializers serializes the
+  // reflection through a single monitor. The race only manifests while a mirror's symbol table is
+  // cold, so each repetition below builds a fresh mirror over a classloader parented at the
+  // platform loader (so `scala.*` is reloaded cold) and drives the real synchronized method from
+  // several threads released at once; without the lock it races red.
+
+  private val collectionCompanionClassNames = Seq(
+    "scala.collection.immutable.List",
+    "scala.collection.immutable.Vector",
+    "scala.collection.immutable.Set",
+    "scala.collection.immutable.Map",
+    "scala.collection.mutable.ArrayBuffer",
+    "scala.collection.mutable.HashMap")
+
+  /** A fresh classloader parented at the platform loader, so `scala.*` is reloaded cold. */
+  private def newColdLoader(): URLClassLoader = {
+    val urls = System
+      .getProperty("java.class.path")
+      .split(File.pathSeparator)
+      .filter(_.nonEmpty)
+      .map(p => new File(p).toURI.toURL)
+    new URLClassLoader(urls, ClassLoader.getPlatformClassLoader)
+  }
+
+  // Drive `resolve` against a fresh cold mirror from 8 threads, 50 times; fail on any error/hang.
+  private def hammerReflection(
+      names: Seq[String],
+      resolve: (ru.Mirror, Class[_]) => Any): Unit = {
+    val errors = new ConcurrentLinkedQueue[Throwable]()
+    for (_ <- 0 until 50) {
+      val loader = newColdLoader()
+      val mirror = ru.runtimeMirror(loader)
+      val classes = names.map(loader.loadClass)
+      val barrier = new CyclicBarrier(8)
+      val threads = (0 until 8).map { _ =>
+        new Thread(() => {
+          barrier.await() // release all threads simultaneously onto the cold mirror
+          classes.foreach { cls =>
+            try resolve(mirror, cls)
+            catch { case e: Throwable => errors.add(e) }
+          }
+        })
+      }
+      threads.foreach(_.start())
+      threads.foreach { t =>
+        t.join(60000)
+        assert(!t.isAlive, "thread did not finish within 60s (possible deadlock)")
+      }
+    }
+    assert(
+      errors.isEmpty,
+      s"reflection raced under concurrent access (${errors.size} error(s)): " +
+        errors.asScala.map(e => s"${e.getClass.getName}: ${e.getMessage}").toSet.mkString("; "))
+  }
+
+  test("SPARK-57371: resolveCompanion is thread-safe under concurrent cold-mirror access") {
+    hammerReflection(
+      collectionCompanionClassNames,
+      (m, c) => ArrowDeserializers.resolveCompanionFromMirror(m, c))
+  }
+
+  test("SPARK-57371: resolveEnum is thread-safe under concurrent cold-mirror access") {
+    hammerReflection(
+      Seq(FooEnum.getClass.getName),
+      (m, c) => ArrowDeserializers.resolveEnumFromMirror(m, c))
   }
 }
 

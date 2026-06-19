@@ -23,6 +23,7 @@ import java.time._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, FractionTimeFormatter, STUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
@@ -31,7 +32,6 @@ import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTab
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -127,20 +127,9 @@ object HiveResult extends SQLConfHelper {
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
     case (ld: LocalDate, DateType) => formatters.date.format(ld)
-    case (lt: LocalTime, _: TimeType) => formatters.time.format(lt)
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
-    // Nanosecond-precision timestamps. The external values are `Instant` (LTZ) and
-    // `LocalDateTime` (NTZ); convert to the physical `TimestampNanosVal` at the column precision
-    // and render via the same formatter methods as the cast-to-string path (SPARK-57256), so the
-    // output stays consistent. LTZ uses the session zone; NTZ is zone-independent.
-    case (i: Instant, t: TimestampLTZNanosType) =>
-      formatters.timestamp.formatNanos(
-        DateTimeUtils.instantToTimestampNanos(i, t.precision), t.precision)
-    case (l: LocalDateTime, t: TimestampNTZNanosType) =>
-      formatters.timestamp.formatWithoutTimeZoneNanos(
-        DateTimeUtils.localDateTimeToTimestampNanos(l, t.precision), t.precision)
     case (bin: Array[Byte], BinaryType) => binaryFormatter(bin)
     case (decimal: java.math.BigDecimal, DecimalType()) => decimal.toPlainString
     case (n, _: NumericType) => n.toString

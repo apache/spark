@@ -220,7 +220,9 @@ trait SparkDateTimeUtils {
    * user-reachable input here. An out-of-range value therefore indicates an internal caller bug
    * and raises an internal error rather than silently retaining all sub-microsecond digits.
    */
-  private def truncateNanosWithinMicroToPrecision(nanosWithinMicro: Int, precision: Int): Int = {
+  private[sql] def truncateNanosWithinMicroToPrecision(
+      nanosWithinMicro: Int,
+      precision: Int): Int = {
     precision match {
       case 7 => (nanosWithinMicro / 100) * 100
       case 8 => (nanosWithinMicro / 10) * 10
@@ -230,6 +232,24 @@ trait SparkDateTimeUtils {
           s"Fractional second precision $precision is out of range " +
             s"[${TimestampNTZNanosType.MIN_PRECISION}, ${TimestampNTZNanosType.MAX_PRECISION}].")
     }
+  }
+
+  /**
+   * Floors a `TimestampNanosVal` to the given timestamp precision `p` in [7, 9] by truncating its
+   * sub-microsecond `nanosWithinMicro` component (see [[truncateNanosWithinMicroToPrecision]]).
+   * `epochMicros` is left untouched, so this only ever drops trailing sub-microsecond digits.
+   *
+   * Used by the same-family cross-precision nanosecond cast paths (`TIMESTAMP_NTZ(p1) ->
+   * TIMESTAMP_NTZ(p2)` and `TIMESTAMP_LTZ(q1) -> TIMESTAMP_LTZ(q2)`): widening (`p2 >= p1`) is
+   * lossless and returns the input unchanged, while narrowing (`p2 < p1`) floors toward `-inf` to
+   * the target precision step.
+   */
+  def truncateTimestampNanosToPrecision(
+      v: TimestampNanosVal,
+      precision: Int): TimestampNanosVal = {
+    val truncated = truncateNanosWithinMicroToPrecision(v.nanosWithinMicro.toInt, precision)
+    if (truncated == v.nanosWithinMicro) v
+    else TimestampNanosVal.fromParts(v.epochMicros, truncated.toShort)
   }
 
   /**
@@ -288,6 +308,37 @@ trait SparkDateTimeUtils {
    */
   def timestampNanosToInstant(v: TimestampNanosVal): Instant = {
     microsToInstant(v.epochMicros).plusNanos(v.nanosWithinMicro.toLong)
+  }
+
+  /**
+   * Converts a `TIMESTAMP_LTZ(p)` nanosecond value into the `TIMESTAMP_NTZ(precision)` wall-clock
+   * value observed in the time zone `zoneId`. The LTZ value denotes an absolute instant;
+   * rendering it as a local date-time at `zoneId` yields the NTZ representation. Time-zone
+   * offsets shift only whole seconds, so the sub-microsecond `nanosWithinMicro` component is
+   * preserved before being floored to the target `precision` (same flooring as same-family
+   * narrowing casts).
+   */
+  def timestampLTZNanosToNTZNanos(
+      v: TimestampNanosVal,
+      zoneId: ZoneId,
+      precision: Int): TimestampNanosVal = {
+    val localDateTime = timestampNanosToInstant(v).atZone(zoneId).toLocalDateTime
+    localDateTimeToTimestampNanos(localDateTime, precision)
+  }
+
+  /**
+   * Converts a `TIMESTAMP_NTZ(q)` nanosecond value into the `TIMESTAMP_LTZ(precision)` instant
+   * obtained by interpreting its wall-clock local date-time in the time zone `zoneId`. This is
+   * the reverse of [[timestampLTZNanosToNTZNanos]]; the sub-microsecond `nanosWithinMicro`
+   * component is preserved across the (whole-second) offset shift before being floored to the
+   * target `precision`.
+   */
+  def timestampNTZNanosToLTZNanos(
+      v: TimestampNanosVal,
+      zoneId: ZoneId,
+      precision: Int): TimestampNanosVal = {
+    val instant = timestampNanosToLocalDateTime(v).atZone(zoneId).toInstant
+    instantToTimestampNanos(instant, precision)
   }
 
   /**

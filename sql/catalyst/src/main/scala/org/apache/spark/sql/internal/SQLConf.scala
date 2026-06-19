@@ -619,6 +619,22 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PLAN_CHANGE_VALIDATION_NULLABILITY =
+    buildConf("spark.sql.planChangeValidation.nullability")
+      .internal()
+      .doc(s"When true, and ${PLAN_CHANGE_VALIDATION.key} is enabled, plan change validation " +
+        "additionally checks that no operator references a child output attribute with a " +
+        "narrower nullability than the child produces (declaring it non-nullable while the child " +
+        "produces it as nullable). Such a mismatch is a latent plan-integrity defect that can " +
+        "enable unsafe optimizations. The check runs only during plan change validation around " +
+        "the optimizer, so nullability defects introduced during analysis are not caught. " +
+        "Disabled by default because not all rules maintain precise nullability today; intended " +
+        "to be enabled by targeted test suites.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val ALLOW_NAMED_FUNCTION_ARGUMENTS = buildConf("spark.sql.allowNamedFunctionArguments")
     .doc("If true, Spark will turn on support for named parameters for all functions that has" +
       " it implemented.")
@@ -634,17 +650,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val TYPES_FRAMEWORK_ENABLED =
-    buildConf("spark.sql.types.framework.enabled")
-      .internal()
-      .doc("When true, use the Types Framework for supported types (currently TimeType and the " +
-        "nanosecond timestamp types TimestampNTZNanosType and TimestampLTZNanosType). " +
-        "The framework centralizes type-specific operations in Ops classes instead of " +
-        "scattered pattern matching. When false, use legacy scattered implementation.")
-      .version("4.2.0")
-      .booleanConf
-      .createWithDefaultFunction(() => Utils.isTesting)
-
   val TIMESTAMP_NANOS_TYPES_ENABLED =
     buildConf("spark.sql.timestampNanosTypes.enabled")
       .internal()
@@ -656,9 +661,7 @@ object SQLConf {
         "Unparameterized TIMESTAMP, TIMESTAMP_NTZ, and TIMESTAMP_LTZ remain microsecond " +
         "types. Enabling this flag does not guarantee full SQL support: casts, Parquet read, " +
         "typed literals, and other operations may still fail until their respective features " +
-        "are implemented. The nanosecond timestamp types are implemented solely through the " +
-        "Types Framework, so this flag only takes effect when " +
-        s"${TYPES_FRAMEWORK_ENABLED.key} is also true.")
+        "are implemented.")
       .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -2723,10 +2726,11 @@ object SQLConf {
     .createWithDefaultString("128MB") // parquet.block.size
 
   val ARCHIVE_FORMAT_READER_ENABLED = buildConf("spark.sql.files.archive.reader.enabled")
-    .doc("When true, the CSV data source can read tar archives (.tar, .tar.gz, .tgz): each " +
-      "archive is read as a single split and its entries are streamed through the CSV parser " +
-      "(never unpacked to disk), as if the entries were separate CSV files, both during scan " +
-      "and schema inference. Only the CSV data source supports reading archives.")
+    .doc("When true, a supported data source can read tar archives (.tar, .tar.gz, .tgz): " +
+      "each archive is read as a single split and its entries are streamed through that data " +
+      "source's parser (never unpacked to disk), as if the entries were separate files, both " +
+      "during scan and schema inference. The CSV, JSON, and text data sources support " +
+      "reading archives.")
     .version("5.0.0")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .booleanConf
@@ -3479,6 +3483,21 @@ object SQLConf {
         "partitioning, and set to false for existing streaming queries to not break queries " +
         "which are restored from existing checkpoints. Please refer SPARK-38204 for details.")
       .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER =
+    buildConf("spark.sql.dropDuplicates.deterministicKeyOrder.enabled")
+      .internal()
+      .doc("When true, dropDuplicates and dropDuplicatesWithinWatermark resolve their key " +
+        "columns with a stable, first-occurrence ordering shared by Spark Classic and Spark " +
+        "Connect. The order does not affect batch results, but stateful streaming " +
+        "deduplication binds state-store keys by position, so for streaming the effective " +
+        "value is pinned per query in the offset log at batch 0: newly started queries use " +
+        "the stable order, while queries restored from a checkpoint that predates this config " +
+        "keep their original key order. Please refer to SPARK-57489 for details.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -4813,6 +4832,17 @@ object SQLConf {
       // show full stacktrace in tests but hide in production by default.
       .createWithDefault(!Utils.isTesting)
 
+  val PYSPARK_TRACEBACK_WITH_LOCALS =
+    buildConf("spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled")
+      .doc(
+        "When true, include the local variables in the traceback from Python UDFs. " +
+        "Note that this config will print the value of every local variable in the call stack, " +
+        "including sensitive data like passwords or API keys. Please use this config with caution.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val PYSPARK_ARROW_VALIDATE_SCHEMA =
     buildConf("spark.sql.execution.arrow.pyspark.validateSchema.enabled")
       .doc(
@@ -5004,7 +5034,7 @@ object SQLConf {
         "dummy value. This is currently used to redact the output of SQL explain commands. " +
         "When this conf is not set, the value from `spark.redaction.string.regex` is used.")
       .version("2.3.0")
-      .fallbackConf(org.apache.spark.internal.config.STRING_REDACTION_PATTERN)
+      .fallbackConf(STRING_REDACTION_PATTERN)
 
   val SQL_SCRIPTING_ENABLED =
     buildConf("spark.sql.scripting.enabled")
@@ -5205,6 +5235,16 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
+
+  val BIN_BY_ENABLED =
+    buildConf("spark.sql.binByRelationOperator.enabled")
+      .doc("Enable the BIN BY relation operator for aligning range-typed rows to " +
+        "fixed-width bin boundaries.")
+      .internal()
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   object StoreAssignmentPolicy extends Enumeration {
     val ANSI, LEGACY, STRICT = Value
@@ -6300,6 +6340,19 @@ object SQLConf {
       .version("4.0.0")
       .booleanConf
       .createWithDefault(true)
+
+  val PUSH_VARIANT_INTO_SCAN_DEFER_CAST_ERROR =
+    buildConf("spark.sql.variant.pushVariantIntoScan.deferCastError")
+      .internal()
+      .doc("When true, strict variant casts that get pushed into the scan are wrapped with a " +
+        "per-row cast-error companion column (nullable string) so that the cast error is only " +
+        "raised when the row is consumed by the user expression. Without this flag, the cast is " +
+        "always evaluated and any failure raises immediately, even when the surrounding " +
+        "expression would not have consumed the failing row.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val VARIANT_WRITE_SHREDDING_ENABLED =
     buildConf("spark.sql.variant.writeShredding.enabled")
@@ -7665,15 +7718,7 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def geospatialEnabled: Boolean = getConf(GEOSPATIAL_ENABLED)
 
-  def typesFrameworkEnabled: Boolean = getConf(TYPES_FRAMEWORK_ENABLED)
-
-  // The nanos types are implemented solely through the Types Framework, so the flag has no
-  // effect without it. The requirement is enforced here instead of in a checkValue of
-  // TIMESTAMP_NANOS_TYPES_ENABLED: a validator must not call SQLConf.get, because validators
-  // run inside mergeSparkConf while the session's SQLConf is still being constructed, and the
-  // SQLConf.get lookup re-enters that construction (infinite recursion).
-  def timestampNanosTypesEnabled: Boolean =
-    getConf(TIMESTAMP_NANOS_TYPES_ENABLED) && getConf(TYPES_FRAMEWORK_ENABLED)
+  def timestampNanosTypesEnabled: Boolean = getConf(TIMESTAMP_NANOS_TYPES_ENABLED)
 
   def dataSourceV2JoinPushdown: Boolean = getConf(DATA_SOURCE_V2_JOIN_PUSHDOWN)
 
@@ -8444,6 +8489,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkHideTraceback: Boolean = getConf(PYSPARK_HIDE_TRACEBACK)
 
   def pysparkSimplifiedTraceback: Boolean = getConf(PYSPARK_SIMPLIFIED_TRACEBACK)
+
+  def pysparkTracebackWithLocals: Boolean = getConf(PYSPARK_TRACEBACK_WITH_LOCALS)
 
   def pysparkArrowValidateSchema: Boolean = getConf(PYSPARK_ARROW_VALIDATE_SCHEMA)
 

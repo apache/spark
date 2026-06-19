@@ -54,7 +54,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -2555,6 +2555,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "toType" -> toSQLType(TimestampType)))
   }
 
+  def cannotCastOrcTimestampError(orcType: DataType, toType: DataType): Throwable = {
+    new SparkUnsupportedOperationException(
+      errorClass = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+      messageParameters = Map(
+        "orcType" -> toSQLType(orcType),
+        "toType" -> toSQLType(toType)))
+  }
+
   def writePartitionExceedConfigSizeWhenDynamicPartitionError(
       numWrittenParts: Int,
       maxDynamicPartitions: Int,
@@ -2617,6 +2625,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" -> (s"add ${toSQLValue(amount, LongType)} $unit to " +
           s"${toSQLValue(DateTimeUtils.microsToInstant(micros), TimestampType)}")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def parquetTimestampNanosOverflowError(
+      value: TimestampNanosVal, isNtz: Boolean): SparkArithmeticException = {
+    // Render TIMESTAMP_NTZ values without a zone (LocalDateTime, no trailing `Z`); TIMESTAMP_LTZ
+    // values are absolute instants and render as UTC with a trailing `Z`.
+    val rendered =
+      if (isNtz) DateTimeUtils.timestampNanosToLocalDateTime(value).toString
+      else DateTimeUtils.timestampNanosToInstant(value).toString
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" -> (s"write the timestamp value $rendered as Parquet INT64 " +
+          "epoch-nanoseconds " +
+          "(supported range: 1677-09-21T00:12:43.145224192Z to 2262-04-11T23:47:16.854775807Z)")),
       context = Array.empty,
       summary = "")
   }
@@ -3045,6 +3070,12 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def invalidVariantGetPath(path: String, functionName: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "INVALID_VARIANT_GET_PATH",
+      messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
+  }
+
+  def invalidVariantPath(path: String, functionName: String): Throwable = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_VARIANT_PATH",
       messageParameters = Map("path" -> path, "functionName" -> toSQLId(functionName)))
   }
 
