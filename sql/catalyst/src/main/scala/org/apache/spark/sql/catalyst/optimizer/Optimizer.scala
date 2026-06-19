@@ -1561,7 +1561,8 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
    * Check if the given expression is cheap that we can inline it.
    */
   def isCheap(e: Expression): Boolean = e match {
-    case _: Attribute | _: OuterReference => true
+    // `BoundReference` is the codegen-bound form of an `Attribute`; a slot read, equally cheap.
+    case _: Attribute | _: OuterReference | _: BoundReference => true
     case _ if e.foldable => true
     // PythonUDF is handled by the rule ExtractPythonUDFs
     case _: PythonUDF =>

@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.optimizer.CollapseProject
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -316,12 +317,12 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // (e.g. decoding a decimal column for rows a cheaper earlier predicate would reject), so we
     // fall back to `generatePredicateCode`.
     //
-    // A *leaf* common subexpression -- a bare column referenced more than once -- does not count.
-    // `c BETWEEN lo AND hi` lowers to `c >= lo AND c <= hi`, so any `BETWEEN` (or a column used in
-    // several conjuncts) makes that column a common subexpression, but caching a column load saves
-    // nothing: the non-CSE path already loads each column lazily into a variable on demand. Taking
-    // the CSE path for it would only add the eager prologue that decodes every referenced column up
-    // front. Require a *non-leaf* common subexpression so filters like TPC-DS q28
+    // A *cheap* common subexpression does not count. `c BETWEEN lo AND hi` lowers to
+    // `c >= lo AND c <= hi`, so any `BETWEEN` (or a column referenced in several conjuncts) makes
+    // that column a common subexpression, but caching a cheap load saves nothing: the non-CSE path
+    // already loads each column lazily into a variable on demand. Taking the CSE path for it would
+    // only add the eager prologue that decodes every referenced column up front. Require a
+    // non-cheap common subexpression (per `CollapseProject.isCheap`) so filters like TPC-DS q28
     // (`ss_quantity BETWEEN ... AND (ss_list_price BETWEEN ... OR ...)`, whose only repeats are the
     // bare columns) keep the lazy, short-circuiting path.
     //
@@ -331,7 +332,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       if (conf.subexpressionEliminationEnabled && conf.subexpressionEliminationFilterExecEnabled &&
           otherPreds.nonEmpty &&
           otherPredsEquivalentExpressions.getCommonSubexpressions
-            .exists(!_.isInstanceOf[LeafExpression])) {
+            .exists(!CollapseProject.isCheap(_))) {
         // Pre-evaluate input variables before CSE analysis: CSE clears
         // ctx.currentVars[i].code as a side effect; without this pre-evaluation, Janino
         // fails when otherPreds reference the same input columns that CSE already
