@@ -56,6 +56,11 @@ on:
         description: 'Commit the benchmark results to the current branch'
         required: true
         default: false
+      generate-tpcds:
+        type: boolean
+        description: 'Generate TPC-DS data (required for TPC-DS benchmarks and all-benchmark runs)'
+        required: true
+        default: true
       expected-cpu:
         type: string
         description: 'Expected CPU model (e.g. "AMD EPYC 7763"). If set, the job fails early when the runner CPU does not match.'
@@ -78,11 +83,7 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   tpcds-1g-gen:
     name: "Generate an TPC-DS dataset with SF=1"
-    # Only generate TPC-DS data when running TPC-DS benchmarks or all benchmarks (class == '*').
-    # Use contains(inputs.class, 'TPCDS') to catch both exact class names and globs like '*TPCDS*'.
-    # Use exact equality for '*' to avoid matching wildcard patterns like
-    # '*VectorizedDeltaReaderBenchmark' that don't need TPC-DS data.
-    if: contains(inputs.class, 'TPCDS') || inputs.class == '*'
+    if: inputs.generate-tpcds
     runs-on: ubuntu-latest
     env:
       SPARK_LOCAL_IP: localhost
@@ -203,7 +204,7 @@ jobs:
         distribution: zulu
         java-version: ${{ inputs.jdk }}
     - name: Cache TPC-DS generated data
-      if: contains(inputs.class, 'TPCDS') || inputs.class == '*'
+      if: inputs.generate-tpcds
       id: cache-tpcds-sf-1
       uses: actions/cache@v5
       with:
