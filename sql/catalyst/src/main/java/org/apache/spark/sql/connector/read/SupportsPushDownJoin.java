@@ -107,7 +107,7 @@ public interface SupportsPushDownJoin extends ScanBuilder {
   /**
    * A pushed table sample from one side of the join.
    *
-   * @since 4.2.0
+   * @since 4.3.0
    */
   record TableSample(
       double lowerBound,
