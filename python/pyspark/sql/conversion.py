@@ -1697,13 +1697,40 @@ class ArrowArrayToPandasConversion:
         ]
 
     @staticmethod
+    def _wrap_elements(items: list, element_is_array: bool) -> "np.ndarray":
+        """Wrap converted array elements into an object ndarray.
+
+        For nested arrays (``element_is_array=True``) each sub-array is kept as a
+        distinct element via an explicit object ndarray. This avoids
+        ``np.asarray(..., dtype=object)`` collapsing equal-length sub-arrays into a 2-D
+        array, so the nested shape is consistent regardless of whether the inner arrays
+        happen to be the same length (where ``np.asarray`` would otherwise yield a 2-D
+        result for rectangular data and a 1-D array of lists for ragged data).
+
+        For leaf elements, ``np.asarray`` is used to match convert_legacy's
+        representation.
+        """
+        import numpy as np
+
+        if element_is_array:
+            out = np.empty(len(items), dtype=object)
+            for i, item in enumerate(items):
+                out[i] = item
+            return out
+        return np.asarray(items, dtype=object)
+
+    @staticmethod
     def _create_element_converter(
         element_type: DataType,
+        ndarray_as_list: bool = False,
     ) -> Optional[Callable]:
         """
         Create a converter function for elements inside arrays that need post-processing.
 
         Returns None if no conversion is needed (i.e., to_pandas() output is already correct).
+
+        ``ndarray_as_list`` mirrors :meth:`convert_numpy`: when True, nested arrays are
+        emitted as Python lists; when False, as object ndarrays (see ``_wrap_elements``).
         """
         if isinstance(element_type, UserDefinedType):
             udt: UserDefinedType = element_type
@@ -1746,15 +1773,27 @@ class ArrowArrayToPandasConversion:
             return convert_geometry
         elif isinstance(element_type, ArrayType):
             inner_conv = ArrowArrayToPandasConversion._create_element_converter(
-                element_type.elementType
+                element_type.elementType, ndarray_as_list=ndarray_as_list
             )
             if inner_conv is None:
                 return None
 
-            def convert_array(v: Any) -> Any:
-                if v is None:
-                    return None
-                return [inner_conv(e) for e in v]
+            if ndarray_as_list:
+
+                def convert_array(v: Any) -> Any:
+                    if v is None:
+                        return None
+                    return [inner_conv(e) for e in v]
+
+            else:
+                inner_is_array = isinstance(element_type.elementType, ArrayType)
+
+                def convert_array(v: Any) -> Any:
+                    if v is None:
+                        return None
+                    return ArrowArrayToPandasConversion._wrap_elements(
+                        [inner_conv(e) for e in v], inner_is_array
+                    )
 
             return convert_array
         return None
@@ -1906,7 +1945,9 @@ class ArrowArrayToPandasConversion:
             series = arr.to_pandas()
             series = series.map(conv)
         elif isinstance(spark_type, ArrayType):
-            element_conv = cls._create_element_converter(spark_type.elementType)
+            element_conv = cls._create_element_converter(
+                spark_type.elementType, ndarray_as_list=ndarray_as_list
+            )
             if element_conv is not None:
                 if ndarray_as_list:
                     series = arr.to_pandas(integer_object_nulls=True)
@@ -1914,12 +1955,11 @@ class ArrowArrayToPandasConversion:
                         lambda x: ([element_conv(e) for e in x] if x is not None else None)
                     )
                 else:
-                    import numpy as np
-
+                    element_is_array = isinstance(spark_type.elementType, ArrayType)
                     series = arr.to_pandas()
                     series = series.map(
                         lambda x: (
-                            np.asarray([element_conv(e) for e in x], dtype=object)
+                            cls._wrap_elements([element_conv(e) for e in x], element_is_array)
                             if x is not None
                             else None
                         )

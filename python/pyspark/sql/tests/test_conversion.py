@@ -30,6 +30,8 @@ from pyspark.sql.conversion import (
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
+    BooleanType,
+    DateType,
     DecimalType,
     DoubleType,
     Geography,
@@ -957,9 +959,11 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         result = ArrowArrayToPandasConversion.convert_numpy(
             arr, ArrayType(ArrayType(VariantType()))
         )
-        # ndarray_as_list=False (default): outer container is ndarray
+        # ndarray_as_list=False (default): nested arrays are object ndarrays at every
+        # level (consistent regardless of inner length; ragged/None-containing inners
+        # stay distinct rather than collapsing into a 2-D array).
         self.assertIsInstance(result.iloc[0], np.ndarray)
-        self.assertIsInstance(result.iloc[0][0], list)
+        self.assertIsInstance(result.iloc[0][0], np.ndarray)
         self.assertIsInstance(result.iloc[0][0][0], VariantVal)
         self.assertIsNone(result.iloc[0][1])
 
@@ -1140,6 +1144,189 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         result_legacy = ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
         result_new = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
         pd.testing.assert_series_equal(result_legacy, result_new)
+
+    def test_nested_complex_array_shape_consistent(self):
+        """Regression: ArrayType(ArrayType(complex)) inner shape must be a consistent
+        object ndarray regardless of inner-array lengths.
+
+        np.asarray(..., dtype=object) collapses equal-length inner arrays into a 2-D
+        array but leaves ragged/None-containing inners as Python lists, so the inner
+        container type used to depend on the data. It must now always be an ndarray.
+        (Note: convert_legacy raises ValueError on the ragged/None cases, so there is no
+        legacy behavior to match there.)
+        """
+        import numpy as np
+        import pyarrow as pa
+
+        variant_type = pa.struct(
+            [
+                pa.field("value", pa.binary(), nullable=False),
+                pa.field("metadata", pa.binary(), nullable=False, metadata={b"variant": b"true"}),
+            ]
+        )
+
+        def v(b):
+            return {"value": bytes([b]), "metadata": bytes([b])}
+
+        spark_type = ArrayType(ArrayType(VariantType()))
+        for label, row in [
+            ("rectangular", [[v(1)], [v(2)]]),
+            ("ragged", [[v(1), v(2)], [v(3)]]),
+            ("with-None", [[v(1)], None]),
+        ]:
+            with self.subTest(case=label):
+                arr = pa.array([row], type=pa.list_(pa.list_(variant_type)))
+                result = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+                outer = result.iloc[0]
+                self.assertIsInstance(outer, np.ndarray)
+                for inner in outer:
+                    if inner is not None:
+                        self.assertIsInstance(inner, np.ndarray)
+                        for elem in inner:
+                            self.assertIsInstance(elem, VariantVal)
+
+        # ndarray_as_list=True remains lists all the way down
+        arr = pa.array([[[v(1), v(2)], [v(3)]]], type=pa.list_(pa.list_(variant_type)))
+        result = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type, ndarray_as_list=True)
+        self.assertIsInstance(result.iloc[0], list)
+        self.assertIsInstance(result.iloc[0][0], list)
+        self.assertIsInstance(result.iloc[0][0][0], VariantVal)
+
+    def test_array_value_parity_with_legacy(self):
+        """For element types that round-trip identically, convert_numpy matches
+        convert_legacy exactly (same values and same representation).
+
+        This pins the set of array element types that already agree, so a future
+        change that breaks parity for one of them is caught here.
+
+        TODO: Remove when convert_legacy is removed.
+        """
+        import datetime
+        import decimal
+        import pandas as pd
+        import pyarrow as pa
+
+        cases = [
+            (ArrayType(DoubleType()), pa.list_(pa.float64()), [[1.5, None], None]),
+            (ArrayType(BooleanType()), pa.list_(pa.bool_()), [[True, None, False]]),
+            (ArrayType(StringType()), pa.list_(pa.string()), [["a", None, "c"], None]),
+            (ArrayType(BinaryType()), pa.list_(pa.binary()), [[b"a", None]]),
+            (ArrayType(DateType()), pa.list_(pa.date32()), [[datetime.date(2020, 1, 1), None]]),
+            # Decimal is not in _prefer_convert_numpy's supported_types, but Array[Decimal]
+            # still routes to convert_numpy via the ArrayType catch-all; pin that it agrees.
+            (
+                ArrayType(DecimalType(10, 2)),
+                pa.list_(pa.decimal128(10, 2)),
+                [[decimal.Decimal("1.50"), None], None],
+            ),
+        ]
+        for spark_type, pa_type, values in cases:
+            with self.subTest(spark_type=spark_type):
+                arr = pa.array(values, type=pa_type)
+                legacy = ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
+                numpy = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
+                pd.testing.assert_series_equal(legacy, numpy)
+
+    def test_array_int_with_null_differs_from_legacy(self):
+        """Documented difference: integer arrays with nulls.
+
+        convert_numpy widens to float64 (null -> NaN), matching its own scalar-integer
+        behavior, whereas convert_legacy keeps object dtype with Python ints and None.
+        This is a value-level difference inherited from the scalar path, not introduced
+        by the array path.
+
+        TODO: Reconcile (or formally accept) when convert_legacy is removed.
+        """
+        import numpy as np
+        import pyarrow as pa
+
+        for spark_type, pa_type in [
+            (ArrayType(IntegerType()), pa.list_(pa.int32())),
+            (ArrayType(LongType()), pa.list_(pa.int64())),
+        ]:
+            with self.subTest(spark_type=spark_type):
+                arr = pa.array([[1, None, 3]], type=pa_type)
+                legacy = ArrowArrayToPandasConversion.convert_legacy(arr, spark_type).iloc[0]
+                numpy = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type).iloc[0]
+                self.assertEqual(legacy.dtype, object)
+                self.assertEqual(legacy.tolist(), [1, None, 3])
+                self.assertEqual(numpy.dtype, np.float64)
+                self.assertEqual(numpy[0], 1.0)
+                self.assertTrue(np.isnan(numpy[1]))
+                self.assertEqual(numpy[2], 3.0)
+
+    def test_array_timestamp_repr_differs_from_legacy(self):
+        """Documented difference: timestamp arrays carry identical instants but
+        different element representation.
+
+        convert_legacy boxes elements into an object ndarray of pd.Timestamp/NaT,
+        while convert_numpy keeps a native datetime64[ns] ndarray. Timezone/instant
+        handling itself is done upstream by preprocess_time, so it is not re-done in
+        the array path -- hence the instants match.
+
+        TODO: Reconcile (or formally accept) when convert_legacy is removed.
+        """
+        import numpy as np
+        import pandas as pd
+        import pyarrow as pa
+
+        utc = datetime.timezone.utc
+        for spark_type, pa_type, values in [
+            (
+                ArrayType(TimestampType()),
+                pa.list_(pa.timestamp("us", tz="UTC")),
+                [[datetime.datetime(2020, 1, 1, tzinfo=utc), None]],
+            ),
+            (
+                ArrayType(TimestampNTZType()),
+                pa.list_(pa.timestamp("us")),
+                [[datetime.datetime(2020, 1, 1), None]],
+            ),
+        ]:
+            with self.subTest(spark_type=spark_type):
+                arr = pa.array(values, type=pa_type)
+                legacy = ArrowArrayToPandasConversion.convert_legacy(
+                    arr, spark_type, timezone="UTC"
+                ).iloc[0]
+                numpy = ArrowArrayToPandasConversion.convert_numpy(
+                    arr, spark_type, timezone="UTC"
+                ).iloc[0]
+                self.assertEqual(legacy.dtype, object)
+                self.assertIsInstance(legacy[0], pd.Timestamp)
+                self.assertEqual(numpy.dtype, np.dtype("datetime64[ns]"))
+                self.assertEqual(pd.Timestamp(legacy[0]).value, pd.Timestamp(numpy[0]).value)
+                self.assertTrue(pd.isna(legacy[1]))
+                self.assertTrue(pd.isna(numpy[1]))
+
+    def test_array_of_struct_or_map_falls_back_to_legacy(self):
+        """Arrays whose element is a StructType or MapType are not yet supported by
+        convert_numpy, so _prefer_convert_numpy returns False and convert() dispatches
+        to convert_legacy. Pin both the routing and the dispatched output.
+        """
+        import pyarrow as pa
+
+        struct_type = ArrayType(StructType([StructField("a", IntegerType())]))
+        map_type = ArrayType(MapType(StringType(), IntegerType()))
+        self.assertFalse(ArrowArrayToPandasConversion._prefer_convert_numpy(struct_type, False))
+        self.assertFalse(ArrowArrayToPandasConversion._prefer_convert_numpy(map_type, False))
+
+        arr = pa.array(
+            [[{"a": 1}, None], None],
+            type=pa.list_(pa.struct([("a", pa.int32())])),
+        )
+        result = ArrowArrayToPandasConversion.convert(
+            arr, struct_type, timezone="UTC", struct_in_pandas="dict"
+        )
+        self.assertEqual(result.iloc[0][0], {"a": 1})
+        self.assertIsNone(result.iloc[0][1])
+        self.assertIsNone(result.iloc[1])
+
+        arr = pa.array([[[("k", 1)], None]], type=pa.list_(pa.map_(pa.string(), pa.int32())))
+        result = ArrowArrayToPandasConversion.convert(
+            arr, map_type, timezone="UTC", struct_in_pandas="dict"
+        )
+        self.assertEqual(result.iloc[0][0], {"k": 1})
+        self.assertIsNone(result.iloc[0][1])
 
     def test_array_of_malformed_data(self):
         """Malformed data raises PySparkValueError for Variant/Geography/Geometry."""
