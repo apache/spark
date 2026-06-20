@@ -178,10 +178,15 @@ trait SparkDateTimeUtils {
       TimeType.MIN_PRECISION <= p && p <= TimeType.MAX_PRECISION,
       s"Fractional second precision $p out" +
         s" of range [${TimeType.MIN_PRECISION}..${TimeType.MAX_PRECISION}].")
-    val scale = TimeType.NANOS_PRECISION - p
-    val factor = math.pow(10, scale).toLong
+    val factor = timeTruncationFactors(TimeType.NANOS_PRECISION - p)
     (nanos / factor) * factor
   }
+
+  // Precomputed 10^k for k in [0, NANOS_PRECISION], indexed by the truncation scale
+  // (NANOS_PRECISION - p). `truncateTimeToPrecision` runs per value on hot read/cast paths, so the
+  // factor is looked up here instead of recomputed with `math.pow` on every call.
+  private val timeTruncationFactors: Array[Long] =
+    (0 to TimeType.NANOS_PRECISION).map(k => math.pow(10, k).toLong).toArray
 
   /**
    * Converts the timestamp `micros` from one timezone to another.

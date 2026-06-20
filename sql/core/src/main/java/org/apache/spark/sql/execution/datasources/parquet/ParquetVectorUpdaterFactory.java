@@ -898,18 +898,31 @@ public class ParquetVectorUpdaterFactory {
   // Mirrors the row-based ParquetRowConverter path so the vectorized and non-vectorized readers
   // agree on the decoded value, including when the requested precision is lower than the on-disk
   // value's precision.
+  // 10^k for k in [0, 9] (TimeType.NANOS_PRECISION), indexed by the truncation scale
+  // (NANOS_PRECISION - p), used to truncate a nanosecond TIME value to the requested
+  // fractional-second precision. Length - 1 equals TimeType.NANOS_PRECISION.
+  private static final long[] TIME_TRUNCATION_FACTORS = {
+    1L, 10L, 100L, 1_000L, 10_000L, 100_000L,
+    1_000_000L, 10_000_000L, 100_000_000L, 1_000_000_000L
+  };
+
   private static class TimeUpdater implements ParquetVectorUpdater {
-    private final int precision;
+    // The truncation step for the requested precision. The precision is constant per column, so the
+    // factor is looked up once here rather than recomputed per value via the math.pow in
+    // DateTimeUtils.truncateTimeToPrecision (this is the vectorized hot loop).
+    private final long truncationFactor;
     private final boolean fileStoresNanos;
 
     TimeUpdater(int precision, boolean fileStoresNanos) {
-      this.precision = precision;
       this.fileStoresNanos = fileStoresNanos;
+      // scale = NANOS_PRECISION - precision, where NANOS_PRECISION == TIME_TRUNCATION_FACTORS.length - 1.
+      this.truncationFactor = TIME_TRUNCATION_FACTORS[TIME_TRUNCATION_FACTORS.length - 1 - precision];
     }
 
     private long toTruncatedNanos(long value) {
       long nanos = fileStoresNanos ? value : DateTimeUtils.microsToNanos(value);
-      return DateTimeUtils.truncateTimeToPrecision(nanos, precision);
+      // Equivalent to DateTimeUtils.truncateTimeToPrecision(nanos, precision) with the factor hoisted.
+      return (nanos / truncationFactor) * truncationFactor;
     }
 
     @Override
