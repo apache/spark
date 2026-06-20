@@ -273,4 +273,38 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
     val inferSchema = new CSVInferSchema(options)
     assert(inferSchema.inferField(NullType, "2884-06-24T02:45:51.138") == StringType)
   }
+
+  test("SPARK-57572: infer TimeType when timeType.enabled is true") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val options = new CSVOptions(Map.empty[String, String],
+        columnPruning = false, defaultTimeZoneId = "UTC")
+      val inferSchema = new CSVInferSchema(options)
+
+      // Basic time inference
+      assert(inferSchema.inferField(NullType, "12:13:14") == TimeType(TimeType.MICROS_PRECISION))
+      assert(inferSchema.inferField(NullType, "23:59:59") == TimeType(TimeType.MICROS_PRECISION))
+      assert(inferSchema.inferField(NullType, "00:00:00") == TimeType(TimeType.MICROS_PRECISION))
+
+      // Time with fractional seconds
+      assert(inferSchema.inferField(NullType, "12:13:14.123") ==
+        TimeType(TimeType.MICROS_PRECISION))
+
+      // Not a time -- should fall through to other types
+      assert(inferSchema.inferField(NullType, "not-a-time") == StringType)
+
+      // Date should NOT be inferred as time
+      assert(inferSchema.inferField(NullType, "2023-01-01") == DateType)
+    }
+  }
+
+  test("SPARK-57572: TimeType not inferred when timeType.enabled is false") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      val options = new CSVOptions(Map.empty[String, String],
+        columnPruning = false, defaultTimeZoneId = "UTC")
+      val inferSchema = new CSVInferSchema(options)
+
+      // Time string should fall through to StringType when disabled
+      assert(inferSchema.inferField(NullType, "12:13:14") != TimeType(TimeType.MICROS_PRECISION))
+    }
+  }
 }

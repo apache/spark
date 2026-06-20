@@ -120,4 +120,19 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
       """{"a": "2884-06-24T02:45:51.138"}""",
       StringType)
   }
+
+  test("SPARK-57572: infer TimeType when timeType.enabled is true") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      checkType(Map.empty[String, String], """{"a": "12:13:14"}""",
+        TimeType(TimeType.MICROS_PRECISION))
+      checkType(Map.empty[String, String], """{"a": "23:59:59.123456"}""",
+        TimeType(TimeType.MICROS_PRECISION))
+    }
+  }
+
+  test("SPARK-57572: TimeType not inferred when timeType.enabled is false") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      checkType(Map.empty[String, String], """{"a": "12:13:14"}""", StringType)
+    }
+  }
 }
