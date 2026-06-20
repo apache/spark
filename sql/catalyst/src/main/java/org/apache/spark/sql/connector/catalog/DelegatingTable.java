@@ -31,7 +31,7 @@ import org.apache.spark.sql.connector.expressions.Transform;
  * defers read/write to Spark, which resolves the table provider into a data source at read time.
  * <p>
  * Catalogs build the metadata via {@link TableInfo.Builder} and return a {@code DelegatingTable}
- * from {@link TableCatalog#loadTable(Identifier)} (or {@link TableViewCatalog#loadRelation} for a
+ * from {@link TableCatalog#loadTable(Identifier)} (or {@link RelationCatalog#loadRelation} for a
  * data-source table) when they want Spark to handle the underlying source. A catalog that has its
  * own {@link Table} object returns that instead. Views are never represented as a
  * {@code DelegatingTable}: a view is a {@link View}, which is itself a {@link Relation}.
@@ -51,7 +51,7 @@ public class DelegatingTable implements Table {
    *             not read this field; it emits the resolved identifier as structured
    *             {@code Catalog} / {@code Namespace} / {@code Table} rows. Catalogs returning
    *             a {@code DelegatingTable} from {@link TableCatalog#loadTable} or
-   *             {@link TableViewCatalog#loadRelation} should typically pass
+   *             {@link RelationCatalog#loadRelation} should typically pass
    *             {@code ident.toString()}, matching the quoted multi-part form used elsewhere
    *             for v2 identifiers.
    */

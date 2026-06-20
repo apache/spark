@@ -33,14 +33,14 @@ import org.apache.spark.sql.types.StructType;
  * <p>
  * Unlike a {@link Table}, a {@code View} is itself a {@link Relation} rather than something Spark
  * realizes into a {@code Table}: Spark expands the view's query text at read time and never builds
- * a view object. A {@link TableViewCatalog} returns a {@code View} directly from
- * {@link TableViewCatalog#loadRelation} for a view identifier, so it never has to smuggle a view
+ * a view object. A {@link RelationCatalog} returns a {@code View} directly from
+ * {@link RelationCatalog#loadRelation} for a view identifier, so it never has to smuggle a view
  * through the {@code Table} surface.
  *
  * @since 4.2.0
  */
 @Evolving
-public non-sealed class View implements Relation {
+public class View implements Relation {
 
   private final Column[] columns;
   private final Map<String, String> properties;

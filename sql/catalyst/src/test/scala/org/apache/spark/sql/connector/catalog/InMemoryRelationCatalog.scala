@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.analysis.{NamespaceAlreadyExistsException, 
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
- * An in-memory [[TableViewCatalog]] for tests. Tables and views share a single keyspace per
- * the [[TableViewCatalog]] contract; the stored [[Relation]]'s runtime type ([[Table]] vs
+ * An in-memory [[RelationCatalog]] for tests. Tables and views share a single keyspace per
+ * the [[RelationCatalog]] contract; the stored [[Relation]]'s runtime type ([[Table]] vs
  * [[View]]) is the kind discriminator. Tables are stored as a [[DelegatingTable]] wrapping the
  * [[TableInfo]] passed to `createTable`. Also implements [[SupportsNamespaces]] with a
  * minimal namespace store, so analyzer rules that read namespace metadata (e.g.
@@ -35,7 +35,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * uniformly with the v1 session catalog. Suitable for any test suite that wants to exercise
  * v2 view DDL or inspection commands against a non-session catalog.
  */
-class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces {
+class InMemoryRelationCatalog extends RelationCatalog with SupportsNamespaces {
 
   private val store =
     new ConcurrentHashMap[(Seq[String], String), Relation]()
@@ -59,7 +59,7 @@ class InMemoryTableViewCatalog extends TableViewCatalog with SupportsNamespaces 
   }
 
   override def alterTable(ident: Identifier, changes: TableChange*): Table = {
-    throw new UnsupportedOperationException("alterTable not supported on InMemoryTableViewCatalog")
+    throw new UnsupportedOperationException("alterTable not supported on InMemoryRelationCatalog")
   }
 
   override def dropTable(ident: Identifier): Boolean = {

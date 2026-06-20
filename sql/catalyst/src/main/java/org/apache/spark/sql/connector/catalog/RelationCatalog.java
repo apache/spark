@@ -27,15 +27,15 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  * Catalog API for connectors that expose both tables and views in a single shared identifier
  * namespace.
  * <p>
- * Connectors that expose <i>both</i> tables and views must implement {@code TableViewCatalog};
+ * Connectors that expose <i>both</i> tables and views must implement {@code RelationCatalog};
  * implementing {@link TableCatalog} and {@link ViewCatalog} directly without
- * {@code TableViewCatalog} is rejected at catalog initialization. Connectors that expose only
+ * {@code RelationCatalog} is rejected at catalog initialization. Connectors that expose only
  * tables implement just {@link TableCatalog}; connectors that expose only views implement just
  * {@link ViewCatalog}; this interface is not relevant to them.
  *
  * <h2>Two principles</h2>
  *
- * A {@code TableViewCatalog} follows two rules that, taken together, define every cross-cutting
+ * A {@code RelationCatalog} follows two rules that, taken together, define every cross-cutting
  * subtlety:
  * <ol>
  *   <li><b>Orthogonal interfaces.</b> Every {@link TableCatalog} method behaves as if views did
@@ -102,14 +102,14 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  * <h2>Single-RPC perf entry points</h2>
  *
  * The orthogonal {@link TableCatalog} and {@link ViewCatalog} answer two cross-cutting
- * questions in two round trips each. {@code TableViewCatalog} adds dedicated methods so a
+ * questions in two round trips each. {@code RelationCatalog} adds dedicated methods so a
  * catalog can answer both in one round trip:
  * <ul>
  *   <li>{@link #loadRelation(Identifier)} -- the resolver's per-identifier read path. Returns a
  *       {@link Table} for a table or a {@link View} for a view; callers discriminate via
  *       {@code instanceof}. Saves the {@code loadTable} -> {@code loadView} fallback on a cold
  *       cache.</li>
- *   <li>{@link #listTableAndViewSummaries(String[])} -- a unified listing of tables and views
+ *   <li>{@link #listRelationSummaries(String[])} -- a unified listing of tables and views
  *       with the kind preserved on each {@link TableSummary}. Default impl performs both
  *       {@link TableCatalog#listTableSummaries} and {@link ViewCatalog#listViews}; override to
  *       fetch in one round trip.</li>
@@ -118,7 +118,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchViewException;
  * @since 4.2.0
  */
 @Evolving
-public interface TableViewCatalog extends TableCatalog, ViewCatalog {
+public interface RelationCatalog extends TableCatalog, ViewCatalog {
 
   /**
    * Load the relation for an identifier that may resolve to either a table or a view.
@@ -147,7 +147,7 @@ public interface TableViewCatalog extends TableCatalog, ViewCatalog {
    * @throws NoSuchTableException if a table listed by the underlying enumeration disappears
    *                              before its summary can be assembled (default impl only)
    */
-  default TableSummary[] listTableAndViewSummaries(String[] namespace)
+  default TableSummary[] listRelationSummaries(String[] namespace)
       throws NoSuchNamespaceException, NoSuchTableException {
     TableSummary[] tableSummaries = listTableSummaries(namespace);
     Identifier[] viewIdentifiers = listViews(namespace);

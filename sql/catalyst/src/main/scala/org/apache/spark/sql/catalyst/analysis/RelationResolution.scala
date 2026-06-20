@@ -40,7 +40,7 @@ import org.apache.spark.sql.connector.catalog.{
   Relation,
   Table,
   TableCatalog,
-  TableViewCatalog,
+  RelationCatalog,
   V1Table,
   V2TableWithV1Fallback,
   View,
@@ -244,7 +244,7 @@ class RelationResolution(
           .orElse {
             val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
             val finalOptions = u.clearWritePrivileges.options
-            // For a `TableViewCatalog` with no time-travel / write privileges, the single-RPC
+            // For a `RelationCatalog` with no time-travel / write privileges, the single-RPC
             // `loadRelation` answers both "is there a table?" and "is there a view?" in one
             // call. Time-travel and write privileges apply to tables only, so for those the
             // lookup falls through to the table-only `loadTable` path below; views are not
@@ -253,8 +253,8 @@ class RelationResolution(
             // Skip the table-side lookup entirely for view-only catalogs (no `TableCatalog`
             // mixin): `CatalogV2Util.loadTable` would call `asTableCatalog` and throw
             // MISSING_CATALOG_ABILITY.TABLES, masking the legitimate view-resolution path.
-            val tableOrView: Option[Relation] = catalog match {
-              case mc: TableViewCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
+            val relation: Option[Relation] = catalog match {
+              case mc: RelationCatalog if finalTimeTravelSpec.isEmpty && writePrivileges == null =>
                 try {
                   Some(mc.loadRelation(ident))
                 } catch {
@@ -292,9 +292,9 @@ class RelationResolution(
                   }
                 }
             }
-            // `table` is `tableOrView` filtered to tables only -- used for cache lookup since
+            // `table` is `relation` filtered to tables only -- used for cache lookup since
             // we don't share-cache views.
-            val table: Option[Table] = tableOrView.collect { case t: Table => t }
+            val table: Option[Table] = relation.collect { case t: Table => t }
 
             val sharedRelationCacheMatch = for {
               t <- table
@@ -312,7 +312,7 @@ class RelationResolution(
               val loaded = createRelation(
                 catalog,
                 ident,
-                tableOrView,
+                relation,
                 finalOptions,
                 u.isStreaming,
                 finalTimeTravelSpec)

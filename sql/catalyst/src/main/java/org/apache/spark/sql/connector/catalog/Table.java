@@ -44,7 +44,7 @@ import java.util.Set;
  * @since 3.0.0
  */
 @Evolving
-public non-sealed interface Table extends Relation {
+public interface Table extends Relation {
 
   /**
    * A name to identify this table. Implementations should provide a meaningful name, like the

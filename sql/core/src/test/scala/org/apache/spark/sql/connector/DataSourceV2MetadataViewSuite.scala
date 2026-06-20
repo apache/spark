@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, DelegatingTable, Relation, Table, TableCatalog, TableChange, TableInfo, TableSummary, TableViewCatalog, V1Table, ViewCatalog, View}
+import org.apache.spark.sql.connector.catalog.{Identifier, DelegatingTable, Relation, Table, TableCatalog, TableChange, TableInfo, TableSummary, RelationCatalog, V1Table, ViewCatalog, View}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -43,7 +43,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
   import testImplicits._
 
   override def sparkConf: SparkConf = super.sparkConf
-    .set("spark.sql.catalog.view_catalog", classOf[TestingTableViewCatalog].getName)
+    .set("spark.sql.catalog.view_catalog", classOf[TestingRelationCatalog].getName)
 
   // --- View read path -----------------------------------------------------
 
@@ -71,7 +71,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
     // End-to-end coverage of the v2 encoder -> parser round-trip: test_unqualified_multi is a
     // view whose captured catalog+namespace is view_catalog.ns1.ns2 (two-part namespace) and
     // whose body references `t` unqualified. At read time the unqualified `t` must expand to
-    // view_catalog.ns1.ns2.t via the captured context -- which TestingTableViewCatalog resolves to
+    // view_catalog.ns1.ns2.t via the captured context -- which TestingRelationCatalog resolves to
     // its own `t` fixture at that namespace.
     checkAnswer(
       spark.table("view_catalog.outer_ns.test_unqualified_multi"),
@@ -207,7 +207,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
       // `unsupportedCreateOrReplaceViewOnTableError`. Pre-seed a non-view entry at a
       // multi-level-namespace identifier to exercise the rendering.
       val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-        .asInstanceOf[TestingTableViewCatalog]
+        .asInstanceOf[TestingRelationCatalog]
       val tblIdent = Identifier.of(Array("ns1", "inner"), "t_err")
       catalog.createTable(
         tblIdent,
@@ -364,7 +364,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
 
   private def seedV2Table(name: String): Unit = {
     val catalog = spark.sessionState.catalogManager.catalog("view_catalog")
-      .asInstanceOf[TestingTableViewCatalog]
+      .asInstanceOf[TestingRelationCatalog]
     catalog.createTable(
       Identifier.of(Array("default"), name),
       new TableInfo.Builder()
@@ -373,9 +373,9 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
         .build())
   }
 
-  test("SHOW TABLES on a TableViewCatalog returns both tables and views (v1-parity)") {
-    // For a `TableViewCatalog` (a catalog exposing both tables and views in a shared
-    // identifier namespace), SHOW TABLES routes through `listTableAndViewSummaries` so views
+  test("SHOW TABLES on a RelationCatalog returns both tables and views (v1-parity)") {
+    // For a `RelationCatalog` (a catalog exposing both tables and views in a shared
+    // identifier namespace), SHOW TABLES routes through `listRelationSummaries` so views
     // appear alongside tables -- matching the v1 SHOW TABLES output. Pure `TableCatalog`
     // catalogs (no view mixin) continue to use `listTables` and return tables only.
     seedV2View("v_in_show_tables")
@@ -392,7 +392,7 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
 }
 
 /**
- * A [[TableViewCatalog]]: round-trips [[DelegatingTable]] for created views and tables and
+ * A [[RelationCatalog]]: round-trips [[DelegatingTable]] for created views and tables and
  * exposes a few canned read-only view fixtures (`test_view`, `test_unqualified_view`,
  * `test_unqualified_multi`, plus an unqualified-target view at `ns1.ns2.t`) used by the
  * view-read tests. Entries created via `createTable` / `createView` are distinguished by the
@@ -400,17 +400,17 @@ class DataSourceV2MetadataViewSuite extends SharedSparkSession {
  * [[loadRelation]] returns either kind; [[loadTable]] is tables-only per the
  * [[TableCatalog#loadTable]] contract.
  */
-class TestingTableViewCatalog extends TableViewCatalog {
+class TestingRelationCatalog extends RelationCatalog {
 
   // Holds entries (views and tables) created via createTable / createView within the session.
   // Keyed by (namespace, name); the stored [[Relation]]'s runtime type (View vs Table)
   // distinguishes views from tables. Tables are stored as a DelegatingTable wrapping the
-  // TableInfo. Mixed-catalog: shared identifier namespace per the TableViewCatalog contract.
+  // TableInfo. Mixed-catalog: shared identifier namespace per the RelationCatalog contract.
   private val createdViews =
     new java.util.concurrent.ConcurrentHashMap[(Seq[String], String), Relation]()
 
   // Canned read-only view fixtures, exposed only via the perf path (loadRelation). loadView
-  // does not need to expose them because the resolver routes TableViewCatalog reads through
+  // does not need to expose them because the resolver routes RelationCatalog reads through
   // loadRelation.
   private def fixtureView(ident: Identifier): Option[View] = ident.name() match {
     case "test_view" =>
@@ -452,7 +452,7 @@ class TestingTableViewCatalog extends TableViewCatalog {
     // Single-RPC perf path: returns tables AND views. Stored entries win over fixture views
     // (the fixture namespace is read-only and disjoint from createdViews in practice).
     // loadTable, loadView, tableExists, viewExists all derive from this via the
-    // TableViewCatalog default impls.
+    // RelationCatalog default impls.
     val key = (ident.namespace().toSeq, ident.name())
     Option(createdViews.get(key))
       .orElse(fixtureView(ident))

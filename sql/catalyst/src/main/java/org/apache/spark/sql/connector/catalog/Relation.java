@@ -22,7 +22,7 @@ import org.apache.spark.annotation.Evolving;
 
 /**
  * A relation in a catalog: either a {@link Table} or a {@link View}. This is the common type
- * returned by {@link TableViewCatalog#loadRelation} so a catalog that exposes both kinds can
+ * returned by {@link RelationCatalog#loadRelation} so a catalog that exposes both kinds can
  * answer a single read in one round trip; callers discriminate with {@code instanceof Table} /
  * {@code instanceof View}.
  * <p>
@@ -31,11 +31,15 @@ import org.apache.spark.annotation.Evolving;
  * expands its query text at read time and never builds a view object). Modeling both as siblings
  * of {@code Relation} -- rather than smuggling a view through the {@code Table} surface -- keeps
  * table-only concepts (partitioning, constraints, scans, writes) off the view side.
+ * <p>
+ * In practice the only two kinds are {@link Table} and {@link View}. {@code Relation} is left
+ * un-sealed because {@link Table} is itself an open interface (so a closed hierarchy would add
+ * little) and because a sealed Java interface trips Scala's pattern-match analysis.
  *
  * @since 4.2.0
  */
 @Evolving
-public sealed interface Relation permits Table, View {
+public interface Relation {
 
   /**
    * The columns of this relation.

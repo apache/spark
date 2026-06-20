@@ -1186,7 +1186,7 @@ class Analyzer(
      * so surfacing a downstream "view not found" would hide the real reason.
      *
      * Lookup order against a non-session catalog:
-     *   1. If the catalog is a [[TableViewCatalog]], [[TableViewCatalog.loadRelation]] is called
+     *   1. If the catalog is a [[RelationCatalog]], [[RelationCatalog.loadRelation]] is called
      *      once. A returned [[org.apache.spark.sql.connector.catalog.View]] is interpreted as a
      *      view; a [[Table]] is a table.
      *   2. Otherwise, [[TableCatalog.loadTable]] is tried (when implemented), then
@@ -1205,7 +1205,7 @@ class Analyzer(
               throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
             }
             catalog match {
-              case mc: TableViewCatalog =>
+              case mc: RelationCatalog =>
                 // Single-RPC perf path: loadRelation returns a Table for a table or a View
                 // for a view. NoSuchTable means neither exists.
                 try {
