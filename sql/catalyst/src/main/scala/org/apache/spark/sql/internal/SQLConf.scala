@@ -1373,7 +1373,7 @@ object SQLConf {
         "COUNT(DISTINCT base) FILTER (WHERE cond). This reduces the Expand factor " +
         "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
         "counts share the same base column.")
-      .version("4.2.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(false)

@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, CASE_WHEN, IF}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.collection.Utils
@@ -429,22 +429,24 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
    */
   private def normalizeCountDistinctConditional(a: Aggregate): Aggregate = {
     if (!SQLConf.get.rewriteCountDistinctConditionalEnabled) return a
-    a.transformExpressionsUp {
+    a.transformExpressionsUpWithPruning(
+      _.containsAnyPattern(IF, CASE_WHEN)) {
       case ae @ AggregateExpression(count: Count, _, true, None, _)
           if count.children.size == 1 =>
         extractCondAndBase(count.children.head) match {
           case Some((cond, base)) =>
             ae.copy(
-              aggregateFunction = count.withNewChildren(Seq(base)).asInstanceOf[Count],
+              aggregateFunction = Count(base),
               filter = Some(cond))
           case None => ae
         }
-    }.asInstanceOf[Aggregate]
+    }
   }
 
   /**
    * Matches IF(cond, base, null), CASE WHEN cond THEN base END, and
    * CASE WHEN cond THEN base ELSE NULL END (including null wrapped in Cast).
+   * Multi-branch CaseWhen is intentionally not rewritten -- Or-flattening is out of scope.
    * Returns None for anything else.
    */
   private def extractCondAndBase(expr: Expression): Option[(Expression, Expression)] =
