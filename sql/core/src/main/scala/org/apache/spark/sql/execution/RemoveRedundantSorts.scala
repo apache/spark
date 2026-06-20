@@ -38,9 +38,9 @@ object RemoveRedundantSorts extends Rule[SparkPlan] {
   }
 
   private def removeSorts(plan: SparkPlan): SparkPlan = plan transform {
-    case s @ SortExec(orders, _, child, _)
-        if SortOrder.orderingSatisfies(child.outputOrdering, orders) &&
-          child.outputPartitioning.satisfies(s.requiredChildDistribution.head) =>
-      child
+    case s: SortLike
+        if SortOrder.orderingSatisfies(s.child.outputOrdering, s.sortOrder) &&
+          s.child.outputPartitioning.satisfies(s.requiredChildDistribution.head) =>
+      s.child
   }
 }

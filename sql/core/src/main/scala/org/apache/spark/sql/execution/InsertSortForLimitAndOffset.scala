@@ -71,7 +71,7 @@ object InsertSortForLimitAndOffset extends Rule[SparkPlan] {
   // a best effort to catch the common query patterns that the data ordering should be preserved.
   private def extractOrderingAndPropagateOrderingColumns(
       plan: SparkPlan): Option[(Seq[SortOrder], SparkPlan)] = plan match {
-    case p: SortExec if p.global => Some(p.sortOrder, p)
+    case p: SortLike if p.global => Some(p.sortOrder, p)
     case p: UnaryExecNode if
         p.isInstanceOf[LocalLimitExec] ||
           p.isInstanceOf[WholeStageCodegenExec] ||

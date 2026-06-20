@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.bucketing
 
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{FileSourceScanExec, FilterExec, ProjectExec, SortLike, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.Exchange
 
@@ -133,7 +133,7 @@ object DisableUnnecessaryBucketedScan extends Rule[SparkPlan] {
    */
   private def isAllowedUnaryExecNode(plan: SparkPlan): Boolean = {
     plan match {
-      case _: SortExec | _: ProjectExec | _: FilterExec => true
+      case _: SortLike | _: ProjectExec | _: FilterExec => true
       case partialAgg: BaseAggregateExec =>
         partialAgg.requiredChildDistributionExpressions.isEmpty
       case _ => false

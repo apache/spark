@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, AggregateHint, ColumnStat, Limit, LocalRelation, LogicalPlan, Project, Range, Sort, SortHint, Statistics, UnresolvedHint}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, OrderedDistribution, Partitioning, SinglePartition, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.ClassicConversions._
@@ -665,6 +665,21 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       }
     }
   }
+
+  test("SPARK-56947: user-defined SortLike can be eliminated by RemoveRedundantSorts") {
+    val extensions = create { extensions =>
+      extensions.injectPlannerStrategy(MySortStrategy)
+    }
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key, true)
+      import session.implicits._
+      val df = session.range(100).select($"id" as "key").sort($"key".desc).sort($"key".desc)
+      val plan = df.queryExecution.executedPlan
+      val sorts = collectWithSubqueries(plan) { case s: SortLike => s }
+      assert(sorts.length == 1)
+      assert(sorts.head.isInstanceOf[MySortExec])
+    }
+  }
 }
 
 case class MyRule(spark: SparkSession) extends Rule[LogicalPlan] {
@@ -690,6 +705,32 @@ case class MyCheckRule(spark: SparkSession) extends (LogicalPlan => Unit) {
 
 case class MySparkStrategy(spark: SparkSession) extends SparkStrategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = Seq.empty
+}
+
+/**
+ * Custom sort operator used in tests to demonstrate that a user-defined [[SortLike]] can be
+ * recognized and eliminated by physical optimization rules such as [[RemoveRedundantSorts]].
+ */
+case class MySortExec(
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SparkPlan) extends SortLike {
+  override def output: Seq[Attribute] = child.output
+  override def outputOrdering: Seq[SortOrder] = sortOrder
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+  override def requiredChildDistribution: Seq[Distribution] =
+    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
+}
+
+case class MySortStrategy(spark: SparkSession) extends SparkStrategy {
+  override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case Sort(sortExprs, global, child, _) =>
+      MySortExec(sortExprs, global, planLater(child)) :: Nil
+    case _ => Nil
+  }
 }
 
 case class MyParser(spark: SparkSession, delegate: ParserInterface) extends ParserInterface {
