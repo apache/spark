@@ -74,9 +74,11 @@ class LateralColumnAliasResolver(expressionResolver: ExpressionResolver, operato
         // Note: LCA + BaseGroupingSets is intercepted in AggregateResolver which throws
         // ExplicitlyUnsupportedResolverFeature before reaching here. This guard is
         // retained as defense-in-depth in case the call path changes.
-        if (!aggregate.groupingExpressions.exists(_.isInstanceOf[BaseGroupingSets])) {
-          AggregationValidator(aggregate)
-        }
+        AggregationValidator(
+          aggregate,
+          skipGroupingExprChecks =
+            aggregate.groupingExpressions.exists(_.isInstanceOf[BaseGroupingSets])
+        )
 
         val remappedAliases = new HashMap[ExprId, Alias](projectList.size)
         projectList.foreach {

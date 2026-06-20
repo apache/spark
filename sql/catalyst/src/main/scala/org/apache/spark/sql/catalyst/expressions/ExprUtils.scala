@@ -155,11 +155,18 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     }
   }
 
+  /**
+   * @param skipGroupingExprChecks When true, skips grouping-expression validation
+   *   (type-is-orderable, no nested aggregates in GROUP BY). Callers should only set this to true
+   *   when the Aggregate contains unexpanded BaseGroupingSets that will be validated
+   *   post-expansion by a subsequent call with the expanded form.
+   */
   def assertValidAggregation(
       a: Aggregate,
       semanticEquality: (Expression, Expression) => Boolean =
         (groupingExpression, checkedExpression) =>
-          groupingExpression.semanticEquals(checkedExpression)): Unit = {
+          groupingExpression.semanticEquals(checkedExpression),
+      skipGroupingExprChecks: Boolean = false): Unit = {
     def checkValidAggregateExpression(expr: Expression): Unit = expr match {
       case expr: AggregateExpression =>
         val aggFunction = expr.aggregateFunction
@@ -217,12 +224,7 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
       }
     }
 
-    // Skip grouping-expression validation when unexpanded BaseGroupingSets are present:
-    // calling .dataType on them would throw. They are validated post-expansion instead.
-    // Aggregate-expression validation (nested agg, missing group-by, etc.) still runs.
-    val skipGroupingChecks =
-      a.groupingExpressions.exists(_.isInstanceOf[BaseGroupingSets])
-    if (!skipGroupingChecks) {
+    if (!skipGroupingExprChecks) {
       a.groupingExpressions.foreach(checkValidGroupingExprs)
     }
     a.aggregateExpressions.foreach(checkValidAggregateExpression)
