@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import scala.util.{Left, Right}
-
 import com.esotericsoftware.kryo.{DefaultSerializer, Kryo, Serializer => KryoSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
 
@@ -41,8 +39,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitionKeyedAccumulator
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{LongAccumulator, Utils}
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.Utils
 
 /**
  * The default implementation of CachedBatch.
@@ -253,17 +251,6 @@ class DefaultCachedBatchSerializer extends SimpleMetricsCachedBatchSerializer {
   }
 }
 
-// The legacy per-build accumulators, allocated together only on the off path (the `Left` of
-// `statsAccumulators` below). `sizeInBytesStats` / `rowCountStats` are the per-batch stat sums
-// (the reported row count / size on that path); `materializedPartitions` is the raw task-completion
-// count driving the loaded check. All over-count under duplicate computes -- the pre-fix behavior.
-// Top-level (not nested in CachedRDDBuilder) so the accumulators carry no outer reference when
-// captured by the build task closure.
-private case class LegacyAccumulators(
-    sizeInBytesStats: LongAccumulator,
-    rowCountStats: LongAccumulator,
-    materializedPartitions: LongAccumulator)
-
 private[sql]
 case class CachedRDDBuilder(
     serializer: CachedBatchSerializer,
@@ -275,30 +262,20 @@ case class CachedRDDBuilder(
   @transient @volatile private var _cachedColumnBuffers: RDD[CachedBatch] = null
   @transient @volatile private var _cachedColumnBuffersAreLoaded: Boolean = false
 
-  // The cache's materialization bookkeeping, chosen ONCE here (at construction) from the
-  // IN_MEMORY_DISTINCT_PARTITION_TRACKING conf, so the scheme can never change mid-build. Exactly
-  // one branch is allocated:
-  //  - Right (the fix, default): a partition-keyed accumulator storing (rowCount, sizeInBytes) per
-  //    partition. AQE creates a separate cache scan stage per reference to the same cache and each
-  //    submits its own build job, so the same partition can be computed by several concurrent jobs
-  //    (and speculative tasks); Spark has no global cross-executor "compute this partition once"
-  //    barrier (only a per-executor write lock). Keying by partition id (last-write-wins) means
-  //    those duplicate completions cannot mark the cache loaded before every partition has been
-  //    computed -- which otherwise let AQE read rowCount 0 on a non-empty cache and propagate an
-  //    empty relation, silently dropping rows -- and also yields exact, de-duplicated row count /
-  //    size.
-  //  - Left (conf off): the raw per-batch accumulators (`LegacyAccumulators`) -- the buggy pre-fix
-  //    behavior, kept only as a safety switch.
-  private val statsAccumulators
-      : Either[LegacyAccumulators, PartitionKeyedAccumulator[(Long, Long)]] =
-    if (cachedPlan.conf.getConf(SQLConf.IN_MEMORY_DISTINCT_PARTITION_TRACKING)) {
-      val acc = new PartitionKeyedAccumulator[(Long, Long)]
-      cachedPlan.session.sparkContext.register(acc)
-      Right(acc)
-    } else {
-      val sc = cachedPlan.session.sparkContext
-      Left(LegacyAccumulators(sc.longAccumulator, sc.longAccumulator, sc.longAccumulator))
-    }
+  // The cache's materialization bookkeeping: a partition-keyed accumulator storing
+  // (rowCount, sizeInBytes) per partition. AQE creates a separate cache scan stage per reference to
+  // the same cache and each submits its own build job, so the same partition can be computed by
+  // several concurrent jobs (and speculative tasks); Spark has no global cross-executor "compute
+  // this partition once" barrier (only a per-executor write lock). Keying by partition id
+  // (last-write-wins) means those duplicate completions cannot mark the cache loaded before every
+  // partition has been computed -- which otherwise let AQE read rowCount 0 on a non-empty cache and
+  // propagate an empty relation, silently dropping rows -- and also yields exact, de-duplicated row
+  // count / size.
+  private val partitionStats: PartitionKeyedAccumulator[(Long, Long)] = {
+    val acc = new PartitionKeyedAccumulator[(Long, Long)]
+    cachedPlan.session.sparkContext.register(acc)
+    acc
+  }
 
   val cachedName = tableName.map(n => s"In-memory table $n")
     .getOrElse(Utils.abbreviate(cachedPlan.toString, 1024))
@@ -319,16 +296,11 @@ case class CachedRDDBuilder(
     if (_cachedColumnBuffers != null) {
       _cachedColumnBuffers.unpersist(blocking)
       _cachedColumnBuffers = null
-      statsAccumulators match {
-        case Right(keyed) =>
-          // The buffers no longer back a live RDD. Reset the one-way "loaded" latch and the keyed
-          // bookkeeping so a rebuild on this builder does not inherit a stale "loaded" state or
-          // stale statistics. Safe to reset in place: every read of `keyed` is under this monitor.
-          _cachedColumnBuffersAreLoaded = false
-          keyed.reset()
-        case Left(_) =>
-          // Pre-fix behavior, kept only for the safety switch: do not reset the bookkeeping.
-      }
+      // The buffers no longer back a live RDD. Reset the one-way "loaded" latch and the keyed
+      // bookkeeping so a rebuild on this builder does not inherit a stale "loaded" state or stale
+      // statistics. Safe to reset in place: every read of the accumulator is under this monitor.
+      _cachedColumnBuffersAreLoaded = false
+      partitionStats.reset()
     }
   }
 
@@ -341,15 +313,10 @@ case class CachedRDDBuilder(
       // We must make sure the statistics of `sizeInBytes` and `rowCount` are accurate if
       // `isCachedRDDLoaded` return true. Otherwise, AQE would do a wrong optimization,
       // e.g., convert a non-empty plan to empty local relation if `rowCount` is 0.
-      val numMaterialized = statsAccumulators match {
-        // Count DISTINCT materialized partitions (the keyed accumulator's key set), so the cache is
-        // only reported loaded once every partition has been computed -- sound even if a partition
-        // is computed more than once by concurrent or speculative tasks.
-        case Right(keyed) => keyed.accumulatedNumPartitions
-        // Buggy pre-fix behavior (safety switch only): a raw task-completion count, which duplicate
-        // computes can inflate past the partition count before every partition is materialized.
-        case Left(legacy) => legacy.materializedPartitions.value.longValue
-      }
+      // Count DISTINCT materialized partitions (the keyed accumulator's key set), so the cache is
+      // only reported loaded once every partition has been computed -- sound even if a partition is
+      // computed more than once by concurrent or speculative tasks.
+      val numMaterialized = partitionStats.accumulatedNumPartitions
       val rddLoaded = _cachedColumnBuffers.partitions.length.toLong == numMaterialized
       if (rddLoaded) {
         _cachedColumnBuffersAreLoaded = rddLoaded
@@ -358,31 +325,20 @@ case class CachedRDDBuilder(
     }
   }
 
-  // Reported row count / size for the cache's statistics. On the default path these are exact and
-  // de-duplicated (folded over distinct materialized partitions); on the off path they fall back to
-  // the raw per-batch accumulators (which can over-count). Synchronized so a fold never races a
-  // concurrent `clearCache` reset.
+  // Reported row count / size for the cache's statistics: exact and de-duplicated, folded over the
+  // distinct materialized partitions. Synchronized so a fold never races a concurrent `clearCache`
+  // reset.
   private[sql] def materializedRowCount: Long = synchronized {
-    statsAccumulators match {
-      case Right(keyed) => keyed.foldValues(0L)((sum, v) => sum + v._1)
-      case Left(legacy) => legacy.rowCountStats.value.longValue
-    }
+    partitionStats.foldValues(0L)((sum, v) => sum + v._1)
   }
 
   private[sql] def materializedSizeInBytes: Long = synchronized {
-    statsAccumulators match {
-      case Right(keyed) => keyed.foldValues(0L)((sum, v) => sum + v._2)
-      case Left(legacy) => legacy.sizeInBytesStats.value.longValue
-    }
+    partitionStats.foldValues(0L)((sum, v) => sum + v._2)
   }
 
-  // The id of the accumulator backing this cache's materialization bookkeeping (the keyed
-  // accumulator on the default path, a legacy stat accumulator otherwise). Exposed only so
+  // The id of the accumulator backing this cache's materialization bookkeeping. Exposed only so
   // `CachedTableSuite`'s accumulator-cleanup test can verify it is cleared after uncache + GC.
-  private[sql] def materializationAccumulatorId: Long = statsAccumulators match {
-    case Left(legacy) => legacy.sizeInBytesStats.id
-    case Right(keyed) => keyed.id
-  }
+  private[sql] def materializationAccumulatorId: Long = partitionStats.id
 
   private def buildBuffers(): RDD[CachedBatch] = {
     val cb = try {
@@ -408,50 +364,29 @@ case class CachedRDDBuilder(
         session.sharedState.cacheManager.recacheByPlan(session, logicalPlan)
         throw e
     }
-    // Records one successful partition materialization, using the scheme selected by the conf.
-    // Built once on the driver so the task closure below captures only the chosen accumulator. The
-    // default path records this partition's (rows, bytes) keyed by its id; the off path just bumps
-    // a raw completion count.
-    val recordMaterialized: (Int, Long, Long) => Unit = statsAccumulators match {
-      case Right(keyed) =>
-        (partitionId: Int, rows: Long, bytes: Long) =>
-          keyed.add((partitionId, (rows, bytes)))
-      case Left(legacy) =>
-        val completions = legacy.materializedPartitions
-        (_: Int, _: Long, _: Long) => completions.add(1L)
-    }
-    // On the default path the keyed accumulator is authoritative for the cache stats, so the legacy
-    // per-batch accumulators are not fed; only the off path uses them. Extract them once on the
-    // driver (None on the default path) so the task closure captures just what it needs.
-    val legacyStatAccs: Option[(LongAccumulator, LongAccumulator)] = statsAccumulators match {
-      case Left(legacy) => Some((legacy.sizeInBytesStats, legacy.rowCountStats))
-      case Right(_) => None
-    }
+    // Records one successful partition materialization: this partition's (rows, bytes) keyed by its
+    // id. Bound to a local so the task closure below captures only the accumulator, not the
+    // enclosing CachedRDDBuilder (whose cachedPlan is not serializable).
+    val accumulator = partitionStats
     val cached = cb.mapPartitionsInternal { it =>
       val taskContext = TaskContext.get()
       val partitionId = taskContext.partitionId()
-      // This task computes exactly one partition. On the default path, tally its totals so the
-      // completion listener records them once (covering empty-output partitions, which produce no
-      // batches); on the off path the raw per-batch accumulators below are fed directly.
+      // This task computes exactly one partition. Tally its totals so the completion listener
+      // records them once, keyed by partition id (covering empty-output partitions, which produce
+      // no batches).
       var localRows = 0L
       var localBytes = 0L
       taskContext.addTaskCompletionListener[Unit] { context =>
         if (!context.isFailed() && !context.isInterrupted()) {
-          recordMaterialized(partitionId, localRows, localBytes)
+          accumulator.add((partitionId, (localRows, localBytes)))
         }
       }
       new Iterator[CachedBatch] {
         override def hasNext: Boolean = it.hasNext
         override def next(): CachedBatch = {
           val batch = it.next()
-          legacyStatAccs match {
-            case Some((sizeAcc, rowAcc)) =>
-              sizeAcc.add(batch.sizeInBytes)
-              rowAcc.add(batch.numRows)
-            case None =>
-              localBytes += batch.sizeInBytes
-              localRows += batch.numRows
-          }
+          localBytes += batch.sizeInBytes
+          localRows += batch.numRows
           batch
         }
       }

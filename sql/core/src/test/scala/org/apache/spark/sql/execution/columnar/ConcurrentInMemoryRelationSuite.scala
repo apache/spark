@@ -29,7 +29,6 @@ import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSui
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.functions.{lit, when}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -46,14 +45,15 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * computed, falsely marking the cache loaded with rowCount 0 -- which lets AQE propagate an empty
  * relation and silently lose rows.
  *
- * The fix (gated by [[SQLConf.IN_MEMORY_DISTINCT_PARTITION_TRACKING]], default on) counts the
- * DISTINCT set of materialized partitions instead, so duplicate computes can no longer mark the
- * cache loaded early. These tests reproduce the data loss deterministically: a two-stage gate holds
- * the row-producing partition while the empty-output partition's duplicate cross-executor
- * completions accumulate. With the fix disabled the cache latches as loaded with rowCount 0 and a
- * consumer observes an empty relation (lost rows); with the fix on the cache stays correctly
- * not-loaded and the consumer observes every row. A multi-executor `local-cluster` session is
- * required so the duplicate computes actually land on different executors.
+ * The fix counts the DISTINCT set of materialized partitions instead, so duplicate computes can no
+ * longer mark the cache loaded early. These tests reproduce the race deterministically: a two-stage
+ * gate holds the row-producing partition while the empty-output partition's duplicate cross-executor
+ * completions accumulate. With distinct tracking the cache stays correctly not-loaded while a
+ * partition is still building, so the consumer observes every row; were the loaded check to fall
+ * back to a raw task-completion count it would latch the cache as loaded with rowCount 0 and let AQE
+ * propagate an empty relation, losing rows (which the repro detects as a row-count mismatch). A
+ * multi-executor `local-cluster` session is required so the duplicate computes land on different
+ * executors.
  */
 class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
@@ -63,12 +63,11 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
     relations.head.cacheBuilder
   }
 
-  private def withSession(distinctTracking: Boolean, numExecutors: Int = 4)(
+  private def withSession(numExecutors: Int = 4)(
       f: SparkSession => Unit): Unit = {
     val conf = new SparkConf()
       .setMaster(s"local-cluster[$numExecutors,1,1024]")
       .setAppName("ConcurrentInMemoryRelationSuite")
-      .set(SQLConf.IN_MEMORY_DISTINCT_PARTITION_TRACKING.key, distinctTracking.toString)
     sc = new SparkContext(conf)
     try {
       // Wait for all executors to register so tasks spread one-per-executor as the tests assume.
@@ -94,13 +93,14 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
    * two distinct executors.
    *
    * Sequence: (1) the threads first-touch the cold cache, gating all `numReferences x
-   * cachePartitions` tasks; (2) release only the empty-output partition -- with the fix disabled
-   * its two cross-executor completions push the RAW materialized count to cachePartitions while the
-   * row-producing partition is still gated; (3) read `isCachedColumnBuffersLoaded`, which latches
-   * that poisoned state permanently (one-way latch), removing the timing race; (4) a consumer query
-   * (a GROUPED aggregate, so empty propagation can collapse it) observes the cache as materialized
-   * with rowCount 0 and AQE propagates an empty relation; (5) release the producing partition.
-   * Returns (rows the consumer observed, expected rows).
+   * cachePartitions` tasks; (2) release only the empty-output partition, so its two cross-executor
+   * completions land while the row-producing partition is still gated; (3) poll
+   * `isCachedColumnBuffersLoaded` -- distinct-partition tracking keeps it false (a raw
+   * task-completion count would instead reach cachePartitions here and latch a poisoned "loaded"
+   * state with rowCount 0); (4) a consumer query (a GROUPED aggregate, where empty propagation could
+   * collapse the result) sees the cache not-loaded and plans against the real rows -- had it been
+   * poisoned, AQE would have propagated an empty relation and dropped rows; (5) release the
+   * producing partition. Returns (rows the consumer observed, expected rows), equal unless poisoned.
    */
   private def runDataLossRepro(spark: SparkSession): (Long, Long) = {
     import spark.implicits._
@@ -190,13 +190,13 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
         // Stage 1: release ONLY the empty-output partition; the producing partition stays gated.
         assert(new File(releaseEmpty).createNewFile())
 
-        // With the fix off, the empty partition's duplicate cross-executor completions push the raw
-        // materialized count to cachePartitions even though the producing partition has not run, so
-        // the cache latches as "loaded" with rowCount 0. We read it through the relation handle --
-        // exactly what AQE's stats reads do in production -- and the one-way latch makes the poison
-        // permanent. That removes the timing race: the producing partition is still gated when the
-        // consumer runs below. With the fix on, distinct-partition accounting keeps the cache not
-        // loaded here, so this poll times out and we fall through to a normal (complete) build.
+        // Were the loaded check to fall back to a raw task-completion count, the empty partition's
+        // duplicate cross-executor completions would push that count to cachePartitions even though
+        // the producing partition has not run, latching the cache as "loaded" with rowCount 0. We
+        // read it through the relation handle -- exactly what AQE's stats reads do in production --
+        // and the one-way latch would make the poison permanent (the producing partition is still
+        // gated when the consumer runs below). With distinct-partition accounting the cache stays
+        // not loaded here, so this poll times out and we fall through to a normal (complete) build.
         val poisoned =
           try {
             eventually(timeout(Span(30, Seconds)), interval(Span(100, Millis))) {
@@ -221,8 +221,8 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
           assert(new File(releaseProducing).createNewFile()) // unblock the build for clean shutdown
           rows.map(_.getLong(1)).sum
         } else {
-          // Fix on: the cache is correctly not loaded, so let the producing partition finish and
-          // the consumer observes every row.
+          // The cache is correctly not loaded, so let the producing partition finish and the
+          // consumer observes every row.
           assert(new File(releaseProducing).createNewFile())
           cached.groupBy("k").count().collect().map(_.getLong(1)).sum
         }
@@ -305,7 +305,7 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
   }
 
   test("SPARK-57547: concurrent first-touch of a cold cache does not lose rows") {
-    withSession(distinctTracking = true) { spark =>
+    withSession() { spark =>
       val (observed, expected) = runDataLossRepro(spark)
       assert(observed == expected, s"consumer observed $observed rows, expected $expected")
     }
@@ -315,20 +315,10 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
     // Every partition is computed by both references, so the partition-keyed accumulator sees a
     // duplicate `add` per partition. Last-write-wins de-duplication keeps the reported row count
     // exact -- a naive summing accumulator would over-count under these duplicate computes.
-    withSession(distinctTracking = true) { spark =>
+    withSession() { spark =>
       val (rowCount, expected) = runDuplicateComputeStats(spark)
       assert(rowCount == expected,
         s"partition-keyed accumulator should report exact row count $expected, got $rowCount")
-    }
-  }
-
-  test("SPARK-57547: with the fix disabled, concurrent first-touch silently loses rows") {
-    // Demonstrates the actual data loss the fix prevents: a consumer that plans against the
-    // poisoned cache observes an empty relation instead of the real rows.
-    withSession(distinctTracking = false) { spark =>
-      val (observed, expected) = runDataLossRepro(spark)
-      assert(observed == 0L,
-        s"expected the buggy path to lose all $expected rows but consumer observed $observed")
     }
   }
 }

@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.util.AccumulatorV2
 
 /**
- * An [[AccumulatorV2]] that records one value of type `T` per partition, keyed by partition id with
+ * An `AccumulatorV2` that records one value of type `T` per partition, keyed by partition id with
  * LAST-WRITE-WINS merge. When the same partition is recorded more than once -- e.g. duplicate
  * cross-executor computes, or speculative tasks -- the later value replaces the earlier one rather
  * than aggregating, so each partition contributes exactly once. The key set is the set of recorded
@@ -34,13 +34,13 @@ import org.apache.spark.util.AccumulatorV2
  * failed/interrupted tasks are dropped by the accumulator framework (it is not
  * `countFailedValues`), so only complete per-partition values are ever merged.
  *
- * Backed by a [[ConcurrentHashMap]], whose per-entry atomicity is sufficient here: `add` and the
+ * Backed by a `ConcurrentHashMap`, whose per-entry atomicity is sufficient here: `add` and the
  * `putAll` in `merge` are last-write-wins per key, and the reads (`value`, `numPartitions`,
  * `foldValues`) only require thread-safety and eventual consistency -- they are weakly consistent
  * during concurrent updates but exact once all updates have been merged. This avoids any explicit
  * locking (and the nested-lock pattern a two-map `merge` would otherwise need).
  *
- * @tparam T the per-partition value type. Must be non-null ([[ConcurrentHashMap]] forbids nulls).
+ * @tparam T the per-partition value type. Must be non-null (`ConcurrentHashMap` forbids nulls).
  */
 class PartitionKeyedAccumulator[T] extends AccumulatorV2[(Int, T), java.util.Map[Int, T]] {
 
