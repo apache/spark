@@ -42,6 +42,13 @@ Project [try_element_at(array(1, 2, 3), -4) AS try_element_at(array(1, 2, 3), -4
 
 
 -- !query
+SELECT try_element_at(array(1, 2, 3), -2147483648)
+-- !query analysis
+Project [try_element_at(array(1, 2, 3), -2147483648) AS try_element_at(array(1, 2, 3), -2147483648)#x]
++- OneRowRelation
+
+
+-- !query
 SELECT try_element_at(map('a','b'), 'a')
 -- !query analysis
 Project [try_element_at(map(a, b), a) AS try_element_at(map(a, b), a)#x]

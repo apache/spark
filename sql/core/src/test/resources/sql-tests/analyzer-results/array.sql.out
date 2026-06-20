@@ -243,6 +243,13 @@ Project [element_at(array(1, 2, 3), 0, None, true) AS element_at(array(1, 2, 3),
 
 
 -- !query
+select element_at(array(1, 2, 3), -2147483648)
+-- !query analysis
+Project [element_at(array(1, 2, 3), -2147483648, None, true) AS element_at(array(1, 2, 3), -2147483648)#x]
++- OneRowRelation
+
+
+-- !query
 select elt(4, '123', '456')
 -- !query analysis
 Project [elt(4, 123, 456, true) AS elt(4, 123, 456)#x]

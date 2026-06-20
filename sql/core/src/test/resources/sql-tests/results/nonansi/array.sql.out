@@ -204,6 +204,14 @@ org.apache.spark.SparkRuntimeException
 
 
 -- !query
+select element_at(array(1, 2, 3), -2147483648)
+-- !query schema
+struct<element_at(array(1, 2, 3), -2147483648):int>
+-- !query output
+NULL
+
+
+-- !query
 select elt(4, '123', '456')
 -- !query schema
 struct<elt(4, 123, 456):string>
