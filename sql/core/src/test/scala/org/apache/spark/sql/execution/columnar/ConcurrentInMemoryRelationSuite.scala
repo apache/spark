@@ -45,15 +45,15 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  * computed, falsely marking the cache loaded with rowCount 0 -- which lets AQE propagate an empty
  * relation and silently lose rows.
  *
- * The fix counts the DISTINCT set of materialized partitions instead, so duplicate computes can no
- * longer mark the cache loaded early. These tests reproduce the race deterministically: a two-stage
- * gate holds the row-producing partition while the empty-output partition's duplicate cross-executor
- * completions accumulate. With distinct tracking the cache stays correctly not-loaded while a
- * partition is still building, so the consumer observes every row; were the loaded check to fall
- * back to a raw task-completion count it would latch the cache as loaded with rowCount 0 and let AQE
- * propagate an empty relation, losing rows (which the repro detects as a row-count mismatch). A
- * multi-executor `local-cluster` session is required so the duplicate computes land on different
- * executors.
+ * The fix counts the DISTINCT set of materialized partitions instead, so duplicate computes can
+ * no longer mark the cache loaded early. These tests reproduce the race deterministically: a
+ * two-stage gate holds the row-producing partition while the empty-output partition's duplicate
+ * cross-executor completions accumulate. With distinct tracking the cache stays correctly
+ * not-loaded while a partition is still building, so the consumer observes every row; were the
+ * loaded check to fall back to a raw task-completion count it would latch the cache as loaded
+ * with rowCount 0 and let AQE propagate an empty relation, losing rows (which the repro detects
+ * as a row-count mismatch). A multi-executor `local-cluster` session is required so the duplicate
+ * computes land on different executors.
  */
 class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
@@ -93,14 +93,15 @@ class ConcurrentInMemoryRelationSuite extends SparkFunSuite with LocalSparkConte
    * two distinct executors.
    *
    * Sequence: (1) the threads first-touch the cold cache, gating all `numReferences x
-   * cachePartitions` tasks; (2) release only the empty-output partition, so its two cross-executor
-   * completions land while the row-producing partition is still gated; (3) poll
+   * cachePartitions` tasks; (2) release only the empty-output partition, so its two
+   * cross-executor completions land while the row-producing partition is still gated; (3) poll
    * `isCachedColumnBuffersLoaded` -- distinct-partition tracking keeps it false (a raw
-   * task-completion count would instead reach cachePartitions here and latch a poisoned "loaded"
-   * state with rowCount 0); (4) a consumer query (a GROUPED aggregate, where empty propagation could
-   * collapse the result) sees the cache not-loaded and plans against the real rows -- had it been
-   * poisoned, AQE would have propagated an empty relation and dropped rows; (5) release the
-   * producing partition. Returns (rows the consumer observed, expected rows), equal unless poisoned.
+   * task-completion count would instead reach cachePartitions here and latch a poisoned
+   * "loaded" state with rowCount 0); (4) a consumer query (a GROUPED aggregate, where empty
+   * propagation could collapse the result) sees the cache not-loaded and plans against the
+   * real rows -- had it been poisoned, AQE would have propagated an empty relation and dropped
+   * rows; (5) release the producing partition. Returns (rows the consumer observed, expected
+   * rows), equal unless poisoned.
    */
   private def runDataLossRepro(spark: SparkSession): (Long, Long) = {
     import spark.implicits._
