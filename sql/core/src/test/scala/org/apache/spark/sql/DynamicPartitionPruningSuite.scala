@@ -1943,10 +1943,16 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
   }
 
   test("DPP materialized-input eligibility requires a repeatable plan") {
+    // A materialized filtering side is injected as a standalone DPP subquery only when it has an
+    // estimable pruning benefit. With CBO statistics on the partitioned table (the partition-side
+    // NDV) and a small row bound on the filtering side (a LocalRelation's exact maxRows), the
+    // benefit comes from the statistics-based ratio. The fallback ratio is no longer applied to a
+    // side without a selective predicate, so it is pinned to 0 to keep it out of the picture.
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
-        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "1000",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0",
+        SQLConf.CBO_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
         SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false",
@@ -1960,6 +1966,10 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           .format(tableFormat)
           .mode("overwrite")
           .saveAsTable("events")
+
+        // Column statistics on the partitioned table supply the partition-side NDV used to estimate
+        // the pruning benefit for a materialized filtering side.
+        sql("ANALYZE TABLE events COMPUTE STATISTICS FOR COLUMNS p")
 
         def activeDppSubqueries(df: DataFrame): Seq[InSubqueryExec] = {
           collectDynamicPruningExpressions(df.queryExecution.executedPlan)
@@ -1982,12 +1992,18 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           DppMaterializedInputTestState.reset(counterId)
           assert(df.collect().toSeq === Seq(Row(1)))
           assert(activeDppSubqueries(df).isEmpty,
-            s"Shouldn't trigger DPP for a non-repeatable materialized plan:\n" +
+            s"Shouldn't execute standalone DPP for this filtering side:\n" +
               df.queryExecution)
         }
 
+        // A LocalRelation is repeatable and exposes an exact maxRows, a conservative bound on its
+        // join-key NDV, so its pruning benefit is estimable and it gets a standalone DPP subquery.
         checkStandaloneDpp(Seq(1).toDF("p"))
-        checkStandaloneDpp(Seq(1).toDF("p").localCheckpoint(eager = true))
+        // A checkpoint-derived LogicalRDD is also repeatable, but a checkpointed LocalRelation
+        // retains no column statistics and exposes no maxRows, so its pruning benefit cannot be
+        // estimated; with no broadcast to reuse it is not injected as a DPP subquery at all. The
+        // statistics-backed checkpointed case (retained NDV) is covered by a dedicated test.
+        checkNoDpp(Seq(1).toDF("p").localCheckpoint(eager = true))
 
         val checkpointed = Seq(1).toDS().localCheckpoint(eager = true)
         val mappedKeys = checkpointed.mapPartitions { values =>
