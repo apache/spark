@@ -31,16 +31,23 @@ import org.apache.spark.util.ArrayImplicits._
  * Certain pairs of floating point numbers require special handling:
  *   1. 0.0 / -0.0
  *   2. NaN / NaN
- * That's because we want to treat each of these pairs of numbers as equal, even though they
- * have different binary representations. (IEEE 754 allows multiple distinct bit patterns for
+ * That's because we want to treat each of these pairs of numbers as equal, even though they have
+ * different binary representations. (Note that IEEE 754 allows multiple distinct bit patterns for
  * NaN.)
  *
- * This special handling is required in several places:
- *   1. When comparing values
- *   2. When grouping keys for aggregates
- *   3. When joining on keys
- *   4. When partitioning keys for windows
- *   5. When executing array set operations
+ * There are multiple ways we compare values that require careful handling of the above floating
+ * point pairs:
+ *   1. Directly, via `==` or via methods of `java.lang.{type}`
+ *   2. Via raw bytes in instances of [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]]
+ *   3. Via hash sets
+ *
+ * This special handling is required in several places where we compare values via one of the above
+ * methods:
+ *   1. When comparing values (direct)
+ *   2. When grouping keys for aggregates (`UnsafeRow`)
+ *   3. When joining on keys (`UnsafeRow`)
+ *   4. When partitioning keys for windows (`UnsafeRow`)
+ *   5. When executing array set operations (hash sets)
  *
  * Case 1 is handled in [[org.apache.spark.sql.catalyst.util.SQLOrderingUtil]] and in the
  *  `genEqual` method of [[org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext]].
