@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 class JdbcUtilsSuite extends SparkFunSuite {
 
@@ -68,5 +69,49 @@ class JdbcUtilsSuite extends SparkFunSuite {
       },
       condition = "PARSE_SYNTAX_ERROR",
       parameters = Map("error" -> "'.'", "hint" -> ""))
+  }
+
+  test("redactUrl redacts credentials embedded in a JDBC URL") {
+    val redaction = Utils.REDACTION_REPLACEMENT_TEXT
+
+    // URLs with no userinfo and no query/property portion are returned unchanged.
+    Seq(
+      "jdbc:mysql://localhost/db",
+      "jdbc:postgresql://localhost:5432/postgres",
+      "jdbc:h2:mem:testdb").foreach { url =>
+      assert(JDBCOptions.redactUrl(url, None) === url)
+    }
+
+    // The authority's userinfo is redacted wholesale (the scheme, host, port and database are
+    // kept), including a bare username and a password that itself contains an '@'.
+    assert(JDBCOptions.redactUrl("jdbc:mysql://user:secret@host:3306/db", None) ===
+      s"jdbc:mysql://$redaction@host:3306/db")
+    assert(JDBCOptions.redactUrl("jdbc:mysql://user@host:3306/db", None) ===
+      s"jdbc:mysql://$redaction@host:3306/db")
+    assert(JDBCOptions.redactUrl("jdbc:mysql://user:p@ss@host:3306/db", None) ===
+      s"jdbc:mysql://$redaction@host:3306/db")
+
+    // The entire query / connection-property portion (from the first '?' or ';') is redacted,
+    // since the credential-bearing property names are driver-specific and open-ended.
+    assert(JDBCOptions.redactUrl(
+      "jdbc:postgresql://host/db?user=alice&password=secret&ssl=true", None) ===
+      s"jdbc:postgresql://host/db?$redaction")
+    assert(JDBCOptions.redactUrl(
+      "jdbc:redshift://host:5439/db;PWD=secret;LogLevel=1", None) ===
+      s"jdbc:redshift://host:5439/db;$redaction")
+    assert(JDBCOptions.redactUrl(
+      "jdbc:sqlserver://localhost:1433;databaseName=testdb", None) ===
+      s"jdbc:sqlserver://localhost:1433;$redaction")
+    assert(JDBCOptions.redactUrl("jdbc:snowflake://host/?token=abc123", None) ===
+      s"jdbc:snowflake://host/?$redaction")
+
+    // Both userinfo and the property portion in the same URL are redacted.
+    assert(JDBCOptions.redactUrl(
+      "jdbc:mysql://user:secret@host:3306/db?password=other", None) ===
+      s"jdbc:mysql://$redaction@host:3306/db?$redaction")
+
+    // Null and empty inputs are passed through.
+    assert(JDBCOptions.redactUrl(null, None) === null)
+    assert(JDBCOptions.redactUrl("", None) === "")
   }
 }
