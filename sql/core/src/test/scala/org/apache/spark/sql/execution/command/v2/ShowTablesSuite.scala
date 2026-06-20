@@ -50,6 +50,18 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
     }
   }
 
+  test("show table extended formats table properties") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t (id bigint) $defaultUsing " +
+        "TBLPROPERTIES ('p1'='v1', 'p2'='v2')")
+
+      val information = sql(s"SHOW TABLE EXTENDED IN $catalog.ns LIKE 'tbl'")
+        .collect()(0)(3).toString
+
+      assert(information.split("\n").contains("Table Properties: [p1=v1, p2=v2]"))
+    }
+  }
+
   override protected def extendedPartInNonPartedTableError(
       catalog: String,
       namespace: String,
