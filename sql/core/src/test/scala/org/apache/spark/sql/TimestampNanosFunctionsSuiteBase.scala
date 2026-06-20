@@ -494,7 +494,8 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     checkAnswer(sqlRes, Row(instant))
     assert(sqlRes.schema.head.dataType === TimestampLTZNanosType(9))
 
-    // A BIGINT argument is implicitly cast to DECIMAL, so the integral literal works directly.
+    // A BIGINT argument is accepted directly through the dedicated IntegralType path (widened to
+    // BigInteger, no DECIMAL coercion), so the integral literal works without a cast.
     checkAnswer(spark.sql(s"SELECT timestamp_nanos(${nanos}L)"), Row(instant))
 
     // DECIMAL input reaches the full [0001, 9999] calendar range, beyond a 64-bit BIGINT of nanos.

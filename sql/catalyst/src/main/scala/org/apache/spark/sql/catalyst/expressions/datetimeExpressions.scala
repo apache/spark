@@ -792,6 +792,12 @@ case class NanosToTimestamp(child: Expression)
   // behavior of `floorDiv`/`floorMod`). When `epochMicros` overflows 64 bits -- i.e. the input is
   // outside the representable timestamp range -- `longValueExact` throws, which is surfaced as a
   // DATETIME_OVERFLOW error.
+  //
+  // Like the sibling `timestamp_micros`/`timestamp_millis`/`timestamp_seconds` constructors, the
+  // result is not validated against the [0001, 9999] calendar range: only the 64-bit `epochMicros`
+  // boundary is guarded, so a count whose `epochMicros` still fits in a long but lands past year
+  // 9999 (up to the long-micros maximum, ~year 294247) yields an out-of-range value rather than an
+  // error. This is intentional, keeping the nanosecond constructor consistent with its micro peers.
   override def nullSafeEval(input: Any): Any = {
     val n = child.dataType match {
       case _: DecimalType =>

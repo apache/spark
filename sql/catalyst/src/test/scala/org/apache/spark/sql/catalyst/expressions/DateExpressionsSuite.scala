@@ -1756,11 +1756,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(tsNanos(BigInt("1230219000123456789")), nanosVal(1230219000123456L, 789))
 
     // An integral argument is accepted directly (widened to BigInteger), exercising the
-    // IntegralType eval/codegen path rather than the DECIMAL one.
+    // IntegralType eval/codegen path rather than the DECIMAL one. Cover every integral width
+    // (TINYINT/SMALLINT/INT/BIGINT) so the `(long)` codegen cast is checked for each.
+    checkEvaluation(NanosToTimestamp(Literal(2.toByte)), nanosVal(0L, 2))
+    checkEvaluation(NanosToTimestamp(Literal(1000.toShort)), nanosVal(1L, 0))
+    checkEvaluation(NanosToTimestamp(Literal(1000)), nanosVal(1L, 0))
     checkEvaluation(
       NanosToTimestamp(Literal(1230219000123456789L)), nanosVal(1230219000123456L, 789))
     checkEvaluation(NanosToTimestamp(Literal(-1L)), nanosVal(-1L, 999))
-    checkEvaluation(NanosToTimestamp(Literal(1000)), nanosVal(1L, 0))
 
     // FLOAT/DOUBLE/STRING are rejected at analysis: a fractional or string nanosecond count is not
     // meaningful, and the implicit DECIMAL coercion would silently overflow for realistic values.
