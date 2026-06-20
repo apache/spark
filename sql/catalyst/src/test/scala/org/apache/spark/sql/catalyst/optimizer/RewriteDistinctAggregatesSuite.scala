@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Expression, If, Literal, Round}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectSet, Count, Sum}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, CollectSet, Count, Sum}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
@@ -152,10 +152,17 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     Count(caseWhen).toAggregateExpression(isDistinct = true)
   }
 
+  private def collectAggregateExpressions(plan: LogicalPlan): Seq[AggregateExpression] = {
+    plan.collect { case a: Aggregate => a.aggregateExpressions }
+      .flatten
+      .flatMap(_.collect { case ae: AggregateExpression => ae })
+  }
+
   /**
    * Asserts that the optimized plan has exactly one Expand node with one projection,
-   * that the projection contains `baseColName` as a plain attribute, and that it
-   * contains no expression of `removedWrapperType` (the IF/CaseWhen that was stripped).
+   * that the projection contains `baseColName` as a plain attribute, that it
+   * contains no expression of `removedWrapperType` (the IF/CaseWhen that was stripped),
+   * and that the outer aggregate has moved the condition into a FILTER clause.
    */
   private def assertSingleDistinctGroupExpand(
       optimized: LogicalPlan,
@@ -170,15 +177,23 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     assert(!expand.projections.head.exists(e => removedWrapperType.isInstance(e)),
       s"${removedWrapperType.getSimpleName} wrapper should have been removed " +
         "from Expand projection")
+    assert(collectAggregateExpressions(optimized).exists(_.filter.isDefined),
+      "expected at least one AggregateExpression with a FILTER clause")
   }
 
   test("conditional: disabled by default") {
     val input = conditionalTestRelation
       .groupBy(Symbol("a"))(
-        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"))
+        countDistinctIf(Symbol("b") > 1, Symbol("c")).as("cnt1"),
+        countDistinctIf(Symbol("b") > 2, Symbol("c")).as("cnt2"))
       .analyze
     val optimized = RewriteDistinctAggregates(input)
-    comparePlans(optimized, input)
+    // The general RewriteDistinctAggregates still fires, but conditional
+    // canonicalization is disabled so the two conditional counts stay as 2
+    // distinct groups instead of collapsing to 1.
+    val expands = optimized.collect { case e: Expand => e }
+    assert(expands.head.projections.size == 2,
+      "expected 2 distinct groups when conditional canonicalization is disabled")
   }
 
   test("conditional: rewrite COUNT(DISTINCT IF(cond, col, NULL)) to COUNT(DISTINCT col) FILTER") {
@@ -236,7 +251,7 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
     }
   }
 
-  test("conditional: single conditional distinct count does not produce Expand") {
+  test("conditional: single conditional distinct count is gated out by mayNeedtoRewrite") {
     // A lone COUNT(DISTINCT IF(...)) must NOT be pushed onto the Expand path.
     // The canonicalization runs inside rewrite(), which is only called when
     // mayNeedtoRewrite returns true. A single conditional distinct count has no filter

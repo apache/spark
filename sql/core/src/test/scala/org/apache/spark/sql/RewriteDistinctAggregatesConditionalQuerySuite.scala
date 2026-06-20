@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -25,23 +27,31 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
   private def checkRewriteAndResult(
       conditionalSql: String,
       filterSql: String): Unit = {
-    withTempView("t") {
-      // Verify the rewrite produces the same result as the explicit FILTER form.
-      val withRewrite = withSQLConf(
-        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-        spark.sql(conditionalSql).collect()
-      }
-      val withoutRewrite = withSQLConf(
-        SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
-        spark.sql(conditionalSql).collect()
-      }
-      val explicitFilter = spark.sql(filterSql).collect()
-
-      assert(withRewrite.sameElements(explicitFilter),
-        "Rewritten query should match explicit FILTER query")
-      assert(withoutRewrite.sameElements(explicitFilter),
-        "Non-rewritten query should also match explicit FILTER query")
+    // Verify the rewrite produces the same result as the explicit FILTER form.
+    val withRewrite = withSQLConf(
+      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
+      spark.sql(conditionalSql)
     }
+    val withoutRewrite = withSQLConf(
+      SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
+      spark.sql(conditionalSql)
+    }
+    val explicitFilter = spark.sql(filterSql)
+
+    // Rewritten query should match explicit FILTER query.
+    checkAnswer(withRewrite, explicitFilter)
+    // Non-rewritten query should also match explicit FILTER query.
+    checkAnswer(withoutRewrite, explicitFilter)
+  }
+
+  private def hasFilterClause(plan: LogicalPlan): Boolean = {
+    val aggregateExpressions = plan.collect {
+      case a: Aggregate => a.aggregateExpressions
+    }.flatten
+    val aggregateExprs = aggregateExpressions.flatMap {
+      _.collect { case ae: AggregateExpression => ae }
+    }
+    aggregateExprs.exists(_.filter.isDefined)
   }
 
   test("rewrite COUNT(DISTINCT IF(cond, col, NULL)) correctness") {
@@ -173,15 +183,19 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
 
       val withRewrite = withSQLConf(
         SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
-        spark.sql(sqlText).collect()
+        spark.sql(sqlText)
       }
       val withoutRewrite = withSQLConf(
         SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "false") {
-        spark.sql(sqlText).collect()
+        spark.sql(sqlText)
       }
 
-      assert(withRewrite.sameElements(withoutRewrite),
-        "Non-null ELSE branch should not be rewritten")
+      // They should produce the same result.
+      checkAnswer(withRewrite, withoutRewrite)
+
+      // There should be no FILTER clause when switch is enabled.
+      assert(!hasFilterClause(withRewrite.queryExecution.optimizedPlan),
+        "Non-null ELSE branch should not produce AggregateExpression with FILTER")
     }
   }
 
@@ -196,18 +210,17 @@ class RewriteDistinctAggregatesConditionalQuerySuite extends QueryTest with Shar
 
       // Two conditional distinct counts on the same base column trigger canonicalization,
       // so the optimized plan must contain FILTER clauses.
-      val planStr = withSQLConf(
+      val hasFilter = withSQLConf(
         SQLConf.REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED.key -> "true") {
         val df = spark.sql(
           """SELECT key,
             |  COUNT(DISTINCT IF(col1 > 10, col2, NULL)) as cnt1,
             |  COUNT(DISTINCT IF(col1 > 5, col2, NULL)) as cnt2
             |FROM t GROUP BY key""".stripMargin)
-        df.queryExecution.optimizedPlan.toString
+        hasFilterClause(df.queryExecution.optimizedPlan)
       }
 
-      assert(planStr.contains("FILTER"),
-        s"Optimized plan should contain FILTER clause. Plan:\n$planStr")
+      assert(hasFilter, "Optimized plan should contain AggregateExpression with FILTER clause")
     }
   }
 }
