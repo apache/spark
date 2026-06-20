@@ -168,11 +168,14 @@ public class ParquetVectorUpdaterFactory {
         } else if (sparkType instanceof TimeType &&
           isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit.NANOS)) {
           // TIME(NANOS) is stored as nanoseconds since midnight, matching the internal
-          // representation, so no unit conversion is needed.
-          return new LongUpdater();
+          // representation, so no unit conversion is needed; the decoded value is truncated to
+          // the requested precision (consistent with the row-based ParquetRowConverter path).
+          return new TimeUpdater(((TimeType) sparkType).precision(), /* fileStoresNanos = */ true);
         } else if (sparkType instanceof TimeType &&
           isTimeTypeMatched(LogicalTypeAnnotation.TimeUnit.MICROS)) {
-          return new LongAsNanosUpdater();
+          // TIME(MICROS) is converted to nanoseconds, then truncated to the requested precision
+          // (consistent with the row-based ParquetRowConverter path).
+          return new TimeUpdater(((TimeType) sparkType).precision(), /* fileStoresNanos = */ false);
         }
       }
       case FLOAT -> {
@@ -889,7 +892,26 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class LongAsNanosUpdater implements ParquetVectorUpdater {
+  // Reads an INT64 TIME column into the internal nanoseconds-since-midnight representation and
+  // truncates it to the requested TimeType precision. `fileStoresNanos` selects the on-disk unit:
+  // TIME(NANOS) stores nanos directly (identity), TIME(MICROS) stores micros (converted to nanos).
+  // Mirrors the row-based ParquetRowConverter path so the vectorized and non-vectorized readers
+  // agree on the decoded value, including when the requested precision is lower than the on-disk
+  // value's precision.
+  private static class TimeUpdater implements ParquetVectorUpdater {
+    private final int precision;
+    private final boolean fileStoresNanos;
+
+    TimeUpdater(int precision, boolean fileStoresNanos) {
+      this.precision = precision;
+      this.fileStoresNanos = fileStoresNanos;
+    }
+
+    private long toTruncatedNanos(long value) {
+      long nanos = fileStoresNanos ? value : DateTimeUtils.microsToNanos(value);
+      return DateTimeUtils.truncateTimeToPrecision(nanos, precision);
+    }
+
     @Override
     public void readValues(
         int total,
@@ -898,7 +920,7 @@ public class ParquetVectorUpdaterFactory {
         VectorizedValuesReader valuesReader) {
       valuesReader.readLongs(total, values, offset);
       for (int i = 0; i < total; i++) {
-        values.putLong(offset + i, DateTimeUtils.microsToNanos(values.getLong(offset + i)));
+        values.putLong(offset + i, toTruncatedNanos(values.getLong(offset + i)));
       }
     }
 
@@ -912,7 +934,7 @@ public class ParquetVectorUpdaterFactory {
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
-      values.putLong(offset, DateTimeUtils.microsToNanos(valuesReader.readLong()));
+      values.putLong(offset, toTruncatedNanos(valuesReader.readLong()));
     }
 
     @Override
@@ -921,8 +943,8 @@ public class ParquetVectorUpdaterFactory {
         WritableColumnVector values,
         WritableColumnVector dictionaryIds,
         Dictionary dictionary) {
-      long micros = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      values.putLong(offset, DateTimeUtils.microsToNanos(micros));
+      long value = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
+      values.putLong(offset, toTruncatedNanos(value));
     }
   }
 

@@ -1974,6 +1974,41 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
       }
     }
   }
+
+  test("Read TIME with a lower precision than the stored value truncates in both readers") {
+    // A raw TIME(NANOS) file carrying full nanosecond precision (.123456789), read back with an
+    // explicit lower precision (TIME(7)). Both the vectorized and the row-based reader must drop
+    // the sub-100ns digits (.123456789 -> .1234567); otherwise the requested type's precision is
+    // violated. Covers both the dictionary and plain decode paths.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,false));
+        |}""".stripMargin)
+    val readSchema = new StructType().add("time_nanos", TimeType(7))
+    val expected = LocalTime.of(23, 59, 59, 123456700)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(23, 59, 59, 123456, 789))
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          assertResult(df.schema)(readSchema)
+          checkAnswer(df, (0 until numRecords).map(_ => Row(expected)))
+        }
+      }
+    }
+  }
+
   // Deterministic INT32 sample shared by the INT32 widening tests below. Mixes sign,
   // zero, and MIN/MAX boundaries to catch sign-extension and precision regressions.
   private def widenSampleAt(i: Int): Int = i % 5 match {
