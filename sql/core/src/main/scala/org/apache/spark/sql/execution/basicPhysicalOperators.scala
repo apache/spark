@@ -321,13 +321,14 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // the non-CSE path already loads each column lazily into a variable on demand, so taking the
     // CSE path for it would only add the eager prologue that decodes every referenced column up
     // front. Note bare columns never reach this point: `EquivalentExpressions` skips
-    // `LeafExpression`s (which includes `BoundReference`/`Attribute`), and `splitConjunctivePredicates`
-    // feeds each conjunct to a separate `addExprTree` call, so a column repeated across conjuncts
-    // (e.g. the `c >= lo` / `c <= hi` that `c BETWEEN lo AND hi` lowers to) is never recorded as a
-    // common subexpression. The cheap-but-recorded case is a shared *non-leaf* such as a struct
-    // field access -- `s.x > 5 AND s.x < 100` shares `GetStructField(s, x)` -- which is just a slot
-    // read. Require a non-cheap common subexpression (per `CollapseProject.isCheap`) so such filters
-    // keep the lazy, short-circuiting path and only genuine repeated computation takes the CSE path.
+    // `LeafExpression`s (which includes `BoundReference`/`Attribute`), and
+    // `splitConjunctivePredicates` feeds each conjunct to a separate `addExprTree` call, so a
+    // column repeated across conjuncts (e.g. the `c >= lo` / `c <= hi` that `c BETWEEN lo AND hi`
+    // lowers to) is never recorded as a common subexpression. The cheap-but-recorded case is a
+    // shared *non-leaf* such as a struct field access -- `s.x > 5 AND s.x < 100` shares
+    // `GetStructField(s, x)` -- which is just a slot read. Require a non-cheap common
+    // subexpression (per `CollapseProject.isCheap`) so such filters keep the lazy,
+    // short-circuiting path and only genuine repeated computation takes the CSE path.
     //
     // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
     // turned off independently of subexpression elimination elsewhere.
