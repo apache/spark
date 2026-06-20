@@ -11750,6 +11750,54 @@ def unix_micros(col: "ColumnOrName") -> Column:
 
 
 @_try_remote_functions
+def unix_nanos(col: "ColumnOrName") -> Column:
+    """Returns the number of nanoseconds since 1970-01-01 00:00:00 UTC as ``DECIMAL(21, 0)``.
+    Only supported for ``TIMESTAMP_LTZ(p)`` and ``TIMESTAMP_NTZ(p)`` with precision ``p``
+    in ``[7, 9]``.
+
+    .. versionadded:: 4.3.0
+
+    Parameters
+    ----------
+    col : :class:`~pyspark.sql.Column` or column name
+        input column of nanosecond-precision timestamp values to convert.
+
+    Returns
+    -------
+    :class:`~pyspark.sql.Column`
+        the number of nanoseconds since 1970-01-01 00:00:00 UTC as ``DECIMAL(21, 0)``.
+
+    See Also
+    --------
+    :meth:`pyspark.sql.functions.unix_date`
+    :meth:`pyspark.sql.functions.unix_seconds`
+    :meth:`pyspark.sql.functions.unix_millis`
+    :meth:`pyspark.sql.functions.unix_micros`
+
+    Examples
+    --------
+    >>> import pyspark.sql.functions as sf
+    >>> df = spark.sql(
+    ...     "SELECT TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789' AS ts"
+    ... )
+    >>> df.select('*', sf.unix_nanos('ts')).show()
+    +-----------------------------+-------------------+
+    |                           ts|     unix_nanos(ts)|
+    +-----------------------------+-------------------+
+    |2020-01-01 13:24:35.123456789|1577884675123456789|
+    +-----------------------------+-------------------+
+
+    >>> df.select(sf.unix_nanos(sf.lit(None).cast('timestamp_ntz(9)'))).show()
+    +------------------------------------------+
+    |unix_nanos(CAST(NULL AS TIMESTAMP_NTZ(9)))|
+    +------------------------------------------+
+    |                                      NULL|
+    +------------------------------------------+
+    """
+    return _invoke_function_over_columns("unix_nanos", col)
+
+
+@_try_remote_functions
 def unix_millis(col: "ColumnOrName") -> Column:
     """Returns the number of milliseconds since 1970-01-01 00:00:00 UTC.
     Truncates higher levels of precision.
