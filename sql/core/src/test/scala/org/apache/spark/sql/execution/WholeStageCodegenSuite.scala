@@ -1225,23 +1225,19 @@ class WholeStageCodegenSuite extends SharedSparkSession
         "CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting non-CSE path)")
   }
 
-  test("SPARK-56032: FilterExec skips CSE codegen when the only common subexpression is a leaf") {
-    // `c BETWEEN lo AND hi` lowers to `c >= lo AND c <= hi`, so a column used in a BETWEEN (or in
-    // several conjuncts) becomes a "common subexpression" -- but it is a bare leaf column whose
-    // load CSE cannot meaningfully cache, since the non-CSE path already loads columns lazily. The
-    // gate must not take the CSE path for it: doing so emits the eager prologue that decodes every
-    // referenced column (the decimals `p1`/`p2` here) up front, defeating the cheap `q` filter's
-    // short-circuiting. This is the TPC-DS q28 shape. Verify the leaf-only case falls back to the
-    // same code as CSE-disabled; `p1`/`p2` stand in for q28's decimal columns whose eager decode
-    // is the cost, though the fallback is type-independent.
+  test("SPARK-56032: FilterExec skips CSE codegen when the common subexpression is cheap") {
+    // A column repeated across conjuncts never becomes a common subexpression -- a bare column is a
+    // `LeafExpression`, which `EquivalentExpressions` skips, and `splitConjunctivePredicates` feeds
+    // each conjunct to a separate `addExprTree` call. The realistic cheap-but-recorded case is a
+    // shared *non-leaf* slot read such as a struct field access: `s.x > 5 AND s.x < 100` shares
+    // `GetStructField(s, x)`. Caching that gains nothing over the non-CSE path's lazy load, so the
+    // gate must fall back. (Pre-`isCheap`-gate this took the CSE path, emitting the eager prologue.)
     val schema = StructType(Seq(
-      StructField("q", IntegerType, nullable = true),
-      StructField("p1", IntegerType, nullable = true),
-      StructField("p2", IntegerType, nullable = true)))
+      StructField("s", StructType(Seq(StructField("x", IntegerType, nullable = true))),
+        nullable = true)))
     val data = spark.sparkContext.parallelize(Seq(
-      Row(4, 10, 7), Row(1, 10, 7), Row(null, 10, 7),
-      Row(5, 100, 7), Row(6, 100, 100), Row(3, 9, 1)))
-    val expected = Seq(Row(4, 10, 7), Row(5, 100, 7), Row(3, 9, 1))
+      Row(Row(10)), Row(Row(3)), Row(Row(200)), Row(Row(50)), Row(Row(null)), Row(null)))
+    val expected = Seq(Row(Row(10)), Row(Row(50)))
 
     def filterCode(cseEnabled: Boolean): String = {
       withSQLConf(
@@ -1249,10 +1245,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
         val df = spark.createDataFrame(data, schema)
-        // The only repeated expressions are the bare columns q, p1, p2 (each referenced by the two
-        // halves of its BETWEEN). No non-leaf expression is shared.
-        val filtered = df.where(
-          "q IS NOT NULL AND q BETWEEN 2 AND 6 AND (p1 BETWEEN 8 AND 18 OR p2 BETWEEN 5 AND 9)")
+        // Both conjuncts share `GetStructField(s, x)`, a cheap non-leaf common subexpression.
+        val filtered = df.where("s.x > 5 AND s.x < 100")
         val plan = filtered.queryExecution.executedPlan
         assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
           "Filter should be in whole-stage codegen")
@@ -1263,8 +1257,42 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
     def normalize(code: String): String = code.replaceAll("#\\d+", "#")
     assert(normalize(filterCode(cseEnabled = true)) == normalize(filterCode(cseEnabled = false)),
-      "With only leaf common subexpressions, CSE-enabled FilterExec codegen should be identical " +
+      "With only a cheap common subexpression, CSE-enabled FilterExec codegen should be identical " +
         "to CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting non-CSE path)")
+  }
+
+  test("SPARK-56032: FilterExec takes CSE codegen when the common subexpression is non-cheap") {
+    // The dual of the cheap-subexpression test: when `otherPreds` share a genuinely non-cheap
+    // computation (`a + b`, whose `isCheap` is false), the gate must take the CSE path so the
+    // shared result is computed once. Verify the CSE-enabled code differs from CSE-disabled here,
+    // pinning down that the gate still fires for real repeated computation.
+    val schema = StructType(Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", IntegerType, nullable = true)))
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(1, 5), Row(60, 50), Row(10, 20), Row(0, 0), Row(null, 5)))
+    val expected = Seq(Row(1, 5), Row(10, 20))
+
+    def filterCode(cseEnabled: Boolean): String = {
+      withSQLConf(
+        SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString,
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = spark.createDataFrame(data, schema)
+        // Both conjuncts share `a + b`, a non-cheap common subexpression worth eliminating.
+        val filtered = df.where("(a + b) > 0 AND (a + b) < 100")
+        val plan = filtered.queryExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[WholeStageCodegenExec]),
+          "Filter should be in whole-stage codegen")
+        checkAnswer(filtered, expected)
+        codegenString(plan)
+      }
+    }
+
+    def normalize(code: String): String = code.replaceAll("#\\d+", "#")
+    assert(normalize(filterCode(cseEnabled = true)) != normalize(filterCode(cseEnabled = false)),
+      "With a non-cheap common subexpression, CSE-enabled FilterExec codegen should differ from " +
+        "CSE-disabled codegen (i.e. take the CSE path that computes the shared result once)")
   }
 
   test("SPARK-56032: subexpressionElimination.filterExec.enabled gates FilterExec CSE " +

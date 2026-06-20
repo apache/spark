@@ -317,14 +317,17 @@ case class FilterExec(condition: Expression, child: SparkPlan)
     // (e.g. decoding a decimal column for rows a cheaper earlier predicate would reject), so we
     // fall back to `generatePredicateCode`.
     //
-    // A *cheap* common subexpression does not count. `c BETWEEN lo AND hi` lowers to
-    // `c >= lo AND c <= hi`, so any `BETWEEN` (or a column referenced in several conjuncts) makes
-    // that column a common subexpression, but caching a cheap load saves nothing: the non-CSE path
-    // already loads each column lazily into a variable on demand. Taking the CSE path for it would
-    // only add the eager prologue that decodes every referenced column up front. Require a
-    // non-cheap common subexpression (per `CollapseProject.isCheap`) so filters like TPC-DS q28
-    // (`ss_quantity BETWEEN ... AND (ss_list_price BETWEEN ... OR ...)`, whose only repeats are the
-    // bare columns) keep the lazy, short-circuiting path.
+    // A *cheap* common subexpression does not count either. Caching a cheap load saves nothing:
+    // the non-CSE path already loads each column lazily into a variable on demand, so taking the
+    // CSE path for it would only add the eager prologue that decodes every referenced column up
+    // front. Note bare columns never reach this point: `EquivalentExpressions` skips
+    // `LeafExpression`s (which includes `BoundReference`/`Attribute`), and `splitConjunctivePredicates`
+    // feeds each conjunct to a separate `addExprTree` call, so a column repeated across conjuncts
+    // (e.g. the `c >= lo` / `c <= hi` that `c BETWEEN lo AND hi` lowers to) is never recorded as a
+    // common subexpression. The cheap-but-recorded case is a shared *non-leaf* such as a struct
+    // field access -- `s.x > 5 AND s.x < 100` shares `GetStructField(s, x)` -- which is just a slot
+    // read. Require a non-cheap common subexpression (per `CollapseProject.isCheap`) so such filters
+    // keep the lazy, short-circuiting path and only genuine repeated computation takes the CSE path.
     //
     // `subexpressionElimination.filterExec.enabled` additionally gates this path so it can be
     // turned off independently of subexpression elimination elsewhere.
