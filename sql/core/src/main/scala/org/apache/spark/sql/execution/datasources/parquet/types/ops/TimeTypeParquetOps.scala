@@ -89,8 +89,7 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
     // requested Spark type is TimeType, regardless of the actual Parquet encoding.
     // Without this guard, files whose column is raw INT64, INT64 TIMESTAMP(MICROS),
     // INT32 TIME(MILLIS), etc. would silently decode as microsToNanos(value) and
-    // produce wrong results. Mirrors the inline guard that existed in
-    // ParquetRowConverter before the framework dispatch.
+    // produce wrong results.
     TimeTypeParquetOps.requireCompatibleParquetType(t, parquetType)
     val fileStoresNanos = TimeTypeParquetOps.isNanosTime(parquetType)
     val precision = t.precision
