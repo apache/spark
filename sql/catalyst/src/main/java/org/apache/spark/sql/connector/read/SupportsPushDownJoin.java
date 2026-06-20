@@ -82,7 +82,7 @@ public interface SupportsPushDownJoin extends ScanBuilder {
    * @param rightSample pushed sample from the right side, or null if there is no pushed sample.
    * @return True if join has been successfully pushed down.
    *
-   * @since 4.2.0
+   * @since 4.3.0
    */
   default boolean pushDownJoin(
       SupportsPushDownJoin other,
