@@ -93,7 +93,8 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
                 with open(SparkFiles.get("my_sc_file.txt"), "r") as my_file:
                     return my_file.read().strip()
 
-            self.spark.range(1).select(
+            session = self.spark.newSession()
+            session.range(1).select(
                 assert_true(func("id") == lit("Hello from SparkContext.addFile"))
             ).show()
 
