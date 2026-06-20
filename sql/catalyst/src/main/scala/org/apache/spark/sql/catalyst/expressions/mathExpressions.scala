@@ -252,7 +252,22 @@ case class Cbrt(child: Expression) extends UnaryMathExpression(math.cbrt, "CBRT"
   override protected def withNewChildInternal(newChild: Expression): Cbrt = copy(child = newChild)
 }
 
-case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL") {
+object CeilFloor {
+  private val LongUpperBound: Double = -Long.MinValue.toDouble
+
+  def toLongExact(value: Double, context: QueryContext): Long = {
+    if (value.isNaN || (value >= Long.MinValue.toDouble && value < LongUpperBound)) {
+      value.toLong
+    } else {
+      throw QueryExecutionErrors.arithmeticOverflowError("long overflow", context = context)
+    }
+  }
+}
+
+case class Ceil(child: Expression, ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryMathExpression(math.ceil, "CEIL") with SupportQueryContext {
+  def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
+
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
@@ -265,7 +280,13 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
-    case DoubleType => f(input.asInstanceOf[Double]).toLong
+    case DoubleType =>
+      val value = f(input.asInstanceOf[Double])
+      if (ansiEnabled) {
+        CeilFloor.toLongExact(value, getContextOrNull())
+      } else {
+        value.toLong
+      }
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
   }
 
@@ -275,9 +296,23 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
-      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+      case _ if ansiEnabled =>
+        val ceilFloor = CeilFloor.getClass.getCanonicalName.stripSuffix("$")
+        val context = getContextOrNullCode(ctx, ansiEnabled)
+        defineCodeGen(ctx, ev, c =>
+          s"$ceilFloor.toLongExact(java.lang.Math.${funcName}($c), $context)")
+      case _ =>
+        defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
+
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
+    Some(origin.context)
+  } else {
+    None
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(child)
 
   override protected def withNewChildInternal(newChild: Expression): Ceil = copy(child = newChild)
 }
@@ -531,7 +566,10 @@ case class Expm1(child: Expression) extends UnaryMathExpression(StrictMath.expm1
   override protected def withNewChildInternal(newChild: Expression): Expm1 = copy(child = newChild)
 }
 
-case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLOOR") {
+case class Floor(child: Expression, ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
+  extends UnaryMathExpression(math.floor, "FLOOR") with SupportQueryContext {
+  def this(child: Expression) = this(child, SQLConf.get.ansiEnabled)
+
   override def dataType: DataType = child.dataType match {
     case dt @ DecimalType.Fixed(_, 0) => dt
     case DecimalType.Fixed(precision, scale) =>
@@ -544,7 +582,13 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
     case LongType => input.asInstanceOf[Long]
-    case DoubleType => f(input.asInstanceOf[Double]).toLong
+    case DoubleType =>
+      val value = f(input.asInstanceOf[Double])
+      if (ansiEnabled) {
+        CeilFloor.toLongExact(value, getContextOrNull())
+      } else {
+        value.toLong
+      }
     case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
 
@@ -554,11 +598,26 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
       case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
       case LongType => defineCodeGen(ctx, ev, c => s"$c")
-      case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
+      case _ if ansiEnabled =>
+        val ceilFloor = CeilFloor.getClass.getCanonicalName.stripSuffix("$")
+        val context = getContextOrNullCode(ctx, ansiEnabled)
+        defineCodeGen(ctx, ev, c =>
+          s"$ceilFloor.toLongExact(java.lang.Math.${funcName}($c), $context)")
+      case _ =>
+        defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
- }
- override protected def withNewChildInternal(newChild: Expression): Floor =
-  copy(child = newChild)
+  }
+
+  override def initQueryContext(): Option[QueryContext] = if (ansiEnabled) {
+    Some(origin.context)
+  } else {
+    None
+  }
+
+  override def flatArguments: Iterator[Any] = Iterator(child)
+
+  override protected def withNewChildInternal(newChild: Expression): Floor =
+    copy(child = newChild)
 }
 
 // scalastyle:off line.size.limit

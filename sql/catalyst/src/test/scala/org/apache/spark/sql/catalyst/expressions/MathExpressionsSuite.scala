@@ -393,13 +393,19 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("ceil") {
-    testUnary(Ceil, (d: Double) => math.ceil(d).toLong)
-    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DoubleType)
+    testUnary((child: Expression) => Ceil(child, ansiEnabled = false),
+      (d: Double) => math.ceil(d).toLong)
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Ceil(child, ansiEnabled = false), DoubleType)
 
-    testUnary(Ceil, (d: Decimal) => d.ceil, (-20 to 20).map(x => Decimal(x * 0.1)))
-    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 3))
-    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(25, 0))
-    checkConsistencyBetweenInterpretedAndCodegen(Ceil, DecimalType(5, 0))
+    testUnary((child: Expression) => Ceil(child, ansiEnabled = false), (d: Decimal) => d.ceil,
+      (-20 to 20).map(x => Decimal(x * 0.1)))
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Ceil(child, ansiEnabled = false), DecimalType(25, 3))
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Ceil(child, ansiEnabled = false), DecimalType(25, 0))
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Ceil(child, ansiEnabled = false), DecimalType(5, 0))
 
     val doublePi: Double = 3.1415
     val floatPi: Float = 3.1415f
@@ -423,13 +429,19 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("floor") {
-    testUnary(Floor, (d: Double) => math.floor(d).toLong)
-    checkConsistencyBetweenInterpretedAndCodegen(Floor, DoubleType)
+    testUnary((child: Expression) => Floor(child, ansiEnabled = false),
+      (d: Double) => math.floor(d).toLong)
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Floor(child, ansiEnabled = false), DoubleType)
 
-    testUnary(Floor, (d: Decimal) => d.floor, (-20 to 20).map(x => Decimal(x * 0.1)))
-    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 3))
-    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(25, 0))
-    checkConsistencyBetweenInterpretedAndCodegen(Floor, DecimalType(5, 0))
+    testUnary((child: Expression) => Floor(child, ansiEnabled = false), (d: Decimal) => d.floor,
+      (-20 to 20).map(x => Decimal(x * 0.1)))
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Floor(child, ansiEnabled = false), DecimalType(25, 3))
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Floor(child, ansiEnabled = false), DecimalType(25, 0))
+    checkConsistencyBetweenInterpretedAndCodegen(
+      (child: Expression) => Floor(child, ansiEnabled = false), DecimalType(5, 0))
 
     val doublePi: Double = 3.1415
     val floatPi: Float = 3.1415f
@@ -450,6 +462,17 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(checkDataTypeAndCast(Floor(1234567890123456L)), 1234567890123456L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(0.01)), 0L, EmptyRow)
     checkEvaluation(checkDataTypeAndCast(Floor(-0.10)), -1L, EmptyRow)
+  }
+
+  test("ceil and floor throw on double overflow in ANSI mode") {
+    Seq(
+      Ceil(Literal(1e30d), ansiEnabled = true),
+      Floor(Literal(-1e30d), ansiEnabled = true)).foreach { expr =>
+      checkExceptionInExpression[SparkArithmeticException](expr, "overflow")
+    }
+
+    checkEvaluation(Ceil(Literal(1e30d), ansiEnabled = false), Long.MaxValue)
+    checkEvaluation(Floor(Literal(-1e30d), ansiEnabled = false), Long.MinValue)
   }
 
   test("factorial") {
