@@ -23,7 +23,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{NoSuchViewException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, Relation, TableCatalog, TableDependency, TableSummary, RelationCatalog, View}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, Relation, RelationCatalog, TableCatalog, TableDependency, TableSummary, View}
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, Constants, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Metadata

@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.connector.catalog.{Identifier, DelegatingTable, Table, TableCatalog, TableChange, TableInfo, TableSummary}
+import org.apache.spark.sql.connector.catalog.{DelegatingTable, Identifier, Table, TableCatalog, TableChange, TableInfo, TableSummary}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType

@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, NoSuchViewException, TableAlreadyExistsException, ViewAlreadyExistsException}
-import org.apache.spark.sql.connector.catalog.{Identifier, DelegatingTable, Relation, Table, TableCatalog, TableChange, TableInfo, TableSummary, RelationCatalog, V1Table, ViewCatalog, View}
+import org.apache.spark.sql.connector.catalog.{DelegatingTable, Identifier, Relation, RelationCatalog, Table, TableCatalog, TableChange, TableInfo, TableSummary, V1Table, View, ViewCatalog}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
