@@ -1839,6 +1839,35 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     }
   }
 
+  test("SPARK-54593: a small materialized filtering side keeps standalone DPP via its row bound") {
+    // A LocalRelation has no column statistics but an exact maxRows, a conservative upper bound on
+    // its join-key NDV. A small, selective materialized side must still get standalone DPP when no
+    // broadcast can be reused -- the row bound, not the gated fallback ratio, supplies the benefit.
+    withSQLConf(
+      SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      // The fallback ratio offers no benefit, so DPP can only come from the row-bound ratio.
+      SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "0",
+      // No broadcast can be reused, so an injected filter must be a standalone subquery.
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+      SQLConf.CBO_ENABLED.key -> "true") {
+      // A one-row LocalRelation: no column statistics, but maxRows = 1 bounds the join-key NDV.
+      val keys = Seq(0).toDF("store_id")
+      val keysPlan = keys.queryExecution.optimizedPlan
+      assert(keysPlan.exists(_.isInstanceOf[LocalRelation]))
+      assert(keysPlan.maxRows.contains(1))
+      assert(!keysPlan.stats.attributeStats.values.exists(_.distinctCount.isDefined),
+        s"LocalRelation should not carry a distinct-count statistic:\n$keysPlan")
+
+      // fact_stats is partitioned by store_id (NDV > 1) and has column statistics, so the row bound
+      // (NDV <= 1) establishes a strong pruning benefit for this materialized side.
+      val df = spark.table("fact_stats").join(keys, "store_id").select("date_id")
+
+      checkPartitionPruningPredicate(df, withSubquery = true, withBroadcast = false)
+    }
+  }
+
   test("DPP does not treat a non-checkpointed LogicalRDD as a selective filtering side") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "true") {

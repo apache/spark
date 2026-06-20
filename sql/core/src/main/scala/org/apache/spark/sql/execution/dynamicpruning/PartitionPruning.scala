@@ -163,7 +163,12 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
           if conf.dynamicPartitionPruningUseStats =>
             // get the CBO stats for each attribute in the join condition
             val partDistinctCount = distinctCounts(leftAttr, partPlan)
-            val otherDistinctCount = distinctCounts(rightAttr, otherPlan)
+            // A materialized filtering side (e.g. a LocalRelation) may carry no column statistics
+            // but an exact `maxRows`, which is a conservative upper bound on its join-key NDV. Use
+            // it when the column statistic is missing so a small, selective materialized side still
+            // yields a statistics-based ratio rather than falling through to the gated fallback.
+            val otherDistinctCount =
+              distinctCounts(rightAttr, otherPlan).orElse(otherPlan.maxRows.map(BigInt(_)))
             val availableStats = partDistinctCount.isDefined && partDistinctCount.get > 0 &&
               otherDistinctCount.isDefined
             if (!availableStats) {
