@@ -1804,17 +1804,17 @@ struct<CAST(TIME '23:59:59.999999' AS DECIMAL(11,6)):decimal(11,6)>
 -- !query
 SELECT CAST(time '23:59:59.999999999' AS decimal(14, 9))
 -- !query schema
-struct<CAST(TIME '23:59:59.999999' AS DECIMAL(14,9)):decimal(14,9)>
+struct<CAST(TIME '23:59:59.999999999' AS DECIMAL(14,9)):decimal(14,9)>
 -- !query output
-86399.999999000
+86399.999999999
 
 
 -- !query
 SELECT CAST(time '23:59:59.999999999' AS decimal(20, 10))
 -- !query schema
-struct<CAST(TIME '23:59:59.999999' AS DECIMAL(20,10)):decimal(20,10)>
+struct<CAST(TIME '23:59:59.999999999' AS DECIMAL(20,10)):decimal(20,10)>
 -- !query output
-86399.9999990000
+86399.9999999990
 
 
 -- !query
@@ -1868,6 +1868,6 @@ struct<CAST(TIME '23:59:59.999999' AS DECIMAL(11,5)):decimal(11,5)>
 -- !query
 SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8))
 -- !query schema
-struct<CAST(TIME '23:59:59.999999' AS DECIMAL(14,8)):decimal(14,8)>
+struct<CAST(TIME '23:59:59.999999999' AS DECIMAL(14,8)):decimal(14,8)>
 -- !query output
-86399.99999900
+86400.00000000
