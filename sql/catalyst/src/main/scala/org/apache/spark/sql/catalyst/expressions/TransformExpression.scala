@@ -75,13 +75,19 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
    */
   def isSameFunction(other: TransformExpression): Boolean =
     function.canonicalName() == other.function.canonicalName() &&
-      children.length == other.children.length &&
+      childrenMatch(other)(_ == _)
+
+  /**
+   * Per-position match of children, requiring equal arity. Literal slots are compared by the
+   * caller-supplied `literalsMatch`; nested transform slots must recursively be the same function;
+   * any other slot must be a plain column reference on both sides.
+   */
+  private def childrenMatch(other: TransformExpression)
+      (literalsMatch: (Literal, Literal) => Boolean): Boolean =
+    children.length == other.children.length &&
       children.zip(other.children).forall {
-        case (l1: Literal, l2: Literal) => l1 == l2
+        case (l1: Literal, l2: Literal) => literalsMatch(l1, l2)
         case (t1: TransformExpression, t2: TransformExpression) => t1.isSameFunction(t2)
-        // Any other pair must be a plain column reference on both sides. Column identity is
-        // ignored (reconciled separately via positional matching); a non-reference slot
-        // (Add, Cast, ...) or a literal/transform-vs-reference mismatch is "not the same".
         case (c1, c2) => TransformExpression.isColumnRef(c1) && TransformExpression.isColumnRef(c2)
       }
 
@@ -140,17 +146,12 @@ case class TransformExpression(function: BoundFunction, children: Seq[Expression
     literalChildren.map(l => LiteralValue(l.value, l.dataType): V2Literal[_]).toArray
 
   /**
-   * Whether this transform and `other` share the same argument layout: equal arity, and at each
-   * position a literal slot aligns with a literal slot (and a non-literal with a non-literal).
-   * Literal *values* may differ -- that is what a [[Reducer]] reconciles.
+   * Reducer precondition: same argument layout/structure as `other` (arity, aligned slots, equal
+   * nested transforms, column refs elsewhere). Only literal *values* may differ. Unlike
+   * [[isSameFunction]] the function name is not compared.
    */
   private def sameArgumentLayout(other: TransformExpression): Boolean =
-    children.length == other.children.length &&
-      children.zip(other.children).forall {
-        case (_: Literal, _: Literal) => true
-        case (_: Literal, _) | (_, _: Literal) => false
-        case _ => true
-      }
+    childrenMatch(other)((_, _) => true)
 
   /**
    * Whether every literal parameter is a scalar (an [[AtomicType]]). Reducer parameters are scalar
