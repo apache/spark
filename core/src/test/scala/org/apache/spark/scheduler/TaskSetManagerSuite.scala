@@ -3004,6 +3004,82 @@ class TaskSetManagerSuite
     new DirectTaskResult[MapStatus](valueSer.serialize(mapStatus), accumUpdates, metricPeaks)
   }
 
+  // SPARK-57465: Demonstrates that RejectedExecutionException (wrapped as ExceptionFailure)
+  // counts toward task failure budget, consuming retries for a non-task-fault.
+  test("SPARK-57465: RejectedExecutionException counts toward task failures (bug repro)") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val clock = new ManualClock(1) // start at 1 so markFinished(time > 0) passes
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    // Simulate the failure that Executor.launchTask sends when threadPool.execute throws
+    // RejectedExecutionException: it wraps as ExceptionFailure (which has
+    // countTowardsTaskFailures = true by default).
+    val rejectedExc = new java.util.concurrent.RejectedExecutionException(
+      "Task org.apache.spark.executor.Executor$TaskRunner rejected from " +
+        "java.util.concurrent.ThreadPoolExecutor [Shutting down]")
+    val failureReason = new ExceptionFailure(
+      rejectedExc.getClass.getName,
+      rejectedExc.getMessage,
+      rejectedExc.getStackTrace,
+      org.apache.spark.util.Utils.exceptionString(rejectedExc),
+      None)
+
+    // Verify that ExceptionFailure (the type used for RejectedExecutionException)
+    // has countTowardsTaskFailures = true - this IS the bug.
+    assert(failureReason.countTowardsTaskFailures === true,
+      "BUG REPRO: ExceptionFailure from RejectedExecutionException should currently " +
+        "count toward task failures (this is the bug)")
+
+    // Launch and fail the task MAX_TASK_FAILURES times with RejectedExecutionException
+    for (attempt <- 0 until MAX_TASK_FAILURES) {
+      clock.advance(1)
+      val taskOption = manager.resourceOffer("exec1", "host1", ANY)._1
+      assert(taskOption.isDefined, s"Task should still be schedulable at attempt $attempt")
+      manager.handleFailedTask(taskOption.get.taskId, TaskState.FAILED, failureReason)
+    }
+
+    // The stage should be aborted because all MAX_TASK_FAILURES attempts were consumed
+    // by RejectedExecutionException - demonstrating the bug.
+    assert(manager.isZombie,
+      "BUG REPRO: Stage should be zombie (aborted) after RejectedExecutionException " +
+        "consumed all retries")
+    assert(sched.taskSetsFailed.contains("0.0"),
+      "BUG REPRO: TaskSet should be failed/aborted")
+  }
+
+  // SPARK-57465: With the fix, ExecutorShutdownFailure does NOT count toward task failures
+  test("SPARK-57465: ExecutorShutdownFailure does not count toward task failures") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val clock = new ManualClock(1)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    val failureReason = ExecutorShutdownFailure("exec1")
+    assert(failureReason.countTowardsTaskFailures === false)
+
+    // Fail the task MAX_TASK_FAILURES times with ExecutorShutdownFailure
+    for (attempt <- 0 until MAX_TASK_FAILURES) {
+      clock.advance(1)
+      val taskOption = manager.resourceOffer("exec1", "host1", ANY)._1
+      assert(taskOption.isDefined, s"Task should still be schedulable at attempt $attempt")
+      manager.handleFailedTask(taskOption.get.taskId, TaskState.FAILED, failureReason)
+    }
+
+    // The stage should NOT be aborted - failures don't count
+    assert(!manager.isZombie,
+      "Stage should NOT be zombie - ExecutorShutdownFailure must not count")
+    assert(!sched.taskSetsFailed.contains("0.0"),
+      "TaskSet should NOT be failed/aborted")
+
+    // Task should still be schedulable
+    clock.advance(1)
+    val taskOption = manager.resourceOffer("exec1", "host1", ANY)._1
+    assert(taskOption.isDefined, "Task should still be schedulable after non-counting failures")
+  }
+
 }
 
 class FakeLongTasks(stageId: Int, partitionId: Int) extends FakeTask(stageId, partitionId) {

@@ -254,6 +254,7 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(TaskKilled("test"))
     testTaskEndReason(TaskCommitDenied(2, 3, 4))
     testTaskEndReason(ExecutorLostFailure("100", true, Some("Induced failure")))
+    testTaskEndReason(ExecutorShutdownFailure("exec-42"))
     testTaskEndReason(UnknownReason)
 
     // BlockId
@@ -550,6 +551,14 @@ class JsonProtocolSuite extends SparkFunSuite {
       .removeField("Attempt Number")
     val expectedDenied = TaskCommitDenied(-1, -1, -1)
     assertEquals(expectedDenied, JsonProtocol.taskEndReasonFromJson(oldDenied))
+  }
+
+  test("SPARK-57465: ExecutorShutdownFailure round-trip serialization") {
+    val reason = ExecutorShutdownFailure("exec-7")
+    val json = toJsonString(JsonProtocol.taskEndReasonToJson(reason, _))
+    val deserialized = JsonProtocol.taskEndReasonFromJson(json)
+    assertEquals(reason, deserialized)
+    assert(deserialized.asInstanceOf[ExecutorShutdownFailure].executorId === "exec-7")
   }
 
   test("AccumulableInfo backward compatibility") {
@@ -1359,6 +1368,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(execId1 === execId2)
         assert(exit1CausedByApp === exit2CausedByApp)
         assert(reason1 === reason2)
+      case (ExecutorShutdownFailure(execId1), ExecutorShutdownFailure(execId2)) =>
+        assert(execId1 === execId2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
     }

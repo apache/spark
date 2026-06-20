@@ -1087,6 +1087,11 @@ private[spark] class TaskSetManager(
           log"Not counting this failure towards the maximum number of failures for the task.")
         None
 
+      case _: ExecutorShutdownFailure =>
+        logInfo(log"${MDC(TASK_NAME, taskName(tid))} was rejected because its executor was" +
+          log" shutting down. Not counting this towards the maximum number of failures.")
+        None
+
       case _: TaskFailedReason =>  // TaskResultLost and others
         logWarning(failureReason)
         None
