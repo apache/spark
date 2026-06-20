@@ -889,6 +889,28 @@ public class UTF8StringSuite {
     assertEquals(fromString(""), fromString("数数数据砖ab").trimRight(fromString("数据砖ab")));
     assertEquals(fromString("头"), fromString("头a???/").trimRight(fromString("数?/*&^%a")));
     assertEquals(fromString("头"), fromString("头数b数数 [").trimRight(fromString(" []数b")));
+
+    // SPARK-57578: trimLeft/trimRight with a trim-set whose last byte is a truncated
+    // multi-byte leader must not read past the end of the backing buffer.
+    // 0xC3 is the leading byte of a 2-byte sequence; the continuation byte is absent.
+    UTF8String truncated2 = fromBytes(new byte[]{(byte) 0xC3});
+    assertEquals(fromString("hello "), fromString("hello ").trimLeft(truncated2));
+    assertEquals(fromString(" hello"), fromString(" hello").trimRight(truncated2));
+
+    // 'A' followed by a lone 2-byte leader — truncation is at the end of the source string.
+    UTF8String srcWithTruncatedTail = fromBytes(new byte[]{0x41, (byte) 0xC3});
+    assertEquals(fromString("B"), srcWithTruncatedTail.trimLeft(fromString("A")));
+    assertEquals(fromString("B"), fromBytes(new byte[]{(byte) 0xC3, 0x42})
+        .trimRight(fromString("B")));
+
+    // Lone 3-byte and 4-byte leaders as the trim string.
+    UTF8String truncated3 = fromBytes(new byte[]{(byte) 0xE4});
+    assertEquals(fromString("hello"), fromString("hello").trimLeft(truncated3));
+    assertEquals(fromString("hello"), fromString("hello").trimRight(truncated3));
+
+    UTF8String truncated4 = fromBytes(new byte[]{(byte) 0xF0});
+    assertEquals(fromString("hello"), fromString("hello").trimLeft(truncated4));
+    assertEquals(fromString("hello"), fromString("hello").trimRight(truncated4));
   }
 
   @Test
@@ -1228,6 +1250,23 @@ public class UTF8StringSuite {
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(-1));
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length()));
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length() + 1));
+
+    // SPARK-57578: a string ending in a truncated multi-byte leader must not read past the buffer.
+    // 0xC3 alone is the leading byte of a 2-byte sequence; codePointFrom(0) must not read byte 1.
+    UTF8String lone2 = fromBytes(new byte[]{(byte) 0xC3});
+    // Returns the partial/clamped code point without throwing or crashing.
+    lone2.codePointFrom(0);
+
+    // 'A' (0x41) followed by a lone 3-byte leader (0xE4) — codePointFrom(1) must not read bytes
+    // 2 or 3 which do not exist.
+    UTF8String aLone3 = fromBytes(new byte[]{0x41, (byte) 0xE4});
+    assertEquals(0x41, aLone3.codePointFrom(0));
+    aLone3.codePointFrom(1);
+
+    // 'A' followed by a lone 4-byte leader (0xF0).
+    UTF8String aLone4 = fromBytes(new byte[]{0x41, (byte) 0xF0});
+    assertEquals(0x41, aLone4.codePointFrom(0));
+    aLone4.codePointFrom(1);
   }
 
   @Test

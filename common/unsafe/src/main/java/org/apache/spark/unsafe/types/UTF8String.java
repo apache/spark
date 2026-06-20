@@ -728,7 +728,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public int codePointFrom(int byteIndex) {
     Objects.checkIndex(byteIndex, numBytes);
     byte b = getByte(byteIndex);
-    int numBytes = numBytesForFirstByte(b);
+    // Clamp to remaining bytes so a truncated trailing sequence never reads past the end.
+    int numBytes = Math.min(numBytesForFirstByte(b), this.numBytes - byteIndex);
     return switch (numBytes) {
       case 1 ->
         b & 0x7F;
@@ -1049,7 +1050,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     while (searchIdx < numBytes) {
       UTF8String searchChar = copyUTF8String(
-          searchIdx, searchIdx + numBytesForFirstByte(this.getByte(searchIdx)) - 1);
+          searchIdx,
+          searchIdx + Math.min(numBytesForFirstByte(this.getByte(searchIdx)),
+                               numBytes - searchIdx) - 1);
       int searchCharBytes = searchChar.numBytes;
       // try to find the matching for the searchChar in the trimString set
       if (trimString.find(searchChar, 0) >= 0) {
@@ -1121,7 +1124,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // build the position and length array
     while (charIdx < numBytes) {
       stringCharPos[numChars] = charIdx;
-      stringCharLen[numChars] = numBytesForFirstByte(getByte(charIdx));
+      stringCharLen[numChars] = Math.min(numBytesForFirstByte(getByte(charIdx)),
+                                         numBytes - charIdx);
       charIdx += stringCharLen[numChars];
       numChars ++;
     }
