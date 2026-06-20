@@ -238,7 +238,7 @@ This is a dummy streaming data reader that generates 2 rows in every microbatch.
             """
             return {"offset": 0}
 
-        def latestOffset(self) -> dict:
+        def latestOffset(self, start: dict, limit) -> dict:
             """
             Return the current latest offset that the next microbatch will read to.
             """
@@ -387,6 +387,47 @@ This is useful for:
 
 For a complete working example, see:
 ``examples/src/main/python/sql/streaming/structured_blockchain_admission_control.py``
+
+Supporting Trigger.AvailableNow
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+``Trigger.AvailableNow`` processes all data available at query start time, then
+terminates, which is useful for scheduled batch-style runs over a streaming source.
+
+To support it, mix in :class:`~pyspark.sql.streaming.datasource.SupportsTriggerAvailableNow`
+and implement ``prepareForTriggerAvailableNow()``. Spark calls this method once at
+query start so the reader can record the target offset (the latest offset at that
+moment). Subsequent calls to ``latestOffset()`` must not return an offset beyond
+that target, so that the query eventually terminates.
+
+.. code-block:: python
+
+    from pyspark.sql.datasource import DataSourceStreamReader
+    from pyspark.sql.streaming.datasource import ReadLimit, SupportsTriggerAvailableNow
+
+    class MyStreamReader(DataSourceStreamReader, SupportsTriggerAvailableNow):
+
+        def __init__(self, schema, options):
+            self.current = 0
+            self.target_offset = None  # set when Trigger.AvailableNow is used
+
+        def prepareForTriggerAvailableNow(self) -> None:
+            """
+            Called once at query start when Trigger.AvailableNow is used.
+            Record the current latest offset as the target so latestOffset()
+            never returns beyond it, ensuring the query terminates.
+            """
+            self.target_offset = self._get_latest()
+
+        def latestOffset(self, start: dict, limit: ReadLimit) -> dict:
+            latest = self._get_latest()
+            if self.target_offset is not None:
+                latest = min(latest, self.target_offset)
+            return {"offset": latest}
+
+        def _get_latest(self) -> int:
+            # Replace with real logic to fetch the current latest offset.
+            return self.current
 
 Implement a Streaming Writer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
