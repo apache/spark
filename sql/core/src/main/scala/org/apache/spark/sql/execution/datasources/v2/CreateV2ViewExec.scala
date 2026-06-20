@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvoluti
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{DependencyList, Identifier, TableCatalog, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{DependencyList, Identifier, TableCatalog, ViewCatalog, View}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.IdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{CommandUtils, ViewHelper}
@@ -33,7 +33,7 @@ import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * Shared validation + ViewInfo construction for v2 CREATE VIEW / ALTER VIEW execs.
+ * Shared validation + View construction for v2 CREATE VIEW / ALTER VIEW execs.
  *
  * Mirrors the persistent-view portion of v1 [[ViewHelper.prepareTable]] + the execution-time
  * checks in [[org.apache.spark.sql.execution.command.CreateViewCommand.run]]. Post-analysis
@@ -57,7 +57,7 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
   protected lazy val fullNameParts: Seq[String] =
     (catalog.name() +: identifier.asMultipartIdentifier).toSeq
 
-  /** Optional structured dependency list to stamp on the built `ViewInfo`. */
+  /** Optional structured dependency list to stamp on the built `View`. */
   protected def viewDependencies: Option[DependencyList] = None
 
   /** Optional view sub-kind to stamp on `PROP_TABLE_TYPE`; defaults to `VIEW` when `None`. */
@@ -74,7 +74,7 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
 
   override def output: Seq[Attribute] = Seq.empty
 
-  protected def buildViewInfo(): ViewInfo = {
+  protected def buildViewInfo(): View = {
     import ViewHelper._
 
     if (userSpecifiedColumns.nonEmpty) {
@@ -107,7 +107,7 @@ private[v2] trait V2ViewPreparation extends LeafV2CommandExec {
       query.output.map(_.name).toArray
     }
 
-    val builder = new ViewInfo.Builder()
+    val builder = new View.Builder()
       .withSchema(aliasedSchema)
       .withProperties(userProperties.asJava)
       .withQueryText(originalText)

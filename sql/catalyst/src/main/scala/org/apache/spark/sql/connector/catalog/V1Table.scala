@@ -113,10 +113,8 @@ private[sql] object V1Table {
   def toCatalogTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      t: MetadataTable): CatalogTable = t.getRelationInfo match {
-    case viewInfo: ViewInfo => toCatalogTable(catalog, ident, viewInfo)
-    case tableInfo: TableInfo => toCatalogTable(catalog, ident, tableInfo)
-  }
+      t: DelegatingTable): CatalogTable =
+    toCatalogTable(catalog, ident, t.getTableInfo)
 
   private def toCatalogTable(
       catalog: CatalogPlugin,
@@ -127,7 +125,7 @@ private[sql] object V1Table {
     // v1 mapping (e.g. TableSummary.FOREIGN_TABLE_TYPE). v1 only has EXTERNAL/MANAGED, so
     // anything other than the explicit MANAGED mapping falls back to EXTERNAL for the v1
     // representation -- the same default v1 uses when the value is missing. VIEW is reached
-    // only through the ViewInfo branch above.
+    // only through the View branch above.
     val tableType = props.get(TableCatalog.PROP_TABLE_TYPE) match {
       case Some(TableSummary.MANAGED_TABLE_TYPE) => CatalogTableType.MANAGED
       case _ => CatalogTableType.EXTERNAL
@@ -169,7 +167,7 @@ private[sql] object V1Table {
   def toCatalogTable(
       catalog: CatalogPlugin,
       ident: Identifier,
-      info: ViewInfo): CatalogTable = {
+      info: View): CatalogTable = {
     val props = info.properties.asScala.toMap
     val userProps = props -- CatalogV2Util.TABLE_RESERVED_PROPERTIES
     // Serde/OPTION properties only apply to data-source tables; views' user properties are a
@@ -196,7 +194,7 @@ private[sql] object V1Table {
     val schemaModeProps = Option(info.schemaMode)
       .map(m => Map(CatalogTable.VIEW_SCHEMA_MODE -> m))
       .getOrElse(Map.empty)
-    // ViewInfo always represents a view-like table, but PROP_TABLE_TYPE may further refine the
+    // View always represents a view-like table, but PROP_TABLE_TYPE may further refine the
     // kind (e.g. METRIC_VIEW). Default to plain VIEW when no refinement is supplied.
     val tableType = props.get(TableCatalog.PROP_TABLE_TYPE) match {
       case Some(TableSummary.METRIC_VIEW_TABLE_TYPE) => CatalogTableType.METRIC_VIEW

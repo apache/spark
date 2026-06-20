@@ -16,19 +16,24 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.Map;
 import java.util.Objects;
 
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
 import org.apache.spark.sql.connector.expressions.Transform;
+import org.apache.spark.sql.types.StructType;
 
 /**
- * Metadata for a data-source table. Adds the table-only fields -- partitioning and constraints --
- * on top of the columns and properties carried by {@link RelationInfo}. Views are represented by
- * the sibling {@link ViewInfo}; the two share {@link RelationInfo} rather than one extending the
- * other.
+ * Metadata describing a data-source table: its columns, properties, partitioning and constraints.
+ * Spark realizes a {@code TableInfo} into a {@link Table} via {@link DelegatingTable}; a catalog
+ * that has its own {@link Table} object returns that instead. Views are described by the sibling
+ * {@link View}, which -- unlike a table -- is itself a {@link Relation} because Spark never builds
+ * a view object.
  */
-public class TableInfo extends RelationInfo {
+public class TableInfo {
 
+  private final Column[] columns;
+  private final Map<String, String> properties;
   private final Transform[] partitions;
   private final Constraint[] constraints;
 
@@ -36,9 +41,22 @@ public class TableInfo extends RelationInfo {
    * Constructor for TableInfo used by the builder.
    */
   protected TableInfo(Builder builder) {
-    super(builder);
+    this.columns = builder.columns;
+    this.properties = builder.properties;
     this.partitions = builder.partitions;
     this.constraints = builder.constraints;
+  }
+
+  public Column[] columns() {
+    return columns;
+  }
+
+  public StructType schema() {
+    return CatalogV2Util.v2ColumnsToStructType(columns);
+  }
+
+  public Map<String, String> properties() {
+    return properties;
   }
 
   public Transform[] partitions() {
@@ -47,7 +65,7 @@ public class TableInfo extends RelationInfo {
 
   public Constraint[] constraints() { return constraints; }
 
-  public static class Builder extends BaseBuilder<Builder> {
+  public static class Builder extends RelationBuilder<Builder> {
     protected Transform[] partitions = new Transform[0];
     protected Constraint[] constraints = new Constraint[0];
 
@@ -75,7 +93,6 @@ public class TableInfo extends RelationInfo {
       return this;
     }
 
-    @Override
     public TableInfo build() {
       Objects.requireNonNull(columns, "columns should not be null");
       return new TableInfo(this);

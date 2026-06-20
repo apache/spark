@@ -816,7 +816,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
   object ResolvedViewIdentifier {
     // Only matches session-catalog persistent views. Non-session-catalog persistent views
-    // (produced for `MetadataTable`) fall through and are picked up by dedicated v2 strategy
+    // (produced for `DelegatingTable`) fall through and are picked up by dedicated v2 strategy
     // cases in `DataSourceV2Strategy` -- AlterViewAs, SET/UNSET TBLPROPERTIES, ALTER VIEW ...
     // WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS, DESCRIBE
     // [COLUMN] all dispatch to v2 view execs that consume `ResolvedPersistentView.info`

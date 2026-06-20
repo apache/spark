@@ -38,11 +38,13 @@ import java.util.Set;
  * The default implementation of {@link #partitioning()} returns an empty array of partitions, and
  * the default implementation of {@link #properties()} returns an empty map. These should be
  * overridden by implementations that support partitioning and table properties.
+ * <p>
+ * A {@code Table} is one kind of {@link Relation}; the other is {@link View}.
  *
  * @since 3.0.0
  */
 @Evolving
-public interface Table {
+public non-sealed interface Table extends Relation {
 
   /**
    * A name to identify this table. Implementations should provide a meaningful name, like the

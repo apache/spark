@@ -53,7 +53,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * @return the view metadata
    * @throws NoSuchViewException if the view does not exist
    */
-  ViewInfo loadView(Identifier ident) throws NoSuchViewException;
+  View loadView(Identifier ident) throws NoSuchViewException;
 
   /**
    * Test whether a view exists.
@@ -93,7 +93,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * @throws ViewAlreadyExistsException if a view already exists at {@code ident}
    * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
    */
-  ViewInfo createView(Identifier ident, ViewInfo info)
+  View createView(Identifier ident, View info)
       throws ViewAlreadyExistsException, NoSuchNamespaceException;
 
   /**
@@ -108,7 +108,7 @@ public interface ViewCatalog extends CatalogPlugin {
    * @return the metadata of the replaced view; may equal {@code info}
    * @throws NoSuchViewException if no view exists at {@code ident}
    */
-  ViewInfo replaceView(Identifier ident, ViewInfo info) throws NoSuchViewException;
+  View replaceView(Identifier ident, View info) throws NoSuchViewException;
 
   /**
    * Create a view if one does not exist at {@code ident}, or atomically replace it if one does.
@@ -129,7 +129,7 @@ public interface ViewCatalog extends CatalogPlugin {
    *                                    {@link TableViewCatalog}, a table sits at {@code ident}
    * @throws NoSuchNamespaceException   if the identifier's namespace does not exist (optional)
    */
-  default ViewInfo createOrReplaceView(Identifier ident, ViewInfo info)
+  default View createOrReplaceView(Identifier ident, View info)
       throws ViewAlreadyExistsException, NoSuchNamespaceException {
     try {
       return replaceView(ident, info);

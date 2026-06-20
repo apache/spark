@@ -22,28 +22,28 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.types.StructType;
 
 /**
- * View metadata DTO -- the typed payload returned by {@link ViewCatalog#loadView} and accepted
- * by {@link ViewCatalog#createView} / {@link ViewCatalog#replaceView}. Carries the
+ * A view in a catalog -- the typed payload returned by {@link ViewCatalog#loadView} and accepted
+ * by {@link ViewCatalog#createView} / {@link ViewCatalog#replaceView}. A {@code View} carries the
  * view-specific fields that cannot be represented as string table properties: the query text,
  * captured creation-time resolution context, captured SQL configs, schema-binding mode, and
- * query output column names. Schema and user TBLPROPERTIES are inherited from {@link RelationInfo}
- * via the typed builder.
+ * query output column names. Columns and user TBLPROPERTIES are set via the typed builder.
  * <p>
- * {@code ViewInfo} and {@link TableInfo} are sibling subclasses of {@link RelationInfo}: a view is
- * not a table, so it does not inherit the table-only surface (partitioning, constraints, provider,
- * location). A {@link TableViewCatalog} can still opt into the single-RPC perf path by returning a
- * {@link MetadataTable} wrapping a {@code ViewInfo} from {@link TableViewCatalog#loadTableOrView}
- * for a view identifier -- {@code MetadataTable} carries a {@link RelationInfo}, which a
- * {@code ViewInfo} is. The typed setters on {@link Builder} cover everything a pure
- * {@link ViewCatalog} implementation needs to construct a {@code ViewInfo}.
+ * Unlike a {@link Table}, a {@code View} is itself a {@link Relation} rather than something Spark
+ * realizes into a {@code Table}: Spark expands the view's query text at read time and never builds
+ * a view object. A {@link TableViewCatalog} returns a {@code View} directly from
+ * {@link TableViewCatalog#loadRelation} for a view identifier, so it never has to smuggle a view
+ * through the {@code Table} surface.
  *
  * @since 4.2.0
  */
 @Evolving
-public class ViewInfo extends RelationInfo {
+public non-sealed class View implements Relation {
 
+  private final Column[] columns;
+  private final Map<String, String> properties;
   private final String queryText;
   private final String currentCatalog;
   private final String[] currentNamespace;
@@ -52,8 +52,9 @@ public class ViewInfo extends RelationInfo {
   private final String[] queryColumnNames;
   private final DependencyList viewDependencies;
 
-  protected ViewInfo(Builder builder) {
-    super(builder);
+  protected View(Builder builder) {
+    this.columns = builder.columns;
+    this.properties = builder.properties;
     this.queryText = Objects.requireNonNull(builder.queryText, "queryText should not be null");
     this.currentCatalog = builder.currentCatalog;
     this.currentNamespace = builder.currentNamespace;
@@ -61,10 +62,24 @@ public class ViewInfo extends RelationInfo {
     this.schemaMode = builder.schemaMode;
     this.queryColumnNames = builder.queryColumnNames;
     this.viewDependencies = builder.viewDependencies;
-    // Default PROP_TABLE_TYPE = VIEW so `properties()` reflects the typed ViewInfo
-    // classification. Callers can refine to a more specific view kind (for example,
-    // METRIC_VIEW) by calling BaseBuilder.withTableType(...) on the builder before build().
-    properties().putIfAbsent(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
+    // Default PROP_TABLE_TYPE = VIEW so `properties()` reflects the typed View classification.
+    // Callers can refine to a more specific view kind (for example, METRIC_VIEW) by calling
+    // RelationBuilder.withTableType(...) on the builder before build().
+    properties.putIfAbsent(TableCatalog.PROP_TABLE_TYPE, TableSummary.VIEW_TABLE_TYPE);
+  }
+
+  @Override
+  public Column[] columns() {
+    return columns;
+  }
+
+  public StructType schema() {
+    return CatalogV2Util.v2ColumnsToStructType(columns);
+  }
+
+  @Override
+  public Map<String, String> properties() {
+    return properties;
   }
 
   /** The SQL text of the view. */
@@ -113,7 +128,7 @@ public class ViewInfo extends RelationInfo {
    */
   public DependencyList viewDependencies() { return viewDependencies; }
 
-  public static class Builder extends BaseBuilder<Builder> {
+  public static class Builder extends RelationBuilder<Builder> {
     private String queryText;
     private String currentCatalog;
     private String[] currentNamespace = new String[0];
@@ -165,10 +180,9 @@ public class ViewInfo extends RelationInfo {
       return this;
     }
 
-    @Override
-    public ViewInfo build() {
+    public View build() {
       Objects.requireNonNull(columns, "columns should not be null");
-      return new ViewInfo(this);
+      return new View(this);
     }
   }
 }

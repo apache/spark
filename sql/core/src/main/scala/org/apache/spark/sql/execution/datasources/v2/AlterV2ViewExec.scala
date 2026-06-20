@@ -23,12 +23,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ResolvedIdentifier, SchemaEvolution, ViewSchemaMode}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewCatalog, ViewInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, TableCatalog, ViewCatalog, View}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.execution.command.CommandUtils
 
 /**
- * Shared bits for the v2 ALTER VIEW ... AS exec. The replacement [[ViewInfo]] is constructed by
+ * Shared bits for the v2 ALTER VIEW ... AS exec. The replacement [[View]] is constructed by
  * [[V2ViewPreparation.buildViewInfo]]; the existing view's payload is provided at analysis time
  * via the `existingView` field so we can preserve user-set TBLPROPERTIES, comment, collation,
  * owner, and schema binding mode without re-loading at runtime.
@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.command.CommandUtils
  * propagates.
  */
 private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
-  protected def existingView: ViewInfo
+  protected def existingView: View
 
   protected lazy val existingProps: Map[String, String] =
     existingView.properties.asScala.toMap
@@ -53,13 +53,13 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
   override def collation: Option[String] = existingProp(TableCatalog.PROP_COLLATION)
   // Preserve the existing view's owner (v1-parity with AlterViewAsCommand's viewMeta.copy,
   // which leaves `owner` untouched). If the existing view has no PROP_OWNER, pass it through
-  // as None so the replacement ViewInfo also has no owner.
+  // as None so the replacement View also has no owner.
   override def owner: Option[String] = existingProp(TableCatalog.PROP_OWNER)
   override def userProperties: Map[String, String] = existingProps
 
   // Preserve the existing view's schema binding mode. Reuse `viewSchemaModeFromProperties`
   // for a v1-identical decode -- it honors `viewSchemaBindingEnabled` and defaults missing
-  // values to SchemaBinding. We feed the typed `ViewInfo.schemaMode` String in via a
+  // values to SchemaBinding. We feed the typed `View.schemaMode` String in via a
   // single-key map so the decode logic stays in one place.
   override def viewSchemaMode: ViewSchemaMode =
     CatalogTable.viewSchemaModeFromProperties(
@@ -75,7 +75,7 @@ private[v2] trait V2AlterViewPreparation extends V2ViewPreparation {
 case class AlterV2ViewExec(
     catalog: ViewCatalog,
     identifier: Identifier,
-    existingView: ViewInfo,
+    existingView: View,
     originalText: String,
     query: LogicalPlan) extends V2AlterViewPreparation {
 
@@ -96,7 +96,7 @@ case class AlterV2ViewExec(
 case class AlterV2ViewSetPropertiesExec(
     catalog: ViewCatalog,
     identifier: Identifier,
-    existingView: ViewInfo,
+    existingView: View,
     properties: Map[String, String]) extends LeafV2CommandExec {
 
   override def output: Seq[org.apache.spark.sql.catalyst.expressions.Attribute] = Seq.empty
@@ -124,7 +124,7 @@ case class AlterV2ViewSetPropertiesExec(
 case class AlterV2ViewUnsetPropertiesExec(
     catalog: ViewCatalog,
     identifier: Identifier,
-    existingView: ViewInfo,
+    existingView: View,
     propertyKeys: Seq[String]) extends LeafV2CommandExec {
 
   override def output: Seq[org.apache.spark.sql.catalyst.expressions.Attribute] = Seq.empty
@@ -152,7 +152,7 @@ case class AlterV2ViewUnsetPropertiesExec(
 case class AlterV2ViewSchemaBindingExec(
     catalog: ViewCatalog,
     identifier: Identifier,
-    existingView: ViewInfo,
+    existingView: View,
     viewSchemaMode: ViewSchemaMode) extends LeafV2CommandExec {
 
   override def output: Seq[org.apache.spark.sql.catalyst.expressions.Attribute] = Seq.empty
