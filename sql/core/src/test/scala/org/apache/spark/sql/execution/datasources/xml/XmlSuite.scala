@@ -3694,6 +3694,53 @@ class XmlSuite
     assert(XmlOptions.isValidOption("encoding"))
     assert(XmlOptions.isValidOption("charset"))
   }
+
+  // Full-precision format pattern for nanosecond NTZ timestamp schema-inference tests.
+  private val ntzNanosFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
+
+  test("SPARK-57458: XML infers nanosecond NTZ timestamps from sub-microsecond fractional digits") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+      // Write a nanosecond DataFrame with a 9-digit format so the XML values carry 9 fractional
+      // digits; then read without a schema so the type is inferred from the string values.
+      val wallClock = LocalDateTime.of(2025, 6, 15, 12, 30, 45, 123456789)
+      val ntzType = TimestampNTZNanosType(9)
+      val inputDf = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(wallClock))),
+        new StructType().add("ts", ntzType))
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        inputDf.write.format("xml").option("rowTag", "ROW")
+          .option("timestampNTZFormat", ntzNanosFormat).mode("overwrite").save(path)
+        val df = spark.read.format("xml").option("rowTag", "ROW").load(path)
+        assert(df.schema("ts").dataType === TimestampNTZNanosType(9),
+          s"Expected TimestampNTZNanosType(9), got ${df.schema("ts").dataType}")
+      }
+    }
+  }
+
+  test("SPARK-57458: XML inferred type is TimestampNTZType for mixed micro/nano NTZ rows") {
+    // When some rows have >6 fractional digits (nano) and others have <=6 (micro), the inferred
+    // type must be TimestampNTZType (not TimestampType / LTZ), because all values are zone-free.
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+      val xmlContent =
+        """<root><row><ts>2025-06-15T12:30:45.123456789</ts></row>
+          |<row><ts>2025-06-15T12:30:45.123456</ts></row></root>""".stripMargin
+      withTempDir { dir =>
+        val path = new File(dir, "mixed.xml").getCanonicalPath
+        Files.write(Paths.get(path),
+          xmlContent.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read.format("xml").option("rowTag", "row")
+          .option("rootTag", "root").load(path)
+        assert(df.schema("ts").dataType === TimestampNTZType,
+          s"Expected TimestampNTZType, got ${df.schema("ts").dataType}")
+      }
+    }
+  }
+
 }
 
 class XmlSuiteWithLegacyParser extends XmlSuite {

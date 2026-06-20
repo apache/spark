@@ -22,7 +22,6 @@ import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions._
@@ -57,13 +56,10 @@ class XmlFunctionsSuite extends SharedSparkSession {
             val parsed = df.select(from_xml($"value", s"c $spelling", options).as("v"))
             // The schema string resolves to the nanos type ...
             assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
-            // ... but the XML datasource does not support nanosecond timestamps yet, so the
-            // value converter rejects it at execution (surfaced as a malformed record in
-            // FAILFAST mode).
-            checkError(
-              exception = intercept[SparkException](parsed.collect()),
-              condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
-              parameters = Map("badRecord" -> "[null]", "failFastMode" -> "FAILFAST"))
+            // ... and the XML datasource supports nanosecond timestamps, so parsing succeeds.
+            val rows = parsed.collect()
+            assert(rows.length === 1)
+            assert(rows(0).getStruct(0).get(0) !== null)
         }
       }
     }

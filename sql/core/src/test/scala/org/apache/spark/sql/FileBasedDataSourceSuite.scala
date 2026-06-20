@@ -1341,7 +1341,7 @@ class FileBasedDataSourceSuite extends SharedSparkSession
 
   test("SPARK-57166: nanosecond timestamp types are not supported in selected file data sources") {
     // Parquet and ORC support nanosecond-capable timestamps, while these formats still reject them.
-    val unsupportedDataSources = Seq("json", "xml")
+    val unsupportedDataSources = Seq("json")
     val nanosTypes = Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9))
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       // Test both v1 and v2 data sources.
@@ -1632,6 +1632,36 @@ class FileBasedDataSourceSuite extends SharedSparkSession
       // An empty session conf does too.
       withSQLConf(SQLConf.IGNORED_PATH_SEGMENT_REGEX.key -> "") {
         checkAnswer(spark.read.format("json").load(basePath), Seq(Row("visible"), Row("hidden")))
+      }
+    }
+  }
+
+  test("SPARK-57458: XML supports nanosecond timestamp types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { precision =>
+        Seq(TimestampNTZNanosType(precision), TimestampLTZNanosType(precision)).foreach {
+          nanosType =>
+            withTempDir { dir =>
+              val wallClock = LocalDateTime.of(1970, 1, 1, 0, 20, 34, 567890123)
+              val (value, fmtKey, fmtVal) = nanosType match {
+                case _: TimestampNTZNanosType =>
+                  (wallClock.asInstanceOf[Any],
+                    "timestampNTZFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS")
+                case _: TimestampLTZNanosType =>
+                  (wallClock.toInstant(ZoneOffset.UTC).asInstanceOf[Any],
+                    "timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSSXXX")
+              }
+              val df = spark.createDataFrame(
+                spark.sparkContext.parallelize(Seq(Row(value))),
+                new StructType().add("ts", nanosType))
+              val path = new File(dir, s"xml_nanos_${nanosType.typeName}").getCanonicalPath
+              df.write.format("xml").option("rowTag", "row")
+                .option(fmtKey, fmtVal).mode("overwrite").save(path)
+              val readBack = spark.read.schema(new StructType().add("ts", nanosType))
+                .format("xml").option("rowTag", "row").option(fmtKey, fmtVal).load(path)
+              checkAnswer(readBack, df)
+            }
+        }
       }
     }
   }
