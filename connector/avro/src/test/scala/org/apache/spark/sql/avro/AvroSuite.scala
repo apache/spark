@@ -3523,6 +3523,55 @@ class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
     }
   }
 
+  test("SPARK-57581: TIME is written as unit-correct time-micros for external readers") {
+    // Expected microseconds-since-midnight for TIME'12:34:56.123456' truncated to each precision.
+    val baseSeconds = (12 * 3600 + 34 * 60 + 56).toLong
+    val expectedMicros = Map(
+      0 -> (baseSeconds * 1000000L + 0L),
+      1 -> (baseSeconds * 1000000L + 100000L),
+      2 -> (baseSeconds * 1000000L + 120000L),
+      3 -> (baseSeconds * 1000000L + 123000L),
+      4 -> (baseSeconds * 1000000L + 123400L),
+      5 -> (baseSeconds * 1000000L + 123450L),
+      6 -> (baseSeconds * 1000000L + 123456L))
+    // Valid micros-of-day range; values mislabeled as micros but holding nanos would exceed this.
+    val microsPerDay = 24L * 3600L * 1000000L
+
+    (0 to 6).foreach { p =>
+      withTempPath { dir =>
+        spark.sql(s"SELECT CAST(TIME'12:34:56.123456' AS TIME($p)) as t")
+          .write.format("avro").save(dir.toString)
+
+        val avroFile = dir.listFiles()
+          .filter(f => f.isFile && f.getName.endsWith("avro"))
+          .head
+        val reader = new DataFileReader[GenericRecord](
+          avroFile, new GenericDatumReader[GenericRecord]())
+        try {
+          // The Avro field must be annotated with the time-micros logical type.
+          val fieldSchema = reader.getSchema.getField("t").schema()
+          val timeSchema = if (fieldSchema.getType == Type.UNION) {
+            fieldSchema.getTypes.asScala.find(_.getType == Type.LONG).get
+          } else {
+            fieldSchema
+          }
+          assert(timeSchema.getLogicalType.getName == "time-micros",
+            s"precision $p should be written as time-micros")
+
+          assert(reader.hasNext)
+          val record = reader.next()
+          val stored = record.get("t").asInstanceOf[Long]
+          assert(stored == expectedMicros(p),
+            s"precision $p should store micros-of-day ${expectedMicros(p)}, but was $stored")
+          assert(stored >= 0 && stored < microsPerDay,
+            s"precision $p stored value $stored is outside the valid micros-of-day range")
+        } finally {
+          reader.close()
+        }
+      }
+    }
+  }
+
   test("SPARK-56457: Avro V2 formatName matches V1 FileFormat.toString") {
     val v2Provider = DataSource.lookupDataSourceV2("avro", spark.sessionState.conf)
     assert(v2Provider.isDefined)
