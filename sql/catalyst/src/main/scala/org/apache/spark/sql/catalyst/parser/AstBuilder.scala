@@ -4416,7 +4416,7 @@ class AstBuilder extends DataTypeAstBuilder
   /**
    * Create an [[UnresolvedTable]] from an identifier reference.
    */
-  private def createUnresolvedTable(
+  protected def createUnresolvedTable(
       ctx: IdentifierReferenceContext,
       commandName: String,
       suggestAlternative: Boolean = false): LogicalPlan = withOrigin(ctx) {
