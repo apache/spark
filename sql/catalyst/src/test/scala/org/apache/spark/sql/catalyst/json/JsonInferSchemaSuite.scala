@@ -123,16 +123,40 @@ class JsonInferSchemaSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-57572: infer TimeType when timeType.enabled is true") {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
-      checkType(Map.empty[String, String], """{"a": "12:13:14"}""",
+      checkType(Map("inferTimestamp" -> "true"), """{"a": "12:13:14"}""",
         TimeType(TimeType.MICROS_PRECISION))
-      checkType(Map.empty[String, String], """{"a": "23:59:59.123456"}""",
+      checkType(Map("inferTimestamp" -> "true"), """{"a": "23:59:59.123456"}""",
         TimeType(TimeType.MICROS_PRECISION))
+      // Negative: date and timestamp strings should NOT infer as TimeType
+      checkType(Map("inferTimestamp" -> "true"), """{"a": "2023-01-01"}""", TimestampType)
+      checkType(Map("inferTimestamp" -> "true"),
+        """{"a": "2024-06-24T02:45:51.138"}""", TimestampType)
     }
   }
 
   test("SPARK-57572: TimeType not inferred when timeType.enabled is false") {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      // With inferTimestamp, time-only strings fall through to timestamp (lenient parser)
+      checkType(Map("inferTimestamp" -> "true"), """{"a": "12:13:14"}""", TimestampType)
+      // Without inferTimestamp, time-only strings become StringType
       checkType(Map.empty[String, String], """{"a": "12:13:14"}""", StringType)
+    }
+  }
+
+  test("SPARK-57572: TimeType not inferred without inferTimestamp") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      // inferTimestamp defaults to false; time inference requires it
+      checkType(Map.empty[String, String], """{"a": "12:13:14"}""", StringType)
+    }
+  }
+
+  test("SPARK-57572: TimeType cross-row merge via compatibleType") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      // Single time value infers as TimeType
+      checkType(Map("inferTimestamp" -> "true"), """{"a": "12:13:14"}""",
+        TimeType(TimeType.MICROS_PRECISION))
+      // Non-time value stays StringType even with timeType enabled
+      checkType(Map("inferTimestamp" -> "true"), """{"a": "not-a-time"}""", StringType)
     }
   }
 }

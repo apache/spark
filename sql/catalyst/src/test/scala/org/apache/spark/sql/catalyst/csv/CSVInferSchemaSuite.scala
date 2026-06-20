@@ -303,8 +303,25 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
         columnPruning = false, defaultTimeZoneId = "UTC")
       val inferSchema = new CSVInferSchema(options)
 
-      // Time string should fall through to StringType when disabled
-      assert(inferSchema.inferField(NullType, "12:13:14") != TimeType(TimeType.MICROS_PRECISION))
+      // When disabled, a time-only string is not inferred as TimeType; the lenient timestamp
+      // parser accepts it (using the current date), so it infers as TimestampType.
+      assert(inferSchema.inferField(NullType, "12:13:14") == TimestampType)
+    }
+  }
+
+  test("SPARK-57572: TimeType cross-row merge via compatibleType") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val options = new CSVOptions(Map.empty[String, String],
+        columnPruning = false, defaultTimeZoneId = "UTC")
+      val inferSchema = new CSVInferSchema(options)
+
+      val timeType = TimeType(TimeType.MICROS_PRECISION)
+      // Two time values merge to TimeType
+      assert(inferSchema.inferField(timeType, "23:59:59") == timeType)
+      // Time + non-time merges to StringType
+      assert(inferSchema.inferField(timeType, "not-a-time") == StringType)
+      // Time + Date merges to StringType
+      assert(inferSchema.inferField(timeType, "2023-01-01") == StringType)
     }
   }
 }

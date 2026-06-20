@@ -178,14 +178,11 @@ class JsonInferSchema(private val options: JSONOptions) extends Serializable wit
         }
         if (options.prefersDecimal && decimalTry.isDefined) {
           decimalTry.get
-        } else if (isTimeTypeEnabled &&
-            (allCatch opt timeFormatter.parse(field)).isDefined) {
-          TimeType(TimeType.MICROS_PRECISION)
         } else if (options.inferTimestamp) {
-          // For text-based format, it's ambiguous to infer a timestamp string without timezone, as
-          // it can be both TIMESTAMP LTZ and NTZ. To avoid behavior changes with the new support
-          // of NTZ, here we only try to infer NTZ if the config is set to use NTZ by default.
-          if (isDefaultNTZ &&
+          if (isTimeTypeEnabled &&
+              (allCatch opt timeFormatter.parse(field)).isDefined) {
+            TimeType(TimeType.MICROS_PRECISION)
+          } else if (isDefaultNTZ &&
             timestampNTZFormatter.parseWithoutTimeZoneOptional(field, false).isDefined) {
             TimestampNTZType
           } else if (timestampFormatter.parseOptional(field).isDefined) {
