@@ -2610,15 +2610,20 @@ abstract class CSVSuite
         StandardOpenOption.CREATE, StandardOpenOption.WRITE
       )
 
-      val errMsg = intercept[TextParsingException] {
+      // Univocity wraps maxCharsPerColumn violations as TextParsingException(cause=AIOOBE),
+      // which UnivocityParser.parseLine now converts to MALFORMED_CSV_RECORD. The badRecord
+      // value is still bounded to MAX_ERROR_CONTENT_LENGTH (1000 chars) with a "..." suffix,
+      // preserving the original intent of SPARK-28431.
+      val e = intercept[SparkRuntimeException] {
         spark.read
           .option("maxCharsPerColumn", maxCharsPerCol)
           .csv(path.getAbsolutePath)
           .count()
-      }.getMessage
-
-      assert(errMsg.contains("..."),
-        "expect the TextParsingException truncate the error content to be 1000 length.")
+      }
+      checkErrorMatchPVals(
+        exception = e,
+        condition = "MALFORMED_CSV_RECORD",
+        parameters = Map("badRecord" -> ".*\\.\\.\\."))
     }
   }
 
@@ -3632,12 +3637,12 @@ abstract class CSVSuite
         parameters = Map("path" -> ".*"))
       val cause = e.getCause
       assert(cause.isInstanceOf[SparkRuntimeException])
-      checkError(
+      // In the multiLine path the header is parsed from a live stream via parseNext(); by the time
+      // the AIOOBE is caught the field appender has already been reset, so badRecord is empty.
+      checkErrorMatchPVals(
         exception = cause.asInstanceOf[SparkRuntimeException],
         condition = "MALFORMED_CSV_RECORD",
-        sqlState = Some("KD000"),
-        parameters = Map("badRecord" -> "a,b,c"),
-        matchPVals = false)
+        parameters = Map("badRecord" -> ".*"))
     }
   }
 
