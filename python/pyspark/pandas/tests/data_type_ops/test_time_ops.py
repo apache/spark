@@ -18,6 +18,7 @@
 import datetime
 
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
@@ -163,6 +164,14 @@ class TimeOpsTestsMixin:
         pdf, psdf = self.time_pdf, self.time_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+
+    def test_astype(self):
+        pser = self.pser
+        psser = self.psser
+        self.assert_eq(pser.astype(str), psser.astype(str))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
+        cat_type = CategoricalDtype(categories=["a", "b", "c"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
 
 class TimeOpsTests(
