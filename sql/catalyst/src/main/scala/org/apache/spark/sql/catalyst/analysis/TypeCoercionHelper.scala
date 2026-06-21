@@ -261,10 +261,10 @@ abstract class TypeCoercionHelper {
       // Note: this common-type resolution is intentionally more permissive than the nanosecond
       // conversion rules in Cast.canUpCast / Cast.canANSIStoreAssign, which keep cross-family and
       // DATE <-> nanos casts explicit-CAST-only while the nanos types are unreleased (SPARK-57323
-      // etc.). Coercion here mirrors the microsecond precedent so that UNION / CASE / coalesce / IN /
-      // comparison resolve a common type the same way they do for the micro families; the stricter
-      // explicit-only stance is deliberately scoped to up-cast and store assignment, not to
-      // common-type resolution.
+      // etc.). Coercion here mirrors the microsecond precedent so that UNION / CASE / coalesce /
+      // IN / comparison resolve a common type the same way they do for the micro families; the
+      // stricter explicit-only stance is deliberately scoped to up-cast and store assignment, not
+      // to common-type resolution.
       case _ =>
         def isLtz(d: DatetimeType): Boolean =
           d.isInstanceOf[TimestampType] || d.isInstanceOf[TimestampLTZNanosType]
@@ -276,9 +276,9 @@ abstract class TypeCoercionHelper {
           case _ => 6 // DateType / TimestampType / TimestampNTZType
         }
         // Beyond TimeType (handled above), the only datetime types are DATE and the micro/nanos
-        // timestamp families. Guard so that a future DatetimeType subtype fails fast here instead of
-        // being silently mis-widened (treated as a family-neutral precision-6 type and folded into
-        // DATE) when it should be wired in explicitly.
+        // timestamp families. Guard so that a future DatetimeType subtype fails fast here instead
+        // of being silently mis-widened (treated as a family-neutral precision-6 type and folded
+        // into DATE) when it should be wired in explicitly.
         def isWidenable(d: DatetimeType): Boolean =
           isLtz(d) || isNtz(d) || d.isInstanceOf[DateType]
         if (!isWidenable(d1) || !isWidenable(d2)) {
