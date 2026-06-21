@@ -82,6 +82,8 @@ import org.apache.spark.sql.types.{
   StringType,
   StringTypeExpression,
   StructType,
+  TimestampLTZNanosType,
+  TimestampNTZNanosType,
   TimestampNTZType,
   TimestampType,
   TimestampTypeExpression,
@@ -244,14 +246,37 @@ abstract class TypeCoercionHelper {
     (d1, d2) match {
       case (_, _: TimeType) => None
       case (_: TimeType, _) => None
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
 
-      case (_: TimestampType, _: TimestampNTZType) | (_: TimestampNTZType, _: TimestampType) =>
-        Some(TimestampType)
-
-      case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
-        Some(TimestampNTZType)
+      // The remaining datetime types (DATE and the micro/nanos TIMESTAMP_LTZ / TIMESTAMP_NTZ
+      // families) widen along two independent axes:
+      //   - time-zone family: the result is LTZ if either input is LTZ-family, otherwise NTZ. This
+      //     mirrors the microsecond precedent where TIMESTAMP + TIMESTAMP_NTZ widens to TIMESTAMP.
+      //     DATE is family-neutral and adopts the family of the other side.
+      //   - precision: the maximum of the two precisions, where the micro types and DATE count as 6
+      //     and the nanos types contribute their own precision p in [7, 9].
+      // The (family, precision) pair then maps back to a concrete type: precision 6 yields the
+      // micro type, precision in [7, 9] yields the nanos type.
+      case _ =>
+        def isLtz(d: DatetimeType): Boolean =
+          d.isInstanceOf[TimestampType] || d.isInstanceOf[TimestampLTZNanosType]
+        def isNtz(d: DatetimeType): Boolean =
+          d.isInstanceOf[TimestampNTZType] || d.isInstanceOf[TimestampNTZNanosType]
+        def precisionOf(d: DatetimeType): Int = d match {
+          case t: TimestampLTZNanosType => t.precision
+          case t: TimestampNTZNanosType => t.precision
+          case _ => 6 // DateType / TimestampType / TimestampNTZType
+        }
+        if (!isLtz(d1) && !isNtz(d1) && !isLtz(d2) && !isNtz(d2)) {
+          // Both sides are DATE; callers short-circuit equal types, so this is just defensive.
+          Some(DateType)
+        } else {
+          val p = math.max(precisionOf(d1), precisionOf(d2))
+          if (isLtz(d1) || isLtz(d2)) {
+            Some(if (p <= 6) TimestampType else TimestampLTZNanosType(p))
+          } else {
+            Some(if (p <= 6) TimestampNTZType else TimestampNTZNanosType(p))
+          }
+        }
     }
 
   /**
