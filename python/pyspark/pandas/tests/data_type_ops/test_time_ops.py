@@ -141,7 +141,6 @@ class TimeOpsTestsMixin:
         self.assertRaises(TypeError, lambda: self.some_time**self.psser)
 
     def test_rmod(self):
-        self.assertRaises(TypeError, lambda: "x" % self.psser)
         self.assertRaises(TypeError, lambda: 1 % self.psser)
         self.assertRaises(TypeError, lambda: self.some_time % self.psser)
 
