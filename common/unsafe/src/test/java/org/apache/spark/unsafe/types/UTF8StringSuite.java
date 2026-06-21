@@ -898,10 +898,14 @@ public class UTF8StringSuite {
     assertEquals(fromString(" hello"), fromString(" hello").trimRight(truncated2));
 
     // 'A' followed by a lone 2-byte leader — truncation is at the end of the source string.
+    // After trimming 'A' from the left, the lone 0xC3 leader byte remains.
+    UTF8String truncated2Tail = fromBytes(new byte[]{(byte) 0xC3});
     UTF8String srcWithTruncatedTail = fromBytes(new byte[]{0x41, (byte) 0xC3});
-    assertEquals(fromString("B"), srcWithTruncatedTail.trimLeft(fromString("A")));
-    assertEquals(fromString("B"), fromBytes(new byte[]{(byte) 0xC3, 0x42})
-        .trimRight(fromString("B")));
+    assertEquals(truncated2Tail, srcWithTruncatedTail.trimLeft(fromString("A")));
+    // {0xC3, 0x42}: the lone 2-byte leader 0xC3 at position 0 consumes the next byte (0x42 = 'B')
+    // into one clamped character, so trimRight("B") finds no standalone 'B' and returns unchanged.
+    UTF8String lone2LeaderPlusB = fromBytes(new byte[]{(byte) 0xC3, 0x42});
+    assertEquals(lone2LeaderPlusB, lone2LeaderPlusB.trimRight(fromString("B")));
 
     // Lone 3-byte and 4-byte leaders as the trim string.
     UTF8String truncated3 = fromBytes(new byte[]{(byte) 0xE4});
