@@ -11780,11 +11780,11 @@ def unix_nanos(col: "ColumnOrName") -> Column:
     >>> df = spark.sql(
     ...     "SELECT TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789' AS ts"
     ... )
-    >>> df.select('*', sf.unix_nanos('ts')).show()
+    >>> df.select('*', sf.unix_nanos('ts')).show(truncate=False)
     +-----------------------------+-------------------+
-    |                           ts|     unix_nanos(ts)|
+    |ts                           |unix_nanos(ts)     |
     +-----------------------------+-------------------+
-    |2020-01-01 13:24:35.123456789|1577884675123456789|
+    |2020-01-01 13:24:35.123456789|1577885075123456789|
     +-----------------------------+-------------------+
 
     >>> df.select(sf.unix_nanos(sf.lit(None).cast('timestamp_ntz(9)'))).show()
