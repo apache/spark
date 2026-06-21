@@ -281,13 +281,13 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
       val inferSchema = new CSVInferSchema(options)
 
       // Basic time inference
-      assert(inferSchema.inferField(NullType, "12:13:14") == TimeType(TimeType.MICROS_PRECISION))
-      assert(inferSchema.inferField(NullType, "23:59:59") == TimeType(TimeType.MICROS_PRECISION))
-      assert(inferSchema.inferField(NullType, "00:00:00") == TimeType(TimeType.MICROS_PRECISION))
+      assert(inferSchema.inferField(NullType, "12:13:14") == TimeType(TimeType.DEFAULT_PRECISION))
+      assert(inferSchema.inferField(NullType, "23:59:59") == TimeType(TimeType.DEFAULT_PRECISION))
+      assert(inferSchema.inferField(NullType, "00:00:00") == TimeType(TimeType.DEFAULT_PRECISION))
 
       // Time with fractional seconds
       assert(inferSchema.inferField(NullType, "12:13:14.123") ==
-        TimeType(TimeType.MICROS_PRECISION))
+        TimeType(TimeType.DEFAULT_PRECISION))
 
       // Not a time -- should fall through to other types
       assert(inferSchema.inferField(NullType, "not-a-time") == StringType)
@@ -315,7 +315,7 @@ class CSVInferSchemaSuite extends SparkFunSuite with SQLHelper {
         columnPruning = false, defaultTimeZoneId = "UTC")
       val inferSchema = new CSVInferSchema(options)
 
-      val timeType = TimeType(TimeType.MICROS_PRECISION)
+      val timeType = TimeType(TimeType.DEFAULT_PRECISION)
       // Two time values merge to TimeType
       assert(inferSchema.inferField(timeType, "23:59:59") == timeType)
       // Time + non-time merges to StringType

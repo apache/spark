@@ -209,7 +209,7 @@ class CSVInferSchema(val options: CSVOptions) extends Serializable {
 
   private def tryParseTime(field: String): DataType = {
     if (isTimeTypeEnabled && (allCatch opt timeFormatter.parse(field)).isDefined) {
-      TimeType(TimeType.MICROS_PRECISION)
+      TimeType(TimeType.DEFAULT_PRECISION)
     } else {
       tryParseDate(field)
     }
