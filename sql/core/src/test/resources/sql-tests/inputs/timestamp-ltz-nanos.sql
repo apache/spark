@@ -238,3 +238,60 @@ SELECT timestamp_nanos(10000000000000000000000000BD);
 SELECT timestamp_nanos(1.0D);
 -- NULL input.
 SELECT timestamp_nanos(CAST(NULL AS BIGINT));
+
+-- SPARK-57454: implicit type coercion / widening over nanosecond TIMESTAMP_LTZ(p). The resolved
+-- common type itself is unit-tested in TypeCoercionSuite / AnsiTypeCoercionSuite, and the operator
+-- wiring (schema and boolean outcomes for UNION/coalesce/CASE/IN/comparison) in
+-- TimestampNanosWideningSuite; the cases below complement those by locking the resolved type with
+-- typeof() and the end-to-end rendered values (in the session time zone), by covering operators
+-- those suites do not (greatest/least and the array/map/named_struct constructors), and by
+-- exercising the mixed time-zone family rule that has no TIMESTAMP_NTZ counterpart.
+
+-- UNION ALL widens micro -> nanos and nanos(p1)/nanos(p2) -> the max precision; the values render
+-- at the widened precision in the session time zone.
+SELECT typeof(c), c FROM (
+    SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC' AS c
+    UNION ALL SELECT TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789 UTC') ORDER BY c;
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567 UTC' :: timestamp_ltz(7) AS c
+    UNION ALL SELECT '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9)) ORDER BY c;
+
+-- coalesce and CASE WHEN unify their branches to the wider nanosecond type.
+SELECT typeof(v), v FROM (SELECT coalesce(
+    '2020-01-01 00:00:00.1234567 UTC' :: timestamp_ltz(7),
+    '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9)) AS v);
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+    THEN TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC'
+    ELSE '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9) END AS v);
+
+-- nanos <-> DATE widening (DATE adopts the nanos family and renders at midnight in the session zone).
+SELECT typeof(v), v FROM (SELECT coalesce(
+    DATE '2020-01-01', '2020-01-01 00:00:00.123456789' :: timestamp_ltz(8)) AS v);
+
+-- greatest / least widen their arguments to the common nanosecond type.
+SELECT typeof(greatest(TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC',
+    '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9)));
+SELECT greatest(TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC',
+    '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9));
+SELECT least('2020-01-01 00:00:00.1234567 UTC' :: timestamp_ltz(7),
+    '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9));
+
+-- array() unifies its element types and map() its value types to the wider nanosecond type.
+SELECT array(TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC',
+    '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9));
+SELECT typeof(array(TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC',
+    '2020-01-01 00:00:00.000000001 UTC' :: timestamp_ltz(9)));
+SELECT map('a', '2020-01-01 00:00:00.1234567 UTC' :: timestamp_ltz(7),
+    'b', '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9));
+
+-- Mixed time-zone families widen to the LTZ family (mirrors TIMESTAMP + TIMESTAMP_NTZ -> TIMESTAMP).
+-- The NTZ branch's wall-clock value is reinterpreted as a session-zone instant, so only the
+-- resolved type is asserted here.
+SELECT typeof(c) FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00' AS c
+    UNION ALL SELECT '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9));
+SELECT typeof(coalesce('2020-01-01 00:00:00.1234567' :: timestamp_ntz(7),
+    '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9)));
+SELECT typeof(CASE WHEN true
+    THEN '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7)
+    ELSE '2020-01-01 00:00:00.123456789 UTC' :: timestamp_ltz(9) END);

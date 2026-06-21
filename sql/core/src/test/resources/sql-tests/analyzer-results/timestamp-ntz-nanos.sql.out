@@ -694,3 +694,112 @@ SELECT unix_nanos(NULL :: timestamp_ntz(9))
 -- !query analysis
 Project [unix_nanos(cast(null as timestamp_ntz(9))) AS unix_nanos(CAST(NULL AS TIMESTAMP_NTZ(9)))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00' AS c
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ntz(9)) AS c#x]
+         :  +- Project [2020-01-01 00:00:00 AS c#x]
+         :     +- OneRowRelation
+         +- Project [2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789'#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7) AS c
+    UNION ALL SELECT '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ntz(9)) AS c#x]
+         :  +- Project [cast(2020-01-01 00:00:00.1234567 as timestamp_ntz(7)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)) AS CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7),
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9)) AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [coalesce(cast(cast(2020-01-01 00:00:00.1234567 as timestamp_ntz(7)) as timestamp_ntz(9)), cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9))) AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+    THEN TIMESTAMP_NTZ '2020-01-01 00:00:00'
+    ELSE '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9) END AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [CASE WHEN true THEN cast(2020-01-01 00:00:00 as timestamp_ntz(9)) ELSE cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)) END AS v#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    DATE '2020-01-01', '2020-01-01 00:00:00.123456789' :: timestamp_ntz(8)) AS v)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(greatest(TIMESTAMP_NTZ '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9)))
+-- !query analysis
+Project [typeof(greatest(cast(2020-01-01 00:00:00 as timestamp_ntz(9)), cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)))) AS typeof(greatest(TIMESTAMP_NTZ '2020-01-01 00:00:00', CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT greatest(TIMESTAMP_NTZ '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9))
+-- !query analysis
+Project [greatest(cast(2020-01-01 00:00:00 as timestamp_ntz(9)), cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9))) AS greatest(TIMESTAMP_NTZ '2020-01-01 00:00:00', CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT least('2020-01-01 00:00:00.1234567' :: timestamp_ntz(7),
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9))
+-- !query analysis
+Project [least(cast(cast(2020-01-01 00:00:00.1234567 as timestamp_ntz(7)) as timestamp_ntz(9)), cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9))) AS least(CAST(2020-01-01 00:00:00.1234567 AS TIMESTAMP_NTZ(7)), CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT array(TIMESTAMP_NTZ '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9))
+-- !query analysis
+Project [array(cast(2020-01-01 00:00:00 as timestamp_ntz(9)), cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9))) AS array(TIMESTAMP_NTZ '2020-01-01 00:00:00', CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(array(TIMESTAMP_NTZ '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00.000000001' :: timestamp_ntz(9)))
+-- !query analysis
+Project [typeof(array(cast(2020-01-01 00:00:00 as timestamp_ntz(9)), cast(2020-01-01 00:00:00.000000001 as timestamp_ntz(9)))) AS typeof(array(TIMESTAMP_NTZ '2020-01-01 00:00:00', CAST(2020-01-01 00:00:00.000000001 AS TIMESTAMP_NTZ(9))))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT map('a', '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7),
+    'b', '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9))
+-- !query analysis
+Project [map(a, cast(cast(2020-01-01 00:00:00.1234567 as timestamp_ntz(7)) as timestamp_ntz(9)), b, cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9))) AS map(a, CAST(2020-01-01 00:00:00.1234567 AS TIMESTAMP_NTZ(7)), b, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation

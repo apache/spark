@@ -776,3 +776,108 @@ SELECT unix_nanos(NULL :: timestamp_ntz(9))
 struct<unix_nanos(CAST(NULL AS TIMESTAMP_NTZ(9))):decimal(21,0)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00' AS c
+    UNION ALL SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789') ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ntz(9)>
+-- !query output
+timestamp_ntz(9)	2020-01-01 00:00:00
+timestamp_ntz(9)	2020-01-01 00:00:00.123456789
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7) AS c
+    UNION ALL SELECT '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9)) ORDER BY c
+-- !query schema
+struct<typeof(c):string,c:timestamp_ntz(9)>
+-- !query output
+timestamp_ntz(9)	2020-01-01 00:00:00.1234567
+timestamp_ntz(9)	2020-01-01 00:00:00.123456789
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7),
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9)) AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ntz(9)>
+-- !query output
+timestamp_ntz(9)	2020-01-01 00:00:00.1234567
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT CASE WHEN true
+    THEN TIMESTAMP_NTZ '2020-01-01 00:00:00'
+    ELSE '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9) END AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ntz(9)>
+-- !query output
+timestamp_ntz(9)	2020-01-01 00:00:00
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    DATE '2020-01-01', '2020-01-01 00:00:00.123456789' :: timestamp_ntz(8)) AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ntz(8)>
+-- !query output
+timestamp_ntz(8)	2020-01-01 00:00:00
+
+
+-- !query
+SELECT typeof(greatest(TIMESTAMP_NTZ '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9)))
+-- !query schema
+struct<typeof(greatest(TIMESTAMP_NTZ '2020-01-01 00:00:00', CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)))):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+SELECT greatest(TIMESTAMP_NTZ '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9))
+-- !query schema
+struct<greatest(TIMESTAMP_NTZ '2020-01-01 00:00:00', CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.123456789
+
+
+-- !query
+SELECT least('2020-01-01 00:00:00.1234567' :: timestamp_ntz(7),
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9))
+-- !query schema
+struct<least(CAST(2020-01-01 00:00:00.1234567 AS TIMESTAMP_NTZ(7)), CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00.1234567
+
+
+-- !query
+SELECT array(TIMESTAMP_NTZ '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9))
+-- !query schema
+struct<array(TIMESTAMP_NTZ '2020-01-01 00:00:00', CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))):array<timestamp_ntz(9)>>
+-- !query output
+[2020-01-01 00:00:00,2020-01-01 00:00:00.123456789]
+
+
+-- !query
+SELECT typeof(array(TIMESTAMP_NTZ '2020-01-01 00:00:00',
+    '2020-01-01 00:00:00.000000001' :: timestamp_ntz(9)))
+-- !query schema
+struct<typeof(array(TIMESTAMP_NTZ '2020-01-01 00:00:00', CAST(2020-01-01 00:00:00.000000001 AS TIMESTAMP_NTZ(9)))):string>
+-- !query output
+array<timestamp_ntz(9)>
+
+
+-- !query
+SELECT map('a', '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7),
+    'b', '2020-01-01 00:00:00.123456789' :: timestamp_ntz(9))
+-- !query schema
+struct<map(a, CAST(2020-01-01 00:00:00.1234567 AS TIMESTAMP_NTZ(7)), b, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))):map<string,timestamp_ntz(9)>>
+-- !query output
+{"a":2020-01-01 00:00:00.1234567,"b":2020-01-01 00:00:00.123456789}
