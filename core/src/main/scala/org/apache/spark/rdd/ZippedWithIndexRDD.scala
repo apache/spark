@@ -40,7 +40,7 @@ class ZippedWithIndexRDDPartition(val prev: Partition, val startIndex: Long)
 private[spark]
 class ZippedWithIndexRDD[T: ClassTag](prev: RDD[T]) extends RDD[(T, Long)](prev) {
 
-  @tailrec
+  @scala.annotation.tailrec
   private def getAncestorWithSamePartitionSizes(rdd: RDD[_]): RDD[_] = {
     rdd match {
       // A ZippedWithIndexRDD ancestor that has already computed its startIndices covers the same
