@@ -2143,7 +2143,8 @@ class JDBCSuite extends SharedSparkSession {
         spark.read.format("jdbc").options(opts).load()
       },
       condition = "FAILED_JDBC.CONNECTION",
-      parameters = Map("url" -> url)
+      // getRedactUrl() keeps only the "jdbc:<subprotocol>:" prefix and redacts the rest.
+      parameters = Map("url" -> s"jdbc:mysql:${Utils.REDACTION_REPLACEMENT_TEXT}")
     )
   }
 
@@ -2496,7 +2497,8 @@ class JDBCSuite extends SharedSparkSession {
           }
         },
         condition = "FAILED_JDBC.CONNECTION",
-        parameters = Map("url" -> url)
+        // getRedactUrl() keeps only the "jdbc:<subprotocol>:" prefix and redacts the rest.
+        parameters = Map("url" -> s"$connectionUrl:${Utils.REDACTION_REPLACEMENT_TEXT}")
       )
     }
   }
