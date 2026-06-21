@@ -93,12 +93,14 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
 private[ops] object TimeTypeParquetOps {
 
   /**
-   * Validates that a Parquet field can be decoded as TimeType. TimeType is stored
-   * as INT64 with TIME(MICROS, isAdjustedToUTC=false). Any other encoding (raw
-   * INT64, INT64 TIME(NANOS), INT32 TIME(MILLIS), INT64 TIMESTAMP(_), decimal-
-   * annotated, etc.) cannot be decoded as TimeType - throw the same error as
-   * the legacy ParquetRowConverter path so reads fail loudly instead of
-   * silently misinterpreting bytes.
+   * Validates that a Parquet field can be decoded as TimeType. TimeType is written
+   * as INT64 with TIME(MICROS, isAdjustedToUTC=false). On read, any INT64 TIME(MICROS)
+   * column is accepted regardless of the isAdjustedToUTC flag: Spark's zone-less TimeType
+   * decodes the raw micros-of-day identically either way, matching the legacy
+   * ParquetRowConverter guard (see SPARK-57416). Any other encoding (raw INT64, INT64
+   * TIME(NANOS), INT32 TIME(MILLIS), INT64 TIMESTAMP(_), decimal-annotated, etc.) cannot
+   * be decoded as TimeType - throw the same error as the legacy ParquetRowConverter path
+   * so reads fail loudly instead of silently misinterpreting bytes.
    */
   private[ops] def requireCompatibleParquetType(
       sparkType: TimeType, parquetType: Type): Unit = {
@@ -106,7 +108,13 @@ private[ops] object TimeTypeParquetOps {
       parquetType.asPrimitiveType.getPrimitiveTypeName == INT64 &&
       (parquetType.getLogicalTypeAnnotation match {
         case t: LogicalTypeAnnotation.TimeLogicalTypeAnnotation =>
-          t.getUnit == TimeUnit.MICROS && !t.isAdjustedToUTC
+          // Accept both isAdjustedToUTC=false and =true. Spark's TimeType is zone-less
+          // local time, so the UTC-adjustment flag carries no extra information on read:
+          // the raw micros-of-day value decodes identically either way. Mirroring the
+          // legacy ParquetRowConverter guard (which only checked the TIME annotation and
+          // the MICROS unit) keeps the framework row-based read path consistent with both
+          // the legacy row-based reader and the still-lenient vectorized reader. SPARK-57416.
+          t.getUnit == TimeUnit.MICROS
         case _ => false
       })
     if (!ok) {
