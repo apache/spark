@@ -915,13 +915,14 @@ public class ParquetVectorUpdaterFactory {
 
     TimeUpdater(int precision, boolean fileStoresNanos) {
       this.fileStoresNanos = fileStoresNanos;
-      // scale = NANOS_PRECISION - precision, where NANOS_PRECISION == TIME_TRUNCATION_FACTORS.length - 1.
-      this.truncationFactor = TIME_TRUNCATION_FACTORS[TIME_TRUNCATION_FACTORS.length - 1 - precision];
+      // scale = NANOS_PRECISION - precision; NANOS_PRECISION == factors.length - 1.
+      int scale = TIME_TRUNCATION_FACTORS.length - 1 - precision;
+      this.truncationFactor = TIME_TRUNCATION_FACTORS[scale];
     }
 
     private long toTruncatedNanos(long value) {
       long nanos = fileStoresNanos ? value : DateTimeUtils.microsToNanos(value);
-      // Equivalent to DateTimeUtils.truncateTimeToPrecision(nanos, precision) with the factor hoisted.
+      // Equivalent to DateTimeUtils.truncateTimeToPrecision with the factor hoisted.
       return (nanos / truncationFactor) * truncationFactor;
     }
 
