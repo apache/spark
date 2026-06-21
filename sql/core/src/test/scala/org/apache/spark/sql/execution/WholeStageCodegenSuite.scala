@@ -1231,7 +1231,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // each conjunct to a separate `addExprTree` call. The realistic cheap-but-recorded case is a
     // shared *non-leaf* slot read such as a struct field access: `s.x > 5 AND s.x < 100` shares
     // `GetStructField(s, x)`. Caching that gains nothing over the non-CSE path's lazy load, so the
-    // gate must fall back. (Pre-`isCheap`-gate this took the CSE path, emitting the eager prologue.)
+    // gate must fall back. (Pre-`isCheap`-gate this took the CSE path, emitting the eager
+    // prologue.)
     val schema = StructType(Seq(
       StructField("s", StructType(Seq(StructField("x", IntegerType, nullable = true))),
         nullable = true)))
@@ -1257,8 +1258,9 @@ class WholeStageCodegenSuite extends SharedSparkSession
 
     def normalize(code: String): String = code.replaceAll("#\\d+", "#")
     assert(normalize(filterCode(cseEnabled = true)) == normalize(filterCode(cseEnabled = false)),
-      "With only a cheap common subexpression, CSE-enabled FilterExec codegen should be identical " +
-        "to CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting non-CSE path)")
+      "With only a cheap common subexpression, CSE-enabled FilterExec codegen should be " +
+        "identical to CSE-disabled codegen (i.e. fall back to the lazy, short-circuiting " +
+        "non-CSE path)")
   }
 
   test("SPARK-56032: FilterExec takes CSE codegen when the common subexpression is non-cheap") {
