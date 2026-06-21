@@ -330,13 +330,18 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-57575: DateFormat with TimeType (to_char/to_varchar)") {
     // 12:13:14 = (12*3600 + 13*60 + 14) seconds, stored as nanoseconds
-    val timeMicros = (12L * 3600 + 13 * 60 + 14) * 1000000000L
-    val timeLit = Literal.create(timeMicros, TimeType(TimeType.DEFAULT_PRECISION))
+    val timeNanos = (12L * 3600 + 13 * 60 + 14) * 1000000000L
+    val timeLit = Literal.create(timeNanos, TimeType(TimeType.DEFAULT_PRECISION))
 
     checkEvaluation(DateFormatClass(timeLit, Literal("HH:mm:ss"), UTC_OPT), "12:13:14")
     checkEvaluation(DateFormatClass(timeLit, Literal("HH"), UTC_OPT), "12")
     checkEvaluation(DateFormatClass(timeLit, Literal("mm"), UTC_OPT), "13")
     checkEvaluation(DateFormatClass(timeLit, Literal("ss"), UTC_OPT), "14")
+
+    // Non-default precision (TIME(0)) should also work
+    val timeNanosLowPrec = (9L * 3600 + 30 * 60 + 0) * 1000000000L
+    val timeLitLowPrec = Literal.create(timeNanosLowPrec, TimeType(0))
+    checkEvaluation(DateFormatClass(timeLitLowPrec, Literal("HH:mm:ss"), UTC_OPT), "09:30:00")
 
     // Null handling
     checkEvaluation(
@@ -345,8 +350,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     // Date-only pattern fields should error for TIME input
     val datePatternExpr = DateFormatClass(timeLit, Literal("yyyy-MM-dd"), UTC_OPT)
-    intercept[Exception] {
-      datePatternExpr.eval(InternalRow(timeMicros, UTF8String.fromString("yyyy-MM-dd")))
+    intercept[java.time.DateTimeException] {
+      datePatternExpr.eval(InternalRow(timeNanos, UTF8String.fromString("yyyy-MM-dd")))
     }
   }
 

@@ -1231,7 +1231,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   def this(left: Expression, right: Expression) = this(left, right, None)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimestampType, TimeType(TimeType.DEFAULT_PRECISION)), StringTypeWithCollation(supportsTrimCollation = true))
+    Seq(TypeCollection(TimestampType, AnyTimeType), StringTypeWithCollation(supportsTrimCollation = true))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
