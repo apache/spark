@@ -455,13 +455,15 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
   // (`MaxMinBy.checkInputDataTypes` -> `TypeUtils.checkForOrderingExpr`), which the nanosecond
   // types pass (SPARK-57103); the value expression is unrestricted and `dataType = valueExpr
   // .dataType`, so a nanosecond *value* is returned with its precision preserved. No change to the
-  // aggregates is needed -- these tests lock in both the nanos-as-value and nanos-as-ordering paths.
+  // aggregates is needed -- these tests lock in both the nanos-as-value and nanos-as-ordering
+  // paths.
 
   test("SPARK-57103: max_by/min_by return a nanosecond value and preserve its precision") {
     Seq(7, 8, 9).foreach { p =>
       // Value columns are nanos; the ordering column is a plain int key (max at k=3, min at k=1).
       // The sub-microsecond parts are multiples of 100ns, so they are exact at every p in [7, 9]
-      // (no flooring) yet still non-zero -- proving the nanos value survives, not truncated to micros.
+      // (no flooring) yet still non-zero -- proving the nanos value survives, not truncated to
+      // micros.
       val schema = new StructType()
         .add("ntz", TimestampNTZNanosType(p))
         .add("ltz", TimestampLTZNanosType(p))
@@ -490,8 +492,8 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
 
   test("SPARK-57103: max_by/min_by order by a nanosecond key down to the sub-microsecond") {
     // The ordering values share epochMicros and differ only within the microsecond, so picking the
-    // extreme requires the full TimestampNanosVal comparison; a NULL-ordering row is ignored. Run on
-    // both the codegen and the interpreted paths.
+    // extreme requires the full TimestampNanosVal comparison; a NULL-ordering row is ignored.
+    // Run on both the codegen and the interpreted paths.
     Seq(
       Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
         SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY"),
