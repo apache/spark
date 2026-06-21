@@ -736,24 +736,79 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("SPARK-34357: test TIME types") {
-    val rows = spark.read.jdbc(
-      urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
-    val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
-      .cache().collect()
-    val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
-    assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
-    assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
-    assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      val rows = spark.read.jdbc(
+        urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+      val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+        .cache().collect()
+      val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
+      assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+      assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+      assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    }
   }
 
   test("SPARK-47396: TIME WITHOUT TIME ZONE preferTimestampNTZ") {
-    spark.catalog.clearCache()
-    val df = spark.read.format("jdbc")
-      .option("preferTimestampNTZ", true)
-      .option("url", urlWithUserAndPass)
-      .option("query", "SELECT A FROM TEST.TIMETYPES limit 1")
-      .load()
-    assert(df.head().get(0).isInstanceOf[LocalDateTime])
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      spark.catalog.clearCache()
+      val df = spark.read.format("jdbc")
+        .option("preferTimestampNTZ", true)
+        .option("url", urlWithUserAndPass)
+        .option("query", "SELECT A FROM TEST.TIMETYPES limit 1")
+        .load()
+      assert(df.head().get(0).isInstanceOf[LocalDateTime])
+    }
+  }
+
+  test("SPARK-57555: JDBC TIME maps to TimeType when timeType.enabled") {
+    val df = spark.read.jdbc(
+      urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+    // With timeType.enabled=true (default in tests), TIME column maps to TimeType
+    assert(df.schema("A").dataType.isInstanceOf[TimeType])
+    val rows = df.collect()
+    assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
+  }
+
+  test("SPARK-57555: JDBC TIME write round-trip") {
+    val url = urlWithUserAndPass
+    val tableName = "TEST.TIME_ROUNDTRIP"
+    val time1 = java.time.LocalTime.of(9, 30, 0)
+    val time2 = java.time.LocalTime.of(23, 59, 59)
+    val schema = new StructType().add("t", TimeType(TimeType.DEFAULT_PRECISION))
+    val rows = Seq(
+      Row(time1),
+      Row(time2)
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+    df.write.jdbc(url, tableName, new Properties())
+    try {
+      val readBack = spark.read.jdbc(url, tableName, new Properties())
+      assert(readBack.schema.fields(0).dataType.isInstanceOf[TimeType])
+      val result = readBack.orderBy(readBack.columns(0)).collect()
+      assert(result(0).getAs[java.time.LocalTime](0) === time1)
+      assert(result(1).getAs[java.time.LocalTime](0) === time2)
+    } finally {
+      val conn = java.sql.DriverManager.getConnection(url)
+      conn.createStatement().execute(s"DROP TABLE IF EXISTS $tableName")
+      conn.close()
+    }
+  }
+
+  test("SPARK-57555: JDBC TIME preserves sub-second precision") {
+    val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+    try {
+      conn.createStatement().execute(
+        "CREATE TABLE TEST.TIME_PRECISION (t TIME(6))")
+      conn.createStatement().execute(
+        "INSERT INTO TEST.TIME_PRECISION VALUES (TIME '14:30:45.123456')")
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIME_PRECISION", new Properties())
+      val result = df.collect()
+      assert(result(0).getAs[java.time.LocalTime](0) ===
+        java.time.LocalTime.of(14, 30, 45, 123456000))
+    } finally {
+      conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TIME_PRECISION")
+      conn.close()
+    }
   }
 
   test("test DATE types") {

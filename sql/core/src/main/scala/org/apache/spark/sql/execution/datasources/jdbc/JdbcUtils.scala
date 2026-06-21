@@ -164,6 +164,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // Note that some dialects override this setting, e.g. as SQL Server.
       case TimestampNTZType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
+      case _: TimeType => Option(JdbcType("TIME", java.sql.Types.TIME))
       case t: DecimalType => Option(
         JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
       case _ => None
@@ -227,7 +228,13 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.SMALLINT => IntegerType
     case java.sql.Types.SQLXML => StringType
     case java.sql.Types.STRUCT => StringType
-    case java.sql.Types.TIME => getTimestampType(isTimestampNTZ)
+    case java.sql.Types.TIME =>
+      if (conf.isTimeTypeEnabled) {
+        // Use reported scale (fractional digits) as precision, default to 6 if not reported
+        val timePrecision = if (scale > 0 && scale <= TimeType.MAX_PRECISION) scale
+          else TimeType.DEFAULT_PRECISION
+        TimeType(timePrecision)
+      } else getTimestampType(isTimestampNTZ)
     case java.sql.Types.TIMESTAMP => getTimestampType(isTimestampNTZ)
     case java.sql.Types.TINYINT => IntegerType
     case java.sql.Types.VARBINARY => BinaryType
@@ -439,6 +446,15 @@ object JdbcUtils extends Logging with SQLConfHelper {
         val dateVal = rs.getDate(pos + 1)
         if (dateVal != null) {
           row.setInt(pos, fromJavaDate(dialect.convertJavaDateToDate(dateVal)))
+        } else {
+          row.update(pos, null)
+        }
+
+    case _: TimeType =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        val localTime = rs.getObject(pos + 1, classOf[java.time.LocalTime])
+        if (localTime != null) {
+          row.setLong(pos, localTime.toNanoOfDay)
         } else {
           row.update(pos, null)
         }
@@ -719,6 +735,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
         (stmt: PreparedStatement, row: Row, pos: Int) =>
           stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
       }
+
+    case _: TimeType =>
+      (stmt: PreparedStatement, row: Row, pos: Int) =>
+        val localTime = row.getAs[java.time.LocalTime](pos)
+        stmt.setObject(pos + 1, localTime)
 
     case t: DecimalType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
