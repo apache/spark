@@ -149,21 +149,47 @@ class TimeOpsTestsMixin:
         pdf, psdf = self.time_pdf, self.time_psdf
         self.assert_eq(pdf["this"] < pdf["that"], psdf["this"] < psdf["that"])
         self.assert_eq(pdf["this"] < pdf["this"], psdf["this"] < psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] < pdf["this"])
 
     def test_le(self):
         pdf, psdf = self.time_pdf, self.time_psdf
         self.assert_eq(pdf["this"] <= pdf["that"], psdf["this"] <= psdf["that"])
         self.assert_eq(pdf["this"] <= pdf["this"], psdf["this"] <= psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] <= pdf["this"])
 
     def test_gt(self):
         pdf, psdf = self.time_pdf, self.time_psdf
         self.assert_eq(pdf["this"] > pdf["that"], psdf["this"] > psdf["that"])
         self.assert_eq(pdf["this"] > pdf["this"], psdf["this"] > psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] > pdf["this"])
 
     def test_ge(self):
         pdf, psdf = self.time_pdf, self.time_psdf
         self.assert_eq(pdf["this"] >= pdf["that"], psdf["this"] >= psdf["that"])
         self.assert_eq(pdf["this"] >= pdf["this"], psdf["this"] >= psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] >= pdf["this"])
+
+    def test_eq(self):
+        pdf, psdf = self.time_pdf, self.time_psdf
+        self.assert_eq(pdf["this"] == pdf["that"], psdf["this"] == psdf["that"])
+        self.assert_eq(pdf["this"] == pdf["this"], psdf["this"] == psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] == pdf["this"])
+
+    def test_ne(self):
+        pdf, psdf = self.time_pdf, self.time_psdf
+        self.assert_eq(pdf["this"] != pdf["that"], psdf["this"] != psdf["that"])
+        self.assert_eq(pdf["this"] != pdf["this"], psdf["this"] != psdf["this"])
+        self.assertRaises(TypeError, lambda: psdf["this"] != pdf["this"])
+
+    def test_isnull(self):
+        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
+    def test_from_to_pandas(self):
+        data = [datetime.time(10, 0, 0), datetime.time(12, 30, 0), datetime.time(14, 0, 0)]
+        pser = pd.Series(data)
+        psser = ps.Series(data)
+        self.assert_eq(pser, psser._to_pandas())
+        self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_astype(self):
         pser = self.pser

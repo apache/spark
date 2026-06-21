@@ -188,6 +188,7 @@ str               StringType
 bool              BooleanType
 datetime.datetime TimestampType
 datetime.date     DateType
+datetime.time     TimeType
 decimal.Decimal   DecimalType(38, 18)
 ================= ===================
 
