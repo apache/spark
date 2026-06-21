@@ -408,6 +408,20 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     }
   }
 
+  test("SPARK-57103: max_by/min_by accept a nanosecond ordering and preserve the value type") {
+    // MaxBy/MinBy gate only on the ordering expression's orderability; a nanosecond ordering is an
+    // orderable AtomicType (SPARK-57103). The value expression is unrestricted, and the result type
+    // is the value's type, so a nanosecond value is returned with its precision preserved.
+    Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(7)).foreach { dt =>
+      val v = AttributeReference("v", dt)()
+      val ord = AttributeReference("ord", dt)()
+      Seq(MaxBy(v, ord), MinBy(v, ord)).foreach { agg =>
+        assert(agg.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+        assert(agg.dataType == dt)
+      }
+    }
+  }
+
   test("check types for aggregates") {
     // We use AggregateFunction directly at here because the error will be thrown from it
     // instead of from AggregateExpression, which is the wrapper of an AggregateFunction.
