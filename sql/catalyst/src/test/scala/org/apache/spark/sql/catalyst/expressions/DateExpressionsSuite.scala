@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException, SparkUpgradeException}
+import org.apache.spark.{SparkArithmeticException, SparkDateTimeException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -348,11 +348,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       DateFormatClass(Literal.create(null, TimeType(TimeType.DEFAULT_PRECISION)),
         Literal("HH:mm:ss"), UTC_OPT), null)
 
-    // Date-only pattern fields should error for TIME input
+    // Date-only pattern fields should error for TIME input with Spark error
     val datePatternExpr = DateFormatClass(timeLit, Literal("yyyy-MM-dd"), UTC_OPT)
-    intercept[java.time.DateTimeException] {
-      datePatternExpr.eval(InternalRow(timeNanos, UTF8String.fromString("yyyy-MM-dd")))
-    }
+    checkErrorInExpression[SparkRuntimeException](
+      datePatternExpr,
+      condition = "INVALID_PARAMETER_VALUE.PATTERN",
+      parameters = Map(
+        "parameter" -> "`regexp`",
+        "functionName" -> "`to_char`",
+        "value" -> "'yyyy-MM-dd'")
+    )
   }
 
   test("Hour") {

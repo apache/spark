@@ -1241,7 +1241,8 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
       case _: TimeType =>
         val tf = timeFormatterOption.getOrElse(
           TimeFormatter(format.toString, isParsing = false))
-        UTF8String.fromString(tf.format(timestamp.asInstanceOf[Long]))
+        DateFormatClass.formatTimeWithError(
+          tf, timestamp.asInstanceOf[Long], "to_char", format.toString)
       case _ =>
         val formatter = formatterOption.getOrElse(getFormatter(format.toString))
         UTF8String.fromString(formatter.format(timestamp.asInstanceOf[Long]))
@@ -1256,17 +1257,23 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     left.dataType match {
       case _: TimeType =>
+        val errClass = QueryExecutionErrors.getClass.getName.stripSuffix("$")
         timeFormatterOption.map { tf =>
           val timeFormatter = ctx.addReferenceObj("timeFormatter", tf)
+          val funcName = ctx.addReferenceObj("funcName", "to_char")
+          val fmtStr = ctx.addReferenceObj("fmtStr", right.eval().toString)
           defineCodeGen(ctx, ev, (time, _) => {
-            s"""UTF8String.fromString($timeFormatter.format($time))"""
+            s"""|((org.apache.spark.unsafe.types.UTF8String)
+                |org.apache.spark.sql.catalyst.expressions.DateFormatClass
+                |.formatTimeWithError($timeFormatter, $time, $funcName, $fmtStr))""".stripMargin.replaceAll("\n", "")
           })
         }.getOrElse {
           val tf = TimeFormatter.getClass.getName.stripSuffix("$")
           defineCodeGen(ctx, ev, (time, format) => {
-            s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
-                |  $format.toString(), false)
-                |.format($time))""".stripMargin
+            s"""|((org.apache.spark.unsafe.types.UTF8String)
+                |org.apache.spark.sql.catalyst.expressions.DateFormatClass
+                |.formatTimeWithError($tf$$.MODULE$$.apply(
+                |  $format.toString(), false), $time, "to_char", $format.toString()))""".stripMargin.replaceAll("\n", "")
           })
         }
       case _ =>
@@ -1302,6 +1309,19 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     copy(left = newLeft, right = newRight)
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(DATETIME)
+}
+
+object DateFormatClass {
+  /** Helper for codegen: formats time with proper Spark error on invalid pattern. */
+  def formatTimeWithError(
+      tf: TimeFormatter, nanos: Long, funcName: String, pattern: String): UTF8String = {
+    try {
+      UTF8String.fromString(tf.format(nanos))
+    } catch {
+      case e: java.time.DateTimeException =>
+        throw QueryExecutionErrors.invalidPatternError(funcName, pattern, e)
+    }
+  }
 }
 
 /**
