@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, LegacyDateFormats, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
@@ -1231,34 +1231,63 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   def this(left: Expression, right: Expression) = this(left, right, None)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimestampType, StringTypeWithCollation(supportsTrimCollation = true))
+    Seq(TypeCollection(TimestampType, TimeType(TimeType.DEFAULT_PRECISION)), StringTypeWithCollation(supportsTrimCollation = true))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
   override protected def nullSafeEval(timestamp: Any, format: Any): Any = {
-    val formatter = formatterOption.getOrElse(getFormatter(format.toString))
-    UTF8String.fromString(formatter.format(timestamp.asInstanceOf[Long]))
+    left.dataType match {
+      case _: TimeType =>
+        val tf = timeFormatterOption.getOrElse(
+          TimeFormatter(format.toString, isParsing = false))
+        UTF8String.fromString(tf.format(timestamp.asInstanceOf[Long]))
+      case _ =>
+        val formatter = formatterOption.getOrElse(getFormatter(format.toString))
+        UTF8String.fromString(formatter.format(timestamp.asInstanceOf[Long]))
+    }
   }
 
+  @transient private lazy val timeFormatterOption: Option[TimeFormatter] =
+    if (left.dataType.isInstanceOf[TimeType] && right.foldable) {
+      Option(right.eval()).map(fmt => TimeFormatter(fmt.toString, isParsing = false))
+    } else None
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    formatterOption.map { tf =>
-      val timestampFormatter = ctx.addReferenceObj("timestampFormatter", tf)
-      defineCodeGen(ctx, ev, (timestamp, _) => {
-        s"""UTF8String.fromString($timestampFormatter.format($timestamp))"""
-      })
-    }.getOrElse {
-      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
-      val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
-      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
-      defineCodeGen(ctx, ev, (timestamp, format) => {
-        s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
-            |  $format.toString(),
-            |  $zid,
-            |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
-            |  false)
-            |.format($timestamp))""".stripMargin
-      })
+    left.dataType match {
+      case _: TimeType =>
+        timeFormatterOption.map { tf =>
+          val timeFormatter = ctx.addReferenceObj("timeFormatter", tf)
+          defineCodeGen(ctx, ev, (time, _) => {
+            s"""UTF8String.fromString($timeFormatter.format($time))"""
+          })
+        }.getOrElse {
+          val tf = TimeFormatter.getClass.getName.stripSuffix("$")
+          defineCodeGen(ctx, ev, (time, format) => {
+            s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
+                |  $format.toString(), false)
+                |.format($time))""".stripMargin
+          })
+        }
+      case _ =>
+        formatterOption.map { tf =>
+          val timestampFormatter = ctx.addReferenceObj("timestampFormatter", tf)
+          defineCodeGen(ctx, ev, (timestamp, _) => {
+            s"""UTF8String.fromString($timestampFormatter.format($timestamp))"""
+          })
+        }.getOrElse {
+          val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+          val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
+          val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+          defineCodeGen(ctx, ev, (timestamp, format) => {
+            s"""|UTF8String.fromString($tf$$.MODULE$$.apply(
+                |  $format.toString(),
+                |  $zid,
+                |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+                |  false)
+                |.format($timestamp))""".stripMargin
+          })
+        }
     }
   }
 

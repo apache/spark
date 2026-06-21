@@ -328,6 +328,28 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57575: DateFormat with TimeType (to_char/to_varchar)") {
+    // 12:13:14 = (12*3600 + 13*60 + 14) seconds, stored as nanoseconds
+    val timeMicros = (12L * 3600 + 13 * 60 + 14) * 1000000000L
+    val timeLit = Literal.create(timeMicros, TimeType(TimeType.DEFAULT_PRECISION))
+
+    checkEvaluation(DateFormatClass(timeLit, Literal("HH:mm:ss"), UTC_OPT), "12:13:14")
+    checkEvaluation(DateFormatClass(timeLit, Literal("HH"), UTC_OPT), "12")
+    checkEvaluation(DateFormatClass(timeLit, Literal("mm"), UTC_OPT), "13")
+    checkEvaluation(DateFormatClass(timeLit, Literal("ss"), UTC_OPT), "14")
+
+    // Null handling
+    checkEvaluation(
+      DateFormatClass(Literal.create(null, TimeType(TimeType.DEFAULT_PRECISION)),
+        Literal("HH:mm:ss"), UTC_OPT), null)
+
+    // Date-only pattern fields should error for TIME input
+    val datePatternExpr = DateFormatClass(timeLit, Literal("yyyy-MM-dd"), UTC_OPT)
+    intercept[Exception] {
+      datePatternExpr.eval(InternalRow(timeMicros, UTF8String.fromString("yyyy-MM-dd")))
+    }
+  }
+
   test("Hour") {
     assert(Hour(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Hour(Literal(ts), UTC_OPT).resolved)
