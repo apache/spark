@@ -450,6 +450,97 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  // ===== max_by / min_by over nanosecond-precision timestamps (SPARK-56822) =====
+  // `MaxBy`/`MinBy` gate only on the ordering expression's orderability
+  // (`MaxMinBy.checkInputDataTypes` -> `TypeUtils.checkForOrderingExpr`), which the nanosecond
+  // types pass (SPARK-57103); the value expression is unrestricted and `dataType = valueExpr
+  // .dataType`, so a nanosecond *value* is returned with its precision preserved. No change to the
+  // aggregates is needed -- these tests lock in both the nanos-as-value and nanos-as-ordering
+  // paths.
+
+  test("SPARK-57103: max_by/min_by return a nanosecond value and preserve its precision") {
+    Seq(7, 8, 9).foreach { p =>
+      // Value columns are nanos; the ordering column is a plain int key (max at k=3, min at k=1).
+      // The sub-microsecond parts are multiples of 100ns, so they are exact at every p in [7, 9]
+      // (no flooring) yet still non-zero -- proving the nanos value survives, not truncated to
+      // micros.
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+        .add("k", IntegerType)
+      val data = Seq(
+        Row(LocalDateTime.parse("2020-01-01T00:00:00.000000100"),
+          Instant.parse("2020-01-01T00:00:00.000000100Z"), 1),
+        Row(LocalDateTime.parse("2020-01-01T00:00:00.000000900"),
+          Instant.parse("2020-01-01T00:00:00.000000900Z"), 3),
+        Row(LocalDateTime.parse("2020-01-01T00:00:00.000000500"),
+          Instant.parse("2020-01-01T00:00:00.000000500Z"), 2))
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
+      val res = df.select(
+        max_by(col("ntz"), col("k")), min_by(col("ntz"), col("k")),
+        max_by(col("ltz"), col("k")), min_by(col("ltz"), col("k")))
+      checkAnswer(res, Row(
+        LocalDateTime.parse("2020-01-01T00:00:00.000000900"),
+        LocalDateTime.parse("2020-01-01T00:00:00.000000100"),
+        Instant.parse("2020-01-01T00:00:00.000000900Z"),
+        Instant.parse("2020-01-01T00:00:00.000000100Z")))
+      // The returned value keeps the family (NTZ/LTZ) and precision of the value column.
+      assert(res.schema.map(_.dataType) === Seq(
+        TimestampNTZNanosType(p), TimestampNTZNanosType(p),
+        TimestampLTZNanosType(p), TimestampLTZNanosType(p)))
+    }
+  }
+
+  test("SPARK-57103: max_by/min_by order by a nanosecond key down to the sub-microsecond") {
+    // The ordering values share epochMicros and differ only within the microsecond, so picking the
+    // extreme requires the full TimestampNanosVal comparison; a NULL-ordering row is ignored.
+    // Run on both the codegen and the interpreted paths.
+    Seq(
+      Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "CODEGEN_ONLY"),
+      Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+        SQLConf.CODEGEN_FACTORY_MODE.key -> "NO_CODEGEN")
+    ).foreach { conf =>
+      withSQLConf(conf: _*) {
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(
+            Row("lo", Instant.parse("2020-01-01T00:00:00.000000001Z")),
+            Row("hi", Instant.parse("2020-01-01T00:00:00.000000999Z")),
+            Row("skip", null))),
+          new StructType().add("label", StringType).add("ts", TimestampLTZNanosType(9)))
+        checkAnswer(
+          df.select(max_by(col("label"), col("ts")), min_by(col("label"), col("ts"))),
+          Row("hi", "lo"))
+      }
+    }
+  }
+
+  test("SPARK-57103: max_by/min_by over nanos handle all-NULL ordering and GROUP BY") {
+    Seq(7, 8, 9).foreach { p =>
+      // All ordering values NULL -> result NULL.
+      val allNull = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row("a", null), Row("b", null))),
+        new StructType().add("label", StringType).add("ts", TimestampNTZNanosType(p)))
+      checkAnswer(
+        allNull.select(max_by(col("label"), col("ts")), min_by(col("label"), col("ts"))),
+        Row(null, null))
+
+      // GROUP BY: per group, pick the label at the extreme nanosecond ordering key.
+      val grouped = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(
+          Row("g1", "g1-lo", LocalDateTime.parse("2020-01-01T00:00:00.000000001")),
+          Row("g1", "g1-hi", LocalDateTime.parse("2020-01-01T00:00:00.000000999")),
+          Row("g2", "g2-only", LocalDateTime.parse("2020-01-01T00:00:00.000000005")))),
+        new StructType().add("g", StringType).add("label", StringType)
+          .add("ts", TimestampNTZNanosType(p)))
+      checkAnswer(
+        grouped.groupBy("g").agg(
+          max_by(col("label"), col("ts")).as("mx"),
+          min_by(col("label"), col("ts")).as("mn")).orderBy("g"),
+        Seq(Row("g1", "g1-hi", "g1-lo"), Row("g2", "g2-only", "g2-only")))
+    }
+  }
+
   test("SPARK-57527: unix_nanos over nanosecond-precision timestamps") {
     // unix_nanos returns DECIMAL(21, 0) nanoseconds since the epoch and applies no zone shift to a
     // timestamp argument. The chosen fractions have zeros beyond the 7th digit, so truncating to
