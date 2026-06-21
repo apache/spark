@@ -125,7 +125,8 @@ public interface RelationCatalog extends TableCatalog, ViewCatalog {
    * <p>
    * Returns a {@link Table} for a table or a {@link View} for a view; callers discriminate via
    * {@code instanceof Table} / {@code instanceof View}. This lets the resolver answer in a single
-   * RPC instead of falling back from {@link TableCatalog#loadTable} to {@link ViewCatalog#loadView}.
+   * RPC instead of falling back from {@link TableCatalog#loadTable} to
+   * {@link ViewCatalog#loadView}.
    *
    * @param ident the identifier
    * @return a {@link Table} for tables, or a {@link View} for views
