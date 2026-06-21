@@ -1840,7 +1840,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
     }
   }
 
-  test("DPP materialized-input eligibility requires a repeatable plan") {
+  test("DPP materialized-input eligibility requires a cheaply recomputable plan") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
         SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
         SQLConf.DYNAMIC_PARTITION_PRUNING_USE_STATS.key -> "false",
@@ -1871,7 +1871,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           assert(activeDppSubqueries(df).exists {
             case InSubqueryExec(_, _: SubqueryExec, _, _, _, _) => true
             case _ => false
-          }, s"Should execute standalone DPP for a repeatable materialized plan:\n" +
+          }, s"Should execute standalone DPP for a cheaply recomputable materialized plan:\n" +
             df.queryExecution)
         }
 
@@ -1880,12 +1880,23 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           DppMaterializedInputTestState.reset(counterId)
           assert(df.collect().toSeq === Seq(Row(1)))
           assert(activeDppSubqueries(df).isEmpty,
-            s"Shouldn't trigger DPP for a non-repeatable materialized plan:\n" +
+            s"Shouldn't trigger DPP for an opaque materialized plan:\n" +
               df.queryExecution)
         }
 
         checkStandaloneDpp(Seq(1).toDF("p"))
         checkStandaloneDpp(Seq(1).toDF("p").localCheckpoint(eager = true))
+
+        // Cheap, scan-cost-bound operators above a materialized input stay eligible: their
+        // recompute cost is dominated by the materialized leaf that calculatePlanOverhead sees.
+        checkStandaloneDpp(
+          Seq(1).toDF("p").localCheckpoint(eager = true).filter($"p" > 0).select($"p"))
+
+        // An Aggregate over a materialized input is excluded even though it is repeatable: its
+        // shuffle/compute cost is invisible to the scan-bytes cost model, so treating it as a cheap
+        // materialized input would overstate the pruning benefit.
+        checkNoDpp(
+          Seq(1).toDF("p").localCheckpoint(eager = true).groupBy("p").count().select("p"))
 
         val checkpointed = Seq(1).toDS().localCheckpoint(eager = true)
         val mappedKeys = checkpointed.mapPartitions { values =>
@@ -1900,7 +1911,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           DppMaterializedInputTestState.reset(counterId)
           assert(broadcastJoin.collect().toSeq === Seq(Row(1)))
           assert(activeDppSubqueries(broadcastJoin).isEmpty,
-            s"Shouldn't trigger DPP for a non-repeatable broadcast plan:\n" +
+            s"Shouldn't trigger DPP for an opaque broadcast plan:\n" +
               broadcastJoin.queryExecution)
 
           val target = spark.table("events").hint("merge")
@@ -1916,7 +1927,7 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
           assert(rows.size === 1)
           assert(rows.head.getString(1) === "target")
           assert(activeDppSubqueries(withSiblingBroadcast).isEmpty,
-            s"A sibling broadcast shouldn't make a non-repeatable plan eligible for DPP:\n" +
+            s"A sibling broadcast shouldn't make an opaque plan eligible for DPP:\n" +
               withSiblingBroadcast.queryExecution)
         }
 
