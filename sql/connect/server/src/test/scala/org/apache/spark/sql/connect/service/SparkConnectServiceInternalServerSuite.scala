@@ -22,7 +22,11 @@ import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
 
+import io.grpc.ManagedChannelBuilder
+import io.grpc.health.v1.{HealthCheckRequest, HealthCheckResponse, HealthGrpc}
+
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.connect.proto.SparkConnectServiceGrpc
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
@@ -259,6 +263,42 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
     assert(SparkConnectService.stopped)
     // The listener should receive the `SparkListenerConnectServiceEnd` event
     endEventSignal.acquire()
+  }
+
+  test("The SparkConnectService exposes standard gRPC health checks") {
+    val conf = new SparkConf()
+      .setAppName(getClass().getName())
+      .set(SparkLauncher.SPARK_MASTER, "local[1]")
+    sc = new SparkContext(conf)
+
+    withSparkEnvConfs((CONNECT_GRPC_BINDING_PORT.key, "0")) {
+      SparkConnectService.start(sc)
+    }
+
+    val channel = ManagedChannelBuilder
+      .forAddress("localhost", SparkConnectService.server.getPort)
+      .usePlaintext()
+      .build()
+    try {
+      val healthStub = HealthGrpc.newBlockingStub(channel)
+
+      val overallStatus = healthStub
+        .check(HealthCheckRequest.newBuilder().build())
+        .getStatus
+      assert(overallStatus == HealthCheckResponse.ServingStatus.SERVING)
+
+      val sparkConnectStatus = healthStub
+        .check(
+          HealthCheckRequest
+            .newBuilder()
+            .setService(SparkConnectServiceGrpc.SERVICE_NAME)
+            .build())
+        .getStatus
+      assert(sparkConnectStatus == HealthCheckResponse.ServingStatus.SERVING)
+    } finally {
+      channel.shutdownNow()
+      SparkConnectService.stop()
+    }
   }
 
   def withPortOccupied(startPort: Int, endPort: Int)(f: => Unit): Unit = {

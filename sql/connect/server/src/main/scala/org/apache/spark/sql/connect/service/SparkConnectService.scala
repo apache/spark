@@ -25,9 +25,10 @@ import scala.jdk.CollectionConverters._
 import com.google.protobuf.Message
 import io.grpc.{BindableService, MethodDescriptor, Server, ServerMethodDefinition, ServerServiceDefinition}
 import io.grpc.MethodDescriptor.PrototypeMarshaller
+import io.grpc.health.v1.HealthCheckResponse.ServingStatus
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.protobuf.ProtoUtils
-import io.grpc.protobuf.services.ProtoReflectionService
+import io.grpc.protobuf.services.{HealthStatusManager, ProtoReflectionService}
 import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkContext, SparkEnv}
@@ -314,8 +315,11 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
  */
 object SparkConnectService extends Logging {
 
+  private val OverallHealthServiceName = HealthStatusManager.SERVICE_NAME_ALL_SERVICES
+
   private[connect] var server: Server = _
   private[connect] var bindingAddress: InetSocketAddress = _
+  private[connect] var healthStatusManager: HealthStatusManager = _
 
   private[connect] var uiTab: Option[SparkConnectServerTab] = None
   private[connect] var listener: SparkConnectServerListener = _
@@ -396,6 +400,8 @@ object SparkConnectService extends Logging {
     val bindAddress = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_ADDRESS)
     val startPort = SparkEnv.get.conf.get(CONNECT_GRPC_BINDING_PORT)
     val sparkConnectService = new SparkConnectService(debugMode)
+    healthStatusManager = new HealthStatusManager()
+    setHealthStatus(ServingStatus.NOT_SERVING)
     val protoReflectionService =
       if (debugMode) Some(ProtoReflectionService.newInstance()) else None
     val configuredInterceptors = SparkConnectInterceptorRegistry.createConfiguredInterceptors()
@@ -409,6 +415,7 @@ object SparkConnectService extends Logging {
       }
       sb.maxInboundMessageSize(SparkEnv.get.conf.get(CONNECT_GRPC_MAX_INBOUND_MESSAGE_SIZE).toInt)
         .addService(sparkConnectService)
+        .addService(healthStatusManager.getHealthService)
 
       getAuthenticateToken.foreach { token =>
         sb.intercept(new PreSharedKeyAuthenticationInterceptor(token))
@@ -459,6 +466,7 @@ object SparkConnectService extends Logging {
 
     started = true
     stopped = false
+    setHealthStatus(ServingStatus.SERVING)
     postSparkConnectServiceStarted()
   }
 
@@ -472,6 +480,7 @@ object SparkConnectService extends Logging {
       throw IllegalStateErrors.serviceNotStarted()
     }
 
+    setHealthStatus(ServingStatus.NOT_SERVING)
     if (server != null) {
       if (timeout.isDefined && unit.isDefined) {
         server.shutdown()
@@ -488,6 +497,14 @@ object SparkConnectService extends Logging {
     started = false
     stopped = true
     postSparkConnectServiceEnd()
+    healthStatusManager = null
+  }
+
+  private def setHealthStatus(status: ServingStatus): Unit = {
+    if (healthStatusManager != null) {
+      healthStatusManager.setStatus(OverallHealthServiceName, status)
+      healthStatusManager.setStatus(SparkConnectServiceGrpc.SERVICE_NAME, status)
+    }
   }
 
   /**
