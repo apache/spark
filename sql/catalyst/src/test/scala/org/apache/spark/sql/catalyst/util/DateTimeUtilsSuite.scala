@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseJulianToGregorianMicros
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLConf
 import org.apache.spark.sql.internal.SqlApiConf
+import org.apache.spark.sql.types.{Decimal, TimeType}
 import org.apache.spark.sql.types.DayTimeIntervalType.{HOUR, SECOND}
-import org.apache.spark.sql.types.Decimal
 import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 
 class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
@@ -1503,6 +1503,21 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
           "expression" -> s"'$invalidTime'",
           "sourceType" -> "\"STRING\"",
           "targetType" -> "\"TIME(6)\"",
+          "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
+    }
+
+    // The error must report the requested target precision, not the default TIME(6).
+    for (precision <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      val invalidTime = "not a time"
+      checkError(
+        exception = intercept[SparkDateTimeException] {
+          stringToTimeAnsi(UTF8String.fromString(invalidTime), precision, null)
+        },
+        condition = "CAST_INVALID_INPUT",
+        parameters = Map(
+          "expression" -> s"'$invalidTime'",
+          "sourceType" -> "\"STRING\"",
+          "targetType" -> s""""TIME($precision)"""",
           "ansiConfig" -> "\"spark.sql.ansi.enabled\""))
     }
   }

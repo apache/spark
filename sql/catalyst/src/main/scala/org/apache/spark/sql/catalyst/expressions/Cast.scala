@@ -966,7 +966,7 @@ case class Cast(
     case _: StringType =>
       if (ansiEnabled) {
         buildCast[UTF8String](_, s => DateTimeUtils.truncateTimeToPrecision(
-          DateTimeUtils.stringToTimeAnsi(s, getContextOrNull()), to.precision))
+          DateTimeUtils.stringToTimeAnsi(s, to.precision, getContextOrNull()), to.precision))
       } else {
         buildCast[UTF8String](_, s => DateTimeUtils.stringToTime(s)
           .map(DateTimeUtils.truncateTimeToPrecision(_, to.precision)).orNull)
@@ -1673,7 +1673,8 @@ case class Cast(
             val errorContext = getContextOrNullCode(ctx)
             code"""
               $evPrim = $dateTimeUtilsCls.truncateTimeToPrecision(
-                $dateTimeUtilsCls.stringToTimeAnsi($c, $errorContext), ${to.precision});
+                $dateTimeUtilsCls.stringToTimeAnsi($c, ${to.precision}, $errorContext),
+                ${to.precision});
             """
           } else {
             code"""

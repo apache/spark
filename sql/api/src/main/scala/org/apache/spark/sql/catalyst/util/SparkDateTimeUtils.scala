@@ -1123,9 +1123,12 @@ trait SparkDateTimeUtils {
     }
   }
 
-  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long = {
+  def stringToTimeAnsi(s: UTF8String, context: QueryContext = null): Long =
+    stringToTimeAnsi(s, TimeType.DEFAULT_PRECISION, context)
+
+  def stringToTimeAnsi(s: UTF8String, precision: Int, context: QueryContext): Long = {
     stringToTime(s).getOrElse {
-      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(), context)
+      throw ExecutionErrors.invalidInputInCastToDatetimeError(s, TimeType(precision), context)
     }
   }
 
