@@ -415,10 +415,10 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite with SQLHelper with Quer
     Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(7)).foreach { dt =>
       val v = AttributeReference("v", dt)()
       val ord = AttributeReference("ord", dt)()
-      assert(MaxBy(v, ord).checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      assert(MinBy(v, ord).checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
-      assert(MaxBy(v, ord).dataType == dt)
-      assert(MinBy(v, ord).dataType == dt)
+      Seq(MaxBy(v, ord), MinBy(v, ord)).foreach { agg =>
+        assert(agg.checkInputDataTypes() == TypeCheckResult.TypeCheckSuccess)
+        assert(agg.dataType == dt)
+      }
     }
   }
 

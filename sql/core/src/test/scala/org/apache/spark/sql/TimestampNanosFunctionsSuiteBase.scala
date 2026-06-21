@@ -476,8 +476,9 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
         Row(LocalDateTime.parse("2020-01-01T00:00:00.000000500"),
           Instant.parse("2020-01-01T00:00:00.000000500Z"), 2))
       val df = spark.createDataFrame(spark.sparkContext.parallelize(data), schema)
-      val res = df.selectExpr(
-        "max_by(ntz, k)", "min_by(ntz, k)", "max_by(ltz, k)", "min_by(ltz, k)")
+      val res = df.select(
+        max_by(col("ntz"), col("k")), min_by(col("ntz"), col("k")),
+        max_by(col("ltz"), col("k")), min_by(col("ltz"), col("k")))
       checkAnswer(res, Row(
         LocalDateTime.parse("2020-01-01T00:00:00.000000900"),
         LocalDateTime.parse("2020-01-01T00:00:00.000000100"),
@@ -507,7 +508,9 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
             Row("hi", Instant.parse("2020-01-01T00:00:00.000000999Z")),
             Row("skip", null))),
           new StructType().add("label", StringType).add("ts", TimestampLTZNanosType(9)))
-        checkAnswer(df.selectExpr("max_by(label, ts)", "min_by(label, ts)"), Row("hi", "lo"))
+        checkAnswer(
+          df.select(max_by(col("label"), col("ts")), min_by(col("label"), col("ts"))),
+          Row("hi", "lo"))
       }
     }
   }
@@ -518,7 +521,9 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       val allNull = spark.createDataFrame(
         spark.sparkContext.parallelize(Seq(Row("a", null), Row("b", null))),
         new StructType().add("label", StringType).add("ts", TimestampNTZNanosType(p)))
-      checkAnswer(allNull.selectExpr("max_by(label, ts)", "min_by(label, ts)"), Row(null, null))
+      checkAnswer(
+        allNull.select(max_by(col("label"), col("ts")), min_by(col("label"), col("ts"))),
+        Row(null, null))
 
       // GROUP BY: per group, pick the label at the extreme nanosecond ordering key.
       val grouped = spark.createDataFrame(
@@ -530,7 +535,8 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
           .add("ts", TimestampNTZNanosType(p)))
       checkAnswer(
         grouped.groupBy("g").agg(
-          expr("max_by(label, ts)").as("mx"), expr("min_by(label, ts)").as("mn")).orderBy("g"),
+          max_by(col("label"), col("ts")).as("mx"),
+          min_by(col("label"), col("ts")).as("mn")).orderBy("g"),
         Seq(Row("g1", "g1-hi", "g1-lo"), Row("g2", "g2-only", "g2-only")))
     }
   }
