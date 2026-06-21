@@ -304,38 +304,34 @@ object JDBCOptions {
     name
   }
 
-  // The userinfo of a URL authority (everything between "//" and the authority's last "@") may
-  // carry credentials, e.g. the "user:password" in "//user:password@host". "[^/?#]*" extends
-  // greedily to the last "@" before the authority ends (at the first "/", "?" or "#"), so an "@"
-  // embedded in the password is covered as well; the whole userinfo is redacted.
-  private val URL_USER_INFO_PATTERN = "(//)[^/?#]*(@)".r
-
-  // The query / connection-property portion of a JDBC URL (everything from the first "?" or ";")
-  // can carry credentials as key=value pairs (e.g. "password=...", "token=..."), and the set of
-  // credential-bearing property names is driver-specific and open-ended. Rather than enumerate
-  // them, redact the whole portion, keeping only the structural "scheme://host:port/database".
-  private val URL_PARAMS_PATTERN = "([?;]).*".r
-
   /**
-   * Redacts credentials that may be embedded in a JDBC URL so it is safe to surface in logs and
-   * error messages. Only the structural prefix (scheme, host, port, database/path) is preserved;
-   * the authority's userinfo and the entire query/connection-property string are redacted, since
-   * either may carry secrets and the credential-bearing property names are driver-specific. This
-   * is done unconditionally rather than relying on the optional, user-configured
+   * Redacts a JDBC URL so it is safe to surface in logs and error messages.
+   *
+   * A JDBC URL has the form `jdbc:<subprotocol>:<subname>`, where `<subprotocol>` is a registered
+   * driver name (`mysql`, `oracle`, `postgresql`, ...) and `<subname>` is entirely driver-specific.
+   * Credentials can appear anywhere in `<subname>` and in arbitrary syntaxes -- userinfo in a
+   * `//user:pwd@host` authority, Oracle Thin's `user/pwd@host`, `?`/`;` connection properties, etc.
+   * Rather than enumerate every driver's syntax (and inevitably miss one and leak), we keep only
+   * the `jdbc:<subprotocol>:` prefix -- which is credential-free by construction -- and redact
+   * everything after it. The driver type stays visible for debugging; nothing else does.
+   *
+   * This redaction is unconditional, unlike the optional, user-configured
    * `spark.sql.redaction.string.regex` (which is unset by default and would leave the URL in the
-   * clear). The configured redaction `regex` is still applied on top, preserving existing behavior.
+   * clear). The configured `regex` is still applied on top, preserving existing behavior.
    */
   def redactUrl(url: String, regex: Option[Regex]): String = {
     if (url == null || url.isEmpty) {
       url
     } else {
-      // The function form of replaceAllIn treats the replacement literally (no '$' group
-      // interpolation), so the redaction text is inserted verbatim.
-      val withoutUserInfo = URL_USER_INFO_PATTERN.replaceAllIn(
-        url, m => s"${m.group(1)}${Utils.REDACTION_REPLACEMENT_TEXT}${m.group(2)}")
-      val withoutParams = URL_PARAMS_PATTERN.replaceAllIn(
-        withoutUserInfo, m => s"${m.group(1)}${Utils.REDACTION_REPLACEMENT_TEXT}")
-      Utils.redact(regex, withoutParams)
+      // The second colon terminates the subprotocol: "jdbc" ':' "<subprotocol>" ':' "<subname>".
+      val subprotocolEnd = url.indexOf(':', url.indexOf(':') + 1)
+      val redacted = if (subprotocolEnd < 0) {
+        // No subname delimiter -- the URL is malformed, so don't trust any of it.
+        Utils.REDACTION_REPLACEMENT_TEXT
+      } else {
+        url.substring(0, subprotocolEnd + 1) + Utils.REDACTION_REPLACEMENT_TEXT
+      }
+      Utils.redact(regex, redacted)
     }
   }
 

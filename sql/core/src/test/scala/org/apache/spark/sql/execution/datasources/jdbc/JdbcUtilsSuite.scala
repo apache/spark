@@ -71,44 +71,40 @@ class JdbcUtilsSuite extends SparkFunSuite {
       parameters = Map("error" -> "'.'", "hint" -> ""))
   }
 
-  test("redactUrl redacts credentials embedded in a JDBC URL") {
+  test("redactUrl keeps only the jdbc:<subprotocol>: prefix") {
     val redaction = Utils.REDACTION_REPLACEMENT_TEXT
 
-    // URLs with no userinfo and no query/property portion are returned unchanged.
-    Seq(
-      "jdbc:mysql://localhost/db",
-      "jdbc:postgresql://localhost:5432/postgres",
-      "jdbc:h2:mem:testdb").foreach { url =>
-      assert(JDBCOptions.redactUrl(url, None) === url)
-    }
-
-    // The authority's userinfo is redacted wholesale (the scheme, host, port and database are
-    // kept), including a bare username and a password that itself contains an '@'.
+    // Only the "jdbc:<subprotocol>:" prefix is kept; everything after it (host, port, database,
+    // userinfo and connection properties) is redacted, regardless of the driver-specific syntax.
+    // This covers credentials embedded as a "//user:pwd@host" authority, ...
     assert(JDBCOptions.redactUrl("jdbc:mysql://user:secret@host:3306/db", None) ===
-      s"jdbc:mysql://$redaction@host:3306/db")
-    assert(JDBCOptions.redactUrl("jdbc:mysql://user@host:3306/db", None) ===
-      s"jdbc:mysql://$redaction@host:3306/db")
-    assert(JDBCOptions.redactUrl("jdbc:mysql://user:p@ss@host:3306/db", None) ===
-      s"jdbc:mysql://$redaction@host:3306/db")
+      s"jdbc:mysql:$redaction")
+    assert(JDBCOptions.redactUrl("jdbc:mysql://user:p@ss@host:3306/db?password=other", None) ===
+      s"jdbc:mysql:$redaction")
+    // ... as Oracle Thin's "user/pwd@host" form (no "//" authority), ...
+    assert(JDBCOptions.redactUrl("jdbc:oracle:thin:scott/tiger@host:1521/svc", None) ===
+      s"jdbc:oracle:$redaction")
+    assert(JDBCOptions.redactUrl("jdbc:oracle:thin:scott/tiger@//host:1521/svc?x=1", None) ===
+      s"jdbc:oracle:$redaction")
+    // ... and as "?"- or ";"-delimited connection properties.
+    assert(JDBCOptions.redactUrl(
+      "jdbc:postgresql://host/db?user=alice&password=secret", None) ===
+      s"jdbc:postgresql:$redaction")
+    assert(JDBCOptions.redactUrl(
+      "jdbc:sqlserver://localhost:1433;databaseName=testdb;password=secret", None) ===
+      s"jdbc:sqlserver:$redaction")
 
-    // The entire query / connection-property portion (from the first '?' or ';') is redacted,
-    // since the credential-bearing property names are driver-specific and open-ended.
-    assert(JDBCOptions.redactUrl(
-      "jdbc:postgresql://host/db?user=alice&password=secret&ssl=true", None) ===
-      s"jdbc:postgresql://host/db?$redaction")
-    assert(JDBCOptions.redactUrl(
-      "jdbc:redshift://host:5439/db;PWD=secret;LogLevel=1", None) ===
-      s"jdbc:redshift://host:5439/db;$redaction")
-    assert(JDBCOptions.redactUrl(
-      "jdbc:sqlserver://localhost:1433;databaseName=testdb", None) ===
-      s"jdbc:sqlserver://localhost:1433;$redaction")
-    assert(JDBCOptions.redactUrl("jdbc:snowflake://host/?token=abc123", None) ===
-      s"jdbc:snowflake://host/?$redaction")
+    // Even URLs that carry no credentials are reduced to the prefix -- nothing past the
+    // subprotocol is assumed safe.
+    assert(JDBCOptions.redactUrl("jdbc:mysql://localhost/db", None) === s"jdbc:mysql:$redaction")
+    assert(JDBCOptions.redactUrl("jdbc:h2:mem:testdb", None) === s"jdbc:h2:$redaction")
 
-    // Both userinfo and the property portion in the same URL are redacted.
-    assert(JDBCOptions.redactUrl(
-      "jdbc:mysql://user:secret@host:3306/db?password=other", None) ===
-      s"jdbc:mysql://$redaction@host:3306/db?$redaction")
+    // A URL with no subname delimiter (no second colon) is redacted wholesale.
+    assert(JDBCOptions.redactUrl("jdbc:weird-url", None) === redaction)
+
+    // The user-configured regex is still applied on top of the kept prefix.
+    assert(JDBCOptions.redactUrl("jdbc:mysql://host/db", Some("mysql".r)) ===
+      s"jdbc:$redaction:$redaction")
 
     // Null and empty inputs are passed through.
     assert(JDBCOptions.redactUrl(null, None) === null)
