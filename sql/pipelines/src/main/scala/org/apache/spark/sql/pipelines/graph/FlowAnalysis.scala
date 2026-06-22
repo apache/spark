@@ -44,17 +44,19 @@ object FlowAnalysis {
       confs: Map[String, String],
       queryContext: QueryContext,
       queryOrigin: QueryOrigin) => {
+      // Flows are resolved in parallel on a shared session, so applying per-flow confs by mutating
+      // that session would race across flows. Resolve each flow against its own cloned session
+      // instead, which keeps its confs isolated from other flows and from the session the pipeline
+      // is run from.
       val ctx = FlowAnalysisContext(
         allInputs = allInputs,
         availableInputs = availableInputs,
         queryContext = queryContext,
-        spark = SparkSession.active
+        spark = SparkSession.active.cloneSession()
       )
-      val df = try {
+      val df = ctx.spark.withActive {
         confs.foreach { case (k, v) => ctx.setConf(k, v) }
         Try(FlowAnalysis.analyze(ctx, plan))
-      } finally {
-        ctx.restoreOriginalConf()
       }
       FlowFunctionResult(
         requestedInputs = ctx.requestedInputs.toSet,

@@ -20,6 +20,7 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
@@ -560,5 +561,44 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
       pipeline.resolvedFlow(identifier).schema == expected,
       s"Flow ${identifier.unquotedString} has the wrong schema"
     )
+  }
+
+  test("per-flow confs are isolated to a per-flow session during analysis") {
+    val key = "pipelines.test.flowConfIsolation"
+    assert(spark.conf.getOption(key).isEmpty)
+
+    val inputId = TableIdentifier("conf_observer")
+    // (conf seen on the active analysis session, conf seen on the run session) during load().
+    var observed: (Option[String], Option[String]) = null
+    val runSession = spark
+    val observingInput = new Input {
+      override def identifier: TableIdentifier = inputId
+      override def origin: QueryOrigin = QueryOrigin()
+      override def load(asStreaming: Boolean): DataFrame = {
+        observed = (SparkSession.active.conf.getOption(key), runSession.conf.getOption(key))
+        SparkSession.active.range(1).toDF()
+      }
+    }
+
+    val result = FlowAnalysis
+      .createFlowFunctionFromLogicalPlan(UnresolvedRelation(Seq("conf_observer")))
+      .call(
+        allInputs = Set(inputId),
+        availableInputs = Seq(observingInput),
+        configuration = Map(key -> "flowValue"),
+        queryContext = QueryContext(currentCatalog = None, currentDatabase = None),
+        queryOrigin = QueryOrigin())
+
+    assert(result.dataFrame.isSuccess, s"flow analysis failed: ${result.dataFrame}")
+    assert(observed != null, "input.load was not invoked during analysis")
+    val (activeConf, runConf) = observed
+    // The per-flow conf is applied to the session used to analyze the flow ...
+    assert(activeConf.contains("flowValue"))
+    // ... but it must not leak onto the session the pipeline is run from.
+    assert(
+      !runConf.contains("flowValue"),
+      "per-flow conf leaked onto the run session during flow analysis")
+    // ... and nothing is left behind on the run session afterwards.
+    assert(spark.conf.getOption(key).isEmpty)
   }
 }

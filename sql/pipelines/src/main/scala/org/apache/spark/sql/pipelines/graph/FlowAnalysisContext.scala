@@ -50,20 +50,12 @@ private[pipelines] case class FlowAnalysisContext(
   val availableInput: Map[TableIdentifier, Input] =
     availableInputs.map(i => i.identifier -> i).toMap
 
-  /** The confs set in this context that should be undone when exiting this context. */
-  private val confsToRestore = mutable.HashMap[String, Option[String]]()
-
-  /** Sets a Spark conf within this context that will be undone by `restoreOriginalConf`. */
+  /**
+   * Sets a Spark conf for this flow's analysis. `spark` is a per-flow session (see
+   * `FlowAnalysis.createFlowFunctionFromLogicalPlan`), so this is isolated from other flows and
+   * from the session the pipeline is run from.
+   */
   def setConf(key: String, value: String): Unit = {
-    if (!confsToRestore.contains(key)) {
-      confsToRestore.put(key, spark.conf.getOption(key))
-    }
     spark.conf.set(key, value)
-  }
-
-  /** Restores the Spark conf to its state when this context was creating by undoing confs set. */
-  def restoreOriginalConf(): Unit = confsToRestore.foreach {
-    case (k, Some(v)) => spark.conf.set(k, v)
-    case (k, None) => spark.conf.unset(k)
   }
 }
