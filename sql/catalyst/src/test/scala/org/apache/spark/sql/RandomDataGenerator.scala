@@ -318,15 +318,19 @@ object RandomDataGenerator {
             .map(s => TimestampNanosTestUtils.parseSpecialNanosLTZ(s, ZoneId.systemDefault()))
             .map(i => Instant.ofEpochSecond(i.getEpochSecond, truncate(i.getNano).toLong))
         )
-      case _: TimeType =>
+      case t: TimeType =>
         val specialTimes = Seq(
           "00:00:00",
-          "23:59:59.999999"
+          "23:59:59.999999",
+          "23:59:59.999999999"
         )
         randomNumeric[LocalTime](
           rand,
           (rand: Random) => {
-            DateTimeUtils.nanosToLocalTime(rand.between(0, 24 * 60 * 60 * 1000 * 1000L) * 1000L)
+            // The full valid range is [0, 86_399_999_999_999] nanoseconds since midnight.
+            val nanos = DateTimeUtils.truncateTimeToPrecision(
+              rand.between(0L, 24 * 60 * 60 * 1000 * 1000 * 1000L), t.precision)
+            DateTimeUtils.nanosToLocalTime(nanos)
           },
           specialTimes.map(LocalTime.parse)
         )

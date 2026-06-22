@@ -1888,6 +1888,127 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-57416: read INT64 TIME(MICROS, isAdjustedToUTC=true) as TimeType " +
+    "on both readers") {
+    // The Parquet TIME logical type may carry isAdjustedToUTC=true. Spark's TimeType is
+    // zone-less local time, so such a column is decoded as the raw micros-of-day, exactly
+    // as isAdjustedToUTC=false. Before SPARK-57416 the Types Framework row-based read guard
+    // rejected this encoding (FAILED_READ_FILE) while the vectorized path accepted it,
+    // leaving the two readers inconsistent. This pins that both readers now accept it.
+    // The column must be supplied via an explicit read schema because schema inference
+    // maps isAdjustedToUTC=true to an unsupported type.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,true));
+        |}""".stripMargin)
+    val readSchema = new StructType().add("time_micros", TimeType())
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times_utc.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(23, 59, 59, 123456) / DateTimeConstants.NANOS_PER_MICROS)
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          assertResult(df.schema)(readSchema)
+          val lt = LocalTime.of(23, 59, 59, 123456000)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("Read TimeType for the logical TIME(NANOS) type") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,false));
+        |}""".stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          // Internal storage is nanoseconds since midnight; TIME(NANOS) writes it unchanged.
+          record.add(0, localTime(23, 59, 59, 123456, 789))
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            new StructType().add("time_nanos", TimeType(TimeType.NANOS_PRECISION))
+          }
+          val lt = LocalTime.of(23, 59, 59, 123456789)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("TimeType nanosecond round-trip through Parquet") {
+    withAllParquetReaders {
+      Seq(7, 8, 9).foreach { p =>
+        withTempPath { path =>
+          val df = spark.sql(
+            s"SELECT CAST(TIME '23:59:59.123456789' AS TIME($p)) AS t")
+          df.write.parquet(path.getCanonicalPath)
+          val readBack = spark.read.parquet(path.getCanonicalPath)
+          assert(readBack.schema.head.dataType === TimeType(p))
+          checkAnswer(readBack, df)
+        }
+      }
+    }
+  }
+
+  test("Read TIME with a lower precision than the stored value truncates in both readers") {
+    // A raw TIME(NANOS) file carrying full nanosecond precision (.123456789), read back with an
+    // explicit lower precision (TIME(7)). Both the vectorized and the row-based reader must drop
+    // the sub-100ns digits (.123456789 -> .1234567); otherwise the requested type's precision is
+    // violated. Covers both the dictionary and plain decode paths.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,false));
+        |}""".stripMargin)
+    val readSchema = new StructType().add("time_nanos", TimeType(7))
+    val expected = LocalTime.of(23, 59, 59, 123456700)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(23, 59, 59, 123456, 789))
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          assertResult(df.schema)(readSchema)
+          checkAnswer(df, (0 until numRecords).map(_ => Row(expected)))
+        }
+      }
+    }
+  }
+
   // Deterministic INT32 sample shared by the INT32 widening tests below. Mixes sign,
   // zero, and MIN/MAX boundaries to catch sign-extension and precision regressions.
   private def widenSampleAt(i: Int): Int = i % 5 match {

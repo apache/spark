@@ -184,6 +184,30 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     assert(vectors.head.getTimestampLTZNanos(2) === TimestampNanosVal.fromParts(200L, 1.toShort))
   }
 
+  test("TimeType column roundtrip") {
+    Seq(0, 3, 6).foreach { precision =>
+      val schema = StructType(Seq(StructField("t", TimeType(precision))))
+      val values = Seq(0L, 12L * 60 * 60 * 1000 * 1000 * 1000, 86399999999999L)
+      val rows = values.map(v => InternalRow(v))
+      val vectors = convertRows(rows, schema)
+      values.zipWithIndex.foreach { case (v, i) =>
+        assert(vectors.head.getLong(i) === v)
+      }
+    }
+  }
+
+  test("TimeType column with nulls") {
+    val schema = StructType(Seq(StructField("t", TimeType(6), nullable = true)))
+    val rows = Seq(
+      InternalRow(0L),
+      InternalRow(null),
+      InternalRow(86399999999999L))
+    val vectors = convertRows(rows, schema)
+    assert(vectors.head.getLong(0) === 0L)
+    assert(vectors.head.isNullAt(1))
+    assert(vectors.head.getLong(2) === 86399999999999L)
+  }
+
   test("multiple columns") {
     val schema = StructType(
       Seq(StructField("s", ShortType), StructField("i", IntegerType), StructField("l", LongType)))
