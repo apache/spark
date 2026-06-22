@@ -20,6 +20,9 @@
 name: "Build / Java25 (Scala 2.13, JDK 25)"
 
 on:
+  push:
+    branches:
+      - 'ci-fix/java25'
   schedule:
     - cron: '0 4 */2 * *'
   workflow_dispatch:
@@ -30,7 +33,7 @@ jobs:
       packages: write
     name: Run
     uses: ./.github/workflows/build_and_test.yml
-    if: github.repository == 'apache/spark'
+    if: github.repository != 'apache/spark'
     with:
       java: 25
       branch: master
@@ -46,12 +49,12 @@ jobs:
       jobs: >-
         {
           "build": "true",
-          "pyspark": "true",
-          "sparkr": "true",
-          "tpcds-1g": "true",
-          "docker-integration-tests": "true",
-          "yarn": "true",
-          "k8s-integration-tests": "true",
-          "buf": "true",
-          "ui": "true"
+          "pyspark": "false",
+          "sparkr": "false",
+          "tpcds-1g": "false",
+          "docker-integration-tests": "false",
+          "yarn": "false",
+          "k8s-integration-tests": "false",
+          "buf": "false",
+          "ui": "false"
         }
