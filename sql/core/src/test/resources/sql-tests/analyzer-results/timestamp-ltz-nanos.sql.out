@@ -774,3 +774,62 @@ SELECT unix_nanos(NULL :: timestamp_ltz(9))
 -- !query analysis
 Project [unix_nanos(cast(null as timestamp_ltz(9))) AS unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(1230219000123456789)
+-- !query analysis
+Project [timestamp_nanos(1230219000123456789) AS timestamp_nanos(1230219000123456789)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(-1)
+-- !query analysis
+Project [timestamp_nanos(-1) AS timestamp_nanos(-1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(253402300799999999999BD)
+-- !query analysis
+Project [timestamp_nanos(253402300799999999999) AS timestamp_nanos(253402300799999999999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(10000000000000000000000000BD)
+-- !query analysis
+Project [timestamp_nanos(10000000000000000000000000) AS timestamp_nanos(10000000000000000000000000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(1.0D)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"INTEGRAL\" or \"DECIMAL\")",
+    "sqlExpr" : "\"timestamp_nanos(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp_nanos(1.0D)"
+  } ]
+}
+
+
+-- !query
+SELECT timestamp_nanos(CAST(NULL AS BIGINT))
+-- !query analysis
+Project [timestamp_nanos(cast(null as bigint)) AS timestamp_nanos(CAST(NULL AS BIGINT))#x]
++- OneRowRelation

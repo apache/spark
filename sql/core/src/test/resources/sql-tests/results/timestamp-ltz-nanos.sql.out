@@ -866,3 +866,76 @@ SELECT unix_nanos(NULL :: timestamp_ltz(9))
 struct<unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9))):decimal(21,0)>
 -- !query output
 NULL
+
+
+-- !query
+SELECT timestamp_nanos(1230219000123456789)
+-- !query schema
+struct<timestamp_nanos(1230219000123456789):timestamp_ltz(9)>
+-- !query output
+2008-12-25 07:30:00.123456789
+
+
+-- !query
+SELECT timestamp_nanos(-1)
+-- !query schema
+struct<timestamp_nanos(-1):timestamp_ltz(9)>
+-- !query output
+1969-12-31 15:59:59.999999999
+
+
+-- !query
+SELECT timestamp_nanos(253402300799999999999BD)
+-- !query schema
+struct<timestamp_nanos(253402300799999999999):timestamp_ltz(9)>
+-- !query output
+9999-12-31 15:59:59.999999999
+
+
+-- !query
+SELECT timestamp_nanos(10000000000000000000000000BD)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "create a TIMESTAMP_LTZ(9) from 10000000000000000000000000 nanoseconds since the epoch"
+  }
+}
+
+
+-- !query
+SELECT timestamp_nanos(1.0D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"INTEGRAL\" or \"DECIMAL\")",
+    "sqlExpr" : "\"timestamp_nanos(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp_nanos(1.0D)"
+  } ]
+}
+
+
+-- !query
+SELECT timestamp_nanos(CAST(NULL AS BIGINT))
+-- !query schema
+struct<timestamp_nanos(CAST(NULL AS BIGINT)):timestamp_ltz(9)>
+-- !query output
+NULL
