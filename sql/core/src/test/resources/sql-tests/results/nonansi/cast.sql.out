@@ -699,46 +699,25 @@ struct<CAST(CAST(1960-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7)) AS STRING):s
 -- !query
 select cast(array(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string)
 -- !query schema
-struct<>
+struct<CAST(array(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)), CAST(NULL AS TIMESTAMP_NTZ(9))) AS STRING):string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+[2020-01-01 00:00:00.123456789, null]
 
 
 -- !query
 select cast(map('k', cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9))) as string)
 -- !query schema
-struct<>
+struct<CAST(map(k, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))) AS STRING):string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+{k -> 2020-01-01 00:00:00.123456789}
 
 
 -- !query
 select cast(named_struct('f', cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9))) as string)
 -- !query schema
-struct<>
+struct<CAST(named_struct(f, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9))) AS STRING):string>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+{2020-01-01 00:00:00.123456789}
 
 
 -- !query
@@ -1182,16 +1161,9 @@ struct<CAST(-122 AS INTERVAL YEAR TO MONTH):interval year to month>
 -- !query
 select cast(ym as interval year to month) from values(-122S) as t(ym)
 -- !query schema
-struct<>
+struct<ym:interval year to month>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+-10-2
 
 
 -- !query
@@ -1221,16 +1193,9 @@ struct<CAST(100 AS INTERVAL HOUR TO SECOND):interval hour to second>
 -- !query
 select cast(dt as interval hour to second) from values(100Y) as t(dt)
 -- !query schema
-struct<>
+struct<dt:interval hour to second>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+0 00:01:40.000000000
 
 
 -- !query
@@ -1707,16 +1672,9 @@ struct<CAST(CAST(2147483648 AS BIGINT) AS INT):int>
 -- !query
 SELECT map(1, '123', 2, '456')[1] :: int
 -- !query schema
-struct<>
+struct<CAST(map(1, 123, 2, 456)[1] AS INT):int>
 -- !query output
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+123
 
 
 -- !query

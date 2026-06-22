@@ -675,9 +675,15 @@ case class Cast(
 
   final override def nodePatternsInternal(): Seq[TreePattern] = {
     // TIME -> TIMESTAMP_NTZ depends on CURRENT_DATE, so it must be visited by ComputeCurrentTime
-    // (which prunes on the CURRENT_LIKE pattern) to be stabilized within a query.
-    if (Cast.isTimeToTimestampNTZ(child.dataType, dataType)) Seq(CAST, CURRENT_LIKE)
-    else Seq(CAST)
+    // (which prunes on the CURRENT_LIKE pattern) to be stabilized within a query. Guard the
+    // child.dataType access on child.resolved: node patterns can be computed during analysis while
+    // the child is still unresolved. The pattern is recomputed for the resolved Cast instance,
+    // which is what ComputeCurrentTime sees in the optimizer.
+    if (child.resolved && Cast.isTimeToTimestampNTZ(child.dataType, dataType)) {
+      Seq(CAST, CURRENT_LIKE)
+    } else {
+      Seq(CAST)
+    }
   }
 
   override def contextIndependentFoldable: Boolean = {

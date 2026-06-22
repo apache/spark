@@ -742,40 +742,22 @@ Project [cast(cast(1960-01-01 00:00:00.123456789 as timestamp_ltz(7)) as string)
 -- !query
 select cast(array(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+Project [cast(array(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string) AS CAST(array(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)), CAST(NULL AS TIMESTAMP_NTZ(9))) AS STRING)#x]
++- OneRowRelation
 
 
 -- !query
 select cast(map('k', cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9))) as string)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+Project [cast(map(k, cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9))) as string) AS CAST(map(k, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))) AS STRING)#x]
++- OneRowRelation
 
 
 -- !query
 select cast(named_struct('f', cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9))) as string)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+Project [cast(named_struct(f, cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(9))) as string) AS CAST(named_struct(f, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9))) AS STRING)#x]
++- OneRowRelation
 
 
 -- !query
@@ -1136,14 +1118,9 @@ Project [cast(-122 as interval year to month) AS CAST(-122 AS INTERVAL YEAR TO M
 -- !query
 select cast(ym as interval year to month) from values(-122S) as t(ym)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+Project [cast(ym#x as interval year to month) AS ym#x]
++- SubqueryAlias t
+   +- LocalRelation [ym#x]
 
 
 -- !query
@@ -1170,14 +1147,9 @@ Project [cast(100 as interval hour to second) AS CAST(100 AS INTERVAL HOUR TO SE
 -- !query
 select cast(dt as interval hour to second) from values(100Y) as t(dt)
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+Project [cast(dt#x as interval hour to second) AS dt#x]
++- SubqueryAlias t
+   +- LocalRelation [dt#x]
 
 
 -- !query
@@ -1587,14 +1559,8 @@ Project [cast(cast(2147483648 as bigint) as int) AS CAST(CAST(2147483648 AS BIGI
 -- !query
 SELECT map(1, '123', 2, '456')[1] :: int
 -- !query analysis
-org.apache.spark.sql.catalyst.analysis.UnresolvedException
-{
-  "errorClass" : "INTERNAL_ERROR",
-  "sqlState" : "XX000",
-  "messageParameters" : {
-    "message" : "Invalid call to dataType on unresolved object"
-  }
-}
+Project [cast(map(1, 123, 2, 456)[1] as int) AS CAST(map(1, 123, 2, 456)[1] AS INT)#x]
++- OneRowRelation
 
 
 -- !query
