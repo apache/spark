@@ -3660,6 +3660,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                            num_legs  num_wings
         class  locomotion
         mammal walks              4          0
+
+        Get values at specified column
+
+        >>> df.xs('num_legs', axis=1)  # doctest: +NORMALIZE_WHITESPACE
+        class   animal   locomotion
+        mammal  cat      walks         4
+                dog      walks         4
+                bat      flies         2
+        bird    penguin  walks         2
+        Name: num_legs, dtype: int64
         """
         from pyspark.pandas.series import first_series
 
@@ -3758,9 +3768,22 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     len(key), self._internal.index_level
                 )
             )
-        index_level = cast(Optional[int], level)
-        if index_level is None:
+        if level is None:
             index_level = 0
+        elif isinstance(level, int):
+            index_level = level
+        else:
+            level_name = cast(Label, level if is_name_like_tuple(level) else (level,))
+            if self._internal.index_names.count(level_name) > 1:
+                raise ValueError(
+                    "The name {} occurs multiple times, use a level number".format(
+                        name_like_string(level_name)
+                    )
+                )
+            try:
+                index_level = self._internal.index_names.index(level_name)
+            except ValueError:
+                raise KeyError("Level {} not found".format(name_like_string(level_name)))
 
         rows = [
             self._internal.index_spark_columns[lvl] == index

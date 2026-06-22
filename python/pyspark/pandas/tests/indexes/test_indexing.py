@@ -115,7 +115,9 @@ class FrameIndexingMixin:
             pd.concat([pdf, pdf]).xs(("mammal", "dog", "walks")),
         )
         self.assert_eq(psdf.xs("cat", level=1), pdf.xs("cat", level=1))
+        self.assert_eq(psdf.xs("cat", level="animal"), pdf.xs("cat", level="animal"))
         self.assert_eq(psdf.xs("flies", level=2), pdf.xs("flies", level=2))
+        self.assert_eq(psdf.xs("mammal", level="class"), pdf.xs("mammal", level="class"))
         self.assert_eq(psdf.xs("mammal", level=-3), pdf.xs("mammal", level=-3))
 
         self.assert_eq(psdf.xs("num_wings", axis=1), pdf.xs("num_wings", axis=1))
