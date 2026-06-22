@@ -186,8 +186,9 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
   }
 
   test("Type mapping for various types") {
-    val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
-    val rows = df.collect().sortBy(_.toString())
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      val df = spark.read.jdbc(jdbcUrl, "bar", new Properties)
+      val rows = df.collect().sortBy(_.toString())
     assert(rows.length == 2)
     // Test the types, and values using the first row.
     val types = rows(0).toSeq.map(x => x.getClass)
@@ -283,6 +284,7 @@ class PostgresIntegrationSuite extends SharedJDBCIntegrationSuite {
 
     // Test reading null values using the second row.
     assert(0.until(16).forall(rows(1).isNullAt(_)))
+    }
   }
 
   test("Basic write test") {

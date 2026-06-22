@@ -714,12 +714,11 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("H2 time types") {
+    // With timeType.enabled=true (default in tests), TIME columns use TimeType
     val rows = sql("SELECT * FROM timetypes").collect()
+    assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
+    // DATE and TIMESTAMP columns unchanged
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
-    assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
-    assert(cal.get(Calendar.MINUTE) === 34)
-    assert(cal.get(Calendar.SECOND) === 56)
     cal.setTime(rows(0).getAs[java.sql.Timestamp](1))
     assert(cal.get(Calendar.YEAR) === 1996)
     assert(cal.get(Calendar.MONTH) === 0)

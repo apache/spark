@@ -184,14 +184,16 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
 
   test("Date types") {
     withDefaultTimeZone(UTC) {
-      val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
-      checkAnswer(df, Row(
+      withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+        val df = spark.read.jdbc(jdbcUrl, "dates", new Properties)
+        checkAnswer(df, Row(
         Date.valueOf("1991-11-09"),
         Timestamp.valueOf("1970-01-01 13:31:24"),
         Timestamp.valueOf("1996-01-01 01:23:45"),
         Timestamp.valueOf("2009-02-13 23:31:30"),
         Date.valueOf("2001-01-01"),
         Timestamp.valueOf("1970-01-01 13:31:24.123")))
+      }
     }
     val df = spark.read.format("jdbc")
       .option("url", jdbcUrl)
@@ -203,15 +205,17 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
 
   test("SPARK-47406: MySQL datetime types with preferTimestampNTZ") {
     withDefaultTimeZone(UTC) {
-      val df = spark.read.option("preferTimestampNTZ", true)
-        .jdbc(jdbcUrl, "dates", new Properties)
-      checkAnswer(df, Row(
-        Date.valueOf("1991-11-09"),
-        LocalDateTime.of(1970, 1, 1, 13, 31, 24),
-        LocalDateTime.of(1996, 1, 1, 1, 23, 45),
-        Timestamp.valueOf("2009-02-13 23:31:30"),
-        Date.valueOf("2001-01-01"),
-        LocalDateTime.of(1970, 1, 1, 13, 31, 24, 123000000)))
+      withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+        val df = spark.read.option("preferTimestampNTZ", true)
+          .jdbc(jdbcUrl, "dates", new Properties)
+        checkAnswer(df, Row(
+          Date.valueOf("1991-11-09"),
+          LocalDateTime.of(1970, 1, 1, 13, 31, 24),
+          LocalDateTime.of(1996, 1, 1, 1, 23, 45),
+          Timestamp.valueOf("2009-02-13 23:31:30"),
+          Date.valueOf("2001-01-01"),
+          LocalDateTime.of(1970, 1, 1, 13, 31, 24, 123000000)))
+      }
     }
   }
 
