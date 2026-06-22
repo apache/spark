@@ -19,13 +19,14 @@ package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
 import java.time.ZoneId
 
+import org.apache.parquet.column.ColumnDescriptor
 import org.apache.parquet.io.api.{Converter, RecordConsumer}
 import org.apache.parquet.schema.Type
 import org.apache.parquet.schema.Type.Repetition
 
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetToSparkSchemaConverter}
+import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetToSparkSchemaConverter, ParquetVectorUpdater}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType, TimeType}
 
@@ -200,6 +201,18 @@ private[parquet] trait ParquetTypeOps extends Serializable {
    * Primitive types return None (no sub-fields to clip).
    */
   def parquetStructSchema: Option[StructType] = None
+
+  // ==================== Vectorized Read ====================
+
+  /**
+   * The vectorized (batch) [[ParquetVectorUpdater]] for this type, or None to fall back to the
+   * built-in `ParquetVectorUpdaterFactory`. A type that returns Some here should also return
+   * true from [[isBatchReadSupported]]. Dispatched (Spark DataType -> ops) at the top of
+   * `ParquetVectorUpdaterFactory.getUpdater`, before its built-in cases.
+   *
+   * @param descriptor the Parquet column descriptor being read
+   */
+  def getVectorUpdater(descriptor: ColumnDescriptor): Option[ParquetVectorUpdater] = None
 }
 
 /**
@@ -224,4 +237,13 @@ private[parquet] object ParquetTypeOps {
       case _ => None
     }
   }
+
+  /**
+   * Java-friendly entry point for `ParquetVectorUpdaterFactory`: the framework vectorized
+   * updater for `dt`, or null if `dt` is not framework-managed (so the factory falls through
+   * to its built-in updaters).
+   */
+  private[parquet] def getVectorUpdaterOrNull(
+      dt: DataType, descriptor: ColumnDescriptor): ParquetVectorUpdater =
+    apply(dt).flatMap(_.getVectorUpdater(descriptor)).orNull
 }

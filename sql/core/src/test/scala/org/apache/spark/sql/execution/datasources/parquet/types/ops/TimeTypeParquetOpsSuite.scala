@@ -23,7 +23,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT32, INT64}
 import org.apache.parquet.schema.Type.Repetition.REQUIRED
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
-import org.apache.spark.sql.types.TimeType
+import org.apache.spark.sql.types.{IntegerType, TimeType}
 
 /**
  * Unit tests for [[TimeTypeParquetOps.requireCompatibleParquetType]].
@@ -117,6 +117,19 @@ class TimeTypeParquetOpsSuite extends SparkFunSuite {
   // wrong-primitive branch of requireCompatibleParquetType is unreachable for
   // the TIME annotation; the raw-INT64 / TIMESTAMP / DECIMAL / group tests
   // above already exercise the !isPrimitive and "non-TIME annotation" branches.
+
+  // ---------- vectorized read updater ----------
+
+  test("getVectorUpdater returns a framework updater for TimeType") {
+    // descriptor is unused by TimeType's updater (micros -> nanos is precision-independent).
+    assert(TimeTypeParquetOps(timeMicros).getVectorUpdater(null).isDefined)
+    // Java-friendly companion entry point used by ParquetVectorUpdaterFactory.
+    assert(ParquetTypeOps.getVectorUpdaterOrNull(timeMicros, null) != null)
+  }
+
+  test("getVectorUpdaterOrNull returns null for non-framework types") {
+    assert(ParquetTypeOps.getVectorUpdaterOrNull(IntegerType, null) == null)
+  }
 
   // ---------- helper ----------
 

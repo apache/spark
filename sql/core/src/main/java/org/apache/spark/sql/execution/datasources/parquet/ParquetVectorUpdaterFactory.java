@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime;
 import org.apache.spark.sql.execution.datasources.DataSourceUtils;
 import org.apache.spark.sql.execution.datasources.SchemaColumnConvertNotSupportedException;
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps$;
 import org.apache.spark.sql.types.*;
 
 import java.math.BigDecimal;
@@ -76,6 +77,13 @@ public class ParquetVectorUpdaterFactory {
     boolean isUnknownType = type.getLogicalTypeAnnotation() instanceof UnknownLogicalTypeAnnotation;
     if (isUnknownType && sparkType instanceof NullType) {
       return new NullTypeUpdater();
+    }
+
+    // Types Framework: a framework-managed type provides its own vectorized updater.
+    ParquetVectorUpdater frameworkUpdater =
+        ParquetTypeOps$.MODULE$.getVectorUpdaterOrNull(sparkType, descriptor);
+    if (frameworkUpdater != null) {
+      return frameworkUpdater;
     }
 
     switch (typeName) {
@@ -165,8 +173,6 @@ public class ParquetVectorUpdaterFactory {
           return new LongUpdater();
         } else if (canReadAsDecimal(descriptor, sparkType)) {
           return new LongToDecimalUpdater(descriptor, (DecimalType) sparkType);
-        } else if (sparkType instanceof TimeType) {
-          return new LongAsNanosUpdater();
         }
       }
       case FLOAT -> {
@@ -880,43 +886,6 @@ public class ParquetVectorUpdaterFactory {
       long julianMillis = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
       long julianMicros = DateTimeUtils.millisToMicros(julianMillis);
       values.putLong(offset, rebaseMicros(julianMicros, failIfRebase, timeZone));
-    }
-  }
-
-  private static class LongAsNanosUpdater implements ParquetVectorUpdater {
-    @Override
-    public void readValues(
-        int total,
-        int offset,
-        WritableColumnVector values,
-        VectorizedValuesReader valuesReader) {
-      valuesReader.readLongs(total, values, offset);
-      for (int i = 0; i < total; i++) {
-        values.putLong(offset + i, DateTimeUtils.microsToNanos(values.getLong(offset + i)));
-      }
-    }
-
-    @Override
-    public void skipValues(int total, VectorizedValuesReader valuesReader) {
-      valuesReader.skipLongs(total);
-    }
-
-    @Override
-    public void readValue(
-        int offset,
-        WritableColumnVector values,
-        VectorizedValuesReader valuesReader) {
-      values.putLong(offset, DateTimeUtils.microsToNanos(valuesReader.readLong()));
-    }
-
-    @Override
-    public void decodeSingleDictionaryId(
-        int offset,
-        WritableColumnVector values,
-        WritableColumnVector dictionaryIds,
-        Dictionary dictionary) {
-      long micros = dictionary.decodeToLong(dictionaryIds.getDictId(offset));
-      values.putLong(offset, DateTimeUtils.microsToNanos(micros));
     }
   }
 

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.parquet.types.ops
 
+import org.apache.parquet.column.{ColumnDescriptor, Dictionary}
 import org.apache.parquet.io.api.{Converter, RecordConsumer}
 import org.apache.parquet.schema.{LogicalTypeAnnotation, Type, Types}
 import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit
@@ -26,7 +27,8 @@ import org.apache.parquet.schema.Type.Repetition
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetPrimitiveConverter}
+import org.apache.spark.sql.execution.datasources.parquet.{HasParentContainerUpdater, ParentContainerUpdater, ParquetPrimitiveConverter, ParquetVectorUpdater, VectorizedValuesReader}
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, TimeType}
 
@@ -88,6 +90,11 @@ case class TimeTypeParquetOps(t: TimeType) extends ParquetTypeOps {
   // ==================== Vectorized Read ====================
 
   override def isBatchReadSupported(sqlConf: SQLConf): Boolean = true
+
+  // Spark internal: nanos-of-day; Parquet storage: INT64 micros-of-day. The updater ignores
+  // `descriptor` (the micros -> nanos conversion is the same for every TimeType precision).
+  override def getVectorUpdater(descriptor: ColumnDescriptor): Option[ParquetVectorUpdater] =
+    Some(new TimeMicrosToNanosUpdater)
 }
 
 private[ops] object TimeTypeParquetOps {
@@ -121,5 +128,43 @@ private[ops] object TimeTypeParquetOps {
       throw QueryExecutionErrors.cannotCreateParquetConverterForDataTypeError(
         sparkType, parquetType.toString)
     }
+  }
+}
+
+/**
+ * Vectorized (batch) updater for TimeType: reads INT64 micros-of-day from Parquet and converts
+ * to nanos-of-day (Spark's internal TimeType representation). Equivalent to the former
+ * `ParquetVectorUpdaterFactory.LongAsNanosUpdater`, now owned by the type's ops.
+ */
+private[ops] class TimeMicrosToNanosUpdater extends ParquetVectorUpdater {
+  override def readValues(
+      total: Int,
+      offset: Int,
+      values: WritableColumnVector,
+      valuesReader: VectorizedValuesReader): Unit = {
+    valuesReader.readLongs(total, values, offset)
+    var i = 0
+    while (i < total) {
+      values.putLong(offset + i, DateTimeUtils.microsToNanos(values.getLong(offset + i)))
+      i += 1
+    }
+  }
+
+  override def skipValues(total: Int, valuesReader: VectorizedValuesReader): Unit =
+    valuesReader.skipLongs(total)
+
+  override def readValue(
+      offset: Int,
+      values: WritableColumnVector,
+      valuesReader: VectorizedValuesReader): Unit =
+    values.putLong(offset, DateTimeUtils.microsToNanos(valuesReader.readLong()))
+
+  override def decodeSingleDictionaryId(
+      offset: Int,
+      values: WritableColumnVector,
+      dictionaryIds: WritableColumnVector,
+      dictionary: Dictionary): Unit = {
+    val micros = dictionary.decodeToLong(dictionaryIds.getDictId(offset))
+    values.putLong(offset, DateTimeUtils.microsToNanos(micros))
   }
 }
