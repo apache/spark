@@ -29,16 +29,18 @@ import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{
   CatalogV2Util,
   Identifier,
+  Table => CatalogTable,
   TableCatalog,
   TableChange,
   TableInfo
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.v2ColumnsToStructType
-import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, Expressions, Transform}
 import org.apache.spark.sql.execution.command.CreateViewCommand
 import org.apache.spark.sql.pipelines.graph.QueryOrigin.ExceptionHelpers
 import org.apache.spark.sql.pipelines.util.SchemaInferenceUtils.diffSchemas
 import org.apache.spark.sql.pipelines.util.SchemaMergingUtils
+import org.apache.spark.sql.types.StructType
 
 /**
  * `DatasetManager` is responsible for materializing tables in the catalog based on the given
@@ -278,11 +280,7 @@ object DatasetManager extends Logging {
 
     val allTransforms = partitioning ++ clustering
 
-    val existingTableOpt = if (catalog.tableExists(identifier)) {
-      Some(catalog.loadTable(identifier))
-    } else {
-      None
-    }
+    val existingTableOpt = loadTableIfExists(catalog, identifier)
 
     // Error if partitioning/clustering doesn't match
     existingTableOpt.foreach { existingTable =>
@@ -298,8 +296,14 @@ object DatasetManager extends Logging {
       }
     }
 
+    // A streaming table on a non-full-refresh run is maintained incrementally: its existing data is
+    // preserved and its schema is merged with (not replaced by) the schema computed in this run.
+    // Every other case (materialized views, and any full refresh) is recomputed from scratch:
+    // existing data is wiped and the schema is taken directly from this run's computed schema.
+    val isTableIncrementallyUpdated = table.isStreamingTable && !isFullRefresh
+
     // Wipe the data if we need to
-    if ((isFullRefresh || !table.isStreamingTable) && existingTableOpt.isDefined) {
+    if (existingTableOpt.isDefined && !isTableIncrementallyUpdated) {
       context.spark.sql(s"TRUNCATE TABLE ${table.identifier.quotedString}")
     }
 
@@ -317,31 +321,25 @@ object DatasetManager extends Logging {
       context.spark.sql(s"DROP TABLE IF EXISTS ${auxiliaryTableId.quotedString}")
     }
 
-    // Alter the table if we need to
-    existingTableOpt.foreach { existingTable =>
-      val existingSchema = v2ColumnsToStructType(existingTable.columns())
-
-      val targetSchema = if (table.isStreamingTable && !isFullRefresh) {
-        SchemaMergingUtils.mergeSchemas(existingSchema, outputSchema)
-      } else {
-        outputSchema
-      }
-
-      val columnChanges = diffSchemas(existingSchema, targetSchema)
-      val setProperties = mergedProperties.map { case (k, v) => TableChange.setProperty(k, v) }
-      catalog.alterTable(identifier, (columnChanges ++ setProperties).toArray: _*)
-    }
-
-    // Create the table if we need to
-    if (existingTableOpt.isEmpty) {
-      catalog.createTable(
-        identifier,
-        new TableInfo.Builder()
-          .withProperties(mergedProperties.asJava)
-          .withColumns(CatalogV2Util.structTypeToV2Columns(outputSchema))
-          .withPartitions(allTransforms.toArray)
-          .build()
-      )
+    // Create the table if absent, otherwise evolve it (schema + properties).
+    existingTableOpt match {
+      case Some(existingTable) =>
+        evolveTableInCatalog(
+          catalog = catalog,
+          tableIdentifier = identifier,
+          existingTable = existingTable,
+          desiredSchema = outputSchema,
+          properties = mergedProperties,
+          mergeWithExistingSchema = isTableIncrementallyUpdated
+        )
+      case None =>
+        createTableInCatalog(
+          catalog = catalog,
+          tableIdentifier = identifier,
+          schema = outputSchema,
+          properties = mergedProperties,
+          transforms = allTransforms
+        )
     }
 
     table.copy(
@@ -349,6 +347,70 @@ object DatasetManager extends Logging {
         catalog.loadTable(identifier).properties().get(TableCatalog.PROP_LOCATION)
       )
     )
+  }
+
+  /** Loads the table at `identifier` from `catalog`, or `None` if it does not exist. */
+  private def loadTableIfExists(
+      catalog: TableCatalog,
+      identifier: Identifier): Option[CatalogTable] = {
+    Option.when(catalog.tableExists(identifier))(catalog.loadTable(identifier))
+  }
+
+  /**
+   * Creates the table at `identifier` with the given schema, properties, and partition/cluster
+   * transforms. Used when no table yet exists at the identifier.
+   *
+   * @param schema     the schema to create the table with.
+   * @param properties the table properties to create the table with.
+   * @param transforms the partition/cluster transforms to create the table with.
+   */
+  private def createTableInCatalog(
+      catalog: TableCatalog,
+      tableIdentifier: Identifier,
+      schema: StructType,
+      properties: Map[String, String],
+      transforms: Seq[Transform]): Unit = {
+    catalog.createTable(
+      tableIdentifier,
+      new TableInfo.Builder()
+        .withProperties(properties.asJava)
+        .withColumns(CatalogV2Util.structTypeToV2Columns(schema))
+        .withPartitions(transforms.toArray)
+        .build()
+    )
+  }
+
+  /**
+   * Evolves the already-existing `existingTable` at `identifier` in place by diffing its schema and
+   * (re)setting its properties. Partitioning/clustering cannot change in place, so no transforms are
+   * accepted here.
+   *
+   * @param existingTable           the currently materialized table.
+   * @param desiredSchema           the schema the table should have as computed in the current
+   *                                execution (the user-specified or inferred schema). This is the
+   *                                "incoming" side and may differ from `existingTable`'s recorded
+   *                                schema due to schema evolution across runs.
+   * @param properties              the table properties to (re)set on evolve.
+   * @param mergeWithExistingSchema whether the effective schema is the merge of the existing and
+   *                                desired schemas (additive evolution) rather than the desired
+   *                                schema as-is.
+   */
+  private def evolveTableInCatalog(
+      catalog: TableCatalog,
+      tableIdentifier: Identifier,
+      existingTable: CatalogTable,
+      desiredSchema: StructType,
+      properties: Map[String, String],
+      mergeWithExistingSchema: Boolean): Unit = {
+    val currentSchema = v2ColumnsToStructType(existingTable.columns())
+    val targetSchema = if (mergeWithExistingSchema) {
+      SchemaMergingUtils.mergeSchemas(currentSchema, desiredSchema)
+    } else {
+      desiredSchema
+    }
+    val columnChanges = diffSchemas(currentSchema, targetSchema)
+    val setProperties = properties.map { case (k, v) => TableChange.setProperty(k, v) }
+    catalog.alterTable(tableIdentifier, (columnChanges ++ setProperties).toArray: _*)
   }
 
   /**
