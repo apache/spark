@@ -643,6 +643,18 @@ Project [unix_timestamp(cast(null as timestamp_ntz(9)), yyyy-MM-dd HH:mm:ss, Som
 
 
 -- !query
+SELECT max_by(v, k), min_by(v, k) FROM VALUES
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', 1),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', 3),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000500', 2),
+  (TIMESTAMP_NTZ '2020-01-01 00:00:00.000000007', CAST(NULL AS INT)) AS t(v, k)
+-- !query analysis
+Aggregate [max_by(v#x, k#x) AS max_by(v, k)#x, min_by(v#x, k#x) AS min_by(v, k)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x, k#x]
+
+
+-- !query
 SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')
 -- !query analysis
 Project [unix_nanos(2020-01-01 13:24:35.123456789) AS unix_nanos(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x]

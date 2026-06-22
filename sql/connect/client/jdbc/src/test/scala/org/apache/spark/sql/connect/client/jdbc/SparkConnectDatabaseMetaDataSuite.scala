@@ -667,7 +667,10 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
           |  col_timestamp TIMESTAMP,
           |  col_timestamp_ntz TIMESTAMP_NTZ,
           |  col_binary BINARY,
-          |  col_time TIME)""".stripMargin)
+          |  col_time TIME,
+          |  col_array ARRAY<INT>,
+          |  col_map MAP<STRING, INT>,
+          |  col_struct STRUCT<a: INT, b: STRING>)""".stripMargin)
 
       spark.sql(
         """CREATE VIEW IF NOT EXISTS spark_catalog.db1.t1_v AS
@@ -720,6 +723,9 @@ class SparkConnectDatabaseMetaDataSuite extends ConnectFunSuite with RemoteSpark
                 ("spark_catalog", "db1", "t2", 13, "col_timestamp_ntz"),
                 ("spark_catalog", "db1", "t2", 14, "col_binary"),
                 ("spark_catalog", "db1", "t2", 15, "col_time"),
+                ("spark_catalog", "db1", "t2", 16, "col_array"),
+                ("spark_catalog", "db1", "t2", 17, "col_map"),
+                ("spark_catalog", "db1", "t2", 18, "col_struct"),
                 ("spark_catalog", "db_", "t_", 1, "id"),
                 ("spark_catalog", "db_", "t_", 2, "i_"),
                 ("spark_catalog", "db_2", "t_2", 1, "id"),
