@@ -32,7 +32,13 @@ import org.apache.spark.sql
  * via the gRPC API using an in-process connect server.
  */
 trait SessionQueryTest extends sql.SessionQueryTest with SparkSessionBinder {
-  final override def isDfSorted(df: sql.DataFrame): Boolean = false // TODO
+
+  /**
+   * TODO add required test-only API to Spark Connect
+   * This method is used by [[checkAnswer]] internally but cannot yet be implemented in connect.
+   * Thus we always return `false` for now.
+   */
+  override def isDfSorted(df: sql.DataFrame): Boolean = false
 
   override def sessionType: String = "connect"
 }
