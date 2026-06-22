@@ -54,6 +54,10 @@ public enum ByteUnit {
     if (d < 0) {
       throw new IllegalArgumentException("Negative size value. Size must be positive: " + d);
     }
+    if (Long.MAX_VALUE / multiplier < d) {
+      throw new IllegalArgumentException("Conversion of " + d + " " + name()
+        + " to bytes exceeds Long.MAX_VALUE");
+    }
     return d * multiplier;
   }
 
