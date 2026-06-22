@@ -451,7 +451,8 @@ public class GcmTransportCipher implements TransportCipher {
                         int expectedRemaining = (int) (expectedLength - ciphertextRead);
                         int bytesToRead = Math.min(readableBytes, expectedRemaining);
                         // The smallest ciphertext size is 16 bytes for the auth tag
-                        ((Buffer) ciphertextBuffer).limit(ciphertextBuffer.position() + bytesToRead);
+                        ((Buffer) ciphertextBuffer).limit(
+                            ciphertextBuffer.position() + bytesToRead);
                         ciphertextNettyBuf.readBytes(ciphertextBuffer);
                         ciphertextRead += bytesToRead;
                         // Check if this is the last segment
