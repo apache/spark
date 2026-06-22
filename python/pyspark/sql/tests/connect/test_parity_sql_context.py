@@ -14,17 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# PEP 563: make annotations lazy strings so the ``-> SQLContext`` return annotation
-# below is not evaluated at class-definition (collection) time. SQLContext is only
-# imported when should_test_connect is True (grpc present); without this, collecting
-# this module on a classic-only / no-grpc image would raise NameError at def time.
-from __future__ import annotations
-
 import warnings
 
 from pyspark.sql.tests.test_sql_context import SQLContextTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
 
+# Connect SQLContext is only importable when grpc is present, so the import is guarded and the
+# ``-> "SQLContext"`` annotation below is quoted to avoid evaluating it when grpc is absent.
 if should_test_connect:
     from pyspark.sql.connect.context import SQLContext
 
@@ -38,7 +34,7 @@ class SQLContextParityTests(SQLContextTestsMixin, ReusedConnectTestCase):
         super().tearDown()
         SQLContext._instantiatedContext = None
 
-    def _make_ctx(self) -> SQLContext:
+    def _make_ctx(self) -> "SQLContext":
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             return SQLContext(self.spark)
