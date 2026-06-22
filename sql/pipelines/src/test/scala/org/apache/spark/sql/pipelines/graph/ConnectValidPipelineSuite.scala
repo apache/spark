@@ -20,8 +20,9 @@ package org.apache.spark.sql.pipelines.graph
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.Union
-import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.autocdc.{ChangeArgs, ScdType, UnqualifiedColumnName}
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -563,20 +564,20 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
     )
   }
 
-  test("per-flow confs are isolated to a per-flow session during analysis") {
+  test("per-flow confs are visible to the analyzer but do not leak onto the run session") {
     val key = "pipelines.test.flowConfIsolation"
     assert(spark.conf.getOption(key).isEmpty)
 
     val inputId = TableIdentifier("conf_observer")
-    // (conf seen on the active analysis session, conf seen on the run session) during load().
+    // (conf the analyzer reads via SQLConf.get, conf on the run session) captured during load().
     var observed: (Option[String], Option[String]) = null
     val runSession = spark
     val observingInput = new Input {
       override def identifier: TableIdentifier = inputId
       override def origin: QueryOrigin = QueryOrigin()
       override def load(asStreaming: Boolean): DataFrame = {
-        observed = (SparkSession.active.conf.getOption(key), runSession.conf.getOption(key))
-        SparkSession.active.range(1).toDF()
+        observed = (SQLConf.get.getAllConfs.get(key), runSession.conf.getOption(key))
+        runSession.range(1).toDF()
       }
     }
 
@@ -591,14 +592,73 @@ class ConnectValidPipelineSuite extends PipelineTest with SharedSparkSession {
 
     assert(result.dataFrame.isSuccess, s"flow analysis failed: ${result.dataFrame}")
     assert(observed != null, "input.load was not invoked during analysis")
-    val (activeConf, runConf) = observed
-    // The per-flow conf is applied to the session used to analyze the flow ...
-    assert(activeConf.contains("flowValue"))
+    val (analyzerConf, runConf) = observed
+    // The per-flow conf is what the analyzer reads ...
+    assert(analyzerConf.contains("flowValue"))
     // ... but it must not leak onto the session the pipeline is run from.
     assert(
       !runConf.contains("flowValue"),
       "per-flow conf leaked onto the run session during flow analysis")
     // ... and nothing is left behind on the run session afterwards.
+    assert(spark.conf.getOption(key).isEmpty)
+  }
+
+  test("per-flow confs stay isolated when flows are resolved in parallel") {
+    val key = "pipelines.test.flowConfIsolation"
+    assert(spark.conf.getOption(key).isEmpty)
+
+    val numFlows = 8
+    val runSession = spark
+    // The conf value each flow's analyzer reads for `key`.
+    val observed = new java.util.concurrent.ConcurrentHashMap[Int, String]()
+    val errors = new java.util.concurrent.ConcurrentLinkedQueue[Throwable]()
+    // Rendezvous so every flow is mid-analysis - its per-flow conf already applied - at the same
+    // time. That is exactly when applying confs to a shared session would let one flow observe
+    // another flow's value.
+    val barrier = new java.util.concurrent.CyclicBarrier(numFlows)
+
+    def observingInput(i: Int): Input = new Input {
+      override def identifier: TableIdentifier = TableIdentifier(s"conf_observer_$i")
+      override def origin: QueryOrigin = QueryOrigin()
+      override def load(asStreaming: Boolean): DataFrame = {
+        barrier.await(60, java.util.concurrent.TimeUnit.SECONDS)
+        observed.put(i, SQLConf.get.getConfString(key, "<unset>"))
+        runSession.range(1).toDF()
+      }
+    }
+
+    val threads = (0 until numFlows).map { i =>
+      val t = new Thread(() => {
+        try {
+          val result = FlowAnalysis
+            .createFlowFunctionFromLogicalPlan(UnresolvedRelation(Seq(s"conf_observer_$i")))
+            .call(
+              allInputs = Set(TableIdentifier(s"conf_observer_$i")),
+              availableInputs = Seq(observingInput(i)),
+              configuration = Map(key -> s"flowValue_$i"),
+              queryContext = QueryContext(currentCatalog = None, currentDatabase = None),
+              queryOrigin = QueryOrigin())
+          result.dataFrame.failed.foreach(errors.add)
+        } catch {
+          case t: Throwable => errors.add(t)
+        }
+      })
+      t.setName(s"flow-conf-isolation-$i")
+      t.start()
+      t
+    }
+    threads.foreach(_.join(120000))
+
+    assert(errors.isEmpty, s"flow analysis threads failed: ${errors.toArray.mkString(", ")}")
+    assert(
+      observed.size() == numFlows,
+      s"only ${observed.size()} of $numFlows flows recorded a conf")
+    (0 until numFlows).foreach { i =>
+      assert(
+        observed.get(i) == s"flowValue_$i",
+        s"flow $i observed '${observed.get(i)}' instead of its own per-flow conf")
+    }
+    // Nothing leaks onto the run session.
     assert(spark.conf.getOption(key).isEmpty)
   }
 }

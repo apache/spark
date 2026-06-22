@@ -21,6 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A context used when evaluating a `Flow`'s query into a concrete DataFrame.
@@ -30,7 +31,12 @@ import org.apache.spark.sql.classic.SparkSession
  * @param queryContext         The context of the query being evaluated.
  * @param requestedInputs      A mutable buffer populated with names of all inputs that were
  *                             requested.
- * @param spark                the spark session to be used.
+ * @param spark                The (shared) spark session to be used.
+ * @param flowConf             A private [[SQLConf]] holding this flow's per-flow confs. It is
+ *                             installed for the analyzing thread via `SQLConf.withExistingConf`
+ *                             (see `FlowAnalysis.createFlowFunctionFromLogicalPlan`) so per-flow
+ *                             confs stay isolated from concurrently resolving flows and from the
+ *                             shared session, without cloning the session.
  * @param externalInputs The names of external inputs that were used to evaluate
  *                                 the flow's query.
  */
@@ -43,6 +49,7 @@ private[pipelines] case class FlowAnalysisContext(
     requestedInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty,
     shouldLowerCaseNames: Boolean = false,
     spark: SparkSession,
+    flowConf: SQLConf,
     externalInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty
 ) {
 
@@ -51,11 +58,11 @@ private[pipelines] case class FlowAnalysisContext(
     availableInputs.map(i => i.identifier -> i).toMap
 
   /**
-   * Sets a Spark conf for this flow's analysis. `spark` is a per-flow session (see
-   * `FlowAnalysis.createFlowFunctionFromLogicalPlan`), so this is isolated from other flows and
-   * from the session the pipeline is run from.
+   * Sets a Spark conf for this flow's analysis. It is set on the per-flow [[flowConf]], which is
+   * active for the analyzing thread only, so it does not leak to other flows or to the shared
+   * session.
    */
   def setConf(key: String, value: String): Unit = {
-    spark.conf.set(key, value)
+    flowConf.setConfString(key, value)
   }
 }

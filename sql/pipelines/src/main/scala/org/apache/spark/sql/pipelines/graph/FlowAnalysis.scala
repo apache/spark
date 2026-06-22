@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.classic.{DataFrame, DataFrameReader, Dataset, DataStreamReader, SparkSession}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{ExternalDatasetIdentifier, InternalDatasetIdentifier}
 
 
@@ -45,16 +46,20 @@ object FlowAnalysis {
       queryContext: QueryContext,
       queryOrigin: QueryOrigin) => {
       // Flows are resolved in parallel on a shared session, so applying per-flow confs by mutating
-      // that session would race across flows. Resolve each flow against its own cloned session
-      // instead, which keeps its confs isolated from other flows and from the session the pipeline
-      // is run from.
+      // that session's conf would race across flows. Instead, give each flow a private SQLConf
+      // (a clone of the session's conf plus this flow's overrides) and install it for the analyzing
+      // thread via SQLConf.withExistingConf. Analysis still runs on the shared session, so its
+      // catalog and the resolved DataFrames are unaffected; only the confs the analyzer reads are
+      // isolated per flow.
+      val spark = SparkSession.active
       val ctx = FlowAnalysisContext(
         allInputs = allInputs,
         availableInputs = availableInputs,
         queryContext = queryContext,
-        spark = SparkSession.active.cloneSession()
+        spark = spark,
+        flowConf = spark.sessionState.conf.clone()
       )
-      val df = ctx.spark.withActive {
+      val df = SQLConf.withExistingConf(ctx.flowConf) {
         confs.foreach { case (k, v) => ctx.setConf(k, v) }
         Try(FlowAnalysis.analyze(ctx, plan))
       }
@@ -231,7 +236,7 @@ object FlowAnalysis {
     // pass through trivially as their [[VirtualTableInput.load]] honors `asStreaming` by
     // construction. The check only ever fires for flows.
     val incompatibleViewReadCheck =
-      ctx.spark.conf.get("pipelines.incompatibleViewCheck.enabled", "true").toBoolean
+      ctx.flowConf.getConfString("pipelines.incompatibleViewCheck.enabled", "true").toBoolean
 
     if (incompatibleViewReadCheck && isStreamingRead && !inputDF.isStreaming) {
       throw new AnalysisException(
