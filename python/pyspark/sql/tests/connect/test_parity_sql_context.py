@@ -14,6 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# PEP 563: make annotations lazy strings so the ``-> SQLContext`` return annotation
+# below is not evaluated at class-definition (collection) time. SQLContext is only
+# imported when should_test_connect is True (grpc present); without this, collecting
+# this module on a classic-only / no-grpc image would raise NameError at def time.
+from __future__ import annotations
+
 import warnings
 
 from pyspark.sql.tests.test_sql_context import SQLContextTestsMixin

@@ -14,6 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# PEP 563: make annotations lazy strings so any annotation referencing a
+# grpc-only connect type is never evaluated at class-definition time. The
+# connect.context imports below are guarded by should_test_connect, so on a
+# classic-only / no-grpc image those names are undefined; lazy annotations keep
+# module collection from raising NameError there.
+from __future__ import annotations
 
 import os
 import warnings
