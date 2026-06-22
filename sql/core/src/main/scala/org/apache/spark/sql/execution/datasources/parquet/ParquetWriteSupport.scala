@@ -307,10 +307,6 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
           recordConsumer.addLong(
             timestampNanosToEpochNanos(row.getTimestampNTZNanos(ordinal), isNtz = true))
 
-      case _: TimeType =>
-        (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addLong(DateTimeUtils.nanosToMicros(row.getLong(ordinal)))
-
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
           recordConsumer.addBinary(Binary.fromReusedByteArray(row.getBinary(ordinal)))
