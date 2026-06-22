@@ -21,7 +21,7 @@ import java.util.Locale
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Ascending, ByteLiteral, EqualTo, Expression, IntegerLiteral, Literal, ShortLiteral, SortOrder, StringLiteral}
+import org.apache.spark.sql.catalyst.expressions.{EqualTo, Expression, IntegerLiteral, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin

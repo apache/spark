@@ -120,7 +120,7 @@ case class ShardExchangeExec(
             child,
             REPARTITION_BY_NUM).execute()
           val sharded = new ShardedRowRDD(shuffled, getPreferredHosts(shuffled.partitions.length))
-          val bfCapacityPerShard = conf.getConf(SQLConf.DISTRIBUTED_MAP_JOIN_BLOOM_FILTER_CAPACITY)
+          val bloomCapacity = conf.getConf(SQLConf.DISTRIBUTED_MAP_JOIN_BLOOM_FILTER_CAPACITY)
           val filterBytes: Option[(Array[Byte], Array[Byte])] = filterExpr.map { expr =>
             val ser = SparkEnv.get.serializer.newInstance()
             val exprBytes = ser.serialize(expr).array()
@@ -133,7 +133,6 @@ case class ShardExchangeExec(
           val shardIds =
             sharded
               .mapPartitionsWithIndexInternal { case (shardId, rowIter) =>
-                val bloomCapacity = bfCapacityPerShard * numShards
                 val bf = BloomFilter.create(bloomCapacity, 0.03d)
                 val keyGenerator = UnsafeProjection.create(buildBoundKeys)
                 val iter = rowIter.map { row =>

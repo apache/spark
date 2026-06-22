@@ -7605,8 +7605,8 @@ object SQLConf {
 
   val DISTRIBUTED_MAP_JOIN_BLOOM_FILTER_CAPACITY =
     buildConf("spark.sql.execution.distributedMapJoin.bloomFilterCapacity")
-      .doc("Expected number of distinct keys per shard for the build-side bloom filter. " +
-        "The total bloom filter capacity is this value multiplied by the number of shards.")
+      .doc("Total capacity (expected number of distinct keys) for the build-side bloom filter " +
+        "used in distributed map join.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .longConf
