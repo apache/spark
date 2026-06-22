@@ -18,8 +18,7 @@ import os
 import tempfile
 import warnings
 
-from pyspark import SQLContext
-from pyspark.sql import SparkSession
+from pyspark.sql import SQLContext, SparkSession
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
