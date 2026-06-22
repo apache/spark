@@ -106,13 +106,15 @@ trait ConstraintHelper {
     if (bindings.isEmpty) return ExpressionSet()
 
     val targets = constraints.filterNot {
-      // EqualTo: substituting into attr=attr is already covered by inferAdditionalConstraints
-      // (transitivity), and substituting into cast-equality forms would produce redundant cast
-      // literals already derivable from that same path.
+      // attr=attr EqualTo: already covered by inferAdditionalConstraints (transitivity).
+      // cast-equality EqualTo: would produce redundant cast literals derivable from that path.
       // EqualNullSafe: substituting a literal produces a structurally distinct b <=> lit form
       // that subquery-reuse matching treats differently from b = lit, causing duplicate subqueries.
       // IsNotNull: handled separately by constructIsNotNullConstraints.
-      case _: EqualTo | _: EqualNullSafe | _: IsNotNull => true
+      case EqualTo(_: Attribute, _: Attribute) => true
+      case EqualTo(Cast(_: Attribute, _, _, _), _: Attribute) => true
+      case EqualTo(_: Attribute, Cast(_: Attribute, _, _, _)) => true
+      case _: EqualNullSafe | _: IsNotNull => true
       case _ => false
     }
 

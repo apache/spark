@@ -442,7 +442,7 @@ class ConstraintPropagationSuite extends PlanTest {
       LessThanOrEqual(b, Add(a, Literal(10)))))
 
     val helper = new ConstraintHelper {}
-    val inferred = helper.inferAdditionalConstraints(constraints)
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
 
     // b >= 5 must be inferred
     assert(inferred.exists {
@@ -471,7 +471,7 @@ class ConstraintPropagationSuite extends PlanTest {
       GreaterThanOrEqual(b, a)))
 
     val helper = new ConstraintHelper {}
-    val inferred = helper.inferAdditionalConstraints(constraints)
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
 
     assert(inferred.exists {
       case GreaterThanOrEqual(attr: Attribute, Literal(v, IntegerType)) =>
@@ -490,7 +490,7 @@ class ConstraintPropagationSuite extends PlanTest {
       EqualTo(b, Add(a, Literal(1)))))
 
     val helper = new ConstraintHelper {}
-    val inferred = helper.inferAdditionalConstraints(constraints)
+    val inferred = helper.inferConstraintsFromLiteralBindings(constraints)
 
     // b = a + 1 with a = 5 should infer b = 5 + 1 (foldable to 6)
     assert(inferred.exists {
