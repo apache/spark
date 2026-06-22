@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 import unittest
+from unittest import mock
 
 from pyspark.testing.connectutils import (
     ReusedConnectTestCase,
@@ -88,6 +89,25 @@ class AddPipelineAnalysisContextTests(ReusedConnectTestCase):
             self.assertEqual(context_3.flow_name, "")
         thread_local_extensions_after_2 = self.spark.client.thread_local.user_context_extensions
         self.assertEqual(len(thread_local_extensions_after_2), 0)
+
+    def test_setup_failure_does_not_mask_original_error(self):
+        # If registering the extension fails, the cleanup in `finally` must skip
+        # remove_user_context_extension(None) - which would raise AttributeError - so the original
+        # error is the one that propagates.
+        with mock.patch.object(
+            self.spark.client,
+            "add_threadlocal_user_context_extension",
+            side_effect=ValueError("boom"),
+        ):
+            with self.assertRaises(ValueError):
+                with add_pipeline_analysis_context(self.spark, "test_dataflow_graph_id", None):
+                    pass
+        # A failed setup should not leave an extension registered. Read lazily, since the
+        # attribute is only created on first successful registration, which never happens here.
+        thread_local_extensions = getattr(
+            self.spark.client.thread_local, "user_context_extensions", []
+        )
+        self.assertEqual(len(thread_local_extensions), 0)
 
 
 if __name__ == "__main__":
