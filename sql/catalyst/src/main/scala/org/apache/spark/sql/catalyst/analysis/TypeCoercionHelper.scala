@@ -266,6 +266,10 @@ abstract class TypeCoercionHelper {
       // stricter explicit-only stance is deliberately scoped to up-cast and store assignment, not
       // to common-type resolution.
       case _ =>
+        // Fractional-seconds precision of the microsecond timestamp types; the nanos types carry
+        // 7-9. DATE has no time component and is treated as the micro precision so that
+        // DATE <-> micro widens to the micro type and DATE <-> nanos to the nanos type.
+        val MicrosPrecision = 6
         def isLtz(d: DatetimeType): Boolean =
           d.isInstanceOf[TimestampType] || d.isInstanceOf[TimestampLTZNanosType]
         def isNtz(d: DatetimeType): Boolean =
@@ -273,7 +277,7 @@ abstract class TypeCoercionHelper {
         def precisionOf(d: DatetimeType): Int = d match {
           case t: TimestampLTZNanosType => t.precision
           case t: TimestampNTZNanosType => t.precision
-          case _ => 6 // DateType / TimestampType / TimestampNTZType
+          case _ => MicrosPrecision // DateType / TimestampType / TimestampNTZType
         }
         // Beyond TimeType (handled above), the only datetime types are DATE and the micro/nanos
         // timestamp families. Guard so that a future DatetimeType subtype fails fast here instead
@@ -290,9 +294,9 @@ abstract class TypeCoercionHelper {
         } else {
           val p = math.max(precisionOf(d1), precisionOf(d2))
           if (isLtz(d1) || isLtz(d2)) {
-            Some(if (p <= 6) TimestampType else TimestampLTZNanosType(p))
+            Some(if (p <= MicrosPrecision) TimestampType else TimestampLTZNanosType(p))
           } else {
-            Some(if (p <= 6) TimestampNTZType else TimestampNTZNanosType(p))
+            Some(if (p <= MicrosPrecision) TimestampNTZType else TimestampNTZNanosType(p))
           }
         }
     }

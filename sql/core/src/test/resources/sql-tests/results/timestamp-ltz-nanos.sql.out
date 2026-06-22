@@ -809,6 +809,18 @@ NULL	NULL
 
 
 -- !query
+SELECT max_by(v, k), min_by(v, k) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000007 UTC', CAST(NULL AS INT)) AS t(v, k)
+-- !query schema
+struct<max_by(v, k):timestamp_ltz(9),min_by(v, k):timestamp_ltz(9)>
+-- !query output
+2019-12-31 16:00:00.000000999	2019-12-31 16:00:00.000000001
+
+
+-- !query
 SELECT unix_nanos(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 -- !query schema
 struct<unix_nanos(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789'):decimal(21,0)>
@@ -852,6 +864,79 @@ struct<unix_nanos(TIMESTAMP_LTZ '1959-12-31 16:00:00.000000001'):decimal(21,0)>
 SELECT unix_nanos(NULL :: timestamp_ltz(9))
 -- !query schema
 struct<unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9))):decimal(21,0)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT timestamp_nanos(1230219000123456789)
+-- !query schema
+struct<timestamp_nanos(1230219000123456789):timestamp_ltz(9)>
+-- !query output
+2008-12-25 07:30:00.123456789
+
+
+-- !query
+SELECT timestamp_nanos(-1)
+-- !query schema
+struct<timestamp_nanos(-1):timestamp_ltz(9)>
+-- !query output
+1969-12-31 15:59:59.999999999
+
+
+-- !query
+SELECT timestamp_nanos(253402300799999999999BD)
+-- !query schema
+struct<timestamp_nanos(253402300799999999999):timestamp_ltz(9)>
+-- !query output
+9999-12-31 15:59:59.999999999
+
+
+-- !query
+SELECT timestamp_nanos(10000000000000000000000000BD)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkArithmeticException
+{
+  "errorClass" : "DATETIME_OVERFLOW",
+  "sqlState" : "22008",
+  "messageParameters" : {
+    "operation" : "create a TIMESTAMP_LTZ(9) from 10000000000000000000000000 nanoseconds since the epoch"
+  }
+}
+
+
+-- !query
+SELECT timestamp_nanos(1.0D)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"INTEGRAL\" or \"DECIMAL\")",
+    "sqlExpr" : "\"timestamp_nanos(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp_nanos(1.0D)"
+  } ]
+}
+
+
+-- !query
+SELECT timestamp_nanos(CAST(NULL AS BIGINT))
+-- !query schema
+struct<timestamp_nanos(CAST(NULL AS BIGINT)):timestamp_ltz(9)>
 -- !query output
 NULL
 
@@ -961,6 +1046,16 @@ SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ltz(9),
 struct<map(min, CAST(0001-01-01 00:00:00.000000001 AS TIMESTAMP_LTZ(9)), max, TIMESTAMP '9999-12-31 23:59:59.999999'):map<string,timestamp_ltz(9)>>
 -- !query output
 {"max":9999-12-31 23:59:59.999999,"min":0001-01-01 00:00:00.000000001}
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    TIMESTAMP_NTZ '2026-06-21 10:16:30.123456789',
+    '1970-01-01 00:00:00.000000001 UTC' :: timestamp_ltz(9)) AS v)
+-- !query schema
+struct<typeof(v):string,v:timestamp_ltz(9)>
+-- !query output
+timestamp_ltz(9)	2026-06-21 10:16:30.123456789
 
 
 -- !query

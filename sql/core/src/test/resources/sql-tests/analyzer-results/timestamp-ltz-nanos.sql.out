@@ -723,6 +723,18 @@ Project [unix_timestamp(cast(null as timestamp_ltz(9)), yyyy-MM-dd HH:mm:ss, Som
 
 
 -- !query
+SELECT max_by(v, k), min_by(v, k) FROM VALUES
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000001 UTC', 1),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999 UTC', 3),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000500 UTC', 2),
+  (TIMESTAMP_LTZ '2020-01-01 00:00:00.000000007 UTC', CAST(NULL AS INT)) AS t(v, k)
+-- !query analysis
+Aggregate [max_by(v#x, k#x) AS max_by(v, k)#x, min_by(v#x, k#x) AS min_by(v, k)#x]
++- SubqueryAlias t
+   +- LocalRelation [v#x, k#x]
+
+
+-- !query
 SELECT unix_nanos(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789 UTC')
 -- !query analysis
 Project [unix_nanos(2020-01-01 05:24:35.123456789) AS unix_nanos(TIMESTAMP_LTZ '2020-01-01 05:24:35.123456789')#x]
@@ -761,6 +773,65 @@ Project [unix_nanos(1959-12-31 16:00:00.000000001) AS unix_nanos(TIMESTAMP_LTZ '
 SELECT unix_nanos(NULL :: timestamp_ltz(9))
 -- !query analysis
 Project [unix_nanos(cast(null as timestamp_ltz(9))) AS unix_nanos(CAST(NULL AS TIMESTAMP_LTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(1230219000123456789)
+-- !query analysis
+Project [timestamp_nanos(1230219000123456789) AS timestamp_nanos(1230219000123456789)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(-1)
+-- !query analysis
+Project [timestamp_nanos(-1) AS timestamp_nanos(-1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(253402300799999999999BD)
+-- !query analysis
+Project [timestamp_nanos(253402300799999999999) AS timestamp_nanos(253402300799999999999)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(10000000000000000000000000BD)
+-- !query analysis
+Project [timestamp_nanos(10000000000000000000000000) AS timestamp_nanos(10000000000000000000000000)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_nanos(1.0D)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1.0\"",
+    "inputType" : "\"DOUBLE\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"INTEGRAL\" or \"DECIMAL\")",
+    "sqlExpr" : "\"timestamp_nanos(1.0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "timestamp_nanos(1.0D)"
+  } ]
+}
+
+
+-- !query
+SELECT timestamp_nanos(CAST(NULL AS BIGINT))
+-- !query analysis
+Project [timestamp_nanos(cast(null as bigint)) AS timestamp_nanos(CAST(NULL AS BIGINT))#x]
 +- OneRowRelation
 
 
@@ -857,6 +928,17 @@ SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ltz(9),
     'max', TIMESTAMP_LTZ '9999-12-31 23:59:59.999999')
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT typeof(v), v FROM (SELECT coalesce(
+    TIMESTAMP_NTZ '2026-06-21 10:16:30.123456789',
+    '1970-01-01 00:00:00.000000001 UTC' :: timestamp_ltz(9)) AS v)
+-- !query analysis
+Project [typeof(v#x) AS typeof(v)#x, v#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Project [coalesce(cast(2026-06-21 10:16:30.123456789 as timestamp_ltz(9)), cast(1970-01-01 00:00:00.000000001 UTC as timestamp_ltz(9))) AS v#x]
+      +- OneRowRelation
 
 
 -- !query

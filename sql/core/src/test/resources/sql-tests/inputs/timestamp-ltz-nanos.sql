@@ -293,8 +293,14 @@ SELECT map('min', '0001-01-01 00:00:00.000000001' :: timestamp_ltz(9),
     'max', TIMESTAMP_LTZ '9999-12-31 23:59:59.999999');
 
 -- Mixed time-zone families widen to the LTZ family (mirrors TIMESTAMP + TIMESTAMP_NTZ -> TIMESTAMP).
--- The NTZ branch's wall-clock value is reinterpreted as a session-zone instant, so only the
--- resolved type is asserted here; varied precisions and eras.
+-- A value-pinned case: the inserted cross-family cast reinterprets the NTZ wall clock as an instant
+-- in the session zone (America/Los_Angeles) and the result is rendered back there, so it round-trips
+-- to the same wall clock with the sub-microsecond digits preserved. This locks the cast's
+-- sessionLocalTimeZone wiring -- a UTC misread would render a different instant.
+SELECT typeof(v), v FROM (SELECT coalesce(
+    TIMESTAMP_NTZ '2026-06-21 10:16:30.123456789',
+    '1970-01-01 00:00:00.000000001 UTC' :: timestamp_ltz(9)) AS v);
+-- The remaining mixed-family cases assert the resolved type only (varied precisions and eras).
 SELECT typeof(c) FROM (
     SELECT TIMESTAMP_NTZ '1582-10-15 00:00:00' AS c
     UNION ALL SELECT '9999-12-31 23:59:59.999999999' :: timestamp_ltz(9));
