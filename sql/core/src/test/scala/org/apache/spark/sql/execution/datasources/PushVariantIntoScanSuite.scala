@@ -1083,10 +1083,10 @@ abstract class PushVariantIntoScanV2SuiteBase extends QueryTest with PushVariant
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         spark.read.parquet(path).createOrReplaceTempView("T_V2")
         // variant_get(v, '$.price') is inside an aggregate function, above the aggregate barrier,
-        // with no local filter/projection on v. v is lifted in only as a bare reference -> a
-        // whole-variant request. Before the fix this shredded to a lone full-variant slot, which
-        // the Parquet reader collapsed to a boolean placeholder; max(variant_get(<boolean>, ...))
-        // then failed to codegen. Keeping v raw avoids the crash and yields correct aggregates.
+        // with no local filter/projection on v, so v is lifted in only as a bare reference -> a
+        // whole-variant request. A whole-variant read is kept raw: shredding it to a lone
+        // full-variant slot would collapse to a boolean placeholder, and max(variant_get(<boolean>,
+        // ...)) would fail to codegen. Keeping v raw yields correct aggregates with a valid plan.
         val query =
           "select name, max(variant_get(v, '$.price', 'int')) as mx from T_V2 group by name"
         val expectedRows = withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN.key -> "false") {
@@ -1127,7 +1127,8 @@ abstract class PushVariantIntoScanV2SuiteBase extends QueryTest with PushVariant
         val expectedRows = withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN.key -> "false") {
           sql(query).collect()
         }
-        // Must not crash during optimization (SPARK-57499 regression) and must be correct.
+        // A variant_get join key produces a valid plan (no attribute-binding failure) and
+        // correct results; the key is read raw and the extraction is evaluated above the scan.
         checkAnswer(sql(query), expectedRows)
         val scans = sql(query).queryExecution.optimizedPlan.collect {
           case s: DataSourceV2ScanRelation => s
@@ -1285,6 +1286,66 @@ abstract class PushVariantIntoScanV2SuiteBase extends QueryTest with PushVariant
           s"Expected v left raw, but got ${vAttr.dataType}")
         assert(v2Attr.dataType.isInstanceOf[StructType],
           s"Expected v2 shredded to struct, but got ${v2Attr.dataType}")
+      }
+    }
+  }
+
+  test(s"V2 test - sole 2-arg variant_get (VariantType target) stays raw ($readerName)") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      withTable("temp_v1") {
+        sql(s"create table temp_v1 (v variant, v2 variant) using PARQUET location '$path'")
+        sql("insert into temp_v1 values " +
+          "(parse_json('{\"a\": {\"x\": 1}}'), parse_json('{\"b\": 2}')), " +
+          "(parse_json('{\"a\": {\"x\": 9}}'), parse_json('{\"b\": 8}'))")
+      }
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        spark.read.parquet(path).createOrReplaceTempView("T_V2")
+        // 2-arg variant_get has no type argument, so its target is VariantType. Its requested
+        // field is NOT the exact `fullVariant` sentinel (the path is "$.a", not "$"), but it still
+        // shreds to a lone variant-typed slot which the reader collapses to a boolean placeholder.
+        // The strip must catch it by target type, not by exact-value equality, and keep v raw.
+        val query = "select variant_get(v, '$.a') as a from T_V2"
+        val expectedRows = withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN.key -> "false") {
+          sql(query).collect()
+        }
+        checkAnswer(sql(query), expectedRows)
+        val scanRelation = findScanRelation(sql(query).queryExecution.optimizedPlan)
+        // v is read whole (kept raw); the unreferenced sibling v2 is pruned.
+        assert(scanRelation.output.map(_.name) == Seq("v"),
+          s"Expected scan output [v] but got ${scanRelation.output.map(_.name)}")
+        assert(scanRelation.output(0).dataType.isInstanceOf[VariantType],
+          s"Expected v left raw, but got ${scanRelation.output(0).dataType}")
+      }
+    }
+  }
+
+  test(s"V2 test - sole variant_get('$$') under non-UTC session stays raw ($readerName)") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      withTable("temp_v1") {
+        sql(s"create table temp_v1 (v variant, v2 variant) using PARQUET location '$path'")
+        sql("insert into temp_v1 values " +
+          "(parse_json('{\"a\": 1}'), parse_json('{\"b\": 2}')), " +
+          "(parse_json('{\"a\": 9}'), parse_json('{\"b\": 8}'))")
+      }
+      // A non-UTC session makes variant_get carry a non-UTC timezone, so even the "$" path is not
+      // equal to the UTC `fullVariant` sentinel. The strip must still keep v raw -- matching by
+      // target type rather than by the exact sentinel value covers this case.
+      withSQLConf(
+          SQLConf.USE_V1_SOURCE_LIST.key -> "",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        spark.read.parquet(path).createOrReplaceTempView("T_V2")
+        val query = "select variant_get(v, '$') as whole from T_V2"
+        val expectedRows = withSQLConf(SQLConf.PUSH_VARIANT_INTO_SCAN.key -> "false") {
+          sql(query).collect()
+        }
+        checkAnswer(sql(query), expectedRows)
+        val scanRelation = findScanRelation(sql(query).queryExecution.optimizedPlan)
+        assert(scanRelation.output.map(_.name) == Seq("v"),
+          s"Expected scan output [v] but got ${scanRelation.output.map(_.name)}")
+        assert(scanRelation.output(0).dataType.isInstanceOf[VariantType],
+          s"Expected v left raw, but got ${scanRelation.output(0).dataType}")
       }
     }
   }

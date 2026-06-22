@@ -35,11 +35,11 @@ import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownVariantExtractions, V1Scan, VariantExtraction}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, RequestedVariantField, VariantInRelation, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.VariantExtractionImpl
 import org.apache.spark.sql.sources
-import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DataType, DecimalType, IntegerType, StringType, StructField, StructType, VariantType}
 import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -448,32 +448,19 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     projectList.foreach(variants.collectRequestedFields)
     filters.foreach(variants.collectRequestedFields)
 
-    // Variant extraction pushdown is for extractions, not for whole-variant reads. A bare variant
-    // reference (e.g. `SELECT v`, or a column lifted into the local Project to feed a `variant_get`
-    // that sits above a Join/Sort/Aggregate barrier this local rewrite cannot see) makes
-    // `collectRequestedFields` record `RequestedVariantField.fullVariant` -- path `$`, target
-    // VariantType -- meaning "produce the entire value." That is not a real extraction:
-    //   - No I/O benefit: the whole variant is read regardless, so shredding it to a single
-    //     full-variant slot never reads fewer bytes than leaving the column raw.
-    //   - It is the case readers mishandle: a lone full-variant slot collapses to a boolean
-    //     placeholder (see ParquetScan.rewriteVariantPushdownSchema), and above a barrier the
-    //     re-exposed `GetStructField(v_new, i) AS v#orig` alias can be dropped by
-    //     RemoveRedundantAliases, yielding wrong results or an invalid plan.
-    // So when a variant is read ONLY as a whole -- its sole requested field is fullVariant -- leave
-    // it raw and let normal column pruning read it. Scoped to the sole-field case on purpose:
-    //   - It is exactly the broken shape (a lone full-variant slot is what collapses / re-exposes).
-    //   - When fullVariant coexists with real extractions on the same variant (e.g.
-    //     `SELECT v, variant_get(v, '$.a')`), the shredded struct has >= 2 slots, so the reader
-    //     does not collapse it; keeping it shredded preserves the typed-path pushdown.
-    // This also keeps the rule correct for free as barrier-aware pushdown lands later: once a
-    // `variant_get` above a Join/Sort/Aggregate becomes visible to the rewrite it is collected as a
-    // real typed path (not fullVariant), so it is no longer sole-fullVariant and the column shreds
-    // automatically -- this guard simply steps aside. Runs before the IsNull/IsNotNull injection
-    // below so presence-only references, which legitimately shred to a tiny placeholder, are
-    // unaffected.
+    // Drop a variant whose sole requested field targets VariantType (a whole-variant read: bare
+    // `SELECT v`, 2-arg `variant_get(v, '$.a')`, or a column lifted to feed a variant_get above a
+    // barrier). Shredding it to a lone variant-typed slot saves no I/O and is mishandled: the
+    // reader collapses such a slot to a boolean placeholder while catalyst keeps it VariantType, so
+    // holder.output and readSchema disagree. Leaving it raw avoids that. The predicate matches the
+    // reader's collapse condition by target type, not the exact `fullVariant` value -- the latter
+    // would miss 2-arg variant_get and non-UTC sessions (different path/tz, same broken slot).
+    // When the field coexists with real extractions the struct has >= 2 slots and is not collapsed,
+    // so this is scoped to the sole-field case. Runs before the IsNull/IsNotNull injection so
+    // presence-only references, which legitimately shred to a placeholder, are unaffected.
     variants.mapping.values.foreach { pathToFields =>
       pathToFields.filterInPlace { case (_, fields) =>
-        !(fields.size == 1 && fields.contains(RequestedVariantField.fullVariant))
+        !(fields.size == 1 && fields.head._1.targetType.isInstanceOf[VariantType])
       }
     }
     variants.mapping.filterInPlace { case (_, pathToFields) => pathToFields.nonEmpty }
@@ -551,7 +538,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     // Companion extractions can only be honored by readers that support cast-error deferral. If
     // none were generated, the pushdown carries only non-strict accesses (`try_variant_get`, plain
     // variant reads, casts to variant/string) that are safe regardless of deferral support.
-    if (hasCompanionExtraction && !builder.supportsDeferCastError()) return originalPlan
+    if (hasCompanionExtraction && !builder.supportsDeferCastError()) {
+      // Set the sentinel like the other early returns, else the leaf is re-visited (double-visit).
+      sHolder.pushedVariants = Some(new VariantInRelation())
+      return originalPlan
+    }
 
     val extractions: Array[VariantExtraction] = extractionInfo.map(_._1).toArray
     val pushedResults = builder.pushVariantExtractions(extractions)
