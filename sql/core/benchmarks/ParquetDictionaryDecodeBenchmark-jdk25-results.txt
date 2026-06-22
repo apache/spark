@@ -3,15 +3,15 @@ Dictionary Decode (no nulls)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 Dictionary Decode (no nulls):             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        6              6           0        175.2           5.7       1.0X
-LongUpdater                                           6              6           0        174.0           5.7       1.0X
-FloatUpdater                                          6              6           0        180.9           5.5       1.0X
-DoubleUpdater                                         6              6           0        180.5           5.5       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  6              6           0        173.6           5.8       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                6              6           0        180.0           5.6       1.0X
+IntegerUpdater                                        6              6           0        179.1           5.6       1.0X
+LongUpdater                                           6              6           0        178.6           5.6       1.0X
+FloatUpdater                                          6              6           0        178.1           5.6       1.0X
+DoubleUpdater                                         6              6           0        177.5           5.6       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  6              6           0        175.1           5.7       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                6              6           0        178.8           5.6       1.0X
 
 
 ================================================================================================
@@ -19,15 +19,15 @@ Dictionary Decode (10% nulls)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 Dictionary Decode (10% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        6              7           0        161.7           6.2       1.0X
-LongUpdater                                           7              7           0        159.4           6.3       1.0X
-FloatUpdater                                          6              6           0        166.2           6.0       1.0X
-DoubleUpdater                                         6              6           0        165.7           6.0       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  7              7           0        159.0           6.3       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                6              7           0        165.5           6.0       1.0X
+IntegerUpdater                                        7              7           0        159.0           6.3       1.0X
+LongUpdater                                           7              7           0        159.3           6.3       1.0X
+FloatUpdater                                          7              7           0        158.6           6.3       1.0X
+DoubleUpdater                                         7              7           0        158.2           6.3       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  7              7           0        158.6           6.3       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                7              7           0        159.2           6.3       1.0X
 
 
 ================================================================================================
@@ -35,14 +35,14 @@ Dictionary Decode (50% nulls)
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1018-azure
-AMD EPYC 7763 64-Core Processor
+AMD EPYC 9V74 80-Core Processor
 Dictionary Decode (50% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        8              9           0        125.2           8.0       1.0X
-LongUpdater                                           8              9           0        123.7           8.1       1.0X
-FloatUpdater                                          8              9           0        124.7           8.0       1.0X
-DoubleUpdater                                         8              9           0        124.6           8.0       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  9              9           0        122.9           8.1       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                8              8           0        125.3           8.0       1.0X
+IntegerUpdater                                        9              9           0        116.4           8.6       1.0X
+LongUpdater                                           9              9           0        111.4           9.0       1.0X
+FloatUpdater                                          9              9           0        116.4           8.6       1.0X
+DoubleUpdater                                         9              9           0        116.6           8.6       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  9              9           0        114.0           8.8       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                9              9           0        116.2           8.6       1.0X
 
 
