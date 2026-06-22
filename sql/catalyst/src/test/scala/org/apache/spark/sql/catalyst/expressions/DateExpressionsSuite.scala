@@ -354,8 +354,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       datePatternExpr,
       condition = "INVALID_PARAMETER_VALUE.PATTERN",
       parameters = Map(
-        "parameter" -> "`regexp`",
-        "functionName" -> "`to_char`",
+        "parameter" -> "`format`",
+        "functionName" -> "`date_format`",
         "value" -> "'yyyy-MM-dd'")
     )
   }

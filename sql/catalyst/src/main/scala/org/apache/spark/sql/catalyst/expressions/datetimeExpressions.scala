@@ -25,7 +25,7 @@ import java.util.Locale
 
 import org.apache.commons.text.StringEscapeUtils
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
@@ -1243,7 +1243,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
         val tf = timeFormatterOption.getOrElse(
           TimeFormatter(format.toString, isParsing = false))
         DateFormatClass.formatTimeWithError(
-          tf, timestamp.asInstanceOf[Long], "to_char", format.toString)
+          tf, timestamp.asInstanceOf[Long], prettyName, format.toString)
       case _ =>
         val formatter = formatterOption.getOrElse(getFormatter(format.toString))
         UTF8String.fromString(formatter.format(timestamp.asInstanceOf[Long]))
@@ -1258,10 +1258,9 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     left.dataType match {
       case _: TimeType =>
-        val errClass = QueryExecutionErrors.getClass.getName.stripSuffix("$")
         timeFormatterOption.map { tf =>
           val timeFormatter = ctx.addReferenceObj("timeFormatter", tf)
-          val funcName = ctx.addReferenceObj("funcName", "to_char")
+          val funcName = ctx.addReferenceObj("funcName", prettyName)
           val fmtStr = ctx.addReferenceObj("fmtStr", right.eval().toString)
           defineCodeGen(ctx, ev, (time, _) => {
             s"""|((org.apache.spark.unsafe.types.UTF8String)
@@ -1272,13 +1271,14 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
           })
         }.getOrElse {
           val tf = TimeFormatter.getClass.getName.stripSuffix("$")
+          val funcName = ctx.addReferenceObj("funcName", prettyName)
           defineCodeGen(ctx, ev, (time, format) => {
             s"""|((org.apache.spark.unsafe.types.UTF8String)
                 |org.apache.spark.sql.catalyst.expressions
                 |.DateFormatClass.formatTimeWithError(
                 |$tf$$.MODULE$$.apply(
                 |$format.toString(), false),
-                |$time, "to_char",
+                |$time, $funcName,
                 |$format.toString()))""".stripMargin.replaceAll("\n", "")
           })
         }
@@ -1318,14 +1318,23 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
 }
 
 object DateFormatClass {
-  /** Helper for codegen: formats time with proper Spark error on invalid pattern. */
+  /**
+   * Formats a TIME value, mapping an invalid pattern to a Spark error.
+   * Used by both eval and codegen.
+   */
   def formatTimeWithError(
       tf: TimeFormatter, nanos: Long, funcName: String, pattern: String): UTF8String = {
     try {
       UTF8String.fromString(tf.format(nanos))
     } catch {
       case e: java.time.DateTimeException =>
-        throw QueryExecutionErrors.invalidPatternError(funcName, pattern, e)
+        throw new SparkRuntimeException(
+          errorClass = "INVALID_PARAMETER_VALUE.PATTERN",
+          messageParameters = Map(
+            "parameter" -> toSQLId("format"),
+            "functionName" -> toSQLId(funcName),
+            "value" -> toSQLValue(pattern, StringType)),
+          cause = e)
     }
   }
 }
