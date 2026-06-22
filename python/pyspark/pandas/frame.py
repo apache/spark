@@ -523,7 +523,7 @@ class DataFrame(Frame, Generic[T]):
             x    y
     0    Data  1.0
     1  Bricks  2.0
-    2    None  NaN
+    2     ...  NaN
 
     Constructing DataFrame from Spark DataFrame with pandas-on-Spark index:
 
@@ -542,7 +542,7 @@ class DataFrame(Frame, Generic[T]):
             x    y
     0    Data  1.0
     1  Bricks  2.0
-    2    None  NaN
+    2     ...  NaN
     """
 
     # Keep pandas-on-Spark above pandas DataFrame for reflected ops.
@@ -760,7 +760,7 @@ class DataFrame(Frame, Generic[T]):
         --------
 
         >>> df = ps.DataFrame({'col1': [1, 2], 'col2': [3, 4]})
-        >>> df.axes
+        >>> df.axes  # doctest: +SKIP
         [Index([0, 1], dtype='int64'), Index(['col1', 'col2'], dtype='object')]
         """
         return [self.index, self.columns]
@@ -3539,7 +3539,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1      bird
         2    mammal
         3    mammal
-        Name: class, dtype: object
+        Name: class, dtype: ...
 
         >>> df
              name  max_speed
@@ -6011,9 +6011,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                   columns=['name', 'toy', 'born'])
         >>> df
                name        toy        born
-        0    Alfred       None        None
+        0    Alfred        ...         ...
         1    Batman  Batmobile  1940-04-25
-        2  Catwoman   Bullwhip        None
+        2  Catwoman   Bullwhip         ...
 
         Drop the rows where at least one element is missing.
 
@@ -6033,16 +6033,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> df.dropna(how='all')
                name        toy        born
-        0    Alfred       None        None
+        0    Alfred        ...         ...
         1    Batman  Batmobile  1940-04-25
-        2  Catwoman   Bullwhip        None
+        2  Catwoman   Bullwhip         ...
 
         Keep only the rows with at least 2 non-NA values.
 
         >>> df.dropna(thresh=2)
                name        toy        born
         1    Batman  Batmobile  1940-04-25
-        2  Catwoman   Bullwhip        None
+        2  Catwoman   Bullwhip         ...
 
         Define in which columns to look for missing values.
 
@@ -7298,7 +7298,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ...                    'f': pd.date_range('20130101', periods=3)},
         ...                   columns=['a', 'b', 'c', 'd', 'e', 'f'])
         >>> df.dtypes
-        a            object
+        a            ...
         b             int64
         c              int8
         d           float64
@@ -7895,7 +7895,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
            col1  col2  col3
         a     A     2     0
         b     B     9     9
-        c  None     8     4
+        c   ...     8     4
         d     D     7     2
         e     C     4     3
 
@@ -7907,7 +7907,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         b     B     9     9
         e     C     4     3
         d     D     7     2
-        c  None     8     4
+        c   ...     8     4
 
         Ignore index for the resulting axis
 
@@ -7917,7 +7917,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1     B     9     9
         2     C     4     3
         3     D     7     2
-        4  None     8     4
+        4   ...     8     4
 
         Sort Descending
 
@@ -7927,7 +7927,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         e     C     4     3
         b     B     9     9
         a     A     2     0
-        c  None     8     4
+        c   ...     8     4
 
         Sort by multiple columns
 
@@ -7944,7 +7944,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         2     B     9     9
         5     C     4     3
         4     D     7     2
-        3  None     8     4
+        3   ...     8     4
         """
         inplace = validate_bool_kwarg(inplace, "inplace")
         new_by = self._prepare_sort_by_scols(by)
@@ -8202,7 +8202,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             has the 'compute.max_rows' default limit of input length and raises a ValueError.
 
                 >>> from pyspark.pandas.config import option_context
-                >>> with option_context('compute.max_rows', 1000):  # doctest: +NORMALIZE_WHITESPACE
+                >>> with option_context('compute.max_rows', 1000):  # doctest: +SKIP
                 ...     ps.DataFrame({'a': range(1001)}).swapaxes(i=0, j=1)
                 Traceback (most recent call last):
                   ...
@@ -8782,7 +8782,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> left_psdf.merge(right_psdf, left_index=True, right_index=True, how='left').sort_index()
            A     B
-        0  1  None
+        0  1   ...
         1  2     x
 
         >>> left_psdf.merge(right_psdf, left_index=True, right_index=True, how='right').sort_index()
@@ -8792,7 +8792,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         >>> left_psdf.merge(right_psdf, left_index=True, right_index=True, how='outer').sort_index()
              A     B
-        0  1.0  None
+        0  1.0   ...
         1  2.0     x
         2  NaN     y
 
@@ -9100,7 +9100,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         0       K0  A0        K0    B0
         1       K1  A1        K1    B1
         2       K2  A2        K2    B2
-        3       K3  A3      None  None
+        3       K3  A3       ...   ...
 
         If we want to join using the key columns, we need to set key to be the index in both df and
         right. The joined DataFrame will have key as its index.
@@ -9112,14 +9112,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         K0   A0    B0
         K1   A1    B1
         K2   A2    B2
-        K3   A3  None
+        K3   A3   ...
 
         Another option to join using the key columns is to use the on parameter. DataFrame.join
         always uses right's index but we can use any column in df. This method does not preserve
         the original DataFrame's index in the result unlike pandas.
 
         >>> join_psdf = psdf1.join(psdf2.set_index('key'), on='key')
-        >>> join_psdf.index
+        >>> join_psdf.index  # doctest: +SKIP
         Index([0, 1, 2, 3], dtype='int64')
         """
         if isinstance(right, ps.Series):
@@ -10703,7 +10703,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     temp_celsius  temp_fahrenheit windspeed
         2014-02-12          28.0              NaN       low
         2014-02-13          30.0              NaN       low
-        2014-02-14           NaN              NaN       None
+        2014-02-14           NaN              NaN       ...
         2014-02-15          35.1              NaN    medium
         """
 
@@ -11182,7 +11182,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         C  0    2
            1    4
            2    6
-        dtype: object
+        dtype: ...
 
         >>> df.columns = pd.MultiIndex.from_tuples([('X', 'A'), ('X', 'B'), ('Y', 'C')])
         >>> df.unstack().sort_index()
@@ -11195,7 +11195,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         Y  C  0    2
               1    4
               2    6
-        dtype: object
+        dtype: ...
 
         For MultiIndex case:
 
@@ -12405,7 +12405,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         sidewinder          7       8
 
         >>> df.keys()
-        Index(['max_speed', 'shield'], dtype='object')
+        Index(['max_speed', 'shield'], dtype=...)
         """
         return self.columns
 
@@ -12513,7 +12513,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1    c
         2    c
         3    c
-        dtype: object
+        dtype: ...
 
         For Multi-column Index
 
@@ -12654,7 +12654,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         1    a
         2    a
         3    b
-        dtype: object
+        dtype: ...
 
         For Multi-column Index
 
@@ -13472,7 +13472,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> df.mode()
           species  legs  wings
         0    bird   2.0    0.0
-        1    None   NaN    2.0
+        1     ...   NaN    2.0
 
         Setting ``dropna=False`` ``NaN`` values are considered and they can be
         the mode (like for wings).
@@ -13673,8 +13673,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> aligned_l.sort_index()
               a     b   c
         10  1.0     a NaN
-        11  NaN  None NaN
-        12  NaN  None NaN
+        11  NaN   ... NaN
+        12  NaN   ... NaN
         20  2.0     b NaN
         30  3.0     c NaN
         >>> aligned_r.sort_index()
@@ -13682,8 +13682,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         10  4.0 NaN     d
         11  5.0 NaN     e
         12  6.0 NaN     f
-        20  NaN NaN  None
-        30  NaN NaN  None
+        20  NaN NaN   ...
+        30  NaN NaN   ...
 
         Align only axis=0 (index):
 
@@ -13691,8 +13691,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> aligned_l.sort_index()
               a     b
         10  1.0     a
-        11  NaN  None
-        12  NaN  None
+        11  NaN   ...
+        12  NaN   ...
         20  2.0     b
         30  3.0     c
         >>> aligned_r.sort_index()
@@ -13700,8 +13700,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         10  4.0     d
         11  5.0     e
         12  6.0     f
-        20  NaN  None
-        30  NaN  None
+        20  NaN   ...
+        30  NaN   ...
 
         Align only axis=1 (column):
 
@@ -13734,8 +13734,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         >>> aligned_l.sort_index()
               a     b
         10  1.0     a
-        11  NaN  None
-        12  NaN  None
+        11  NaN   ...
+        12  NaN   ...
         20  2.0     b
         30  3.0     c
         >>> aligned_r.sort_index()

@@ -23,6 +23,11 @@ on:
   schedule:
     - cron: '0 21 */2 * *'
   workflow_dispatch:
+  # [DO-NOT-MERGE] Run this scheduled Pandas-3 build on the fork branch to verify
+  # the pandas-3 doctest/coercion fixes. This trigger is reverted before merge.
+  push:
+    branches:
+      - 'fix-ci/pandas3'
 
 jobs:
   run-build:
@@ -30,7 +35,8 @@ jobs:
       packages: write
     name: Run
     uses: ./.github/workflows/build_and_test.yml
-    if: github.repository == 'apache/spark'
+    # [DO-NOT-MERGE] Allow this build to run on the fork for verification.
+    if: github.repository == 'apache/spark' || github.repository == 'HyukjinKwon/spark'
     with:
       java: 17
       branch: master
