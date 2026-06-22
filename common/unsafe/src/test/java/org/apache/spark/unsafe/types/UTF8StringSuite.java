@@ -1229,6 +1229,61 @@ public class UTF8StringSuite {
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(-1));
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length()));
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length() + 1));
+
+    // Truncated trailing multi-byte sequence: the leader declares more bytes than remain.
+    // codePointFrom should decode only the bytes present (missing continuation bytes count as
+    // 0) and not read past the end. Each backing array has extra trailing bytes, so an
+    // over-read regression would show up in the result.
+    // 2-byte leader 0xCE with no continuation byte present.
+    assertEquals((0xCE & 0x1F) << 6,
+      fromBytes(new byte[] {(byte) 0xCE, 0x42}, 0, 1).codePointFrom(0));
+    // 3-byte leader 0xE4 with no continuation bytes present.
+    assertEquals((0xE4 & 0x0F) << 12,
+      fromBytes(new byte[] {(byte) 0xE4, 0x42, 0x43}, 0, 1).codePointFrom(0));
+    // 3-byte leader 0xE4 0xB8 with the final continuation byte missing.
+    assertEquals(((0xE4 & 0x0F) << 12) | ((0xB8 & 0x3F) << 6),
+      fromBytes(new byte[] {(byte) 0xE4, (byte) 0xB8, 0x42}, 0, 2).codePointFrom(0));
+    // 4-byte leader 0xF1 with no continuation bytes present.
+    assertEquals((0xF1 & 0x07) << 18,
+      fromBytes(new byte[] {(byte) 0xF1, 0x42, 0x43, 0x44}, 0, 1).codePointFrom(0));
+    // 4-byte leader 0xF1 with two continuation bytes present and only the last one missing,
+    // so just the final read crosses the end.
+    assertEquals(((0xF1 & 0x07) << 18) | ((0x9F & 0x3F) << 12) | ((0x8F & 0x3F) << 6),
+      fromBytes(new byte[] {(byte) 0xF1, (byte) 0x9F, (byte) 0x8F, 0x42}, 0, 3).codePointFrom(0));
+  }
+
+  @Test
+  public void copyUTF8StringClampsToRemainingBytes() {
+    // Here `end` runs one byte past the string, as it would for a truncated trailing sequence.
+    // copyUTF8String should clamp to the available bytes; the extra backing byte would show up
+    // in the result if it over-read.
+    byte[] backing = new byte[] {0x41, 0x42, 0x43};
+    UTF8String s = fromBytes(backing, 0, 2); // views "AB"
+    // `end` (2) is one past the last valid byte index (1); only the two real bytes are copied.
+    assertEquals(fromString("AB"), s.copyUTF8String(0, 2));
+    // Same with a non-zero start, so the clamp uses `numBytes - start`, not `numBytes`.
+    assertEquals(fromString("B"), s.copyUTF8String(1, 2));
+    // In-bounds copies are unaffected.
+    assertEquals(fromString("AB"), s.copyUTF8String(0, 1));
+    assertEquals(fromString("B"), s.copyUTF8String(1, 1));
+  }
+
+  @Test
+  public void trimTruncatedTrailingSequence() {
+    // trimLeft/trimRight build the search character through copyUTF8String, so an over-read would
+    // make it longer than the bytes that remain. The backing arrays carry an extra trailing byte
+    // to make any over-read deterministic.
+    // A lone truncated 2-byte leader (0xC2): the clamped search char is just the leader, which
+    // matches the 1-byte trim set and is trimmed away.
+    UTF8String lone = fromBytes(new byte[] {(byte) 0xC2, 0x42}, 0, 1);
+    UTF8String trim2 = fromBytes(new byte[] {(byte) 0xC2});
+    assertEquals(EMPTY_UTF8, lone.trimLeft(trim2));
+    assertEquals(EMPTY_UTF8, lone.trimRight(trim2));
+    // 'A' followed by a truncated 3-byte leader (0xE4). Trimming the leader from the right must
+    // keep 'A': the trailing character occupies only one real byte, so only that byte is removed.
+    UTF8String prefixed = fromBytes(new byte[] {0x41, (byte) 0xE4, 0x42}, 0, 2);
+    UTF8String trim3 = fromBytes(new byte[] {(byte) 0xE4});
+    assertEquals(fromString("A"), prefixed.trimRight(trim3));
   }
 
   @Test
