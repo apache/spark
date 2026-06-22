@@ -223,26 +223,43 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * add negligible compute, a `Union`'s cost is the sum of its (materialized) children, and
    * `SubqueryAlias` is a no-op. `Aggregate`, joins, and opaque RDD operators (e.g. `mapPartitions`)
    * are excluded: they add compute or a shuffle the scan-bytes cost model cannot see, so treating
-   * such a side as a cheap materialized input would overstate the pruning benefit. A subquery in a
-   * `Project`/`Filter` is excluded for the same reason -- it embeds its own plan, whose recompute
+   * such a side as a cheap materialized input would overstate the pruning benefit. A `Project`/
+   * `Filter` is likewise excluded when its expressions embed a subquery (which carries its own
+   * plan) or an opaque user function (a UDF or a user-defined generator) -- both add recompute
    * cost `calculatePlanOverhead` does not account for.
    *
-   * This is a cost guard only; it does not check that re-evaluating the side yields the same rows.
-   * DPP duplicates the filtering side on every eligibility path and has always assumed it is
-   * repeatable, so a non-deterministic operator above the materialized input (e.g. a `rand()`
-   * projection) can still produce different keys on re-evaluation -- the same pre-existing,
-   * DPP-wide limitation the selective-predicate path carries, intentionally left to a future
+   * This is primarily a cost guard, but the eligible shapes are also repeatable in practice, which
+   * matters because DPP duplicates the filtering side and must produce the same keys on
+   * re-evaluation. Honest non-determinism does not slip through: a `rand()` (or a UDF marked
+   * non-deterministic) above the materialized input makes the resulting `DynamicPruningSubquery`
+   * non-deterministic (`PlanExpression.deterministic` folds in its build plan), so
+   * `CleanupDynamicPruningFilters` rewrites the dynamic predicate to `true` before physical
+   * planning rather than planning a standalone `SubqueryExec` -- it is never re-evaluated. The
+   * residual, DPP-wide limitation is *hidden* non-determinism left marked deterministic; the
+   * opaque-expression exclusion above narrows it, and the rest is intentionally left to a future
    * system-level design rather than patched piecemeal here. The one materialized-input-specific
    * repeatability concern -- a checkpoint that has not been materialized yet -- is handled by
    * `LogicalRDD.isCheckpointedInput` requiring the RDD to be actually checkpointed.
    */
   private def isCheaplyRecomputableMaterializedPlan(plan: LogicalPlan): Boolean = {
+    // An expression keeps the side cheap only if its cost is bounded by the input scan that
+    // `calculatePlanOverhead` measures. A subquery embeds its own plan, and an opaque user
+    // function (a Scala/Python UDF, a user-defined generator, or any other non-Catalyst
+    // expression) adds CPU/IO the scan-bytes cost model cannot see -- recomputing either would
+    // cost more than the materialized leaf suggests, so it disqualifies the side.
+    def isScanCostBoundExpression(e: Expression): Boolean = {
+      !SubqueryExpression.hasSubquery(e) && !e.exists {
+        case _: NonSQLExpression | _: UserDefinedExpression | _: UserDefinedGenerator => true
+        case _ => false
+      }
+    }
+
     plan match {
       case _: LocalRelation => true
       case r: LogicalRDD => r.isCheckpointedInput
-      case Project(projectList, child) if !projectList.exists(SubqueryExpression.hasSubquery) =>
+      case Project(projectList, child) if projectList.forall(isScanCostBoundExpression) =>
         isCheaplyRecomputableMaterializedPlan(child)
-      case Filter(condition, child) if !SubqueryExpression.hasSubquery(condition) =>
+      case Filter(condition, child) if isScanCostBoundExpression(condition) =>
         isCheaplyRecomputableMaterializedPlan(child)
       case u: Union => u.children.forall(isCheaplyRecomputableMaterializedPlan)
       case SubqueryAlias(_, child) => isCheaplyRecomputableMaterializedPlan(child)

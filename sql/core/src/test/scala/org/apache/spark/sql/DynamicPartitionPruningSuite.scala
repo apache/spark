@@ -1889,14 +1889,24 @@ abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningDat
 
         // Cheap, scan-cost-bound operators above a materialized input stay eligible: their
         // recompute cost is dominated by the materialized leaf that calculatePlanOverhead sees.
-        checkStandaloneDpp(
-          Seq(1).toDF("p").localCheckpoint(eager = true).filter($"p" > 0).select($"p"))
+        // The filter uses a non-selective predicate (a boolean cast is not classified selective by
+        // isLikelySelective), so eligibility must come from isCheaplyRecomputableMaterializedPlan
+        // rather than the selective-predicate path.
+        checkStandaloneDpp(Seq(1).toDF("p").localCheckpoint(eager = true)
+          .filter($"p".cast("boolean")).select($"p"))
 
         // An Aggregate over a materialized input is excluded even though it is repeatable: its
         // shuffle/compute cost is invisible to the scan-bytes cost model, so treating it as a cheap
         // materialized input would overstate the pruning benefit.
         checkNoDpp(
           Seq(1).toDF("p").localCheckpoint(eager = true).groupBy("p").count().select("p"))
+
+        // A UDF projection over a materialized input is excluded: an opaque user function adds
+        // CPU/IO the scan-bytes cost model cannot see, so it would be recomputed without that cost
+        // being counted against the pruning benefit.
+        val identityUdf = udf((x: Int) => x)
+        checkNoDpp(
+          Seq(1).toDF("p").localCheckpoint(eager = true).select(identityUdf($"p").as("p")))
 
         val checkpointed = Seq(1).toDS().localCheckpoint(eager = true)
         val mappedKeys = checkpointed.mapPartitions { values =>
