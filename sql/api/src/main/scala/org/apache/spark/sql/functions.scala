@@ -5181,6 +5181,9 @@ object functions {
    * @note
    *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
    *   in str.
+   * @note
+   *   If `start` is positive, the search proceeds forward. If `start` is negative, the search
+   *   proceeds backward from the end of the string. If `start` is 0, returns 0.
    *
    * @group string_funcs
    * @since 4.3.0
@@ -5195,6 +5198,9 @@ object functions {
    * @note
    *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
    *   in str.
+   * @note
+   *   If `start` is positive, the search proceeds forward. If `start` is negative, the search
+   *   proceeds backward from the end of the string. If `start` is 0, returns 0.
    *
    * @group string_funcs
    * @since 4.3.0
@@ -5209,6 +5215,11 @@ object functions {
    * @note
    *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
    *   in str.
+   * @note
+   *   If `start` is positive, the search proceeds forward. If `start` is negative, the search
+   *   proceeds backward from the end of the string. If `start` is 0, returns 0.
+   * @note
+   *   The `occurrence` parameter must be a positive integer.
    *
    * @group string_funcs
    * @since 4.3.0
@@ -5223,6 +5234,11 @@ object functions {
    * @note
    *   The position is not zero based, but 1 based index. Returns 0 if substr could not be found
    *   in str.
+   * @note
+   *   If `start` is positive, the search proceeds forward. If `start` is negative, the search
+   *   proceeds backward from the end of the string. If `start` is 0, returns 0.
+   * @note
+   *   The `occurrence` parameter must be a positive integer.
    *
    * @group string_funcs
    * @since 4.3.0

@@ -15187,7 +15187,7 @@ def instr(
     occurrence: Optional[Union[Column, int]] = None,
 ) -> Column:
     """
-    Locate the position of the first occurrence of substr column in the given string.
+    Locate the position of the specified occurrence of substr column in the given string.
     Returns null if either of the arguments are null.
 
     .. versionadded:: 1.5.0
