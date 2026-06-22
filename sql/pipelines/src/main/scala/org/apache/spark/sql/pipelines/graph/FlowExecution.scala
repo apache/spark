@@ -34,7 +34,7 @@ import org.apache.spark.sql.{AnalysisException, Dataset, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsRowLevelOperations, Table => CatalogTable, TableCatalog, TableInfo}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Table => CatalogTable, TableCatalog, TableInfo}
 import org.apache.spark.sql.pipelines.autocdc.{
   AutoCdcReservedNames,
   ChangeArgs,
@@ -471,32 +471,6 @@ trait AutoCdcMergeWriteBase {
   private lazy val auxiliaryKeyColumnNames: Seq[String] = expectedAuxiliaryKeyFields.map(_.name)
 
   /**
-   * Validate that the target table's underlying connector implements
-   * [[SupportsRowLevelOperations]], which is the V2 connector contract for MERGE/UPDATE/DELETE
-   * with rewrite - all operations that the AutoCDC transformation executes.
-   */
-  protected def requireDestinationSupportsRowLevelOps(): Unit = {
-    val (catalog, v2Identifier) =
-      PipelinesCatalogUtils.resolveTableCatalog(spark, destination.identifier)
-    val destinationTable = catalog.loadTable(v2Identifier)
-
-    if (!destinationTable.isInstanceOf[SupportsRowLevelOperations]) {
-      throw new AnalysisException(
-        errorClass = "AUTOCDC_TARGET_DOES_NOT_SUPPORT_MERGE",
-        messageParameters = Map(
-          "tableName" -> destination.identifier.quotedString,
-          "format" -> destination.format.orElse(
-              Option(
-                destinationTable.properties.get(TableCatalog.PROP_PROVIDER)
-              )
-            )
-            .getOrElse("<unknown>")
-        )
-      )
-    }
-  }
-
-  /**
    * If the auxiliary table for this flow's destination already exists, validate that the
    * AutoCDC keys the flow expects line up with the keys recorded in the auxiliary
    * table. On a fresh pipeline (or after a full refresh dropped the auxiliary), the
@@ -620,7 +594,6 @@ class Scd1MergeStreamingWrite(
     val sqlConf: Map[String, String]
 ) extends StreamingFlowExecution with AutoCdcMergeWriteBase {
 
-  requireDestinationSupportsRowLevelOps()
   validateNoAutoCdcKeyDriftIfAuxTableExists()
 
   override def getOrigin: QueryOrigin = flow.origin
