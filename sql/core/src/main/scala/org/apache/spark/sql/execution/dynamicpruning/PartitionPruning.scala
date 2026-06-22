@@ -234,7 +234,9 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
    * non-deterministic) above the materialized input makes the resulting `DynamicPruningSubquery`
    * non-deterministic (`PlanExpression.deterministic` folds in its build plan), so
    * `CleanupDynamicPruningFilters` rewrites the dynamic predicate to `true` before physical
-   * planning rather than planning a standalone `SubqueryExec` -- it is never re-evaluated. The
+   * planning rather than planning a standalone `SubqueryExec` -- it is never re-evaluated. That
+   * rule is non-excludable (`SparkOptimizer.nonExcludableRules`), so this holds regardless of
+   * `spark.sql.optimizer.excludedRules`. The
    * residual, DPP-wide limitation is *hidden* non-determinism left marked deterministic; the
    * opaque-expression exclusion above narrows it, and the rest is intentionally left to a future
    * system-level design rather than patched piecemeal here. The one materialized-input-specific
