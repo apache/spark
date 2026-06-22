@@ -745,6 +745,11 @@ function setupZoomAndPan(svg, zoomLayer) {
       // (foreignObject) so text inside metrics tables remains selectable.
       // Also ignore right-click to leave the browser context menu intact.
       if (event.button === 2) return false;
+      // Require Ctrl (or Cmd on Mac) for wheel-zoom so that unmodified
+      // scroll gestures pass through to the page for normal scrolling.
+      // Note: trackpad pinch gestures fire as wheel events with ctrlKey=true,
+      // so pinch-to-zoom still works as expected.
+      if (event.type === "wheel" && !event.ctrlKey && !event.metaKey) return false;
       var target = event.target;
       while (target && target !== svgNode) {
         if (target.nodeName === "foreignObject") return false;
@@ -765,6 +770,41 @@ function setupZoomAndPan(svg, zoomLayer) {
   // provides the natural fit, and the zoom-layer has no transform, so no
   // explicit transform is required here.
   updateZoomLevelLabel(1);
+
+  // Remove d3-zoom's wheel listener (which is registered as non-passive and
+  // can block page scrolling) and replace it with a gated wrapper that only
+  // forwards Ctrl/Cmd+wheel to d3, letting unmodified scrolls pass through.
+  var d3WheelHandler = svg.on("wheel.zoom");
+  svg.on("wheel.zoom", null);
+  svgNode.addEventListener("wheel", function (e) {
+    if (e.ctrlKey || e.metaKey) {
+      // Forward to d3-zoom's original handler for zoom behavior
+      d3WheelHandler.call(this, e);
+    } else {
+      // Let the event propagate naturally for page scrolling and show hint
+      showZoomHint();
+    }
+  });
+}
+
+var zoomHintTimeout;
+function showZoomHint() {
+  var container = document.getElementById("plan-viz-graph");
+  if (!container) return;
+  var hint = document.getElementById("plan-viz-zoom-hint");
+  if (!hint) {
+    hint = document.createElement("div");
+    hint.id = "plan-viz-zoom-hint";
+    hint.className = "plan-viz-zoom-hint";
+    var isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+    hint.textContent = (isMac ? "\u2318" : "Ctrl") + " + scroll to zoom";
+    container.appendChild(hint);
+  }
+  hint.classList.add("visible");
+  clearTimeout(zoomHintTimeout);
+  zoomHintTimeout = setTimeout(function () {
+    hint.classList.remove("visible");
+  }, 1500);
 }
 
 function updateZoomLevelLabel(scale) {
