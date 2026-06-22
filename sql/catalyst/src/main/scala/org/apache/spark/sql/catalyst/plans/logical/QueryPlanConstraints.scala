@@ -58,8 +58,9 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 trait ConstraintHelper {
 
   /**
-   * Infers an additional set of constraints from a given set of equality constraints via
-   * transitivity. For example, (`a = b`, `b = c`) returns `a = c`.
+   * Infers an additional set of constraints from a given set of equality constraints.
+   * For e.g., if an operator has constraints of the form (`a = 5`, `a = b`), this returns an
+   * additional constraint of the form `b = 5`.
    */
   def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
     var inferredConstraints = ExpressionSet()
