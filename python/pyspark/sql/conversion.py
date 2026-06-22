@@ -1828,13 +1828,15 @@ class ArrowArrayToPandasConversion:
         elif isinstance(spark_type, supported_types):
             return True
         elif isinstance(spark_type, ArrayType):
-            # Recurse into element type. MapType and StructType are not yet supported.
+            # Array[E] is preferred only when its element type E is itself preferred: nested
+            # arrays recurse, otherwise E must be in supported_types. Element types not in
+            # supported_types (StringType, DecimalType, the interval types) and MapType/
+            # StructType stay on the legacy path -- matching the scalar routing -- until their
+            # parity with convert_legacy is confirmed and they are added to supported_types.
             element_type = spark_type.elementType
-            if isinstance(element_type, (MapType, StructType)):
-                return False
-            elif isinstance(element_type, ArrayType):
+            if isinstance(element_type, ArrayType):
                 return cls._prefer_convert_numpy(element_type, df_for_struct=False)
-            return True
+            return isinstance(element_type, supported_types)
         # elif isinstance(spark_type, (MapType, StructType)):
         #     TODO: Support MapType, StructType
         else:

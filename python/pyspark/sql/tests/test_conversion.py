@@ -32,6 +32,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     DateType,
+    DayTimeIntervalType,
     DecimalType,
     DoubleType,
     Geography,
@@ -1193,35 +1194,31 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
         self.assertIsInstance(result.iloc[0][0][0], VariantVal)
 
     def test_array_value_parity_with_legacy(self):
-        """For element types that round-trip identically, convert_numpy matches
-        convert_legacy exactly (same values and same representation).
+        """For array element types that are routed to convert_numpy (i.e. in
+        _prefer_convert_numpy's supported_types), convert_numpy matches convert_legacy
+        exactly (same values and same representation).
 
-        This pins the set of array element types that already agree, so a future
-        change that breaks parity for one of them is caught here.
+        This pins parity for the element types that the dispatcher actually routes to
+        convert_numpy, so a future change that breaks parity for one of them is caught here.
 
         TODO: Remove when convert_legacy is removed.
         """
         import datetime
-        import decimal
         import pandas as pd
         import pyarrow as pa
 
         cases = [
             (ArrayType(DoubleType()), pa.list_(pa.float64()), [[1.5, None], None]),
             (ArrayType(BooleanType()), pa.list_(pa.bool_()), [[True, None, False]]),
-            (ArrayType(StringType()), pa.list_(pa.string()), [["a", None, "c"], None]),
             (ArrayType(BinaryType()), pa.list_(pa.binary()), [[b"a", None]]),
             (ArrayType(DateType()), pa.list_(pa.date32()), [[datetime.date(2020, 1, 1), None]]),
-            # Decimal is not in _prefer_convert_numpy's supported_types, but Array[Decimal]
-            # still routes to convert_numpy via the ArrayType catch-all; pin that it agrees.
-            (
-                ArrayType(DecimalType(10, 2)),
-                pa.list_(pa.decimal128(10, 2)),
-                [[decimal.Decimal("1.50"), None], None],
-            ),
         ]
         for spark_type, pa_type, values in cases:
             with self.subTest(spark_type=spark_type):
+                # element type is in supported_types, so the dispatcher uses convert_numpy
+                self.assertTrue(
+                    ArrowArrayToPandasConversion._prefer_convert_numpy(spark_type, False)
+                )
                 arr = pa.array(values, type=pa_type)
                 legacy = ArrowArrayToPandasConversion.convert_legacy(arr, spark_type)
                 numpy = ArrowArrayToPandasConversion.convert_numpy(arr, spark_type)
@@ -1298,32 +1295,55 @@ class ArrowArrayToPandasConversionTests(unittest.TestCase):
                 self.assertTrue(pd.isna(legacy[1]))
                 self.assertTrue(pd.isna(numpy[1]))
 
-    def test_array_of_struct_or_map_falls_back_to_legacy(self):
-        """Arrays whose element is a StructType or MapType are not yet supported by
-        convert_numpy, so _prefer_convert_numpy returns False and convert() dispatches
-        to convert_legacy. Pin both the routing and the dispatched output.
+    def test_array_unsupported_element_falls_back_to_legacy(self):
+        """Array[E] is routed to convert_numpy only when E is in supported_types. Element
+        types not in supported_types -- StringType, DecimalType, the interval types -- and
+        MapType/StructType stay on the legacy path, consistent with their scalar routing, so
+        an unconfirmed element type cannot silently change its toPandas() representation.
+        Pin both the routing (False) and that the dispatcher still produces correct output.
         """
+        import decimal
         import pyarrow as pa
 
-        struct_type = ArrayType(StructType([StructField("a", IntegerType())]))
-        map_type = ArrayType(MapType(StringType(), IntegerType()))
-        self.assertFalse(ArrowArrayToPandasConversion._prefer_convert_numpy(struct_type, False))
-        self.assertFalse(ArrowArrayToPandasConversion._prefer_convert_numpy(map_type, False))
+        prefer = ArrowArrayToPandasConversion._prefer_convert_numpy
+        # element types not in supported_types -> legacy
+        for spark_type in [
+            ArrayType(StringType()),
+            ArrayType(DecimalType(10, 2)),
+            ArrayType(DayTimeIntervalType()),
+            ArrayType(StructType([StructField("a", IntegerType())])),
+            ArrayType(MapType(StringType(), IntegerType())),
+            ArrayType(ArrayType(StringType())),
+        ]:
+            self.assertFalse(prefer(spark_type, False), msg=str(spark_type))
 
-        arr = pa.array(
-            [[{"a": 1}, None], None],
-            type=pa.list_(pa.struct([("a", pa.int32())])),
-        )
-        result = ArrowArrayToPandasConversion.convert(
-            arr, struct_type, timezone="UTC", struct_in_pandas="dict"
-        )
-        self.assertEqual(result.iloc[0][0], {"a": 1})
-        self.assertIsNone(result.iloc[0][1])
+        # common Array[String] still converts correctly via the dispatcher (convert_legacy)
+        st = ArrayType(StringType())
+        arr = pa.array([["a", None, "c"], None], type=pa.list_(pa.string()))
+        result = ArrowArrayToPandasConversion.convert(arr, st, timezone="UTC")
+        self.assertEqual(list(result.iloc[0]), ["a", None, "c"])
         self.assertIsNone(result.iloc[1])
 
+        # Array[Decimal]
+        st = ArrayType(DecimalType(10, 2))
+        arr = pa.array([[decimal.Decimal("1.50"), None]], type=pa.list_(pa.decimal128(10, 2)))
+        result = ArrowArrayToPandasConversion.convert(arr, st, timezone="UTC")
+        self.assertEqual(result.iloc[0][0], decimal.Decimal("1.50"))
+
+        # Array[Struct]
+        st = ArrayType(StructType([StructField("a", IntegerType())]))
+        arr = pa.array([[{"a": 1}, None], None], type=pa.list_(pa.struct([("a", pa.int32())])))
+        result = ArrowArrayToPandasConversion.convert(
+            arr, st, timezone="UTC", struct_in_pandas="dict"
+        )
+        self.assertEqual(result.iloc[0][0], {"a": 1})
+        self.assertIsNone(result.iloc[1])
+
+        # Array[Map]
+        st = ArrayType(MapType(StringType(), IntegerType()))
         arr = pa.array([[[("k", 1)], None]], type=pa.list_(pa.map_(pa.string(), pa.int32())))
         result = ArrowArrayToPandasConversion.convert(
-            arr, map_type, timezone="UTC", struct_in_pandas="dict"
+            arr, st, timezone="UTC", struct_in_pandas="dict"
         )
         self.assertEqual(result.iloc[0][0], {"k": 1})
         self.assertIsNone(result.iloc[0][1])
