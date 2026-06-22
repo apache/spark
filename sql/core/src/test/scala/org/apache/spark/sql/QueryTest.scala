@@ -173,9 +173,15 @@ trait QueryTestBase
         }
     }
 
-    assertEmptyMissingInput(analyzedDF)
+    if (analyzedDF.isInstanceOf[classic.DataFrame]) {
+      assertEmptyMissingInput(analyzedDF)
 
-    QueryTest.checkAnswer(analyzedDF, expectedAnswer)
+      SQLExecution.withSQLConfPropagated(analyzedDF.sparkSession) {
+        df.materializedRdd.count() // Also attempt to deserialize as an RDD [SPARK-15791]
+      }
+    }
+
+    super.checkAnswer(analyzedDF, expectedAnswer)
   }
 
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Row): Unit = {
