@@ -46,6 +46,17 @@ class ResourceProfileTests(unittest.TestCase):
         ).getOrCreate()
         # Still can access taskResources, similar to executorResources.
         self.assertEqual(rp.taskResources["cpus"].amount, 2.0)
+        # SPARK-57615: the local-cluster Spark Connect server can return errors on the first
+        # commands right after start-connect-server.sh returns, before its SparkContext is fully
+        # initialized. Wait until a trivial job succeeds before creating a ResourceProfile, which
+        # would otherwise race that initialization and fail server-side.
+        from pyspark.testing.utils import eventually
+
+        def _server_ready() -> bool:
+            spark.range(1).count()
+            return True
+
+        eventually(timeout=120, expected_exceptions=(Exception,))(_server_ready)()
         rp.id
         df = spark.range(10)
         df.mapInPandas(lambda x: x, df.schema, False, rp).show(n=10)
