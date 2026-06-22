@@ -1375,6 +1375,7 @@ object SQLConf {
         "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
         "counts share the same base column.")
       .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
