@@ -4048,7 +4048,9 @@ class CSVLegacyTimeParserSuite extends CSVSuite {
     Seq("Write timestamps correctly in ISO8601 format by default",
       // The result is different because the date/timestamp parser behavior is different. Not too
       // much value to test it.
-      "csv with variant")
+      "csv with variant",
+      // Legacy time parser does not support TIME type inference
+      "SPARK-57572: infer TimeType from CSV via spark.read.csv")
 
   override protected def sparkConf: SparkConf =
     super
