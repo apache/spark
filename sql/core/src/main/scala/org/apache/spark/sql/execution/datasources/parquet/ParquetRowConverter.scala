@@ -526,22 +526,6 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
-      case t: TimeType
-        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimeLogicalTypeAnnotation] && {
-          val unit = parquetType.getLogicalTypeAnnotation
-            .asInstanceOf[TimeLogicalTypeAnnotation].getUnit
-          unit == TimeUnit.MICROS || unit == TimeUnit.NANOS
-        } =>
-        val fileStoresNanos = parquetType.getLogicalTypeAnnotation
-          .asInstanceOf[TimeLogicalTypeAnnotation].getUnit == TimeUnit.NANOS
-        val precision = t.precision
-        new ParquetPrimitiveConverter(updater) {
-          override def addLong(value: Long): Unit = {
-            val nanos = if (fileStoresNanos) value else DateTimeUtils.microsToNanos(value)
-            this.updater.setLong(DateTimeUtils.truncateTimeToPrecision(nanos, precision))
-          }
-        }
-
       // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
       // annotated by `LIST` or `MAP` should be interpreted as a required list of required
       // elements where the element type is the type of the field.
