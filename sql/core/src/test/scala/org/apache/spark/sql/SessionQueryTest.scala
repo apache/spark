@@ -30,7 +30,7 @@ import org.apache.spark.SparkFunSuite
  * }}}
  *
  * While this trait internally uses a [[classic.SparkSession]] when executing tests,
- * it exposed as a [[SparkSession sql.SparkSession]] to allow for overriding on the connect side.
+ * it is exposed as a [[SparkSession sql.SparkSession]] to allow for overriding on the connect side.
  *
  * For classic-specific tests, use [[classic.SessionQueryTest]].
  */
