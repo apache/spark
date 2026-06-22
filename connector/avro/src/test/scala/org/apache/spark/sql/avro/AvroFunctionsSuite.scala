@@ -668,6 +668,9 @@ class AvroFunctionsSuite extends SharedSparkSession {
   }
 
   test("roundtrip in to_avro and from_avro - TIME type with different precisions") {
+    // Avro stores TIME as the time-micros logical type, so this lossless round-trip is limited to
+    // precision 0-6. TIME(7-9) truncates to microseconds over Avro (no time-nanos logical type,
+    // upstream AVRO-4043); that behavior is covered in AvroSuite.
     val df = spark.sql("""
       SELECT
         CAST(TIME'12:34:56' AS TIME(0)) as time_p0,
@@ -676,13 +679,10 @@ class AvroFunctionsSuite extends SharedSparkSession {
         CAST(TIME'12:34:56.123' AS TIME(3)) as time_p3,
         CAST(TIME'12:34:56.1234' AS TIME(4)) as time_p4,
         CAST(TIME'12:34:56.12345' AS TIME(5)) as time_p5,
-        CAST(TIME'12:34:56.123456' AS TIME(6)) as time_p6,
-        CAST(TIME'12:34:56.1234567' AS TIME(7)) as time_p7,
-        CAST(TIME'12:34:56.12345678' AS TIME(8)) as time_p8,
-        CAST(TIME'12:34:56.123456789' AS TIME(9)) as time_p9
+        CAST(TIME'12:34:56.123456' AS TIME(6)) as time_p6
     """)
 
-    val precisions = Seq(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+    val precisions = Seq(0, 1, 2, 3, 4, 5, 6)
     precisions.foreach { p =>
       val fieldName = s"time_p$p"
       // Generate correct schema for each precision
