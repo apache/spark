@@ -25,7 +25,7 @@ import org.apache.spark.sql
  *   FooSuite extends SessionQueryTest { test("") { ... } }
  *
  *   // in sql/connect
- *   FooConnectSuite extends connect.SessionQueryTest
+ *   FooConnectSuite extends FooSuite with connect.SessionQueryTest
  * }}}
  *
  * This trait overrides [[spark]] to use a [[SparkSession connect.SparkSession]], which executes
