@@ -1231,7 +1231,8 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
   def this(left: Expression, right: Expression) = this(left, right, None)
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(TimestampType, AnyTimeType), StringTypeWithCollation(supportsTrimCollation = true))
+    Seq(TypeCollection(TimestampType, AnyTimeType),
+      StringTypeWithCollation(supportsTrimCollation = true))
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -1264,16 +1265,21 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
           val fmtStr = ctx.addReferenceObj("fmtStr", right.eval().toString)
           defineCodeGen(ctx, ev, (time, _) => {
             s"""|((org.apache.spark.unsafe.types.UTF8String)
-                |org.apache.spark.sql.catalyst.expressions.DateFormatClass
-                |.formatTimeWithError($timeFormatter, $time, $funcName, $fmtStr))""".stripMargin.replaceAll("\n", "")
+                |org.apache.spark.sql.catalyst.expressions
+                |.DateFormatClass.formatTimeWithError(
+                |$timeFormatter, $time,
+                |$funcName, $fmtStr))""".stripMargin.replaceAll("\n", "")
           })
         }.getOrElse {
           val tf = TimeFormatter.getClass.getName.stripSuffix("$")
           defineCodeGen(ctx, ev, (time, format) => {
             s"""|((org.apache.spark.unsafe.types.UTF8String)
-                |org.apache.spark.sql.catalyst.expressions.DateFormatClass
-                |.formatTimeWithError($tf$$.MODULE$$.apply(
-                |  $format.toString(), false), $time, "to_char", $format.toString()))""".stripMargin.replaceAll("\n", "")
+                |org.apache.spark.sql.catalyst.expressions
+                |.DateFormatClass.formatTimeWithError(
+                |$tf$$.MODULE$$.apply(
+                |$format.toString(), false),
+                |$time, "to_char",
+                |$format.toString()))""".stripMargin.replaceAll("\n", "")
           })
         }
       case _ =>
