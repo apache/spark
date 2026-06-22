@@ -1,0 +1,48 @@
+================================================================================================
+Dictionary Decode (no nulls)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Dictionary Decode (no nulls):             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+IntegerUpdater                                        6              6           0        182.8           5.5       1.0X
+LongUpdater                                           6              6           1        182.3           5.5       1.0X
+FloatUpdater                                          6              6           0        183.0           5.5       1.0X
+DoubleUpdater                                         6              6           0        170.9           5.9       0.9X
+IntegerToLongUpdater (INT32 -> Long)                  6              6           0        182.1           5.5       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                6              6           0        182.5           5.5       1.0X
+
+
+================================================================================================
+Dictionary Decode (10% nulls)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Dictionary Decode (10% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+IntegerUpdater                                        6              6           0        167.9           6.0       1.0X
+LongUpdater                                           6              6           0        167.3           6.0       1.0X
+FloatUpdater                                          6              6           0        168.1           6.0       1.0X
+DoubleUpdater                                         6              6           0        167.2           6.0       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  6              6           0        167.2           6.0       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                6              6           0        167.4           6.0       1.0X
+
+
+================================================================================================
+Dictionary Decode (50% nulls)
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.19+10-LTS on Linux 6.17.0-1018-azure
+AMD EPYC 7763 64-Core Processor
+Dictionary Decode (50% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+IntegerUpdater                                        8              8           0        129.6           7.7       1.0X
+LongUpdater                                           8              8           0        128.4           7.8       1.0X
+FloatUpdater                                          8              8           1        131.3           7.6       1.0X
+DoubleUpdater                                         8              8           0        131.1           7.6       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  8              8           0        128.4           7.8       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                8              8           0        131.2           7.6       1.0X
+
+
