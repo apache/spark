@@ -249,12 +249,6 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             test_name="Arrow Optimized Python UDF",
         )
 
-    @unittest.skipIf(
-        have_pandas and LooseVersion(pd.__version__) >= LooseVersion("3.0.0"),
-        "The deprecated legacy pandas conversion path delivers a null string to the "
-        "Python UDF as the string 'nan' rather than None under pandas>=3.0.0, so its "
-        "golden expectation diverges from the pandas<3 one. Skipped under pandas 3.",
-    )
     def test_python_input_type_coercion_with_arrow_and_pandas(self):
         self._run_udf_input_type_coercion(
             use_arrow=True,

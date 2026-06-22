@@ -139,7 +139,7 @@ class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
             count = F.count(scol).over(self._window)
             return F.when(
                 (F.row_number().over(self._unbounded_window) >= self._min_periods) & (count > ddof),
-                F.stddev(scol).over(self._window) / F.sqrt(count - ddof),
+                F.stddev(scol).over(self._window) * F.sqrt((count - 1) / ((count - ddof) * count)),
             ).otherwise(F.lit(None))
 
         return self._apply_as_series_or_frame(sem)
@@ -883,10 +883,10 @@ class Rolling(RollingLike[FrameLike]):
         >>> s.rolling(3).sem()
         0         NaN
         1         NaN
-        2    0.408248
-        3    0.707107
-        4    0.707107
-        5    0.816497
+        2    0.333333
+        3    0.577350
+        4    0.577350
+        5    0.666667
         6    0.000000
         dtype: float64
 
@@ -897,9 +897,9 @@ class Rolling(RollingLike[FrameLike]):
                   A          B
         0       NaN        NaN
         1  0.000000   0.000000
-        2  0.707107   7.778175
-        3  0.707107   9.192388
-        4  1.414214  16.970563
+        2  0.500000   5.500000
+        3  0.500000   6.500000
+        4  1.000000  12.000000
         5  0.000000   0.000000
         6  0.000000   0.000000
         """
@@ -2112,11 +2112,11 @@ class Expanding(ExpandingLike[FrameLike]):
         >>> s.expanding(3).sem()
         0         NaN
         1         NaN
-        2    0.408248
-        3    0.552771
-        4    0.447214
-        5    0.374166
-        6    0.321208
+        2    0.333333
+        3    0.478714
+        4    0.400000
+        5    0.341565
+        6    0.297381
         dtype: float64
 
         For DataFrame, each expanding standard error of the mean is computed column-wise.
@@ -2126,11 +2126,11 @@ class Expanding(ExpandingLike[FrameLike]):
                   A         B
         0       NaN       NaN
         1  0.000000  0.000000
-        2  0.408248  4.490731
-        3  0.552771  6.589132
-        4  0.447214  5.315073
-        5  0.374166  4.439970
-        6  0.321208  3.807887
+        2  0.333333  3.666667
+        3  0.478714  5.706356
+        4  0.400000  4.753946
+        5  0.341565  4.053120
+        6  0.297381  3.525418
         """
         return super().sem(ddof)
 

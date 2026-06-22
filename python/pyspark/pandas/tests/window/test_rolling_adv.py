@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+import unittest
+
+import pandas as pd
+
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.pandas.tests.window.test_rolling import RollingTestingFuncMixin
 
@@ -32,6 +37,11 @@ class RollingAdvMixin(RollingTestingFuncMixin):
     def test_rolling_var(self):
         self._test_rolling_func("var")
 
+    @unittest.skipIf(
+        LooseVersion(pd.__version__) < "3.0.0",
+        "pandas<3 expanding/rolling sem is buggy (std/sqrt(N-1)); pandas-on-Spark now "
+        "matches the correct pandas>=3 sem (std/sqrt(N)), validated under pandas>=3.",
+    )
     def test_rolling_sem(self):
         self._test_rolling_func("sem")
         self._test_rolling_func(lambda x: x.sem(ddof=0), lambda x: x.sem(ddof=0))

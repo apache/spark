@@ -3182,13 +3182,33 @@ def read_udfs(pickleSer, udf_info_list, eval_type, runner_conf, eval_conf):
                 if not pandas_columns:
                     pandas_columns = [pd.Series([_NoValue] * num_rows)]
 
+                input_fields = (
+                    eval_conf.input_type.fields if eval_conf.input_type is not None else None
+                )
+
+                def _col_to_list(o: int) -> list:
+                    values = pandas_columns[o].tolist()
+                    # pandas>=3 materializes nulls in string columns as a float NaN
+                    # via tolist(); restore None so string nulls reach the UDF as
+                    # None, matching the pandas<3 behavior. Only StringType columns
+                    # are adjusted, so NaN in numeric columns is left untouched.
+                    if (
+                        input_fields is not None
+                        and o < len(input_fields)
+                        and isinstance(input_fields[o].dataType, StringType)
+                    ):
+                        return [
+                            None if (isinstance(v, float) and pd.isna(v)) else v for v in values
+                        ]
+                    return values
+
                 # --- Process: evaluate each UDF row-by-row ---
                 result_series = []
                 for udf_func, offsets, zero_arg, _, coerce in udf_infos:
                     rows = (
                         [() for _ in range(num_rows)]
                         if zero_arg
-                        else list(zip(*[pandas_columns[o].tolist() for o in offsets]))
+                        else list(zip(*[_col_to_list(o) for o in offsets]))
                     )
                     results = _evaluate_batch_udf_legacy(udf_func, rows)
                     verify_result_row_count(len(results), num_rows)

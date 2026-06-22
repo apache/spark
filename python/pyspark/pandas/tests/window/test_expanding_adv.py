@@ -38,10 +38,9 @@ class ExpandingAdvMixin(ExpandingTestingFuncMixin):
         self._test_expanding_func("var", int_almost=True)
 
     @unittest.skipIf(
-        LooseVersion(pd.__version__) >= "3.0.0",
-        "pandas-on-Spark expanding().sem() diverges from pandas>=3.0.0's expanding sem "
-        "beyond the almost-equal tolerance. pandas-on-Spark does not yet fully support "
-        "pandas 3 (see the emitted FutureWarning); tracked for a separate follow-up.",
+        LooseVersion(pd.__version__) < "3.0.0",
+        "pandas<3 expanding/rolling sem is buggy (std/sqrt(N-1)); pandas-on-Spark now "
+        "matches the correct pandas>=3 sem (std/sqrt(N)), validated under pandas>=3.",
     )
     def test_expanding_sem(self):
         self._test_expanding_func("sem", int_almost=True)
