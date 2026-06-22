@@ -2513,6 +2513,13 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // TIMESTAMP_LTZ (the micro TimestampType) is not a valid counterpart.
       assert(!Cast.canCast(TimeType(p), TimestampType))
       assert(!Cast.canCast(TimestampType, TimeType(p)))
+      assert(!Cast.canAnsiCast(TimeType(p), TimestampType))
+      assert(!Cast.canAnsiCast(TimestampType, TimeType(p)))
+      // The disallowed pairs are rejected at analysis, not merely by the canCast predicate. The
+      // suite `cast` helper applies the active evalMode, so canAnsiCast / canCast is exercised
+      // under ANSI on / off respectively.
+      assert(cast(Literal.create(0L, TimeType(p)), TimestampType).checkInputDataTypes().isFailure)
+      assert(cast(Literal.create(0L, TimestampType), TimeType(p)).checkInputDataTypes().isFailure)
       foreachNanosPrecision { q =>
         assert(Cast.canCast(TimeType(p), TimestampNTZNanosType(q)))
         assert(Cast.canCast(TimestampNTZNanosType(q), TimeType(p)))
@@ -2521,6 +2528,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         // TIMESTAMP_LTZ nanos is not a valid counterpart either.
         assert(!Cast.canCast(TimeType(p), TimestampLTZNanosType(q)))
         assert(!Cast.canCast(TimestampLTZNanosType(q), TimeType(p)))
+        assert(!Cast.canAnsiCast(TimeType(p), TimestampLTZNanosType(q)))
+        assert(!Cast.canAnsiCast(TimestampLTZNanosType(q), TimeType(p)))
       }
     }
     // Only TIME -> TIMESTAMP_NTZ depends on the session time zone (CURRENT_DATE); the reverse
