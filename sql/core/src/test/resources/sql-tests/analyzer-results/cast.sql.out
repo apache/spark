@@ -742,22 +742,40 @@ Project [cast(cast(1960-01-01 00:00:00.123456789 as timestamp_ltz(7)) as string)
 -- !query
 select cast(array(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string)
 -- !query analysis
-Project [cast(array(cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string) AS CAST(array(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)), CAST(NULL AS TIMESTAMP_NTZ(9))) AS STRING)#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
 select cast(map('k', cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9))) as string)
 -- !query analysis
-Project [cast(map(k, cast(2020-01-01 00:00:00.123456789 as timestamp_ntz(9))) as string) AS CAST(map(k, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))) AS STRING)#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
 select cast(named_struct('f', cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9))) as string)
 -- !query analysis
-Project [cast(named_struct(f, cast(2020-01-01 00:00:00.123456789 as timestamp_ltz(9))) as string) AS CAST(named_struct(f, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9))) AS STRING)#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -1118,9 +1136,14 @@ Project [cast(-122 as interval year to month) AS CAST(-122 AS INTERVAL YEAR TO M
 -- !query
 select cast(ym as interval year to month) from values(-122S) as t(ym)
 -- !query analysis
-Project [cast(ym#x as interval year to month) AS ym#x]
-+- SubqueryAlias t
-   +- LocalRelation [ym#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -1147,9 +1170,14 @@ Project [cast(100 as interval hour to second) AS CAST(100 AS INTERVAL HOUR TO SE
 -- !query
 select cast(dt as interval hour to second) from values(100Y) as t(dt)
 -- !query analysis
-Project [cast(dt#x as interval hour to second) AS dt#x]
-+- SubqueryAlias t
-   +- LocalRelation [dt#x]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -1559,8 +1587,14 @@ Project [cast(cast(2147483648 as bigint) as int) AS CAST(CAST(2147483648 AS BIGI
 -- !query
 SELECT map(1, '123', 2, '456')[1] :: int
 -- !query analysis
-Project [cast(map(1, 123, 2, 456)[1] as int) AS CAST(map(1, 123, 2, 456)[1] AS INT)#x]
-+- OneRowRelation
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -1733,4 +1767,149 @@ Project [cast(23:59:59.999999 as decimal(11,5)) AS CAST(TIME '23:59:59.999999' A
 SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8))
 -- !query analysis
 Project [cast(23:59:59.999999999 as decimal(14,8)) AS CAST(TIME '23:59:59.999999999' AS DECIMAL(14,8))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(6))
+-- !query analysis
+Project [cast(2020-05-17 12:34:56.789012 as time(6)) AS CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012' AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(3))
+-- !query analysis
+Project [cast(2020-05-17 12:34:56.789012 as time(3)) AS CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012' AS TIME(3))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(0))
+-- !query analysis
+Project [cast(2020-05-17 12:34:56.789012 as time(0)) AS CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012' AS TIME(0))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(timestamp_ntz'1969-12-31 23:59:59.123456' AS TIME(6))
+-- !query analysis
+Project [cast(1969-12-31 23:59:59.123456 as time(6)) AS CAST(TIMESTAMP_NTZ '1969-12-31 23:59:59.123456' AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(9))
+-- !query analysis
+Project [cast(cast(2020-05-17 12:34:56.789012345 as timestamp_ntz(9)) as time(9)) AS CAST(CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(7))
+-- !query analysis
+Project [cast(cast(2020-05-17 12:34:56.789012345 as timestamp_ntz(9)) as time(7)) AS CAST(CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(7))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(6))
+-- !query analysis
+Project [cast(cast(2020-05-17 12:34:56.789012345 as timestamp_ntz(9)) as time(6)) AS CAST(CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(7) AS TIME(9))
+-- !query analysis
+Project [cast(cast(2020-05-17 12:34:56.789012345 as timestamp_ntz(7)) as time(9)) AS CAST(CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(7)) AS TIME(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT timestamp_ntz'2020-05-17 12:34:56.789012' :: TIME(6)
+-- !query analysis
+Project [cast(2020-05-17 12:34:56.789012 as time(6)) AS CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012' AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ))
+-- !query analysis
+Project [typeof(cast(12:34:56 as timestamp_ntz)) AS typeof(CAST(TIME '12:34:56' AS TIMESTAMP_NTZ))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ(9)))
+-- !query analysis
+Project [typeof(cast(12:34:56 as timestamp_ntz(9))) AS typeof(CAST(TIME '12:34:56' AS TIMESTAMP_NTZ(9)))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ) AS DATE) = current_date()
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS DATE) = current_date()
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ) AS TIME(6))
+-- !query analysis
+Project [cast(cast(12:34:56.789012 as timestamp_ntz) as time(6)) AS CAST(CAST(TIME '12:34:56.789012' AS TIMESTAMP_NTZ) AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(9))
+-- !query analysis
+Project [cast(cast(12:34:56.789012345 as timestamp_ntz(9)) as time(9)) AS CAST(CAST(TIME '12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(7)) AS TIME(9))
+-- !query analysis
+Project [cast(cast(12:34:56.789012345 as timestamp_ntz(7)) as time(9)) AS CAST(CAST(TIME '12:34:56.789012345' AS TIMESTAMP_NTZ(7)) AS TIME(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345'::time(9) AS TIMESTAMP_NTZ(6)) AS TIME(9))
+-- !query analysis
+Project [cast(cast(cast(12:34:56.789012345 as time(9)) as timestamp_ntz) as time(9)) AS CAST(CAST(CAST(TIME '12:34:56.789012345' AS TIME(9)) AS TIMESTAMP_NTZ) AS TIME(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ)
+-- !query analysis
+Project [cast(cast(null as time(6)) as timestamp_ntz) AS CAST(CAST(NULL AS TIME(6)) AS TIMESTAMP_NTZ)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ(9))
+-- !query analysis
+Project [cast(cast(null as time(6)) as timestamp_ntz(9)) AS CAST(CAST(NULL AS TIME(6)) AS TIMESTAMP_NTZ(9))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6))
+-- !query analysis
+Project [cast(cast(null as timestamp_ntz) as time(6)) AS CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6))
+-- !query analysis
+Project [cast(cast(null as timestamp_ntz(9)) as time(6)) AS CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6))#x]
 +- OneRowRelation

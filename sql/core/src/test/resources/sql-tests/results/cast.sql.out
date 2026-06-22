@@ -1437,25 +1437,46 @@ struct<CAST(CAST(1960-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(7)) AS STRING):s
 -- !query
 select cast(array(cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9)), cast(null as timestamp_ntz(9))) as string)
 -- !query schema
-struct<CAST(array(CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9)), CAST(NULL AS TIMESTAMP_NTZ(9))) AS STRING):string>
+struct<>
 -- !query output
-[2020-01-01 00:00:00.123456789, null]
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
 select cast(map('k', cast('2020-01-01 00:00:00.123456789' as timestamp_ntz(9))) as string)
 -- !query schema
-struct<CAST(map(k, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_NTZ(9))) AS STRING):string>
+struct<>
 -- !query output
-{k -> 2020-01-01 00:00:00.123456789}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
 select cast(named_struct('f', cast('2020-01-01 00:00:00.123456789' as timestamp_ltz(9))) as string)
 -- !query schema
-struct<CAST(named_struct(f, CAST(2020-01-01 00:00:00.123456789 AS TIMESTAMP_LTZ(9))) AS STRING):string>
+struct<>
 -- !query output
-{2020-01-01 00:00:00.123456789}
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -1933,9 +1954,16 @@ struct<CAST(-122 AS INTERVAL YEAR TO MONTH):interval year to month>
 -- !query
 select cast(ym as interval year to month) from values(-122S) as t(ym)
 -- !query schema
-struct<ym:interval year to month>
+struct<>
 -- !query output
--10-2
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -1965,9 +1993,16 @@ struct<CAST(100 AS INTERVAL HOUR TO SECOND):interval hour to second>
 -- !query
 select cast(dt as interval hour to second) from values(100Y) as t(dt)
 -- !query schema
-struct<dt:interval hour to second>
+struct<>
 -- !query output
-0 00:01:40.000000000
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -2621,9 +2656,16 @@ org.apache.spark.SparkArithmeticException
 -- !query
 SELECT map(1, '123', 2, '456')[1] :: int
 -- !query schema
-struct<CAST(map(1, 123, 2, 456)[1] AS INT):int>
+struct<>
 -- !query output
-123
+org.apache.spark.sql.catalyst.analysis.UnresolvedException
+{
+  "errorClass" : "INTERNAL_ERROR",
+  "sqlState" : "XX000",
+  "messageParameters" : {
+    "message" : "Invalid call to dataType on unresolved object"
+  }
+}
 
 
 -- !query
@@ -2871,3 +2913,171 @@ SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8))
 struct<CAST(TIME '23:59:59.999999999' AS DECIMAL(14,8)):decimal(14,8)>
 -- !query output
 86400.00000000
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(6))
+-- !query schema
+struct<CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012' AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(3))
+-- !query schema
+struct<CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012' AS TIME(3)):time(3)>
+-- !query output
+12:34:56.789
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(0))
+-- !query schema
+struct<CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012' AS TIME(0)):time(0)>
+-- !query output
+12:34:56
+
+
+-- !query
+SELECT CAST(timestamp_ntz'1969-12-31 23:59:59.123456' AS TIME(6))
+-- !query schema
+struct<CAST(TIMESTAMP_NTZ '1969-12-31 23:59:59.123456' AS TIME(6)):time(6)>
+-- !query output
+23:59:59.123456
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.789012345
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(7))
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(7)):time(7)>
+-- !query output
+12:34:56.7890123
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(6))
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(7) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012345' AS TIMESTAMP_NTZ(7)) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.7890123
+
+
+-- !query
+SELECT timestamp_ntz'2020-05-17 12:34:56.789012' :: TIME(6)
+-- !query schema
+struct<CAST(TIMESTAMP_NTZ '2020-05-17 12:34:56.789012' AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ))
+-- !query schema
+struct<typeof(CAST(TIME '12:34:56' AS TIMESTAMP_NTZ)):string>
+-- !query output
+timestamp_ntz
+
+
+-- !query
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ(9)))
+-- !query schema
+struct<typeof(CAST(TIME '12:34:56' AS TIMESTAMP_NTZ(9))):string>
+-- !query output
+timestamp_ntz(9)
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ) AS DATE) = current_date()
+-- !query schema
+struct<(CAST(CAST(TIME '12:34:56' AS TIMESTAMP_NTZ) AS DATE) = current_date()):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS DATE) = current_date()
+-- !query schema
+struct<(CAST(CAST(TIME '12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS DATE) = current_date()):boolean>
+-- !query output
+true
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ) AS TIME(6))
+-- !query schema
+struct<CAST(CAST(TIME '12:34:56.789012' AS TIMESTAMP_NTZ) AS TIME(6)):time(6)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(TIME '12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.789012345
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(7)) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(TIME '12:34:56.789012345' AS TIMESTAMP_NTZ(7)) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.7890123
+
+
+-- !query
+SELECT CAST(CAST(TIME'12:34:56.789012345'::time(9) AS TIMESTAMP_NTZ(6)) AS TIME(9))
+-- !query schema
+struct<CAST(CAST(CAST(TIME '12:34:56.789012345' AS TIME(9)) AS TIMESTAMP_NTZ) AS TIME(9)):time(9)>
+-- !query output
+12:34:56.789012
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ)
+-- !query schema
+struct<CAST(CAST(NULL AS TIME(6)) AS TIMESTAMP_NTZ):timestamp_ntz>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ(9))
+-- !query schema
+struct<CAST(CAST(NULL AS TIME(6)) AS TIMESTAMP_NTZ(9)):timestamp_ntz(9)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6))
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6)):time(6)>
+-- !query output
+NULL
+
+
+-- !query
+SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6))
+-- !query schema
+struct<CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6)):time(6)>
+-- !query output
+NULL

@@ -324,3 +324,38 @@ SELECT CAST(time '23:59:59.9' AS decimal(6, 0));
 SELECT CAST(time '23:59:59.999' AS decimal(8, 2));
 SELECT CAST(time '23:59:59.999999' AS decimal(11, 5));
 SELECT CAST(time '23:59:59.999999999' AS decimal(14, 8));
+
+-- SPARK-57618: cast TIMESTAMP_NTZ(q) to TIME(p) extracts the time-of-day and truncates to p.
+-- This direction is deterministic and time-zone independent.
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(6));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(3));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012' AS TIME(0));
+-- Pre-epoch wall-clock time-of-day is preserved.
+SELECT CAST(timestamp_ntz'1969-12-31 23:59:59.123456' AS TIME(6));
+-- Nanosecond TIMESTAMP_NTZ(q) preserves the sub-microsecond digits up to p.
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(9));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(7));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(9) AS TIME(6));
+SELECT CAST(timestamp_ntz'2020-05-17 12:34:56.789012345'::timestamp_ntz(7) AS TIME(9));
+-- Double colon syntax.
+SELECT timestamp_ntz'2020-05-17 12:34:56.789012' :: TIME(6);
+
+-- SPARK-57618: cast TIME(p) to TIMESTAMP_NTZ(q) takes the date from CURRENT_DATE. SQL-layer
+-- coverage stays deterministic: type resolution, the date anchor equals current_date(), and the
+-- value round-trips back to TIME. The current-date stabilization is covered by ComputeCurrentTimeSuite
+-- and the value semantics by CastSuite* unit tests.
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ));
+SELECT typeof(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ(9)));
+-- The date fields come from the query current date.
+SELECT CAST(CAST(TIME'12:34:56' AS TIMESTAMP_NTZ) AS DATE) = current_date();
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS DATE) = current_date();
+-- Round-trips re-extract the original time-of-day (truncated to the intermediate precision).
+SELECT CAST(CAST(TIME'12:34:56.789012' AS TIMESTAMP_NTZ) AS TIME(6));
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(9)) AS TIME(9));
+SELECT CAST(CAST(TIME'12:34:56.789012345' AS TIMESTAMP_NTZ(7)) AS TIME(9));
+SELECT CAST(CAST(TIME'12:34:56.789012345'::time(9) AS TIMESTAMP_NTZ(6)) AS TIME(9));
+-- Null propagation in both directions.
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ);
+SELECT CAST(CAST(NULL AS TIME) AS TIMESTAMP_NTZ(9));
+SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ) AS TIME(6));
+SELECT CAST(CAST(NULL AS TIMESTAMP_NTZ(9)) AS TIME(6));

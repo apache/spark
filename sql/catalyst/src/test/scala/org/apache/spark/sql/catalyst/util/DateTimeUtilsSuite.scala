@@ -1609,6 +1609,43 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(msg.contains("Invalid value"))
   }
 
+  test("makeTimestampNTZNanos") {
+    // The combined date + time is floored to the target nanosecond precision in [7, 9].
+    val nanos = localTime(23, 59, 59, 999999, 999)
+    val microsOfDay = localTime(23, 59, 59, 999999) / NANOS_PER_MICROS
+    assert(makeTimestampNTZNanos(0, nanos, 9) ===
+      TimestampNanosVal.fromParts(microsOfDay, 999.toShort))
+    assert(makeTimestampNTZNanos(0, nanos, 8) ===
+      TimestampNanosVal.fromParts(microsOfDay, 990.toShort))
+    assert(makeTimestampNTZNanos(0, nanos, 7) ===
+      TimestampNanosVal.fromParts(microsOfDay, 900.toShort))
+    // A non-zero date shifts the microsecond component while preserving the sub-micro digits.
+    assert(makeTimestampNTZNanos(days(2020, 5, 17), localTime(12, 34, 56, 789012, 345), 9) ===
+      TimestampNanosVal.fromParts(date(2020, 5, 17, 12, 34, 56, 789012), 345.toShort))
+    // Pre-epoch date.
+    assert(makeTimestampNTZNanos(days(1969, 12, 31), localTime(23, 59, 59, 123456, 789), 9) ===
+      TimestampNanosVal.fromParts(date(1969, 12, 31, 23, 59, 59, 123456), 789.toShort))
+  }
+
+  test("timestampNTZ time-of-day extraction") {
+    // Micro TimestampNTZ: time-of-day is the value modulo one day.
+    assert(timestampNTZToNanosOfDay(0) === 0)
+    assert(timestampNTZToNanosOfDay(date(2020, 5, 17, 12, 34, 56, 789012)) ===
+      localTime(12, 34, 56, 789012))
+    // Pre-epoch timestamps wrap correctly via floorMod.
+    assert(timestampNTZToNanosOfDay(date(1969, 12, 31, 23, 59, 59, 123456)) ===
+      localTime(23, 59, 59, 123456))
+    assert(timestampNTZToNanosOfDay(-1) === localTime(23, 59, 59, 999999))
+
+    // Nanosecond TimestampNTZ preserves the sub-microsecond digits.
+    assert(timestampNTZNanosToNanosOfDay(
+      TimestampNanosVal.fromParts(date(2020, 5, 17, 12, 34, 56, 789012), 345.toShort)) ===
+      localTime(12, 34, 56, 789012, 345))
+    assert(timestampNTZNanosToNanosOfDay(
+      TimestampNanosVal.fromParts(date(1969, 12, 31, 23, 59, 59, 123456), 789.toShort)) ===
+      localTime(23, 59, 59, 123456, 789))
+  }
+
   test("instant to nanos of day") {
     assert(instantToNanosOfDay(Instant.parse("1970-01-01T00:00:01.001002003Z"), "UTC") ==
       1001002003)

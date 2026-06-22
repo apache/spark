@@ -131,6 +131,22 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
               Literal.create(
                 DateTimeUtils.microsToDays(currentTimestampMicros, cd.zoneId), DateType)
             })
+          // CAST(time AS TIMESTAMP_NTZ(q)) fills the date fields from CURRENT_DATE. Rewrite it to
+          // a date+time builder anchored on the same query-stable current date literal that
+          // current_date() resolves to, so all references agree within the query. The builder's
+          // `replacement` (a StaticInvoke) is emitted directly because ReplaceExpressions has
+          // already run earlier in this batch and will not expand a fresh RuntimeReplaceable.
+          case c: Cast if Cast.isTimeToTimestampNTZ(c.child.dataType, c.dataType) =>
+            val dateLit = currentDates.getOrElseUpdate(c.zoneId, {
+              Literal.create(
+                DateTimeUtils.microsToDays(currentTimestampMicros, c.zoneId), DateType)
+            })
+            c.dataType match {
+              case n: TimestampNTZNanosType =>
+                MakeTimestampNTZNanos(dateLit, c.child, n.precision).replacement
+              case _ =>
+                MakeTimestampNTZ(dateLit, c.child).replacement
+            }
           case currentTimeType : CurrentTime =>
             val truncatedTime = truncateTimeToPrecision(currentTimeOfDayNanos,
               currentTimeType.precision)
