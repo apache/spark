@@ -2510,11 +2510,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       assert(Cast.canCast(TimestampNTZType, TimeType(p)))
       assert(Cast.canAnsiCast(TimeType(p), TimestampNTZType))
       assert(Cast.canAnsiCast(TimestampNTZType, TimeType(p)))
+      // try_cast inherits the allowed pairs (canTryCast delegates to canAnsiCast for atomic types).
+      // These casts never fail, so try_cast behaves exactly like cast.
+      assert(Cast.canTryCast(TimeType(p), TimestampNTZType))
+      assert(Cast.canTryCast(TimestampNTZType, TimeType(p)))
       // TIMESTAMP_LTZ (the micro TimestampType) is not a valid counterpart.
       assert(!Cast.canCast(TimeType(p), TimestampType))
       assert(!Cast.canCast(TimestampType, TimeType(p)))
       assert(!Cast.canAnsiCast(TimeType(p), TimestampType))
       assert(!Cast.canAnsiCast(TimestampType, TimeType(p)))
+      assert(!Cast.canTryCast(TimeType(p), TimestampType))
+      assert(!Cast.canTryCast(TimestampType, TimeType(p)))
       // The disallowed pairs are rejected at analysis, not merely by the canCast predicate. The
       // suite `cast` helper applies the active evalMode, so canAnsiCast / canCast is exercised
       // under ANSI on / off respectively.
@@ -2525,11 +2531,15 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         assert(Cast.canCast(TimestampNTZNanosType(q), TimeType(p)))
         assert(Cast.canAnsiCast(TimeType(p), TimestampNTZNanosType(q)))
         assert(Cast.canAnsiCast(TimestampNTZNanosType(q), TimeType(p)))
+        assert(Cast.canTryCast(TimeType(p), TimestampNTZNanosType(q)))
+        assert(Cast.canTryCast(TimestampNTZNanosType(q), TimeType(p)))
         // TIMESTAMP_LTZ nanos is not a valid counterpart either.
         assert(!Cast.canCast(TimeType(p), TimestampLTZNanosType(q)))
         assert(!Cast.canCast(TimestampLTZNanosType(q), TimeType(p)))
         assert(!Cast.canAnsiCast(TimeType(p), TimestampLTZNanosType(q)))
         assert(!Cast.canAnsiCast(TimestampLTZNanosType(q), TimeType(p)))
+        assert(!Cast.canTryCast(TimeType(p), TimestampLTZNanosType(q)))
+        assert(!Cast.canTryCast(TimestampLTZNanosType(q), TimeType(p)))
       }
     }
     // Only TIME -> TIMESTAMP_NTZ depends on the session time zone (CURRENT_DATE); the reverse

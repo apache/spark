@@ -2573,15 +2573,24 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(MakeTimestampNTZNanos(dateLit(date), timeNanos, 7),
       TimestampNanosVal.fromParts(micros, 700.toShort))
     // Pre-epoch date.
+    val preEpochMicros = timestampToMicros("1969-12-31T23:59:59.123456", UTC)
     checkEvaluation(
       MakeTimestampNTZNanos(dateLit("1969-12-31"),
         Literal.create(localTime(23, 59, 59, 123456, 789), TimeType(9)), 9),
-      TimestampNanosVal.fromParts(timestampToMicros("1969-12-31T23:59:59.123456", UTC), 789.toShort))
+      TimestampNanosVal.fromParts(preEpochMicros, 789.toShort))
     // Null inputs propagate to a null result.
     checkEvaluation(MakeTimestampNTZNanos(Literal(null, DateType), timeNanos, 9), null)
     checkEvaluation(MakeTimestampNTZNanos(dateLit(date), Literal(null, TimeType(9)), 9), null)
     // The result type carries the requested nanosecond precision.
     assert(MakeTimestampNTZNanos(dateLit(date), timeNanos, 7).dataType === TimestampNTZNanosType(7))
+    // The precision participates in equality and canonicalization: builders that differ only in
+    // precision are distinct, so two casts to different TIMESTAMP_NTZ(q) are never conflated.
+    assert(MakeTimestampNTZNanos(dateLit(date), timeNanos, 9) !=
+      MakeTimestampNTZNanos(dateLit(date), timeNanos, 7))
+    assert(MakeTimestampNTZNanos(dateLit(date), timeNanos, 9).canonicalized ==
+      MakeTimestampNTZNanos(dateLit(date), timeNanos, 9).canonicalized)
+    assert(MakeTimestampNTZNanos(dateLit(date), timeNanos, 9).canonicalized !=
+      MakeTimestampNTZNanos(dateLit(date), timeNanos, 7).canonicalized)
   }
 
   test("SPARK-53113: try to make timestamp from date, time, and timezone") {
