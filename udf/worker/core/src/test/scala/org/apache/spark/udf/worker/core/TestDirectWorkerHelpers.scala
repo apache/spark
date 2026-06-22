@@ -17,7 +17,7 @@
 package org.apache.spark.udf.worker.core
 
 import java.io.{File, IOException}
-import java.nio.file.{Files, FileVisitResult, Path, SimpleFileVisitor}
+import java.nio.file.{Files, FileVisitResult, Path, Paths, SimpleFileVisitor}
 import java.nio.file.attribute.{BasicFileAttributes, PosixFilePermissions}
 
 import org.apache.spark.udf.worker.{Cancel, DataRequest, DataResponse, Finish, FinishResponse,
@@ -213,15 +213,23 @@ class TestDirectWorkerDispatcher(
    * Creates a private (owner-only, 0700) temp directory for worker sockets.
    * On POSIX filesystems the permissions are applied atomically at creation;
    * the non-POSIX branch tightens best-effort after creation.
+   *
+   * The directory is anchored under a short base path (see [[shortTempBase]])
+   * rather than the configured `java.io.tmpdir`. Builds point the latter at a
+   * deep location (e.g. `<module>/target/tmp`), which combined with the
+   * generated socket leaf would push the worker's Unix-domain socket path past
+   * the platform `sun_path` limit (108 bytes on Linux, 104 on macOS) and fail
+   * with "AF_UNIX path too long".
    */
   private def createPrivateTempDirectory(): Path = {
     val attr = PosixFilePermissions.asFileAttribute(
       PosixFilePermissions.fromString("rwx------"))
+    val base = shortTempBase()
     try {
-      Files.createTempDirectory("spark-udf-worker", attr)
+      Files.createTempDirectory(base, "spark-udf-worker", attr)
     } catch {
       case _: UnsupportedOperationException =>
-        val dir = Files.createTempDirectory("spark-udf-worker")
+        val dir = Files.createTempDirectory(base, "spark-udf-worker")
         val f = dir.toFile
         // Bit-wise AND (NOT &&): all six setters must run even if an earlier
         // one returns false, so the final permission state matches owner-only.
@@ -237,5 +245,18 @@ class TestDirectWorkerDispatcher(
         }
         dir
     }
+  }
+
+  /**
+   * Picks the shortest usable base directory for the socket temp dir so the
+   * resulting Unix-domain socket path stays within the platform `sun_path`
+   * limit. Prefers "/tmp" when it is a writable directory (true on the Linux
+   * and macOS hosts these tests run on); otherwise falls back to the
+   * configured `java.io.tmpdir`.
+   */
+  private def shortTempBase(): Path = {
+    val fallback = Paths.get(System.getProperty("java.io.tmpdir"))
+    val shortTmp = Paths.get("/tmp")
+    if (Files.isDirectory(shortTmp) && Files.isWritable(shortTmp)) shortTmp else fallback
   }
 }
