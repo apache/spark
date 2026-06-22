@@ -862,8 +862,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val minTimestamp = Literal.create(Long.MinValue, TimestampType)
       Seq("YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE",
           "SECOND", "MILLISECOND").foreach { fmt =>
-        checkExceptionInExpression[ArithmeticException](
-          TruncTimestamp(Literal.create(fmt, StringType), minTimestamp), "")
+        // The overflow surfaces as a raw `ArithmeticException` from `Math.*Exact`, which
+        // `checkEvaluation` wraps in a scalatest `TestFailedException`. Unwrap it via `getCause`
+        // and assert the type. The exception message is not part of the API contract: JDK 25 may
+        // throw it with a `null` message in codegen mode (JIT "hot throw", see SPARK-55714 /
+        // SPARK-55755 / JDK-8367990), while the interpreter reports "long overflow", so tolerate
+        // a null message. Mirrors the `TimestampAddInterval` overflow check in this suite.
+        val e = intercept[Exception] {
+          checkEvaluation(
+            TruncTimestamp(Literal.create(fmt, StringType), minTimestamp),
+            null)
+        }.getCause
+        assert(e.isInstanceOf[ArithmeticException])
+        assert(e.getMessage == null || e.getMessage.contains("overflow"))
       }
     }
   }
