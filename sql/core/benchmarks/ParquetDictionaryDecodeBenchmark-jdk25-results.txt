@@ -6,12 +6,12 @@ OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Dictionary Decode (no nulls):             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        6              6           0        178.5           5.6       1.0X
-LongUpdater                                           6              6           0        178.3           5.6       1.0X
-FloatUpdater                                          6              6           0        178.3           5.6       1.0X
-DoubleUpdater                                         6              6           0        177.9           5.6       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  6              6           0        178.2           5.6       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                6              6           0        177.6           5.6       1.0X
+IntegerUpdater                                        6              6           0        175.2           5.7       1.0X
+LongUpdater                                           6              6           0        174.0           5.7       1.0X
+FloatUpdater                                          6              6           0        180.9           5.5       1.0X
+DoubleUpdater                                         6              6           0        180.5           5.5       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  6              6           0        173.6           5.8       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                6              6           0        180.0           5.6       1.0X
 
 
 ================================================================================================
@@ -22,12 +22,12 @@ OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Dictionary Decode (10% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        6              6           0        163.4           6.1       1.0X
-LongUpdater                                           6              6           0        163.5           6.1       1.0X
-FloatUpdater                                          6              6           0        163.8           6.1       1.0X
-DoubleUpdater                                         6              6           0        162.8           6.1       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  6              6           0        163.9           6.1       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                6              6           0        163.0           6.1       1.0X
+IntegerUpdater                                        6              7           0        161.7           6.2       1.0X
+LongUpdater                                           7              7           0        159.4           6.3       1.0X
+FloatUpdater                                          6              6           0        166.2           6.0       1.0X
+DoubleUpdater                                         6              6           0        165.7           6.0       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  7              7           0        159.0           6.3       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                6              7           0        165.5           6.0       1.0X
 
 
 ================================================================================================
@@ -38,11 +38,11 @@ OpenJDK 64-Bit Server VM 25.0.3+9-LTS on Linux 6.17.0-1018-azure
 AMD EPYC 7763 64-Core Processor
 Dictionary Decode (50% nulls):            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-IntegerUpdater                                        8              8           0        127.0           7.9       1.0X
-LongUpdater                                           8              8           0        126.8           7.9       1.0X
-FloatUpdater                                          8              8           0        125.3           8.0       1.0X
-DoubleUpdater                                         8              8           0        126.6           7.9       1.0X
-IntegerToLongUpdater (INT32 -> Long)                  8              8           0        125.4           8.0       1.0X
-FloatToDoubleUpdater (FLOAT -> Double)                8              8           0        126.7           7.9       1.0X
+IntegerUpdater                                        8              9           0        125.2           8.0       1.0X
+LongUpdater                                           8              9           0        123.7           8.1       1.0X
+FloatUpdater                                          8              9           0        124.7           8.0       1.0X
+DoubleUpdater                                         8              9           0        124.6           8.0       1.0X
+IntegerToLongUpdater (INT32 -> Long)                  9              9           0        122.9           8.1       1.0X
+FloatToDoubleUpdater (FLOAT -> Double)                8              8           0        125.3           8.0       1.0X
 
 
