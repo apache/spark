@@ -1207,7 +1207,7 @@ object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
       // original string is in the same format.
       case DateFormatClass(
           GetTimestamp(
-            e @ DateFormatClass(_, pattern, timeZoneId),
+            e @ DateFormatClass(child, pattern, timeZoneId),
             pattern2,
             TimestampType,
             _,
@@ -1216,7 +1216,8 @@ object SimplifyDateTimeConversions extends Rule[LogicalPlan] {
           pattern3,
           timeZoneId3)
           if pattern.semanticEquals(pattern2) && pattern.semanticEquals(pattern3)
-            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3 =>
+            && timeZoneId == timeZoneId2 && timeZoneId == timeZoneId3
+            && !child.dataType.isInstanceOf[TimeType] =>
         e
 
       // Remove a timestamp to string conversion followed by a string to timestamp conversions if
