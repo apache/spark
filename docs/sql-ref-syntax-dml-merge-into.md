@@ -27,7 +27,7 @@ updated or deleted, and new rows are inserted from the source, according to the 
 apply. All of these row-level changes are performed as a single atomic operation.
 
 `MERGE INTO` is supported on tables backed by
-[Data Source V2](sql-data-sources-v2.html#row-level-dml) connectors that support row-level operations.
+[Data Source V2](sql-v2-data-sources.html#row-level-dml) connectors that support row-level operations.
 
 ### Syntax
 
