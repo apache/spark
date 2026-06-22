@@ -348,7 +348,7 @@ The following options control the authentication of Web UIs:
 <tr>
   <td><code>spark.ui.allowFramingFrom</code></td>
   <td><code>SAMEORIGIN</code></td>
-  <td>Allow framing for a specific named URI via <code>X-Frame-Options</code>. By default, allow only from the same origin.</td>
+  <td>Allow framing for a specific named URI via CSP <code>frame-ancestors</code> directive. By default, allow only from the same origin. The <code>X-Frame-Options</code> header is always set to <code>SAMEORIGIN</code> as a fallback for legacy browsers.</td>
   <td>1.6.0</td>
 </tr>
 <tr>

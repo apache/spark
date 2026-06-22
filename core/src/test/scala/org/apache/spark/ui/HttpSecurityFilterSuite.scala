@@ -130,7 +130,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val filter = new HttpSecurityFilter(conf, secMgr)
     filter.doFilter(req, res, chain)
 
-    // CSP header contains a dynamic nonce, so verify it matches the expected pattern
+    // CSP header contains a dynamic nonce and frame-ancestors with the configured URI
     val cspCaptor = ArgumentCaptor.forClass(classOf[String])
     verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
     val cspValue = cspCaptor.getValue
@@ -139,9 +139,12 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     assert(cspValue.contains("img-src 'self' data:"))
     assert(cspValue.contains("object-src 'none'"))
     assert(cspValue.contains("base-uri 'self'"))
+    assert(cspValue.contains("frame-ancestors 'self' example.com"))
 
+    // X-Frame-Options is always SAMEORIGIN as a fallback for legacy browsers.
+    // The allowFramingFrom config is honored via CSP frame-ancestors instead.
     Map(
-      "X-Frame-Options" -> "ALLOW-FROM example.com",
+      "X-Frame-Options" -> "SAMEORIGIN",
       "X-XSS-Protection" -> "xssProtection",
       "X-Content-Type-Options" -> "nosniff",
       "Strict-Transport-Security" -> "tsec"
@@ -150,7 +153,7 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     }
   }
 
-  test("Content-Security-Policy header is not set by default") {
+  test("Content-Security-Policy header has only frame-ancestors when CSP is disabled") {
     val conf = new SparkConf(false)
     val secMgr = new SecurityManager(conf)
     val req = mockRequest()
@@ -160,7 +163,10 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
     val filter = new HttpSecurityFilter(conf, secMgr)
     filter.doFilter(req, res, chain)
 
-    verify(res, times(0)).setHeader(meq("Content-Security-Policy"), any())
+    // Even with CSP disabled, frame-ancestors should be set for clickjacking protection
+    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
+    assert(cspCaptor.getValue === "frame-ancestors 'self';")
   }
 
   test("X-XSS-Protection defaults to 0") {
@@ -278,6 +284,44 @@ class HttpSecurityFilterSuite extends SparkFunSuite {
 
     // All nonces should be unique
     assert(nonces.distinct.size === 3)
+  }
+
+  test("allowFramingFrom value is sanitized to prevent CSP directive injection") {
+    val conf = new SparkConf(false)
+      .set(UI_ALLOW_FRAMING_FROM, "evil.com; script-src 'unsafe-inline'")
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    val cspCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(res).setHeader(meq("Content-Security-Policy"), cspCaptor.capture())
+    val cspValue = cspCaptor.getValue
+    // Semicolons should be stripped, preventing directive injection
+    assert(!cspValue.contains("script-src 'unsafe-inline'"))
+    assert(cspValue.contains("frame-ancestors 'self' evil.com"))
+  }
+
+  test("X-Frame-Options is set even when access is denied") {
+    val conf = new SparkConf(false)
+      .set(ACLS_ENABLE, true)
+      .set(UI_VIEW_ACLS, Seq("alice"))
+    val secMgr = new SecurityManager(conf)
+    val req = mockRequest()
+    val res = mock(classOf[HttpServletResponse])
+    val chain = mock(classOf[FilterChain])
+
+    when(req.getRemoteUser()).thenReturn("unauthorized-user")
+    val filter = new HttpSecurityFilter(conf, secMgr)
+    filter.doFilter(req, res, chain)
+
+    // chain.doFilter should not have been called
+    verify(chain, times(0)).doFilter(any(), any())
+    // But X-Frame-Options should still be set
+    verify(res).setHeader(meq("X-Frame-Options"), meq("SAMEORIGIN"))
   }
 
   private def mockRequest(params: Map[String, Array[String]] = Map()): HttpServletRequest = {
