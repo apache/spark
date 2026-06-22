@@ -186,11 +186,12 @@ private[spark] class DAGScheduler(
   // A construction-time `else null` would then be dereferenced by a use-site that re-checks
   // `Utils.isTesting` and sees `true`, throwing an NPE that crashes the event loop. The maps are
   // only ever populated inside the config-gated test paths, so in production they stay empty and
-  // carry no behavioral cost beyond an empty map. They are not evicted per-stage: under AQE each
+  // carry no behavioral cost beyond an empty map. Entries are evicted when the shuffle's map
+  // outputs are unregistered (via the CleanerListener attached lazily in
+  // ensureInjectShuffleFetchFailuresCleanerListenerForTest), not on stage removal: under AQE each
   // Exchange is materialized as its own map-stage job whose stage is removed before the consuming
   // stage runs, so evicting on stage removal would drop a pending corruption before its consumer
-  // is ever submitted. The only correct eviction point is shuffle unregistration, which is
-  // GC-driven; the residual state is one small entry per shuffleId, bounded by a test's lifetime.
+  // is ever submitted.
 
   // For INJECT_SHUFFLE_FETCH_FAILURES: per-shuffleId, the stage attempt whose partition-0 task
   // we corrupted. Read to (a) avoid re-corrupting that partition on recompute, and (b) decide
@@ -212,6 +213,32 @@ private[spark] class DAGScheduler(
   // task-success events observed so far.
   private val injectShuffleFetchFailuresDownstreamSuccessCount: ConcurrentHashMap[Int, Int] =
     new ConcurrentHashMap[Int, Int]()
+
+  // Whether the CleanerListener that evicts the injectShuffleFetchFailures* maps on shuffle
+  // cleanup has been attached. Attached lazily (not in the constructor) because sc.cleaner is
+  // created after the DAGScheduler.
+  @volatile private var injectShuffleFetchFailuresCleanerAttached = false
+
+  // Lazily attach a CleanerListener that drops a shuffle's injectShuffleFetchFailures* entries
+  // when its map outputs are unregistered. Called from the test-gated injection path only, so it
+  // never runs in production. Runs on the single-threaded event loop, hence no extra locking.
+  private def ensureInjectShuffleFetchFailuresCleanerListenerForTest(): Unit = {
+    if (injectShuffleFetchFailuresCleanerAttached) return
+    sc.cleaner.foreach { cleaner =>
+      cleaner.attachListener(new CleanerListener {
+        override def rddCleaned(rddId: Int): Unit = {}
+        override def shuffleCleaned(shuffleId: Int): Unit = {
+          injectShuffleFetchFailuresCorruptedAttempt.remove(shuffleId)
+          injectShuffleFetchFailuresPendingDelayedCorruption.remove(shuffleId)
+          injectShuffleFetchFailuresDownstreamSuccessCount.remove(shuffleId)
+        }
+        override def broadcastCleaned(broadcastId: Long): Unit = {}
+        override def accumCleaned(accId: Long): Unit = {}
+        override def checkpointCleaned(rddId: Long): Unit = {}
+      })
+      injectShuffleFetchFailuresCleanerAttached = true
+    }
+  }
 
   // Build the bogus BlockManagerId used by INJECT_SHUFFLE_FETCH_FAILURES to mark a corrupted
   // MapStatus: keeps the original host/port/topology so the consumer's locality preference
@@ -1676,6 +1703,7 @@ private[spark] class DAGScheduler(
    */
   private def shouldCorruptShuffleOutputForTest(shuffleId: Int, task: Task[_]): Boolean = {
     if (task.partitionId != 0) return false
+    ensureInjectShuffleFetchFailuresCleanerListenerForTest()
     val recorded = injectShuffleFetchFailuresCorruptedAttempt.computeIfAbsent(
       shuffleId, _ => task.stageAttemptId)
     recorded == task.stageAttemptId
