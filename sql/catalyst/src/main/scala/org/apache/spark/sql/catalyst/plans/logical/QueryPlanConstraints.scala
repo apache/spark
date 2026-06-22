@@ -34,6 +34,7 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
     if (conf.constraintPropagationEnabled) {
       validConstraints
         .union(inferAdditionalConstraints(validConstraints))
+        .union(inferConstraintsFromLiteralBindings(validConstraints))
         .union(constructIsNotNullConstraints(validConstraints, output))
         .filter { c =>
           c.references.nonEmpty && c.references.subsetOf(outputSet) && c.deterministic
@@ -57,9 +58,8 @@ trait QueryPlanConstraints extends ConstraintHelper { self: LogicalPlan =>
 trait ConstraintHelper {
 
   /**
-   * Infers an additional set of constraints from a given set of equality and inequality
-   * constraints. For example, (`a = 5`, `a = b`) returns `b = 5`, and (`a = 5`, `b >= a`)
-   * returns `b >= 5`.
+   * Infers an additional set of constraints from a given set of equality constraints via
+   * transitivity. For example, (`a = b`, `b = c`) returns `a = c`.
    */
   def inferAdditionalConstraints(constraints: ExpressionSet): ExpressionSet = {
     var inferredConstraints = ExpressionSet()
@@ -72,10 +72,6 @@ trait ConstraintHelper {
         val candidateConstraints = predicates - eq - EqualNullSafe(l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
         inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case eq @ EqualTo(l: Attribute, r: Literal) if isBinaryStable(l.dataType) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, l, r)
-      case eq @ EqualTo(l: Literal, r: Attribute) if isBinaryStable(r.dataType) =>
-        inferredConstraints ++= replaceConstraints(predicates - eq, r, l)
       case eq @ EqualTo(l @ Cast(_: Attribute, _, _, _), r: Attribute) =>
         inferredConstraints ++= replaceConstraints(predicates - eq - EqualNullSafe(l, r), r, l)
       case eq @ EqualTo(l: Attribute, r @ Cast(_: Attribute, _, _, _)) =>
@@ -84,6 +80,46 @@ trait ConstraintHelper {
     }
 
     inferredConstraints -- constraints
+  }
+
+  /**
+   * Infers additional constraints by substituting known attribute-to-literal bindings into
+   * non-equality predicates. For example, given `a = 5` and `b >= a`, infers `b >= 5`.
+   *
+   * [[EqualTo]] and [[EqualNullSafe]] predicates are excluded from substitution targets.
+   * Substituting into attribute-attribute [[EqualTo]] would duplicate work already done by the
+   * transitivity case in [[inferAdditionalConstraints]] (e.g. `a = 5` and `b = a` imply `b = 5`,
+   * already derived there). Substituting into [[EqualNullSafe]] would produce a structurally
+   * distinct form (e.g. `b <=> 5`) that downstream rules (such as subquery-reuse matching)
+   * treat differently from the [[EqualTo]] form, leading to duplicate subqueries being generated.
+   */
+  def inferConstraintsFromLiteralBindings(constraints: ExpressionSet): ExpressionSet = {
+    // Collect attr -> literal bindings, guarded by binary-stable collation so that
+    // the substitution is semantically safe (non-binary-stable collations may equate
+    // strings that are binary-distinct, so substituting the literal would change results).
+    val bindings: Map[Attribute, Literal] = constraints.collect {
+      case EqualTo(a: Attribute, l: Literal) if isBinaryStable(a.dataType) => a -> l
+      case EqualTo(l: Literal, a: Attribute) if isBinaryStable(a.dataType) => a -> l
+    }.toMap
+
+    if (bindings.isEmpty) return ExpressionSet()
+
+    val targets = constraints.filterNot {
+      // EqualTo: substituting into attr=attr is already covered by inferAdditionalConstraints
+      // (transitivity), and substituting into cast-equality forms would produce redundant cast
+      // literals already derivable from that same path.
+      // EqualNullSafe: substituting a literal produces a structurally distinct b <=> lit form
+      // that subquery-reuse matching treats differently from b = lit, causing duplicate subqueries.
+      // IsNotNull: handled separately by constructIsNotNullConstraints.
+      case _: EqualTo | _: EqualNullSafe | _: IsNotNull => true
+      case _ => false
+    }
+
+    var inferred = ExpressionSet()
+    bindings.foreach { case (attr, lit) =>
+      inferred ++= replaceConstraints(targets, attr, lit)
+    }
+    inferred -- constraints
   }
 
   private def replaceConstraints(
