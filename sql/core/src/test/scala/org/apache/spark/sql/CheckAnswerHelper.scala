@@ -22,6 +22,7 @@ import java.util.TimeZone
 import org.scalatest.Assertions
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.util.{SparkErrorUtils, SparkStringUtils}
 
@@ -40,7 +41,23 @@ trait CheckAnswerHelper extends Assertions {
    * @param expectedAnswer the expected result in a Seq of Rows.
    */
   protected def checkAnswer(df: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
-    getErrorMessageInCheckAnswer(df, expectedAnswer) match {
+
+    val analyzedDF = try df catch {
+      case ae: ExtendedAnalysisException =>
+        if (ae.plan.isDefined) {
+          fail(
+            s"""
+               |Failed to analyze query: $ae
+               |${ae.plan.get}
+               |
+               |${SparkErrorUtils.stackTraceToString(ae)}
+               |""".stripMargin)
+        } else {
+          throw ae
+        }
+    }
+
+    getErrorMessageInCheckAnswer(analyzedDF, expectedAnswer) match {
       case Some(errorMessage) => fail(errorMessage)
       case None =>
     }
