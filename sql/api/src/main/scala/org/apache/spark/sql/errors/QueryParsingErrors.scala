@@ -369,6 +369,15 @@ private[sql] object QueryParsingErrors extends DataTypeErrorsBase {
       ctx)
   }
 
+  def timeLiteralPrecisionExceedsMaxError(
+      value: String,
+      ctx: TypeConstructorContext): Throwable = {
+    new ParseException(
+      errorClass = "INVALID_TIME_LITERAL_PRECISION",
+      messageParameters = Map("value" -> toSQLValue(value)),
+      ctx)
+  }
+
   def literalValueTypeUnsupportedError(
       unsupportedType: String,
       supportedTypes: Seq[String],
