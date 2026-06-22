@@ -250,13 +250,22 @@ class TestDirectWorkerDispatcher(
   /**
    * Picks the shortest usable base directory for the socket temp dir so the
    * resulting Unix-domain socket path stays within the platform `sun_path`
-   * limit. Prefers "/tmp" when it is a writable directory (true on the Linux
-   * and macOS hosts these tests run on); otherwise falls back to the
-   * configured `java.io.tmpdir`.
+   * limit (108 bytes on Linux, 104 on macOS).
+   *
+   * This mirrors how PySpark already chooses its UDS directory in
+   * `python/run-tests.py` (`spark.python.unix.domain.socket.dir`): prefer the
+   * OS temp-dir env vars (`TMPDIR`/`TEMP`/`TMP`) and fall back to `/tmp`. Builds
+   * point `java.io.tmpdir` at a deep `<module>/target/tmp`, which combined with
+   * the generated socket leaf would overflow `sun_path`; the OS temp dir is
+   * short (e.g. a per-user `/tmp/...` on Linux runners, `/var/folders/...` via
+   * `$TMPDIR` on macOS). `java.io.tmpdir` remains the last-resort fallback.
    */
   private def shortTempBase(): Path = {
-    val fallback = Paths.get(System.getProperty("java.io.tmpdir"))
-    val shortTmp = Paths.get("/tmp")
-    if (Files.isDirectory(shortTmp) && Files.isWritable(shortTmp)) shortTmp else fallback
+    val candidates =
+      Seq("TMPDIR", "TEMP", "TMP").flatMap(sys.env.get).filter(_.nonEmpty) :+ "/tmp"
+    candidates
+      .map(Paths.get(_))
+      .find(p => Files.isDirectory(p) && Files.isWritable(p))
+      .getOrElse(Paths.get(System.getProperty("java.io.tmpdir")))
   }
 }
