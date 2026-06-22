@@ -19,6 +19,7 @@ import unittest
 import tempfile
 import textwrap
 from pathlib import Path
+from unittest import mock
 
 from pyspark.errors import PySparkException
 from pyspark.testing.connectutils import (
@@ -525,6 +526,33 @@ class CLIUtilityTests(ReusedConnectTestCase):
                 context.exception.getMessageParameters(),
                 {"glob_pattern": "transformations/**/*.py"},
             )
+
+    @mock.patch("pyspark.pipelines.cli.create_dataflow_graph", side_effect=RuntimeError("boom"))
+    @mock.patch("pyspark.pipelines.cli.SparkSession")
+    @mock.patch("pyspark.pipelines.cli.load_pipeline_spec")
+    def test_run_stops_session_when_a_step_fails(self, mock_load, mock_session, mock_create):
+        # If a step after the session is created fails (here, dataflow-graph creation), run() must
+        # still stop the session in its finally block rather than leaking it.
+        mock_load.return_value = PipelineSpec(
+            name="test_pipeline",
+            storage="file:///tmp/pipeline_storage",
+            catalog=None,
+            database=None,
+            configuration={},
+            libraries=[],
+        )
+        mock_spark = mock.MagicMock()
+        mock_session.builder.config.return_value.getOrCreate.return_value = mock_spark
+        with self.assertRaises(RuntimeError):
+            run(
+                spec_path=Path("/unused"),
+                full_refresh=[],
+                full_refresh_all=False,
+                refresh=[],
+                dry=False,
+            )
+        # The session must be stopped even though a step after its creation failed.
+        mock_spark.stop.assert_called_once()
 
 
 if __name__ == "__main__":
