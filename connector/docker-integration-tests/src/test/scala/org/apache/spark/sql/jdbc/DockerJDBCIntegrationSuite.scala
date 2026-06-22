@@ -96,6 +96,15 @@ abstract class DatabaseOnDocker {
   def beforeContainerStart(
       hostConfigBuilder: HostConfig,
       containerConfigBuilder: ContainerConfig): Unit = {}
+
+  /**
+   * Optional per-database override for how long to wait for the database to accept JDBC
+   * connections after the container has started. Some databases (e.g. Oracle) take
+   * considerably longer to fully bootstrap their listener, so they can extend the default.
+   * The value is a duration string such as "15min". When `None`, the suite default
+   * (`spark.test.docker.connectionTimeout`, "10min") is used.
+   */
+  def connectionTimeout: Option[String] = None
 }
 
 abstract class DockerJDBCIntegrationSuite
@@ -111,8 +120,12 @@ abstract class DockerJDBCIntegrationSuite
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.imagePullTimeout", "5min"))
   protected val startContainerTimeout: Long =
     timeStringAsSeconds(sys.props.getOrElse("spark.test.docker.startContainerTimeout", "5min"))
-  protected val connectionTimeout: PatienceConfiguration.Timeout = {
-    val timeoutStr = sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min")
+  // `lazy` so that `db` (abstract, defined by concrete suites) is initialized before it is read.
+  // A database may extend the connection timeout via `db.connectionTimeout` (e.g. Oracle, whose
+  // container takes longer to bootstrap its listener); otherwise the suite default is used.
+  protected lazy val connectionTimeout: PatienceConfiguration.Timeout = {
+    val timeoutStr = db.connectionTimeout.getOrElse(
+      sys.props.getOrElse("spark.test.docker.connectionTimeout", "10min"))
     timeout(timeStringAsSeconds(timeoutStr).seconds)
   }
 
