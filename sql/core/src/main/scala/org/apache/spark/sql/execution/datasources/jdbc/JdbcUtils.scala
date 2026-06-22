@@ -164,7 +164,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       // Note that some dialects override this setting, e.g. as SQL Server.
       case TimestampNTZType => Option(JdbcType("TIMESTAMP", java.sql.Types.TIMESTAMP))
       case DateType => Option(JdbcType("DATE", java.sql.Types.DATE))
-      case _: TimeType => Option(JdbcType("TIME", java.sql.Types.TIME))
+      case t: TimeType => Option(JdbcType(s"TIME(${t.precision})", java.sql.Types.TIME))
       case t: DecimalType => Option(
         JdbcType(s"DECIMAL(${t.precision},${t.scale})", java.sql.Types.DECIMAL))
       case _ => None
@@ -230,8 +230,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
     case java.sql.Types.STRUCT => StringType
     case java.sql.Types.TIME =>
       if (conf.isTimeTypeEnabled) {
-        // Use reported scale (fractional digits) as precision, default to 6 if not reported
-        val timePrecision = if (scale > 0 && scale <= TimeType.MAX_PRECISION) scale
+        // Use reported scale (fractional digits) as precision; TIME(0) is valid
+        val timePrecision = if (scale >= 0 && scale <= TimeType.MAX_PRECISION) scale
           else TimeType.DEFAULT_PRECISION
         TimeType(timePrecision)
       } else getTimestampType(isTimestampNTZ)

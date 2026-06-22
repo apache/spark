@@ -772,7 +772,7 @@ class JDBCSuite extends SharedSparkSession {
     val url = urlWithUserAndPass
     val tableName = "TEST.TIME_ROUNDTRIP"
     val time1 = java.time.LocalTime.of(9, 30, 0)
-    val time2 = java.time.LocalTime.of(23, 59, 59)
+    val time2 = java.time.LocalTime.of(23, 59, 59, 123456000)
     val schema = new StructType().add("t", TimeType(TimeType.DEFAULT_PRECISION))
     val rows = Seq(
       Row(time1),
