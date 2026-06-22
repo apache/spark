@@ -204,9 +204,11 @@ private[sql] class AvroDeserializer(
       }
 
       case (LONG, _: TimeType) => avroType.getLogicalType match {
+        // The time-micros logical type stores microseconds-since-midnight, while TimeType
+        // is represented internally as nanoseconds-since-midnight, so convert micros to nanos.
         case _: LogicalTypes.TimeMicros => (updater, ordinal, value) =>
           val micros = value.asInstanceOf[Long]
-          updater.setLong(ordinal, micros)
+          updater.setLong(ordinal, DateTimeUtils.microsToNanos(micros))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type ${TimeType().sql}.")
       }
