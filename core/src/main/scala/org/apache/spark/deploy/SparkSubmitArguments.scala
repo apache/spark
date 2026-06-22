@@ -510,7 +510,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    */
   override protected def handleUnknown(opt: String): Boolean = {
     if (opt.startsWith("-")) {
-      error(s"Unrecognized option '$opt'.")
+      SparkSubmit.printErrorAndExit(s"Unrecognized option '$opt'.")
+
     }
 
     primaryResource =
