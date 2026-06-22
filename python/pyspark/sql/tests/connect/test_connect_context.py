@@ -22,8 +22,10 @@ from unittest.mock import patch
 from pyspark.errors import PySparkNotImplementedError
 from pyspark.sql import HiveContext as ClassicHiveContext
 from pyspark.sql import SQLContext as ClassicSQLContext
-from pyspark.sql.connect.context import HiveContext, SQLContext
-from pyspark.testing.connectutils import ReusedConnectTestCase
+from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
+
+if should_test_connect:
+    from pyspark.sql.connect.context import HiveContext, SQLContext
 
 
 class SQLContextConnectTests(ReusedConnectTestCase):
