@@ -77,7 +77,7 @@ class TimedeltaOps(DataTypeOps):
         self, result: SeriesOrIndex, left: IndexOpsLike, right: Union[IndexOpsMixin, timedelta]
     ) -> SeriesOrIndex:
         # pandas 3.0.0+ promotes timedelta arithmetic to the finer resolution of the
-        # operands; before that timedelta64 is always nanoseconds.
+        # operands; before that, pandas-on-Spark represented timedelta as nanoseconds.
         if LooseVersion(pd.__version__) < "3.0.0":
             return result
 
@@ -100,6 +100,9 @@ class TimedeltaOps(DataTypeOps):
             promoted = np.dtype("timedelta64[us]")
 
         field = result._internal.data_fields[0]
+        if field.dtype == promoted:
+            # Already the right resolution (the common us case); avoid rebuilding the field.
+            return result
         return result._with_new_scol(result.spark.column, field=field.copy(dtype=promoted))
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
