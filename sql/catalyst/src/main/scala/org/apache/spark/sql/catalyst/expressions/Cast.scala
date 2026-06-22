@@ -367,11 +367,11 @@ object Cast extends QueryErrorsBase {
 
   /**
    * Return true if we need to use the `timeZone` information casting `from` type to `to` type.
-   * The patterns matched reflect the current implementation in the Cast node.
-   * c.f. usage of `timeZone` in:
-   * * Cast.castToString
-   * * Cast.castToDate
-   * * Cast.castToTimestamp
+   * The patterns matched reflect the current implementation in the Cast node and must stay in sync
+   * with it: a conversion needs the session time zone exactly when its `castTo*` / `castTo*Code`
+   * path reads `zoneId`. This is principally the string/date casts of the LTZ timestamp families
+   * (TIMESTAMP and TIMESTAMP_LTZ(p)), the cross-family TIMESTAMP_LTZ <-> TIMESTAMP_NTZ conversions
+   * (micro and nanosecond), and TIME -> TIMESTAMP_NTZ (whose date fields come from CURRENT_DATE).
    */
   def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
     case (VariantType, _) => true
