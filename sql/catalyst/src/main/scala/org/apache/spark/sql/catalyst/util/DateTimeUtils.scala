@@ -1081,7 +1081,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
    *
    * @param days The number of days since the epoch 1970-01-01.
    *             Negative numbers represent earlier days.
-   * @param nanos The number of nanoseconds within the day since the midnight.
+   * @param nanos The number of nanoseconds within the day since midnight.
    * @param precision The fractional-second precision of the target `TIMESTAMP_NTZ(precision)`.
    * @return The composite `(epochMicros, nanosWithinMicro)` pair since the epoch
    *         1970-01-01 00:00:00Z.
