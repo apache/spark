@@ -97,6 +97,7 @@ class StringSubstitutorSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     val sub = new StringSubstitutor(
       Map("a" -> "${b}", "b" -> "${a}"), enableSubstitutionInVariables = true)
     val e = intercept[IllegalStateException](sub.replace("${a}"))
+    assert(e.getMessage.startsWith("Infinite loop in property interpolation of"))
     assert(e.getMessage.contains("a") || e.getMessage.contains("b"))
   }
 
@@ -113,5 +114,47 @@ class StringSubstitutorSuite extends AnyFunSuite { // scalastyle:ignore funsuite
     assert(sub.replace("prefix${x:-}suffix") === "prefixsuffix")
     // A later placeholder is still expanded after the empty-default replacement.
     assert(sub.replace("${x:-}${y:-Z}") === "Z")
+  }
+
+  test("custom prefix, suffix, escape, and value delimiter") {
+    val sub = new StringSubstitutor(
+      Map("x" -> "X"), prefix = "%{", suffix = "}", escape = '%', valueDelimiter = "|")
+    assert(sub.replace("%{x}") === "X")
+    assert(sub.replace("pre%{x}post") === "preXpost")
+    // The custom value delimiter supplies the default for an undefined variable.
+    assert(sub.replace("%{y|def}") === "def")
+    // The custom escape char guards the custom prefix (preserveEscapes defaults to true).
+    assert(sub.replace("%%{x}") === "%%{x}")
+  }
+
+  test("scan continues past an unresolved placeholder to a later resolved one") {
+    // With exceptions disabled, an unresolved placeholder is left untouched but does not stop the
+    // scan from reaching and expanding a later resolvable placeholder.
+    val sub = new StringSubstitutor(Map("x" -> "X"), enableUndefinedVariableException = false)
+    assert(sub.replace("${undefined} ${x}") === "${undefined} X")
+  }
+
+  test("a null resolver value renders as the string \"null\"") {
+    // The sole caller (ErrorClassesJSONReader) sanitizes a null parameter to "null", so a null
+    // value is rendered the same way here rather than NPEing on toString or being treated as
+    // undefined.
+    val resolver = Map[String, Any]("x" -> null)
+    assert(new StringSubstitutor(resolver).replace("${x}") === "null")
+    assert(new StringSubstitutor(resolver).replace("a${x}b") === "anullb")
+    // The variable is resolved (to "null"), so its default value is not used.
+    assert(new StringSubstitutor(resolver).replace("${x:-def}") === "null")
+  }
+
+  test("placeholders inside a default value are not expanded") {
+    // The first '}' closes the placeholder, so the default value is the literal text up to it and
+    // the inner ${x} is not treated as a nested reference.
+    val sub = new StringSubstitutor(Map("x" -> "X"))
+    assert(sub.replace("${undefined:-${x}}") === "${x}")
+  }
+
+  test("an empty placeholder with no default is undefined") {
+    val e = intercept[IllegalArgumentException](
+      new StringSubstitutor(Map.empty[String, Any]).replace("${}"))
+    assert(e.getMessage.contains("Undefined variable"))
   }
 }

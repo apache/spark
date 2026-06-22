@@ -88,7 +88,9 @@ class StringSubstitutor(
 
           resolver.get(varName) match {
             case Some(value) =>
-              var replacement = value.toString
+              // Use String.valueOf so a null value renders as "null" (matching how the sole
+              // caller, ErrorClassesJSONReader, sanitizes null parameters) instead of NPEing.
+              var replacement = String.valueOf(value)
               if (enableSubstitutionInVariables) {
                 val newPrior = priorVariables.clone() += varName
                 val tempBuf = new StringBuilder(replacement)
